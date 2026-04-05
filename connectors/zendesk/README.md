@@ -27,7 +27,7 @@ npm run bundle
 
 **Always set** (important for stdio protocol):
 - `LOG_MODE=strict` — suppresses stdout logs that would corrupt the MCP stdio protocol. ALWAYS set this when running as a Rebel MCP.
-- `MINDSTONE_REBEL_BRIDGE_STATE` — path to Rebel's inbox bridge state file. Optional — gracefully degraded to null when absent.
+- `MCP_HOST_BRIDGE_STATE` — path to host app bridge state file for credential management. Optional — gracefully degrades to null when absent. Also accepts `MINDSTONE_REBEL_BRIDGE_STATE` for backwards compatibility.
 
 ## Wiring into Rebel
 

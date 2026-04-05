@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Zendesk MCP Server for Mindstone Rebel
+ * Zendesk MCP Server
  *
  * Provides Zendesk Support integration via Model Context Protocol.
  * Supports API token authentication (primary) and OAuth 2.0 (legacy/future).
@@ -9,7 +9,7 @@
  * - ZENDESK_CONFIG_PATH: Path to config directory containing accounts.json and credentials/
  * - ZENDESK_CLIENT_ID: OAuth client ID (for token refresh, OAuth only)
  * - ZENDESK_CLIENT_SECRET: OAuth client secret (for token refresh, OAuth only)
- * - MINDSTONE_REBEL_BRIDGE_STATE: Path to bridge state file for app communication
+ * - MCP_HOST_BRIDGE_STATE: Path to host app bridge state file for credential management (optional)
  *
  * Authentication:
  * - API token: Basic auth with email/token:apiToken (primary)
@@ -30,7 +30,7 @@ import * as os from 'os';
 
 // Configuration
 const CONFIG_PATH = process.env.ZENDESK_CONFIG_PATH || path.join(os.homedir(), '.mcp', 'zendesk');
-const BRIDGE_STATE_PATH = process.env.MINDSTONE_REBEL_BRIDGE_STATE;
+const BRIDGE_STATE_PATH = process.env.MCP_HOST_BRIDGE_STATE || process.env.MINDSTONE_REBEL_BRIDGE_STATE;
 
 // OAuth credentials (for token refresh)
 const ZENDESK_CLIENT_ID = process.env.ZENDESK_CLIENT_ID;
@@ -461,7 +461,7 @@ async function zendeskFetch<T>(
         throw new ZendeskError(
           'Authentication failed',
           'AUTH_FAILED',
-          'API token is invalid or revoked. Check your Zendesk API token and email, or reconnect in Mindstone settings.'
+          'API token is invalid or revoked. Check your Zendesk API token and email, or reconnect in your MCP host app settings.'
         );
       }
 
@@ -496,7 +496,7 @@ async function zendeskFetch<T>(
             throw new ZendeskError(
               'Authentication failed after token refresh',
               'AUTH_FAILED',
-              'OAuth token is invalid. Please reconnect your Zendesk account in Mindstone settings.'
+              'OAuth token is invalid. Please reconnect your Zendesk account in your MCP host app settings.'
             );
           }
 
@@ -530,7 +530,7 @@ async function zendeskFetch<T>(
       throw new ZendeskError(
         'Authentication failed',
         'AUTH_FAILED',
-        'OAuth token is expired or invalid. Please reconnect your Zendesk account in Mindstone settings.'
+        'OAuth token is expired or invalid. Please reconnect your Zendesk account in your MCP host app settings.'
       );
     }
 
@@ -558,7 +558,7 @@ async function zendeskFetch<T>(
       throw new ZendeskError(
         `Zendesk API error (${response.status}): ${statusMessage}`,
         'API_ERROR',
-        'Check the request parameters and try again. If the problem persists, reconnect your Zendesk account in Mindstone settings.'
+        'Check the request parameters and try again. If the problem persists, reconnect your Zendesk account in your MCP host app settings.'
       );
     }
 
@@ -780,7 +780,7 @@ Auth types: "api-token" (recommended) or "oauth".
 Status can be: "active", "needs-refresh", or "expired". API token accounts are always "active".
 
 Use this to see which accounts are available before calling other Zendesk tools.
-To connect a new account, use authenticate_zendesk_account or go to Mindstone Settings > Integrations > Zendesk.`,
+To connect a new account, use authenticate_zendesk_account or configure credentials via environment variables.`,
     inputSchema: {
       type: 'object',
       properties: {},
@@ -1635,7 +1635,7 @@ async function handleToolCall(
           return JSON.stringify({
             ok: true,
             accounts: [],
-            message: 'No Zendesk accounts connected. Go to Mindstone Settings > Integrations > Zendesk to connect.',
+            message: 'No Zendesk accounts connected. Use authenticate_zendesk_account or configure credentials via environment variables.',
           });
         }
         
@@ -2905,7 +2905,7 @@ function noAccountError(): string {
   return JSON.stringify({
     ok: false,
     error: 'No Zendesk account connected',
-    resolution: 'Go to Mindstone Settings > Integrations > Zendesk to connect your account.',
+    resolution: 'Use authenticate_zendesk_account or configure credentials via environment variables.',
   });
 }
 
