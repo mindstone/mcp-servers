@@ -1,7 +1,7 @@
 {
   "name": "@harryjbloom18/mcp-server-zendesk",
   "version": "0.1.0-spike",
-  "description": "Zendesk MCP connector for Mindstone Rebel",
+  "description": "Zendesk MCP connector for Model Context Protocol hosts",
   "type": "module",
   "main": "dist/server.cjs",
   "scripts": {

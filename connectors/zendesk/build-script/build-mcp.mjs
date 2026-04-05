@@ -78,7 +78,7 @@ const pkg = JSON.parse(readFileSync(join(connectorRoot, 'package.json'), 'utf8')
 
 let gitCommit = 'dev';
 try {
-  gitCommit = execSync('git rev-parse --short HEAD', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+  gitCommit = execSync('git rev-parse --short HEAD', { cwd: connectorRoot, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
 } catch {
   // Not in a git repo yet or git not available
 }
@@ -87,7 +87,7 @@ const manifest = {
   connectorId: mcpName,
   connectorVersion: pkg.version,
   gitCommit,
-  builtAgainstRebelBridge: '1.0',
+  builtAgainstHostBridge: '1.0',
   toolNamespace: 'Zendesk',
   builtAt: new Date().toISOString(),
 };
