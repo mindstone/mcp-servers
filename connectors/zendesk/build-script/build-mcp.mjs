@@ -3,7 +3,6 @@
 /**
  * Standalone build script for a single MCP connector.
  *
- * Adapted from the MindstoneRebel monorepo's build-bundled-mcps.js.
  * Compiles TypeScript, bundles with esbuild into a single CJS file,
  * and generates a manifest.json with build metadata.
  *

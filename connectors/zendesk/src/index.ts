@@ -38,6 +38,8 @@ const ZENDESK_CLIENT_SECRET = process.env.ZENDESK_CLIENT_SECRET;
 
 // Token refresh buffer - refresh if token expires within this many milliseconds
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 minutes
+const REQUEST_TIMEOUT_MS = 30_000;
+const SUBDOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i;
 
 // Types
 interface TokenData {
@@ -74,6 +76,20 @@ interface ZendeskAccount {
 interface BridgeState {
   port: number;
   token: string;
+}
+
+function assertValidSubdomain(subdomain: string): void {
+  if (!SUBDOMAIN_RE.test(subdomain)) {
+    throw new Error(`Invalid Zendesk subdomain: ${subdomain}`);
+  }
+}
+
+function resolveTempOutputPath(outputPath: string): string {
+  const resolved = path.resolve(outputPath);
+  if (!resolved.startsWith(path.resolve(os.tmpdir()))) {
+    throw new Error('output_path must be within the temp directory');
+  }
+  return resolved;
 }
 
 // Account management
@@ -117,6 +133,7 @@ function loadAccounts(): void {
           const subdomain = file.replace('.token.json', '');
           const tokenPath = path.join(credentialsDir, file);
           try {
+            assertValidSubdomain(subdomain);
             const tokenRaw = fs.readFileSync(tokenPath, 'utf8');
             const tokenData: TokenData = JSON.parse(tokenRaw);
             
@@ -149,16 +166,21 @@ function loadAccounts(): void {
 
   // Load API token accounts from accounts.json
   for (const account of accountsConfig.accounts) {
-    if (account.apiToken && !accounts.has(account.subdomain)) {
-      // API token account — no OAuth token file needed
-      accounts.set(account.subdomain, {
-        subdomain: account.subdomain,
-        email: account.email,
-        apiToken: account.apiToken,
-        authType: 'api-token',
-        accessToken: '', // unused for API token auth
-        expiresAt: Infinity, // API tokens don't expire
-      });
+    try {
+      assertValidSubdomain(account.subdomain);
+      if (account.apiToken && !accounts.has(account.subdomain)) {
+        // API token account — no OAuth token file needed
+        accounts.set(account.subdomain, {
+          subdomain: account.subdomain,
+          email: account.email,
+          apiToken: account.apiToken,
+          authType: 'api-token',
+          accessToken: '', // unused for API token auth
+          expiresAt: Infinity, // API tokens don't expire
+        });
+      }
+    } catch (error) {
+      console.error('[Zendesk] Failed to load account:', error);
     }
   }
 }
@@ -170,10 +192,10 @@ function saveToken(subdomain: string, tokenData: TokenData): void {
   const credentialsDir = path.join(CONFIG_PATH, 'credentials');
   try {
     if (!fs.existsSync(credentialsDir)) {
-      fs.mkdirSync(credentialsDir, { recursive: true });
+      fs.mkdirSync(credentialsDir, { recursive: true, mode: 0o700 });
     }
     const tokenPath = path.join(credentialsDir, `${subdomain}.token.json`);
-    fs.writeFileSync(tokenPath, JSON.stringify(tokenData, null, 2));
+    fs.writeFileSync(tokenPath, JSON.stringify(tokenData, null, 2), { mode: 0o600 });
   } catch (error) {
     console.error(`[Zendesk] Failed to save token for ${subdomain}:`, error);
   }
@@ -184,6 +206,7 @@ function saveToken(subdomain: string, tokenData: TokenData): void {
  * Returns true if refresh succeeded, false otherwise.
  */
 async function refreshToken(subdomain: string): Promise<boolean> {
+  assertValidSubdomain(subdomain);
   const account = accounts.get(subdomain);
   if (!account || !account.refreshToken) {
     console.error(`[Zendesk] Cannot refresh token for ${subdomain}: no refresh token available`);
@@ -207,6 +230,7 @@ async function refreshToken(subdomain: string): Promise<boolean> {
     });
     const response = await fetch(tokenUrl, {
       method: 'POST',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
@@ -358,6 +382,7 @@ const bridgeRequest = async (
   }
   const response = await fetch(`http://127.0.0.1:${bridge.port}${urlPath}`, {
     method: 'POST',
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${bridge.token}`,
@@ -401,6 +426,7 @@ async function zendeskFetch<T>(
 ): Promise<T> {
   const { params, ...fetchOptions } = options;
   const method = (options.method ?? 'GET').toUpperCase();
+  assertValidSubdomain(account.subdomain);
   
   // Build URL with query params
   let url = `https://${account.subdomain}.zendesk.com/api/v2${endpoint}`;
@@ -427,6 +453,7 @@ async function zendeskFetch<T>(
 
     const response = await fetch(url, {
       ...fetchOptions,
+      signal: fetchOptions.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: {
         Authorization: authHeader,
         'Content-Type': 'application/json',
@@ -477,6 +504,7 @@ async function zendeskFetch<T>(
           console.error(`[Zendesk API] Retrying request with refreshed token`);
           const retryResponse = await fetch(url, {
             ...fetchOptions,
+            signal: fetchOptions.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
             headers: {
               Authorization: getAuthHeader(refreshedAccount),
               'Content-Type': 'application/json',
@@ -1701,8 +1729,10 @@ async function handleToolCall(
           return JSON.stringify({ ok: false, error: 'subdomain, email, and api_token are all required.' });
         }
         try {
+          const normalizedSubdomain = subdomain.trim();
+          assertValidSubdomain(normalizedSubdomain);
           const result = await bridgeRequest('/bundled/zendesk/configure', {
-            subdomain: subdomain.trim(),
+            subdomain: normalizedSubdomain,
             email: email.trim(),
             apiToken: api_token.trim(),
           });
@@ -1711,8 +1741,8 @@ async function handleToolCall(
             loadAccounts();
             return JSON.stringify({
               ok: true,
-              message: `Zendesk account connected: ${subdomain}.zendesk.com (${email})`,
-              subdomain,
+              message: `Zendesk account connected: ${normalizedSubdomain}.zendesk.com (${email})`,
+              subdomain: normalizedSubdomain,
               email,
             });
           }
@@ -1887,7 +1917,7 @@ async function handleToolCall(
         const saveToFile = args.save_to_file === true;
         const includeComments = args.include_comments === true;
         const outputPath = saveToFile
-          ? (args.output_path as string) || path.join(os.tmpdir(), `zendesk-export-${Date.now()}.json`)
+          ? resolveTempOutputPath((args.output_path as string) || path.join(os.tmpdir(), `zendesk-export-${Date.now()}.json`))
           : '';
 
         // Guardrail: reject include_comments for large exports
@@ -1919,6 +1949,7 @@ async function handleToolCall(
             try { writeStream.write('\n]'); writeStream.end(); } catch { /* best effort */ }
           };
           process.on('SIGTERM', sigTermHandler);
+          process.on('SIGINT', sigTermHandler);
 
           let totalCount = 0;
           let isFirstTicket = true;
@@ -2019,10 +2050,12 @@ async function handleToolCall(
             } else {
               // Clean up and remove the SIGTERM handler before re-throwing
               if (sigTermHandler) process.removeListener('SIGTERM', sigTermHandler);
+              if (sigTermHandler) process.removeListener('SIGINT', sigTermHandler);
               throw error;
             }
           } finally {
             if (sigTermHandler) process.removeListener('SIGTERM', sigTermHandler);
+            if (sigTermHandler) process.removeListener('SIGINT', sigTermHandler);
           }
 
           const fileSizeKb = totalCount > 0 ? Math.round(fs.statSync(outputPath).size / 1024) : 0;
@@ -2200,7 +2233,7 @@ async function handleToolCall(
 
         const saveToFile = args.save_to_file === true;
         const outputPath = saveToFile
-          ? (args.output_path as string) || path.join(os.tmpdir(), `zendesk-tickets-by-ids-${Date.now()}.json`)
+          ? resolveTempOutputPath((args.output_path as string) || path.join(os.tmpdir(), `zendesk-tickets-by-ids-${Date.now()}.json`))
           : '';
 
         // Guardrail: reject large in-context fetches

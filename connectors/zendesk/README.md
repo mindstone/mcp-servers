@@ -1,8 +1,8 @@
 # @harryjbloom18/mcp-server-zendesk
 
-Zendesk MCP connector. Part of the [rebel-mcps](../../README.md) spike — proving the standalone open-source build and Rebel integration loop.
+Zendesk Support MCP server for hosts that can launch stdio-based MCP connectors.
 
-## Prerequisites
+## Requirements
 
 - Node.js 18+
 - npm
@@ -10,21 +10,33 @@ Zendesk MCP connector. Part of the [rebel-mcps](../../README.md) spike — provi
 ## Build
 
 ```bash
+cd <path-to-repo>/connectors/zendesk
 npm install
 npm run bundle
-# → produces dist/server.cjs and dist/manifest.json
 ```
 
-## Environment Variables
+Build output:
 
-**Rebel mode** (recommended — credentials managed by Rebel):
-- `ZENDESK_CONFIG_PATH` — path to Rebel's Zendesk config dir (contains `accounts.json` with subdomain, email, apiToken). Rebel sets this automatically.
+- `dist/server.cjs`
+- `dist/manifest.json`
 
-**Standalone mode** (if running outside Rebel):
-Create a config directory and `accounts.json` file manually:
+## Configuration
+
+### Supported environment variables
+
+- `ZENDESK_CONFIG_PATH` — path to the config directory that contains `accounts.json` and `credentials/`
+- `ZENDESK_CLIENT_ID` — optional OAuth client ID for legacy token refresh flows
+- `ZENDESK_CLIENT_SECRET` — optional OAuth client secret for legacy token refresh flows
+- `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
+- `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
+
+### Standalone config directory
+
+Create a config directory and `accounts.json` file:
+
 ```bash
 mkdir -p ~/.mcp/zendesk
-cat > ~/.mcp/zendesk/accounts.json << 'EOF'
+cat > ~/.mcp/zendesk/accounts.json <<'EOF'
 {
   "accounts": [
     {
@@ -37,17 +49,48 @@ cat > ~/.mcp/zendesk/accounts.json << 'EOF'
 }
 EOF
 ```
-Then set `ZENDESK_CONFIG_PATH=~/.mcp/zendesk` when launching the server.
 
-**Always set** (important for stdio protocol):
-- `LOG_MODE=strict` — suppresses stdout logs that would corrupt the MCP stdio protocol. ALWAYS set this when running as a Rebel MCP.
-- `MCP_HOST_BRIDGE_STATE` — path to host app bridge state file for credential management. Optional — gracefully degrades to null when absent. Also accepts `MINDSTONE_REBEL_BRIDGE_STATE` for backwards compatibility.
+## Host configuration examples
 
-## Wiring into Rebel
+### Claude Desktop (`.claude/mcp.json`)
 
-After building, update `~/Library/Application Support/mindstone-rebel/mcp/super-mcp-router.json`.
+```json
+{
+  "mcpServers": {
+    "Zendesk": {
+      "command": "node",
+      "args": [
+        "<path-to-repo>/connectors/zendesk/dist/server.cjs"
+      ],
+      "env": {
+        "ZENDESK_CONFIG_PATH": "~/.mcp/zendesk"
+      }
+    }
+  }
+}
+```
 
-Find the `"Zendesk"` entry and change:
+### Cursor (`.cursor/mcp.json`)
+
+```json
+{
+  "mcpServers": {
+    "Zendesk": {
+      "command": "node",
+      "args": [
+        "<path-to-repo>/connectors/zendesk/dist/server.cjs"
+      ],
+      "env": {
+        "ZENDESK_CONFIG_PATH": "~/.mcp/zendesk"
+      }
+    }
+  }
+}
+```
+
+### Mindstone Rebel
+
+Update the Zendesk entry in your Rebel MCP router config:
 
 ```json
 "Zendesk": {
@@ -55,12 +98,12 @@ Find the `"Zendesk"` entry and change:
   "type": "stdio",
   "command": "node",
   "args": [
-    "/path/to/home/development/rebel-mcps/connectors/zendesk/dist/server.cjs"
+    "<path-to-repo>/connectors/zendesk/dist/server.cjs"
   ],
   "env": {
-    "NODE_PATH": "/path/to/home/development/rebel-mcps/connectors/zendesk/node_modules",
-    "ZENDESK_CONFIG_PATH": "/path/to/home/Library/Application Support/mindstone-rebel/mcp/zendesk",
-    "MCP_HOST_BRIDGE_STATE": "/path/to/home/Library/Application Support/mindstone-rebel/mcp/rebel-inbox-bridge.json",
+    "NODE_PATH": "<path-to-repo>/connectors/zendesk/node_modules",
+    "ZENDESK_CONFIG_PATH": "~/Library/Application Support/mindstone-rebel/mcp/zendesk",
+    "MCP_HOST_BRIDGE_STATE": "~/Library/Application Support/mindstone-rebel/mcp/rebel-inbox-bridge.json",
     "LOG_MODE": "strict"
   },
   "description": "Zendesk support tickets...",
@@ -68,26 +111,26 @@ Find the `"Zendesk"` entry and change:
 }
 ```
 
-Then **fully quit and restart Rebel** (Cmd+Q, not just close the window). A package restart is NOT sufficient — the full process must restart to pick up config changes.
+`LOG_MODE=strict` is recommended in Rebel so stdio output stays clean.
 
-## Smoke Test
+After editing the router config, fully quit and restart Rebel so it reloads the connector.
 
-After restarting Rebel, ask it: **"List my open Zendesk tickets"**
+## Smoke test
 
-Expected: a list of open tickets from your Zendesk instance (mindstone-45270). If you see an error or empty result where you'd expect tickets, check that `ZENDESK_CONFIG_PATH` is set and `accounts.json` is readable.
+Ask your MCP host to run a simple Zendesk query such as:
 
-## Rebel-Specific Notes
+> List my open Zendesk tickets
 
-- **`LOG_MODE=strict`**: MUST be set. Without it, the connector writes logs to stdout which corrupts the MCP stdio protocol and causes JSON parse errors in Rebel.
-- **`MINDSTONE_REBEL_BRIDGE_STATE`**: Safe to set to a non-existent path — the connector checks for the file and returns null gracefully. Do not remove this env var.
-- **Tool namespace**: Rebel registers this connector under the `Zendesk` namespace. Tool names appear as `Zendesk__search_tickets`, etc.
+If that fails, confirm that:
+
+- `dist/server.cjs` exists
+- `ZENDESK_CONFIG_PATH` points to a readable directory
+- `accounts.json` contains a valid subdomain, email, and API token
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| Zendesk tools don't appear after config edit | Config not picked up | Fully quit and restart Rebel (Cmd+Q) |
-| MCP parse errors in Rebel logs | stdout logging corrupting stdio | Ensure `LOG_MODE=strict` is set |
-| Auth error / empty results | ZENDESK_CONFIG_PATH wrong | Check path contains `accounts.json` with valid credentials |
-| `dist/server.cjs` not found | Build not run | Run `npm install && npm run bundle` first |
-| Import errors during build | Missing dependency | Check `npm install` completed successfully |
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Connector fails to start | Bundle not built yet | Run `npm install && npm run bundle` |
+| Auth error or empty results | Wrong config path or invalid credentials | Check `ZENDESK_CONFIG_PATH` and `accounts.json` |
+| MCP host reports protocol/parsing issues in Rebel | Stdout noise in a stdio session | Set `LOG_MODE=strict` in the Rebel config |
