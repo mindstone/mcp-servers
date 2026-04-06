@@ -21,9 +21,23 @@ npm run bundle
 - `ZENDESK_CONFIG_PATH` — path to Rebel's Zendesk config dir (contains `accounts.json` with subdomain, email, apiToken). Rebel sets this automatically.
 
 **Standalone mode** (if running outside Rebel):
-- `ZENDESK_SUBDOMAIN` — your Zendesk subdomain (e.g. `yourcompany`)
-- `ZENDESK_EMAIL` — your Zendesk email
-- `ZENDESK_API_TOKEN` — your Zendesk API token
+Create a config directory and `accounts.json` file manually:
+```bash
+mkdir -p ~/.mcp/zendesk
+cat > ~/.mcp/zendesk/accounts.json << 'EOF'
+{
+  "accounts": [
+    {
+      "subdomain": "yourcompany",
+      "email": "you@example.com",
+      "apiToken": "your-zendesk-api-token"
+    }
+  ],
+  "defaultSubdomain": "yourcompany"
+}
+EOF
+```
+Then set `ZENDESK_CONFIG_PATH=~/.mcp/zendesk` when launching the server.
 
 **Always set** (important for stdio protocol):
 - `LOG_MODE=strict` — suppresses stdout logs that would corrupt the MCP stdio protocol. ALWAYS set this when running as a Rebel MCP.
