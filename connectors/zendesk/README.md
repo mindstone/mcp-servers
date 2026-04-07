@@ -1,28 +1,37 @@
 # @harryjbloom18/mcp-server-zendesk
 
-Zendesk Support MCP server for hosts that can launch stdio-based MCP connectors.
+Zendesk Support MCP server for Model Context Protocol hosts.
 
 ## Requirements
 
 - Node.js 18+
 - npm
 
-## Build
+## Quick Start
+
+### Install & build
 
 ```bash
 cd <path-to-repo>/connectors/zendesk
 npm install
-npm run bundle
+npm run build
 ```
 
-Build output:
+### npx (once published)
 
-- `dist/server.cjs`
-- `dist/manifest.json`
+```bash
+npx -y @harryjbloom18/mcp-server-zendesk
+```
+
+### Local
+
+```bash
+node dist/index.js
+```
 
 ## Configuration
 
-### Supported environment variables
+### Environment variables
 
 - `ZENDESK_CONFIG_PATH` — path to the config directory that contains `accounts.json` and `credentials/`
 - `ZENDESK_CLIENT_ID` — optional OAuth client ID for legacy token refresh flows
@@ -52,16 +61,14 @@ EOF
 
 ## Host configuration examples
 
-### Claude Desktop (`.claude/mcp.json`)
+### Claude Desktop / Cursor
 
 ```json
 {
   "mcpServers": {
     "Zendesk": {
-      "command": "node",
-      "args": [
-        "<path-to-repo>/connectors/zendesk/dist/server.cjs"
-      ],
+      "command": "npx",
+      "args": ["-y", "@harryjbloom18/mcp-server-zendesk"],
       "env": {
         "ZENDESK_CONFIG_PATH": "~/.mcp/zendesk"
       }
@@ -70,16 +77,14 @@ EOF
 }
 ```
 
-### Cursor (`.cursor/mcp.json`)
+### Local development (no npm publish needed)
 
 ```json
 {
   "mcpServers": {
     "Zendesk": {
       "command": "node",
-      "args": [
-        "<path-to-repo>/connectors/zendesk/dist/server.cjs"
-      ],
+      "args": ["<path-to-repo>/connectors/zendesk/dist/index.js"],
       "env": {
         "ZENDESK_CONFIG_PATH": "~/.mcp/zendesk"
       }
@@ -90,40 +95,63 @@ EOF
 
 ### Mindstone Rebel
 
-Update the Zendesk entry in your Rebel MCP router config:
-
 ```json
 "Zendesk": {
   "name": "Zendesk",
   "type": "stdio",
   "command": "node",
-  "args": [
-    "<path-to-repo>/connectors/zendesk/dist/server.cjs"
-  ],
+  "args": ["<path-to-repo>/connectors/zendesk/dist/index.js"],
   "env": {
-    "NODE_PATH": "<path-to-repo>/connectors/zendesk/node_modules",
     "ZENDESK_CONFIG_PATH": "~/Library/Application Support/mindstone-rebel/mcp/zendesk",
-    "MCP_HOST_BRIDGE_STATE": "~/Library/Application Support/mindstone-rebel/mcp/rebel-inbox-bridge.json",
-    "LOG_MODE": "strict"
+    "MCP_HOST_BRIDGE_STATE": "~/Library/Application Support/mindstone-rebel/mcp/rebel-inbox-bridge.json"
   },
   "description": "Zendesk support tickets...",
   "catalogId": "bundled-zendesk"
 }
 ```
 
-`LOG_MODE=strict` is recommended in Rebel so stdio output stays clean.
+## Tools (20)
 
-After editing the router config, fully quit and restart Rebel so it reloads the connector.
+### Account management
+- `list_zendesk_accounts` — List connected accounts with auth status
+- `remove_zendesk_account` — Disconnect a Zendesk account
+- `authenticate_zendesk_account` — Connect using API token
+
+### Tickets
+- `search_zendesk_tickets` — Search with Zendesk query syntax (max 1000 results)
+- `export_zendesk_tickets` — Cursor-based export with no 1000-result limit
+- `get_zendesk_ticket` — Get single ticket by ID
+- `get_zendesk_tickets_by_ids` — Batch-fetch multiple tickets
+- `create_zendesk_ticket` — Create a new ticket
+- `update_zendesk_ticket` — Update ticket fields, status, or add comment
+
+### Users
+- `search_zendesk_users` — Search by name, email, or query
+- `get_zendesk_user` — Get user by ID
+
+### Comments
+- `list_zendesk_ticket_comments` — List conversation thread with author resolution
+- `add_zendesk_ticket_comment` — Add public reply or internal note
+
+### Discovery
+- `list_zendesk_groups` — List agent groups
+- `list_zendesk_ticket_fields` — List ticket fields including custom fields
+- `list_zendesk_views` — List saved ticket views
+- `list_zendesk_organizations` — List organizations
+
+### Macros
+- `list_zendesk_macros` — List or search macros
+- `get_zendesk_macro` — Get macro details
+- `apply_zendesk_macro` — Preview and apply macro to ticket
 
 ## Smoke test
 
-Ask your MCP host to run a simple Zendesk query such as:
+Ask your MCP host to run:
 
 > List my open Zendesk tickets
 
 If that fails, confirm that:
-
-- `dist/server.cjs` exists
+- `dist/index.js` exists (run `npm run build`)
 - `ZENDESK_CONFIG_PATH` points to a readable directory
 - `accounts.json` contains a valid subdomain, email, and API token
 
@@ -131,6 +159,6 @@ If that fails, confirm that:
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
-| Connector fails to start | Bundle not built yet | Run `npm install && npm run bundle` |
+| Connector fails to start | Not built yet | Run `npm install && npm run build` |
 | Auth error or empty results | Wrong config path or invalid credentials | Check `ZENDESK_CONFIG_PATH` and `accounts.json` |
-| MCP host reports protocol/parsing issues in Rebel | Stdout noise in a stdio session | Set `LOG_MODE=strict` in the Rebel config |
+| MCP host reports protocol issues | Stdout noise in stdio session | Ensure no `console.log` calls (all logging uses `console.error`) |

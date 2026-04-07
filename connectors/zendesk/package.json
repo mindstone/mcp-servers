@@ -1,24 +1,31 @@
 {
   "name": "@harryjbloom18/mcp-server-zendesk",
-  "version": "0.1.0-spike",
-  "description": "Zendesk MCP connector for Model Context Protocol hosts",
+  "version": "0.2.0",
+  "description": "Zendesk MCP server for Model Context Protocol hosts",
+  "license": "MIT",
   "type": "module",
-  "main": "dist/server.cjs",
+  "bin": {
+    "mcp-server-zendesk": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsc",
-    "bundle": "node build-script/build-mcp.mjs",
-    "start": "node dist/server.cjs"
+    "build": "tsc && shx chmod +x dist/index.js",
+    "prepare": "npm run build",
+    "watch": "tsc --watch",
+    "start": "node dist/index.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@types/node": "^20.11.24",
-    "esbuild": "^0.25.0",
-    "typescript": "^5.3.3"
+    "@types/node": "^22",
+    "shx": "^0.3.4",
+    "typescript": "^5.8.2"
   },
   "engines": {
     "node": ">=18"
-  },
-  "license": "MIT"
+  }
 }
