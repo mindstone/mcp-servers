@@ -11,7 +11,7 @@ import {
 export function createServer(): McpServer {
   const server = new McpServer({
     name: 'zendesk-mcp-server',
-    version: '0.2.0',
+    version: '0.2.1-rc.1',
   });
 
   registerAccountTools(server);
