@@ -7,7 +7,7 @@ Zendesk Support MCP server for Model Context Protocol hosts.
 
 ## Requirements
 
-- Node.js 18+
+- Node.js 20+
 - npm
 
 ## Quick Start
