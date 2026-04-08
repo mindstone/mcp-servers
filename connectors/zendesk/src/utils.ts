@@ -5,7 +5,9 @@ import { ZendeskError } from './types.js';
 
 export function resolveTempOutputPath(outputPath: string): string {
   const resolved = path.resolve(outputPath);
-  if (!resolved.startsWith(path.resolve(os.tmpdir()))) {
+  const tmpDir = path.resolve(os.tmpdir());
+  const relative = path.relative(tmpDir, resolved);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new Error('output_path must be within the temp directory');
   }
   return resolved;

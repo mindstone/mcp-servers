@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+    defaults:
+      run:
+        working-directory: connectors/zendesk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Verify package contents
+        run: |
+          npm pack --dry-run 2>&1 | tee /tmp/pack-output.txt
+          if grep -q '\.map' /tmp/pack-output.txt; then
+            echo "ERROR: Source maps found in package"
+            exit 1
+          fi
+          if grep -q '__tests__\|\.test\.' /tmp/pack-output.txt; then
+            echo "ERROR: Test files found in package"
+            exit 1
+          fi

@@ -1,4 +1,7 @@
-# @harryjbloom18/mcp-server-zendesk
+# @mindstone-engineering/mcp-server-zendesk
+
+[![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-zendesk.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-zendesk)
+[![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 Zendesk Support MCP server for Model Context Protocol hosts.
 
@@ -20,7 +23,7 @@ npm run build
 ### npx (once published)
 
 ```bash
-npx -y @harryjbloom18/mcp-server-zendesk
+npx -y @mindstone-engineering/mcp-server-zendesk
 ```
 
 ### Local
@@ -68,7 +71,7 @@ EOF
   "mcpServers": {
     "Zendesk": {
       "command": "npx",
-      "args": ["-y", "@harryjbloom18/mcp-server-zendesk"],
+      "args": ["-y", "@mindstone-engineering/mcp-server-zendesk"],
       "env": {
         "ZENDESK_CONFIG_PATH": "~/.mcp/zendesk"
       }
@@ -162,3 +165,7 @@ If that fails, confirm that:
 | Connector fails to start | Not built yet | Run `npm install && npm run build` |
 | Auth error or empty results | Wrong config path or invalid credentials | Check `ZENDESK_CONFIG_PATH` and `accounts.json` |
 | MCP host reports protocol issues | Stdout noise in stdio session | Ensure no `console.log` calls (all logging uses `console.error`) |
+
+## Licence
+
+[FSL-1.1-MIT](./LICENSE) — Functional Source License, Version 1.1, with MIT future licence. The software converts to MIT licence on 2030-04-08.
