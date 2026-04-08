@@ -1,18 +1,23 @@
-# rebel-mcps
+# mcp-servers
 
-Standalone MCP connector packages for Mindstone Rebel.
+Open-source MCP servers by Mindstone. Works with any MCP host — Claude Desktop, Cursor, Rebel, and others.
 
-## Connectors
+## Servers
 
-- `connectors/zendesk/` — Zendesk support tickets connector
+- `connectors/zendesk/` — Zendesk Support (tickets, macros, users, views)
 
-## Contributing
+## Quick Start
 
-Each connector builds independently:
+Each server builds independently:
 ```bash
 cd connectors/<name>
 npm install
-npm run bundle
+npm run build
 ```
 
-See each connector's README for setup and wiring instructions.
+Or run directly via npx (once published):
+```bash
+npx -y @mindstone-engineering/mcp-server-zendesk
+```
+
+See each server's README for configuration and host setup instructions.
