@@ -1,0 +1,95 @@
+import { z } from 'zod';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { servicenowFetch, buildQueryParams } from '../client.js';
+import { withErrorHandling } from '../utils.js';
+
+export function registerChangeTools(server: McpServer): void {
+  // ── list_servicenow_change_requests ───────────────────────────
+
+  server.registerTool(
+    'list_servicenow_change_requests',
+    {
+      description:
+        'List or search change requests in ServiceNow. ' +
+        'Returns: number, short_description, state, type, priority, assigned_to, start_date, end_date. ' +
+        'Use ServiceNow encoded query syntax for filtering. ' +
+        'Type values: "normal", "standard", "emergency".',
+      inputSchema: z.object({
+        query: z
+          .string()
+          .optional()
+          .describe('ServiceNow encoded query (e.g., "state=implement^type=normal")'),
+        limit: z
+          .number()
+          .optional()
+          .default(20)
+          .describe('Max results to return (default: 20)'),
+        offset: z
+          .number()
+          .optional()
+          .default(0)
+          .describe('Offset for pagination (default: 0)'),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    withErrorHandling(async (args) => {
+      const params = buildQueryParams({
+        sysparm_limit: args.limit ?? 20,
+        sysparm_offset: args.offset ?? 0,
+        sysparm_display_value: 'true',
+        sysparm_fields:
+          'number,short_description,state,type,priority,assigned_to,start_date,end_date',
+        sysparm_query: args.query,
+      });
+      const changeRequests = await servicenowFetch<Array<Record<string, unknown>>>(
+        `/change_request${params}`,
+      );
+      return JSON.stringify({
+        ok: true,
+        change_requests: changeRequests,
+        count: changeRequests.length,
+      });
+    }),
+  );
+
+  // ── get_servicenow_change_request ─────────────────────────────
+
+  server.registerTool(
+    'get_servicenow_change_request',
+    {
+      description:
+        'Get a single change request by number (e.g., CHG0010001) or sys_id. ' +
+        'Returns the full change request record with all fields.',
+      inputSchema: z.object({
+        identifier: z
+          .string()
+          .min(1)
+          .describe('Change request number (e.g., CHG0010001) or sys_id'),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    withErrorHandling(async (args) => {
+      if (args.identifier.toUpperCase().startsWith('CHG')) {
+        const params = buildQueryParams({
+          sysparm_query: `number=${args.identifier}`,
+          sysparm_limit: 1,
+          sysparm_display_value: 'true',
+        });
+        const results = await servicenowFetch<Array<Record<string, unknown>>>(
+          `/change_request${params}`,
+        );
+        if (results.length === 0) {
+          return JSON.stringify({
+            ok: false,
+            error: `Change request ${args.identifier} not found.`,
+          });
+        }
+        return JSON.stringify({ ok: true, change_request: results[0] });
+      }
+      const changeRequest = await servicenowFetch<Record<string, unknown>>(
+        `/change_request/${encodeURIComponent(args.identifier)}?sysparm_display_value=true`,
+      );
+      return JSON.stringify({ ok: true, change_request: changeRequest });
+    }),
+  );
+}
