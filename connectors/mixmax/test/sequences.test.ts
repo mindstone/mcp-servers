@@ -118,11 +118,11 @@ describe('Mixmax sequence tools', () => {
   });
 
   // --- VAL-COMMON-004: Zod rejects malformed input before outbound request ---
-  it('rejects malformed sequenceId before making API request', async () => {
-    let requestMade = false;
+  it('rejects malformed sequenceId before making API request (requestCount=0)', async () => {
+    let requestCount = 0;
     mswServer.use(
       http.get('https://api.mixmax.com/v1/*', () => {
-        requestMade = true;
+        requestCount++;
         return HttpResponse.json({});
       }),
     );
@@ -134,14 +134,14 @@ describe('Mixmax sequence tools', () => {
     // Zod schema requires sequenceId to be a non-empty string
     const result = await testClient.callTool('get_mixmax_sequence', { sequenceId: '' });
     expect(result.isError).toBe(true);
-    expect(requestMade).toBe(false);
+    expect(requestCount).toBe(0);
   });
 
-  it('rejects malformed recipients before making API request', async () => {
-    let requestMade = false;
+  it('rejects malformed recipients before making API request (requestCount=0)', async () => {
+    let requestCount = 0;
     mswServer.use(
       http.post('https://api.mixmax.com/v1/*', () => {
-        requestMade = true;
+        requestCount++;
         return HttpResponse.json({});
       }),
     );
@@ -156,7 +156,7 @@ describe('Mixmax sequence tools', () => {
       recipients: [],
     });
     expect(result.isError).toBe(true);
-    expect(requestMade).toBe(false);
+    expect(requestCount).toBe(0);
   });
 
   // --- VAL-COMMON-005: Network timeout returns actionable MCP error ---

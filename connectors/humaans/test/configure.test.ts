@@ -41,14 +41,22 @@ describe('Humaans configure tools', () => {
     expect(afterJson.people).toBeDefined();
   });
 
-  it('configure_humaans_api_key rejects empty key via Zod', async () => {
-    mswServer.use(...createHumaansHandlers());
+  it('configure_humaans_api_key rejects empty key via Zod (requestCount=0)', async () => {
+    let requestCount = 0;
+    mswServer.use(
+      ...createHumaansHandlers(),
+      http.post('http://127.0.0.1:9999/bundled/humaans/configure', () => {
+        requestCount++;
+        return HttpResponse.json({ success: true });
+      }),
+    );
     testClient = await createTestClient({
       env: { HUMAANS_API_KEY: '', MCP_HOST_BRIDGE_STATE: '' },
     });
 
     const result = await testClient.callTool('configure_humaans_api_key', { api_key: '' });
     expect(result.isError).toBe(true);
+    expect(requestCount).toBe(0);
   });
 
   it('configure_humaans_api_key returns isError when bridge returns 401', async () => {

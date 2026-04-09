@@ -141,11 +141,11 @@ describe('Humaans people tools', () => {
   });
 
   // --- VAL-COMMON-004: Zod rejects malformed input before outbound request ---
-  it('rejects malformed personId before making API request', async () => {
-    let requestMade = false;
+  it('rejects malformed personId before making API request (requestCount=0)', async () => {
+    let requestCount = 0;
     mswServer.use(
       http.get('https://app.humaans.io/api/*', () => {
-        requestMade = true;
+        requestCount++;
         return HttpResponse.json({});
       }),
     );
@@ -157,7 +157,7 @@ describe('Humaans people tools', () => {
     // Zod schema requires personId to be a non-empty string
     const result = await testClient.callTool('get_humaans_person', { personId: '' });
     expect(result.isError).toBe(true);
-    expect(requestMade).toBe(false);
+    expect(requestCount).toBe(0);
   });
 
   // --- VAL-COMMON-005: Network timeout returns actionable MCP error ---

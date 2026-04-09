@@ -45,8 +45,15 @@ describe('Kling configure tools', () => {
     expect(afterJson.task_id).toBeDefined();
   });
 
-  it('configure_kling_api_keys rejects empty keys via Zod', async () => {
-    mswServer.use(...createKlingHandlers());
+  it('configure_kling_api_keys rejects empty keys via Zod (requestCount=0)', async () => {
+    let requestCount = 0;
+    mswServer.use(
+      ...createKlingHandlers(),
+      http.post('http://127.0.0.1:9999/bundled/kling/configure', () => {
+        requestCount++;
+        return HttpResponse.json({ success: true });
+      }),
+    );
     testClient = await createTestClient({
       env: { KLING_ACCESS_KEY: '', KLING_SECRET_KEY: '', MCP_HOST_BRIDGE_STATE: '' },
     });
@@ -56,6 +63,7 @@ describe('Kling configure tools', () => {
       secret_key: '',
     });
     expect(result.isError).toBe(true);
+    expect(requestCount).toBe(0);
   });
 
   it('configure_kling_api_keys returns isError when bridge returns 401', async () => {

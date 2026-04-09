@@ -162,11 +162,11 @@ describe('Fathom meetings tools', () => {
   });
 
   // --- VAL-COMMON-004: Zod rejects malformed input before outbound request ---
-  it('rejects malformed recording_id before making API request', async () => {
-    let requestMade = false;
+  it('rejects malformed recording_id before making API request (requestCount=0)', async () => {
+    let requestCount = 0;
     mswServer.use(
       http.get('https://api.fathom.ai/external/v1/*', () => {
-        requestMade = true;
+        requestCount++;
         return HttpResponse.json({});
       }),
     );
@@ -178,7 +178,7 @@ describe('Fathom meetings tools', () => {
     // Zod schema requires recording_id to be a positive integer
     const result = await testClient.callTool('get_fathom_meeting', { recording_id: -1 });
     expect(result.isError).toBe(true);
-    expect(requestMade).toBe(false);
+    expect(requestCount).toBe(0);
   });
 
   // --- VAL-COMMON-005: Network timeout returns actionable MCP error ---

@@ -40,5 +40,10 @@ export const bridgeRequest = async (
     },
     body: JSON.stringify(body),
   });
+
+  if (response.status === 401 || response.status === 403) {
+    return { success: false, error: `Bridge returned ${response.status}: unauthorized. Check host app authentication.` };
+  }
+
   return response.json() as Promise<{ success: boolean; warning?: string; error?: string }>;
 };

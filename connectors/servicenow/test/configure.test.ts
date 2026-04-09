@@ -48,8 +48,15 @@ describe('ServiceNow configure tools', () => {
     expect(afterJson.incidents).toBeDefined();
   });
 
-  it('configure_servicenow rejects empty instance via Zod', async () => {
-    mswServer.use(...createServiceNowHandlers());
+  it('configure_servicenow rejects empty instance via Zod (requestCount=0)', async () => {
+    let requestCount = 0;
+    mswServer.use(
+      ...createServiceNowHandlers(),
+      http.post('http://127.0.0.1:9999/bundled/servicenow/configure', () => {
+        requestCount++;
+        return HttpResponse.json({ success: true });
+      }),
+    );
     testClient = await createTestClient({
       env: {
         SERVICENOW_INSTANCE: '',
@@ -65,6 +72,7 @@ describe('ServiceNow configure tools', () => {
       password: 'pass',
     });
     expect(result.isError).toBe(true);
+    expect(requestCount).toBe(0);
   });
 
   it('configure_servicenow rejects invalid instance format', async () => {

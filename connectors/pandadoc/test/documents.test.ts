@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import { createPandaDocHandlers, createPandaDocUnauthorizedHandlers, createPandaDocTimeoutHandlers } from './helpers/pandadoc-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
@@ -172,14 +173,21 @@ describe('PandaDoc document tools', () => {
     expect(json.ok).toBe(false);
   });
 
-  it('send_document validates document_id via Zod', async () => {
-    mswServer.use(...createPandaDocHandlers());
+  it('send_document validates document_id via Zod (requestCount=0)', async () => {
+    let requestCount = 0;
+    mswServer.use(
+      http.post('https://api.pandadoc.com/public/v1/*', () => {
+        requestCount++;
+        return HttpResponse.json({});
+      }),
+    );
     testClient = await createTestClient({
       env: { PANDADOC_API_KEY: 'test-pandadoc-key', MCP_HOST_BRIDGE_STATE: '' },
     });
 
     const result = await testClient.callTool('send_document', {});
     expect(result.isError).toBe(true);
+    expect(requestCount).toBe(0);
   });
 
   // ── download_document ───────────────────────────────────────────
