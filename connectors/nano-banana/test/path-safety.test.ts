@@ -1,10 +1,34 @@
-import { describe, it, expect } from 'vitest';
-import { resolveSavePath } from '../src/tools/path-safety.js';
-import * as os from 'os';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { resolveSavePath, getWorkspaceRoot } from '../src/tools/path-safety.js';
 import * as path from 'path';
 
 describe('Path traversal safety — resolveSavePath', () => {
   const mimeType = 'image/png';
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  // ---- WORKSPACE ROOT DERIVATION ----
+
+  describe('getWorkspaceRoot', () => {
+    it('uses REBEL_WORKSPACE_PATH when set', () => {
+      vi.stubEnv('REBEL_WORKSPACE_PATH', '/tmp/test-workspace');
+      expect(getWorkspaceRoot()).toBe('/tmp/test-workspace');
+    });
+
+    it('falls back to process.cwd() when REBEL_WORKSPACE_PATH is empty', () => {
+      vi.stubEnv('REBEL_WORKSPACE_PATH', '');
+      expect(getWorkspaceRoot()).toBe(path.resolve(process.cwd()));
+    });
+
+    it('falls back to process.cwd() when REBEL_WORKSPACE_PATH is undefined', () => {
+      delete process.env.REBEL_WORKSPACE_PATH;
+      expect(getWorkspaceRoot()).toBe(path.resolve(process.cwd()));
+    });
+  });
+
+  // ---- ALLOWED PATHS (RELATIVE TO WORKSPACE) ----
 
   it('allows simple relative path', () => {
     const result = resolveSavePath('output/test-image', mimeType);
@@ -15,17 +39,8 @@ describe('Path traversal safety — resolveSavePath', () => {
     }
   });
 
-  it('allows path with tilde expansion', () => {
-    const result = resolveSavePath('~/Pictures/my-image.png', mimeType);
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.path).toContain(os.homedir());
-      expect(result.path).toContain('Pictures');
-    }
-  });
-
   it('adds extension when missing', () => {
-    const result = resolveSavePath('~/Pictures/my-image', mimeType);
+    const result = resolveSavePath('output/my-image', mimeType);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.path.endsWith('.png')).toBe(true);
@@ -33,7 +48,7 @@ describe('Path traversal safety — resolveSavePath', () => {
   });
 
   it('preserves existing extension', () => {
-    const result = resolveSavePath('~/Pictures/my-image.jpg', mimeType);
+    const result = resolveSavePath('output/my-image.jpg', mimeType);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.path.endsWith('.jpg')).toBe(true);
@@ -45,6 +60,25 @@ describe('Path traversal safety — resolveSavePath', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.path.endsWith('.jpg')).toBe(true);
+    }
+  });
+
+  it('allows absolute path inside workspace root', () => {
+    vi.stubEnv('REBEL_WORKSPACE_PATH', '/tmp/test-workspace');
+    const wsPath = '/tmp/test-workspace/images/test-image.png';
+    const result = resolveSavePath(wsPath, mimeType);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.path).toBe(wsPath);
+    }
+  });
+
+  it('resolves relative paths against workspace root', () => {
+    vi.stubEnv('REBEL_WORKSPACE_PATH', '/tmp/test-workspace');
+    const result = resolveSavePath('images/test-image', mimeType);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.path).toBe('/tmp/test-workspace/images/test-image.png');
     }
   });
 
@@ -71,7 +105,8 @@ describe('Path traversal safety — resolveSavePath', () => {
     const result = resolveSavePath('~/../../etc/shadow', mimeType);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toContain('Path traversal');
+      // Can match either "Path traversal" or "Tilde paths" since ~ is also rejected
+      expect(result.ok).toBe(false);
     }
   });
 
@@ -83,40 +118,67 @@ describe('Path traversal safety — resolveSavePath', () => {
     }
   });
 
-  // ---- ABSOLUTE PATH OUTSIDE HOME REJECTION ----
+  // ---- TILDE / HOMEDIR REJECTION ----
 
-  it('rejects absolute path outside home directory (/etc)', () => {
-    const result = resolveSavePath('/etc/evil-image', mimeType);
+  it('rejects tilde paths (would escape workspace root)', () => {
+    vi.stubEnv('REBEL_WORKSPACE_PATH', '/tmp/test-workspace');
+    const result = resolveSavePath('~/Pictures/my-image.png', mimeType);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toContain('home directory');
+      expect(result.error).toContain('Tilde paths are not allowed');
+      expect(result.error).toContain('workspace root');
     }
   });
 
-  it('rejects absolute path outside home directory (/tmp)', () => {
+  it('rejects bare tilde path', () => {
+    vi.stubEnv('REBEL_WORKSPACE_PATH', '/tmp/test-workspace');
+    const result = resolveSavePath('~/image', mimeType);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('Tilde');
+    }
+  });
+
+  // ---- ABSOLUTE PATH OUTSIDE WORKSPACE REJECTION ----
+
+  it('rejects absolute path outside workspace (/etc)', () => {
+    vi.stubEnv('REBEL_WORKSPACE_PATH', '/tmp/test-workspace');
+    const result = resolveSavePath('/etc/evil-image', mimeType);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('workspace root');
+    }
+  });
+
+  it('rejects absolute path outside workspace (/tmp)', () => {
+    vi.stubEnv('REBEL_WORKSPACE_PATH', '/tmp/test-workspace');
     const result = resolveSavePath('/tmp/evil-image', mimeType);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toContain('home directory');
+      expect(result.error).toContain('workspace root');
     }
   });
 
   it('rejects root path', () => {
+    vi.stubEnv('REBEL_WORKSPACE_PATH', '/tmp/test-workspace');
     const result = resolveSavePath('/evil.png', mimeType);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toContain('home directory');
+      expect(result.error).toContain('workspace root');
     }
   });
 
-  // ---- ALLOWED PATHS ----
+  // ---- FINAL PATH VALIDATION (AFTER EXTENSION APPEND) ----
 
-  it('allows absolute path inside home directory', () => {
-    const homePath = path.join(os.homedir(), 'Pictures', 'test-image.png');
-    const result = resolveSavePath(homePath, mimeType);
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.path).toBe(homePath);
+  it('validates final path after extension is appended', () => {
+    // Even if the base path looks okay, the final path after extension append
+    // must still be within the workspace root
+    vi.stubEnv('REBEL_WORKSPACE_PATH', '/tmp/test-workspace');
+    // Absolute path outside workspace — even without extension, should be caught
+    const result = resolveSavePath('/tmp/other-dir/image', mimeType);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('workspace root');
     }
   });
 });

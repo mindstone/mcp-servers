@@ -36,11 +36,11 @@ export function registerTranscriptionTools(server: McpServer): void {
 
       // Read local file
       if (!fs.existsSync(filePath)) {
-        return JSON.stringify({
-          ok: false,
-          error: `File not found: ${filePath}`,
-          resolution: 'Provide an absolute path to an existing audio file.',
-        });
+        throw new ElevenLabsError(
+          `File not found: ${filePath}`,
+          'FILE_NOT_FOUND',
+          'Provide an absolute path to an existing audio file.',
+        );
       }
 
       const fileBuffer = fs.readFileSync(filePath);

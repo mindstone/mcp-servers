@@ -206,6 +206,29 @@ export function createElevenLabsBridgeFailureHandlers(port: number, token: strin
 }
 
 /**
+ * Creates handlers where voice search always returns empty results.
+ * Used to test default voice lookup failure in generate_speech.
+ */
+export function createEmptyVoiceSearchHandlers(expectedApiKey = MOCK_API_KEY) {
+  return [
+    http.get(`${BASE_V2}/voices`, ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      return HttpResponse.json({ voices: [], has_more: false });
+    }),
+    // Still provide TTS endpoint in case voice lookup somehow passes
+    http.post(`${BASE_V1}/text-to-speech/:voiceId`, async ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      const audioBuffer = makeFakeAudioBuffer(4096);
+      return new HttpResponse(audioBuffer, {
+        headers: { 'Content-Type': 'audio/mpeg' },
+      });
+    }),
+  ];
+}
+
+/**
  * Creates handlers that track xi-api-key header on requests.
  * Returns captured requests for assertion.
  */

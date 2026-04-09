@@ -76,12 +76,16 @@ export function registerSpeechTools(server: McpServer): void {
             const voice = await lookupVoiceByName(apiKey, 'Rachel');
             voiceId = voice.voice_id;
             resolvedVoiceName = voice.name;
-          } catch {
-            return JSON.stringify({
-              ok: false,
-              error: 'No voice specified and default voice lookup failed.',
-              resolution: 'Provide a voice_id or voice_name. Use list_voices to find available voices.',
-            });
+          } catch (err) {
+            // Propagate the error so withErrorHandling emits isError: true
+            if (err instanceof ElevenLabsError) {
+              throw err;
+            }
+            throw new ElevenLabsError(
+              'No voice specified and default voice lookup failed.',
+              'VOICE_NOT_FOUND',
+              'Provide a voice_id or voice_name. Use list_voices to find available voices.',
+            );
           }
         }
       }

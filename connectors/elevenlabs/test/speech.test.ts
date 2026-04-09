@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { mswServer } from './helpers/setup.js';
-import { createElevenLabsHandlers } from './helpers/elevenlabs-mock-server.js';
+import { createElevenLabsHandlers, createEmptyVoiceSearchHandlers } from './helpers/elevenlabs-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
 import { MOCK_API_KEY, makeFakeAudioBuffer } from './fixtures/elevenlabs-data.js';
 
@@ -83,6 +83,39 @@ describe('Speech tools', () => {
         fs.unlinkSync(parsed.file_path);
       }
     });
+
+    it('returns isError:true when default voice lookup fails', async () => {
+      mswServer.use(...createEmptyVoiceSearchHandlers());
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('generate_speech', {
+        text: 'Test without voice.',
+      });
+
+      expect(result.isError).toBe(true);
+      const parsed = JSON.parse(result.text);
+      expect(parsed.ok).toBe(false);
+      expect(parsed.code).toBe('VOICE_NOT_FOUND');
+    });
+
+    it('returns isError:true when explicit voice_name lookup fails', async () => {
+      mswServer.use(...createEmptyVoiceSearchHandlers());
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('generate_speech', {
+        text: 'Test with bad voice name.',
+        voice_name: 'NonExistentVoice',
+      });
+
+      expect(result.isError).toBe(true);
+      const parsed = JSON.parse(result.text);
+      expect(parsed.ok).toBe(false);
+      expect(parsed.code).toBe('VOICE_NOT_FOUND');
+    });
   });
 
   describe('generate_sound_effect', () => {
@@ -136,7 +169,7 @@ describe('Speech tools', () => {
       }
     });
 
-    it('returns error for non-existent file', async () => {
+    it('returns isError:true for non-existent file', async () => {
       mswServer.use(...createElevenLabsHandlers());
       testClient = await createTestClient({
         env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
@@ -146,10 +179,12 @@ describe('Speech tools', () => {
         file_path: '/tmp/nonexistent-audio-file-12345.mp3',
       });
 
-      // This returns a non-error MCP response with ok: false in body
+      // Must return isError: true via withErrorHandling
+      expect(result.isError).toBe(true);
       const parsed = JSON.parse(result.text);
       expect(parsed.ok).toBe(false);
       expect(parsed.error).toContain('File not found');
+      expect(parsed.code).toBe('FILE_NOT_FOUND');
     });
   });
 });
