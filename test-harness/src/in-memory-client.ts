@@ -46,14 +46,23 @@ export async function createInMemoryTestClient(options: InMemoryTestClientOption
     vi.stubEnv(key, value);
   }
 
-  const server = createServer();
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  let server: ReturnType<typeof createServer>;
+  let client: Client;
 
-  const client = new Client({ name: 'test-client', version: '1.0.0' });
-  await Promise.all([
-    client.connect(clientTransport),
-    server.connect(serverTransport),
-  ]);
+  try {
+    server = createServer();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    client = new Client({ name: 'test-client', version: '1.0.0' });
+    await Promise.all([
+      client.connect(clientTransport),
+      server.connect(serverTransport),
+    ]);
+  } catch (error) {
+    // Clean up env stubs on initialization failure to prevent leaks
+    vi.unstubAllEnvs();
+    throw error;
+  }
 
   const callTool = async (name: string, args: Record<string, unknown>): Promise<CallToolResult> => {
     const result = await client.callTool({ name, arguments: args });

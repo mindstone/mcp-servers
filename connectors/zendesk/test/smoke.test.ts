@@ -1,7 +1,7 @@
 import { describe, it, expect, afterAll, afterEach, vi } from 'vitest';
+import { createTempConfig } from '@mindstone-engineering/mcp-test-harness';
 import { mswServer } from './helpers/setup.js';
 import { createZendeskHandlers } from './helpers/zendesk-mock-server.js';
-import { createTempConfig } from './helpers/temp-config.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
 import { API_TOKEN_ACCOUNT } from './fixtures/accounts.js';
 
@@ -22,6 +22,8 @@ describe('Smoke test — infrastructure verification', () => {
     // 1. Create temp config directory with a test account
     const tempConfig = createTempConfig({
       accounts: [API_TOKEN_ACCOUNT],
+      defaultAccount: API_TOKEN_ACCOUNT.subdomain,
+      prefix: 'zendesk-test-',
     });
     cleanup = tempConfig.cleanup;
 

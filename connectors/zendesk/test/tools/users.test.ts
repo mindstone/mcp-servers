@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
+import { createTempConfig } from '@mindstone-engineering/mcp-test-harness';
 import { mswServer } from '../helpers/setup.js';
 import { createZendeskHandlers } from '../helpers/zendesk-mock-server.js';
-import { createTempConfig } from '../helpers/temp-config.js';
 import { createTestClient, type McpTestClient } from '../helpers/mcp-test-client.js';
 import { API_TOKEN_ACCOUNT } from '../fixtures/accounts.js';
 import { makeUser } from '../fixtures/zendesk-data.js';
@@ -13,7 +13,11 @@ describe('User tools', () => {
   const base = `https://${API_TOKEN_ACCOUNT.subdomain}.zendesk.com/api/v2`;
 
   beforeAll(async () => {
-    const tempConfig = createTempConfig({ accounts: [API_TOKEN_ACCOUNT] });
+    const tempConfig = createTempConfig({
+      accounts: [API_TOKEN_ACCOUNT],
+      defaultAccount: API_TOKEN_ACCOUNT.subdomain,
+      prefix: 'zendesk-test-',
+    });
     cleanup = tempConfig.cleanup;
     mswServer.use(...createZendeskHandlers(API_TOKEN_ACCOUNT.subdomain));
     testClient = await createTestClient({

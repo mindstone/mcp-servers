@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
+import { createTempConfig, createBridgeHandlers } from '@mindstone-engineering/mcp-test-harness';
 import { mswServer } from './helpers/setup.js';
 import { createZendeskHandlers } from './helpers/zendesk-mock-server.js';
-import { createBridgeHandlers } from './helpers/bridge-mock.js';
-import { createTempConfig } from './helpers/temp-config.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
 import { API_TOKEN_ACCOUNT } from './fixtures/accounts.js';
 
@@ -22,7 +21,11 @@ describe('Account tools — list_zendesk_accounts', () => {
   });
 
   it('should return configured accounts', async () => {
-    const tempConfig = createTempConfig({ accounts: [API_TOKEN_ACCOUNT] });
+    const tempConfig = createTempConfig({
+      accounts: [API_TOKEN_ACCOUNT],
+      defaultAccount: API_TOKEN_ACCOUNT.subdomain,
+      prefix: 'zendesk-test-',
+    });
     cleanup = tempConfig.cleanup;
     mswServer.use(...createZendeskHandlers(API_TOKEN_ACCOUNT.subdomain));
 
@@ -58,7 +61,7 @@ describe('Account tools — list_zendesk_accounts (empty)', () => {
   });
 
   it('should return empty message when no accounts configured', async () => {
-    const tempConfig = createTempConfig({ empty: true });
+    const tempConfig = createTempConfig({ empty: true, prefix: 'zendesk-test-' });
     cleanup = tempConfig.cleanup;
 
     testClient = await createTestClient({
@@ -91,7 +94,11 @@ describe('Account tools — remove_zendesk_account', () => {
   });
 
   it('should remove account', async () => {
-    const tempConfig = createTempConfig({ accounts: [API_TOKEN_ACCOUNT] });
+    const tempConfig = createTempConfig({
+      accounts: [API_TOKEN_ACCOUNT],
+      defaultAccount: API_TOKEN_ACCOUNT.subdomain,
+      prefix: 'zendesk-test-',
+    });
     cleanup = tempConfig.cleanup;
     mswServer.use(...createZendeskHandlers(API_TOKEN_ACCOUNT.subdomain));
 
@@ -128,7 +135,7 @@ describe('Account tools — authenticate_zendesk_account', () => {
   it('should authenticate via bridge', async () => {
     const bridgePort = 19876;
     const bridgeToken = 'test-bridge-token';
-    const tempConfig = createTempConfig({ empty: true });
+    const tempConfig = createTempConfig({ empty: true, prefix: 'zendesk-test-' });
     cleanup = tempConfig.cleanup;
 
     // Write bridge state file
