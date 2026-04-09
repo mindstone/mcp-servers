@@ -1,0 +1,30 @@
+{
+  "id": "rebel-oss-zendesk",
+  "name": "Zendesk",
+  "description": "Zendesk support tickets and macros. Search by ticket number, requester email, status (open/pending/solved), or keywords. Create tickets, add comments, update status. List, search, and apply macros to tickets.",
+  "category": "productivity",
+  "icon": "zendesk",
+  "maturity": "stable",
+  "verifiedSource": "https://github.com/mindstone-engineering/mcp-servers",
+  "requiresSetup": true,
+  "setupFields": [
+    {
+      "key": "ZENDESK_SUBDOMAIN",
+      "label": "Zendesk Subdomain",
+      "type": "text",
+      "placeholder": "acme (for acme.zendesk.com)"
+    },
+    {
+      "key": "ZENDESK_EMAIL",
+      "label": "Email Address",
+      "type": "text",
+      "placeholder": "admin@acme.com"
+    },
+    {
+      "key": "ZENDESK_API_TOKEN",
+      "label": "API Token",
+      "type": "password"
+    }
+  ],
+  "accountIdentity": "subdomain"
+}

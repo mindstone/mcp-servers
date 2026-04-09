@@ -2,20 +2,41 @@ name: Publish
 
 on:
   push:
-    tags: ['zendesk-v*']
+    tags: ['*-v*']
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    defaults:
-      run:
-        working-directory: connectors/zendesk
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Extract connector and version from tag
+        id: meta
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          # Extract connector slug: everything before the last '-v'
+          CONNECTOR="${TAG%-v*}"
+          # Extract version: everything after the last '-v'
+          VERSION="${TAG##*-v}"
+
+          if [ ! -d "connectors/$CONNECTOR" ]; then
+            echo "ERROR: connectors/$CONNECTOR directory does not exist"
+            exit 1
+          fi
+
+          NPM_PACKAGE=$(node -p "require('./connectors/$CONNECTOR/package.json').name")
+
+          echo "connector=$CONNECTOR" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "package=$NPM_PACKAGE" >> "$GITHUB_OUTPUT"
+          echo "Connector: $CONNECTOR"
+          echo "Version: $VERSION"
+          echo "Package: $NPM_PACKAGE"
+
       - name: Verify tag is on main
         run: |
           git fetch origin main --depth=1
@@ -23,33 +44,62 @@ jobs:
             echo "ERROR: Release tags must reference a commit on main"
             exit 1
           fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-      - run: npm ci
-      - run: npm run build
-      - run: npm test
-      - name: Verify version sync (tag, package.json, server.ts)
+
+      - name: Install, build, and test
+        working-directory: connectors/${{ steps.meta.outputs.connector }}
         run: |
-          TAG_VERSION="${GITHUB_REF_NAME#zendesk-v}"
+          npm ci
+          npm run build
+          npm test
+
+      - name: Verify version sync (tag, package.json, server.ts)
+        working-directory: connectors/${{ steps.meta.outputs.connector }}
+        run: |
+          TAG_VERSION="${{ steps.meta.outputs.version }}"
           PKG_VERSION=$(node -p "require('./package.json').version")
-          SRV_VERSION=$(grep -oP "version:\s*'\K[^']+" src/server.ts)
           if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
             echo "ERROR: Tag ($TAG_VERSION) != package.json ($PKG_VERSION)"
             exit 1
           fi
-          if [ "$TAG_VERSION" != "$SRV_VERSION" ]; then
-            echo "ERROR: Tag ($TAG_VERSION) != server.ts ($SRV_VERSION)"
-            exit 1
+          # Check server.ts version if the file exists
+          if [ -f "src/server.ts" ]; then
+            SRV_VERSION=$(grep -oP "version:\s*'\K[^']+" src/server.ts || true)
+            if [ -n "$SRV_VERSION" ] && [ "$TAG_VERSION" != "$SRV_VERSION" ]; then
+              echo "ERROR: Tag ($TAG_VERSION) != server.ts ($SRV_VERSION)"
+              exit 1
+            fi
           fi
+
       - name: Verify package contents
+        working-directory: connectors/${{ steps.meta.outputs.connector }}
         run: |
           npm pack --dry-run 2>&1 | tee /tmp/pack-output.txt
           if grep -q '\.map' /tmp/pack-output.txt; then
             echo "ERROR: Source maps found in package"
             exit 1
           fi
-      - run: npm publish --access public
+
+      - name: Publish to npm
+        working-directory: connectors/${{ steps.meta.outputs.connector }}
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Dispatch catalog sync to MindstoneRebel
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.CATALOG_SYNC_TOKEN }}
+          repository: mindstone-engineering/MindstoneRebel
+          event-type: connector-published
+          client-payload: |-
+            {
+              "connector": "${{ steps.meta.outputs.connector }}",
+              "package": "${{ steps.meta.outputs.package }}",
+              "version": "${{ steps.meta.outputs.version }}",
+              "sha": "${{ github.sha }}"
+            }
