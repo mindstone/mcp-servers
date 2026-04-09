@@ -51,6 +51,115 @@ describe('Humaans configure tools', () => {
     expect(result.isError).toBe(true);
   });
 
+  it('configure_humaans_api_key returns isError when bridge returns 401', async () => {
+    // Mock bridge endpoint returning 401
+    mswServer.use(
+      http.post('http://127.0.0.1:9999/bundled/humaans/configure', () => {
+        return new HttpResponse(null, { status: 401 });
+      }),
+      ...createHumaansHandlers(),
+    );
+
+    // Write a temp bridge state file
+    const fs = await import('fs');
+    const path = await import('path');
+    const os = await import('os');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'humaans-bridge-401-'));
+    const bridgePath = path.join(tmpDir, 'bridge.json');
+    fs.writeFileSync(bridgePath, JSON.stringify({ port: 9999, token: 'test-token' }));
+
+    try {
+      testClient = await createTestClient({
+        env: {
+          HUMAANS_API_KEY: '',
+          MINDSTONE_REBEL_BRIDGE_STATE: bridgePath,
+          MCP_HOST_BRIDGE_STATE: '',
+        },
+      });
+
+      const result = await testClient.callTool('configure_humaans_api_key', { api_key: 'some-key' });
+      expect(result.isError).toBe(true);
+      const json = result.json as { ok: boolean; error: string; code: string };
+      expect(json.ok).toBe(false);
+      expect(json.error).toContain('401');
+      expect(json.code).toBe('BRIDGE_ERROR');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('configure_humaans_api_key returns isError when bridge returns 403', async () => {
+    // Mock bridge endpoint returning 403
+    mswServer.use(
+      http.post('http://127.0.0.1:9999/bundled/humaans/configure', () => {
+        return new HttpResponse(null, { status: 403 });
+      }),
+      ...createHumaansHandlers(),
+    );
+
+    const fs = await import('fs');
+    const path = await import('path');
+    const os = await import('os');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'humaans-bridge-403-'));
+    const bridgePath = path.join(tmpDir, 'bridge.json');
+    fs.writeFileSync(bridgePath, JSON.stringify({ port: 9999, token: 'test-token' }));
+
+    try {
+      testClient = await createTestClient({
+        env: {
+          HUMAANS_API_KEY: '',
+          MINDSTONE_REBEL_BRIDGE_STATE: bridgePath,
+          MCP_HOST_BRIDGE_STATE: '',
+        },
+      });
+
+      const result = await testClient.callTool('configure_humaans_api_key', { api_key: 'some-key' });
+      expect(result.isError).toBe(true);
+      const json = result.json as { ok: boolean; error: string; code: string };
+      expect(json.ok).toBe(false);
+      expect(json.error).toContain('403');
+      expect(json.code).toBe('BRIDGE_ERROR');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('configure_humaans_api_key returns isError when bridge returns success:false', async () => {
+    // Mock bridge endpoint returning success:false
+    mswServer.use(
+      http.post('http://127.0.0.1:9999/bundled/humaans/configure', () => {
+        return HttpResponse.json({ success: false, error: 'Invalid API key format' });
+      }),
+      ...createHumaansHandlers(),
+    );
+
+    const fs = await import('fs');
+    const path = await import('path');
+    const os = await import('os');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'humaans-bridge-fail-'));
+    const bridgePath = path.join(tmpDir, 'bridge.json');
+    fs.writeFileSync(bridgePath, JSON.stringify({ port: 9999, token: 'test-token' }));
+
+    try {
+      testClient = await createTestClient({
+        env: {
+          HUMAANS_API_KEY: '',
+          MINDSTONE_REBEL_BRIDGE_STATE: bridgePath,
+          MCP_HOST_BRIDGE_STATE: '',
+        },
+      });
+
+      const result = await testClient.callTool('configure_humaans_api_key', { api_key: 'some-key' });
+      expect(result.isError).toBe(true);
+      const json = result.json as { ok: boolean; error: string; code: string };
+      expect(json.ok).toBe(false);
+      expect(json.error).toContain('Invalid API key format');
+      expect(json.code).toBe('BRIDGE_ERROR');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   it('configure_humaans_api_key works with bridge available', async () => {
     // Mock bridge endpoint
     mswServer.use(

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { setApiKeys } from '../auth.js';
 import { bridgeRequest, BRIDGE_STATE_PATH } from '../bridge.js';
+import { KlingError } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 
 export function registerConfigureTools(server: McpServer): void {
@@ -45,13 +46,24 @@ export function registerConfigureTools(server: McpServer): void {
               : 'Kling API keys configured successfully! You can now use generate_kling_video to create AI videos.';
             return JSON.stringify({ ok: true, message });
           }
-          // Bridge returned error — fall through to in-memory only
-        } catch {
-          // Bridge request failed — fall through to in-memory only
+          // Bridge returned failure — surface as error, do NOT fall through
+          throw new KlingError(
+            result.error || 'Bridge configuration failed',
+            'BRIDGE_ERROR',
+            'The host app bridge rejected the configuration request. Check the host app logs.',
+          );
+        } catch (error) {
+          if (error instanceof KlingError) throw error;
+          // Bridge request failed (network, timeout, etc.) — surface as error
+          throw new KlingError(
+            `Bridge request failed: ${error instanceof Error ? error.message : String(error)}`,
+            'BRIDGE_ERROR',
+            'Could not reach the host app bridge. Ensure the host app is running.',
+          );
         }
       }
 
-      // No bridge or bridge failed — configure in-memory only
+      // No bridge configured — configure in-memory only
       setApiKeys(trimmedAccessKey, trimmedSecretKey);
       return JSON.stringify({
         ok: true,

@@ -109,6 +109,129 @@ describe('ServiceNow configure tools', () => {
     expect(json.message).toContain('test-instance.service-now.com');
   });
 
+  it('configure_servicenow returns isError when bridge returns 401', async () => {
+    mswServer.use(
+      http.post('http://127.0.0.1:9999/bundled/servicenow/configure', () => {
+        return new HttpResponse(null, { status: 401 });
+      }),
+      ...createServiceNowHandlers(),
+    );
+
+    const fs = await import('fs');
+    const path = await import('path');
+    const os = await import('os');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'servicenow-bridge-401-'));
+    const bridgePath = path.join(tmpDir, 'bridge.json');
+    fs.writeFileSync(bridgePath, JSON.stringify({ port: 9999, token: 'test-token' }));
+
+    try {
+      testClient = await createTestClient({
+        env: {
+          SERVICENOW_INSTANCE: '',
+          SERVICENOW_USERNAME: '',
+          SERVICENOW_PASSWORD: '',
+          MINDSTONE_REBEL_BRIDGE_STATE: bridgePath,
+          MCP_HOST_BRIDGE_STATE: '',
+        },
+      });
+
+      const result = await testClient.callTool('configure_servicenow', {
+        instance: 'test-instance',
+        username: 'user',
+        password: 'pass',
+      });
+      expect(result.isError).toBe(true);
+      const json = result.json as { ok: boolean; error: string; code: string };
+      expect(json.ok).toBe(false);
+      expect(json.error).toContain('401');
+      expect(json.code).toBe('BRIDGE_ERROR');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('configure_servicenow returns isError when bridge returns 403', async () => {
+    mswServer.use(
+      http.post('http://127.0.0.1:9999/bundled/servicenow/configure', () => {
+        return new HttpResponse(null, { status: 403 });
+      }),
+      ...createServiceNowHandlers(),
+    );
+
+    const fs = await import('fs');
+    const path = await import('path');
+    const os = await import('os');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'servicenow-bridge-403-'));
+    const bridgePath = path.join(tmpDir, 'bridge.json');
+    fs.writeFileSync(bridgePath, JSON.stringify({ port: 9999, token: 'test-token' }));
+
+    try {
+      testClient = await createTestClient({
+        env: {
+          SERVICENOW_INSTANCE: '',
+          SERVICENOW_USERNAME: '',
+          SERVICENOW_PASSWORD: '',
+          MINDSTONE_REBEL_BRIDGE_STATE: bridgePath,
+          MCP_HOST_BRIDGE_STATE: '',
+        },
+      });
+
+      const result = await testClient.callTool('configure_servicenow', {
+        instance: 'test-instance',
+        username: 'user',
+        password: 'pass',
+      });
+      expect(result.isError).toBe(true);
+      const json = result.json as { ok: boolean; error: string; code: string };
+      expect(json.ok).toBe(false);
+      expect(json.error).toContain('403');
+      expect(json.code).toBe('BRIDGE_ERROR');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('configure_servicenow returns isError when bridge returns success:false', async () => {
+    mswServer.use(
+      http.post('http://127.0.0.1:9999/bundled/servicenow/configure', () => {
+        return HttpResponse.json({ success: false, error: 'Invalid credentials' });
+      }),
+      ...createServiceNowHandlers(),
+    );
+
+    const fs = await import('fs');
+    const path = await import('path');
+    const os = await import('os');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'servicenow-bridge-fail-'));
+    const bridgePath = path.join(tmpDir, 'bridge.json');
+    fs.writeFileSync(bridgePath, JSON.stringify({ port: 9999, token: 'test-token' }));
+
+    try {
+      testClient = await createTestClient({
+        env: {
+          SERVICENOW_INSTANCE: '',
+          SERVICENOW_USERNAME: '',
+          SERVICENOW_PASSWORD: '',
+          MINDSTONE_REBEL_BRIDGE_STATE: bridgePath,
+          MCP_HOST_BRIDGE_STATE: '',
+        },
+      });
+
+      const result = await testClient.callTool('configure_servicenow', {
+        instance: 'test-instance',
+        username: 'user',
+        password: 'pass',
+      });
+      expect(result.isError).toBe(true);
+      const json = result.json as { ok: boolean; error: string; code: string };
+      expect(json.ok).toBe(false);
+      expect(json.error).toContain('Invalid credentials');
+      expect(json.code).toBe('BRIDGE_ERROR');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   it('configure_servicenow works with bridge available', async () => {
     // Mock bridge endpoint
     mswServer.use(

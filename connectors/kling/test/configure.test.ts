@@ -58,6 +58,123 @@ describe('Kling configure tools', () => {
     expect(result.isError).toBe(true);
   });
 
+  it('configure_kling_api_keys returns isError when bridge returns 401', async () => {
+    mswServer.use(
+      http.post('http://127.0.0.1:9999/bundled/kling/configure', () => {
+        return new HttpResponse(null, { status: 401 });
+      }),
+      ...createKlingHandlers(),
+    );
+
+    const fs = await import('fs');
+    const path = await import('path');
+    const os = await import('os');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kling-bridge-401-'));
+    const bridgePath = path.join(tmpDir, 'bridge.json');
+    fs.writeFileSync(bridgePath, JSON.stringify({ port: 9999, token: 'test-token' }));
+
+    try {
+      testClient = await createTestClient({
+        env: {
+          KLING_ACCESS_KEY: '',
+          KLING_SECRET_KEY: '',
+          MINDSTONE_REBEL_BRIDGE_STATE: bridgePath,
+          MCP_HOST_BRIDGE_STATE: '',
+        },
+      });
+
+      const result = await testClient.callTool('configure_kling_api_keys', {
+        access_key: ACCESS_KEY,
+        secret_key: SECRET_KEY,
+      });
+      expect(result.isError).toBe(true);
+      const json = result.json as { ok: boolean; error: string; code: string };
+      expect(json.ok).toBe(false);
+      expect(json.error).toContain('401');
+      expect(json.code).toBe('BRIDGE_ERROR');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('configure_kling_api_keys returns isError when bridge returns 403', async () => {
+    mswServer.use(
+      http.post('http://127.0.0.1:9999/bundled/kling/configure', () => {
+        return new HttpResponse(null, { status: 403 });
+      }),
+      ...createKlingHandlers(),
+    );
+
+    const fs = await import('fs');
+    const path = await import('path');
+    const os = await import('os');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kling-bridge-403-'));
+    const bridgePath = path.join(tmpDir, 'bridge.json');
+    fs.writeFileSync(bridgePath, JSON.stringify({ port: 9999, token: 'test-token' }));
+
+    try {
+      testClient = await createTestClient({
+        env: {
+          KLING_ACCESS_KEY: '',
+          KLING_SECRET_KEY: '',
+          MINDSTONE_REBEL_BRIDGE_STATE: bridgePath,
+          MCP_HOST_BRIDGE_STATE: '',
+        },
+      });
+
+      const result = await testClient.callTool('configure_kling_api_keys', {
+        access_key: ACCESS_KEY,
+        secret_key: SECRET_KEY,
+      });
+      expect(result.isError).toBe(true);
+      const json = result.json as { ok: boolean; error: string; code: string };
+      expect(json.ok).toBe(false);
+      expect(json.error).toContain('403');
+      expect(json.code).toBe('BRIDGE_ERROR');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('configure_kling_api_keys returns isError when bridge returns success:false', async () => {
+    mswServer.use(
+      http.post('http://127.0.0.1:9999/bundled/kling/configure', () => {
+        return HttpResponse.json({ success: false, error: 'Invalid credentials' });
+      }),
+      ...createKlingHandlers(),
+    );
+
+    const fs = await import('fs');
+    const path = await import('path');
+    const os = await import('os');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kling-bridge-fail-'));
+    const bridgePath = path.join(tmpDir, 'bridge.json');
+    fs.writeFileSync(bridgePath, JSON.stringify({ port: 9999, token: 'test-token' }));
+
+    try {
+      testClient = await createTestClient({
+        env: {
+          KLING_ACCESS_KEY: '',
+          KLING_SECRET_KEY: '',
+          MINDSTONE_REBEL_BRIDGE_STATE: bridgePath,
+          MCP_HOST_BRIDGE_STATE: '',
+        },
+      });
+
+      const result = await testClient.callTool('configure_kling_api_keys', {
+        access_key: ACCESS_KEY,
+        secret_key: SECRET_KEY,
+      });
+      expect(result.isError).toBe(true);
+      const json = result.json as { ok: boolean; error: string; code: string };
+      expect(json.ok).toBe(false);
+      expect(json.error).toContain('Invalid credentials');
+      expect(json.code).toBe('BRIDGE_ERROR');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   it('configure_kling_api_keys works with bridge available', async () => {
     // Mock bridge endpoint
     mswServer.use(
