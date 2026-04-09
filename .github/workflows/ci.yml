@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        connector: [zendesk]
+        connector: [zendesk, fathom, humaans, kling, mixmax, pandadoc, servicenow]
         node-version: [20, 22]
     defaults:
       run:

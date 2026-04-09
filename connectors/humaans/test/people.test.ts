@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
-import { createHumaansHandlers, createHumaansUnauthorizedHandlers } from './helpers/humaans-mock-server.js';
+import { createHumaansHandlers, createHumaansUnauthorizedHandlers, createHumaansTimeoutHandlers } from './helpers/humaans-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
 
 const API_KEY = 'test-humaans-key';
@@ -159,6 +159,24 @@ describe('Humaans people tools', () => {
     expect(result.isError).toBe(true);
     expect(requestMade).toBe(false);
   });
+
+  // --- VAL-COMMON-005: Network timeout returns actionable MCP error ---
+  it('network timeout returns actionable MCP error', async () => {
+    mswServer.use(...createHumaansTimeoutHandlers());
+
+    testClient = await createTestClient({
+      env: { HUMAANS_API_KEY: API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('list_humaans_people', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; code: string };
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('TIMEOUT');
+    expect(json.error).toContain('timed out');
+    // Must not contain secrets
+    expect(result.text).not.toContain(API_KEY);
+  }, 45_000);
 
   // --- Not configured ---
   it('returns not-configured error when no API key is set', async () => {

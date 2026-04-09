@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
-import { createMixmaxHandlers, createMixmaxUnauthorizedHandlers } from './helpers/mixmax-mock-server.js';
+import { createMixmaxHandlers, createMixmaxUnauthorizedHandlers, createMixmaxTimeoutHandlers } from './helpers/mixmax-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
 
 const API_TOKEN = 'test-mixmax-token';
@@ -158,6 +158,24 @@ describe('Mixmax sequence tools', () => {
     expect(result.isError).toBe(true);
     expect(requestMade).toBe(false);
   });
+
+  // --- VAL-COMMON-005: Network timeout returns actionable MCP error ---
+  it('network timeout returns actionable MCP error', async () => {
+    mswServer.use(...createMixmaxTimeoutHandlers());
+
+    testClient = await createTestClient({
+      env: { MIXMAX_API_TOKEN: API_TOKEN, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('list_mixmax_sequences', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; code: string };
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('TIMEOUT');
+    expect(json.error).toContain('timed out');
+    // Must not contain secrets
+    expect(result.text).not.toContain(API_TOKEN);
+  }, 45_000);
 
   // --- Not configured ---
   it('returns not-configured error when no API token is set', async () => {
