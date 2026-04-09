@@ -10,11 +10,13 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
+        connector: [zendesk]
         node-version: [20, 22]
     defaults:
       run:
-        working-directory: connectors/zendesk
+        working-directory: connectors/${{ matrix.connector }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
