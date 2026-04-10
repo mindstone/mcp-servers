@@ -1,0 +1,251 @@
+/**
+ * Shared utilities for email-imap tool handlers.
+ */
+
+import { randomUUID } from 'node:crypto';
+import type { Readable } from 'node:stream';
+import type { MessageAddressObject, MessageStructureObject } from 'imapflow';
+
+import type { ClientConfig } from '../types.js';
+import { getConnection } from '../imap-client.js';
+import { getPreset } from '../presets.js';
+
+/**
+ * In-memory client config. Set by initClients(), read by tool handlers.
+ */
+let clientConfig: ClientConfig | null = null;
+
+export function setClientConfig(config: ClientConfig | null): void {
+  clientConfig = config ? { ...config } : null;
+}
+
+export function getClientConfig(): ClientConfig | null {
+  return clientConfig;
+}
+
+export function ensureInitialized(): ClientConfig {
+  if (!clientConfig) {
+    throw new Error('Email clients are not initialized');
+  }
+  return clientConfig;
+}
+
+/**
+ * Attachment metadata from a parsed message.
+ */
+export interface AttachmentMetadata {
+  filename: string | null;
+  contentType: string;
+  size: number;
+}
+
+/**
+ * Parsed message parts (text, html, attachments).
+ */
+export interface MessageParts {
+  textPart?: string;
+  htmlPart?: string;
+  attachments: AttachmentMetadata[];
+}
+
+/**
+ * Format email addresses for display.
+ */
+export function formatAddresses(addresses?: MessageAddressObject[]): string {
+  if (!addresses || addresses.length === 0) {
+    return '';
+  }
+
+  return addresses
+    .map((address) => {
+      if (!address.address) {
+        return '';
+      }
+
+      if (address.name) {
+        return `${address.name} <${address.address}>`;
+      }
+
+      return address.address;
+    })
+    .filter((entry) => entry.length > 0)
+    .join(', ');
+}
+
+/**
+ * Format a date value to ISO string.
+ */
+export function formatDate(date: Date | string | undefined): string | null {
+  if (!date) {
+    return null;
+  }
+
+  if (date instanceof Date) {
+    return date.toISOString();
+  }
+
+  const parsed = new Date(date);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+/**
+ * Generate a unique Message-ID for an email.
+ */
+export function generateMessageId(email: string): string {
+  const [, domain = 'localhost'] = email.split('@');
+  return `<${randomUUID()}@${domain}>`;
+}
+
+/**
+ * Read a stream into a Buffer.
+ */
+export async function streamToBuffer(stream: Readable): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    if (typeof chunk === 'string') {
+      chunks.push(Buffer.from(chunk));
+    } else {
+      chunks.push(chunk as Buffer);
+    }
+  }
+  return Buffer.concat(chunks);
+}
+
+/**
+ * Download a message part as text by UID and part number.
+ */
+export async function downloadPartAsText(uid: number, part: string): Promise<string> {
+  const client = await getConnection();
+  const partData = await client.download(uid, part, { uid: true });
+  const content = await streamToBuffer(partData.content);
+  return content.toString('utf8');
+}
+
+/**
+ * Recursively collect text/html parts and attachments from a message structure.
+ */
+export function collectMessageParts(
+  node: MessageStructureObject | undefined,
+  parts: MessageParts,
+): void {
+  if (!node) {
+    return;
+  }
+
+  if (Array.isArray(node.childNodes) && node.childNodes.length > 0) {
+    for (const childNode of node.childNodes) {
+      collectMessageParts(childNode, parts);
+    }
+    return;
+  }
+
+  const contentType = node.type.toLowerCase();
+  const partIdentifier = node.part ?? '1';
+
+  if (contentType === 'text/plain' && !parts.textPart) {
+    parts.textPart = partIdentifier;
+    return;
+  }
+
+  if (contentType === 'text/html' && !parts.htmlPart) {
+    parts.htmlPart = partIdentifier;
+    return;
+  }
+
+  const disposition = node.disposition?.toLowerCase();
+  const filename =
+    node.dispositionParameters?.filename ?? node.parameters?.name ?? null;
+  const isAttachment =
+    disposition === 'attachment' ||
+    (disposition === 'inline' && Boolean(filename)) ||
+    (Boolean(filename) && !contentType.startsWith('text/'));
+
+  if (!isAttachment) {
+    return;
+  }
+
+  parts.attachments.push({
+    filename,
+    contentType,
+    size: typeof node.size === 'number' ? node.size : 0,
+  });
+}
+
+/**
+ * Remove duplicates from an array, preserving order (case-insensitive).
+ */
+export function uniquePreserveOrder(values: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const value of values) {
+    const key = value.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(value);
+  }
+
+  return result;
+}
+
+/**
+ * Resolve the drafts mailbox name for the current account.
+ */
+export async function resolveDraftsMailbox(): Promise<string> {
+  const client = await getConnection();
+  const listedMailboxes = await client.list();
+  const mailboxByLowerName = new Map<string, string>();
+
+  for (const mailbox of listedMailboxes) {
+    mailboxByLowerName.set(mailbox.path.toLowerCase(), mailbox.path);
+  }
+
+  const exactDrafts = mailboxByLowerName.get('drafts');
+  if (exactDrafts) {
+    return exactDrafts;
+  }
+
+  const specialUseDrafts = listedMailboxes.find(
+    (mailbox) => mailbox.specialUse === '\\Drafts',
+  );
+  if (specialUseDrafts) {
+    return specialUseDrafts.path;
+  }
+
+  const iCloudPreset = getPreset('icloud');
+  const yahooPreset = getPreset('yahoo');
+  const fallbackCandidates = uniquePreserveOrder([
+    'Drafts',
+    'Draft',
+    ...(iCloudPreset?.folderFallbacks.drafts ?? []),
+    ...(yahooPreset?.folderFallbacks.drafts ?? []),
+  ]);
+
+  for (const candidate of fallbackCandidates) {
+    const existing = mailboxByLowerName.get(candidate.toLowerCase());
+    if (existing) {
+      return existing;
+    }
+  }
+
+  const defaultMailbox = fallbackCandidates[0] ?? 'Drafts';
+  await client.mailboxCreate(defaultMailbox);
+  return defaultMailbox;
+}
+
+/**
+ * Ensure a mailbox exists, creating it if necessary.
+ */
+export async function ensureMailboxExists(mailbox: string): Promise<void> {
+  const client = await getConnection();
+  const listedMailboxes = await client.list();
+  const exists = listedMailboxes.some(
+    (entry) => entry.path.toLowerCase() === mailbox.toLowerCase(),
+  );
+
+  if (!exists) {
+    await client.mailboxCreate(mailbox);
+  }
+}
