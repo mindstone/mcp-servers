@@ -13,8 +13,8 @@
  * Environment variables:
  * - TALENTLMS_API_KEY: TalentLMS API key (Super Admin required)
  * - TALENTLMS_DOMAIN: TalentLMS subdomain (e.g., "acme" for acme.talentlms.com)
- * - MCP_HOST_BRIDGE_STATE: Path to host app bridge state file (optional)
- * - MINDSTONE_REBEL_BRIDGE_STATE: Legacy bridge state path (optional)
+ * - MCP_HOST_BRIDGE_STATE: Path to host app bridge state file (primary, optional)
+ * - MINDSTONE_REBEL_BRIDGE_STATE: Legacy/deprecated bridge state path (optional)
  */
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';

@@ -20,7 +20,7 @@ const loadBridgeState = (): BridgeState | null => {
 /**
  * Send a request to the host app bridge.
  *
- * The bridge is an HTTP server running inside the host app (e.g. Rebel)
+ * The bridge is an HTTP server running inside the host app (e.g. the host application)
  * that handles credential management and other cross-process operations.
  */
 export const bridgeRequest = async (

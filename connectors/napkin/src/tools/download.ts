@@ -32,11 +32,11 @@ function slugify(text: string): string {
 /**
  * Resolve the output directory for downloaded visuals.
  *
- * - With REBEL_WORKSPACE_PATH: saves to workspace/Chief-of-Staff/generated-visuals/
+ * - With MCP_WORKSPACE_PATH: saves to workspace/Chief-of-Staff/generated-visuals/
  * - Without: saves to ~/Pictures/NapkinVisuals/
  */
 export function resolveOutputDir(): string {
-  const workspacePath = process.env.REBEL_WORKSPACE_PATH;
+  const workspacePath = process.env.MCP_WORKSPACE_PATH;
   if (workspacePath) {
     return path.join(workspacePath, 'Chief-of-Staff', 'generated-visuals');
   }

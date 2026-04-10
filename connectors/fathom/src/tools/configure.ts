@@ -12,7 +12,7 @@ export function registerConfigureTools(server: McpServer): void {
       description:
         'Configure the Fathom API key. Call this tool when the user provides their Fathom API key. ' +
         'Get your API key from https://fathom.video/customize#api-access-header — ' +
-        'click "Add +", select "Generate API Key", name it "Mindstone Rebel".',
+        'click "Add +", select "Generate API Key", name it (e.g., "MCP Server").',
       inputSchema: z.object({
         api_key: z.string().min(1).describe('The Fathom API key'),
       }),

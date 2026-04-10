@@ -12,18 +12,18 @@ describe('Path traversal safety — resolveSavePath', () => {
   // ---- WORKSPACE ROOT DERIVATION ----
 
   describe('getWorkspaceRoot', () => {
-    it('uses REBEL_WORKSPACE_PATH when set', () => {
-      vi.stubEnv('REBEL_WORKSPACE_PATH', '/tmp/test-workspace');
+    it('uses MCP_WORKSPACE_PATH when set', () => {
+      vi.stubEnv('MCP_WORKSPACE_PATH', '/tmp/test-workspace');
       expect(getWorkspaceRoot()).toBe('/tmp/test-workspace');
     });
 
-    it('falls back to process.cwd() when REBEL_WORKSPACE_PATH is empty', () => {
-      vi.stubEnv('REBEL_WORKSPACE_PATH', '');
+    it('falls back to process.cwd() when MCP_WORKSPACE_PATH is empty', () => {
+      vi.stubEnv('MCP_WORKSPACE_PATH', '');
       expect(getWorkspaceRoot()).toBe(path.resolve(process.cwd()));
     });
 
-    it('falls back to process.cwd() when REBEL_WORKSPACE_PATH is undefined', () => {
-      delete process.env.REBEL_WORKSPACE_PATH;
+    it('falls back to process.cwd() when MCP_WORKSPACE_PATH is undefined', () => {
+      delete process.env.MCP_WORKSPACE_PATH;
       expect(getWorkspaceRoot()).toBe(path.resolve(process.cwd()));
     });
   });
@@ -64,7 +64,7 @@ describe('Path traversal safety — resolveSavePath', () => {
   });
 
   it('allows absolute path inside workspace root', () => {
-    vi.stubEnv('REBEL_WORKSPACE_PATH', '/tmp/test-workspace');
+    vi.stubEnv('MCP_WORKSPACE_PATH', '/tmp/test-workspace');
     const wsPath = '/tmp/test-workspace/images/test-image.png';
     const result = resolveSavePath(wsPath, mimeType);
     expect(result.ok).toBe(true);
@@ -74,7 +74,7 @@ describe('Path traversal safety — resolveSavePath', () => {
   });
 
   it('resolves relative paths against workspace root', () => {
-    vi.stubEnv('REBEL_WORKSPACE_PATH', '/tmp/test-workspace');
+    vi.stubEnv('MCP_WORKSPACE_PATH', '/tmp/test-workspace');
     const result = resolveSavePath('images/test-image', mimeType);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -121,7 +121,7 @@ describe('Path traversal safety — resolveSavePath', () => {
   // ---- TILDE / HOMEDIR REJECTION ----
 
   it('rejects tilde paths (would escape workspace root)', () => {
-    vi.stubEnv('REBEL_WORKSPACE_PATH', '/tmp/test-workspace');
+    vi.stubEnv('MCP_WORKSPACE_PATH', '/tmp/test-workspace');
     const result = resolveSavePath('~/Pictures/my-image.png', mimeType);
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -131,7 +131,7 @@ describe('Path traversal safety — resolveSavePath', () => {
   });
 
   it('rejects bare tilde path', () => {
-    vi.stubEnv('REBEL_WORKSPACE_PATH', '/tmp/test-workspace');
+    vi.stubEnv('MCP_WORKSPACE_PATH', '/tmp/test-workspace');
     const result = resolveSavePath('~/image', mimeType);
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -142,7 +142,7 @@ describe('Path traversal safety — resolveSavePath', () => {
   // ---- ABSOLUTE PATH OUTSIDE WORKSPACE REJECTION ----
 
   it('rejects absolute path outside workspace (/etc)', () => {
-    vi.stubEnv('REBEL_WORKSPACE_PATH', '/tmp/test-workspace');
+    vi.stubEnv('MCP_WORKSPACE_PATH', '/tmp/test-workspace');
     const result = resolveSavePath('/etc/evil-image', mimeType);
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -151,7 +151,7 @@ describe('Path traversal safety — resolveSavePath', () => {
   });
 
   it('rejects absolute path outside workspace (/tmp)', () => {
-    vi.stubEnv('REBEL_WORKSPACE_PATH', '/tmp/test-workspace');
+    vi.stubEnv('MCP_WORKSPACE_PATH', '/tmp/test-workspace');
     const result = resolveSavePath('/tmp/evil-image', mimeType);
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -160,7 +160,7 @@ describe('Path traversal safety — resolveSavePath', () => {
   });
 
   it('rejects root path', () => {
-    vi.stubEnv('REBEL_WORKSPACE_PATH', '/tmp/test-workspace');
+    vi.stubEnv('MCP_WORKSPACE_PATH', '/tmp/test-workspace');
     const result = resolveSavePath('/evil.png', mimeType);
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -173,7 +173,7 @@ describe('Path traversal safety — resolveSavePath', () => {
   it('validates final path after extension is appended', () => {
     // Even if the base path looks okay, the final path after extension append
     // must still be within the workspace root
-    vi.stubEnv('REBEL_WORKSPACE_PATH', '/tmp/test-workspace');
+    vi.stubEnv('MCP_WORKSPACE_PATH', '/tmp/test-workspace');
     // Absolute path outside workspace — even without extension, should be caught
     const result = resolveSavePath('/tmp/other-dir/image', mimeType);
     expect(result.ok).toBe(false);

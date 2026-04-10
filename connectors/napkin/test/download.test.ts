@@ -44,7 +44,7 @@ describe('napkin_download_visual', () => {
       env: {
         NAPKIN_API_KEY: MOCK_API_KEY,
         MCP_HOST_BRIDGE_STATE: '',
-        REBEL_WORKSPACE_PATH: '',
+        MCP_WORKSPACE_PATH: '',
         HOME: tmpDir,
       },
     });
@@ -83,7 +83,7 @@ describe('napkin_download_visual', () => {
       env: {
         NAPKIN_API_KEY: MOCK_API_KEY,
         MCP_HOST_BRIDGE_STATE: '',
-        REBEL_WORKSPACE_PATH: '',
+        MCP_WORKSPACE_PATH: '',
         HOME: tmpDir,
       },
     });
@@ -119,7 +119,7 @@ describe('napkin_download_visual', () => {
       env: {
         NAPKIN_API_KEY: MOCK_API_KEY,
         MCP_HOST_BRIDGE_STATE: '',
-        REBEL_WORKSPACE_PATH: '',
+        MCP_WORKSPACE_PATH: '',
         HOME: tmpDir,
       },
     });
@@ -145,7 +145,7 @@ describe('napkin_download_visual', () => {
       env: {
         NAPKIN_API_KEY: MOCK_API_KEY,
         MCP_HOST_BRIDGE_STATE: '',
-        REBEL_WORKSPACE_PATH: '',
+        MCP_WORKSPACE_PATH: '',
         HOME: tmpDir,
       },
     });
@@ -188,9 +188,9 @@ describe('napkin_download_visual', () => {
 });
 
 describe('Output directory resolution', () => {
-  it('resolves to workspace path when REBEL_WORKSPACE_PATH is set', async () => {
+  it('resolves to workspace path when MCP_WORKSPACE_PATH is set', async () => {
     // Import the module to test resolveOutputDir
-    vi.stubEnv('REBEL_WORKSPACE_PATH', '/tmp/test-workspace');
+    vi.stubEnv('MCP_WORKSPACE_PATH', '/tmp/test-workspace');
     vi.resetModules();
     const { resolveOutputDir } = await import('../src/tools/download.js');
 
@@ -200,8 +200,8 @@ describe('Output directory resolution', () => {
     vi.unstubAllEnvs();
   });
 
-  it('resolves to ~/Pictures/NapkinVisuals when REBEL_WORKSPACE_PATH is not set', async () => {
-    vi.stubEnv('REBEL_WORKSPACE_PATH', '');
+  it('resolves to ~/Pictures/NapkinVisuals when MCP_WORKSPACE_PATH is not set', async () => {
+    vi.stubEnv('MCP_WORKSPACE_PATH', '');
     vi.stubEnv('HOME', '/Users/testuser');
     vi.resetModules();
     const { resolveOutputDir } = await import('../src/tools/download.js');

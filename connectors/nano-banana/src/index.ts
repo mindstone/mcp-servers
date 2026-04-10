@@ -7,8 +7,8 @@
  *
  * Environment variables:
  * - GEMINI_API_KEY: Gemini API key (required, get from https://aistudio.google.com/api-keys)
- * - MCP_HOST_BRIDGE_STATE: Path to host app bridge state file (optional)
- * - MINDSTONE_REBEL_BRIDGE_STATE: Legacy bridge state path (optional)
+ * - MCP_HOST_BRIDGE_STATE: Path to host app bridge state file (primary, optional)
+ * - MINDSTONE_REBEL_BRIDGE_STATE: Legacy/deprecated bridge state path (optional)
  */
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';

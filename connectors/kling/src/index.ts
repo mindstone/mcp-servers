@@ -7,8 +7,8 @@
  * Environment variables:
  * - KLING_ACCESS_KEY: Kling API access key (required)
  * - KLING_SECRET_KEY: Kling API secret key (required)
- * - MCP_HOST_BRIDGE_STATE: Path to host app bridge state file (optional)
- * - MINDSTONE_REBEL_BRIDGE_STATE: Legacy bridge state path (optional)
+ * - MCP_HOST_BRIDGE_STATE: Path to host app bridge state file (primary, optional)
+ * - MINDSTONE_REBEL_BRIDGE_STATE: Legacy/deprecated bridge state path (optional)
  */
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';

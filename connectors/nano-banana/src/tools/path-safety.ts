@@ -17,11 +17,11 @@ export type ResolveResult =
 /**
  * Derive the canonical workspace root directory.
  *
- * Priority: REBEL_WORKSPACE_PATH env var > process.cwd()
+ * Priority: MCP_WORKSPACE_PATH env var > process.cwd()
  * The result is always resolved to an absolute path.
  */
 export function getWorkspaceRoot(): string {
-  const envRoot = process.env.REBEL_WORKSPACE_PATH;
+  const envRoot = process.env.MCP_WORKSPACE_PATH;
   if (envRoot && envRoot.trim()) {
     return path.resolve(envRoot.trim());
   }
