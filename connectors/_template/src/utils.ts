@@ -48,8 +48,28 @@ export function validateHostname(input: string): string {
         'Use an HTTPS URL.',
       );
     }
-    // Strip scheme and extract hostname (before port/path)
-    hostname = trimmed.slice(schemeMatch[0].length).split(/[:/]/)[0];
+    // Strip scheme
+    hostname = trimmed.slice(schemeMatch[0].length);
+
+    // Strip userinfo (e.g. "user@" in "https://user@localhost/")
+    const atIndex = hostname.indexOf('@');
+    if (atIndex !== -1) {
+      hostname = hostname.slice(atIndex + 1);
+    }
+
+    // Extract hostname (before port/path)
+    hostname = hostname.split(/[:/]/)[0];
+  } else {
+    // No scheme — strip port from bare hostnames/IPs.
+    // Handle bracketed IPv6 like [::1]:8080
+    const bracketMatch = hostname.match(/^\[([^\]]+)\]/);
+    if (bracketMatch) {
+      hostname = bracketMatch[1];
+    } else if ((hostname.match(/:/g) || []).length === 1) {
+      // Exactly one colon means host:port (not bare IPv6 which has multiple colons)
+      hostname = hostname.slice(0, hostname.indexOf(':'));
+    }
+    // Bare IPv6 like ::1 (multiple colons, no brackets) is left as-is
   }
 
   const lower = hostname.toLowerCase();
