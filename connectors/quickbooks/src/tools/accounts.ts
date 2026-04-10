@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling } from '../utils.js';
+import { withErrorHandling, escapeQboql } from '../utils.js';
 import { qboQuery } from '../client.js';
 
 export function registerAccountTools(server: McpServer): void {
@@ -30,7 +30,7 @@ Account types: Bank, Accounts Receivable, Other Current Asset, Fixed Asset, Othe
       const limit = Math.min(args.limit ?? 100, 1000);
       const conditions: string[] = [];
 
-      if (args.accountType) conditions.push(`AccountType = '${args.accountType}'`);
+      if (args.accountType) conditions.push(`AccountType = '${escapeQboql(args.accountType)}'`);
       if (args.active !== undefined) conditions.push(`Active = ${args.active}`);
 
       const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';

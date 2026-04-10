@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling } from '../utils.js';
+import { withErrorHandling, escapeQboql } from '../utils.js';
 import { qboFetch, qboQuery } from '../client.js';
 
 export function registerVendorTools(server: McpServer): void {
@@ -30,7 +30,7 @@ Example: { "searchTerm": "Office" }`,
 
       if (args.active !== undefined) conditions.push(`Active = ${args.active}`);
       if (args.searchTerm) {
-        conditions.push(`DisplayName LIKE '%${args.searchTerm.replace(/'/g, "\\'")}%'`);
+        conditions.push(`DisplayName LIKE '%${escapeQboql(args.searchTerm)}%'`);
       }
 
       const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';

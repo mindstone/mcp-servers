@@ -192,7 +192,7 @@ describe('Bridge integration', () => {
     });
 
     const result = await testClient.callTool('configure_elevenlabs_api_key', {
-      api_key: 'some-key',
+      api_key: 'mcp-test-elevenlabs-key',
     });
 
     expect(result.isError).toBe(true);
@@ -213,7 +213,7 @@ describe('Bridge integration', () => {
     });
 
     const result = await testClient.callTool('configure_elevenlabs_api_key', {
-      api_key: 'some-key',
+      api_key: 'mcp-test-elevenlabs-key',
     });
 
     expect(result.isError).toBe(true);
@@ -235,7 +235,7 @@ describe('Bridge integration', () => {
     });
 
     const result = await testClient.callTool('configure_elevenlabs_api_key', {
-      api_key: 'some-key',
+      api_key: 'mcp-test-elevenlabs-key',
     });
 
     expect(result.isError).toBe(true);

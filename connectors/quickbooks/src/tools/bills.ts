@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling } from '../utils.js';
+import { withErrorHandling, escapeQboql, validateAlphanumericId } from '../utils.js';
 import { qboFetch, qboQuery } from '../client.js';
 
 export function registerBillTools(server: McpServer): void {
@@ -25,7 +25,8 @@ Example: { "vendorId": "123" }`,
     },
     withErrorHandling(async (args) => {
       const limit = Math.min(args.limit ?? 50, 1000);
-      const where = args.vendorId ? ` WHERE VendorRef = '${args.vendorId}'` : '';
+      if (args.vendorId) validateAlphanumericId(args.vendorId, 'vendorId');
+      const where = args.vendorId ? ` WHERE VendorRef = '${escapeQboql(args.vendorId)}'` : '';
       const query = `SELECT * FROM Bill${where} ORDERBY TxnDate DESC`;
       const bills = await qboQuery('Bill', query, limit);
       return JSON.stringify({ ok: true, bills, count: bills.length });

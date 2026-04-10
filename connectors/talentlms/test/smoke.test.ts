@@ -76,7 +76,7 @@ describe('Spawned stdio smoke test', () => {
       command: 'node',
       args: [distPath],
       env: {
-        TALENTLMS_API_KEY: 'test-key',
+        TALENTLMS_API_KEY: 'mcp-test-talentlms-key',
         TALENTLMS_DOMAIN: 'test',
         MCP_HOST_BRIDGE_STATE: '',
       },

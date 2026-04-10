@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling } from '../utils.js';
+import { withErrorHandling, escapeQboql, validateAlphanumericId } from '../utils.js';
 import { qboFetch, qboQuery } from '../client.js';
 
 export function registerInvoiceTools(server: McpServer): void {
@@ -40,7 +40,10 @@ WORKFLOW:
       else if (args.status === 'overdue') {
         conditions.push(`Balance > '0' AND DueDate < '${new Date().toISOString().split('T')[0]}'`);
       }
-      if (args.customerId) conditions.push(`CustomerRef = '${args.customerId}'`);
+      if (args.customerId) {
+        validateAlphanumericId(args.customerId, 'customerId');
+        conditions.push(`CustomerRef = '${escapeQboql(args.customerId)}'`);
+      }
 
       const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
       const query = `SELECT * FROM Invoice${where} ORDERBY TxnDate DESC`;

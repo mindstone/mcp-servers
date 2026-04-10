@@ -385,7 +385,7 @@ describe('Freshdesk bridge integration', () => {
 
     const result = await testClient.client.callTool({
       name: 'configure_freshdesk',
-      arguments: { domain: 'test401', api_key: 'test-key' },
+      arguments: { domain: 'test401', api_key: 'mcp-test-freshdesk-key' },
     });
 
     expect(result.isError).toBe(true);
@@ -411,7 +411,7 @@ describe('Freshdesk bridge integration', () => {
 
     const result = await testClient.client.callTool({
       name: 'configure_freshdesk',
-      arguments: { domain: 'test403', api_key: 'test-key' },
+      arguments: { domain: 'test403', api_key: 'mcp-test-freshdesk-key' },
     });
 
     expect(result.isError).toBe(true);
@@ -437,7 +437,7 @@ describe('Freshdesk bridge integration', () => {
 
     const result = await testClient.client.callTool({
       name: 'configure_freshdesk',
-      arguments: { domain: 'testfail', api_key: 'test-key' },
+      arguments: { domain: 'testfail', api_key: 'mcp-test-freshdesk-key' },
     });
 
     expect(result.isError).toBe(true);

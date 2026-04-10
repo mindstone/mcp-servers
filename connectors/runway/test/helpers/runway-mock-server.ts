@@ -168,7 +168,7 @@ export function createRunwayHandlers(expectedApiKey = MOCK_API_KEY) {
       if (authError) return authError;
       return HttpResponse.json({
         uploadUrl: 'https://runway-uploads.example.com/upload',
-        fields: { key: 'test-key', 'Content-Type': 'application/octet-stream' },
+        fields: { key: 'mcp-test-runway-upload-key', 'Content-Type': 'application/octet-stream' },
         runwayUri: 'runway://test-upload-001',
       });
     }),

@@ -48,7 +48,7 @@ describe('Spawned stdio smoke test', () => {
       command: 'node',
       args: [distPath],
       env: {
-        NAPKIN_API_KEY: 'test-key',
+        NAPKIN_API_KEY: 'mcp-test-napkin-key',
         MCP_HOST_BRIDGE_STATE: '',
       },
     });

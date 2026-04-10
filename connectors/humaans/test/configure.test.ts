@@ -85,7 +85,7 @@ describe('Humaans configure tools', () => {
         },
       });
 
-      const result = await testClient.callTool('configure_humaans_api_key', { api_key: 'some-key' });
+      const result = await testClient.callTool('configure_humaans_api_key', { api_key: 'mcp-test-humaans-key' });
       expect(result.isError).toBe(true);
       const json = result.json as { ok: boolean; error: string; code: string };
       expect(json.ok).toBe(false);
@@ -121,7 +121,7 @@ describe('Humaans configure tools', () => {
         },
       });
 
-      const result = await testClient.callTool('configure_humaans_api_key', { api_key: 'some-key' });
+      const result = await testClient.callTool('configure_humaans_api_key', { api_key: 'mcp-test-humaans-key' });
       expect(result.isError).toBe(true);
       const json = result.json as { ok: boolean; error: string; code: string };
       expect(json.ok).toBe(false);
@@ -157,7 +157,7 @@ describe('Humaans configure tools', () => {
         },
       });
 
-      const result = await testClient.callTool('configure_humaans_api_key', { api_key: 'some-key' });
+      const result = await testClient.callTool('configure_humaans_api_key', { api_key: 'mcp-test-humaans-key' });
       expect(result.isError).toBe(true);
       const json = result.json as { ok: boolean; error: string; code: string };
       expect(json.ok).toBe(false);

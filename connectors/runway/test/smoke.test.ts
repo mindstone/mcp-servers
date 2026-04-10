@@ -68,7 +68,7 @@ describe('Spawned stdio smoke test', () => {
       command: 'node',
       args: [distPath],
       env: {
-        RUNWAYML_API_SECRET: 'test-key',
+        RUNWAYML_API_SECRET: 'mcp-test-runway-key',
         MCP_HOST_BRIDGE_STATE: '',
       },
     });

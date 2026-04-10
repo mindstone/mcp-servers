@@ -23,6 +23,7 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
       - run: npm ci
+      - run: npm audit --audit-level=high --omit=dev
       - run: npm run build
       - run: npm test
       - name: Verify package contents

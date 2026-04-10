@@ -47,7 +47,7 @@ describe('Spawned stdio smoke test', () => {
       command: 'node',
       args: [distPath],
       env: {
-        GEMINI_API_KEY: 'test-key',
+        GEMINI_API_KEY: 'mcp-test-nano-banana-key',
         MCP_HOST_BRIDGE_STATE: '',
       },
     });

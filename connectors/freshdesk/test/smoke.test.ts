@@ -73,7 +73,7 @@ describe('Spawned stdio smoke test', () => {
       accounts: [
         {
           domain: 'testacme',
-          apiKey: 'test-key',
+          apiKey: 'mcp-test-freshdesk-key',
           agentEmail: 'agent@testacme.freshdesk.com',
         },
       ],

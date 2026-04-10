@@ -52,7 +52,7 @@ describe('Spawned stdio smoke test', () => {
       command: 'node',
       args: [distPath],
       env: {
-        ELEVENLABS_API_KEY: 'test-key',
+        ELEVENLABS_API_KEY: 'mcp-test-elevenlabs-key',
         MCP_HOST_BRIDGE_STATE: '',
       },
     });

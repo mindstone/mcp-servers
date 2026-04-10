@@ -83,7 +83,7 @@ describe('Fathom configure tools', () => {
         },
       });
 
-      const result = await testClient.callTool('configure_fathom_api_key', { api_key: 'some-key' });
+      const result = await testClient.callTool('configure_fathom_api_key', { api_key: 'mcp-test-fathom-key' });
       expect(result.isError).toBe(true);
       const json = result.json as { ok: boolean; error: string; code: string };
       expect(json.ok).toBe(false);
@@ -118,7 +118,7 @@ describe('Fathom configure tools', () => {
         },
       });
 
-      const result = await testClient.callTool('configure_fathom_api_key', { api_key: 'some-key' });
+      const result = await testClient.callTool('configure_fathom_api_key', { api_key: 'mcp-test-fathom-key' });
       expect(result.isError).toBe(true);
       const json = result.json as { ok: boolean; error: string; code: string };
       expect(json.ok).toBe(false);
@@ -153,7 +153,7 @@ describe('Fathom configure tools', () => {
         },
       });
 
-      const result = await testClient.callTool('configure_fathom_api_key', { api_key: 'some-key' });
+      const result = await testClient.callTool('configure_fathom_api_key', { api_key: 'mcp-test-fathom-key' });
       expect(result.isError).toBe(true);
       const json = result.json as { ok: boolean; error: string; code: string };
       expect(json.ok).toBe(false);

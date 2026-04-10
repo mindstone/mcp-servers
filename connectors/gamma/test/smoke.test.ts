@@ -50,7 +50,7 @@ describe('Spawned stdio smoke test', () => {
       command: 'node',
       args: [distPath],
       env: {
-        GAMMA_API_KEY: 'test-key',
+        GAMMA_API_KEY: 'mcp-test-gamma-key',
         MCP_HOST_BRIDGE_STATE: '',
       },
     });
