@@ -2,7 +2,7 @@
  * Test fixtures for the ElevenLabs connector.
  */
 
-export const MOCK_API_KEY = 'sk_mock-elevenlabs-test-key';
+export const MOCK_API_KEY = 'mcp-test-elevenlabs-key';
 
 export const mockVoices = [
   {

@@ -2,7 +2,7 @@
  * Test fixtures for Runway MCP connector.
  */
 
-export const MOCK_API_KEY = 'key_test_mock_secret_12345';
+export const MOCK_API_KEY = 'mcp-test-runway-key';
 
 export const mockOrgResponse = {
   tier: {
