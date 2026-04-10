@@ -1,3 +1,4 @@
+// Bridge env var (MCP_HOST_BRIDGE_STATE || MINDSTONE_REBEL_BRIDGE_STATE) is defined in auth.ts and imported as BRIDGE_STATE_PATH.
 import * as fs from 'fs';
 import { type BridgeState, REQUEST_TIMEOUT_MS } from './types.js';
 import { BRIDGE_STATE_PATH } from './auth.js';
