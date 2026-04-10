@@ -29,7 +29,7 @@ export function registerFieldTools(server: McpServer): void {
           ok: false,
           error: 'No Freshdesk account connected',
           resolution:
-            'Use configure_freshdesk or go to Mindstone Settings > Integrations > Freshdesk to connect your account.',
+            'Use configure_freshdesk to connect your account.',
         });
       }
 

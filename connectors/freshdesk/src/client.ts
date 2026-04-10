@@ -9,6 +9,7 @@
  */
 
 import { FreshdeskError, REQUEST_TIMEOUT_MS } from './types.js';
+import { validateSubdomain } from './utils.js';
 
 export interface FreshdeskFetchOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
@@ -29,6 +30,9 @@ export async function freshdeskFetch<T>(
   endpoint: string,
   options: FreshdeskFetchOptions = {},
 ): Promise<T> {
+  // Defence-in-depth: validate domain before URL construction
+  validateSubdomain(domain);
+
   const { params, ...fetchOptions } = options;
 
   // Build URL with query params
@@ -91,7 +95,7 @@ export async function freshdeskFetch<T>(
     throw new FreshdeskError(
       'Authentication failed',
       'AUTH_FAILED',
-      'API key is invalid or revoked. Check your Freshdesk API key, or reconnect in Mindstone settings.',
+      'API key is invalid or revoked. Check your Freshdesk API key in your MCP host\'s settings.',
     );
   }
 
@@ -128,7 +132,7 @@ export async function freshdeskFetch<T>(
     throw new FreshdeskError(
       `Freshdesk API error (${response.status}): ${statusMessage}`,
       'API_ERROR',
-      'Check the request parameters and try again. If the problem persists, reconnect your Freshdesk account in Mindstone settings.',
+      'Check the request parameters and try again. If the problem persists, reconnect your Freshdesk account in your MCP host\'s settings.',
     );
   }
 

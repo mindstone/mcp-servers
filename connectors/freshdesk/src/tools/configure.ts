@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { loadAccounts, getAccountsConfig, removeAccount, upsertAccount } from '../auth.js';
 import { bridgeRequest, BRIDGE_STATE_PATH } from '../bridge.js';
 import { FreshdeskError } from '../types.js';
-import { withErrorHandling } from '../utils.js';
+import { withErrorHandling, validateSubdomain } from '../utils.js';
 
 export function registerConfigureTools(server: McpServer): void {
   // ── configure_freshdesk ─────────────────────────────────────────
@@ -29,6 +29,9 @@ export function registerConfigureTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       const domain = args.domain.trim();
       const apiKey = args.api_key.trim();
+
+      // Validate subdomain before any storage or network call
+      validateSubdomain(domain);
 
       // If bridge is available, persist via bridge
       if (BRIDGE_STATE_PATH) {
@@ -96,7 +99,7 @@ export function registerConfigureTools(server: McpServer): void {
           ok: true,
           accounts: [],
           message:
-            'No Freshdesk accounts connected. Use configure_freshdesk or go to Mindstone Settings > Integrations > Freshdesk to connect.',
+            'No Freshdesk accounts connected. Use configure_freshdesk to connect your account.',
         });
       }
 
