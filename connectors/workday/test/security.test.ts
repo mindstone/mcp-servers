@@ -319,7 +319,7 @@ describe('Bridge integration', () => {
     vi.unstubAllEnvs();
   });
 
-  it('bridge 401 returns isError with bridge-specific message', async () => {
+  it('bridge 401 returns isError:true with bridge-specific message', async () => {
     const bridgePort = 19876;
 
     // Use a handler that returns 401 for ALL bridge requests (no Bearer token check)
@@ -364,9 +364,61 @@ describe('Bridge integration', () => {
         client_secret: MOCK_CLIENT_SECRET,
       });
 
+      // Bridge failure must surface as isError:true MCP error, not just ok:false text
+      expect(result.isError).toBe(true);
       const json = result.json as Record<string, unknown>;
       expect(json.ok).toBe(false);
-      expect(json.error).toContain('unauthorized');
+      expect(json.code).toBe('BRIDGE_ERROR');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('bridge { success: false } returns isError:true (not silent ok:false)', async () => {
+    const bridgePort = 19878;
+
+    mswServer.use(
+      http.post(`http://127.0.0.1:${bridgePort}/bundled/workday/configure`, () =>
+        HttpResponse.json({ success: false, error: 'Bridge internal failure' }),
+      ),
+      http.post(TOKEN_URL, async () =>
+        HttpResponse.json(createTokenResponse()),
+      ),
+      http.get(`${API_BASE}/workers`, () =>
+        HttpResponse.json({ data: [], total: 0 }),
+      ),
+    );
+
+    const fs = await import('fs');
+    const os = await import('os');
+    const path = await import('path');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'workday-bridge-'));
+    const bridgeStatePath = path.join(tmpDir, 'bridge-state.json');
+    fs.writeFileSync(bridgeStatePath, JSON.stringify({ port: bridgePort, token: 'test-token' }));
+
+    try {
+      testClient = await createTestClient({
+        env: {
+          WORKDAY_HOST: MOCK_HOST,
+          WORKDAY_TENANT: MOCK_TENANT,
+          WORKDAY_CLIENT_ID: MOCK_CLIENT_ID,
+          WORKDAY_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+          MCP_HOST_BRIDGE_STATE: bridgeStatePath,
+        },
+      });
+
+      const result = await testClient.callTool('configure_workday_credentials', {
+        host: MOCK_HOST,
+        tenant: MOCK_TENANT,
+        client_id: MOCK_CLIENT_ID,
+        client_secret: MOCK_CLIENT_SECRET,
+      });
+
+      expect(result.isError).toBe(true);
+      const json = result.json as Record<string, unknown>;
+      expect(json.ok).toBe(false);
+      expect(json.code).toBe('BRIDGE_ERROR');
+      expect(json.error).toContain('Bridge internal failure');
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -416,5 +468,68 @@ describe('Bridge integration', () => {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('WORKDAY_HOST env validation at startup', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  const privateEnvHosts = [
+    { host: 'localhost', label: 'localhost' },
+    { host: '127.0.0.1', label: '127.0.0.1' },
+    { host: '10.0.0.1', label: '10.x private' },
+    { host: '172.16.0.1', label: '172.16.x private' },
+    { host: '192.168.1.1', label: '192.168.x private' },
+    { host: '0.0.0.0', label: '0.0.0.0' },
+  ];
+
+  for (const { host, label } of privateEnvHosts) {
+    it(`rejects private host ${label} from env var — connector reports not configured`, async () => {
+      mswServer.use(
+        ...createWorkdayHandlers(),
+      );
+
+      testClient = await createTestClient({
+        env: {
+          WORKDAY_HOST: host,
+          WORKDAY_TENANT: MOCK_TENANT,
+          WORKDAY_CLIENT_ID: MOCK_CLIENT_ID,
+          WORKDAY_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+          MCP_HOST_BRIDGE_STATE: '',
+        },
+      });
+
+      // With an invalid host, the host is discarded (set to empty string),
+      // so isConfigured() returns false and API calls report not configured
+      const result = await testClient.callTool('list_workday_workers', {});
+      const json = result.json as Record<string, unknown>;
+      expect(json.ok).toBe(false);
+      expect(json.error).toContain('not configured');
+    });
+  }
+
+  it('accepts valid public host from env var', async () => {
+    mswServer.use(
+      ...createWorkdayHandlers(),
+    );
+
+    testClient = await createTestClient({
+      env: {
+        WORKDAY_HOST: MOCK_HOST,
+        WORKDAY_TENANT: MOCK_TENANT,
+        WORKDAY_CLIENT_ID: MOCK_CLIENT_ID,
+        WORKDAY_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('list_workday_workers', {});
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
   });
 });

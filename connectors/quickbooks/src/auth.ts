@@ -22,7 +22,17 @@ let clientId: string = process.env.QUICKBOOKS_CLIENT_ID ?? '';
 let clientSecret: string = process.env.QUICKBOOKS_CLIENT_SECRET ?? '';
 let refreshToken: string = process.env.QUICKBOOKS_REFRESH_TOKEN ?? '';
 let realmId: string = process.env.QUICKBOOKS_REALM_ID ?? '';
-let environment: string = process.env.QUICKBOOKS_ENVIRONMENT ?? 'production';
+let environment: string = (() => {
+  const envVal = process.env.QUICKBOOKS_ENVIRONMENT ?? 'production';
+  if (envVal !== 'sandbox' && envVal !== 'production') {
+    throw new QuickBooksError(
+      `Invalid QUICKBOOKS_ENVIRONMENT: "${envVal}". Must be "sandbox" or "production".`,
+      'INVALID_CONFIG',
+      'Set QUICKBOOKS_ENVIRONMENT to either "sandbox" or "production".',
+    );
+  }
+  return envVal;
+})();
 
 // ── Token cache ──
 

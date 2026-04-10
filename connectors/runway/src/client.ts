@@ -233,6 +233,73 @@ export async function resolveMediaInput(
 }
 
 // ============================================================================
+// SSRF / Host validation for download URLs
+// ============================================================================
+
+/**
+ * Check whether a hostname is private, localhost, or otherwise reserved.
+ * Matches the same patterns as Workday's SSRF prevention.
+ */
+function isPrivateOrReservedHost(hostname: string): boolean {
+  const lower = hostname.toLowerCase();
+
+  // Localhost names
+  if (lower === 'localhost' || lower === '[::1]' || lower === '::1') {
+    return true;
+  }
+
+  // .local domains
+  if (lower.endsWith('.local')) {
+    return true;
+  }
+
+  // IPv4 private/reserved ranges
+  const ipMatch = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipMatch) {
+    const [, a, b] = ipMatch.map(Number);
+    if (a === 127) return true;           // 127.0.0.0/8 loopback
+    if (a === 10) return true;            // 10.0.0.0/8 private
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12 private
+    if (a === 192 && b === 168) return true; // 192.168.0.0/16 private
+    if (a === 169 && b === 254) return true; // 169.254.0.0/16 link-local
+    if (a === 0) return true;             // 0.0.0.0/8
+  }
+
+  // IPv6 private/loopback (bracket-wrapped from URL parsing)
+  if (lower.startsWith('[') && lower.endsWith(']')) {
+    const inner = lower.slice(1, -1);
+    if (inner === '::1' || inner === '::' || inner.startsWith('fe80:') || inner.startsWith('fc') || inner.startsWith('fd')) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Validate a download URL for SSRF safety.
+ * Returns an error message if the URL is unsafe, or null if OK.
+ */
+export function validateDownloadUrl(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return 'Invalid URL.';
+  }
+
+  if (parsed.protocol !== 'https:') {
+    return 'Only HTTPS URLs are supported for download.';
+  }
+
+  if (isPrivateOrReservedHost(parsed.hostname)) {
+    return 'Cannot download from local/private network addresses.';
+  }
+
+  return null;
+}
+
+// ============================================================================
 // Cost estimation helper
 // ============================================================================
 

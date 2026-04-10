@@ -17,11 +17,22 @@ import { bridgeRequest } from './bridge.js';
 
 // ── Runtime credentials ──
 
-let workdayHost: string = process.env.WORKDAY_HOST ?? '';
+let workdayHost: string = '';
 let workdayTenant: string = process.env.WORKDAY_TENANT ?? '';
 let clientId: string = process.env.WORKDAY_CLIENT_ID ?? '';
 let clientSecret: string = process.env.WORKDAY_CLIENT_SECRET ?? '';
 let refreshToken: string = process.env.WORKDAY_REFRESH_TOKEN ?? '';
+
+// Validate WORKDAY_HOST from env at startup — reject private/localhost hosts
+const _envHost = process.env.WORKDAY_HOST ?? '';
+if (_envHost) {
+  const _hostResult = validateHost(_envHost);
+  if (_hostResult.valid) {
+    workdayHost = _hostResult.host!;
+  } else {
+    console.error(`[Workday] Ignoring invalid WORKDAY_HOST from env: ${_hostResult.error}`);
+  }
+}
 
 // ── Token cache ──
 

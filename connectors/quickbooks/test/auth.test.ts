@@ -367,3 +367,91 @@ describe('Network error handling', () => {
     expect(result.text).not.toContain(MOCK_REFRESH_TOKEN);
   });
 });
+
+describe('QUICKBOOKS_ENVIRONMENT validation', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('rejects invalid QUICKBOOKS_ENVIRONMENT value at module init', async () => {
+    vi.stubEnv('QUICKBOOKS_ENVIRONMENT', 'staging');
+    vi.stubEnv('QUICKBOOKS_CLIENT_ID', MOCK_CLIENT_ID);
+    vi.stubEnv('QUICKBOOKS_CLIENT_SECRET', MOCK_CLIENT_SECRET);
+    vi.stubEnv('QUICKBOOKS_REFRESH_TOKEN', MOCK_REFRESH_TOKEN);
+    vi.stubEnv('QUICKBOOKS_REALM_ID', MOCK_REALM_ID);
+    vi.stubEnv('MCP_HOST_BRIDGE_STATE', '');
+    vi.resetModules();
+
+    await expect(async () => {
+      await import('../../src/server.js');
+    }).rejects.toThrow(/Invalid QUICKBOOKS_ENVIRONMENT.*staging.*sandbox.*production/);
+  });
+
+  it('rejects empty string QUICKBOOKS_ENVIRONMENT (not silent default)', async () => {
+    vi.stubEnv('QUICKBOOKS_ENVIRONMENT', '');
+    vi.stubEnv('QUICKBOOKS_CLIENT_ID', MOCK_CLIENT_ID);
+    vi.stubEnv('QUICKBOOKS_CLIENT_SECRET', MOCK_CLIENT_SECRET);
+    vi.stubEnv('QUICKBOOKS_REFRESH_TOKEN', MOCK_REFRESH_TOKEN);
+    vi.stubEnv('QUICKBOOKS_REALM_ID', MOCK_REALM_ID);
+    vi.stubEnv('MCP_HOST_BRIDGE_STATE', '');
+    vi.resetModules();
+
+    await expect(async () => {
+      await import('../../src/server.js');
+    }).rejects.toThrow(/Invalid QUICKBOOKS_ENVIRONMENT/);
+  });
+
+  it('accepts "sandbox" QUICKBOOKS_ENVIRONMENT', async () => {
+    mswServer.use(
+      http.post(TOKEN_URL, () =>
+        HttpResponse.json(createTokenResponse()),
+      ),
+      http.get(`${SANDBOX_API_BASE}/query`, () =>
+        HttpResponse.json(createInvoicesQueryResponse()),
+      ),
+    );
+
+    const testClient = await createTestClient({
+      env: {
+        QUICKBOOKS_CLIENT_ID: MOCK_CLIENT_ID,
+        QUICKBOOKS_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+        QUICKBOOKS_REFRESH_TOKEN: MOCK_REFRESH_TOKEN,
+        QUICKBOOKS_REALM_ID: MOCK_REALM_ID,
+        QUICKBOOKS_ENVIRONMENT: 'sandbox',
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('list_quickbooks_invoices', {});
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    await testClient.close();
+  });
+
+  it('accepts "production" QUICKBOOKS_ENVIRONMENT', async () => {
+    mswServer.use(
+      http.post(TOKEN_URL, () =>
+        HttpResponse.json(createTokenResponse()),
+      ),
+      http.get(`${PRODUCTION_API_BASE}/query`, () =>
+        HttpResponse.json(createInvoicesQueryResponse()),
+      ),
+    );
+
+    const testClient = await createTestClient({
+      env: {
+        QUICKBOOKS_CLIENT_ID: MOCK_CLIENT_ID,
+        QUICKBOOKS_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+        QUICKBOOKS_REFRESH_TOKEN: MOCK_REFRESH_TOKEN,
+        QUICKBOOKS_REALM_ID: MOCK_REALM_ID,
+        QUICKBOOKS_ENVIRONMENT: 'production',
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('list_quickbooks_invoices', {});
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    await testClient.close();
+  });
+});

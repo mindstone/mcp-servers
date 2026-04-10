@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { runwayFetch, runwayRawFetch } from '../client.js';
+import { runwayFetch, runwayRawFetch, validateDownloadUrl } from '../client.js';
 import { RunwayError, type TaskDetail } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 
@@ -144,19 +144,10 @@ export function registerTaskTools(server: McpServer): void {
       const url = args.url;
       const outputPath = args.output_path;
 
-      // Validate URL
-      try {
-        const parsed = new URL(url);
-        if (parsed.protocol !== 'https:') {
-          return JSON.stringify({ ok: false, error: 'Only HTTPS URLs are supported for download.' });
-        }
-        const host = parsed.hostname.toLowerCase();
-        if (host === 'localhost' || host === '127.0.0.1' || host.startsWith('10.') ||
-            host.startsWith('192.168.') || host.endsWith('.local')) {
-          return JSON.stringify({ ok: false, error: 'Cannot download from local/private network addresses.' });
-        }
-      } catch {
-        return JSON.stringify({ ok: false, error: 'Invalid URL.' });
+      // Validate URL (SSRF prevention — blocks private/reserved hosts)
+      const urlError = validateDownloadUrl(url);
+      if (urlError) {
+        return JSON.stringify({ ok: false, error: urlError });
       }
 
       // Validate output path

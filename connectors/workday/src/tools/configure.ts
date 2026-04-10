@@ -173,7 +173,11 @@ COMMON MISTAKES:
       });
 
       if (!result.success) {
-        return JSON.stringify({ ok: false, error: result.error || 'Failed to configure Workday via bridge.' });
+        throw new WorkdayError(
+          result.error || 'Failed to configure Workday via bridge.',
+          'BRIDGE_ERROR',
+          'Check that the host application is running and bridge is available.',
+        );
       }
 
       // Update runtime credentials
