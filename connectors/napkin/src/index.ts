@@ -8,7 +8,7 @@
  * Environment variables:
  * - NAPKIN_API_KEY: Napkin API token (from https://app.napkin.ai → Developers)
  * - MCP_HOST_BRIDGE_STATE: Path to host app bridge state file (primary, optional)
- * - MINDSTONE_REBEL_BRIDGE_STATE: Legacy bridge state path (optional)
+ * - MINDSTONE_REBEL_BRIDGE_STATE: Legacy/deprecated bridge state path (optional)
  * - MCP_WORKSPACE_PATH: Workspace path for output directory resolution (optional)
  */
 
