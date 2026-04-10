@@ -2,7 +2,7 @@
  * Test fixtures for the Napkin connector.
  */
 
-export const MOCK_API_KEY = 'mock-napkin-test-key';
+export const MOCK_API_KEY = 'mcp-test-napkin-key';
 
 export const mockRequestId = 'req-abc123-uuid';
 

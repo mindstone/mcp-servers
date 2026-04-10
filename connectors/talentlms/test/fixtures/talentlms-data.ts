@@ -2,7 +2,7 @@
  * Test fixtures for TalentLMS MCP connector.
  */
 
-export const MOCK_API_KEY = 'mock-test-key-12345';
+export const MOCK_API_KEY = 'mcp-test-talentlms-key';
 export const MOCK_DOMAIN = 'acme';
 
 // ─── Users ──────────────────────────────────────────────

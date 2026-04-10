@@ -2,7 +2,7 @@
  * Test fixtures for the Nano Banana connector.
  */
 
-export const MOCK_API_KEY = 'mock-gemini-test-key-abc123';
+export const MOCK_API_KEY = 'mcp-test-nano-banana-key';
 
 /**
  * A tiny valid base64-encoded PNG (1x1 transparent pixel).

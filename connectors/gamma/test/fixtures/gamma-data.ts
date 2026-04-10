@@ -2,7 +2,7 @@
  * Test fixtures for the Gamma connector.
  */
 
-export const MOCK_API_KEY = 'mock-gamma-test-key';
+export const MOCK_API_KEY = 'mcp-test-gamma-key';
 
 export const mockThemes = [
   {
