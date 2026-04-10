@@ -1,5 +1,5 @@
 export const REQUEST_TIMEOUT_MS = 30_000;
-export const USER_AGENT = 'MindstoneRebel/1.0 (Workday-MCP)';
+export const USER_AGENT = 'mcp-server-workday/0.1.0';
 
 export interface BridgeState {
   port: number;

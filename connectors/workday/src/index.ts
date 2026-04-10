@@ -15,8 +15,8 @@
  * - WORKDAY_CLIENT_ID: OAuth client ID
  * - WORKDAY_CLIENT_SECRET: OAuth client secret
  * - WORKDAY_REFRESH_TOKEN: Optional refresh token (enables refresh_token grant)
- * - MCP_HOST_BRIDGE_STATE: Path to bridge state file for app communication
- * - MINDSTONE_REBEL_BRIDGE_STATE: Legacy bridge state path
+ * - MCP_HOST_BRIDGE_STATE: Path to bridge state file for app communication (primary)
+ * - MINDSTONE_REBEL_BRIDGE_STATE: Legacy/deprecated bridge state path
  */
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';

@@ -15,8 +15,8 @@
  * - QUICKBOOKS_REFRESH_TOKEN: OAuth2 refresh token
  * - QUICKBOOKS_REALM_ID: QuickBooks company ID (Realm ID)
  * - QUICKBOOKS_ENVIRONMENT: "sandbox" or "production" (default: "production")
- * - MCP_HOST_BRIDGE_STATE: Path to bridge state file for app communication
- * - MINDSTONE_REBEL_BRIDGE_STATE: Legacy bridge state path
+ * - MCP_HOST_BRIDGE_STATE: Path to bridge state file for app communication (primary)
+ * - MINDSTONE_REBEL_BRIDGE_STATE: Legacy/deprecated bridge state path
  */
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';

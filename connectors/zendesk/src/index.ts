@@ -9,7 +9,8 @@
  * - ZENDESK_CONFIG_PATH: Path to config directory containing accounts.json and credentials/
  * - ZENDESK_CLIENT_ID: OAuth client ID (for token refresh, OAuth only)
  * - ZENDESK_CLIENT_SECRET: OAuth client secret (for token refresh, OAuth only)
- * - MCP_HOST_BRIDGE_STATE: Path to host app bridge state file for credential management (optional)
+ * - MCP_HOST_BRIDGE_STATE: Path to host app bridge state file for credential management (primary, optional)
+ * - MINDSTONE_REBEL_BRIDGE_STATE: Legacy/deprecated bridge state path (optional)
  *
  * Authentication:
  * - API token: Basic auth with email/token:apiToken (primary)

@@ -12,7 +12,7 @@ export function registerConfigureTools(server: McpServer): void {
       description:
         'Configure the Humaans API access token. Call this when the user provides their token. ' +
         'Get a token from https://app.humaans.io/settings/home?tokens=1 — ' +
-        'click "Generate new token", name it (e.g., "Rebel"), select scopes: public:read, private:read, private:write.',
+        'click "Generate new token", name it (e.g., "MCP Server"), select scopes: public:read, private:read, private:write.',
       inputSchema: z.object({
         api_key: z.string().min(1).describe('The Humaans API access token'),
       }),

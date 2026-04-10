@@ -1,5 +1,5 @@
 export const REQUEST_TIMEOUT_MS = 30_000;
-export const USER_AGENT = 'MindstoneRebel/1.0 (QuickBooks-MCP)';
+export const USER_AGENT = 'mcp-server-quickbooks/0.1.0';
 
 export const TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
 

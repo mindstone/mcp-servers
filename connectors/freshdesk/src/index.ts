@@ -7,8 +7,8 @@
  *
  * Environment variables:
  * - FRESHDESK_CONFIG_PATH: Path to config directory containing accounts.json
- * - MCP_HOST_BRIDGE_STATE: Path to host app bridge state file (optional)
- * - MINDSTONE_REBEL_BRIDGE_STATE: Legacy bridge state path (optional)
+ * - MCP_HOST_BRIDGE_STATE: Path to host app bridge state file (primary, optional)
+ * - MINDSTONE_REBEL_BRIDGE_STATE: Legacy/deprecated bridge state path (optional)
  */
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';

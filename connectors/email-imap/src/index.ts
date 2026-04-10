@@ -13,8 +13,8 @@
  * - EMAIL_IMAP_IMAP_PORT: Custom IMAP server port (default: 993)
  * - EMAIL_IMAP_SMTP_HOST: Custom SMTP server host
  * - EMAIL_IMAP_SMTP_PORT: Custom SMTP server port (default: 587)
- * - MCP_HOST_BRIDGE_STATE: Path to host app bridge state file (optional)
- * - MINDSTONE_REBEL_BRIDGE_STATE: Legacy bridge state path (optional)
+ * - MCP_HOST_BRIDGE_STATE: Path to host app bridge state file (primary, optional)
+ * - MINDSTONE_REBEL_BRIDGE_STATE: Legacy/deprecated bridge state path (optional)
  */
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
