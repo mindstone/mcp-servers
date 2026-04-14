@@ -37,3 +37,24 @@ jobs:
             echo "ERROR: Test files found in package"
             exit 1
           fi
+
+  notify-failure:
+    name: Slack CI Failure
+    needs: [build-and-test]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post to Slack
+        run: |
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          SHORT_SHA="${{ github.sha }}"
+          SHORT_SHA="${SHORT_SHA:0:7}"
+          COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -1)
+
+          curl -sS -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg text ":red_circle: *mcp-servers CI failed* on \`${{ github.ref_name }}\` (<${RUN_URL}|view run>)
+          Commit: \`${SHORT_SHA}\` by ${{ github.actor }}
+          ${COMMIT_MSG}" \
+              '{text: $text}')"
