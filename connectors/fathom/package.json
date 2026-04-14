@@ -1,6 +1,6 @@
 {
   "name": "@mindstone-engineering/mcp-server-fathom",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Fathom AI meeting transcription MCP server for Model Context Protocol hosts",
   "license": "FSL-1.1-MIT",
   "type": "module",
@@ -31,7 +31,6 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
-    "fathom-typescript": "^0.0.37",
     "zod": "^3.23.0"
   },
   "devDependencies": {
