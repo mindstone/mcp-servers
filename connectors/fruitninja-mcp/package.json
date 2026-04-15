@@ -1,0 +1,27 @@
+{
+  "name": "fruitninja-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for FruitNinja — optimal fruit cutting guidance",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "fruitninja-mcp": "dist/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "start:no-env": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.6.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
