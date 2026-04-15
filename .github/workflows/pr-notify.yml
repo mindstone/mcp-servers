@@ -2,7 +2,7 @@ name: PR Notifications
 
 on:
   pull_request:
-    types: [opened]
+    types: [opened, reopened]
 
 jobs:
   notify-new-pr:
@@ -10,13 +10,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Post to Slack
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_WEBHOOK_URL not configured — skipping notification"
+            exit 0
+          fi
+
           PR_URL="${{ github.event.pull_request.html_url }}"
           PR_TITLE="${{ github.event.pull_request.title }}"
           PR_AUTHOR="${{ github.event.pull_request.user.login }}"
           PR_NUMBER="${{ github.event.pull_request.number }}"
 
-          curl -sS -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+          curl -sS -X POST "$SLACK_WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -d "$(jq -n \
               --arg text ":pull-request: *New PR* on mcp-servers by ${PR_AUTHOR}
