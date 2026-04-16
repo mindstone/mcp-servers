@@ -1,0 +1,11 @@
+{
+  "id": "rebel-oss-browser-automation",
+  "name": "Browser Automation",
+  "description": "Headless browser control via accessibility snapshots — navigate pages, fill forms, click elements, take screenshots, and manage tabs. Uses the agent-browser CLI for reliable web automation.",
+  "category": "productivity",
+  "icon": "browser-automation",
+  "maturity": "stable",
+  "verifiedSource": "https://github.com/mindstone-engineering/mcp-servers",
+  "requiresSetup": false,
+  "setupFields": []
+}
