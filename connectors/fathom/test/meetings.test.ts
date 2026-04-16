@@ -210,5 +210,64 @@ describe('Fathom meetings tools', () => {
     const json = result.json as { ok: boolean; error: string };
     expect(json.ok).toBe(false);
     expect(json.error).toContain('not configured');
+
+  });
+  it('get_fathom_meeting_participants returns participants for valid meeting', async () => {
+    await setup();
+    const result = await testClient.callTool('get_fathom_meeting_participants', { recording_id: 101 });
+    const json = result.json as {
+      ok: boolean;
+      recording_id: number;
+      title: string;
+      participants: Array<{ name: string | null; email: string; email_domain: string | null; is_external: boolean }>;
+      count: number;
+    };
+
+    expect(json.ok).toBe(true);
+    expect(json.recording_id).toBe(101);
+    expect(json.title).toBe('Weekly Standup');
+    expect(json.participants).toHaveLength(2);
+    expect(json.participants[0].name).toBe('Alice');
+    expect(json.participants[0].email).toBe('alice@example.com');
+    expect(json.count).toBe(2);
+  });
+
+  it('get_fathom_meeting_participants returns error for non-existent meeting', async () => {
+    await setup();
+    const result = await testClient.callTool('get_fathom_meeting_participants', { recording_id: 999 });
+    const json = result.json as { ok: boolean; error: string };
+
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('not found');
+  });
+
+  it('get_fathom_meeting_participants returns not-configured error when no API key is set', async () => {
+    mswServer.use(...createFathomHandlers());
+    testClient = await createTestClient({
+      env: { FATHOM_API_KEY: '', MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('get_fathom_meeting_participants', { recording_id: 101 });
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('not configured');
+  });
+
+  it('get_fathom_meeting_participants rejects malformed recording_id before making API request', async () => {
+    let requestCount = 0;
+    mswServer.use(
+      http.get('https://api.fathom.ai/external/v1/*', () => {
+        requestCount++;
+        return { json: () => ({ limit: 25, next_cursor: null, items: [] }) };
+      }),
+    );
+
+    testClient = await createTestClient({
+      env: { FATHOM_API_KEY: API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('get_fathom_meeting_participants', { recording_id: 0 });
+    expect(result.isError).toBe(true);
+    expect(requestCount).toBe(0);
   });
 });

@@ -27,10 +27,11 @@ describe('Smoke test — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(6);
+    expect(toolsResult.tools).toHaveLength(7);
     expect(toolNames).toEqual([
       'configure_fathom_api_key',
       'get_fathom_meeting',
+      'get_fathom_meeting_participants',
       'get_fathom_transcript',
       'list_fathom_meetings',
       'list_fathom_team_members',

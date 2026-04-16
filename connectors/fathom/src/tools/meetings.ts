@@ -328,4 +328,57 @@ Use list_fathom_meetings first to find the recording_id.`,
       return `${header}${hasMore ? ' - more available with start_entry parameter' : ''}\n\n${lines.join('\n')}`;
     }),
   );
+
+  server.registerTool(
+    'get_fathom_meeting_participants',
+    {
+      description:
+        `Get the list of participants for a Fathom meeting by its recording_id.
+
+Returns an array of calendar invitees including their name, email, email domain,
+and whether they are an external attendee.
+
+Note: Searches through up to 10 pages of recent meetings to find the meeting
+if it is not in the first page. For older meetings, use list_fathom_meetings
+with created_after/created_before date filters first.
+Rate limit: May use 1-11 API calls depending on meeting position in history.`,
+      inputSchema: z.object({
+        recording_id: z.number().int().positive().describe('The recording ID of the meeting (from list_fathom_meetings)'),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    withErrorHandling(async (args) => {
+      if (!isConfigured()) return noApiKeyError();
+
+      const recordingId = args.recording_id;
+      const meeting = await findMeetingByRecordingId(recordingId);
+
+      if (!meeting) {
+        return JSON.stringify({
+          ok: false,
+          error: 'Meeting not found',
+          recordingId,
+          resolution:
+            'The meeting may not exist, may not be accessible, or may be older than the search limit. ' +
+            'Try list_fathom_meetings with created_after/created_before date filters to find older meetings.',
+        });
+      }
+
+      const participants = (meeting.calendar_invitees || []).map((invitee) => ({
+        name: invitee.name || null,
+        email: invitee.email,
+        email_domain: invitee.email_domain || null,
+        is_external: invitee.is_external ?? false,
+      }));
+
+      return JSON.stringify({
+        ok: true,
+        recording_id: recordingId,
+        title: meeting.title,
+        participants,
+        count: participants.length,
+      });
+    }),
+  );
+
 }
