@@ -25,7 +25,7 @@ WHEN TO USE:
 - User asks to connect Outreach
 
 After connecting, verify with outreach_list_connected_accounts.`,
-      inputSchema: z.object({}),
+      inputSchema: z.object({}).strict(),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -100,7 +100,7 @@ After connecting, verify with outreach_list_connected_accounts.`,
 
 Call this FIRST before any Outreach operations to verify authentication.
 Returns auth mode, connection status, and account details.`,
-      inputSchema: z.object({}),
+      inputSchema: z.object({}).strict(),
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,

@@ -157,7 +157,7 @@ Only provided fields are updated. Use outreach_search_prospects to find the ID.`
       }),
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: true,
         openWorldHint: true,
       },
