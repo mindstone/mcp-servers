@@ -3,6 +3,7 @@ import {
   registerConfigureTools,
   registerMeetingTools,
   registerTeamTools,
+  registerSyncTools,
 } from './tools/index.js';
 
 export function createServer(): McpServer {
@@ -14,6 +15,7 @@ export function createServer(): McpServer {
   registerConfigureTools(server);
   registerMeetingTools(server);
   registerTeamTools(server);
+  registerSyncTools(server);
 
   return server;
 }
