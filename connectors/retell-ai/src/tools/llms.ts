@@ -30,7 +30,7 @@ RETURNS: Updated LLM configuration object.`,
       },
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: true,
         openWorldHint: true,
       },
