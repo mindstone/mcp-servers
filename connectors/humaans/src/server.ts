@@ -5,6 +5,7 @@ import {
   registerJobRoleTools,
   registerCompanyTools,
   registerTimeAwayTools,
+  registerDicerollTools,
 } from './tools/index.js';
 
 export function createServer(): McpServer {
