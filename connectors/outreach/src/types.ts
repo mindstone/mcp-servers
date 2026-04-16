@@ -3,7 +3,7 @@ export const OUTREACH_API_BASE = 'https://api.outreach.io/api/v2';
 export const OUTREACH_OAUTH_URL = 'https://api.outreach.io/oauth/token';
 export const OUTREACH_AUTHORIZE_URL = 'https://api.outreach.io/oauth/authorize';
 export const SERVER_NAME = 'outreach-mcp-server';
-export const SERVER_VERSION = '0.1.0';
+export const SERVER_VERSION = '0.1.1';
 
 export interface BridgeState {
   port: number;
