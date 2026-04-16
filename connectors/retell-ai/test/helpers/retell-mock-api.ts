@@ -64,13 +64,13 @@ function requireAuth(authHeader: string | null): HttpResponse | null {
 export function createRetellHandlers() {
   return [
     // --- Agents ---
-    http.get(`${RETELL_API_BASE}/v2/list-agents`, ({ request }) => {
+    http.get(`${RETELL_API_BASE}/list-agents`, ({ request }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;
       return HttpResponse.json([mockAgent]);
     }),
 
-    http.get(`${RETELL_API_BASE}/v2/get-agent/:agentId`, ({ request, params }) => {
+    http.get(`${RETELL_API_BASE}/get-agent/:agentId`, ({ request, params }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;
       if (params.agentId === 'nonexistent') {
@@ -82,7 +82,7 @@ export function createRetellHandlers() {
       return HttpResponse.json({ ...mockAgent, agent_id: params.agentId });
     }),
 
-    http.post(`${RETELL_API_BASE}/v2/create-agent`, async ({ request }) => {
+    http.post(`${RETELL_API_BASE}/create-agent`, async ({ request }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;
       const body = await request.json() as Record<string, unknown>;
@@ -95,7 +95,7 @@ export function createRetellHandlers() {
       });
     }),
 
-    http.patch(`${RETELL_API_BASE}/v2/update-agent/:agentId`, async ({ request, params }) => {
+    http.patch(`${RETELL_API_BASE}/update-agent/:agentId`, async ({ request, params }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;
       const body = await request.json() as Record<string, unknown>;
@@ -107,7 +107,7 @@ export function createRetellHandlers() {
     }),
 
     // --- Calls ---
-    http.post(`${RETELL_API_BASE}/v2/create-phone-call`, async ({ request }) => {
+    http.post(`${RETELL_API_BASE}/create-phone-call`, async ({ request }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;
       const body = await request.json() as Record<string, unknown>;
@@ -120,7 +120,7 @@ export function createRetellHandlers() {
       });
     }),
 
-    http.post(`${RETELL_API_BASE}/v2/create-web-call`, async ({ request }) => {
+    http.post(`${RETELL_API_BASE}/create-web-call`, async ({ request }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;
       const body = await request.json() as Record<string, unknown>;
@@ -133,7 +133,7 @@ export function createRetellHandlers() {
       });
     }),
 
-    http.get(`${RETELL_API_BASE}/v2/get-call/:callId`, ({ request, params }) => {
+    http.get(`${RETELL_API_BASE}/get-call/:callId`, ({ request, params }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;
       if (params.callId === 'nonexistent') {
@@ -142,13 +142,13 @@ export function createRetellHandlers() {
       return HttpResponse.json({ ...mockCall, call_id: params.callId });
     }),
 
-    http.post(`${RETELL_API_BASE}/v2/list-calls`, async ({ request }) => {
+    http.post(`${RETELL_API_BASE}/list-calls`, async ({ request }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;
       return HttpResponse.json([mockCall]);
     }),
 
-    // --- LLMs (v1 endpoints — no /v2 prefix) ---
+    // --- LLMs ---
     http.get(`${RETELL_API_BASE}/list-retell-llm`, ({ request }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;

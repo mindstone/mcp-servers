@@ -73,6 +73,7 @@ describe('Security — No internal references', () => {
   it('should not contain host-specific bridge code in source', () => {
     const bridgePatterns = [
       /REBEL_WORKSPACE_PATH/,
+      /\/bundled\//,
     ];
     const violations: string[] = [];
 

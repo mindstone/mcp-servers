@@ -1,7 +1,7 @@
 export const REQUEST_TIMEOUT_MS = 30_000;
 export const RETELL_API_BASE = 'https://api.retellai.com';
 export const SERVER_NAME = 'retell-ai-mcp-server';
-export const SERVER_VERSION = '0.1.0';
+export const SERVER_VERSION = '0.1.1';
 
 export interface BridgeState {
   port: number;

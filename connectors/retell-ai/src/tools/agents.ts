@@ -28,7 +28,7 @@ RETURNS: Full agent configuration object including agent_id, agent_name, voice_i
     withErrorHandling(async (args) => {
       requireApiKey();
       const result = await retellFetch<Record<string, unknown>>(
-        `/v2/get-agent/${encodeURIComponent(args.agent_id)}`,
+        `/get-agent/${encodeURIComponent(args.agent_id)}`,
         { method: 'GET' },
       );
       return JSON.stringify({ ok: true, ...result });
@@ -57,7 +57,7 @@ RETURNS: Array of agent objects with agent_id, agent_name, voice_id, language, a
     withErrorHandling(async () => {
       requireApiKey();
       const result = await retellFetch<unknown[]>(
-        '/v2/list-agents',
+        '/list-agents',
         { method: 'GET' },
       );
       return JSON.stringify({
@@ -108,7 +108,7 @@ RETURNS: Full agent object with generated agent_id.`,
       if (args.language) body.language = args.language;
 
       const result = await retellFetch<Record<string, unknown>>(
-        '/v2/create-agent',
+        '/create-agent',
         { method: 'POST', body: JSON.stringify(body) },
       );
 
@@ -140,7 +140,7 @@ RETURNS: Updated agent object.`,
       },
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: true,
         openWorldHint: true,
       },
@@ -155,7 +155,7 @@ RETURNS: Updated agent object.`,
       if (args.language !== undefined) body.language = args.language;
 
       const result = await retellFetch<Record<string, unknown>>(
-        `/v2/update-agent/${encodeURIComponent(agentId)}`,
+        `/update-agent/${encodeURIComponent(agentId)}`,
         { method: 'PATCH', body: JSON.stringify(body) },
       );
 

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { setApiKey } from '../client.js';
-import { bridgeRequest, BRIDGE_STATE_PATH } from '../bridge.js';
+import { postToBridge, BRIDGE_STATE_PATH } from '../bridge.js';
 import { withErrorHandling } from '../utils.js';
 
 export function registerConfigTools(server: McpServer): void {
@@ -35,7 +35,7 @@ All other Retell AI tools require a valid API key to work.`,
       // If running inside a host app bridge, persist via the bridge
       if (BRIDGE_STATE_PATH) {
         try {
-          const result = await bridgeRequest('/bundled/retell-ai/configure', { apiKey });
+          const result = await postToBridge({ apiKey });
           if (result.success) {
             setApiKey(apiKey);
             const message = result.warning
@@ -43,7 +43,7 @@ All other Retell AI tools require a valid API key to work.`,
               : 'Retell AI API key configured! You can now manage voice agents and make phone calls.';
             return JSON.stringify({ ok: true, message });
           }
-          return JSON.stringify({ ok: false, error: result.error || 'Failed to configure API key.' });
+          // Bridge endpoint not configured or failed — fall through to session-only mode
         } catch {
           // Bridge unavailable — fall through to session-only mode
         }

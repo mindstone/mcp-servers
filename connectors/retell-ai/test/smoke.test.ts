@@ -83,6 +83,10 @@ describe('Smoke test — Retell AI MCP server', () => {
       'get_retell_llm', 'list_retell_llms', 'list_voices', 'list_phone_numbers',
     ];
 
+    const destructiveTools = [
+      'update_agent', 'update_retell_llm',
+    ];
+
     for (const tool of toolsResult.tools) {
       expect(tool.annotations, `Tool ${tool.name} should have annotations`).toBeDefined();
       expect(typeof tool.annotations!.readOnlyHint).toBe('boolean');
@@ -90,6 +94,12 @@ describe('Smoke test — Retell AI MCP server', () => {
 
       if (readOnlyTools.includes(tool.name)) {
         expect(tool.annotations!.readOnlyHint, `${tool.name} should be readOnly`).toBe(true);
+        expect(tool.annotations!.destructiveHint, `${tool.name} should not be destructive`).toBe(false);
+      }
+
+      if (destructiveTools.includes(tool.name)) {
+        expect(tool.annotations!.destructiveHint, `${tool.name} should be destructive`).toBe(true);
+        expect(tool.annotations!.readOnlyHint, `${tool.name} should not be readOnly`).toBe(false);
       }
     }
   });

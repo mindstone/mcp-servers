@@ -52,7 +52,7 @@ COST: Uses phone minutes from your Retell AI plan. Calls are billed per minute.`
       if (args.retell_llm_dynamic_variables) body.retell_llm_dynamic_variables = args.retell_llm_dynamic_variables;
 
       const result = await retellFetch<Record<string, unknown>>(
-        '/v2/create-phone-call',
+        '/create-phone-call',
         { method: 'POST', body: JSON.stringify(body) },
       );
 
@@ -97,7 +97,7 @@ COST: Uses minutes from your Retell AI plan, same as phone calls.`,
       if (args.retell_llm_dynamic_variables) body.retell_llm_dynamic_variables = args.retell_llm_dynamic_variables;
 
       const result = await retellFetch<Record<string, unknown>>(
-        '/v2/create-web-call',
+        '/create-web-call',
         { method: 'POST', body: JSON.stringify(body) },
       );
 
@@ -133,7 +133,7 @@ RETURNS: Full call object including status, transcript, recording_url, call_anal
     withErrorHandling(async (args) => {
       requireApiKey();
       const result = await retellFetch<Record<string, unknown>>(
-        `/v2/get-call/${encodeURIComponent(args.call_id)}`,
+        `/get-call/${encodeURIComponent(args.call_id)}`,
         { method: 'GET' },
       );
       return JSON.stringify({ ok: true, ...result });
@@ -177,7 +177,7 @@ RETURNS: Array of call objects with call_id, status, agent_id, duration, and met
       if (args.filter_criteria) body.filter_criteria = args.filter_criteria;
 
       const result = await retellFetch<unknown[]>(
-        '/v2/list-calls',
+        '/list-calls',
         { method: 'POST', body: JSON.stringify(body) },
       );
 
