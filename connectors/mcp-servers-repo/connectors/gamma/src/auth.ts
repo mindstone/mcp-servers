@@ -1,0 +1,32 @@
+/**
+ * Gamma authentication module.
+ *
+ * Simple API key management — stored via env var (GAMMA_API_KEY)
+ * or configured at runtime via the configure_gamma_api_key tool.
+ *
+ * Auth: x-api-key header on all API requests.
+ */
+
+/** Runtime API key — starts from env, can be updated via configure tool. */
+let apiKey: string = process.env.GAMMA_API_KEY ?? '';
+
+/**
+ * Get the current API key.
+ */
+export function getApiKey(): string {
+  return apiKey;
+}
+
+/**
+ * Set the API key at runtime (from configure tool).
+ */
+export function setApiKey(key: string): void {
+  apiKey = key;
+}
+
+/**
+ * Check if an API key is configured.
+ */
+export function hasApiKey(): boolean {
+  return apiKey.trim().length > 0;
+}
