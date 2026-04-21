@@ -39,7 +39,8 @@ node dist/index.js
 - `RUNWAYML_API_SECRET` — Runway API key (from dev.runwayml.com)
 - `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
 - `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
-- `RUNWAY_REQUEST_TIMEOUT_MS` — optional override (positive integer ms, max 30 min) for the outbound HTTP request timeout applied to both Runway API and host-bridge calls. Default: `60000` (60s). Raise this if you see `TIMEOUT` errors on slow submits; lower it if you want tighter bounds.
+- `RUNWAY_REQUEST_TIMEOUT_MS` — optional override (positive integer ms, max 30 min) for the outbound HTTP request timeout applied to Runway JSON API and host-bridge calls. Default: `60000` (60s). Raise this if you see `TIMEOUT` errors on slow submits; lower it if you want tighter bounds.
+- `RUNWAY_UPLOAD_TIMEOUT_MS` — optional override (positive integer ms, max 30 min) for the signed-URL upload leg of `uploadEphemeral` (large local-file uploads). Default: `600000` (10 min). Sized for up-to-200MB uploads on typical consumer uplinks (~5 Mbps) with comfortable headroom; raise for slower connections or lower for tighter bounds.
 
 ## Host configuration examples
 

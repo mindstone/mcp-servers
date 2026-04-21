@@ -13,6 +13,7 @@ import * as path from 'path';
 import {
   RunwayError,
   getRequestTimeoutMs,
+  getUploadTimeoutMs,
   RUNWAY_API_BASE,
   RUNWAY_API_VERSION,
   MIME_MAP,
@@ -207,7 +208,31 @@ export async function uploadEphemeral(filePath: string): Promise<string> {
   }
   formData.append('file', new Blob([fileBuffer]), filename);
 
-  const uploadRes = await fetch(uploadInfo.uploadUrl, { method: 'POST', body: formData });
+  // Signed-URL upload to external storage (not the Runway API). Uses a
+  // workload-appropriate timeout — uploads can be up to 200MB, unlike the
+  // sub-second JSON calls covered by `getRequestTimeoutMs()`. No caller
+  // signal is plumbed here, so a bare `timeoutSignal.aborted` check is
+  // sufficient (same shape as napkin's downloadFile path).
+  const uploadTimeoutMs = getUploadTimeoutMs();
+  const uploadTimeoutSignal = AbortSignal.timeout(uploadTimeoutMs);
+  let uploadRes: Response;
+  try {
+    uploadRes = await fetch(uploadInfo.uploadUrl, {
+      method: 'POST',
+      body: formData,
+      signal: uploadTimeoutSignal,
+    });
+  } catch (error) {
+    if (uploadTimeoutSignal.aborted) {
+      const timeoutSec = Math.round(uploadTimeoutMs / 1000);
+      throw new RunwayError(
+        `Runway upload timed out after ${timeoutSec}s`,
+        'TIMEOUT',
+        `The signed-URL upload took longer than ${timeoutSec}s. Set RUNWAY_UPLOAD_TIMEOUT_MS to increase the timeout, or reduce the file size / use a faster connection.`,
+      );
+    }
+    throw error;
+  }
   if (!uploadRes.ok && uploadRes.status !== 204) {
     throw new RunwayError(`Upload failed (HTTP ${uploadRes.status})`, 'UPLOAD_FAILED',
       'Try again. If the file is too large (max 200MB), reduce its size.');

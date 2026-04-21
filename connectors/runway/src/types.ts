@@ -44,6 +44,28 @@ export function getRequestTimeoutMs(): number {
   return parseTimeoutEnv('RUNWAY_REQUEST_TIMEOUT_MS', DEFAULT_REQUEST_TIMEOUT_MS);
 }
 
+/**
+ * Default timeout (ms) for the signed-URL upload in `uploadEphemeral`.
+ *
+ * Calibrated for large (up to 200MB) file uploads rather than quick
+ * JSON API calls. A 200MB upload at 5 Mbps takes ~5.3 min before
+ * TLS handshake / multipart overhead, so 10 min gives comfortable
+ * headroom for typical consumer uplinks. Slower links (or larger files
+ * in the future) can raise via `RUNWAY_UPLOAD_TIMEOUT_MS`; the 30-min
+ * `MAX_REQUEST_TIMEOUT_MS` ceiling still applies.
+ */
+export const DEFAULT_UPLOAD_TIMEOUT_MS = 600_000; // 10 min
+
+/**
+ * Timeout (ms) for the signed-URL upload leg of `uploadEphemeral`.
+ * Reads `RUNWAY_UPLOAD_TIMEOUT_MS` at call time, falling back to
+ * `DEFAULT_UPLOAD_TIMEOUT_MS`. Validated via the same `parseTimeoutEnv`
+ * (positive integer, <= 30 min ceiling).
+ */
+export function getUploadTimeoutMs(): number {
+  return parseTimeoutEnv('RUNWAY_UPLOAD_TIMEOUT_MS', DEFAULT_UPLOAD_TIMEOUT_MS);
+}
+
 export interface BridgeState {
   port: number;
   token: string;

@@ -1,7 +1,8 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import {
   createRunwayHandlers,
@@ -330,5 +331,106 @@ describe('Zod validation before outbound request', () => {
     const result = await testClient.callTool('generate_video_from_text', {} as never);
     expect(result.isError).toBe(true);
     expect(requestCount).toBe(0);
+  });
+});
+
+describe('Upload-leg timeout (uploadEphemeral signed-URL fetch)', () => {
+  let testClient: McpTestClient;
+  let tempFilePath: string;
+
+  beforeEach(() => {
+    // 1KB temp file — above the 512-byte floor, below the 200MB ceiling
+    tempFilePath = path.join(os.tmpdir(), `runway-upload-timeout-${Date.now()}.bin`);
+    fs.writeFileSync(tempFilePath, Buffer.alloc(1024, 0xab));
+  });
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+    vi.unstubAllEnvs();
+  });
+
+  it('upload stall aborts with TIMEOUT pointing at RUNWAY_UPLOAD_TIMEOUT_MS (uses override)', async () => {
+    // Fast initial /uploads call to get the signed URL, then a stalled POST
+    // to the signed URL triggers the upload-leg timeout.
+    mswServer.use(
+      ...createRunwayHandlers('secret-upload-key'),
+      http.post('https://runway-uploads.example.com/upload', async () => {
+        await new Promise((resolve) => setTimeout(resolve, 60_000));
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    testClient = await createTestClient({
+      env: {
+        RUNWAYML_API_SECRET: 'secret-upload-key',
+        MCP_HOST_BRIDGE_STATE: '',
+        // Short upload timeout so the test aborts fast; default is 10 min.
+        RUNWAY_UPLOAD_TIMEOUT_MS: '500',
+      },
+    });
+
+    const result = await testClient.callTool('upload_media', { file_path: tempFilePath });
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('timed out');
+    expect(result.text).toContain('TIMEOUT');
+    expect(result.text).toContain('RUNWAY_UPLOAD_TIMEOUT_MS');
+    // Must not leak the API key
+    expect(result.text).not.toContain('secret-upload-key');
+  });
+
+  it('non-timeout upload failure (HTTP 500) is NOT misattributed as TIMEOUT', async () => {
+    // Pins the attribution pattern: a real server-side error must surface
+    // as UPLOAD_FAILED with the HTTP status, not be swallowed as TIMEOUT
+    // just because the signal machinery is now in place.
+    mswServer.use(
+      ...createRunwayHandlers('secret-upload-key'),
+      http.post('https://runway-uploads.example.com/upload', () =>
+        HttpResponse.json({ error: 'Bucket unavailable' }, { status: 500 }),
+      ),
+    );
+
+    testClient = await createTestClient({
+      env: {
+        RUNWAYML_API_SECRET: 'secret-upload-key',
+        MCP_HOST_BRIDGE_STATE: '',
+        RUNWAY_UPLOAD_TIMEOUT_MS: '500',
+      },
+    });
+
+    const result = await testClient.callTool('upload_media', { file_path: tempFilePath });
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('UPLOAD_FAILED');
+    expect(result.text).not.toContain('TIMEOUT');
+    expect(result.text).not.toContain('timed out');
+  });
+
+  it('invalid RUNWAY_UPLOAD_TIMEOUT_MS falls back to default without breaking upload', async () => {
+    // With valid auth + instant 204 from the signed URL, the upload should
+    // complete successfully even though the env var is garbage — proving
+    // getUploadTimeoutMs() returns the default rather than throwing.
+    mswServer.use(
+      ...createRunwayHandlers('secret-upload-key'),
+      http.post('https://runway-uploads.example.com/upload', () =>
+        new HttpResponse(null, { status: 204 }),
+      ),
+    );
+
+    testClient = await createTestClient({
+      env: {
+        RUNWAYML_API_SECRET: 'secret-upload-key',
+        MCP_HOST_BRIDGE_STATE: '',
+        RUNWAY_UPLOAD_TIMEOUT_MS: 'not-a-number',
+      },
+    });
+
+    const result = await testClient.callTool('upload_media', { file_path: tempFilePath });
+
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.text);
+    expect(data.ok).toBe(true);
+    expect(data.runway_uri).toBe('runway://test-upload-001');
   });
 });
