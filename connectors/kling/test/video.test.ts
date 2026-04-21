@@ -293,7 +293,7 @@ describe('Kling error handling', () => {
     expect(requestCount).toBe(0);
   });
 
-  it('network timeout returns actionable MCP error', async () => {
+  it('network timeout returns actionable MCP error (uses KLING_REQUEST_TIMEOUT_MS override)', async () => {
     mswServer.use(
       http.post('https://api-singapore.klingai.com/v1/videos/text2video', async () => {
         await new Promise((resolve) => setTimeout(resolve, 60_000));
@@ -302,16 +302,40 @@ describe('Kling error handling', () => {
     );
 
     testClient = await createTestClient({
-      env: { KLING_ACCESS_KEY: ACCESS_KEY, KLING_SECRET_KEY: SECRET_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      env: {
+        KLING_ACCESS_KEY: ACCESS_KEY,
+        KLING_SECRET_KEY: SECRET_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        // Short timeout so the test aborts fast; default is 60s.
+        KLING_REQUEST_TIMEOUT_MS: '500',
+      },
     });
 
-    // Override timeout to be short for this test
     const result = await testClient.callTool('generate_kling_video', { prompt: 'timeout test' });
     expect(result.isError).toBe(true);
     const json = result.json as { ok: boolean; error: string };
     expect(json.ok).toBe(false);
+    expect(result.text).toContain('timed out');
+    expect(result.text).toContain('KLING_REQUEST_TIMEOUT_MS');
     // Should not contain secrets
     expect(result.text).not.toContain(ACCESS_KEY);
     expect(result.text).not.toContain(SECRET_KEY);
-  }, 45_000);
+  });
+
+  it('ignores invalid KLING_REQUEST_TIMEOUT_MS and falls back to default', async () => {
+    // When the env var is invalid the module should load cleanly and use the default.
+    // We assert this indirectly via AUTH_REQUIRED: missing keys → connector still initialises.
+    testClient = await createTestClient({
+      env: {
+        KLING_ACCESS_KEY: '',
+        KLING_SECRET_KEY: '',
+        MCP_HOST_BRIDGE_STATE: '',
+        KLING_REQUEST_TIMEOUT_MS: 'not-a-number',
+      },
+    });
+
+    const result = await testClient.callTool('generate_kling_video', { prompt: 'test' });
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('AUTH_REQUIRED');
+  });
 });

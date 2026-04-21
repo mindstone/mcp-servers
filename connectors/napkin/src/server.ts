@@ -4,7 +4,7 @@ import { registerConfigureTools, registerGenerationTools, registerDownloadTools 
 export function createServer(): McpServer {
   const server = new McpServer({
     name: 'napkin-mcp-server',
-    version: '0.1.0',
+    version: '0.3.0',
   });
 
   registerConfigureTools(server);

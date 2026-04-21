@@ -42,25 +42,43 @@ describe('Error handling', () => {
   });
 
   describe('Network timeout', () => {
-    it(
-      'returns actionable error without secrets',
-      async () => {
-        mswServer.use(...createNapkinTimeoutHandlers());
-        testClient = await createTestClient({
-          env: { NAPKIN_API_KEY: 'secret-timeout-key', MCP_HOST_BRIDGE_STATE: '' },
-        });
+    it('returns actionable error without secrets (uses NAPKIN_REQUEST_TIMEOUT_MS override)', async () => {
+      mswServer.use(...createNapkinTimeoutHandlers());
+      testClient = await createTestClient({
+        env: {
+          NAPKIN_API_KEY: 'secret-timeout-key',
+          MCP_HOST_BRIDGE_STATE: '',
+          // Short timeout so the test aborts fast; default is 60s.
+          NAPKIN_REQUEST_TIMEOUT_MS: '500',
+        },
+      });
 
-        const result = await testClient.callTool('napkin_check_status', {
-          request_id: 'some-id',
-        });
+      const result = await testClient.callTool('napkin_check_status', {
+        request_id: 'some-id',
+      });
 
-        expect(result.isError).toBe(true);
-        expect(result.text).toContain('timed out');
-        // Must not leak the API key
-        expect(result.text).not.toContain('secret-timeout-key');
-      },
-      35_000,
-    );
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain('timed out');
+      expect(result.text).toContain('NAPKIN_REQUEST_TIMEOUT_MS');
+      // Must not leak the API key
+      expect(result.text).not.toContain('secret-timeout-key');
+    });
+
+    it('ignores invalid NAPKIN_REQUEST_TIMEOUT_MS and falls back to default', async () => {
+      testClient = await createTestClient({
+        env: {
+          NAPKIN_API_KEY: '',
+          MCP_HOST_BRIDGE_STATE: '',
+          NAPKIN_REQUEST_TIMEOUT_MS: 'not-a-number',
+        },
+      });
+
+      const result = await testClient.callTool('napkin_check_status', {
+        request_id: 'some-id',
+      });
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain('AUTH_REQUIRED');
+    });
   });
 });
 

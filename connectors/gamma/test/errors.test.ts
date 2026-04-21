@@ -40,23 +40,39 @@ describe('Error handling', () => {
   });
 
   describe('Network timeout', () => {
-    it(
-      'returns actionable error without secrets',
-      async () => {
-        mswServer.use(...createGammaTimeoutHandlers());
-        testClient = await createTestClient({
-          env: { GAMMA_API_KEY: 'secret-timeout-key', MCP_HOST_BRIDGE_STATE: '' },
-        });
+    it('returns actionable error without secrets (uses GAMMA_REQUEST_TIMEOUT_MS override)', async () => {
+      mswServer.use(...createGammaTimeoutHandlers());
+      testClient = await createTestClient({
+        env: {
+          GAMMA_API_KEY: 'secret-timeout-key',
+          MCP_HOST_BRIDGE_STATE: '',
+          // Short timeout so the test aborts fast; default is 60s.
+          GAMMA_REQUEST_TIMEOUT_MS: '500',
+        },
+      });
 
-        const result = await testClient.callTool('gamma_list_themes', {});
+      const result = await testClient.callTool('gamma_list_themes', {});
 
-        expect(result.isError).toBe(true);
-        expect(result.text).toContain('timed out');
-        // Must not leak the API key
-        expect(result.text).not.toContain('secret-timeout-key');
-      },
-      35_000,
-    );
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain('timed out');
+      expect(result.text).toContain('GAMMA_REQUEST_TIMEOUT_MS');
+      // Must not leak the API key
+      expect(result.text).not.toContain('secret-timeout-key');
+    });
+
+    it('ignores invalid GAMMA_REQUEST_TIMEOUT_MS and falls back to default', async () => {
+      testClient = await createTestClient({
+        env: {
+          GAMMA_API_KEY: '',
+          MCP_HOST_BRIDGE_STATE: '',
+          GAMMA_REQUEST_TIMEOUT_MS: 'not-a-number',
+        },
+      });
+
+      const result = await testClient.callTool('gamma_list_themes', {});
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain('AUTH_REQUIRED');
+    });
   });
 });
 

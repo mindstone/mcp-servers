@@ -1,4 +1,45 @@
-export const REQUEST_TIMEOUT_MS = 30_000;
+/**
+ * Default timeout (ms) for outbound HTTP requests (API + bridge).
+ *
+ * Gamma generation is async — the initial create call returns a
+ * `generationId` that is polled separately — so individual HTTP calls
+ * should complete in <5s. The 60s default gives headroom for occasional
+ * slow submits under load. Override via `GAMMA_REQUEST_TIMEOUT_MS`.
+ */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
+
+/**
+ * Sanity ceiling on configured timeouts. 30 minutes catches accidental
+ * extra zeros in env values.
+ */
+export const MAX_REQUEST_TIMEOUT_MS = 30 * 60 * 1000;
+
+function parseTimeoutEnv(envVarName: string, fallbackMs: number): number {
+  const raw = process.env[envVarName];
+  if (raw === undefined || raw === '') return fallbackMs;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) {
+    console.error(
+      `[Gamma] Ignoring invalid ${envVarName}=${JSON.stringify(raw)} (expected positive integer ms); using default ${fallbackMs}`,
+    );
+    return fallbackMs;
+  }
+  if (parsed > MAX_REQUEST_TIMEOUT_MS) {
+    console.error(
+      `[Gamma] Ignoring ${envVarName}=${parsed} (exceeds max ${MAX_REQUEST_TIMEOUT_MS}ms); using default ${fallbackMs}`,
+    );
+    return fallbackMs;
+  }
+  return parsed;
+}
+
+/**
+ * Timeout (ms) for outbound requests. Reads `GAMMA_REQUEST_TIMEOUT_MS`
+ * at call time, falling back to `DEFAULT_REQUEST_TIMEOUT_MS`.
+ */
+export function getRequestTimeoutMs(): number {
+  return parseTimeoutEnv('GAMMA_REQUEST_TIMEOUT_MS', DEFAULT_REQUEST_TIMEOUT_MS);
+}
 
 /** Export polling interval in ms — overridable via GAMMA_EXPORT_POLL_INTERVAL_MS */
 export const EXPORT_POLL_INTERVAL_MS = parseInt(

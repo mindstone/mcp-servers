@@ -12,7 +12,7 @@ import {
 export function createServer(): McpServer {
   const server = new McpServer({
     name: 'runway-mcp-server',
-    version: '0.1.0',
+    version: '0.3.0',
   });
 
   registerConfigureTools(server);

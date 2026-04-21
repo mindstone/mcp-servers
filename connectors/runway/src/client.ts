@@ -12,7 +12,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
   RunwayError,
-  REQUEST_TIMEOUT_MS,
+  getRequestTimeoutMs,
   RUNWAY_API_BASE,
   RUNWAY_API_VERSION,
   MIME_MAP,
@@ -44,10 +44,16 @@ export async function runwayFetch<T>(
   console.error(`[Runway API] ${options.method || 'GET'} ${url}`);
 
   let response: Response;
+  const timeoutMs = getRequestTimeoutMs();
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const callerSignal = options.signal ?? undefined;
+  const fetchSignal =
+    callerSignal === undefined ? timeoutSignal : AbortSignal.any([callerSignal, timeoutSignal]);
+
   try {
     response = await fetch(url, {
       ...options,
-      signal: options.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: fetchSignal,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
@@ -56,11 +62,15 @@ export async function runwayFetch<T>(
       },
     });
   } catch (error) {
-    if (error instanceof Error && error.name === 'TimeoutError') {
+    // Attribute timeout to OUR signal only (not any caller-supplied TimeoutError):
+    // timeoutSignal.aborted goes true iff its timer actually expired. If the caller
+    // aborted first, their AbortError rethrows unchanged.
+    if (timeoutSignal.aborted) {
+      const timeoutSec = Math.round(timeoutMs / 1000);
       throw new RunwayError(
-        'Request to Runway API timed out',
+        `Request to Runway API timed out after ${timeoutSec}s`,
         'TIMEOUT',
-        'The request took too long. Try again or check if the Runway API is available.',
+        `The request took longer than ${timeoutSec}s. Set RUNWAY_REQUEST_TIMEOUT_MS to increase the timeout, or try again.`,
       );
     }
     throw error;
@@ -113,10 +123,16 @@ export async function runwayRawFetch(
   console.error(`[Runway API] ${options.method || 'GET'} ${url}`);
 
   let response: Response;
+  const timeoutMs = getRequestTimeoutMs();
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const callerSignal = options.signal ?? undefined;
+  const fetchSignal =
+    callerSignal === undefined ? timeoutSignal : AbortSignal.any([callerSignal, timeoutSignal]);
+
   try {
     response = await fetch(url, {
       ...options,
-      signal: options.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: fetchSignal,
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'X-Runway-Version': RUNWAY_API_VERSION,
@@ -124,11 +140,15 @@ export async function runwayRawFetch(
       },
     });
   } catch (error) {
-    if (error instanceof Error && error.name === 'TimeoutError') {
+    // Attribute timeout to OUR signal only (not any caller-supplied TimeoutError):
+    // timeoutSignal.aborted goes true iff its timer actually expired. If the caller
+    // aborted first, their AbortError rethrows unchanged.
+    if (timeoutSignal.aborted) {
+      const timeoutSec = Math.round(timeoutMs / 1000);
       throw new RunwayError(
-        'Request to Runway API timed out',
+        `Request to Runway API timed out after ${timeoutSec}s`,
         'TIMEOUT',
-        'The request took too long. Try again or check if the Runway API is available.',
+        `The request took longer than ${timeoutSec}s. Set RUNWAY_REQUEST_TIMEOUT_MS to increase the timeout, or try again.`,
       );
     }
     throw error;

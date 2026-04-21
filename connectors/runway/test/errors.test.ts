@@ -69,23 +69,40 @@ describe('Error handling', () => {
   });
 
   describe('Network timeout', () => {
-    it(
-      'returns actionable error without secrets',
-      async () => {
-        mswServer.use(...createRunwayTimeoutHandlers());
-        testClient = await createTestClient({
-          env: { RUNWAYML_API_SECRET: 'secret-timeout-key', MCP_HOST_BRIDGE_STATE: '' },
-        });
+    it('returns actionable error without secrets (uses RUNWAY_REQUEST_TIMEOUT_MS override)', async () => {
+      mswServer.use(...createRunwayTimeoutHandlers());
+      testClient = await createTestClient({
+        env: {
+          RUNWAYML_API_SECRET: 'secret-timeout-key',
+          MCP_HOST_BRIDGE_STATE: '',
+          // Short timeout so the test aborts fast; default is 60s.
+          RUNWAY_REQUEST_TIMEOUT_MS: '500',
+        },
+      });
 
-        const result = await testClient.callTool('get_runway_balance', {});
+      const result = await testClient.callTool('get_runway_balance', {});
 
-        expect(result.isError).toBe(true);
-        expect(result.text).toContain('timed out');
-        // Must not leak the API key
-        expect(result.text).not.toContain('secret-timeout-key');
-      },
-      35_000,
-    );
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain('timed out');
+      expect(result.text).toContain('RUNWAY_REQUEST_TIMEOUT_MS');
+      // Must not leak the API key
+      expect(result.text).not.toContain('secret-timeout-key');
+    });
+
+    it('ignores invalid RUNWAY_REQUEST_TIMEOUT_MS and falls back to default', async () => {
+      testClient = await createTestClient({
+        env: {
+          RUNWAYML_API_SECRET: '',
+          MCP_HOST_BRIDGE_STATE: '',
+          RUNWAY_REQUEST_TIMEOUT_MS: 'not-a-number',
+        },
+      });
+
+      // Module should load cleanly despite bad env; AUTH_REQUIRED proves it.
+      const result = await testClient.callTool('get_runway_balance', {});
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain('AUTH_REQUIRED');
+    });
   });
 });
 

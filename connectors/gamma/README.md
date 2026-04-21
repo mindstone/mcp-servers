@@ -39,6 +39,7 @@ node dist/index.js
 - `GAMMA_API_KEY` — Gamma API key
 - `GAMMA_EXPORT_POLL_INTERVAL_MS` — export poll interval in milliseconds (default: `5000`)
 - `GAMMA_EXPORT_POLL_MAX_ATTEMPTS` — maximum export poll attempts (default: `12`)
+- `GAMMA_REQUEST_TIMEOUT_MS` — optional override (positive integer ms, max 30 min) for the outbound HTTP request timeout applied to both Gamma API and host-bridge calls. Default: `60000` (60s). Raise this if you see `TIMEOUT` errors on slow submits; lower it if you want tighter bounds.
 - `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
 - `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
 

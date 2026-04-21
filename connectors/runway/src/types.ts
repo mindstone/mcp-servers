@@ -1,7 +1,48 @@
-export const REQUEST_TIMEOUT_MS = 30_000;
-
 export const RUNWAY_API_BASE = 'https://api.dev.runwayml.com/v1';
 export const RUNWAY_API_VERSION = '2024-11-06';
+
+/**
+ * Default timeout (ms) for outbound HTTP requests (API + bridge).
+ *
+ * Runway video generation is async via task polling, so individual HTTP
+ * calls (submit + poll) should complete in <5s. The 60s default gives
+ * headroom for occasional slow submits under load while still surfacing
+ * real upstream outages. Override via `RUNWAY_REQUEST_TIMEOUT_MS`.
+ */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
+
+/**
+ * Sanity ceiling on configured timeouts. 30 minutes catches accidental
+ * extra zeros in env values.
+ */
+export const MAX_REQUEST_TIMEOUT_MS = 30 * 60 * 1000;
+
+function parseTimeoutEnv(envVarName: string, fallbackMs: number): number {
+  const raw = process.env[envVarName];
+  if (raw === undefined || raw === '') return fallbackMs;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) {
+    console.error(
+      `[Runway] Ignoring invalid ${envVarName}=${JSON.stringify(raw)} (expected positive integer ms); using default ${fallbackMs}`,
+    );
+    return fallbackMs;
+  }
+  if (parsed > MAX_REQUEST_TIMEOUT_MS) {
+    console.error(
+      `[Runway] Ignoring ${envVarName}=${parsed} (exceeds max ${MAX_REQUEST_TIMEOUT_MS}ms); using default ${fallbackMs}`,
+    );
+    return fallbackMs;
+  }
+  return parsed;
+}
+
+/**
+ * Timeout (ms) for outbound requests. Reads `RUNWAY_REQUEST_TIMEOUT_MS`
+ * at call time, falling back to `DEFAULT_REQUEST_TIMEOUT_MS`.
+ */
+export function getRequestTimeoutMs(): number {
+  return parseTimeoutEnv('RUNWAY_REQUEST_TIMEOUT_MS', DEFAULT_REQUEST_TIMEOUT_MS);
+}
 
 export interface BridgeState {
   port: number;

@@ -40,6 +40,7 @@ node dist/index.js
 - `MCP_WORKSPACE_PATH` — optional workspace path for saving generated visuals
 - `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
 - `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
+- `NAPKIN_REQUEST_TIMEOUT_MS` — optional override (positive integer ms, max 30 min) for the outbound HTTP request timeout applied to Napkin API, host-bridge, and download calls. Default: `60000` (60s). Raise this if you see `TIMEOUT` errors on slow submits or large downloads; lower it if you want tighter bounds.
 
 ## Host configuration examples
 

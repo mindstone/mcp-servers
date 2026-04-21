@@ -10,7 +10,7 @@
 
 import {
   GammaError,
-  REQUEST_TIMEOUT_MS,
+  getRequestTimeoutMs,
   type GenerationRequest,
   type CreateFromTemplateRequest,
   type GenerationResponse,
@@ -36,10 +36,16 @@ async function gammaFetch<T>(
 
   let response: Response;
 
+  const timeoutMs = getRequestTimeoutMs();
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const callerSignal = options.signal ?? undefined;
+  const fetchSignal =
+    callerSignal === undefined ? timeoutSignal : AbortSignal.any([callerSignal, timeoutSignal]);
+
   try {
     response = await fetch(url, {
       ...options,
-      signal: options.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: fetchSignal,
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
@@ -47,11 +53,15 @@ async function gammaFetch<T>(
       },
     });
   } catch (error) {
-    if (error instanceof Error && error.name === 'TimeoutError') {
+    // Attribute timeout to OUR signal only (not any caller-supplied TimeoutError):
+    // timeoutSignal.aborted goes true iff its timer actually expired. If the caller
+    // aborted first, their AbortError rethrows unchanged.
+    if (timeoutSignal.aborted) {
+      const timeoutSec = Math.round(timeoutMs / 1000);
       throw new GammaError(
-        'Request to Gamma API timed out',
+        `Request to Gamma API timed out after ${timeoutSec}s`,
         'TIMEOUT',
-        'The request took too long. Try again or check if the Gamma API is available.',
+        `The request took longer than ${timeoutSec}s. Set GAMMA_REQUEST_TIMEOUT_MS to increase the timeout, or try again.`,
       );
     }
     throw error;
