@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import { type BridgeState, REQUEST_TIMEOUT_MS } from './types.js';
+import { type BridgeState, getBridgeRequestTimeoutMs } from './types.js';
 
 /**
  * Path to bridge state file, supporting both current and legacy env vars.
@@ -33,7 +33,7 @@ export const bridgeRequest = async (
   }
   const response = await fetch(`http://127.0.0.1:${bridge.port}${urlPath}`, {
     method: 'POST',
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    signal: AbortSignal.timeout(getBridgeRequestTimeoutMs()),
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${bridge.token}`,

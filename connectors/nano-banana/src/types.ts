@@ -1,4 +1,66 @@
-export const REQUEST_TIMEOUT_MS = 30_000;
+/**
+ * Default timeouts (ms) for outbound HTTP requests.
+ *
+ * Gemini image generation — especially `gemini-3-pro-image-preview` — can
+ * legitimately take 60-120s per request. We default to 180_000 (3 min) so
+ * Pro-quality generations don't spuriously abort. Users can override via
+ * `NANO_BANANA_GEMINI_TIMEOUT_MS` if their infra needs a tighter bound.
+ *
+ * Bridge requests are local HTTP calls to the host app and should be fast;
+ * 30s is a generous ceiling. Override via `NANO_BANANA_BRIDGE_TIMEOUT_MS`.
+ */
+export const DEFAULT_GEMINI_REQUEST_TIMEOUT_MS = 180_000;
+export const DEFAULT_BRIDGE_REQUEST_TIMEOUT_MS = 30_000;
+
+/**
+ * Sanity ceiling on configured timeouts. 30 minutes is well above any
+ * realistic image-gen latency and catches accidental extra zeros in env
+ * values (e.g. pasting `1800000000` instead of `180000`).
+ */
+export const MAX_REQUEST_TIMEOUT_MS = 30 * 60 * 1000;
+
+/**
+ * Parse a positive integer from an env var. Returns the fallback (with a
+ * stderr warning) for missing/empty, non-integer, non-positive, or
+ * out-of-range values so misconfiguration is visible rather than silently
+ * defaulting.
+ */
+function parseTimeoutEnv(envVarName: string, fallbackMs: number): number {
+  const raw = process.env[envVarName];
+  if (raw === undefined || raw === '') return fallbackMs;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) {
+    console.error(
+      `[NanoBanana] Ignoring invalid ${envVarName}=${JSON.stringify(raw)} (expected positive integer ms); using default ${fallbackMs}`,
+    );
+    return fallbackMs;
+  }
+  if (parsed > MAX_REQUEST_TIMEOUT_MS) {
+    console.error(
+      `[NanoBanana] Ignoring ${envVarName}=${parsed} (exceeds max ${MAX_REQUEST_TIMEOUT_MS}ms); using default ${fallbackMs}`,
+    );
+    return fallbackMs;
+  }
+  return parsed;
+}
+
+/**
+ * Timeout (ms) for outbound Gemini API requests. Reads
+ * `NANO_BANANA_GEMINI_TIMEOUT_MS` at call time, falling back to
+ * `DEFAULT_GEMINI_REQUEST_TIMEOUT_MS`.
+ */
+export function getGeminiRequestTimeoutMs(): number {
+  return parseTimeoutEnv('NANO_BANANA_GEMINI_TIMEOUT_MS', DEFAULT_GEMINI_REQUEST_TIMEOUT_MS);
+}
+
+/**
+ * Timeout (ms) for outbound host bridge requests. Reads
+ * `NANO_BANANA_BRIDGE_TIMEOUT_MS` at call time, falling back to
+ * `DEFAULT_BRIDGE_REQUEST_TIMEOUT_MS`.
+ */
+export function getBridgeRequestTimeoutMs(): number {
+  return parseTimeoutEnv('NANO_BANANA_BRIDGE_TIMEOUT_MS', DEFAULT_BRIDGE_REQUEST_TIMEOUT_MS);
+}
 
 export interface BridgeState {
   port: number;

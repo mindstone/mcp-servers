@@ -40,6 +40,8 @@ node dist/index.js
 - `MCP_WORKSPACE_PATH` — optional workspace path for saving generated images
 - `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
 - `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
+- `NANO_BANANA_GEMINI_TIMEOUT_MS` — optional override (positive integer ms) for the outbound Gemini request timeout. Default: `180000` (3 min). Increase this if you use `gemini-3-pro-image-preview` and see `TIMEOUT` errors on slow generations; decrease it if you want tighter bounds.
+- `NANO_BANANA_BRIDGE_TIMEOUT_MS` — optional override (positive integer ms) for requests to the host bridge. Default: `30000`.
 
 ## Host configuration examples
 

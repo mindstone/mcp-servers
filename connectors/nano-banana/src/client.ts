@@ -10,7 +10,7 @@
 
 import {
   NanoBananaError,
-  REQUEST_TIMEOUT_MS,
+  getGeminiRequestTimeoutMs,
   getErrorResolution,
   type GeminiResponse,
   type GeminiApiErrorData,
@@ -44,21 +44,36 @@ export async function geminiFetch(
 
   let response: Response;
 
+  const timeoutMs = getGeminiRequestTimeoutMs();
+  // Compose caller-supplied signal (if any) with our timeout so the built-in
+  // ceiling always applies — even when a caller passes its own AbortSignal.
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const fetchSignal =
+    signal === undefined ? timeoutSignal : AbortSignal.any([signal, timeoutSignal]);
+
   try {
     response = await fetch(url, {
       method: 'POST',
-      signal: signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: fetchSignal,
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
     });
   } catch (error) {
-    if (error instanceof Error && error.name === 'TimeoutError') {
+    // Attribute the abort to the timeout only when the timeout was the
+    // *winning* signal — inspecting the composed signal's reason handles the
+    // race where both caller-supplied abort and timeout fire near-simultaneously.
+    const composedReason = fetchSignal.reason as { name?: string } | undefined;
+    const timedOut =
+      composedReason?.name === 'TimeoutError' ||
+      (signal === undefined && error instanceof Error && error.name === 'TimeoutError');
+    if (timedOut) {
+      const timeoutSec = Math.round(timeoutMs / 1000);
       throw new NanoBananaError(
-        'Request to Gemini API timed out',
+        `Request to Gemini API timed out after ${timeoutSec}s`,
         'TIMEOUT',
-        'The request took too long. Try again or check if the Gemini API is available.',
+        `The request took longer than ${timeoutSec}s. Gemini Pro image generations can be slow; set NANO_BANANA_GEMINI_TIMEOUT_MS to increase the timeout, or try again.`,
       );
     }
     throw error;

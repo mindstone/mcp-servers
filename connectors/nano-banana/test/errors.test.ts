@@ -55,25 +55,47 @@ describe('Error handling', () => {
   });
 
   describe('Network timeout', () => {
-    it(
-      'returns actionable error without secrets',
-      async () => {
-        mswServer.use(...createNanoBananaTimeoutHandlers());
-        testClient = await createTestClient({
-          env: { GEMINI_API_KEY: 'secret-timeout-key', MCP_HOST_BRIDGE_STATE: '' },
-        });
+    it('returns actionable error without secrets (uses NANO_BANANA_GEMINI_TIMEOUT_MS override)', async () => {
+      mswServer.use(...createNanoBananaTimeoutHandlers());
+      testClient = await createTestClient({
+        env: {
+          GEMINI_API_KEY: 'secret-timeout-key',
+          MCP_HOST_BRIDGE_STATE: '',
+          // Use a short timeout so the test fires fast; the default is 3 min.
+          NANO_BANANA_GEMINI_TIMEOUT_MS: '500',
+        },
+      });
 
-        const result = await testClient.callTool('nano_banana_generate', {
-          prompt: 'A test image',
-        });
+      const result = await testClient.callTool('nano_banana_generate', {
+        prompt: 'A test image',
+      });
 
-        expect(result.isError).toBe(true);
-        expect(result.text).toContain('timed out');
-        // Must not leak the API key
-        expect(result.text).not.toContain('secret-timeout-key');
-      },
-      35_000,
-    );
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain('timed out');
+      // Error message exposes the configured bound so the user can tune it.
+      expect(result.text).toContain('NANO_BANANA_GEMINI_TIMEOUT_MS');
+      // Must not leak the API key
+      expect(result.text).not.toContain('secret-timeout-key');
+    });
+
+    it('ignores invalid NANO_BANANA_GEMINI_TIMEOUT_MS and falls back to default', async () => {
+      testClient = await createTestClient({
+        env: {
+          GEMINI_API_KEY: '',
+          MCP_HOST_BRIDGE_STATE: '',
+          NANO_BANANA_GEMINI_TIMEOUT_MS: 'not-a-number',
+        },
+      });
+
+      // Tool runs without throwing on the bad env var; falls back to the
+      // AUTH_REQUIRED path, which proves the module loaded cleanly despite
+      // the invalid config.
+      const result = await testClient.callTool('nano_banana_generate', {
+        prompt: 'A test image',
+      });
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain('AUTH_REQUIRED');
+    });
   });
 });
 
