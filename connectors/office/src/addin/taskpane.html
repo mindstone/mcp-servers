@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rebel — Word Add-in</title>
+
+  <!-- Office.js CDN — required for all Office Add-ins -->
+  <script src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
+
+  <style>
+    :root {
+      color-scheme: light;
+
+      --color-bg-page: #f4f7fb;
+      --color-surface-1: #ffffff;
+      --color-text-primary: #0f172a;
+      --color-text-secondary: rgba(15, 23, 42, 0.6);
+      --color-border-soft: rgba(226, 232, 240, 0.7);
+      --color-primary: #8b5cf6;
+      --color-primary-hover: #7c3aed;
+      --color-primary-foreground: #ffffff;
+      --color-success: #16a34a;
+      --color-warning: #d97706;
+      --color-danger: #dc2626;
+      --color-muted: #f1f5f9;
+      --color-muted-foreground: #475569;
+
+      --taskpane-bg: var(--color-bg-page);
+      --taskpane-fg: var(--color-text-primary);
+      --taskpane-muted: var(--color-text-secondary);
+      --taskpane-divider: var(--color-border-soft);
+      --status-connected-bg: rgba(22, 163, 74, 0.12);
+      --status-connected-fg: var(--color-success);
+      --status-connected-dot: var(--color-success);
+      --status-disconnected-bg: rgba(220, 38, 38, 0.12);
+      --status-disconnected-fg: var(--color-danger);
+      --status-disconnected-dot: var(--color-danger);
+      --status-connecting-bg: rgba(217, 119, 6, 0.14);
+      --status-connecting-fg: var(--color-warning);
+      --status-connecting-dot: var(--color-warning);
+      --status-rebel-closed-bg: var(--color-muted);
+      --status-rebel-closed-fg: var(--color-muted-foreground);
+      --status-rebel-closed-dot: var(--color-muted-foreground);
+      --button-bg: var(--color-primary);
+      --button-bg-hover: var(--color-primary-hover);
+      --button-fg: var(--color-primary-foreground);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+
+        --color-bg-page: #0a0a0e;
+        --color-surface-1: #0d111c;
+        --color-text-primary: rgba(248, 250, 255, 0.98);
+        --color-text-secondary: rgba(226, 232, 240, 0.78);
+        --color-border-soft: rgba(148, 163, 184, 0.18);
+        --color-primary: #8b5cf6;
+        --color-primary-hover: #a78bfa;
+        --color-primary-foreground: #ffffff;
+        --color-success: #16a34a;
+        --color-warning: #d97706;
+        --color-danger: #ef4444;
+        --color-muted: #334155;
+        --color-muted-foreground: #cbd5e1;
+
+        --status-connected-bg: rgba(22, 163, 74, 0.2);
+        --status-disconnected-bg: rgba(239, 68, 68, 0.18);
+        --status-connecting-bg: rgba(217, 119, 6, 0.18);
+      }
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--taskpane-bg);
+      color: var(--taskpane-fg);
+      padding: 16px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .header h1 {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .status {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+      font-weight: 500;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 5px;
+    }
+
+    .status.connected {
+      background: var(--status-connected-bg);
+      color: var(--status-connected-fg);
+    }
+    .status.connected .status-dot { background: var(--status-connected-dot); }
+
+    .status.disconnected {
+      background: var(--status-disconnected-bg);
+      color: var(--status-disconnected-fg);
+    }
+    .status.disconnected .status-dot { background: var(--status-disconnected-dot); }
+
+    .status.connecting {
+      background: var(--status-connecting-bg);
+      color: var(--status-connecting-fg);
+    }
+    .status.connecting .status-dot { background: var(--status-connecting-dot); animation: pulse 1.5s infinite; }
+
+    .status.rebel-closed {
+      background: var(--status-rebel-closed-bg);
+      color: var(--status-rebel-closed-fg);
+    }
+    .status.rebel-closed .status-dot { background: var(--status-rebel-closed-dot); }
+
+    .status-content {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .status-text {
+      font-weight: 600;
+    }
+
+    .status-detail {
+      color: inherit;
+      font-size: 12px;
+      font-weight: 400;
+      opacity: 0.9;
+    }
+
+    .status-button {
+      align-self: flex-start;
+      margin-top: 4px;
+      border: none;
+      border-radius: 999px;
+      background: var(--button-bg);
+      color: var(--button-fg);
+      cursor: pointer;
+      font: inherit;
+      font-weight: 600;
+      padding: 6px 12px;
+      transition: background 0.15s ease;
+    }
+
+    .status-button:hover {
+      background: var(--button-bg-hover);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .log-section h2 {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--taskpane-muted);
+      margin-bottom: 8px;
+    }
+
+    .log-entry {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 0;
+      font-size: 12px;
+      color: var(--taskpane-fg);
+      border-bottom: 1px solid var(--taskpane-divider);
+    }
+
+    .log-entry:last-child { border-bottom: none; }
+
+    .log-icon { font-size: 11px; }
+    .log-icon.success { color: var(--color-success); }
+    .log-icon.failure { color: var(--color-danger); }
+
+    .log-action { font-family: "SF Mono", "Fira Code", Menlo, monospace; font-size: 11px; }
+    .log-time { margin-left: auto; color: var(--taskpane-muted); font-size: 11px; }
+    .log-empty { color: var(--taskpane-muted); font-style: italic; padding: 8px 0; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Rebel</h1>
+  </div>
+
+  <div id="status" class="status disconnected">
+    <span class="status-dot"></span>
+    <div class="status-content">
+      <span id="status-text" class="status-text">Initializing…</span>
+      <p id="status-detail" class="status-detail" hidden></p>
+      <button id="retry-connect" class="status-button" type="button" hidden>Try again</button>
+    </div>
+  </div>
+
+  <div class="log-section">
+    <h2>Recent Commands</h2>
+    <div id="command-log">
+      <div class="log-empty">No commands yet</div>
+    </div>
+  </div>
+
+  <!-- Bundled add-in entry script (compiled from taskpane.ts, served by sidecar) -->
+  <script src="/taskpane.js"></script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+{
+  "name": "@mindstone-engineering/mcp-server-office",
+  "version": "0.1.0",
+  "description": "Microsoft Office (Word, Excel, PowerPoint) MCP server for Model Context Protocol hosts. Bundles the stdio MCP server, the Office add-in sidecar, and the add-in task pane assets.",
+  "license": "FSL-1.1-MIT",
+  "type": "module",
+  "bin": {
+    "mcp-server-office": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "manifest.xml",
+    "assets",
+    "!dist/**/*.map"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nspr-io/mcp-servers.git",
+    "directory": "connectors/office"
+  },
+  "homepage": "https://github.com/nspr-io/mcp-servers/tree/main/connectors/office",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build:server": "tsc -p tsconfig.json && shx chmod +x dist/index.js",
+    "build:sidecar": "node scripts/build-sidecar.mjs",
+    "build:addin": "node scripts/build-addin.mjs",
+    "build": "npm run build:server && npm run build:sidecar && npm run build:addin",
+    "typecheck": "tsc -p tsconfig.sidecar.json --noEmit && tsc -p tsconfig.addin.json --noEmit",
+    "prepare": "npm run build",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "office-addin-dev-certs": "^2.0.7",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/office-js": "^1.0.0",
+    "@types/ws": "^8.5.0",
+    "@vitest/coverage-v8": "^4.1.3",
+    "esbuild": "^0.24.0",
+    "happy-dom": "^20.8.9",
+    "shx": "^0.3.4",
+    "typescript": "^5.8.2",
+    "vitest": "^4.1.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

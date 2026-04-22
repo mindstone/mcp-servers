@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Office Add-in manifest for Rebel (Word only, MVP).
+  Sideloaded for development — not submitted to AppSource.
+
+  SourceLocation uses a placeholder port (3000). In production the manifest
+  is generated at runtime with the actual sidecar port.
+-->
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+  xsi:type="TaskPaneApp">
+
+  <Id>a1b2c3d4-e5f6-7890-abcd-ef1234567890</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Mindstone</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="Rebel" />
+  <Description DefaultValue="Connect Microsoft Office to Rebel — your AI assistant for documents, spreadsheets, and presentations." />
+  <SupportUrl DefaultValue="https://www.mindstone.ai" />
+
+  <AppDomains>
+    <AppDomain>https://localhost:3000</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Document" />
+    <Host Name="Workbook" />
+    <Host Name="Presentation" />
+  </Hosts>
+
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://localhost:3000/taskpane.html" />
+  </DefaultSettings>
+
+  <Permissions>ReadWriteDocument</Permissions>
+
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Document">
+        <DesktopFormFactor>
+          <GetStarted>
+            <Title resid="Rebel.GetStarted.Title" />
+            <Description resid="Rebel.GetStarted.Description" />
+            <LearnMoreUrl resid="Rebel.GetStarted.LearnMoreUrl" />
+          </GetStarted>
+
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="Rebel.Group.Word">
+                <Label resid="Rebel.Group.Label" />
+
+                <Control xsi:type="Button" id="Rebel.ShowTaskpane.Word">
+                  <Label resid="Rebel.ShowTaskpane.Label" />
+                  <Supertip>
+                    <Title resid="Rebel.ShowTaskpane.Label" />
+                    <Description resid="Rebel.ShowTaskpane.Tooltip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Rebel.Icon.16" />
+                    <bt:Image size="32" resid="Rebel.Icon.32" />
+                    <bt:Image size="80" resid="Rebel.Icon.80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>RebelTaskpane</TaskpaneId>
+                    <SourceLocation resid="Rebel.Taskpane.Url" />
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+
+      <Host xsi:type="Workbook">
+        <DesktopFormFactor>
+          <GetStarted>
+            <Title resid="Rebel.GetStarted.Title" />
+            <Description resid="Rebel.GetStarted.Description" />
+            <LearnMoreUrl resid="Rebel.GetStarted.LearnMoreUrl" />
+          </GetStarted>
+
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="Rebel.Group.Excel">
+                <Label resid="Rebel.Group.Label" />
+
+                <Control xsi:type="Button" id="Rebel.ShowTaskpane.Excel">
+                  <Label resid="Rebel.ShowTaskpane.Label" />
+                  <Supertip>
+                    <Title resid="Rebel.ShowTaskpane.Label" />
+                    <Description resid="Rebel.ShowTaskpane.Tooltip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Rebel.Icon.16" />
+                    <bt:Image size="32" resid="Rebel.Icon.32" />
+                    <bt:Image size="80" resid="Rebel.Icon.80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>RebelTaskpane</TaskpaneId>
+                    <SourceLocation resid="Rebel.Taskpane.Url" />
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+
+      <Host xsi:type="Presentation">
+        <DesktopFormFactor>
+          <GetStarted>
+            <Title resid="Rebel.GetStarted.Title" />
+            <Description resid="Rebel.GetStarted.Description" />
+            <LearnMoreUrl resid="Rebel.GetStarted.LearnMoreUrl" />
+          </GetStarted>
+
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="Rebel.Group.PowerPoint">
+                <Label resid="Rebel.Group.Label" />
+
+                <Control xsi:type="Button" id="Rebel.ShowTaskpane.PowerPoint">
+                  <Label resid="Rebel.ShowTaskpane.Label" />
+                  <Supertip>
+                    <Title resid="Rebel.ShowTaskpane.Label" />
+                    <Description resid="Rebel.ShowTaskpane.Tooltip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Rebel.Icon.16" />
+                    <bt:Image size="32" resid="Rebel.Icon.32" />
+                    <bt:Image size="80" resid="Rebel.Icon.80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>RebelTaskpane</TaskpaneId>
+                    <SourceLocation resid="Rebel.Taskpane.Url" />
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Rebel.Icon.16" DefaultValue="https://localhost:3000/assets/icon-16.png" />
+        <bt:Image id="Rebel.Icon.32" DefaultValue="https://localhost:3000/assets/icon-32.png" />
+        <bt:Image id="Rebel.Icon.80" DefaultValue="https://localhost:3000/assets/icon-80.png" />
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Rebel.Taskpane.Url" DefaultValue="https://localhost:3000/taskpane.html" />
+        <bt:Url id="Rebel.GetStarted.LearnMoreUrl" DefaultValue="https://www.mindstone.ai" />
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="Rebel.GetStarted.Title" DefaultValue="Get started with Rebel" />
+        <bt:String id="Rebel.Group.Label" DefaultValue="Rebel" />
+        <bt:String id="Rebel.ShowTaskpane.Label" DefaultValue="Rebel" />
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="Rebel.GetStarted.Description" DefaultValue="Rebel is now connected to Office. Start a conversation in Rebel and it can read, write, and annotate your documents, spreadsheets, and presentations." />
+        <bt:String id="Rebel.ShowTaskpane.Tooltip" DefaultValue="Open the Rebel panel to see connection status." />
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>
