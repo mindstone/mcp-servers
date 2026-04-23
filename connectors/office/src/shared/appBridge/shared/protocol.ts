@@ -14,19 +14,18 @@
 // ---------------------------------------------------------------------------
 
 /**
- * Canonical capability identifiers the bridge understands today.
+ * Canonical capability identifiers the bridge protocol understands today.
  *
- * This is the single source of truth used by:
- *   - `TOOLS_BY_APP_ID` (resources/mcp/rebel-app-bridge/tools/index.js) —
- *     every tool must declare exactly one of these as its capability.
- *   - `CAPABILITY_BY_TOOL_NAME` — same mapping inverted for the relay.
- *   - `scripts/check-app-bridge-tool-registry.ts` — validates the two
- *     registries agree and that every capability referenced exists here.
+ * This file is a vendored copy from the Mindstone Rebel monorepo
+ * (`src/core/appBridge/shared/protocol.ts`); the original ships alongside
+ * Rebel-side tool registries and a consistency check that enforce that every
+ * tool declares exactly one capability listed here.
  *
- * Adding a new capability means: append to this tuple, add a tool in
- * `resources/mcp/rebel-app-bridge/tools/browser.js`, register the extension
- * side, and update docs. The consistency check fails loud if any of those
- * drift out of sync.
+ * Inside this OSS package only the Office sidecar uses the bridge wire
+ * format, so the browser-targeted capabilities below are retained for
+ * protocol compatibility but are not exercised here. Changes to this list
+ * must be mirrored on the Rebel side (see the "Known drift risk" section of
+ * README.md).
  */
 export const CAPABILITY_KEYS = [
   'read_page',

@@ -23,8 +23,8 @@ import type { ResponseErrorMessage } from './protocol.js';
  * callers can use `ErrorCode.APP_NOT_CONNECTED` without pulling in a TS `enum`.
  *
  * The type alias deliberately shadows the value via `typeof` — this is the
- * idiomatic zero-runtime-overhead enum pattern already used in the Office
- * sidecar (`SIDECAR_ERROR_CODES` in `packages/office-addin/src/shared/errors.ts`).
+ * idiomatic zero-runtime-overhead enum pattern also used by this package's
+ * Office-facing `SIDECAR_ERROR_CODES` in `src/shared/office/errors.ts`.
  */
 export const ErrorCode = {
   APP_NOT_CONNECTED: 'APP_NOT_CONNECTED',
