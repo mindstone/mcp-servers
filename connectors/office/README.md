@@ -65,11 +65,29 @@ node dist/index.js
 
 ### Environment variables
 
+**Read by the stdio MCP server (`dist/index.js`):**
+
 - `REBEL_OFFICE_SIDECAR_STATE` — **required**. Absolute path to the sidecar state
   file (JSON). The MCP server reads `port` and `token` from this file to talk
-  to the sidecar; the sidecar writes it on startup.
-- `REBEL_DISABLE_OFFICE_SIDECAR` — optional kill-switch. When set, the MCP
-  server refuses to talk to or spawn the sidecar.
+  to the sidecar; the sidecar writes it on startup. The state file's parent
+  directory doubles as the sidecar's state directory (certs, per-app
+  manifests).
+- `REBEL_DISABLE_OFFICE_SIDECAR` — optional kill-switch. When set (`1`), the
+  MCP server refuses to talk to or spawn the sidecar.
+
+**Read by the sidecar (`dist/sidecar/cli.js`) — normally set by the MCP server
+when it lazy-spawns the sidecar, but documented here for hosts that manage the
+sidecar lifecycle directly:**
+
+- `REBEL_OFFICE_SIDECAR_STATE_DIR` — **required** by the sidecar. Directory for
+  the state file, HTTPS certificates, and generated per-app manifests
+  (`manifest.word.xml`, `manifest.excel.xml`, `manifest.powerpoint.xml`). The
+  MCP server derives this from the parent directory of
+  `REBEL_OFFICE_SIDECAR_STATE` and passes it through automatically.
+- `REBEL_OFFICE_ADDIN_DIR` — optional. Absolute path to the built add-in static
+  files (the directory containing `taskpane.html`, `taskpane.js`, and
+  `assets/`). The MCP server sets this to the package's `dist/addin/`
+  directory; hosts serving a custom add-in bundle can override it.
 
 ## Host configuration examples
 
@@ -136,5 +154,45 @@ manifest. The server does not need a live sidecar to respond to `listTools`.
 
 ## Security
 
-See the repository-level [SECURITY.md](../../SECURITY.md) for vulnerability
-reporting.
+See [SECURITY.md](./SECURITY.md) for this connector's security policy and the
+repository-level [SECURITY.md](../../SECURITY.md) for vulnerability reporting.
+
+## Known drift risk: vendored code from the Mindstone Rebel monorepo
+
+Some files in this package are **byte-compatible copies** of code that also
+lives in the Mindstone Rebel monorepo (`github.com/nspr-io/MindstoneRebel`).
+They have to stay in sync on both sides; there is no automation today.
+
+**Vendored from Rebel's `src/shared/sidecar/`** (wire-format contract between
+Rebel's main process and this sidecar CLI):
+
+- `src/shared/sidecar/stateFile.ts`
+- `src/shared/sidecar/readySignal.ts`
+- `src/shared/sidecar/constantTime.ts`
+- `src/shared/sidecar/errorMessages.ts`
+
+**Vendored from Rebel's `src/core/appBridge/`** (minimum slice needed for the
+sidecar bundle; ~1,444 LOC across four files):
+
+- `src/shared/appBridge/server/commandRouter.ts`
+- `src/shared/appBridge/server/connectionManager.ts`
+- `src/shared/appBridge/shared/errors.ts`
+- `src/shared/appBridge/shared/protocol.ts`
+
+**If the Rebel-side files change, this package's copies will drift silently.**
+The state-file / ready-signal schemas in particular are a wire-format contract
+— the Rebel main process parses what the sidecar writes — and a silent drift
+will surface as runtime `ReadySignalSchema.safeParse()` failures or sidecar
+startup regressions.
+
+### TODO — future work
+
+Extract these into their own published package (e.g.
+`@mindstone-engineering/app-bridge-core` plus a shared sidecar-protocol
+package) so they become versioned contracts rather than vendored code.
+
+**Until then:** anyone touching either side must manually keep both copies in
+sync. When editing here, diff against the corresponding file in the Rebel
+monorepo (`src/shared/sidecar/*` and `src/core/appBridge/*`) and copy the
+change across before landing. Both sides are covered by their own test suites
+but neither proves the other's copy is byte-current.

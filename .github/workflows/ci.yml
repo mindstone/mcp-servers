@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        connector: [zendesk, fathom, humaans, kling, mixmax, pandadoc, servicenow, freshdesk, gamma, napkin, elevenlabs, nano-banana, runway, talentlms, workday, quickbooks, email-imap, retell-ai, browser-automation, outreach, salesforce]
+        connector: [zendesk, fathom, humaans, kling, mixmax, office, pandadoc, servicenow, freshdesk, gamma, napkin, elevenlabs, nano-banana, runway, talentlms, workday, quickbooks, email-imap, retell-ai, browser-automation, outreach, salesforce]
         node-version: [20, 22]
     defaults:
       run:

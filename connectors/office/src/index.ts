@@ -250,17 +250,21 @@ const writeFallbackInvokedSentinel = ({ lastEagerStartErrorCode, reason }) => {
   })}\n`);
 };
 
+// Resolve the sidecar CLI relative to the compiled server entrypoint. This file
+// ships as `dist/index.js` in the published package and expects the sidecar at
+// `dist/sidecar/cli.js` (produced by `npm run build:sidecar`).
+//
+// During in-tree development (running from `src/` via tsx/ts-node before
+// `npm run build`), we also check the local `dist/sidecar/cli.js` path so you
+// can rebuild the sidecar independently from the server. There is no
+// monorepo-wide fallback here — this package is standalone.
 const resolveSidecarScript = () => {
-  // In packaged: server.cjs is at resources/mcp/rebel-office/server.cjs
-  //              sidecar cli is at resources/mcp/rebel-office/sidecar/cli.js
-  // In dev: server.cjs is at resources/mcp/rebel-office/server.cjs
-  //         sidecar cli is at packages/office-addin/dist/sidecar/cli.js
   const packagedPath = path.join(__dirname, 'sidecar', 'cli.js');
   if (fs.existsSync(packagedPath)) return packagedPath;
 
-  // Dev fallback — walk up to repo root
-  const repoRoot = path.resolve(__dirname, '..', '..', '..');
-  const devPath = path.join(repoRoot, 'packages', 'office-addin', 'dist', 'sidecar', 'cli.js');
+  // Dev path — in-tree when running pre-build from src/
+  const packageRoot = path.resolve(__dirname, '..');
+  const devPath = path.join(packageRoot, 'dist', 'sidecar', 'cli.js');
   if (fs.existsSync(devPath)) return devPath;
 
   return null;
@@ -270,8 +274,8 @@ const resolveAddinDir = () => {
   const packagedPath = path.join(__dirname, 'addin');
   if (fs.existsSync(packagedPath)) return packagedPath;
 
-  const repoRoot = path.resolve(__dirname, '..', '..', '..');
-  const devPath = path.join(repoRoot, 'packages', 'office-addin', 'dist', 'addin');
+  const packageRoot = path.resolve(__dirname, '..');
+  const devPath = path.join(packageRoot, 'dist', 'addin');
   if (fs.existsSync(devPath)) return devPath;
 
   return null;
@@ -284,7 +288,13 @@ const resolveAddinDir = () => {
 const defaultSpawnSidecarAndWait = async () => {
   const script = resolveSidecarScript();
   if (!script) {
-    throw new Error('Sidecar script not found. Run `npm run build` in packages/office-addin.');
+    const attempted = [
+      path.join(__dirname, 'sidecar', 'cli.js'),
+      path.join(path.resolve(__dirname, '..'), 'dist', 'sidecar', 'cli.js'),
+    ].join(', ');
+    throw new Error(
+      `Sidecar script not found (looked in: ${attempted}). Run \`npm run build\` in this package.`,
+    );
   }
 
   if (!stateDir) {
