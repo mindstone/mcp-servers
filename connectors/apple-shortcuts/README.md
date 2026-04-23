@@ -10,7 +10,7 @@ An MCP server that exposes Apple Shortcuts functionality to Rebel via the macOS 
 ## Setup
 
 ```bash
-cd ~/mcp-servers/apple-shortcuts-mcp
+cd ~/mcp-servers/apple-shortcuts
 npm install
 npm run build
 ```
@@ -41,7 +41,7 @@ Run a named shortcut with optional text input.
 
 Add the connector in **Settings → Connectors** with:
 - **Command:** `node`
-- **Args:** `["/Users/harry/mcp-servers/apple-shortcuts-mcp/dist/index.js"]`
+- **Args:** `["<absolute path to>/mcp-servers/apple-shortcuts/dist/index.js"]` (e.g. `~/mcp-servers/apple-shortcuts/dist/index.js` expanded to an absolute path)
 
 ## Caveats
 

@@ -2,6 +2,7 @@
   "name": "apple-shortcuts-mcp",
   "version": "1.0.0",
   "description": "MCP server for Apple Shortcuts via the macOS shortcuts CLI",
+  "license": "FSL-1.1-MIT",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
