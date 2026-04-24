@@ -1,0 +1,24 @@
+{
+  "name": "apple-shortcuts-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Apple Shortcuts via the macOS shortcuts CLI",
+  "license": "FSL-1.1-MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "node --test __tests__/*.test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.6.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
