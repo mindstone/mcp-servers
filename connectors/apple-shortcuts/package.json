@@ -1,12 +1,28 @@
 {
-  "name": "apple-shortcuts-mcp",
-  "version": "1.0.0",
+  "name": "@mindstone-engineering/mcp-server-apple-shortcuts",
+  "version": "0.1.0",
   "description": "MCP server for Apple Shortcuts via the macOS shortcuts CLI",
   "license": "FSL-1.1-MIT",
   "type": "module",
-  "main": "dist/index.js",
+  "bin": {
+    "mcp-server-apple-shortcuts": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nspr-io/mcp-servers.git",
+    "directory": "connectors/apple-shortcuts"
+  },
+  "homepage": "https://github.com/nspr-io/mcp-servers/tree/main/connectors/apple-shortcuts",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
+    "prepare": "npm run build",
     "start": "node dist/index.js",
     "test": "node --test __tests__/*.test.ts"
   },
