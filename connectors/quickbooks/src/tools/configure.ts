@@ -45,7 +45,7 @@ COMMON MISTAKES:
         environment: z.enum(['sandbox', 'production']).optional().default('production')
           .describe('"sandbox" or "production" (default: production)'),
       }),
-      annotations: { destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     },
     withErrorHandling(async (args) => {
       const cid = args.clientId.trim();

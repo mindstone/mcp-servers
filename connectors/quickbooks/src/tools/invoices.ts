@@ -29,7 +29,7 @@ WORKFLOW:
         customerId: z.string().optional().describe('Filter by customer ID'),
         limit: z.number().optional().describe('Max results (default: 50)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const limit = Math.min(args.limit ?? 50, 1000);
@@ -79,7 +79,7 @@ COMMON MISTAKES:
         dueDate: z.string().optional().describe('Due date (YYYY-MM-DD)'),
         memo: z.string().optional().describe('Customer memo / notes'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const invoiceBody: Record<string, unknown> = {
