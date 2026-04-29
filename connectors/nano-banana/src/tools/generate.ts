@@ -38,7 +38,7 @@ export function registerGenerateTools(server: McpServer): void {
         aspect_ratio: z.enum(SUPPORTED_ASPECT_RATIOS).optional().describe('Aspect ratio for the generated image (default: 1:1)'),
         save_path: z.string().optional().describe('Optional file path to save the image. IMPORTANT: Must be inside the workspace directory so the image can be displayed inline.'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     async (input): Promise<CallToolResult> => {
       if (!hasApiKey()) {

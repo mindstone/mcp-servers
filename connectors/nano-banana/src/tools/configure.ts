@@ -17,7 +17,7 @@ export function registerConfigureTools(server: McpServer): void {
       inputSchema: z.object({
         api_key: z.string().min(1).describe('Gemini API key from https://aistudio.google.com/api-keys'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     },
     withErrorHandling(async (args) => {
       const key = args.api_key.trim();
