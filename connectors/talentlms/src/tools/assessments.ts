@@ -17,7 +17,7 @@ export function registerAssessmentTools(server: McpServer): void {
         test_id: z.string().min(1).describe('Test/quiz ID (from course units)'),
         user_id: z.string().min(1).describe('User ID'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const result = await talentlmsFetch<Record<string, unknown>>(
@@ -37,7 +37,7 @@ export function registerAssessmentTools(server: McpServer): void {
         survey_id: z.string().min(1).describe('Survey ID (from course units)'),
         user_id: z.string().min(1).describe('User ID'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const result = await talentlmsFetch<Record<string, unknown>>(
@@ -59,7 +59,7 @@ export function registerAssessmentTools(server: McpServer): void {
       inputSchema: z.object({
         ilt_id: z.string().min(1).describe('ILT unit ID (from course units)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const sessions = await talentlmsFetch<Array<Record<string, unknown>>>(

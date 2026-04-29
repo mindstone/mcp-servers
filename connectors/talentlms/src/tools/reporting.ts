@@ -11,7 +11,7 @@ export function registerReportingTools(server: McpServer): void {
         'Get TalentLMS site-level statistics and configuration.\n\n' +
         'Returns: total users, total courses, signup method, site name, timezone, domain, and more.',
       inputSchema: z.object({}),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async () => {
       const info = await talentlmsFetch<Record<string, unknown>>('/siteinfo');
@@ -28,7 +28,7 @@ export function registerReportingTools(server: McpServer): void {
       inputSchema: z.object({
         type: z.enum(['users', 'courses']).describe('Timeline type'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const timeline = await talentlmsFetch<Array<Record<string, unknown>>>(`/gettimeline/type:${args.type}`);
@@ -50,7 +50,7 @@ export function registerReportingTools(server: McpServer): void {
         user_id: z.string().min(1).describe('User ID'),
         course_id: z.string().min(1).describe('Course ID'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const result = await talentlmsFetch<Record<string, unknown>>(

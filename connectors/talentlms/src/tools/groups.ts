@@ -13,7 +13,7 @@ export function registerGroupTools(server: McpServer): void {
         'RELATED TOOLS:\n' +
         '- get_talentlms_group: Get group details including members and courses',
       inputSchema: z.object({}),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async () => {
       const groups = await talentlmsFetch<Array<Record<string, unknown>>>('/groups');
@@ -30,7 +30,7 @@ export function registerGroupTools(server: McpServer): void {
       inputSchema: z.object({
         group_id: z.string().min(1).describe('Group ID'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const group = await talentlmsFetch<Record<string, unknown>>(`/groups/id:${encodeURIComponent(args.group_id)}`);
@@ -47,7 +47,7 @@ export function registerGroupTools(server: McpServer): void {
         description: z.string().optional().describe('Group description'),
         key: z.string().optional().describe('Enrollment key (optional)'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const body = formEncode({
@@ -71,7 +71,7 @@ export function registerGroupTools(server: McpServer): void {
         group_id: z.string().min(1).describe('Group ID'),
         course_id: z.string().min(1).describe('Course ID'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       await talentlmsFetch<Record<string, unknown>>(

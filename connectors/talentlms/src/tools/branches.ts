@@ -11,7 +11,7 @@ export function registerBranchTools(server: McpServer): void {
         'List all branches in TalentLMS (multi-tenant).\n\n' +
         'Returns: id, name, description, created_on.',
       inputSchema: z.object({}),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async () => {
       const branches = await talentlmsFetch<Array<Record<string, unknown>>>('/branches');

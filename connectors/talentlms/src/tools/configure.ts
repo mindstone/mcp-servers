@@ -21,7 +21,7 @@ export function registerConfigureTools(server: McpServer): void {
         api_key: z.string().min(1).describe('TalentLMS API key'),
         domain: z.string().min(1).describe('TalentLMS subdomain (e.g., "acme" for acme.talentlms.com)'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     },
     withErrorHandling(async (args) => {
       const apiKey = args.api_key.trim();

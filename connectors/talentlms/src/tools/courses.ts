@@ -14,7 +14,7 @@ export function registerCourseTools(server: McpServer): void {
         '- get_talentlms_course: Get full course details\n' +
         '- get_talentlms_course_users: See enrolled users',
       inputSchema: z.object({}),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async () => {
       const courses = await talentlmsFetch<Array<Record<string, unknown>>>('/courses');
@@ -39,7 +39,7 @@ export function registerCourseTools(server: McpServer): void {
       inputSchema: z.object({
         course_id: z.string().min(1).describe('Course ID'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const course = await talentlmsFetch<Record<string, unknown>>(`/courses/id:${encodeURIComponent(args.course_id)}`);
@@ -61,7 +61,7 @@ export function registerCourseTools(server: McpServer): void {
         category_id: z.string().optional().describe('Category ID (optional)'),
         creator_id: z.string().optional().describe('Creator user ID (optional)'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const body = formEncode({
@@ -91,7 +91,7 @@ export function registerCourseTools(server: McpServer): void {
       inputSchema: z.object({
         course_id: z.string().min(1).describe('Course ID'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const course = await talentlmsFetch<Record<string, unknown>>(`/courses/id:${encodeURIComponent(args.course_id)}`);
@@ -113,7 +113,7 @@ export function registerCourseTools(server: McpServer): void {
         course_id: z.string().min(1).describe('Course ID'),
         role: z.enum(['learner', 'instructor']).optional().describe('Enrolment role. Default: learner'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const body = formEncode({
@@ -140,7 +140,7 @@ export function registerCourseTools(server: McpServer): void {
         user_id: z.string().min(1).describe('User ID'),
         course_id: z.string().min(1).describe('Course ID'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       await talentlmsFetch<Record<string, unknown>>(
@@ -160,7 +160,7 @@ export function registerCourseTools(server: McpServer): void {
         user_id: z.string().min(1).describe('User ID'),
         course_id: z.string().min(1).describe('Course ID'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const result = await talentlmsFetch<Record<string, unknown>>(
