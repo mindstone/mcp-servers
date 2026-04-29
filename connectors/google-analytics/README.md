@@ -1,0 +1,128 @@
+# @mindstone-engineering/mcp-server-google-analytics
+
+[![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-google-analytics.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-google-analytics)
+[![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
+
+Google Analytics 4 MCP server for Model Context Protocol hosts. Discover account/property structure, explore the live schema, run reports (with row-volume safety), and inspect admin configuration through a standardised MCP interface.
+
+## Requirements
+
+- Node.js 20+
+- npm
+- Google Application Default Credentials (ADC) with the `analytics.readonly` scope, or a service account JSON with access to the GA4 property
+
+## Quick Start
+
+### Install & build
+
+```bash
+cd <path-to-repo>/connectors/google-analytics
+npm install
+npm run build
+```
+
+### npx (once published)
+
+```bash
+npx -y @mindstone-engineering/mcp-server-google-analytics
+```
+
+### Local
+
+```bash
+node dist/index.js
+```
+
+## Authentication
+
+This server uses Google Application Default Credentials (ADC). Mint ADC for a user account by installing the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) and running:
+
+```bash
+gcloud auth application-default login \
+  --scopes=https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/cloud-platform \
+  --client-id-file=/absolute/path/to/oauth-client-secret.json
+```
+
+The `--client-id-file` is optional but strongly recommended — using your own OAuth client avoids the shared `gcloud` quota and gives you a stable verification footprint. You'll need a Google Cloud project with the **Google Analytics Admin API** and **Google Analytics Data API** enabled.
+
+For service accounts, set `GOOGLE_APPLICATION_CREDENTIALS` to the absolute path of the service-account JSON. The service account must be granted access to the GA4 property in the GA4 Admin UI.
+
+## Configuration
+
+### Environment variables
+
+- `GOOGLE_APPLICATION_CREDENTIALS` — **required**. Absolute path to ADC or service-account JSON. Node does not expand `~` or `%APPDATA%` — provide a fully-resolved path.
+- `GA4_PROPERTY_ID` — optional. Default GA4 property ID (e.g. `123456789`). Tools fall back to this when `property_id` is not passed in the call.
+
+## Host configuration examples
+
+### Claude Desktop / Cursor
+
+```json
+{
+  "mcpServers": {
+    "GoogleAnalytics": {
+      "command": "npx",
+      "args": ["-y", "@mindstone-engineering/mcp-server-google-analytics"],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "/Users/you/.config/gcloud/application_default_credentials.json",
+        "GA4_PROPERTY_ID": "123456789"
+      }
+    }
+  }
+}
+```
+
+### Local development (no npm publish needed)
+
+```json
+{
+  "mcpServers": {
+    "GoogleAnalytics": {
+      "command": "node",
+      "args": ["<path-to-repo>/connectors/google-analytics/dist/index.js"],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "/absolute/path/to/credentials.json",
+        "GA4_PROPERTY_ID": "123456789"
+      }
+    }
+  }
+}
+```
+
+## Tools (25)
+
+### Account & property
+- `ga_list_account_summaries` — discover available accounts and properties
+- `ga_list_properties` — flat list of GA4 properties with optional filtering
+- `ga_get_property_details` — currency, time zone, industry category, service level
+
+### Schema discovery
+- `ga_get_metadata` — live property schema
+- `ga_get_property_schema` — same data with summary counts
+- `ga_search_schema` — keyword search across dimensions and metrics
+- `ga_list_dimension_categories`, `ga_list_metric_categories`
+- `ga_get_dimensions_by_category`, `ga_get_metrics_by_category`
+- `ga_check_compatibility` — verify dimension/metric combinations before reporting
+
+### Reporting
+- `ga_run_report` — core report with row-volume safety (estimate, opt-in to large datasets, automatic aggregation suggestions)
+- `ga_run_pivot_report` — cross-tabulated reports
+- `ga_batch_run_reports` — up to 5 reports in one call
+- `ga_run_realtime_report` — last 30 minutes of activity
+- `ga_get_property_quotas_snapshot` — remaining tokens / requests
+
+### Admin visibility
+- `ga_get_custom_dimensions_and_metrics`
+- `ga_list_google_ads_links`
+- `ga_list_key_events`
+- `ga_list_data_streams`
+- `ga_get_global_site_tag` — gtag.js snippet for the first web stream
+- `ga_list_bigquery_links`
+- `ga_get_data_retention_settings`
+- `ga_list_firebase_links`
+- `ga_search_change_history_events`
+
+## Licence
+
+[FSL-1.1-MIT](./LICENSE) — Functional Source License, Version 1.1, with MIT future licence. The software converts to MIT licence on the second anniversary of release.
