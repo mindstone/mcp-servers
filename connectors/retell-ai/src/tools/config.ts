@@ -21,7 +21,7 @@ All other Retell AI tools require a valid API key to work.`,
       },
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: true,
         openWorldHint: false,
       },

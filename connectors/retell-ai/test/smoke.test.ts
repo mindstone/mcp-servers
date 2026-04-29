@@ -85,6 +85,9 @@ describe('Smoke test — Retell AI MCP server', () => {
 
     const destructiveTools = [
       'update_agent', 'update_retell_llm',
+      'create_phone_call', 'create_web_call',
+      'create_agent', 'create_retell_llm',
+      'configure_retell_api_key',
     ];
 
     for (const tool of toolsResult.tools) {
