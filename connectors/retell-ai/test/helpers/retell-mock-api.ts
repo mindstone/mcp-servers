@@ -142,14 +142,14 @@ export function createRetellHandlers() {
       return HttpResponse.json({ ...mockCall, call_id: params.callId });
     }),
 
-    http.post(`${RETELL_API_BASE}/list-calls`, async ({ request }) => {
+    http.post(`${RETELL_API_BASE}/v2/list-calls`, async ({ request }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;
       return HttpResponse.json([mockCall]);
     }),
 
     // --- LLMs ---
-    http.get(`${RETELL_API_BASE}/list-retell-llm`, ({ request }) => {
+    http.get(`${RETELL_API_BASE}/list-retell-llms`, ({ request }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;
       return HttpResponse.json([mockLlm]);
