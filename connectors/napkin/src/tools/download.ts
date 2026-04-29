@@ -63,7 +63,7 @@ export function registerDownloadTools(server: McpServer): void {
           .optional()
           .describe('Optional base filename (without extension). If omitted, auto-generated from timestamp.'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
