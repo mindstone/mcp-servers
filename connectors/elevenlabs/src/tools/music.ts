@@ -28,7 +28,7 @@ export function registerMusicTools(server: McpServer): void {
         output_format: OUTPUT_FORMAT_ENUM.describe('Audio output format. Default: mp3_44100_128.'),
         seed: z.number().int().optional().describe('Random seed for reproducibility.'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const apiKey = getApiKey();
@@ -83,7 +83,7 @@ export function registerMusicTools(server: McpServer): void {
         prompt: z.string().min(1).describe('Describe the music you want.'),
         duration_seconds: z.number().min(3).max(600).optional().describe('Target duration in seconds (3-600). Default: 30.'),
       }),
-      annotations: { readOnlyHint: true, destructiveHint: false },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const apiKey = getApiKey();
@@ -141,7 +141,7 @@ export function registerMusicTools(server: McpServer): void {
         seed: z.number().int().optional().describe('Random seed for reproducibility.'),
         output_format: OUTPUT_FORMAT_ENUM.describe('Audio output format. Default: mp3_44100_128.'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const apiKey = getApiKey();

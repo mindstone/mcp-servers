@@ -20,7 +20,7 @@ export function registerTranscriptionTools(server: McpServer): void {
         file_path: z.string().min(1).describe('Absolute path to local audio file to transcribe.'),
         language_code: z.string().optional().describe('Language code (e.g., "en", "es", "fr"). Auto-detected if omitted.'),
       }),
-      annotations: { readOnlyHint: true, destructiveHint: false },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const apiKey = getApiKey();

@@ -44,7 +44,7 @@ export function registerSpeechTools(server: McpServer): void {
         output_format: z.enum(['mp3_44100_128', 'mp3_44100_192', 'pcm_16000', 'pcm_22050', 'pcm_24000', 'pcm_44100']).optional()
           .describe('Audio output format. Default: mp3_44100_128.'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const apiKey = getApiKey();
@@ -134,7 +134,7 @@ export function registerSpeechTools(server: McpServer): void {
         duration_seconds: z.number().min(0.5).max(22).optional().describe('Duration in seconds (0.5-22). Auto if omitted.'),
         prompt_influence: z.number().min(0).max(1).optional().describe('How closely to follow the prompt (0-1). Default: 0.3.'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const apiKey = getApiKey();
