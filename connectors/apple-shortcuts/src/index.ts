@@ -7,14 +7,18 @@
  */
 
 import { spawn } from "child_process";
+import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import * as logger from "./logger.js";
 
+const require = createRequire(import.meta.url);
+const pkg = require("../package.json") as { version: string };
+
 const server = new McpServer({
   name: "apple-shortcuts-mcp",
-  version: "0.1.0",
+  version: pkg.version,
 });
 
 // =============================================================================
