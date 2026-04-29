@@ -32,7 +32,7 @@ export function registerListingTools(server: McpServer): void {
         limit: z.number().optional().describe('Results per page (default 50, max 50)'),
         after: z.string().optional().describe('Pagination cursor from previous response'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
@@ -67,7 +67,7 @@ export function registerListingTools(server: McpServer): void {
         limit: z.number().optional().describe('Results per page (default 50, max 50)'),
         after: z.string().optional().describe('Pagination cursor from previous response'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
