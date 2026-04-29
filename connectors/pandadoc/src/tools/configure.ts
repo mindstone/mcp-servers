@@ -17,7 +17,7 @@ export function registerConfigureTools(server: McpServer): void {
       inputSchema: z.object({
         api_key: z.string().min(1).describe('The PandaDoc API key from Settings > API > Developer Dashboard'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     },
     withErrorHandling(async (args) => {
       const trimmedKey = args.api_key.trim();

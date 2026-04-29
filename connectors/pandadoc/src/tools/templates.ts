@@ -42,7 +42,7 @@ RELATED TOOLS:
         count: z.number().min(1).max(100).default(50).describe('Results per page (default 50, max 100)'),
         page: z.number().min(1).default(1).describe('Page number (starts at 1)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
