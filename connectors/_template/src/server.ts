@@ -1,11 +1,15 @@
+import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { withErrorHandling } from './utils.js';
 
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json') as { version: string };
+
 export function createServer(): McpServer {
   const server = new McpServer({
     name: 'CONNECTOR_NAME-mcp-server',
-    version: '0.1.0',
+    version: pkg.version,
   });
 
   // --- Example tool: configure credentials ---
@@ -16,7 +20,7 @@ export function createServer(): McpServer {
       inputSchema: z.object({
         api_key: z.string().min(1).describe('API key for authentication'),
       }),
-      annotations: { destructiveHint: false, readOnlyHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       // TODO: Implement credential storage (env, config file, or bridge)
@@ -35,7 +39,7 @@ export function createServer(): McpServer {
       inputSchema: z.object({
         limit: z.number().min(1).max(100).default(25).describe('Maximum number of results'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       // TODO: Replace with real API call
