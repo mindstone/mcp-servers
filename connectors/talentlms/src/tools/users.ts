@@ -14,7 +14,7 @@ export function registerUserTools(server: McpServer): void {
         '- get_talentlms_user: Get full profile by ID\n' +
         '- get_talentlms_user_courses: See courses a user is enrolled in',
       inputSchema: z.object({}),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async () => {
       const users = await talentlmsFetch<Array<Record<string, unknown>>>('/users');
@@ -39,7 +39,7 @@ export function registerUserTools(server: McpServer): void {
         user_id: z.string().optional().describe('User ID'),
         email: z.string().optional().describe('User email (alternative to user_id)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const userId = args.user_id;
@@ -71,7 +71,7 @@ export function registerUserTools(server: McpServer): void {
         password: z.string().optional().describe('Password (auto-generated if omitted)'),
         user_type: z.string().optional().describe('User type: Learner, Trainer, Admin, SuperAdmin. Default: Learner'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const body = formEncode({
@@ -101,7 +101,7 @@ export function registerUserTools(server: McpServer): void {
         user_id: z.string().min(1).describe('User ID'),
         status: z.enum(['active', 'inactive']).describe('New status'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const path = `/usersetstatus/user_id:${encodeURIComponent(args.user_id)},status:${args.status}`;
@@ -121,7 +121,7 @@ export function registerUserTools(server: McpServer): void {
       inputSchema: z.object({
         user_id: z.string().min(1).describe('User ID'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const user = await talentlmsFetch<Record<string, unknown>>(`/users/id:${encodeURIComponent(args.user_id)}`);
