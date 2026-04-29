@@ -17,7 +17,7 @@ export function registerMailboxTools(server: McpServer): void {
     {
       description: 'List all email folders/mailboxes with message counts.',
       inputSchema: z.object({}),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async () => {
       ensureInitialized();
@@ -73,7 +73,7 @@ export function registerMailboxTools(server: McpServer): void {
           .optional()
           .describe('Include latest unread message summaries'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       ensureInitialized();
