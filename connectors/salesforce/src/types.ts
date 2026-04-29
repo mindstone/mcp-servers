@@ -1,6 +1,13 @@
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json') as { version: string };
+
 export const REQUEST_TIMEOUT_MS = 30_000;
 export const SERVER_NAME = 'salesforce-mcp-server';
-export const SERVER_VERSION = '0.1.0';
+/** Server version reported on MCP `initialize`. Read from package.json so
+ *  it cannot drift from the published npm version. */
+export const SERVER_VERSION = pkg.version;
 
 export interface BridgeState {
   port: number;
