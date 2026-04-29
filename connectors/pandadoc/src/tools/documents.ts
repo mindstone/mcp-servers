@@ -95,7 +95,7 @@ RELATED TOOLS:
         count: z.number().min(1).max(100).default(50).describe('Results per page (default 50, max 100)'),
         page: z.number().min(1).default(1).describe('Page number (starts at 1)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
@@ -145,7 +145,7 @@ WORKFLOW — After upload:
       inputSchema: z.object({
         document_id: z.string().min(1).describe('The document ID'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
@@ -175,7 +175,7 @@ RELATED TOOLS:
       inputSchema: z.object({
         document_id: z.string().min(1).describe('The document ID'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
@@ -227,7 +227,7 @@ RELATED TOOLS:
         tags: z.array(z.string()).optional().describe('Tags to apply'),
         folder_uuid: z.string().optional().describe('Folder ID to store the document in'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
@@ -292,7 +292,7 @@ RELATED TOOLS:
         tags: z.array(z.string()).optional().describe('Tags to apply to the document'),
         folder_uuid: z.string().optional().describe('ID of the PandaDoc folder to store the document in'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
@@ -427,7 +427,7 @@ RELATED TOOLS:
         subject: z.string().optional().describe('Email subject line'),
         silent: z.boolean().optional().describe('If true, suppresses email notifications to recipients. Default: false'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
@@ -479,7 +479,7 @@ RELATED TOOLS:
         watermark_opacity: z.number().optional().describe('Watermark opacity (0.0 to 1.0)'),
         separate_files: z.boolean().optional().describe('If true, downloads as a zip archive with separate PDFs per section'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
