@@ -93,7 +93,7 @@ export function registerGenerationTools(server: McpServer): void {
         width: z.number().optional().describe('Custom width in pixels (png only)'),
         height: z.number().optional().describe('Custom height in pixels (png only)'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
@@ -146,7 +146,7 @@ export function registerGenerationTools(server: McpServer): void {
           .min(1)
           .describe('The request ID returned by napkin_generate_visual (UUID format)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
