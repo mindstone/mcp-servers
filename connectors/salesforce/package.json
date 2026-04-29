@@ -1,6 +1,6 @@
 {
   "name": "@mindstone-engineering/mcp-server-salesforce",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Salesforce CRM MCP server — accounts, contacts, opportunities, leads, tasks, and custom objects via Salesforce API",
   "license": "FSL-1.1-MIT",
   "type": "module",
