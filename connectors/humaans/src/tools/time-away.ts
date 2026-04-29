@@ -49,7 +49,7 @@ RELATED TOOLS:
         skip: z.number().min(0).optional()
           .describe('Number of results to skip'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
@@ -112,7 +112,7 @@ COMMON MISTAKES:
         note: z.string().optional()
           .describe('Optional note (visible to employee, manager, admins)'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
@@ -153,7 +153,7 @@ RELATED TOOLS:
         skip: z.number().min(0).optional()
           .describe('Number of results to skip'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();

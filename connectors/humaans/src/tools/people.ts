@@ -78,7 +78,7 @@ RELATED TOOLS:
 - create_humaans_time_away: Use the returned id as personId
 - list_humaans_time_away: Filter by your personId`,
       inputSchema: z.object({}),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async () => {
       if (!isConfigured()) return noApiKeyError();
@@ -116,7 +116,7 @@ RELATED TOOLS:
         skip: z.number().min(0).optional()
           .describe('Number of results to skip (for pagination)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
@@ -166,7 +166,7 @@ WORKFLOW - To find a person:
       inputSchema: z.object({
         personId: z.string().min(1).describe('The person ID (from list_humaans_people)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();

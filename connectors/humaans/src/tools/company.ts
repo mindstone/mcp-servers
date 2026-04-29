@@ -36,7 +36,7 @@ Example: {}`,
         skip: z.number().min(0).optional()
           .describe('Number of results to skip'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
@@ -72,7 +72,7 @@ Returns: company name, status, trial info, timesheet settings.
 
 Example: {}`,
       inputSchema: z.object({}),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async () => {
       if (!isConfigured()) return noApiKeyError();
