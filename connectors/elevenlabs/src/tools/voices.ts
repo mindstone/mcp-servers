@@ -19,7 +19,7 @@ export function registerVoiceTools(server: McpServer): void {
           .describe('Filter by voice category.'),
         page_size: z.number().int().min(1).max(100).optional().describe('Number of results (1-100). Default: 20.'),
       }),
-      annotations: { readOnlyHint: true, destructiveHint: false },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const apiKey = getApiKey();
