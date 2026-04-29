@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
   registerConfigureTools,
@@ -5,10 +6,13 @@ import {
   registerOrganizationTools,
 } from './tools/index.js';
 
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json') as { version: string };
+
 export function createServer(): McpServer {
   const server = new McpServer({
     name: 'workday-mcp-server',
-    version: '0.1.0',
+    version: pkg.version,
   });
 
   registerConfigureTools(server);
