@@ -11,8 +11,12 @@
  *
  * Environment variables:
  * - AGENT_BROWSER_SESSION_NAME: Session name for persistence (default: "mcp")
+ * - MCP_DISABLE_GRACEFUL_FS=1: Disable the graceful-fs EMFILE mitigation patch
  */
 
+// MUST be the very first import — installs the graceful-fs EMFILE mitigation
+// before any other module touches node:fs.
+import './installGracefulFs.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createServer } from './server.js';
 
