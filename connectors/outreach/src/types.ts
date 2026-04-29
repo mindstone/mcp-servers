@@ -1,9 +1,16 @@
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json') as { version: string };
+
 export const REQUEST_TIMEOUT_MS = 30_000;
 export const OUTREACH_API_BASE = 'https://api.outreach.io/api/v2';
 export const OUTREACH_OAUTH_URL = 'https://api.outreach.io/oauth/token';
 export const OUTREACH_AUTHORIZE_URL = 'https://api.outreach.io/oauth/authorize';
 export const SERVER_NAME = 'outreach-mcp-server';
-export const SERVER_VERSION = '0.1.1';
+/** Server version reported on MCP `initialize`. Read from package.json so
+ *  it cannot drift from the published npm version. */
+export const SERVER_VERSION = pkg.version;
 
 export interface BridgeState {
   port: number;
