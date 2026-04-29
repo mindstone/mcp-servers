@@ -149,7 +149,7 @@ RETURNS: Array of LLM config objects with llm_id, general_prompt, model, and tim
     withErrorHandling(async () => {
       requireApiKey();
       const result = await retellFetch<unknown[]>(
-        '/list-retell-llm',
+        '/list-retell-llms',
         { method: 'GET' },
       );
       return JSON.stringify({

@@ -177,7 +177,7 @@ RETURNS: Array of call objects with call_id, status, agent_id, duration, and met
       if (args.filter_criteria) body.filter_criteria = args.filter_criteria;
 
       const result = await retellFetch<unknown[]>(
-        '/list-calls',
+        '/v2/list-calls',
         { method: 'POST', body: JSON.stringify(body) },
       );
 
