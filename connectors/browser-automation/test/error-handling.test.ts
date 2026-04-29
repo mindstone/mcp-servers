@@ -67,7 +67,7 @@ describe('Error handling — Browser Automation', () => {
     expect(result.isError).toBe(true);
   });
 
-  it('returns structured error when binary not found and npx fallback fails', async () => {
+  it('returns BINARY_NOT_FOUND when agent-browser missing AND npx itself missing', async () => {
     const childProcess = await import('node:child_process');
     const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
 
@@ -78,8 +78,8 @@ describe('Error handling — Browser Automation', () => {
         // First call: agent-browser not found
         callback(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
       } else {
-        // Second call: npx fallback also fails
-        callback(Object.assign(new Error('npx failed'), { code: 'ENOENT' }));
+        // Second call: npx itself missing (true binary-not-found scenario)
+        callback(Object.assign(new Error('npx not found'), { code: 'ENOENT' }));
       }
     });
 
@@ -95,6 +95,44 @@ describe('Error handling — Browser Automation', () => {
     expect(parsed.ok).toBe(false);
     expect(parsed.code).toBe('BINARY_NOT_FOUND');
     expect(parsed.resolution).toContain('npm install -g agent-browser');
+    expect(result.isError).toBe(true);
+  });
+
+  it('returns CLI_ERROR (not BINARY_NOT_FOUND) when agent-browser missing but npx-fallback CLI exits non-zero', async () => {
+    // Regression for the diagnostic confusion where every CLI failure via the
+    // npx fallback was labelled BINARY_NOT_FOUND, hiding the real cause.
+    const childProcess = await import('node:child_process');
+    const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
+
+    let callCount = 0;
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: unknown, callback: Function) => {
+      callCount++;
+      if (callCount === 1) {
+        // First call: agent-browser not found on PATH
+        callback(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+      } else {
+        // Second call: npx ran agent-browser, which itself exited non-zero
+        // (e.g., a real CLI error like "Element not found")
+        callback(Object.assign(new Error('Command failed with exit code 1'), {
+          code: 1,
+          stderr: 'Error: Selector @e99 not found',
+          stdout: '',
+        }));
+      }
+    });
+
+    testClient = await createTestClient();
+
+    const result = await testClient.client.callTool({
+      name: 'browser_click',
+      arguments: { ref: '@e99' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const parsed = JSON.parse(text);
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.code).toBe('CLI_ERROR');
+    expect(parsed.error).toContain('Selector @e99 not found');
     expect(result.isError).toBe(true);
   });
 
