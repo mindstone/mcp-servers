@@ -1,6 +1,6 @@
 {
   "name": "@mindstone-engineering/mcp-server-browser-automation",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Browser automation MCP server — headless browser control via accessibility snapshots, navigation, form filling, screenshots, and tab management",
   "license": "FSL-1.1-MIT",
   "type": "module",

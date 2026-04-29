@@ -37,10 +37,28 @@ function buildEnv(): Record<string, string> {
 }
 
 /**
+ * Pinned version of agent-browser used by the npx fallback.
+ *
+ * Why pinned: keeps fallback behavior reproducible. Bump when verified against
+ * a newer release. Do not use `latest` — npx caches by spec, and an unpinned
+ * spec produces flaky behavior across machines.
+ */
+const NPX_FALLBACK_VERSION = '0.26.0';
+
+/**
  * Execute an agent-browser CLI command.
  *
- * Falls back to `npx -y agent-browser@0.17` if the binary is not on PATH.
- * Uses execFile (no shell) to prevent command injection.
+ * Argument shape: `agent-browser <command> [args] [options]`. The CLI parses
+ * the FIRST positional as the command, so flags like `--headed` MUST come
+ * AFTER the command — putting them first makes the CLI report
+ * "Unknown command: --headed" and exit 1.
+ *
+ * Headless is the agent-browser default; we only inject `--headed` (after the
+ * command) when explicitly requested. There is no `--headless` flag — passing
+ * one would be a CLI error.
+ *
+ * Falls back to `npx -y agent-browser@<NPX_FALLBACK_VERSION>` if the binary is
+ * not on PATH. Uses execFile (no shell) to prevent command injection.
  */
 export async function execAgentBrowser(
   args: string[],
@@ -49,10 +67,11 @@ export async function execAgentBrowser(
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const env = buildEnv();
 
-  if (options?.headed) {
-    args = ['--headed', ...args];
-  } else {
-    args = ['--headless', ...args];
+  // Inject --headed AFTER the command (positional index 1). The CLI parses
+  // the first positional as the command name, so flags must follow it.
+  // Headless is the default; no flag needed to opt in.
+  if (options?.headed && args.length > 0) {
+    args = [args[0], '--headed', ...args.slice(1)];
   }
 
   const binary = resolveAgentBrowser();
@@ -68,22 +87,44 @@ export async function execAgentBrowser(
   } catch (error: unknown) {
     const err = error as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
 
-    // Binary not found — try npx fallback
+    // Binary not found on PATH — try npx fallback (pulls a pinned version
+    // from the npm cache / registry).
     if (err.code === 'ENOENT') {
       try {
-        const npxResult = await execFileAsync('npx', ['-y', 'agent-browser@0.17', ...args], {
-          env,
-          timeout: timeoutMs + 15_000, // extra time for npx install
-          maxBuffer: 10 * 1024 * 1024,
-        });
+        const npxResult = await execFileAsync(
+          'npx',
+          ['-y', `agent-browser@${NPX_FALLBACK_VERSION}`, ...args],
+          {
+            env,
+            timeout: timeoutMs + 15_000, // extra time for npx install
+            maxBuffer: 10 * 1024 * 1024,
+          },
+        );
         return { stdout: npxResult.stdout, stderr: npxResult.stderr ?? '' };
       } catch (npxError: unknown) {
         const npxErr = npxError as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
+
+        // Distinguish: npx itself missing (true binary-not-found) vs
+        // agent-browser ran but returned non-zero (CLI error surfaced via npx).
+        if (npxErr.code === 'ENOENT') {
+          throw new ConnectorError(
+            `agent-browser binary not found on PATH and npx is also unavailable: ${npxErr.message ?? String(npxErr)}`,
+            'BINARY_NOT_FOUND',
+            'Install agent-browser: npm install -g agent-browser\n' +
+            'Or ensure npx is available on PATH.',
+          );
+        }
+
+        // npx ran but the underlying CLI exited non-zero — propagate as CLI_ERROR
+        // with the actual stderr for diagnosis.
+        const npxStderr = npxErr.stderr?.trim() ?? '';
+        const npxStdout = npxErr.stdout?.trim() ?? '';
         throw new ConnectorError(
-          `agent-browser not found and npx fallback failed: ${npxErr.message ?? String(npxErr)}`,
-          'BINARY_NOT_FOUND',
-          'Install agent-browser: npm install -g agent-browser\n' +
-          'Or ensure npx is available on PATH.',
+          npxStderr || npxStdout || npxErr.message || String(npxError),
+          'CLI_ERROR',
+          'The agent-browser CLI command failed (via npx fallback). ' +
+          'Check the error details above. ' +
+          'For best performance, install agent-browser globally: npm install -g agent-browser',
         );
       }
     }

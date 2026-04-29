@@ -107,4 +107,61 @@ describe('Navigation tools — Browser Automation', () => {
     expect(parsed.ok).toBe(true);
     expect(parsed.message).toContain('forward');
   });
+
+  // Regression for the agent-browser arg-order bug: agent-browser parses the
+  // FIRST positional as the command name. If we prepend a flag like
+  // `--headless` or `--headed` before the command, the CLI errors with
+  // "Unknown command: --headed" and exits 1.
+  //
+  // Headless is the default — no flag should be injected at all.
+  it('does NOT inject --headless before the command (regression: agent-browser would reject it)', async () => {
+    const childProcess = await import('node:child_process');
+    const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
+
+    const capturedCalls: string[][] = [];
+    mockExecFile.mockImplementation((_cmd: string, args: string[], _opts: unknown, callback: Function) => {
+      capturedCalls.push(args);
+      callback(null, '', '');
+    });
+
+    testClient = await createTestClient();
+
+    await testClient.client.callTool({
+      name: 'browser_navigate',
+      arguments: { url: 'https://example.com' },
+    });
+
+    // browser_navigate makes two CLI calls: `open <url>` then `get title`.
+    // Both must have a real command as first positional, never a flag.
+    expect(capturedCalls.length).toBeGreaterThanOrEqual(1);
+    expect(capturedCalls[0][0]).toBe('open');
+    for (const args of capturedCalls) {
+      expect(args).not.toContain('--headless');
+      // The valid flag is --headed, and only when explicitly opted-in.
+      expect(args).not.toContain('--headed');
+    }
+  });
+
+  it('first positional is always the agent-browser command (not a flag)', async () => {
+    const childProcess = await import('node:child_process');
+    const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
+
+    const allCapturedArgs: string[][] = [];
+    mockExecFile.mockImplementation((_cmd: string, args: string[], _opts: unknown, callback: Function) => {
+      allCapturedArgs.push(args);
+      callback(null, '', '');
+    });
+
+    testClient = await createTestClient();
+
+    await testClient.client.callTool({ name: 'browser_navigate', arguments: { url: 'https://example.com' } });
+    await testClient.client.callTool({ name: 'browser_back', arguments: {} });
+    await testClient.client.callTool({ name: 'browser_forward', arguments: {} });
+
+    for (const args of allCapturedArgs) {
+      expect(args.length).toBeGreaterThan(0);
+      // The CLI command must be the first positional, never a flag.
+      expect(args[0].startsWith('--')).toBe(false);
+    }
+  });
 });
