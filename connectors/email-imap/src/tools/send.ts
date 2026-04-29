@@ -42,7 +42,7 @@ export function registerSendTools(server: McpServer): void {
           .optional()
           .describe('Message-ID of the original email when replying'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const config = ensureInitialized();
@@ -91,7 +91,7 @@ export function registerSendTools(server: McpServer): void {
           .optional()
           .describe('Message-ID of the original email when drafting a reply'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const config = ensureInitialized();

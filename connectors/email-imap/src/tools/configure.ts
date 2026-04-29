@@ -53,7 +53,7 @@ export function registerConfigureTools(server: McpServer): void {
           .optional()
           .describe('Email provider preset (icloud, yahoo, or custom)'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     },
     withErrorHandling(async (args) => {
       const email = args.email.trim();

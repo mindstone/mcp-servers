@@ -32,7 +32,7 @@ export function registerMessageTools(server: McpServer): void {
         unread: z.boolean().optional().describe('If true, return only unread messages'),
         limit: z.number().positive().optional().describe('Maximum number of messages to return'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       ensureInitialized();
@@ -116,7 +116,7 @@ export function registerMessageTools(server: McpServer): void {
         mailbox: z.string().min(1).describe('Mailbox/folder name that contains the message'),
         uid: z.number().int().positive().describe('Message UID from email_search_messages'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       ensureInitialized();
@@ -191,7 +191,7 @@ export function registerMessageTools(server: McpServer): void {
         mailbox: z.string().min(1).describe('Source mailbox/folder name'),
         destination: z.string().min(1).describe('Destination mailbox/folder name'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       ensureInitialized();
@@ -258,7 +258,7 @@ export function registerMessageTools(server: McpServer): void {
           .min(1)
           .describe('Flags to update (e.g. \\Seen, \\Flagged)'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       ensureInitialized();
