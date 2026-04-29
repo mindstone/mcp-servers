@@ -58,7 +58,7 @@ export function registerVideoTools(server: McpServer): void {
           .optional()
           .describe('std=standard (faster), pro=professional (higher quality). Default: std'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const model = args.model || 'kling-v2-6';
@@ -124,7 +124,7 @@ export function registerVideoTools(server: McpServer): void {
           .optional()
           .describe('std=standard, pro=professional quality. Default: std'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       // Validate HTTPS URL
@@ -194,7 +194,7 @@ export function registerVideoTools(server: McpServer): void {
             'Use "text2video" for generate_kling_video, "image2video" for generate_kling_image_to_video. Default: text2video',
           ),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const taskType = args.task_type || 'text2video';

@@ -26,7 +26,7 @@ export function registerConfigureTools(server: McpServer): void {
         access_key: z.string().min(1).describe('Kling API Access Key (identifies the account)'),
         secret_key: z.string().min(1).describe('Kling API Secret Key (signs API requests)'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     },
     withErrorHandling(async (args) => {
       const trimmedAccessKey = args.access_key.trim();
