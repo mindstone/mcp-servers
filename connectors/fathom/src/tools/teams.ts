@@ -26,7 +26,7 @@ Returns teams with:
 
 Use this to find team names for filtering meetings with list_fathom_meetings or listing team members with list_fathom_team_members.`,
       inputSchema: z.object({}),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async () => {
       if (!isConfigured()) return noApiKeyError();
@@ -69,7 +69,7 @@ Use list_fathom_teams first to get available team names.`,
       inputSchema: z.object({
         team: z.string().min(1).describe('Team name to list members for (from list_fathom_teams)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
