@@ -30,7 +30,7 @@ export function registerIncidentTools(server: McpServer): void {
           .default(0)
           .describe('Offset for pagination (default: 0)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const params = buildQueryParams({
@@ -62,7 +62,7 @@ export function registerIncidentTools(server: McpServer): void {
           .min(1)
           .describe('Incident number (e.g., INC0010001) or sys_id'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (args.identifier.toUpperCase().startsWith('INC')) {
@@ -115,7 +115,7 @@ export function registerIncidentTools(server: McpServer): void {
         caller_id: z.string().optional().describe('Caller user name or sys_id'),
         category: z.string().optional().describe('Incident category'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const body: Record<string, string> = {};
@@ -178,7 +178,7 @@ export function registerIncidentTools(server: McpServer): void {
           .optional()
           .describe('Close notes (required when resolving)'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const body: Record<string, string> = {};

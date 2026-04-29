@@ -30,7 +30,7 @@ export function registerUserTools(server: McpServer): void {
           .default(0)
           .describe('Offset for pagination (default: 0)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const params = buildQueryParams({
