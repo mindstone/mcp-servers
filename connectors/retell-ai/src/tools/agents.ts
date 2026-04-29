@@ -94,7 +94,7 @@ RETURNS: Full agent object with generated agent_id.`,
       },
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: false,
         openWorldHint: true,
       },

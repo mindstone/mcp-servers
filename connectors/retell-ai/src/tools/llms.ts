@@ -103,7 +103,7 @@ RETURNS: New LLM config object with generated llm_id.`,
       },
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: false,
         openWorldHint: true,
       },

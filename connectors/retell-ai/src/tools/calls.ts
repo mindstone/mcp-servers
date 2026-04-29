@@ -36,7 +36,7 @@ COST: Uses phone minutes from your Retell AI plan. Calls are billed per minute.`
       },
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: false,
         openWorldHint: true,
       },
@@ -83,7 +83,7 @@ COST: Uses minutes from your Retell AI plan, same as phone calls.`,
       },
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: false,
         openWorldHint: true,
       },
