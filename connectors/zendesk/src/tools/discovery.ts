@@ -22,7 +22,7 @@ Example: "Engineering Support" → ID: 360001234567`,
         subdomain: z.string().optional().describe('Zendesk subdomain (optional if only one account connected)'),
         response_format: z.enum(['concise', 'detailed']).optional().describe('Response format: "concise" (default) for names+IDs, "detailed" for full metadata'),
       },
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = await getAccount(args.subdomain);
@@ -54,7 +54,7 @@ Custom fields use numeric IDs (e.g., 360001234567) not names.`,
         active_only: z.boolean().optional().describe('Only return active fields (default: true)'),
         response_format: z.enum(['concise', 'detailed']).optional().describe('Response format: "concise" (default) for title+ID+type, "detailed" for full metadata including options'),
       },
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = await getAccount(args.subdomain);
@@ -91,7 +91,7 @@ Use views to efficiently find tickets by pre-defined criteria like
         active_only: z.boolean().optional().describe('Only return active views (default: true)'),
         response_format: z.enum(['concise', 'detailed']).optional().describe('Response format (default: concise)'),
       },
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = await getAccount(args.subdomain);
@@ -136,7 +136,7 @@ Use organization IDs when:
         per_page: z.number().optional().describe('Results per page, max 100 (default: 25)'),
         response_format: z.enum(['concise', 'detailed']).optional().describe('Response format (default: concise)'),
       },
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = await getAccount(args.subdomain);

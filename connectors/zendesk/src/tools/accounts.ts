@@ -27,7 +27,7 @@ Status can be: "active", "needs-refresh", or "expired". API token accounts are a
 Use this to see which accounts are available before calling other Zendesk tools.
 To connect a new account, use authenticate_zendesk_account or configure credentials via environment variables.`,
       inputSchema: {},
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async () => {
       loadAccounts();
@@ -79,7 +79,7 @@ Use list_zendesk_accounts to see available subdomains.`,
       inputSchema: {
         subdomain: z.string().describe('Zendesk subdomain to disconnect'),
       },
-      annotations: { readOnlyHint: false, destructiveHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       removeAccount(args.subdomain);
@@ -111,7 +111,7 @@ Get your API token:
         email: z.string().describe('Zendesk agent email address'),
         api_token: z.string().describe('Zendesk API token'),
       },
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!args.subdomain || !args.email || !args.api_token) {

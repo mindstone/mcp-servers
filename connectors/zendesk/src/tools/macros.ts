@@ -26,7 +26,7 @@ Use apply_zendesk_macro to apply a macro to a ticket.`,
         per_page: z.number().optional().describe('Results per page, max 100 (default: 100)'),
         response_format: z.enum(['concise', 'detailed']).optional().describe('Response format: "concise" (default) for title+ID, "detailed" for full macro data including actions'),
       },
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = await getAccount(args.subdomain);
@@ -93,7 +93,7 @@ Use list_zendesk_macros to find macro IDs.`,
         subdomain: z.string().optional().describe('Zendesk subdomain (optional if only one account connected)'),
         response_format: z.enum(['concise', 'detailed']).optional().describe('Response format (default: detailed)'),
       },
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = await getAccount(args.subdomain);
@@ -139,7 +139,7 @@ Example:
         subdomain: z.string().optional().describe('Zendesk subdomain (optional if only one account connected)'),
         preview_only: z.boolean().optional().describe('If true, only preview the changes without applying (default: false)'),
       },
-      annotations: { readOnlyHint: false, destructiveHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = await getAccount(args.subdomain);

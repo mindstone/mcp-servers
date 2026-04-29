@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
   registerAccountTools,
@@ -8,10 +9,13 @@ import {
   registerMacroTools,
 } from './tools/index.js';
 
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json') as { version: string };
+
 export function createServer(): McpServer {
   const server = new McpServer({
     name: 'zendesk-mcp-server',
-    version: '0.2.0',
+    version: pkg.version,
   });
 
   registerAccountTools(server);

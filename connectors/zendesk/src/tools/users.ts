@@ -27,7 +27,7 @@ Returns user ID, name, email, role, and organization.`,
         per_page: z.number().optional().describe('Results per page, max 100 (default: 25)'),
         response_format: z.enum(['concise', 'detailed']).optional().describe('Response format (default: concise)'),
       },
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = await getAccount(args.subdomain);
@@ -71,7 +71,7 @@ Returns full user details including name, email, role, phone, organization, and 
         subdomain: z.string().optional().describe('Zendesk subdomain (optional if only one account connected)'),
         response_format: z.enum(['concise', 'detailed']).optional().describe('Response format (default: detailed)'),
       },
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = await getAccount(args.subdomain);
