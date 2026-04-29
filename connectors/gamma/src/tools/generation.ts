@@ -118,7 +118,7 @@ export function registerGenerationTools(server: McpServer): void {
           .optional()
           .describe('Access level for external viewers'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
@@ -205,7 +205,7 @@ export function registerGenerationTools(server: McpServer): void {
           .optional()
           .describe('Auto-export format'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
@@ -245,7 +245,7 @@ export function registerGenerationTools(server: McpServer): void {
           .min(1)
           .describe('The generation_id returned by gamma_generate or gamma_create_from_template'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
