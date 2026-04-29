@@ -20,7 +20,7 @@ export function registerFieldTools(server: McpServer): void {
           .optional()
           .describe('Response format (default: "concise")'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = getAccount(args.domain);

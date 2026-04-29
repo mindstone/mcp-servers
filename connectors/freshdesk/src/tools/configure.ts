@@ -24,7 +24,7 @@ export function registerConfigureTools(server: McpServer): void {
           .describe('Freshdesk subdomain (e.g. "acme" for acme.freshdesk.com)'),
         api_key: z.string().min(1).describe('Freshdesk API key from Profile Settings'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     },
     withErrorHandling(async (args) => {
       const domain = args.domain.trim();
@@ -88,7 +88,7 @@ export function registerConfigureTools(server: McpServer): void {
         'List connected Freshdesk accounts. Returns all authenticated domains with associated agent emails. ' +
         'Call this first to check connected accounts. If none, use configure_freshdesk.',
       inputSchema: z.object({}),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async () => {
       loadAccounts();
@@ -130,7 +130,7 @@ export function registerConfigureTools(server: McpServer): void {
       inputSchema: z.object({
         domain: z.string().min(1).describe('Freshdesk domain to disconnect (e.g. "acme")'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const domain = args.domain.trim();
