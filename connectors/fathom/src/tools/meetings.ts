@@ -104,7 +104,7 @@ Rate limit: Fathom allows ~60 API calls/minute.`,
         created_before: z.string().optional().describe('ISO date string — only return meetings created before this date'),
         limit: z.number().min(1).max(100).default(25).describe('Maximum number of results per page'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
@@ -173,7 +173,7 @@ Rate limit: May use 1-11 API calls depending on meeting position in history.`,
       inputSchema: z.object({
         recording_id: z.number().int().positive().describe('The recording ID of the meeting (from list_fathom_meetings)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
@@ -258,7 +258,7 @@ Use list_fathom_meetings first to find the recording_id.`,
         max_entries: z.number().int().positive().optional().describe('Maximum number of transcript entries to return'),
         start_entry: z.number().int().min(0).default(0).describe('Skip first N entries (0-indexed)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
@@ -345,7 +345,7 @@ Rate limit: May use 1-11 API calls depending on meeting position in history.`,
       inputSchema: z.object({
         recording_id: z.number().int().positive().describe('The recording ID of the meeting (from list_fathom_meetings)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
