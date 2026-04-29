@@ -48,7 +48,7 @@ export function registerTicketTools(server: McpServer): void {
           .optional()
           .describe('Response format (default: "concise")'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = getAccount(args.domain);
@@ -110,7 +110,7 @@ export function registerTicketTools(server: McpServer): void {
           .optional()
           .describe('Response format (default: "detailed")'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = getAccount(args.domain);
@@ -176,7 +176,7 @@ export function registerTicketTools(server: McpServer): void {
           .optional()
           .describe('Response format (default: "concise")'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = getAccount(args.domain);
@@ -251,7 +251,7 @@ export function registerTicketTools(server: McpServer): void {
           .optional()
           .describe('Custom field values as key-value pairs'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = getAccount(args.domain);
@@ -326,7 +326,7 @@ export function registerTicketTools(server: McpServer): void {
           .optional()
           .describe('Custom field updates as key-value pairs'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = getAccount(args.domain);
@@ -382,7 +382,7 @@ export function registerTicketTools(server: McpServer): void {
         body: z.string().min(1).describe('Reply body (HTML supported)'),
         domain: z.string().optional().describe('Freshdesk domain (optional if only one account)'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = getAccount(args.domain);
@@ -416,7 +416,7 @@ export function registerTicketTools(server: McpServer): void {
         domain: z.string().optional().describe('Freshdesk domain (optional if only one account)'),
         private: z.boolean().optional().describe('Private note (default: true)'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = getAccount(args.domain);
