@@ -59,7 +59,7 @@ Note: Zendesk search has a 1000 result limit. Use date filters to narrow large r
         auto_paginate: z.boolean().optional().describe('Automatically fetch all pages of results up to 1000 total (default: false)'),
         response_format: z.enum(['concise', 'detailed']).optional().describe('Response format: "concise" (default) for summary, "detailed" for full ticket data'),
       },
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = await getAccount(args.subdomain);
@@ -170,7 +170,7 @@ If rate limited or the cursor expires mid-pagination, returns partial results co
         output_path: z.string().optional().describe('Custom file path for export (only used when save_to_file is true). Default: <temp-dir>/zendesk-export-<timestamp>.json'),
         include_comments: z.boolean().optional().describe('Fetch and include comments for each exported ticket (default: false). WARNING: Makes 1 additional API call per ticket.'),
       },
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = await getAccount(args.subdomain);
@@ -415,7 +415,7 @@ Use include_comments to also fetch the conversation thread.`,
         include_comments: z.boolean().optional().describe('Include ticket comments/conversation (default: false)'),
         response_format: z.enum(['concise', 'detailed']).optional().describe('Response format (default: detailed for single ticket)'),
       },
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = await getAccount(args.subdomain);
@@ -473,7 +473,7 @@ Example: Get tickets 101, 102, 103 with their comments:
         output_path: z.string().optional().describe('Custom file path for output (only used when save_to_file is true).'),
         response_format: z.enum(['concise', 'detailed']).optional().describe('Response format: "concise" (default) for summary, "detailed" for full ticket data'),
       },
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = await getAccount(args.subdomain);
@@ -637,7 +637,7 @@ Example:
         group_id: z.number().optional().describe('Group ID (use list_zendesk_groups to find)'),
         custom_fields: z.array(z.object({ id: z.number(), value: z.unknown() })).optional().describe('Custom field values (use list_zendesk_ticket_fields for IDs)'),
       },
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = await getAccount(args.subdomain);
@@ -711,7 +711,7 @@ Example - resolve with comment:
         comment_public: z.boolean().optional().describe('Is comment public (true) or internal note (false)? Default: true'),
         custom_fields: z.array(z.object({ id: z.number(), value: z.unknown() })).optional().describe('Custom field updates'),
       },
-      annotations: { readOnlyHint: false, destructiveHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = await getAccount(args.subdomain);

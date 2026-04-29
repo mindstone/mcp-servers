@@ -21,7 +21,7 @@ Automatically paginates to fetch all comments (Zendesk returns max 100 per page)
         max_comments: z.number().optional().describe('Maximum number of comments to fetch (default: 500). Use to limit results for very long threads.'),
         response_format: z.enum(['concise', 'detailed']).optional().describe('Response format (default: concise)'),
       },
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = await getAccount(args.subdomain);
@@ -96,7 +96,7 @@ Default is public comment.`,
         subdomain: z.string().optional().describe('Zendesk subdomain (optional if only one account connected)'),
         public: z.boolean().optional().describe('Public reply (true) or internal note (false)? Default: true'),
       },
-      annotations: { readOnlyHint: false, destructiveHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = await getAccount(args.subdomain);
