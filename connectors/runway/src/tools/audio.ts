@@ -17,7 +17,7 @@ export function registerAudioTools(server: McpServer): void {
         text: z.string().describe('Text to speak. Max 1000 characters.'),
         voice: z.string().optional().describe('Voice preset name or custom voice UUID. Default: Maya.'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const voice = args.voice || 'Maya';
@@ -54,7 +54,7 @@ export function registerAudioTools(server: McpServer): void {
         duration: z.number().optional().describe('Duration in seconds (0.5-30). Auto-determined if omitted.'),
         loop: z.boolean().optional().describe('If true, output loops seamlessly. Default: false.'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const body: Record<string, unknown> = { model: 'eleven_text_to_sound_v2', promptText: args.prompt_text };
@@ -83,7 +83,7 @@ export function registerAudioTools(server: McpServer): void {
         voice: z.enum(VOICE_PRESETS).optional().describe('Target voice preset. Default: Maya.'),
         remove_background_noise: z.boolean().optional().describe('Remove background noise. Default: false.'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const mediaType = args.media_type || 'audio';
@@ -120,7 +120,7 @@ export function registerAudioTools(server: McpServer): void {
         drop_background_audio: z.boolean().optional().describe('Remove background audio/music. Default: false.'),
         num_speakers: z.number().int().optional().describe('Number of speakers. Auto-detected if not specified.'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const audioUri = await resolveMediaInput(args.audio, 'audio');
@@ -150,7 +150,7 @@ export function registerAudioTools(server: McpServer): void {
       inputSchema: z.object({
         audio: z.string().describe('Audio file with voice + background. HTTPS URL or local file.'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const audioUri = await resolveMediaInput(args.audio, 'audio');

@@ -11,7 +11,7 @@ export function registerAccountTools(server: McpServer): void {
     {
       description: 'Check your Runway credit balance, usage tier limits, and today\'s usage by model. 1 credit = $0.01.',
       inputSchema: z.object({}),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async () => {
       const org = await runwayFetch<OrgResponse>('/organization');
@@ -47,7 +47,7 @@ export function registerAccountTools(server: McpServer): void {
         start_date: z.string().optional().describe('Start date (YYYY-MM-DD). Default: 30 days ago.'),
         before_date: z.string().optional().describe('End date, not inclusive (YYYY-MM-DD). Default: 30 days after start.'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const body: Record<string, unknown> = {};

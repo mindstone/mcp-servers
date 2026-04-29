@@ -14,7 +14,7 @@ export function registerVoiceTools(server: McpServer): void {
         'List all custom voices you\'ve created. Returns voice IDs, names, descriptions, and status. ' +
         'Use the voice ID with generate_speech.',
       inputSchema: z.object({}),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async () => {
       const result = await runwayFetch<VoiceListResponse>('/voices');
@@ -44,7 +44,7 @@ export function registerVoiceTools(server: McpServer): void {
         model: z.enum(['eleven_multilingual_ttv_v2', 'eleven_ttv_v3']).optional().describe('Voice design model. Default: eleven_multilingual_ttv_v2.'),
         description: z.string().optional().describe('Optional description for your reference. Max 512 characters.'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const model = args.model || 'eleven_multilingual_ttv_v2';
@@ -73,7 +73,7 @@ export function registerVoiceTools(server: McpServer): void {
         prompt: z.string().describe('Text description of desired voice. Min 20, max 1000 characters.'),
         model: z.enum(['eleven_multilingual_ttv_v2', 'eleven_ttv_v3']).optional().describe('Voice design model. Default: eleven_multilingual_ttv_v2.'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const model = args.model || 'eleven_multilingual_ttv_v2';
@@ -96,7 +96,7 @@ export function registerVoiceTools(server: McpServer): void {
       inputSchema: z.object({
         voice_id: z.string().describe('UUID of the voice to delete (from list_custom_voices).'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const delRes = await runwayRawFetch(`/voices/${args.voice_id}`, { method: 'DELETE' });

@@ -28,7 +28,7 @@ export function registerImageTools(server: McpServer): void {
         content_moderation: z.enum(['auto', 'low']).optional().describe('Public figure threshold.'),
         seed: z.number().int().optional().describe('Random seed (0-4294967295).'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const model = args.model || 'gen4_image';
