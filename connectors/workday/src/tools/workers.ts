@@ -53,7 +53,7 @@ COMMON MISTAKES:
         limit: z.number().optional().describe('Max results per page (default 50, max 100)'),
         offset: z.number().optional().describe('Number of results to skip (for pagination, default 0)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return notConfiguredResponse();
@@ -98,7 +98,7 @@ RELATED TOOLS:
       inputSchema: z.object({
         worker_id: z.string().describe('Worker ID (from list_workday_workers)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return notConfiguredResponse();

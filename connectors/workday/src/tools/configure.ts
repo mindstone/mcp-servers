@@ -50,7 +50,7 @@ COMMON MISTAKES:
         client_secret: z.string().describe('OAuth Client Secret'),
         refresh_token: z.string().optional().describe('Optional refresh token. If omitted, client_credentials grant is used.'),
       }),
-      annotations: { destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     },
     withErrorHandling(async (args) => {
       const rawHost = args.host.trim();
