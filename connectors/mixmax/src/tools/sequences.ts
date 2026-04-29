@@ -43,7 +43,7 @@ PAGINATION: Cursor-based. If hasNext is true, pass the "next" value as the next 
         limit: z.number().min(1).max(100).default(25).describe('Maximum results to return (default: 25)'),
         next: z.string().optional().describe('Cursor for next page (from previous response)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiTokenError();
@@ -79,7 +79,7 @@ USE list_mixmax_sequences FIRST to find the _id.`,
       inputSchema: z.object({
         sequenceId: z.string().min(1).describe('The _id of the sequence (from list_mixmax_sequences)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiTokenError();
@@ -116,7 +116,7 @@ TEMPLATE VARIABLES: If the sequence stages use variables like {{first_name}}, pa
           }),
         ).min(1).describe('Array of recipients to add (each must have an email)'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiTokenError();

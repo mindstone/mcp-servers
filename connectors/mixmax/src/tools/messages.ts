@@ -43,7 +43,7 @@ PAGINATION: Cursor-based. If hasNext is true, pass the "next" value as the next 
         limit: z.number().min(1).max(100).default(25).describe('Maximum results to return (default: 25)'),
         next: z.string().optional().describe('Cursor for next page (from previous response)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiTokenError();
@@ -83,7 +83,7 @@ NOTE: This sends through Mixmax, not raw Gmail. The email will appear in the use
         cc: z.array(z.string().email()).optional().describe('CC recipient email addresses (optional)'),
         bcc: z.array(z.string().email()).optional().describe('BCC recipient email addresses (optional)'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiTokenError();
