@@ -36,7 +36,7 @@ USE CASES:
 - "What meeting types do I have?" — list them with durations and locations
 - "Send Alice my 30-min call link" — find the right type, then use the URL in send_mixmax_email`,
       inputSchema: z.object({}),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async () => {
       if (!isConfigured()) return noApiTokenError();

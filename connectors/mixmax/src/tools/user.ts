@@ -35,7 +35,7 @@ USE CASES:
 - Check plan level (relevant if a feature requires Enterprise)
 - See what integrations the user has active`,
       inputSchema: z.object({}),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async () => {
       if (!isConfigured()) return noApiTokenError();

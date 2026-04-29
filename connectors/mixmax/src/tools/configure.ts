@@ -17,7 +17,7 @@ export function registerConfigureTools(server: McpServer): void {
       inputSchema: z.object({
         api_key: z.string().min(1).describe('The Mixmax API token from Settings > Integrations'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     },
     withErrorHandling(async (args) => {
       const trimmedToken = args.api_key.trim();
