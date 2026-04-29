@@ -18,7 +18,7 @@ export function registerTaskTools(server: McpServer): void {
       inputSchema: z.object({
         task_id: z.string().describe('Task ID from any generate_* tool.'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const result = await runwayFetch<TaskDetail>(`/tasks/${args.task_id}`);
@@ -54,7 +54,7 @@ export function registerTaskTools(server: McpServer): void {
         poll_interval: z.number().optional().describe('Seconds between polls. Default: 15. Min: 5.'),
         timeout: z.number().optional().describe('Max seconds to wait. Default: 300 (5 min). Max: 600.'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const pollInterval = Math.max(5, args.poll_interval || 15) * 1000;
@@ -112,7 +112,7 @@ export function registerTaskTools(server: McpServer): void {
       inputSchema: z.object({
         task_id: z.string().describe('Task ID to cancel or delete.'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const cancelRes = await runwayRawFetch(`/tasks/${args.task_id}`, { method: 'DELETE' });
@@ -138,7 +138,7 @@ export function registerTaskTools(server: McpServer): void {
         url: z.string().describe('Output URL from a completed task.'),
         output_path: z.string().describe('Local file path to save to. Parent directory must exist.'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const url = args.url;
@@ -202,7 +202,7 @@ export function registerTaskTools(server: McpServer): void {
       inputSchema: z.object({
         file_path: z.string().describe('Absolute path to the local file to upload.'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const fs = await import('fs');
