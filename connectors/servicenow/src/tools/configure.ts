@@ -22,7 +22,7 @@ export function registerConfigureTools(server: McpServer): void {
         username: z.string().min(1).describe('ServiceNow username'),
         password: z.string().min(1).describe('ServiceNow password'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     },
     withErrorHandling(async (args) => {
       const normalized = normalizeServiceNowInstanceInput(args.instance);

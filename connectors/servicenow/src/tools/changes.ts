@@ -30,7 +30,7 @@ export function registerChangeTools(server: McpServer): void {
           .default(0)
           .describe('Offset for pagination (default: 0)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const params = buildQueryParams({
@@ -66,7 +66,7 @@ export function registerChangeTools(server: McpServer): void {
           .min(1)
           .describe('Change request number (e.g., CHG0010001) or sys_id'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (args.identifier.toUpperCase().startsWith('CHG')) {
