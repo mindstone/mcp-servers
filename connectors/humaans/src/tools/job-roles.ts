@@ -45,7 +45,7 @@ RELATED TOOLS:
         skip: z.number().min(0).optional()
           .describe('Number of results to skip'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
@@ -86,7 +86,7 @@ Example: { "jobRoleId": "hmA5GnUq9ojK86LLKKWbiuKG" }`,
       inputSchema: z.object({
         jobRoleId: z.string().min(1).describe('The job role ID (from list_humaans_job_roles)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
