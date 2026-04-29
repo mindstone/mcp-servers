@@ -21,7 +21,7 @@ Example: { "vendorId": "123" }`,
         vendorId: z.string().optional().describe('Filter by vendor ID'),
         limit: z.number().optional().describe('Max results (default: 50)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const limit = Math.min(args.limit ?? 50, 1000);
@@ -54,7 +54,7 @@ WORKFLOW:
         dueDate: z.string().optional().describe('Due date (YYYY-MM-DD)'),
         memo: z.string().optional().describe('Memo / notes'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const billBody: Record<string, unknown> = {

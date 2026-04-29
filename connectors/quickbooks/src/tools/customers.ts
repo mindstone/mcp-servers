@@ -23,7 +23,7 @@ Example: { "searchTerm": "Smith" }`,
         searchTerm: z.string().optional().describe('Search by display name (partial match)'),
         limit: z.number().optional().describe('Max results (default: 50)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const limit = Math.min(args.limit ?? 50, 1000);
@@ -54,7 +54,7 @@ Example: { "displayName": "Jane Smith", "email": "jane@smith.com", "phone": "555
         phone: z.string().optional().describe('Primary phone number'),
         companyName: z.string().optional().describe('Company name'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const customerBody: Record<string, unknown> = { DisplayName: args.displayName };

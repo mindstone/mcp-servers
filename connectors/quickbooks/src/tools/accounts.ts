@@ -24,7 +24,7 @@ Account types: Bank, Accounts Receivable, Other Current Asset, Fixed Asset, Othe
         active: z.boolean().optional().describe('Filter by active status'),
         limit: z.number().optional().describe('Max results (default: 100)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const limit = Math.min(args.limit ?? 100, 1000);

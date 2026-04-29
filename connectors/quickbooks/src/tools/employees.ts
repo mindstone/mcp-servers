@@ -20,7 +20,7 @@ Example: {}`,
         active: z.boolean().optional().describe('Filter by active status'),
         limit: z.number().optional().describe('Max results (default: 50)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const limit = Math.min(args.limit ?? 50, 1000);

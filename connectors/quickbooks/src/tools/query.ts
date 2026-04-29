@@ -31,7 +31,7 @@ COMMON MISTAKES:
         query: z.string().describe('QuickBooks Query Language statement'),
         limit: z.number().optional().describe('Max results (default: 100, max: 1000)'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const query = args.query;
@@ -60,7 +60,7 @@ Supported entity types: Account, Bill, BillPayment, Customer, Employee, Estimate
         ]).describe('Entity type (PascalCase)'),
         entityId: z.string().describe('Entity ID'),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const { entityType, entityId } = args;
