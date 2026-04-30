@@ -208,10 +208,30 @@ export function registerTaskTools(server: McpServer): void {
       const fs = await import('fs');
       const filePath = args.file_path;
 
-      if (!fs.existsSync(filePath)) {
+      // Defence-in-depth: defer to uploadEphemeral, which performs the
+      // RUNWAY_ALLOWED_ROOT sandbox check (via assertPathInAllowedRoot)
+      // BEFORE any file read or upstream API call. The pre-existing
+      // existsSync / size guards remain so non-sandbox failures keep
+      // their familiar shapes (e.g. "File not found" for inside-the-root
+      // missing paths). To avoid the size / not-found guards firing
+      // BEFORE the sandbox check (which would mask a sandbox violation),
+      // run the sandbox check first via uploadEphemeral's internals.
+      const { assertPathInAllowedRoot, uploadEphemeral } = await import('../client.js');
+      let safePath: string;
+      try {
+        safePath = assertPathInAllowedRoot(filePath);
+      } catch (err) {
+        if (err && typeof err === 'object' && 'code' in err && (err as { code?: string }).code === 'PATH_OUTSIDE_ALLOWED_ROOT') {
+          const e = err as { message: string; code: string; resolution: string };
+          return JSON.stringify({ ok: false, error: e.message, code: e.code, resolution: e.resolution });
+        }
+        throw err;
+      }
+
+      if (!fs.existsSync(safePath)) {
         return JSON.stringify({ ok: false, error: `File not found: ${filePath}` });
       }
-      const stats = fs.statSync(filePath);
+      const stats = fs.statSync(safePath);
       if (stats.size > 200 * 1_048_576) {
         return JSON.stringify({ ok: false, error: 'File exceeds 200MB limit.' });
       }
@@ -219,8 +239,7 @@ export function registerTaskTools(server: McpServer): void {
         return JSON.stringify({ ok: false, error: 'File must be at least 512 bytes.' });
       }
 
-      const { uploadEphemeral } = await import('../client.js');
-      const uri = await uploadEphemeral(filePath);
+      const uri = await uploadEphemeral(safePath);
       const sizeMB = (stats.size / 1_048_576).toFixed(1);
       return JSON.stringify({
         ok: true, runway_uri: uri, size_mb: sizeMB,
