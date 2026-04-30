@@ -259,6 +259,48 @@ export function assertDownloadPathInRoot(outputPath: string): { resolved: string
     );
   }
 
+  // (4) Refuse to write through a non-regular-file existing target.
+  //
+  // The parent-dir realpath check above does NOT inspect the terminal
+  // filename — that's appended via `path.basename(lexical)`. Without an
+  // explicit lstat here, `fs.openSync(resolved, 'w')` (under
+  // `overwrite: true`) would silently follow a pre-existing symlink at
+  // the target path and clobber whatever the symlink points at, even when
+  // the destination is outside the allow-listed root. This same gap also
+  // applies to other non-regular-file targets (directories, FIFOs,
+  // sockets, character/block devices) — overwriting them via `openSync`
+  // either fails noisily (EISDIR) or silently writes to an unintended
+  // sink. Refuse all of these here with structured error codes so the
+  // refusal is clean and pre-existing regular-file behaviour (governed
+  // by `overwrite` at the caller) is preserved.
+  //
+  // ENOENT (target does not yet exist) is the happy path: the caller's
+  // `flags: 'wx'` / `'w'` choice handles the create, and ENOENT here is
+  // not a sandbox failure.
+  try {
+    const lst = fs.lstatSync(resolved);
+    if (lst.isSymbolicLink()) {
+      throw new RunwayError(
+        `Output path already exists as a symbolic link, refusing to write through it: ${outputPath}`,
+        'OUTPUT_PATH_IS_SYMLINK',
+        'Remove or rename the existing symlink before retrying. Runway downloads refuse to follow symlinks at the output target — even when overwrite=true — to prevent writing through a symlink to an unintended location.',
+      );
+    }
+    if (!lst.isFile()) {
+      throw new RunwayError(
+        `Output path already exists and is not a regular file (directory, FIFO, socket, or other special file): ${outputPath}`,
+        'OUTPUT_PATH_NOT_REGULAR_FILE',
+        'Remove or rename the existing target before retrying, or pick a different output_path. Runway downloads only write to fresh paths or to existing regular files (with overwrite=true).',
+      );
+    }
+  } catch (err) {
+    if (err instanceof RunwayError) throw err;
+    const e = err as NodeJS.ErrnoException;
+    // ENOENT: missing target — not a sandbox failure. Anything else is
+    // an unexpected lstat error and should propagate (e.g. EACCES).
+    if (e?.code !== 'ENOENT') throw err;
+  }
+
   return { resolved, root: realRoot };
 }
 
