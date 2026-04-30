@@ -179,7 +179,16 @@ export function registerMessageTools(server: McpServer): void {
             date: formatDate(fetchedMessage.envelope?.date),
             messageId: fetchedMessage.envelope?.messageId ?? null,
             textBody: wrapUntrusted(fallbackTextBody),
-            ...(htmlBody ? { htmlBody: wrapUntrusted(htmlBody) } : {}),
+            // Drive htmlBody presence from the upstream MIME signal
+            // (parts.htmlPart) rather than the truthiness of the decoded
+            // body string. This way an inbound message with an EMPTY
+            // text/html part still produces an htmlBody field in the
+            // response (wrapped, with empty inner content) — consistent
+            // with the documented contract that wrapping is content-
+            // agnostic and presence reflects the source MIME structure.
+            ...(parts.htmlPart !== undefined
+              ? { htmlBody: wrapUntrusted(htmlBody ?? '') }
+              : {}),
             attachments: parts.attachments,
           },
         });
