@@ -885,7 +885,7 @@ server.registerTool(TOOL_NAMES.setup, {
     '  • Force a re-install after deleting manifests manually\n' +
     '  • Uninstall the add-in (action="uninstall")\n\n' +
     'After install, open (or restart) Word, Excel, or PowerPoint. The Rebel button will appear ' +
-    'in the Home ribbon; click it to open the panel and see "Connected".',
+    'in the Home ribbon, under the "Add ons" menu; click it to open the panel and see "Connected".',
   inputSchema: {
     "type": "object",
     "properties": {
@@ -964,8 +964,9 @@ server.registerTool(TOOL_NAMES.setup, {
   }
 
   lines.push('\nNext steps:');
-  lines.push('1. Open (or restart) Microsoft Word, Excel, or PowerPoint');
-  lines.push('2. Look for the "Rebel" button in the Home ribbon');
+  lines.push('1. Open (or restart) the Microsoft 365 desktop app for Word, Excel, or PowerPoint');
+  lines.push('   (the web/browser versions of Office are not supported)');
+  lines.push('2. Find the "Rebel" button in the Home ribbon, under the "Add ons" menu');
   lines.push('3. Click it to open the connection panel');
   lines.push('4. Once it shows "Connected", you\'re ready to go!');
 
@@ -1014,7 +1015,7 @@ server.registerTool(TOOL_NAMES.status, {
       lines.push('\nNo Office apps are connected. Make sure you have:');
       lines.push('1. Run rebel_office_setup to install the add-in');
       lines.push('2. Opened Word, Excel, or PowerPoint');
-      lines.push('3. Clicked the "Rebel" button in the Home ribbon');
+      lines.push('3. Clicked the "Rebel" button in the Home ribbon (under the "Add ons" menu)');
     }
 
     return { content: [{ type: 'text', text: lines.join('\n') }] };
