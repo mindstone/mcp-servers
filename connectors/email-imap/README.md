@@ -46,6 +46,22 @@ node dist/index.js
 - `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
 - `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
 
+#### Send-side caps (`email_send`)
+
+These caps act as blast-radius circuit breakers against prompt-injection-driven
+mass sends. Defaults are baked into the source so a host that sets none of
+these still gets safe behaviour. Hosts can tighten them per deployment.
+
+- `EMAIL_IMAP_MAX_RECIPIENTS` — maximum combined To+CC+BCC recipients per
+  `email_send` call (default: `25`). Exceeding this returns a structured
+  error with `code: "RECIPIENT_LIMIT_EXCEEDED"`.
+- `EMAIL_IMAP_RATE_LIMIT_PER_HOUR` — maximum number of `email_send` calls per
+  rolling window (default: `50`). Exceeding this returns a structured error
+  with `code: "RATE_LIMIT_EXCEEDED"`, plus `resetAt` (ISO-8601) and
+  `retryAfterMs` so the host/LLM can back off.
+- `EMAIL_IMAP_RATE_LIMIT_WINDOW_MS` — sliding-window length, in milliseconds,
+  for the rate limit (default: `3600000` — one hour).
+
 ## Host configuration examples
 
 ### Claude Desktop / Cursor
@@ -83,6 +99,34 @@ node dist/index.js
   }
 }
 ```
+
+## Security: host confirmation required for `email_send`
+
+`email_send` is a **destructive, open-world** action: it dispatches mail to
+arbitrary external recipients on the user's behalf. The tool is annotated
+with `destructiveHint: true` and `openWorldHint: true` accordingly.
+
+**Hosts MUST require explicit user confirmation before each `email_send`
+invocation.** A user-confirmation gate is the only reliable defence against
+prompt-injection content (e.g., text inside an `email_get_message` body)
+coercing the LLM into sending mail without the user's intent. Do not
+auto-approve `email_send` based on tool annotations alone — surface the full
+recipient list, subject, and body to the user and require an affirmative
+click/keystroke before forwarding the call to the connector.
+
+The connector additionally enforces:
+
+- A combined To+CC+BCC recipient cap (`EMAIL_IMAP_MAX_RECIPIENTS`, default
+  `25`).
+- A per-process rolling rate limit
+  (`EMAIL_IMAP_RATE_LIMIT_PER_HOUR` / `EMAIL_IMAP_RATE_LIMIT_WINDOW_MS`,
+  defaults `50` / `3600000`ms).
+
+When either cap is exceeded the tool returns a structured error JSON
+(`{ ok: false, code: "RECIPIENT_LIMIT_EXCEEDED" | "RATE_LIMIT_EXCEEDED", … }`)
+without contacting the SMTP transport. Caps are env-tunable but defaults are
+baked into the source — hosts do **not** need to set any env var to get safe
+behaviour.
 
 ## Tools (9)
 
