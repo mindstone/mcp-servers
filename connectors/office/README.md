@@ -160,7 +160,7 @@ repository-level [SECURITY.md](../../SECURITY.md) for vulnerability reporting.
 ## Known drift risk: vendored code from the Mindstone Rebel monorepo
 
 Some files in this package are **byte-compatible copies** of code that also
-lives in the Mindstone Rebel monorepo (`github.com/nspr-io/MindstoneRebel`).
+lives in the Mindstone Rebel monorepo (`github.com/mindstone/MindstoneRebel`).
 They have to stay in sync on both sides; there is no automation today.
 
 **Vendored from Rebel's `src/shared/sidecar/`** (wire-format contract between

@@ -5,7 +5,7 @@ Thank you for considering contributing to the Zendesk MCP Server.
 ## Getting Started
 
 ```bash
-git clone https://github.com/nspr-io/mcp-servers.git
+git clone https://github.com/mindstone/mcp-servers.git
 cd mcp-servers/connectors/zendesk
 npm ci
 npm run build
