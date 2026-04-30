@@ -665,7 +665,7 @@ const TOOL_NAMES = {
 
 const server = new McpServer({
   name: 'RebelOffice',
-  version: '0.1.0',
+  version: '0.1.1',
 });
 
 const EMPTY_OBJECT_SCHEMA = {
