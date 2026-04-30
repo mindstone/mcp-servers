@@ -13,10 +13,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/nspr-io/mcp-servers.git",
+    "url": "https://github.com/mindstone/mcp-servers.git",
     "directory": "connectors/humaans"
   },
-  "homepage": "https://github.com/nspr-io/mcp-servers/tree/main/connectors/humaans",
+  "homepage": "https://github.com/mindstone/mcp-servers/tree/main/connectors/humaans",
   "publishConfig": {
     "access": "public"
   },

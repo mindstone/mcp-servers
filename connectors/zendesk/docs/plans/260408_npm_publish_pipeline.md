@@ -66,7 +66,7 @@ Two HTTP surfaces to mock:
 
 ### CI Pipeline Design
 
-The repo is at `nspr-io/mcp-servers` on GitHub. No existing `.github/` directory.
+The repo is at `mindstone/mcp-servers` on GitHub. No existing `.github/` directory.
 
 Two workflows needed:
 1. **PR Check** (`ci.yml`): On push/PR → install, build, lint, test. Runs for all connectors.
@@ -537,7 +537,7 @@ connectors/zendesk/
 ## Assumptions
 
 1. npm org `mindstone-engineering` exists and `NPM_TOKEN` is available as a repo secret
-2. GitHub repo `nspr-io/mcp-servers` has Actions enabled
+2. GitHub repo `mindstone/mcp-servers` has Actions enabled
 3. FSL-1.1-MIT is acceptable with Change Date of 2028-04-08 (2 years from first publish)
 4. No existing `@mindstone-engineering/mcp-server-zendesk` package on npm
 5. The connector's `@modelcontextprotocol/sdk@^1.26.0` dependency is compatible with InMemoryTransport and Client (verified — both exist in installed version)
