@@ -205,7 +205,66 @@ export function registerTaskTools(server: McpServer): void {
         });
       }
 
-      const response = await fetch(url);
+      // SSRF-via-redirect defence:
+      //   * Pass `redirect: 'manual'` so the runtime never silently follows a
+      //     3xx hop (a public HTTPS host could otherwise redirect to
+      //     `https://169.254.169.254/...` or `https://127.0.0.1/...` and
+      //     exfiltrate internal data).
+      //   * On a 3xx, re-validate the `Location` header against the same
+      //     private-IP / non-HTTPS allow-list (`validateDownloadUrl`) before
+      //     issuing the next fetch.
+      //   * Cap the redirect chain depth to MAX_REDIRECTS.
+      const MAX_REDIRECTS = 5;
+      let response: Response;
+      let currentUrl = url;
+      let redirectCount = 0;
+      let redirectError: string | null = null;
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        response = await fetch(currentUrl, { redirect: 'manual' });
+        if (response.status >= 300 && response.status < 400) {
+          // Drain the redirect body so the connection isn't held open.
+          try { await response.body?.cancel(); } catch { /* best-effort */ }
+
+          redirectCount++;
+          if (redirectCount > MAX_REDIRECTS) {
+            redirectError = `Refused to follow redirect: too many redirects (>${MAX_REDIRECTS}).`;
+            break;
+          }
+
+          const location = response.headers.get('location');
+          if (!location) {
+            redirectError = 'Redirect response missing Location header.';
+            break;
+          }
+
+          let nextUrl: string;
+          try {
+            nextUrl = new URL(location, currentUrl).toString();
+          } catch {
+            redirectError = `Refused to follow redirect: invalid Location header (${location}).`;
+            break;
+          }
+
+          // Re-apply the same SSRF allow-list to every redirect target.
+          const validationError = validateDownloadUrl(nextUrl);
+          if (validationError) {
+            redirectError = `Refused to follow redirect to ${nextUrl}: ${validationError}`;
+            break;
+          }
+
+          currentUrl = nextUrl;
+          continue;
+        }
+        break;
+      }
+
+      if (redirectError) {
+        try { fs.closeSync(fd); } catch { /* empty */ }
+        try { fs.unlinkSync(safe.resolved); } catch { /* cleanup best-effort */ }
+        return JSON.stringify({ ok: false, error: redirectError });
+      }
       if (!response.ok) {
         try { fs.closeSync(fd); } catch { /* empty */ }
         try { fs.unlinkSync(safe.resolved); } catch { /* cleanup best-effort */ }

@@ -503,3 +503,330 @@ describe('Runway download_runway_output sandbox (VAL-RUNWAY-101..112)', () => {
     expect(sourceBlob).toMatch(/\/etc/);
   });
 });
+
+/**
+ * VAL-RUNWAY-201..209 — `download_runway_output` SSRF-via-redirect.
+ *
+ * `validateDownloadUrl` only inspects the initial URL. Without explicit
+ * redirect handling, a public HTTPS URL can 302-redirect to a private /
+ * loopback / metadata-service host and exfiltrate internal data. The fix
+ * is to (a) pass `redirect: 'manual'` to fetch so the runtime never
+ * silently follows a hop, (b) re-validate every `Location` header against
+ * the same private-IP/scheme allow-list before following, and (c) cap the
+ * redirect chain depth (≤ 5).
+ */
+describe('Runway download_runway_output SSRF redirect (VAL-RUNWAY-201..209)', () => {
+  const DOWNLOAD_BODY = Buffer.alloc(2048, 0xcd);
+  const REMOTE_URL = 'https://cdn.runwayml.example/clip.mp4';
+  const REMOTE_HOST = 'cdn.runwayml.example';
+  const SAFE_REDIRECT_URL = 'https://safe-cdn.example/clip.mp4';
+
+  let testClient: McpTestClient;
+  let downloadRoot: string;
+
+  function makeRedirectHandler(locationHeader: string | null) {
+    const initialCalls: Array<{ url: string; redirect: string | undefined }> = [];
+    const handler = http.get(REMOTE_URL, ({ request }) => {
+      // request.redirect is the Request's redirect mode (set by the caller's
+      // init). msw forwards this from the underlying Request object.
+      initialCalls.push({ url: request.url, redirect: (request as Request).redirect });
+      const headers: Record<string, string> = {};
+      if (locationHeader !== null) headers.Location = locationHeader;
+      return new HttpResponse(null, { status: 302, headers });
+    });
+    return { handler, initialCalls };
+  }
+
+  function makeBodyHandler(url: string, body: Buffer = DOWNLOAD_BODY) {
+    const calls: Array<{ url: string }> = [];
+    const handler = http.get(url, ({ request }) => {
+      calls.push({ url: request.url });
+      return HttpResponse.arrayBuffer(
+        body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer,
+        { headers: { 'Content-Type': 'video/mp4', 'Content-Length': String(body.length) } },
+      );
+    });
+    return { handler, calls };
+  }
+
+  beforeEach(() => {
+    downloadRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'runway-dl-redir-'));
+  });
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    try { fs.rmSync(downloadRoot, { recursive: true, force: true }); } catch { /* empty */ }
+  });
+
+  // ── VAL-RUNWAY-201 ────────────────────────────────────────────────────
+  it('VAL-RUNWAY-201 — passes redirect: "manual" to fetch (static check)', () => {
+    const tasksTs = fs.readFileSync(
+      path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'src', 'tools', 'tasks.ts'),
+      'utf8',
+    );
+    expect(tasksTs).toMatch(/redirect:\s*'manual'/);
+  });
+
+  it('VAL-RUNWAY-201 — passes redirect: "manual" to fetch (behavioural)', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const { handler: redirectHandler } = makeRedirectHandler(SAFE_REDIRECT_URL);
+    const { handler: bodyHandler } = makeBodyHandler(SAFE_REDIRECT_URL);
+    mswServer.use(...createRunwayHandlers(), redirectHandler, bodyHandler);
+
+    testClient = await createTestClient({
+      env: {
+        RUNWAYML_API_SECRET: MOCK_API_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        RUNWAY_DOWNLOAD_ROOT: downloadRoot,
+      },
+    });
+
+    const outputPath = path.join(downloadRoot, 'clip.mp4');
+    await testClient.callTool('download_runway_output', { url: REMOTE_URL, output_path: outputPath });
+
+    // At least one call to the download host must have been made with
+    // init.redirect === 'manual'. Other fetch calls (e.g. MSW internals or
+    // the connector's API client) are out of scope here.
+    const downloadCalls = fetchSpy.mock.calls.filter((c) => {
+      const u = c[0];
+      const s = typeof u === 'string' ? u : (u as URL).toString();
+      return s.includes(REMOTE_HOST) || s.includes('safe-cdn.example');
+    });
+    expect(downloadCalls.length).toBeGreaterThan(0);
+    for (const call of downloadCalls) {
+      const init = call[1] as RequestInit | undefined;
+      expect(init?.redirect).toBe('manual');
+    }
+  });
+
+  // ── VAL-RUNWAY-202 ────────────────────────────────────────────────────
+  it('VAL-RUNWAY-202 — 302 to a public HTTPS URL is re-validated and followed', async () => {
+    const { handler: redirectHandler, initialCalls } = makeRedirectHandler(SAFE_REDIRECT_URL);
+    const { handler: bodyHandler, calls: bodyCalls } = makeBodyHandler(SAFE_REDIRECT_URL);
+    mswServer.use(...createRunwayHandlers(), redirectHandler, bodyHandler);
+
+    testClient = await createTestClient({
+      env: {
+        RUNWAYML_API_SECRET: MOCK_API_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        RUNWAY_DOWNLOAD_ROOT: downloadRoot,
+      },
+    });
+
+    const outputPath = path.join(downloadRoot, 'clip.mp4');
+    const result = await testClient.callTool('download_runway_output', {
+      url: REMOTE_URL,
+      output_path: outputPath,
+    });
+
+    expect(result.isError).toBeFalsy();
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(fs.existsSync(outputPath)).toBe(true);
+    expect(fs.readFileSync(outputPath).length).toBe(DOWNLOAD_BODY.length);
+    expect(initialCalls.length).toBe(1);
+    expect(bodyCalls.length).toBe(1);
+  });
+
+  // ── VAL-RUNWAY-203 ────────────────────────────────────────────────────
+  it('VAL-RUNWAY-203 — 302 to loopback (https://127.0.0.1/...) is refused', async () => {
+    const { handler: redirectHandler, initialCalls } = makeRedirectHandler('https://127.0.0.1/x');
+    mswServer.use(...createRunwayHandlers(), redirectHandler);
+
+    testClient = await createTestClient({
+      env: {
+        RUNWAYML_API_SECRET: MOCK_API_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        RUNWAY_DOWNLOAD_ROOT: downloadRoot,
+      },
+    });
+
+    const outputPath = path.join(downloadRoot, 'clip.mp4');
+    const result = await testClient.callTool('download_runway_output', {
+      url: REMOTE_URL,
+      output_path: outputPath,
+    });
+
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(String(json.error || '')).toMatch(/redirect|local|private|loopback/i);
+    expect(initialCalls.length).toBe(1);
+    expect(fs.existsSync(outputPath)).toBe(false);
+  });
+
+  // ── VAL-RUNWAY-204 ────────────────────────────────────────────────────
+  it('VAL-RUNWAY-204 — 302 to AWS IMDS (169.254.169.254) is refused', async () => {
+    const { handler: redirectHandler, initialCalls } = makeRedirectHandler(
+      'https://169.254.169.254/latest/meta-data/',
+    );
+    mswServer.use(...createRunwayHandlers(), redirectHandler);
+
+    testClient = await createTestClient({
+      env: {
+        RUNWAYML_API_SECRET: MOCK_API_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        RUNWAY_DOWNLOAD_ROOT: downloadRoot,
+      },
+    });
+
+    const outputPath = path.join(downloadRoot, 'clip.mp4');
+    const result = await testClient.callTool('download_runway_output', {
+      url: REMOTE_URL,
+      output_path: outputPath,
+    });
+
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(String(json.error || '')).toMatch(/redirect|local|private|link-local/i);
+    expect(initialCalls.length).toBe(1);
+    expect(fs.existsSync(outputPath)).toBe(false);
+  });
+
+  // ── VAL-RUNWAY-205 ────────────────────────────────────────────────────
+  for (const target of [
+    'https://10.0.0.1/x',
+    'https://10.255.255.255/x',
+    'https://172.16.0.1/x',
+    'https://172.31.255.255/x',
+    'https://192.168.1.1/x',
+  ]) {
+    it(`VAL-RUNWAY-205 — 302 to RFC1918 (${target}) is refused`, async () => {
+      const { handler: redirectHandler, initialCalls } = makeRedirectHandler(target);
+      mswServer.use(...createRunwayHandlers(), redirectHandler);
+
+      testClient = await createTestClient({
+        env: {
+          RUNWAYML_API_SECRET: MOCK_API_KEY,
+          MCP_HOST_BRIDGE_STATE: '',
+          RUNWAY_DOWNLOAD_ROOT: downloadRoot,
+        },
+      });
+
+      const outputPath = path.join(downloadRoot, 'clip.mp4');
+      const result = await testClient.callTool('download_runway_output', {
+        url: REMOTE_URL,
+        output_path: outputPath,
+      });
+
+      const json = result.json as Record<string, unknown>;
+      expect(json.ok).toBe(false);
+      expect(String(json.error || '')).toMatch(/redirect|local|private/i);
+      expect(initialCalls.length).toBe(1);
+      expect(fs.existsSync(outputPath)).toBe(false);
+    });
+  }
+
+  // ── VAL-RUNWAY-206 ────────────────────────────────────────────────────
+  for (const target of [
+    'https://[::1]/x',
+    'https://[fd00::1]/x',
+    'https://[fe80::1]/x',
+  ]) {
+    it(`VAL-RUNWAY-206 — 302 to IPv6 (${target}) is refused`, async () => {
+      const { handler: redirectHandler, initialCalls } = makeRedirectHandler(target);
+      mswServer.use(...createRunwayHandlers(), redirectHandler);
+
+      testClient = await createTestClient({
+        env: {
+          RUNWAYML_API_SECRET: MOCK_API_KEY,
+          MCP_HOST_BRIDGE_STATE: '',
+          RUNWAY_DOWNLOAD_ROOT: downloadRoot,
+        },
+      });
+
+      const outputPath = path.join(downloadRoot, 'clip.mp4');
+      const result = await testClient.callTool('download_runway_output', {
+        url: REMOTE_URL,
+        output_path: outputPath,
+      });
+
+      const json = result.json as Record<string, unknown>;
+      expect(json.ok).toBe(false);
+      expect(String(json.error || '')).toMatch(/redirect|local|private|loopback/i);
+      expect(initialCalls.length).toBe(1);
+      expect(fs.existsSync(outputPath)).toBe(false);
+    });
+  }
+
+  // ── VAL-RUNWAY-207 ────────────────────────────────────────────────────
+  for (const target of [
+    'http://example.com/x',
+    'ftp://example.com/x',
+  ]) {
+    it(`VAL-RUNWAY-207 — 302 to non-HTTPS (${target}) is refused`, async () => {
+      const { handler: redirectHandler, initialCalls } = makeRedirectHandler(target);
+      mswServer.use(...createRunwayHandlers(), redirectHandler);
+
+      testClient = await createTestClient({
+        env: {
+          RUNWAYML_API_SECRET: MOCK_API_KEY,
+          MCP_HOST_BRIDGE_STATE: '',
+          RUNWAY_DOWNLOAD_ROOT: downloadRoot,
+        },
+      });
+
+      const outputPath = path.join(downloadRoot, 'clip.mp4');
+      const result = await testClient.callTool('download_runway_output', {
+        url: REMOTE_URL,
+        output_path: outputPath,
+      });
+
+      const json = result.json as Record<string, unknown>;
+      expect(json.ok).toBe(false);
+      expect(String(json.error || '')).toMatch(/redirect|HTTPS|scheme/i);
+      expect(initialCalls.length).toBe(1);
+      expect(fs.existsSync(outputPath)).toBe(false);
+    });
+  }
+
+  // ── VAL-RUNWAY-208 ────────────────────────────────────────────────────
+  it('VAL-RUNWAY-208 — 3xx with no Location header is refused gracefully', async () => {
+    const { handler: redirectHandler, initialCalls } = makeRedirectHandler(null);
+    mswServer.use(...createRunwayHandlers(), redirectHandler);
+
+    testClient = await createTestClient({
+      env: {
+        RUNWAYML_API_SECRET: MOCK_API_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        RUNWAY_DOWNLOAD_ROOT: downloadRoot,
+      },
+    });
+
+    const outputPath = path.join(downloadRoot, 'clip.mp4');
+    const result = await testClient.callTool('download_runway_output', {
+      url: REMOTE_URL,
+      output_path: outputPath,
+    });
+
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(String(json.error || '')).toMatch(/Location|redirect/i);
+    expect(initialCalls.length).toBe(1);
+    expect(fs.existsSync(outputPath)).toBe(false);
+  });
+
+  // ── VAL-RUNWAY-209 (regression) ───────────────────────────────────────
+  it('VAL-RUNWAY-209 — initial-URL SSRF table still rejects loopback (regression)', async () => {
+    mswServer.use(...createRunwayHandlers());
+    testClient = await createTestClient({
+      env: {
+        RUNWAYML_API_SECRET: MOCK_API_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        RUNWAY_DOWNLOAD_ROOT: downloadRoot,
+      },
+    });
+
+    const outputPath = path.join(downloadRoot, 'clip.mp4');
+    const result = await testClient.callTool('download_runway_output', {
+      url: 'https://127.0.0.1/x',
+      output_path: outputPath,
+    });
+
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(String(json.error || '')).toMatch(/local\/private/i);
+    expect(fs.existsSync(outputPath)).toBe(false);
+  });
+});
