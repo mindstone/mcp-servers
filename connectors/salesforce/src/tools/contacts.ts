@@ -95,7 +95,7 @@ export function registerContactTools(server: McpServer): void {
         if (args.title) updateData.Title = args.title;
         if (args.fields) validateAndMergeCustomFields(updateData, args.fields);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = await conn.sobject('Account').update(updateData as any) as unknown as SaveResult;
+        const result = await conn.sobject('Contact').update(updateData as any) as unknown as SaveResult;
         checkSaveResult(result, 'Failed to update contact');
         return JSON.stringify({ ok: true, status: 'success', object: 'Contact', id: args.id });
       });
