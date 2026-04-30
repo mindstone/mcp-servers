@@ -19,6 +19,122 @@ import {
 const NAPKIN_API_BASE = 'https://api.napkin.ai/v1';
 
 /**
+ * Hard-coded allow-list of hosts the connector will download from.
+ *
+ * `napkin_download_visual` attaches `Authorization: Bearer <NAPKIN_API_KEY>`
+ * to its outbound request, so the destination MUST be limited to the
+ * official Napkin API host. The Napkin API documentation specifies that
+ * download URLs are returned by the status endpoint as
+ * `https://api.napkin.ai/v1/visual/<request-id>/file/<file-id>` — there is
+ * no separate signed-URL CDN host. Keeping this list as a literal const
+ * (NOT env-overridable) prevents prompt-injection-driven exfiltration of
+ * the API key to attacker-controlled hosts.
+ */
+export const NAPKIN_DOWNLOAD_ALLOWED_HOSTS: readonly string[] = ['api.napkin.ai'] as const;
+
+/**
+ * Check whether a hostname is private, localhost, or otherwise reserved.
+ * Defence-in-depth check on top of the allow-list — even if a future
+ * allow-list entry resolved to a private IP literal in `file_url`, this
+ * blocks SSRF-style attempts.
+ */
+function isPrivateOrReservedHost(hostname: string): boolean {
+  const lower = hostname.toLowerCase();
+
+  if (lower === 'localhost' || lower === '[::1]' || lower === '::1') {
+    return true;
+  }
+
+  if (lower.endsWith('.local')) {
+    return true;
+  }
+
+  // IPv4 private/reserved ranges
+  const ipMatch = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipMatch) {
+    const [, a, b] = ipMatch.map(Number);
+    if (a === 127) return true;            // 127.0.0.0/8 loopback
+    if (a === 10) return true;             // 10.0.0.0/8 private
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12 private
+    if (a === 192 && b === 168) return true; // 192.168.0.0/16 private
+    if (a === 169 && b === 254) return true; // 169.254.0.0/16 link-local
+    if (a === 0) return true;              // 0.0.0.0/8
+  }
+
+  // IPv6 loopback / unique-local / link-local (URL parsing wraps in [])
+  if (lower.startsWith('[') && lower.endsWith(']')) {
+    const inner = lower.slice(1, -1);
+    if (inner === '::1' || inner === '::' || inner.startsWith('fe80:') || inner.startsWith('fc') || inner.startsWith('fd')) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Validate a download URL against the Napkin allow-list.
+ *
+ * Rejects:
+ *  - malformed URLs
+ *  - non-HTTPS schemes
+ *  - URLs carrying userinfo (`https://user:pass@host/...`)
+ *  - hosts outside `NAPKIN_DOWNLOAD_ALLOWED_HOSTS`
+ *  - hosts matching private/loopback/link-local/reserved IP ranges
+ *
+ * Throws a `NapkinError` (with `URL_REJECTED` code) on any failure.
+ * Callers MUST invoke this BEFORE constructing the `Authorization` header.
+ */
+export function validateDownloadUrl(input: string): URL {
+  let parsed: URL;
+  try {
+    parsed = new URL(input);
+  } catch {
+    throw new NapkinError(
+      'Invalid file_url',
+      'URL_REJECTED',
+      'file_url must be a valid URL returned by Napkin (generated_files[].url).',
+    );
+  }
+
+  if (parsed.protocol !== 'https:') {
+    throw new NapkinError(
+      `Refusing non-HTTPS file_url scheme '${parsed.protocol.replace(/:$/, '')}'`,
+      'URL_REJECTED',
+      'Only https:// URLs are accepted for napkin_download_visual.',
+    );
+  }
+
+  if (parsed.username || parsed.password) {
+    throw new NapkinError(
+      'Refusing file_url containing userinfo (user:pass@host)',
+      'URL_REJECTED',
+      'Strip userinfo from the URL; only plain Napkin-hosted https URLs are accepted.',
+    );
+  }
+
+  const host = parsed.hostname.toLowerCase();
+
+  if (isPrivateOrReservedHost(parsed.hostname)) {
+    throw new NapkinError(
+      `Refusing file_url whose host '${parsed.hostname}' is a private/loopback/reserved address`,
+      'URL_REJECTED',
+      'file_url must point at the public Napkin API host (api.napkin.ai).',
+    );
+  }
+
+  if (!NAPKIN_DOWNLOAD_ALLOWED_HOSTS.includes(host)) {
+    throw new NapkinError(
+      `Refusing file_url host '${parsed.hostname}': not on the Napkin allow-list (${NAPKIN_DOWNLOAD_ALLOWED_HOSTS.join(', ')})`,
+      'URL_REJECTED',
+      'Pass a URL returned by napkin_check_status (generated_files[].url). Other hosts are refused to prevent leaking the Napkin API key.',
+    );
+  }
+
+  return parsed;
+}
+
+/**
  * Make an authenticated request to the Napkin API.
  */
 async function napkinFetch<T>(
@@ -169,21 +285,36 @@ export async function getVisualStatus(
 /**
  * Download a file from a URL with Bearer auth.
  * Returns the raw Buffer.
+ *
+ * The URL is validated against `NAPKIN_DOWNLOAD_ALLOWED_HOSTS` BEFORE the
+ * `Authorization: Bearer` header is constructed. This is a defence-in-depth
+ * measure against prompt-injection-driven API-key exfiltration: if validation
+ * fails we throw before composing the header, and the request is never sent.
  */
 export async function downloadFile(
   apiKey: string,
   fileUrl: string,
 ): Promise<Buffer> {
+  // Validate FIRST — throws NapkinError on rejection. The Authorization
+  // header is intentionally not constructed yet so that any failure path
+  // here cannot leak the API key over the wire.
+  const validated = validateDownloadUrl(fileUrl);
+
   let response: Response;
 
   const timeoutMs = getRequestTimeoutMs();
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
 
+  // Only NOW (after validation) build the request init that carries the
+  // Bearer token, and issue the request.
+  const requestUrl = validated.toString();
+  const requestInit: RequestInit = {
+    signal: timeoutSignal,
+    headers: { Authorization: `Bearer ${apiKey}` },
+  };
+
   try {
-    response = await fetch(fileUrl, {
-      signal: timeoutSignal,
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
+    response = await fetch(requestUrl, requestInit);
   } catch (error) {
     // Download path has no caller signal, so timeoutSignal.aborted is unambiguous.
     if (timeoutSignal.aborted) {

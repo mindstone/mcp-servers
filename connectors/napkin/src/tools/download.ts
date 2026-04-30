@@ -52,7 +52,10 @@ export function registerDownloadTools(server: McpServer): void {
         'Use this after napkin_check_status returns "completed" to save files locally. ' +
         'Pass a file URL from the generated_files array in the status response. ' +
         'Files are saved to your private space (Chief-of-Staff/generated-visuals/) in the workspace, or ~/Pictures/NapkinVisuals/ if no workspace is set. ' +
-        'IMPORTANT: Download URLs expire 30 minutes after generation.',
+        'IMPORTANT: Download URLs expire 30 minutes after generation. ' +
+        'SECURITY: file_url must be a Napkin-hosted https URL (host on the hard-coded allow-list, currently api.napkin.ai); ' +
+        'requests to other hosts are refused without sending the request, to prevent leaking the Napkin API key. ' +
+        'URLs with userinfo (user:pass@host) and non-HTTPS schemes are also refused.',
       inputSchema: z.object({
         file_url: z
           .string()
