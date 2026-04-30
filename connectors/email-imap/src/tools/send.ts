@@ -32,11 +32,33 @@ import {
   recordSend,
 } from './limits.js';
 
+/**
+ * Flatten a recipient field (string | string[] | undefined) into the list of
+ * resolved addresses it carries, splitting any comma-delimited string entries
+ * into individual addresses. This is the input to the recipient-cap check —
+ * counting array length alone would let a single string like
+ * `"a@x.com, b@x.com, c@x.com"` bypass the cap. The original `to`/`cc`/`bcc`
+ * value is still passed through to nodemailer, which performs its own
+ * downstream parsing.
+ */
 function toRecipientArray(value: string | string[] | undefined): string[] {
   if (value === undefined) {
     return [];
   }
-  return Array.isArray(value) ? value : [value];
+  const entries = Array.isArray(value) ? value : [value];
+  const flattened: string[] = [];
+  for (const entry of entries) {
+    if (typeof entry !== 'string') {
+      continue;
+    }
+    for (const piece of entry.split(',')) {
+      const trimmed = piece.trim();
+      if (trimmed.length > 0) {
+        flattened.push(trimmed);
+      }
+    }
+  }
+  return flattened;
 }
 
 export function registerSendTools(server: McpServer): void {
