@@ -215,85 +215,108 @@ export function registerTaskTools(server: McpServer): void {
       //     issuing the next fetch.
       //   * Cap the redirect chain depth to MAX_REDIRECTS.
       const MAX_REDIRECTS = 5;
-      let response: Response;
-      let currentUrl = url;
-      let redirectCount = 0;
-      let redirectError: string | null = null;
-
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        response = await fetch(currentUrl, { redirect: 'manual' });
-        if (response.status >= 300 && response.status < 400) {
-          // Drain the redirect body so the connection isn't held open.
-          try { await response.body?.cancel(); } catch { /* best-effort */ }
-
-          redirectCount++;
-          if (redirectCount > MAX_REDIRECTS) {
-            redirectError = `Refused to follow redirect: too many redirects (>${MAX_REDIRECTS}).`;
-            break;
-          }
-
-          const location = response.headers.get('location');
-          if (!location) {
-            redirectError = 'Redirect response missing Location header.';
-            break;
-          }
-
-          let nextUrl: string;
-          try {
-            nextUrl = new URL(location, currentUrl).toString();
-          } catch {
-            redirectError = `Refused to follow redirect: invalid Location header (${location}).`;
-            break;
-          }
-
-          // Re-apply the same SSRF allow-list to every redirect target.
-          const validationError = validateDownloadUrl(nextUrl);
-          if (validationError) {
-            redirectError = `Refused to follow redirect to ${nextUrl}: ${validationError}`;
-            break;
-          }
-
-          currentUrl = nextUrl;
-          continue;
-        }
-        break;
-      }
-
-      if (redirectError) {
-        try { fs.closeSync(fd); } catch { /* empty */ }
-        try { fs.unlinkSync(safe.resolved); } catch { /* cleanup best-effort */ }
-        return JSON.stringify({ ok: false, error: redirectError });
-      }
-      if (!response.ok) {
-        try { fs.closeSync(fd); } catch { /* empty */ }
-        try { fs.unlinkSync(safe.resolved); } catch { /* cleanup best-effort */ }
-        return JSON.stringify({ ok: false, error: `Download failed (HTTP ${response.status}). The URL may have expired.` });
-      }
-      if (!response.body) {
-        try { fs.closeSync(fd); } catch { /* empty */ }
-        try { fs.unlinkSync(safe.resolved); } catch { /* cleanup best-effort */ }
-        return JSON.stringify({ ok: false, error: 'No response body received.' });
-      }
-
-      // Hand the open fd to a write stream (avoids re-opening with default
-      // `w` and so preserves the wx semantics of our pre-check).
-      const fileHandle = fs.createWriteStream(safe.resolved, { fd });
+      // Track ownership of the just-opened fd. The fd is "released" once
+      // we hand it off to `fs.createWriteStream({ fd })` — after that point
+      // the stream owns it and will close it on `end`/`destroy`. Until
+      // then, ANY thrown exception (network failure on `fetch`, abort on
+      // the body iterator, etc.) must close the fd and unlink the freshly
+      // created (wx-flagged) file so the caller's failure is atomic.
+      let fdReleased = false;
       let bytesWritten = 0;
       try {
-        for await (const chunk of response.body as AsyncIterable<Uint8Array>) {
-          fileHandle.write(chunk);
-          bytesWritten += chunk.length;
+        let response: Response;
+        let currentUrl = url;
+        let redirectCount = 0;
+        let redirectError: string | null = null;
+
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          response = await fetch(currentUrl, { redirect: 'manual' });
+          if (response.status >= 300 && response.status < 400) {
+            // Drain the redirect body so the connection isn't held open.
+            try { await response.body?.cancel(); } catch { /* best-effort */ }
+
+            redirectCount++;
+            if (redirectCount > MAX_REDIRECTS) {
+              redirectError = `Refused to follow redirect: too many redirects (>${MAX_REDIRECTS}).`;
+              break;
+            }
+
+            const location = response.headers.get('location');
+            if (!location) {
+              redirectError = 'Redirect response missing Location header.';
+              break;
+            }
+
+            let nextUrl: string;
+            try {
+              nextUrl = new URL(location, currentUrl).toString();
+            } catch {
+              redirectError = `Refused to follow redirect: invalid Location header (${location}).`;
+              break;
+            }
+
+            // Re-apply the same SSRF allow-list to every redirect target.
+            const validationError = validateDownloadUrl(nextUrl);
+            if (validationError) {
+              redirectError = `Refused to follow redirect to ${nextUrl}: ${validationError}`;
+              break;
+            }
+
+            currentUrl = nextUrl;
+            continue;
+          }
+          break;
         }
-        fileHandle.end();
-        await new Promise<void>((resolve, reject) => {
-          fileHandle.on('finish', resolve);
-          fileHandle.on('error', reject);
-        });
-      } catch (streamErr) {
-        fileHandle.destroy();
-        try { fs.unlinkSync(safe.resolved); } catch { /* cleanup best-effort */ }
-        throw streamErr;
+
+        if (redirectError) {
+          try { fs.closeSync(fd); } catch { /* empty */ }
+          fdReleased = true;
+          try { fs.unlinkSync(safe.resolved); } catch { /* cleanup best-effort */ }
+          return JSON.stringify({ ok: false, error: redirectError });
+        }
+        if (!response.ok) {
+          try { fs.closeSync(fd); } catch { /* empty */ }
+          fdReleased = true;
+          try { fs.unlinkSync(safe.resolved); } catch { /* cleanup best-effort */ }
+          return JSON.stringify({ ok: false, error: `Download failed (HTTP ${response.status}). The URL may have expired.` });
+        }
+        if (!response.body) {
+          try { fs.closeSync(fd); } catch { /* empty */ }
+          fdReleased = true;
+          try { fs.unlinkSync(safe.resolved); } catch { /* cleanup best-effort */ }
+          return JSON.stringify({ ok: false, error: 'No response body received.' });
+        }
+
+        // Hand the open fd to a write stream (avoids re-opening with default
+        // `w` and so preserves the wx semantics of our pre-check).
+        const fileHandle = fs.createWriteStream(safe.resolved, { fd });
+        fdReleased = true; // fd ownership transferred to the stream
+        try {
+          for await (const chunk of response.body as AsyncIterable<Uint8Array>) {
+            fileHandle.write(chunk);
+            bytesWritten += chunk.length;
+          }
+          fileHandle.end();
+          await new Promise<void>((resolve, reject) => {
+            fileHandle.on('finish', resolve);
+            fileHandle.on('error', reject);
+          });
+        } catch (streamErr) {
+          fileHandle.destroy();
+          try { fs.unlinkSync(safe.resolved); } catch { /* cleanup best-effort */ }
+          throw streamErr;
+        }
+      } catch (err) {
+        // Resource hygiene: if anything between `fs.openSync` and the
+        // `createWriteStream` hand-off threw (e.g. `fetch` rejecting with
+        // a network error), close the fd we own and unlink the freshly
+        // created file so the failure is atomic.
+        if (!fdReleased) {
+          try { fs.closeSync(fd); } catch { /* empty */ }
+          try { fs.unlinkSync(safe.resolved); } catch { /* cleanup best-effort */ }
+        }
+        throw err;
       }
 
       const sizeMB = (bytesWritten / 1_048_576).toFixed(1);

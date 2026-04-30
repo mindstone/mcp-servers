@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -828,5 +829,245 @@ describe('Runway download_runway_output SSRF redirect (VAL-RUNWAY-201..209)', ()
     expect(json.ok).toBe(false);
     expect(String(json.error || '')).toMatch(/local\/private/i);
     expect(fs.existsSync(outputPath)).toBe(false);
+  });
+});
+
+/**
+ * VAL-RUNWAY-113..114 — `download_runway_output` non-regular-file refusal.
+ *
+ * Even when the target path lexically lives inside the allow-listed
+ * `RUNWAY_DOWNLOAD_ROOT`, the connector MUST refuse to write through a
+ * pre-existing symlink (regardless of where the symlink points) and MUST
+ * refuse to write to any non-regular-file existing target (directory,
+ * FIFO, socket, etc.). Pre-existing regular files remain governed by the
+ * `overwrite` flag (see VAL-RUNWAY-109/110).
+ */
+describe('Runway download_runway_output non-regular-file refusal (VAL-RUNWAY-113..114)', () => {
+  const DOWNLOAD_BODY = Buffer.alloc(2048, 0xcd);
+  const REMOTE_URL = 'https://cdn.runwayml.example/clip.mp4';
+
+  let testClient: McpTestClient;
+  let downloadRoot: string;
+  let outsideRoot: string;
+
+  function makeDownloadHandlers(body: Buffer = DOWNLOAD_BODY) {
+    const calls: Array<{ url: string }> = [];
+    const handler = http.get(REMOTE_URL, ({ request }) => {
+      calls.push({ url: request.url });
+      return HttpResponse.arrayBuffer(
+        body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer,
+        { headers: { 'Content-Type': 'video/mp4', 'Content-Length': String(body.length) } },
+      );
+    });
+    return { handler, calls };
+  }
+
+  beforeEach(() => {
+    downloadRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'runway-dl-symlink-'));
+    outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'runway-dl-symlink-outside-'));
+  });
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    try { fs.rmSync(downloadRoot, { recursive: true, force: true }); } catch { /* empty */ }
+    try { fs.rmSync(outsideRoot, { recursive: true, force: true }); } catch { /* empty */ }
+  });
+
+  // ── VAL-RUNWAY-113 ─────────────────────────────────────────────────────
+  it('VAL-RUNWAY-113 — overwrite=true on existing symlink (target out-of-root) is refused; pointed-to file unchanged', async () => {
+    if (process.platform === 'win32') return;
+
+    const targetFile = path.join(outsideRoot, 'secret.txt');
+    const targetBytes = Buffer.from('do not overwrite me — out-of-root secret', 'utf8');
+    fs.writeFileSync(targetFile, targetBytes);
+    const targetShaBefore = crypto.createHash('sha256').update(targetBytes).digest('hex');
+
+    const symlinkPath = path.join(downloadRoot, 'foo.bin');
+    fs.symlinkSync(targetFile, symlinkPath);
+    expect(fs.lstatSync(symlinkPath).isSymbolicLink()).toBe(true);
+
+    const { handler, calls } = makeDownloadHandlers();
+    mswServer.use(...createRunwayHandlers(), handler);
+    testClient = await createTestClient({
+      env: {
+        RUNWAYML_API_SECRET: MOCK_API_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        RUNWAY_DOWNLOAD_ROOT: downloadRoot,
+      },
+    });
+
+    const result = await testClient.callTool('download_runway_output', {
+      url: REMOTE_URL,
+      output_path: symlinkPath,
+      overwrite: true,
+    });
+
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('OUTPUT_PATH_IS_SYMLINK');
+    expect(String(json.error || '')).toMatch(/symlink/i);
+
+    // The symlink itself MUST still exist (we did not unlink it) and the
+    // pointed-to file MUST be byte-for-byte unchanged.
+    expect(fs.lstatSync(symlinkPath).isSymbolicLink()).toBe(true);
+    const onDisk = fs.readFileSync(targetFile);
+    expect(onDisk.equals(targetBytes)).toBe(true);
+    const targetShaAfter = crypto.createHash('sha256').update(onDisk).digest('hex');
+    expect(targetShaAfter).toBe(targetShaBefore);
+
+    // Refusal happens before any download is attempted.
+    expect(calls.length).toBe(0);
+  });
+
+  it('VAL-RUNWAY-113 — overwrite=true on existing symlink (target in-root) is still refused', async () => {
+    if (process.platform === 'win32') return;
+
+    const targetFile = path.join(downloadRoot, 'real-target.bin');
+    const targetBytes = Buffer.from('in-root pointed-to file', 'utf8');
+    fs.writeFileSync(targetFile, targetBytes);
+
+    const symlinkPath = path.join(downloadRoot, 'foo.bin');
+    fs.symlinkSync(targetFile, symlinkPath);
+    expect(fs.lstatSync(symlinkPath).isSymbolicLink()).toBe(true);
+
+    const { handler, calls } = makeDownloadHandlers();
+    mswServer.use(...createRunwayHandlers(), handler);
+    testClient = await createTestClient({
+      env: {
+        RUNWAYML_API_SECRET: MOCK_API_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        RUNWAY_DOWNLOAD_ROOT: downloadRoot,
+      },
+    });
+
+    const result = await testClient.callTool('download_runway_output', {
+      url: REMOTE_URL,
+      output_path: symlinkPath,
+      overwrite: true,
+    });
+
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('OUTPUT_PATH_IS_SYMLINK');
+
+    // Pointed-to file unchanged byte-for-byte.
+    expect(fs.readFileSync(targetFile).equals(targetBytes)).toBe(true);
+    expect(fs.lstatSync(symlinkPath).isSymbolicLink()).toBe(true);
+    expect(calls.length).toBe(0);
+  });
+
+  // ── VAL-RUNWAY-114 ─────────────────────────────────────────────────────
+  it('VAL-RUNWAY-114 — pre-existing symlink without overwrite is refused with OUTPUT_PATH_IS_SYMLINK', async () => {
+    if (process.platform === 'win32') return;
+
+    const targetFile = path.join(outsideRoot, 'whatever.txt');
+    fs.writeFileSync(targetFile, 'arbitrary');
+    const symlinkPath = path.join(downloadRoot, 'foo.bin');
+    fs.symlinkSync(targetFile, symlinkPath);
+
+    const { handler, calls } = makeDownloadHandlers();
+    mswServer.use(...createRunwayHandlers(), handler);
+    testClient = await createTestClient({
+      env: {
+        RUNWAYML_API_SECRET: MOCK_API_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        RUNWAY_DOWNLOAD_ROOT: downloadRoot,
+      },
+    });
+
+    const result = await testClient.callTool('download_runway_output', {
+      url: REMOTE_URL,
+      output_path: symlinkPath,
+    });
+
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('OUTPUT_PATH_IS_SYMLINK');
+    expect(fs.lstatSync(symlinkPath).isSymbolicLink()).toBe(true);
+    expect(calls.length).toBe(0);
+  });
+
+  it('VAL-RUNWAY-114 — pre-existing directory at output_path is refused with OUTPUT_PATH_NOT_REGULAR_FILE (overwrite=true)', async () => {
+    const dirPath = path.join(downloadRoot, 'foo.bin');
+    fs.mkdirSync(dirPath);
+
+    const { handler, calls } = makeDownloadHandlers();
+    mswServer.use(...createRunwayHandlers(), handler);
+    testClient = await createTestClient({
+      env: {
+        RUNWAYML_API_SECRET: MOCK_API_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        RUNWAY_DOWNLOAD_ROOT: downloadRoot,
+      },
+    });
+
+    const result = await testClient.callTool('download_runway_output', {
+      url: REMOTE_URL,
+      output_path: dirPath,
+      overwrite: true,
+    });
+
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('OUTPUT_PATH_NOT_REGULAR_FILE');
+    expect(String(json.error || '')).toMatch(/regular file|directory/i);
+    expect(fs.statSync(dirPath).isDirectory()).toBe(true);
+    expect(calls.length).toBe(0);
+  });
+
+  it('VAL-RUNWAY-114 — pre-existing directory at output_path is refused without overwrite as well', async () => {
+    const dirPath = path.join(downloadRoot, 'bar.bin');
+    fs.mkdirSync(dirPath);
+
+    const { handler, calls } = makeDownloadHandlers();
+    mswServer.use(...createRunwayHandlers(), handler);
+    testClient = await createTestClient({
+      env: {
+        RUNWAYML_API_SECRET: MOCK_API_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        RUNWAY_DOWNLOAD_ROOT: downloadRoot,
+      },
+    });
+
+    const result = await testClient.callTool('download_runway_output', {
+      url: REMOTE_URL,
+      output_path: dirPath,
+    });
+
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('OUTPUT_PATH_NOT_REGULAR_FILE');
+    expect(fs.statSync(dirPath).isDirectory()).toBe(true);
+    expect(calls.length).toBe(0);
+  });
+
+  // ── Regression: missing target + regular-file target preserved ────────
+  it('VAL-RUNWAY-114 — missing target still works (regression: lstat ENOENT not flagged)', async () => {
+    const outputPath = path.join(downloadRoot, 'fresh.bin');
+    expect(fs.existsSync(outputPath)).toBe(false);
+
+    const { handler, calls } = makeDownloadHandlers();
+    mswServer.use(...createRunwayHandlers(), handler);
+    testClient = await createTestClient({
+      env: {
+        RUNWAYML_API_SECRET: MOCK_API_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        RUNWAY_DOWNLOAD_ROOT: downloadRoot,
+      },
+    });
+
+    const result = await testClient.callTool('download_runway_output', {
+      url: REMOTE_URL,
+      output_path: outputPath,
+    });
+
+    expect(result.isError).toBeFalsy();
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(fs.existsSync(outputPath)).toBe(true);
+    expect(fs.statSync(outputPath).isFile()).toBe(true);
+    expect(calls.length).toBe(1);
   });
 });
