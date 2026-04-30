@@ -9,6 +9,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      connector: ${{ steps.meta.outputs.connector }}
+      package: ${{ steps.meta.outputs.package }}
+      version: ${{ steps.meta.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,9 +34,11 @@ jobs:
 
           NPM_PACKAGE=$(node -p "require('./connectors/$CONNECTOR/package.json').name")
 
-          echo "connector=$CONNECTOR" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "package=$NPM_PACKAGE" >> "$GITHUB_OUTPUT"
+          {
+            echo "connector=$CONNECTOR"
+            echo "version=$VERSION"
+            echo "package=$NPM_PACKAGE"
+          } >> "$GITHUB_OUTPUT"
           echo "Connector: $CONNECTOR"
           echo "Version: $VERSION"
           echo "Package: $NPM_PACKAGE"
@@ -59,8 +65,9 @@ jobs:
 
       - name: Verify version sync (tag, package.json, server.ts)
         working-directory: connectors/${{ steps.meta.outputs.connector }}
+        env:
+          TAG_VERSION: ${{ steps.meta.outputs.version }}
         run: |
-          TAG_VERSION="${{ steps.meta.outputs.version }}"
           PKG_VERSION=$(node -p "require('./package.json').version")
           if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
             echo "ERROR: Tag ($TAG_VERSION) != package.json ($PKG_VERSION)"
@@ -90,16 +97,25 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+  # Catalog-sync dispatch runs on a separate runner with NO NPM_TOKEN and NO
+  # ~/.npmrc (we do not call setup-node here), so the third-party action below
+  # cannot read the npm publish credentials. Pinned to an immutable commit SHA.
+  dispatch-catalog-sync:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
       - name: Dispatch catalog sync to MindstoneRebel
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # v3.0.0
         with:
           token: ${{ secrets.CATALOG_SYNC_TOKEN }}
           repository: mindstone-engineering/MindstoneRebel
           event-type: connector-published
           client-payload: |-
             {
-              "connector": "${{ steps.meta.outputs.connector }}",
-              "package": "${{ steps.meta.outputs.package }}",
-              "version": "${{ steps.meta.outputs.version }}",
+              "connector": "${{ needs.publish.outputs.connector }}",
+              "package": "${{ needs.publish.outputs.package }}",
+              "version": "${{ needs.publish.outputs.version }}",
               "sha": "${{ github.sha }}"
             }
