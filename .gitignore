@@ -7,3 +7,14 @@ dist/
 .env
 .env.*
 .factory/
+
+# Secrets / credentials
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+id_rsa
+id_rsa.*
+*.token.json
+credentials/
