@@ -9,6 +9,7 @@
  */
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import {
   RunwayError,
@@ -23,6 +24,100 @@ import {
   type UploadResponse,
 } from './types.js';
 import { getApiKey } from './auth.js';
+
+// ============================================================================
+// Local-file sandbox
+// ============================================================================
+//
+// `upload_media` and `resolveMediaInput` (used by every prompt_image / video /
+// audio / character / reference_* / media / file_path argument) read local
+// files supplied by an LLM-controlled tool input. Without a sandbox, a
+// malicious or hallucinated argument can name an arbitrary path on the host —
+// e.g. `~/.ssh/id_rsa` or `/etc/passwd` — and exfiltrate its bytes to the
+// upstream Runway API.
+//
+// The sandbox restricts local-file reads to a single allow-listed root
+// directory tree:
+//
+//   * Configurable via `RUNWAY_ALLOWED_ROOT`.
+//   * Defaults to `os.tmpdir()` when the env var is unset / empty.
+//   * Both the configured root and the input path are canonicalised via
+//     `fs.realpathSync`, which catches symlink-escapes (a symlink inside the
+//     root that points OUTSIDE the root is rejected).
+//   * `..` traversal is caught because realpath resolves it to the actual
+//     destination (which then fails the allow-list check).
+//
+// HTTPS, `data:`, and `runway://` URIs bypass this branch entirely — they
+// don't read disk at all.
+
+const RUNWAY_ALLOWED_ROOT_ENV = 'RUNWAY_ALLOWED_ROOT';
+
+function getAllowedRoot(): string {
+  const raw = process.env[RUNWAY_ALLOWED_ROOT_ENV];
+  const root = raw && raw.length > 0 ? raw : os.tmpdir();
+  // Canonicalise the root once so the prefix-check below is stable across
+  // platforms where the system tmpdir is itself reached through a symlink
+  // (e.g. macOS: /var/folders/... → /private/var/folders/...).
+  return fs.realpathSync(path.resolve(root));
+}
+
+/**
+ * Validate that `input` is a local file path inside the allow-listed root,
+ * canonicalising via `fs.realpathSync` so that symlink-escape attempts are
+ * caught. Returns the canonicalised (or, for not-yet-existing files, the
+ * lexically-resolved) path.
+ *
+ * Throws a structured `RunwayError` with code `PATH_OUTSIDE_ALLOWED_ROOT`
+ * when the resolved path falls outside the allow-listed root. Does NOT
+ * throw for "file does not exist" — callers handle that via their existing
+ * `FILE_NOT_FOUND` paths so error attribution stays clean.
+ */
+export function assertPathInAllowedRoot(input: string): string {
+  const root = getAllowedRoot();
+  const lexical = path.resolve(input);
+  const denyMessage = `File path is outside the RUNWAY_ALLOWED_ROOT sandbox: ${input}`;
+  const denyResolution =
+    `Set ${RUNWAY_ALLOWED_ROOT_ENV} to a directory that contains the file, ` +
+    `or move the file under ${root}.`;
+
+  const isInsideRoot = (p: string): boolean =>
+    p === root || p.startsWith(root + path.sep);
+
+  // Try to canonicalise the input. If it exists, this also follows any
+  // symlinks — catching the "symlink inside the root pointing outside"
+  // attack, since the resolved target is what we check.
+  try {
+    const resolved = fs.realpathSync(lexical);
+    if (!isInsideRoot(resolved)) {
+      throw new RunwayError(denyMessage, 'PATH_OUTSIDE_ALLOWED_ROOT', denyResolution);
+    }
+    return resolved;
+  } catch (err) {
+    if (err instanceof RunwayError) throw err;
+    // realpath failed (most likely ENOENT). Try canonicalising the parent
+    // dir so callers can still distinguish "outside the sandbox" from
+    // "doesn't exist" cases. If the parent canonicalises and is outside,
+    // refuse. Otherwise, fall through to a lexical-only comparison.
+    const parent = path.dirname(lexical);
+    try {
+      const resolvedParent = fs.realpathSync(parent);
+      if (!isInsideRoot(resolvedParent)) {
+        throw new RunwayError(denyMessage, 'PATH_OUTSIDE_ALLOWED_ROOT', denyResolution);
+      }
+      return path.join(resolvedParent, path.basename(lexical));
+    } catch (err2) {
+      if (err2 instanceof RunwayError) throw err2;
+      // Even the parent doesn't resolve; use lexical comparison as a
+      // last-resort defence. This is conservative: a non-existent path
+      // outside the lexical root is rejected; an inside-the-root path is
+      // returned so the caller's existing FILE_NOT_FOUND surfaces cleanly.
+      if (!isInsideRoot(lexical)) {
+        throw new RunwayError(denyMessage, 'PATH_OUTSIDE_ALLOWED_ROOT', denyResolution);
+      }
+      return lexical;
+    }
+  }
+}
 
 /**
  * Make an authenticated JSON request to the Runway API.
@@ -175,13 +270,21 @@ export async function runwayRawFetch(
 /**
  * Upload a local file to Runway's ephemeral storage.
  * Returns a runway:// URI valid for 24 hours.
+ *
+ * SECURITY: refuses paths outside `RUNWAY_ALLOWED_ROOT` (default
+ * `os.tmpdir()`); see `assertPathInAllowedRoot`. The sandbox check runs
+ * BEFORE any file read or upstream API call, so a disallowed path never
+ * triggers an `/uploads` request and the file's bytes are never read.
  */
 export async function uploadEphemeral(filePath: string): Promise<string> {
-  if (!fs.existsSync(filePath)) {
+  // Sandbox check first — refuse before reading the file or hitting /uploads.
+  const safePath = assertPathInAllowedRoot(filePath);
+
+  if (!fs.existsSync(safePath)) {
     throw new RunwayError(`File not found: ${filePath}`, 'FILE_NOT_FOUND',
       'Provide an accessible local file path.');
   }
-  const stats = fs.statSync(filePath);
+  const stats = fs.statSync(safePath);
   if (!stats.isFile()) {
     throw new RunwayError(`Not a file: ${filePath}`, 'INVALID_INPUT',
       'Provide a file path, not a directory.');
@@ -195,13 +298,13 @@ export async function uploadEphemeral(filePath: string): Promise<string> {
       'Provide a valid media file.');
   }
 
-  const filename = path.basename(filePath);
+  const filename = path.basename(safePath);
   const uploadInfo = await runwayFetch<UploadResponse>('/uploads', {
     method: 'POST',
     body: JSON.stringify({ filename, type: 'ephemeral' }),
   });
 
-  const fileBuffer = fs.readFileSync(filePath);
+  const fileBuffer = fs.readFileSync(safePath);
   const formData = new FormData();
   for (const [key, value] of Object.entries(uploadInfo.fields)) {
     formData.append(key, value);
@@ -246,6 +349,10 @@ export async function uploadEphemeral(filePath: string): Promise<string> {
  * - HTTPS/data/runway URIs are passed through.
  * - Local files under the size limit are converted to data URIs.
  * - Large local files are uploaded via ephemeral upload.
+ *
+ * SECURITY: local-file inputs are sandboxed under `RUNWAY_ALLOWED_ROOT`
+ * (default `os.tmpdir()`). Paths outside the sandbox — including symlinks
+ * pointing outside it — are refused before any file read.
  */
 export async function resolveMediaInput(
   input: string,
@@ -255,17 +362,20 @@ export async function resolveMediaInput(
     return input;
   }
 
+  // Sandbox the local-file branch first so a disallowed path is never read.
+  const safePath = assertPathInAllowedRoot(input);
+
   try {
-    const stats = fs.statSync(input);
+    const stats = fs.statSync(safePath);
     if (!stats.isFile()) {
       throw new RunwayError(`Not a file: ${input}`, 'INVALID_INPUT',
         'Provide a file path, not a directory.');
     }
     const limit = DATA_URI_BINARY_LIMITS[category];
     if (stats.size > limit) {
-      return await uploadEphemeral(input);
+      return await uploadEphemeral(safePath);
     }
-    const buffer = fs.readFileSync(input);
+    const buffer = fs.readFileSync(safePath);
     const ext = input.split('.').pop()?.toLowerCase() || 'bin';
     const fallback = category === 'image' ? 'image/png' : category === 'video' ? 'video/mp4' : 'audio/mpeg';
     const mime = MIME_MAP[ext] || fallback;
