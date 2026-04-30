@@ -36,6 +36,12 @@ export interface MockMessageData {
       childNodes?: unknown[];
     }>;
   };
+  /**
+   * Optional per-part body content. Keys are part identifiers (e.g. "1", "2");
+   * values are the raw text/html that download() should return for that part.
+   * If unset for a given part, download() falls back to a generic placeholder.
+   */
+  bodyByPart?: Record<string, string>;
 }
 
 export interface ImapMockOptions {
@@ -161,10 +167,12 @@ export function createImapMock(options: ImapMockOptions = {}) {
       };
     }
 
-    async download(_uid: number, _part: string, _opts?: unknown) {
+    async download(uid: number, part: string, _opts?: unknown) {
       const { Readable } = await import('node:stream');
+      const msg = messages.find((m) => m.uid === uid);
+      const body = msg?.bodyByPart?.[part] ?? 'Test email body content';
       return {
-        content: Readable.from([Buffer.from('Test email body content')]),
+        content: Readable.from([Buffer.from(body)]),
       };
     }
 
