@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { runwayFetch, runwayRawFetch, validateDownloadUrl } from '../client.js';
+import { runwayFetch, runwayRawFetch, validateDownloadUrl, assertDownloadPathInRoot } from '../client.js';
 import { RunwayError, type TaskDetail } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 
@@ -133,16 +133,25 @@ export function registerTaskTools(server: McpServer): void {
     {
       description:
         'Download a Runway output (video, image, audio) to a local file. ' +
-        'Use after a task succeeds to save the output locally.',
+        'Use after a task succeeds to save the output locally. ' +
+        'output_path MUST live inside RUNWAY_DOWNLOAD_ROOT (default ~/Downloads/runway-mcp). ' +
+        'Sensitive paths (~/.ssh, ~/.aws, /etc, ~/.bashrc, ~/.zshrc) are refused even when the root would otherwise permit them. ' +
+        'By default, refuses to overwrite an existing file (atomic flags: "wx") — pass overwrite: true to clobber.',
       inputSchema: z.object({
         url: z.string().describe('Output URL from a completed task.'),
-        output_path: z.string().describe('Local file path to save to. Parent directory must exist.'),
+        output_path: z.string().describe(
+          'Local file path to save to. Must be inside RUNWAY_DOWNLOAD_ROOT (default ~/Downloads/runway-mcp). Parent directory must exist.',
+        ),
+        overwrite: z.boolean().optional().describe(
+          'If true, replace an existing file at output_path. Defaults to false (refuses to clobber).',
+        ),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const url = args.url;
       const outputPath = args.output_path;
+      const overwrite = args.overwrite === true;
 
       // Validate URL (SSRF prevention — blocks private/reserved hosts)
       const urlError = validateDownloadUrl(url);
@@ -150,23 +159,67 @@ export function registerTaskTools(server: McpServer): void {
         return JSON.stringify({ ok: false, error: urlError });
       }
 
-      // Validate output path
+      // Sandbox the output path BEFORE any network call. This catches:
+      //   - paths outside RUNWAY_DOWNLOAD_ROOT,
+      //   - `..` traversal,
+      //   - symlink-escape on the parent directory,
+      //   - sensitive deny-list (~/.ssh, ~/.aws, /etc, ~/.bashrc, ~/.zshrc)
+      //     even when the configured root would otherwise allow it.
       const fs = await import('fs');
-      const pathMod = await import('path');
-      const parentDir = pathMod.dirname(outputPath);
-      if (!fs.existsSync(parentDir)) {
-        return JSON.stringify({ ok: false, error: `Parent directory does not exist: ${parentDir}` });
+      let safe: { resolved: string; root: string };
+      try {
+        safe = assertDownloadPathInRoot(outputPath);
+      } catch (err) {
+        if (err instanceof RunwayError) {
+          return JSON.stringify({
+            ok: false,
+            error: err.message,
+            code: err.code,
+            resolution: err.resolution,
+          });
+        }
+        throw err;
+      }
+
+      // Open the output file synchronously with `wx` (or `w` if overwrite)
+      // so the EEXIST refusal is atomic with the open. createWriteStream
+      // with `flags: 'wx'` would also work, but doing this synchronously
+      // gives us a clean refusal BEFORE we issue any network request.
+      const writeFlag = overwrite ? 'w' : 'wx';
+      let fd: number;
+      try {
+        fd = fs.openSync(safe.resolved, writeFlag);
+      } catch (openErr) {
+        const e = openErr as NodeJS.ErrnoException;
+        if (e && e.code === 'EEXIST') {
+          return JSON.stringify({
+            ok: false,
+            error: `Output file already exists: ${outputPath}. Pass overwrite: true to clobber.`,
+            code: 'EEXIST',
+          });
+        }
+        return JSON.stringify({
+          ok: false,
+          error: `Could not open output_path for writing: ${e?.message || String(openErr)}`,
+          code: e?.code || 'OPEN_FAILED',
+        });
       }
 
       const response = await fetch(url);
       if (!response.ok) {
+        try { fs.closeSync(fd); } catch { /* empty */ }
+        try { fs.unlinkSync(safe.resolved); } catch { /* cleanup best-effort */ }
         return JSON.stringify({ ok: false, error: `Download failed (HTTP ${response.status}). The URL may have expired.` });
       }
       if (!response.body) {
+        try { fs.closeSync(fd); } catch { /* empty */ }
+        try { fs.unlinkSync(safe.resolved); } catch { /* cleanup best-effort */ }
         return JSON.stringify({ ok: false, error: 'No response body received.' });
       }
 
-      const fileHandle = fs.createWriteStream(outputPath);
+      // Hand the open fd to a write stream (avoids re-opening with default
+      // `w` and so preserves the wx semantics of our pre-check).
+      const fileHandle = fs.createWriteStream(safe.resolved, { fd });
       let bytesWritten = 0;
       try {
         for await (const chunk of response.body as AsyncIterable<Uint8Array>) {
@@ -180,11 +233,15 @@ export function registerTaskTools(server: McpServer): void {
         });
       } catch (streamErr) {
         fileHandle.destroy();
-        try { fs.unlinkSync(outputPath); } catch { /* cleanup best-effort */ }
+        try { fs.unlinkSync(safe.resolved); } catch { /* cleanup best-effort */ }
         throw streamErr;
       }
 
       const sizeMB = (bytesWritten / 1_048_576).toFixed(1);
+      // Use the user-supplied (lexical) path in the user-facing response so
+      // the path the LLM/user sees matches the path they passed. The actual
+      // open/write happens against `safe.resolved` (the realpath-canonical
+      // target), which is what enforced the sandbox.
       return JSON.stringify({
         ok: true, path: outputPath, size_mb: sizeMB,
         message: `Downloaded ${sizeMB}MB to ${outputPath}`,
