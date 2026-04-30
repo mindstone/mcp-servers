@@ -119,6 +119,149 @@ export function assertPathInAllowedRoot(input: string): string {
   }
 }
 
+// ============================================================================
+// Local-file sandbox — `download_runway_output` write target
+// ============================================================================
+//
+// `download_runway_output` writes a file to disk at an LLM-controlled path.
+// Without a sandbox, an attacker who can influence the tool input can overwrite
+// arbitrary files — `~/.zshrc`, `~/.ssh/authorized_keys`, `/etc/cron.daily/x`,
+// etc. — turning a "download a video" tool into a turn-key code-execution
+// path on the host.
+//
+// The output-write sandbox restricts where the connector may create files:
+//
+//   * Configurable via `RUNWAY_DOWNLOAD_ROOT`.
+//   * Defaults to `~/Downloads/runway-mcp` when the env var is unset / empty.
+//     (NOT `os.tmpdir()` — downloaded files are user-facing artifacts.)
+//   * Auto-creates the root directory if missing so the default works
+//     out-of-the-box.
+//   * The PARENT DIR of the requested output_path is canonicalised via
+//     `fs.realpathSync` and checked against the canonicalised root, catching
+//     symlink-escape attacks (a writable symlink inside the root pointing
+//     outside it is rejected).
+//   * `..` traversal is caught lexically so a path that resolves outside the
+//     root cannot reach realpath (and never depends on whether the upper
+//     directory exists).
+//   * A static deny-list of sensitive globs (`~/.ssh/**`, `~/.aws/**`,
+//     `~/.bashrc`, `~/.zshrc`, `/etc/**`) is refused EVEN WHEN the configured
+//     root would otherwise allow it (e.g. an attacker setting
+//     `RUNWAY_DOWNLOAD_ROOT=$HOME` or `=/`). This is the canonical
+//     "sensitive paths" set.
+//   * The actual write opens with `flags: 'wx'` (atomic refuse-on-existing)
+//     unless the caller passes `overwrite: true` to clobber.
+
+const RUNWAY_DOWNLOAD_ROOT_ENV = 'RUNWAY_DOWNLOAD_ROOT';
+
+function getDownloadRoot(): string {
+  const raw = process.env[RUNWAY_DOWNLOAD_ROOT_ENV];
+  if (raw && raw.length > 0) return path.resolve(raw);
+  return path.join(os.homedir(), 'Downloads', 'runway-mcp');
+}
+
+/**
+ * Sensitive paths that are refused even when the caller's
+ * `RUNWAY_DOWNLOAD_ROOT` would otherwise allow them. Each entry is checked
+ * against the realpath-resolved output target.
+ */
+function isPathInDenyList(resolvedAbs: string): { hit: true; reason: string } | { hit: false } {
+  let home: string;
+  try {
+    home = fs.realpathSync(os.homedir());
+  } catch {
+    home = os.homedir();
+  }
+
+  const sshDir = path.join(home, '.ssh');
+  const awsDir = path.join(home, '.aws');
+  const bashrc = path.join(home, '.bashrc');
+  const zshrc = path.join(home, '.zshrc');
+  const etcRoot = path.resolve('/etc');
+
+  const isUnder = (p: string, root: string) =>
+    p === root || p.startsWith(root + path.sep);
+
+  if (isUnder(resolvedAbs, sshDir)) return { hit: true, reason: '~/.ssh/** is sensitive' };
+  if (isUnder(resolvedAbs, awsDir)) return { hit: true, reason: '~/.aws/** is sensitive' };
+  if (resolvedAbs === bashrc) return { hit: true, reason: '~/.bashrc is sensitive' };
+  if (resolvedAbs === zshrc) return { hit: true, reason: '~/.zshrc is sensitive' };
+  if (isUnder(resolvedAbs, etcRoot)) return { hit: true, reason: '/etc/** is sensitive' };
+  return { hit: false };
+}
+
+/**
+ * Validate that `outputPath` is a writable destination for
+ * `download_runway_output`:
+ *  1. Must lexically resolve under `RUNWAY_DOWNLOAD_ROOT` (catches `..`).
+ *  2. Parent dir must `realpathSync` cleanly into the same root (catches
+ *     symlink-escape).
+ *  3. Resolved target must not match the static deny-list (catches the
+ *     `RUNWAY_DOWNLOAD_ROOT=$HOME` / `=/` defeat path).
+ *
+ * Returns the realpath-resolved write target on success, or throws a
+ * structured `RunwayError` otherwise. Auto-creates the configured root
+ * directory if missing so the default `~/Downloads/runway-mcp` works
+ * out-of-the-box.
+ */
+export function assertDownloadPathInRoot(outputPath: string): { resolved: string; root: string } {
+  const lexicalRoot = getDownloadRoot();
+  // Auto-create the configured root so the default just works. Tolerate
+  // failures here — they'll surface later when we try to canonicalise it.
+  try {
+    fs.mkdirSync(lexicalRoot, { recursive: true });
+  } catch {
+    /* tolerate; realpath below will fail with a clear error */
+  }
+
+  const realRoot = fs.realpathSync(lexicalRoot);
+
+  const lexical = path.resolve(outputPath);
+  const lexicalParent = path.dirname(lexical);
+
+  const denyMessage = `Output path is outside the RUNWAY_DOWNLOAD_ROOT sandbox: ${outputPath}`;
+  const denyResolution =
+    `Set ${RUNWAY_DOWNLOAD_ROOT_ENV} to a directory that contains the target file, ` +
+    `or pick an output_path inside ${realRoot}.`;
+
+  const isUnder = (p: string, root: string) =>
+    p === root || p.startsWith(root + path.sep);
+
+  // (1) Lexical check — catches `..` traversal and "completely outside"
+  // paths regardless of filesystem state.
+  if (!isUnder(lexicalParent, lexicalRoot) && !isUnder(lexicalParent, realRoot)) {
+    throw new RunwayError(denyMessage, 'OUTPUT_OUTSIDE_DOWNLOAD_ROOT', denyResolution);
+  }
+
+  // (2) Realpath check on the parent dir — catches symlink-escape.
+  let realParent: string;
+  try {
+    realParent = fs.realpathSync(lexicalParent);
+  } catch {
+    throw new RunwayError(
+      `Parent directory does not exist or is not accessible: ${lexicalParent}`,
+      'OUTPUT_PARENT_NOT_FOUND',
+      `Create ${lexicalParent} first, or pick an output_path inside ${realRoot}.`,
+    );
+  }
+  if (!isUnder(realParent, realRoot)) {
+    throw new RunwayError(denyMessage, 'OUTPUT_OUTSIDE_DOWNLOAD_ROOT', denyResolution);
+  }
+
+  const resolved = path.join(realParent, path.basename(lexical));
+
+  // (3) Static deny-list — applies even when nominally inside the root.
+  const denied = isPathInDenyList(resolved);
+  if (denied.hit) {
+    throw new RunwayError(
+      `Output path matches the sensitive deny-list and is refused: ${outputPath}`,
+      'OUTPUT_PATH_DENY_LISTED',
+      `Refused: ${denied.reason}. Paths under ~/.ssh, ~/.aws, /etc, and shell rc files (~/.bashrc, ~/.zshrc) cannot be overwritten by Runway downloads even when ${RUNWAY_DOWNLOAD_ROOT_ENV} would otherwise permit it.`,
+    );
+  }
+
+  return { resolved, root: realRoot };
+}
+
 /**
  * Make an authenticated JSON request to the Runway API.
  */
