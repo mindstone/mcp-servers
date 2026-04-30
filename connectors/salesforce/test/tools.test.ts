@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import { createSalesforceHandlers, MOCK_ACCESS_TOKEN, MOCK_INSTANCE_URL } from './helpers/salesforce-mock-api.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
@@ -65,6 +66,58 @@ describe('Tool tests — Salesforce MCP server', () => {
     expect(result.json).toHaveProperty('status', 'success');
     expect(result.json).toHaveProperty('object', 'Contact');
     expect(result.json.id).toBeDefined();
+  });
+
+  it('salesforce_update_contact issues PATCH against /sobjects/Contact/<id> (VAL-SALESFORCE-001, VAL-SALESFORCE-006)', async () => {
+    const observedRequests: { method: string; pathname: string }[] = [];
+
+    // Record every request so we can assert path-routing post-fix.
+    mswServer.events.removeAllListeners();
+    const recordRequest = ({ request }: { request: Request }) => {
+      const u = new URL(request.url);
+      observedRequests.push({ method: request.method, pathname: u.pathname });
+    };
+    mswServer.events.on('request:start', recordRequest);
+
+    // Catch-all handler that fails the test if anything is PATCHed against /sobjects/Account/<id>.
+    const accountTrap = http.patch(
+      '*/services/data/:version/sobjects/Account/:id',
+      () => {
+        throw new Error('VAL-SALESFORCE-001 violation: PATCH against /sobjects/Account/ — update_contact must target Contact.');
+      },
+    );
+
+    // Explicit Contact-update handler returning the canonical 204.
+    const contactUpdate = http.patch(
+      '*/services/data/:version/sobjects/Contact/:id',
+      () => new HttpResponse(null, { status: 204 }),
+    );
+
+    // Order matters in msw: more-specific first; then defaults from createSalesforceHandlers.
+    mswServer.use(contactUpdate, accountTrap, ...createSalesforceHandlers());
+    tempConfig = createConfigWithToken();
+    testClient = await createTestClient({ env: createAuthEnv(tempConfig.configPath) });
+
+    const targetId = '003000000000001AAA';
+    const result = await testClient.callTool('salesforce_update_contact', {
+      id: targetId,
+      first_name: 'NewName',
+    });
+
+    mswServer.events.removeListener('request:start', recordRequest);
+
+    expect(result.json).toHaveProperty('ok', true);
+    expect(result.json).toHaveProperty('status', 'success');
+    expect(result.json).toHaveProperty('object', 'Contact');
+    expect(result.json).toHaveProperty('id', targetId);
+
+    const patches = observedRequests.filter((r) => r.method === 'PATCH');
+    const contactPatches = patches.filter((r) =>
+      /\/services\/data\/v\d+\.\d+\/sobjects\/Contact\/003000000000001AAA$/.test(r.pathname),
+    );
+    const accountPatches = patches.filter((r) => r.pathname.includes('/sobjects/Account/'));
+    expect(contactPatches.length).toBeGreaterThanOrEqual(1);
+    expect(accountPatches.length).toBe(0);
   });
 
   it('salesforce_get_accounts returns accounts via mock', async () => {
