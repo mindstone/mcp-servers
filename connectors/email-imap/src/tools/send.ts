@@ -1,5 +1,18 @@
 /**
  * Send/draft tools — sending emails and saving drafts.
+ *
+ * Security notes (M2.5):
+ * - `email_send` is annotated `destructiveHint: true, openWorldHint: true`.
+ *   Hosts MUST require explicit user confirmation before invoking it.
+ * - A combined To+CC+BCC recipient cap (`EMAIL_IMAP_MAX_RECIPIENTS`,
+ *   default 25) and a rolling rate limit
+ *   (`EMAIL_IMAP_RATE_LIMIT_PER_HOUR` / `EMAIL_IMAP_RATE_LIMIT_WINDOW_MS`,
+ *   default 50/hour) act as blast-radius circuit breakers against
+ *   prompt-injection-driven mass sends.
+ * - When either cap is exceeded, the tool returns a structured JSON
+ *   error with a stable `code` (`RECIPIENT_LIMIT_EXCEEDED` or
+ *   `RATE_LIMIT_EXCEEDED`); rate-cap errors include both `resetAt`
+ *   (ISO-8601) and `retryAfterMs`.
  */
 
 import { z } from 'zod';
@@ -13,6 +26,18 @@ import {
   generateMessageId,
   resolveDraftsMailbox,
 } from './shared.js';
+import {
+  checkRateLimit,
+  getMaxRecipients,
+  recordSend,
+} from './limits.js';
+
+function toRecipientArray(value: string | string[] | undefined): string[] {
+  if (value === undefined) {
+    return [];
+  }
+  return Array.isArray(value) ? value : [value];
+}
 
 export function registerSendTools(server: McpServer): void {
   // ── email_send ──────────────────────────────────────────────────
@@ -21,7 +46,13 @@ export function registerSendTools(server: McpServer): void {
     'email_send',
     {
       description:
-        'Send an email. For replies, provide reply_to_message_id from the original message.',
+        'Send an email. For replies, provide reply_to_message_id from the original message. ' +
+        'This is a destructive action: hosts MUST require explicit user confirmation before each ' +
+        'invocation. Combined To+CC+BCC recipient count is capped (default 25, env ' +
+        '`EMAIL_IMAP_MAX_RECIPIENTS`) and outbound sends are rate-limited (default 50/hour, env ' +
+        '`EMAIL_IMAP_RATE_LIMIT_PER_HOUR` / `EMAIL_IMAP_RATE_LIMIT_WINDOW_MS`). When a cap is hit, ' +
+        'the tool returns a structured error with a stable `code` (`RECIPIENT_LIMIT_EXCEEDED` or ' +
+        '`RATE_LIMIT_EXCEEDED`).',
       inputSchema: z.object({
         to: z
           .union([z.string().min(1), z.array(z.string().min(1)).min(1)])
@@ -42,12 +73,57 @@ export function registerSendTools(server: McpServer): void {
           .optional()
           .describe('Message-ID of the original email when replying'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const config = ensureInitialized();
 
       const { to, subject, text, html, cc, bcc, reply_to_message_id } = args;
+
+      // ── Recipient cap (combined To + CC + BCC) ────────────────────
+      const recipientCount =
+        toRecipientArray(to).length +
+        toRecipientArray(cc).length +
+        toRecipientArray(bcc).length;
+      const maxRecipients = getMaxRecipients();
+      if (recipientCount > maxRecipients) {
+        return JSON.stringify({
+          ok: false,
+          code: 'RECIPIENT_LIMIT_EXCEEDED',
+          error:
+            `Recipient cap exceeded: ${recipientCount} addresses requested, ` +
+            `limit is ${maxRecipients} (combined To+CC+BCC).`,
+          limit: maxRecipients,
+          observed: recipientCount,
+          resolution:
+            'Reduce the number of recipients per message or raise EMAIL_IMAP_MAX_RECIPIENTS ' +
+            'after explicit user confirmation.',
+        });
+      }
+
+      // ── Rolling-window rate limit ─────────────────────────────────
+      const decision = checkRateLimit();
+      if (!decision.allowed) {
+        return JSON.stringify({
+          ok: false,
+          code: 'RATE_LIMIT_EXCEEDED',
+          error:
+            `Send rate limit exceeded: ${decision.observed} sends in the active window, ` +
+            `limit is ${decision.limit}.`,
+          limit: decision.limit,
+          observed: decision.observed,
+          resetAt: decision.resetAt,
+          retryAfterMs: decision.retryAfterMs,
+          resolution:
+            'Retry after the window resets, or raise EMAIL_IMAP_RATE_LIMIT_PER_HOUR / ' +
+            'EMAIL_IMAP_RATE_LIMIT_WINDOW_MS after explicit user confirmation.',
+        });
+      }
+
+      // Record the attempt BEFORE calling the transport so that a looped
+      // SMTP failure cannot bypass the cap by retrying.
+      recordSend();
+
       const messageId = generateMessageId(config.email);
 
       const transport = await getTransport();
