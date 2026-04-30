@@ -291,6 +291,76 @@ describe('VAL-NAPKIN — napkin_download_visual Bearer-leak hardening', () => {
     expect(desc).toMatch(/allow.?list|only.*napkin|refused|reject|napkin-hosted|not.*napkin/);
   });
 
+  it.each([
+    // URLs whose host is NOT on the allow-list AND whose pathname embeds
+    // /visual/<id>/ — without the pre-validation hoist, the format-detection
+    // branch would call getVisualStatus(<id>) BEFORE validateDownloadUrl runs,
+    // sending Authorization: Bearer to api.napkin.ai. Each of these MUST
+    // produce ZERO fetch calls.
+    ['https://attacker.example/v1/visual/req-abc/file/x.bin'],
+    ['https://evil.com/v1/visual/req-xyz/file/output.zip'],
+    ['https://api.napkin.ai.attacker.example/v1/visual/req-abc/file/x.bin'],
+    ['https://10.0.0.1/v1/visual/req-abc/file/x.bin'],
+    ['https://127.0.0.1/v1/visual/req-abc/file/x.bin'],
+  ])('VAL-NAPKIN-010 — non-allow-listed URL is rejected with ZERO outbound network calls (%s)', async (url) => {
+    testClient = await createTestClient({
+      env: {
+        NAPKIN_API_KEY: MOCK_API_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        MCP_WORKSPACE_PATH: '',
+        HOME: os.tmpdir(),
+      },
+    });
+
+    fetchSpy?.mockClear();
+
+    const result = await testClient.callTool('napkin_download_visual', { file_url: url });
+
+    expect(result.isError).toBe(true);
+    const data = result.json as DownloadResult;
+    // Structured URL_REJECTED error — validation ran before any network use.
+    expect(data.code).toBe('URL_REJECTED');
+
+    // Crucial: ZERO fetch calls were issued at all (no pre-validation
+    // status-API probe, no download attempt).
+    expect(fetchSpy?.mock.calls.length ?? 0).toBe(0);
+  });
+
+  it.each([
+    // Non-https schemes / userinfo / unparseable — same invariant: zero
+    // outbound network calls. The shapes deliberately include /visual/<id>/
+    // in the path so that the (broken) format-detection branch would
+    // otherwise issue a getVisualStatus probe first.
+    ['http://api.napkin.ai/v1/visual/req-abc/file/x.bin'],
+    ['file:///v1/visual/req-abc/file/x.bin'],
+    ['data:text/plain,/visual/req-abc/file/x'],
+    ['ftp://api.napkin.ai/v1/visual/req-abc/file/x.bin'],
+    ['https://user:pass@api.napkin.ai/v1/visual/req-abc/file/x.bin'],
+    ['https://user@api.napkin.ai/v1/visual/req-abc/file/x.bin'],
+    ['not a url at all'],
+  ])('VAL-NAPKIN-011 — malformed/non-HTTPS/userinfo URL rejected with ZERO outbound network calls (%s)', async (url) => {
+    testClient = await createTestClient({
+      env: {
+        NAPKIN_API_KEY: MOCK_API_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        MCP_WORKSPACE_PATH: '',
+        HOME: os.tmpdir(),
+      },
+    });
+
+    fetchSpy?.mockClear();
+
+    const result = await testClient.callTool('napkin_download_visual', { file_url: url });
+
+    expect(result.isError).toBe(true);
+    const data = result.json as DownloadResult;
+    expect(data.code).toBe('URL_REJECTED');
+
+    // Zero fetch calls of any kind: pre-validation status probe is gone,
+    // download attempt never reached.
+    expect(fetchSpy?.mock.calls.length ?? 0).toBe(0);
+  });
+
   it('VAL-NAPKIN-009 — pre-existing happy-path download still works (regression)', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'napkin-reg-'));
     createdDirs.push(tmpDir);

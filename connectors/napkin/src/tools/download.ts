@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey, hasApiKey } from '../auth.js';
-import { downloadFile, getVisualStatus } from '../client.js';
+import { downloadFile, getVisualStatus, validateDownloadUrl } from '../client.js';
 import { NapkinError, FORMAT_EXTENSIONS } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 
@@ -72,6 +72,18 @@ export function registerDownloadTools(server: McpServer): void {
       const apiKey = requireApiKey();
       const { file_url, filename } = args;
 
+      // SECURITY: validate the URL BEFORE any outbound network call. Without
+      // this hoist, the format-detection else-branch below would invoke
+      // `getVisualStatus(apiKey, requestId)` (which sends
+      // `Authorization: Bearer ${NAPKIN_API_KEY}` to api.napkin.ai) for any
+      // `file_url` whose pathname embeds `/visual/<id>/`, even when the URL's
+      // host/scheme/userinfo would later be rejected by `downloadFile`. By
+      // validating first we guarantee that a rejected `file_url` produces a
+      // structured `URL_REJECTED` error with ZERO outbound `fetch` calls
+      // anywhere in the handler. Re-using the parsed URL avoids a second
+      // `new URL()` parse below.
+      const validatedUrl = validateDownloadUrl(file_url);
+
       // Detect file extension from URL or by querying status
       const formatMatch = file_url.match(/\.(svg|png|pptx?)$/i);
       let extension = '.svg';
@@ -80,10 +92,9 @@ export function registerDownloadTools(server: McpServer): void {
         // Normalize .ppt to .pptx
         if (extension === '.ppt') extension = '.pptx';
       } else {
-        // Try to determine format from the URL structure
+        // Try to determine format from the (already-validated) URL structure
         try {
-          const urlParts = new URL(file_url);
-          const pathParts = urlParts.pathname.split('/');
+          const pathParts = validatedUrl.pathname.split('/');
           const requestIdIndex = pathParts.indexOf('visual');
           if (requestIdIndex >= 0) {
             const requestId = pathParts[requestIdIndex + 1];
@@ -100,7 +111,7 @@ export function registerDownloadTools(server: McpServer): void {
         }
       }
 
-      const data = await downloadFile(apiKey, file_url);
+      const data = await downloadFile(apiKey, validatedUrl.toString());
 
       const outputDir = resolveOutputDir();
       fs.mkdirSync(outputDir, { recursive: true });
