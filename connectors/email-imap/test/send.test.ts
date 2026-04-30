@@ -336,6 +336,74 @@ describe('Send/draft tools', () => {
       }
     });
 
+    it('VAL-EMAIL-024 — cap counts comma-separated addresses inside string to/cc/bcc fields', async () => {
+      await setupClientWithEnv({ EMAIL_IMAP_MAX_RECIPIENTS: '2' });
+      const result = await testClient.callTool('email_send', {
+        to: 'a@x.com, b@x.com, c@x.com',
+        subject: 'comma-string-over-cap',
+        text: 'body',
+      });
+      const json = result.json as Record<string, unknown>;
+      expect(json.ok).toBe(false);
+      expect(json.code).toBe('RECIPIENT_LIMIT_EXCEEDED');
+      expect(json.limit).toBe(2);
+      expect(json.observed).toBe(3);
+      expect(typeof json.error).toBe('string');
+      expect(mockTransport.sendMail).not.toHaveBeenCalled();
+    });
+
+    describe('VAL-EMAIL-025 — recipient counting is shape-invariant', () => {
+      const shapes: Array<{ name: string; args: Record<string, unknown> }> = [
+        {
+          name: 'string with commas',
+          args: { to: 'a@x.com, b@x.com' },
+        },
+        {
+          name: 'array of singles',
+          args: { to: ['a@x.com', 'b@x.com'] },
+        },
+        {
+          name: 'array of comma-strings',
+          args: { to: ['a@x.com, b@x.com'] },
+        },
+        {
+          name: 'to + cc split',
+          args: { to: 'a@x.com', cc: 'b@x.com' },
+        },
+      ];
+
+      for (const shape of shapes) {
+        it(`cap=2 allows shape "${shape.name}"`, async () => {
+          await setupClientWithEnv({ EMAIL_IMAP_MAX_RECIPIENTS: '2' });
+          const result = await testClient.callTool('email_send', {
+            ...shape.args,
+            subject: `shape-pass-${shape.name}`,
+            text: 'body',
+          });
+          const json = result.json as Record<string, unknown>;
+          expect(json.ok).toBe(true);
+          expect(mockTransport.sendMail).toHaveBeenCalledTimes(1);
+        });
+      }
+
+      for (const shape of shapes) {
+        it(`cap=1 rejects shape "${shape.name}" with RECIPIENT_LIMIT_EXCEEDED`, async () => {
+          await setupClientWithEnv({ EMAIL_IMAP_MAX_RECIPIENTS: '1' });
+          const result = await testClient.callTool('email_send', {
+            ...shape.args,
+            subject: `shape-fail-${shape.name}`,
+            text: 'body',
+          });
+          const json = result.json as Record<string, unknown>;
+          expect(json.ok).toBe(false);
+          expect(json.code).toBe('RECIPIENT_LIMIT_EXCEEDED');
+          expect(json.limit).toBe(1);
+          expect(json.observed).toBe(2);
+          expect(mockTransport.sendMail).not.toHaveBeenCalled();
+        });
+      }
+    });
+
     it('VAL-EMAIL-023 — vanilla single-recipient send still works under default caps', async () => {
       await setupClient();
       const result = await testClient.callTool('email_send', {
