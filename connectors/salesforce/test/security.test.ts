@@ -438,3 +438,125 @@ describe('M3.2 — OAuth callback bind (VAL-SALESFORCE-017..019)', () => {
     expect((addr as http.AddressInfo).address).toBe('127.0.0.1');
   });
 });
+
+// ---------------------------------------------------------------------------
+// M3-fix-A — quote-aware SOQL comment stripping (VAL-SALESFORCE-020..021)
+// ---------------------------------------------------------------------------
+
+describe('M3-fix-A — applyQueryLimitCap is quote-aware (VAL-SALESFORCE-020)', () => {
+  it("VAL-SALESFORCE-020 — preserves '//' inside a single-quoted URL literal", async () => {
+    const { applyQueryLimitCap } = await import('../src/tools/query.js');
+    const input = "SELECT Id FROM Lead WHERE Website = 'https://example.com/path'";
+    const output = applyQueryLimitCap(input, 200);
+    expect(output).toBe(
+      "SELECT Id FROM Lead WHERE Website = 'https://example.com/path' LIMIT 200",
+    );
+  });
+
+  it("VAL-SALESFORCE-020 — preserves '/* */' inside a single-quoted literal", async () => {
+    const { applyQueryLimitCap } = await import('../src/tools/query.js');
+    const input = "SELECT Id FROM Lead WHERE Notes__c LIKE '/* keep */ test'";
+    const output = applyQueryLimitCap(input, 200);
+    expect(output).toBe(
+      "SELECT Id FROM Lead WHERE Notes__c LIKE '/* keep */ test' LIMIT 200",
+    );
+  });
+
+  it("VAL-SALESFORCE-020 — respects '' (doubled-apostrophe) escape and keeps '// ok' literal intact", async () => {
+    const { applyQueryLimitCap } = await import('../src/tools/query.js');
+    const input = "SELECT Id FROM Lead WHERE Name = 'O''Brien // ok'";
+    const output = applyQueryLimitCap(input, 200);
+    expect(output).toBe(
+      "SELECT Id FROM Lead WHERE Name = 'O''Brien // ok' LIMIT 200",
+    );
+  });
+
+  it("VAL-SALESFORCE-020 — respects \\' (backslash-quote) escape inside a literal", async () => {
+    const { applyQueryLimitCap } = await import('../src/tools/query.js');
+    const input = "SELECT Id FROM Lead WHERE Name = 'a\\'b // ok'";
+    const output = applyQueryLimitCap(input, 200);
+    expect(output).toBe(
+      "SELECT Id FROM Lead WHERE Name = 'a\\'b // ok' LIMIT 200",
+    );
+  });
+
+  it('VAL-SALESFORCE-020 — quoted literal with // is not corrupted into an unterminated literal', async () => {
+    const { applyQueryLimitCap } = await import('../src/tools/query.js');
+    const input = "SELECT Id FROM Lead WHERE Website = 'https://example.com/path'";
+    const output = applyQueryLimitCap(input, 200);
+    // Quoted literal must remain balanced (count of single quotes is even).
+    const quoteCount = (output.match(/'/g) ?? []).length;
+    expect(quoteCount % 2).toBe(0);
+    // The original quoted span is preserved verbatim.
+    expect(output).toContain("'https://example.com/path'");
+  });
+});
+
+describe('M3-fix-A — applyQueryLimitCap LIMIT-bypass guard preserved (VAL-SALESFORCE-021)', () => {
+  it('VAL-SALESFORCE-021 — outside-quote // line comment after LIMIT still stripped', async () => {
+    const { applyQueryLimitCap } = await import('../src/tools/query.js');
+    const input = 'SELECT Id FROM Lead LIMIT 5000 // bypass';
+    const output = applyQueryLimitCap(input, 200);
+    expect(output).not.toMatch(/\/\//);
+    expect(output).not.toMatch(/bypass/);
+    const limitMatches = output.match(/\bLIMIT\b/gi) ?? [];
+    expect(limitMatches.length).toBe(1);
+    const limitNum = output.match(/\bLIMIT\s+(\d+)/i);
+    expect(limitNum).not.toBeNull();
+    expect(parseInt(limitNum![1], 10)).toBeLessThanOrEqual(200);
+  });
+
+  it('VAL-SALESFORCE-021 — outside-quote /* */ block comment after LIMIT still stripped', async () => {
+    const { applyQueryLimitCap } = await import('../src/tools/query.js');
+    const input = 'SELECT Id FROM Lead LIMIT 5000 /* bypass */';
+    const output = applyQueryLimitCap(input, 200);
+    expect(output).not.toMatch(/\/\*/);
+    expect(output).not.toMatch(/bypass/);
+    const limitMatches = output.match(/\bLIMIT\b/gi) ?? [];
+    expect(limitMatches.length).toBe(1);
+    const limitNum = output.match(/\bLIMIT\s+(\d+)/i);
+    expect(limitNum).not.toBeNull();
+    expect(parseInt(limitNum![1], 10)).toBeLessThanOrEqual(200);
+  });
+
+  it('VAL-SALESFORCE-021 — LIMIT 5000 OFFSET 100 → LIMIT capped, OFFSET preserved', async () => {
+    const { applyQueryLimitCap } = await import('../src/tools/query.js');
+    const input = 'SELECT Id FROM Lead LIMIT 5000 OFFSET 100';
+    const output = applyQueryLimitCap(input, 200);
+    expect(output).toBe('SELECT Id FROM Lead LIMIT 200 OFFSET 100');
+  });
+
+  it('VAL-SALESFORCE-021 — OFFSET-only input has LIMIT appended and OFFSET preserved', async () => {
+    const { applyQueryLimitCap } = await import('../src/tools/query.js');
+    const input = 'SELECT Id FROM Lead OFFSET 50';
+    const output = applyQueryLimitCap(input, 200);
+    expect(output).toBe('SELECT Id FROM Lead LIMIT 200 OFFSET 50');
+  });
+});
+
+describe('M3-fix-A — captured SOQL preserves quoted literals end-to-end (VAL-SALESFORCE-020)', () => {
+  let testClient: McpTestClient;
+  let tempConfig: TempConfigResult;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    if (tempConfig) tempConfig.cleanup();
+    vi.unstubAllEnvs();
+  });
+
+  it('VAL-SALESFORCE-020 — captured SOQL preserves // inside quoted Website value', async () => {
+    const { queries } = captureSoqlQueries();
+    tempConfig = createConfigWithToken();
+    testClient = await createTestClient({ env: createAuthEnv(tempConfig.configPath) });
+
+    const input = "SELECT Id, Name FROM Lead WHERE Website = 'https://example.com/path'";
+    const result = await testClient.callTool('salesforce_query', { query: input });
+    expect(result.json).toHaveProperty('ok', true);
+    const soql = queries.find((q) => q.includes('FROM Lead')) ?? '';
+    expect(soql, `expected one SOQL query against Lead, got: ${queries.join(' | ')}`).not.toBe('');
+    // Quoted literal preserved verbatim, so the URL with `//` is intact.
+    expect(soql).toContain("'https://example.com/path'");
+    // LIMIT cap applied because input had no LIMIT.
+    expect(soql).toMatch(/\bLIMIT\s+200\b/);
+  });
+});
