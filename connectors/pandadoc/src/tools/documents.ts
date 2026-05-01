@@ -6,6 +6,7 @@ import { pandadocFetch, pandadocFetchRaw } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
 import { MAX_FILE_SIZE } from '../types.js';
+import { resolveUploadPath } from './path-safety.js';
 import type {
   DocumentListResponse,
   DocumentCreateResponse,
@@ -297,7 +298,31 @@ RELATED TOOLS:
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
 
-      const resolvedPath = path.resolve(args.file_path);
+      // ----------------------------------------------------------------
+      // SECURITY (M3.7): sandbox local file reads to under
+      // `MCP_WORKSPACE_PATH` (or `os.tmpdir()` if unset). LLM-controlled
+      // input cannot be allowed to point at arbitrary host files such as
+      // `~/.ssh/id_rsa` or `/etc/passwd`, where the bytes would otherwise
+      // be uploaded to the PandaDoc API as a "document".
+      //
+      // `resolveUploadPath` performs lexical containment, then
+      // canonicalises the path through `fs.realpathSync` so a symlink
+      // inside the workspace pointing OUTSIDE the workspace is refused.
+      // ----------------------------------------------------------------
+      const sandboxResult = resolveUploadPath(args.file_path);
+      if (!sandboxResult.ok) {
+        return JSON.stringify({
+          ok: false,
+          error: sandboxResult.error,
+          resolution:
+            'Place the file under MCP_WORKSPACE_PATH (or os.tmpdir() when ' +
+            'the env var is unset) before uploading.',
+        });
+      }
+      // Defence-in-depth: re-canonicalise via fs.realpathSync at the very
+      // last moment to close the (vanishingly small) TOCTOU window between
+      // sandbox validation and the readFileSync call below.
+      const resolvedPath = fs.realpathSync(sandboxResult.path);
 
       // Validate file exists and check size
       let fileInfo: fs.Stats;
@@ -413,6 +438,15 @@ RELATED TOOLS:
 
 The document must be in 'document.draft' status before sending.
 Optionally include a custom email message and subject line.
+
+⚠️ WARNING — silent: true SUPPRESSES SIGNER NOTIFICATIONS.
+Setting silent: true tells PandaDoc to skip / suppress the email notifications
+that would normally be sent to every recipient. The document is still marked
+as sent on the PandaDoc side, but no signer notification email is delivered,
+which means recipients have no way of knowing the document is waiting for
+them unless they are notified through some other channel. Default is false
+(notifications are sent). Only pass silent: true when the user has explicitly
+asked you to skip / suppress the email notifications for this send.
 
 COMMON MISTAKES:
 - Cannot send a document in 'document.uploaded' status — wait for 'document.draft'
