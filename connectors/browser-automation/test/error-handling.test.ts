@@ -215,9 +215,10 @@ describe('Error handling — Browser Automation', () => {
 
     testClient = await createTestClient({ env: {} });
 
-    // Verify tools list works
+    // Verify tools list works. Default surface is 17 tools — browser_evaluate
+    // is gated behind BROWSER_AUTOMATION_ALLOW_EVAL=1 (see M3.12 / VAL-BROWSER-001..003).
     const toolsResult = await testClient.client.listTools();
-    expect(toolsResult.tools).toHaveLength(18);
+    expect(toolsResult.tools).toHaveLength(17);
 
     // Verify a tool call works without any credentials
     const result = await testClient.client.callTool({
