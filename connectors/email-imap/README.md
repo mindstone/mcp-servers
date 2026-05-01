@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-email-imap.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-email-imap)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Email IMAP/SMTP MCP server for Model Context Protocol hosts. Read, search, send, and manage emails through IMAP and SMTP — supports iCloud Mail, Yahoo Mail, and custom IMAP providers.
+Email IMAP/SMTP MCP server for Model Context Protocol hosts. Read, search, send, and manage emails through IMAP and SMTP — supports iCloud Mail, Gmail, Yahoo Mail, Outlook / Microsoft 365, and custom IMAP providers.
 
 ## Requirements
 
@@ -38,11 +38,21 @@ node dist/index.js
 
 - `EMAIL_IMAP_EMAIL` — email address
 - `EMAIL_IMAP_PASSWORD` — app-specific password
-- `EMAIL_IMAP_PROVIDER` — email provider (e.g. `icloud`, `yahoo`, or blank for custom)
-- `EMAIL_IMAP_IMAP_HOST` — custom IMAP host (optional, for custom providers)
-- `EMAIL_IMAP_SMTP_HOST` — custom SMTP host (optional, for custom providers)
+- `EMAIL_IMAP_PROVIDER` — email provider (`icloud`, `gmail`, `yahoo`, `outlook`,
+  or `custom`). When unset, the connector auto-detects the provider from the
+  email's domain (e.g. `@gmail.com` → `gmail`, `@icloud.com` → `icloud`,
+  `@outlook.com` → `outlook`, `@yahoo.co.uk` → `yahoo`). If the domain is not
+  recognised, the connector refuses to start with a clear error — it will
+  **not** silently fall back to a default provider.
+- `EMAIL_IMAP_IMAP_HOST` — custom IMAP host (optional, for `custom` providers)
+- `EMAIL_IMAP_SMTP_HOST` — custom SMTP host (optional, for `custom` providers)
 - `EMAIL_IMAP_IMAP_PORT` — custom IMAP port (default: `993`)
 - `EMAIL_IMAP_SMTP_PORT` — custom SMTP port (default: `587`)
+- `EMAIL_IMAP_ALLOW_PLAINTEXT` — set to `1` to opt into cleartext IMAP
+  (`imap_port=143`) or SMTP (`smtp_port=25`) for `provider: custom`.
+  **Strongly discouraged** — credentials and message bodies will travel
+  unencrypted. With this env var unset, the connector refuses to start
+  when a cleartext port is configured.
 - `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
 - `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
 

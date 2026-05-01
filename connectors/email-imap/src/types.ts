@@ -43,6 +43,12 @@ export interface ClientConfig {
   smtpHost: string;
   smtpPort: number;
   smtpSecure: boolean;
+  /**
+   * When true, force STARTTLS upgrade for SMTP submission. Always true for
+   * known-provider presets and for `provider: custom` unless the user has
+   * explicitly opted into plaintext via `EMAIL_IMAP_ALLOW_PLAINTEXT=1`.
+   */
+  smtpRequireTLS: boolean;
   email: string;
   password: string;
 }
@@ -65,6 +71,12 @@ export interface SmtpClientConfig {
   host: string;
   port: number;
   secure: boolean;
+  /**
+   * When true, force STARTTLS upgrade. Maps to nodemailer's `requireTLS` /
+   * `tls.required` option so a plain-port (587) submission cannot silently
+   * stay un-encrypted.
+   */
+  requireTLS?: boolean;
   user: string;
   pass: string;
 }

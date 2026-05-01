@@ -149,7 +149,10 @@ describe('Provider presets', () => {
     const result = await testClient.callTool('configure_email_imap', {
       email: 'test@example.com',
       password: 'test-pass',
-      provider: 'gmail',
+      // Use a provider name that is genuinely not in `presets.ts` (M3.4
+      // added gmail/outlook to the preset list, so they are no longer
+      // suitable as "unsupported" examples here).
+      provider: 'aol',
     });
 
     expect(result.isError).toBe(true);
