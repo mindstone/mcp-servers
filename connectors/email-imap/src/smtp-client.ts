@@ -9,6 +9,7 @@ function sameConfig(a: SmtpClientConfig, b: SmtpClientConfig): boolean {
     a.host === b.host &&
     a.port === b.port &&
     a.secure === b.secure &&
+    a.requireTLS === b.requireTLS &&
     a.user === b.user &&
     a.pass === b.pass
   );
@@ -43,6 +44,11 @@ export async function getTransport(): Promise<MailTransporter> {
     host: config.host,
     port: config.port,
     secure: config.secure,
+    // Force STARTTLS upgrade for plain-port (587) submission so a hostile
+    // DNS / MITM cannot keep the connection in cleartext. Only `false`
+    // when the user has explicitly opted into plaintext for `provider:
+    // custom` via `EMAIL_IMAP_ALLOW_PLAINTEXT=1`.
+    requireTLS: config.requireTLS ?? !config.secure,
     auth: {
       user: config.user,
       pass: config.pass,

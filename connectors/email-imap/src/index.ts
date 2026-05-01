@@ -20,6 +20,7 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createServer } from './server.js';
 import { initClients, getCredentials } from './tools/index.js';
+import { detectProviderFromEmail, listPresetKeys } from './presets.js';
 
 async function main() {
   const server = createServer();
@@ -30,11 +31,29 @@ async function main() {
   const password = creds.password.trim();
 
   if (email && password) {
-    const provider = creds.provider.trim().toLowerCase() || 'icloud';
+    let provider = creds.provider.trim().toLowerCase();
+    if (!provider) {
+      // Non-breaking auto-detect for known providers via the email's domain
+      // (M3.4 / VAL-EMAIL-010..012). Refuse to start when no preset claims
+      // the domain — silently defaulting to a particular provider
+      // (historically `icloud`) is unsafe: it points the IMAP/SMTP clients
+      // at the wrong servers and trains hosts to ignore startup errors.
+      const detected = detectProviderFromEmail(email);
+      if (!detected) {
+        const supported = [...listPresetKeys(), 'custom'].join(', ');
+        console.error(
+          `Email IMAP startup refused: cannot auto-detect provider from EMAIL_IMAP_EMAIL=${email}. ` +
+            `Set EMAIL_IMAP_PROVIDER explicitly to one of: ${supported}.`,
+        );
+        process.exit(1);
+      }
+      provider = detected;
+    }
     try {
       await initClients({ email, password, provider });
     } catch (error) {
       console.error('Failed to initialize Email IMAP clients from environment:', error);
+      process.exit(1);
     }
   }
 
