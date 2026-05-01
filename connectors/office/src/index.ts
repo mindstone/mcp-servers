@@ -33,8 +33,81 @@ const __dirname = path.dirname(__filename);
 // The sidecar uses HTTPS with a trusted localhost cert (via office-addin-dev-certs).
 // Office requires HTTPS for SourceLocation URLs. Since this MCP process connects
 // to the same-machine sidecar, we skip cert verification to avoid trust issues
-// when the CA hasn't been installed yet.
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+// when the CA hasn't been installed yet — but ONLY for loopback connections.
+//
+// SECURITY (M3.1, VAL-OFFICE-001..003): the previous implementation flipped
+// the Node global TLS-bypass env var process-wide, which would disable
+// certificate validation for every HTTPS request issued by this Node process
+// (including unrelated outbound calls another connector might make if loaded
+// into the same process). We now scope the relaxation to a dedicated
+// `https.Agent` that is ONLY attached to requests whose hostname is loopback
+// (`127.0.0.1`, `::1`, or `localhost`). Non-loopback HTTPS requests honour
+// standard certificate validation.
+const loopbackHttpsAgent = new https.Agent({ rejectUnauthorized: false });
+
+const isLoopbackHostname = (hostname) => {
+  if (!hostname) return false;
+  // Strip surrounding brackets that `URL.hostname` already removes for IPv6,
+  // but defend in case a caller passes a raw `[::1]`.
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  return h === '127.0.0.1' || h === '::1' || h === 'localhost';
+};
+
+/**
+ * Loopback-only HTTPS helper used by the office connector to talk to its
+ * sidecar over the office-addin dev cert. For loopback hostnames the dedicated
+ * `loopbackHttpsAgent` (rejectUnauthorized: false) is attached; for any other
+ * hostname the default agent is used so standard certificate validation
+ * applies. The shape is fetch-like so existing call sites can swap in with
+ * minimal churn.
+ */
+const loopbackHttpsRequest = (url, init = {}) => {
+  const u = new URL(url);
+  if (u.protocol !== 'https:') {
+    return Promise.reject(new Error(`loopbackHttpsRequest requires https: URL, got ${u.protocol}`));
+  }
+  const hostname = u.hostname;
+  const agent = isLoopbackHostname(hostname) ? loopbackHttpsAgent : undefined;
+
+  return new Promise((resolve, reject) => {
+    const requestOptions = {
+      hostname,
+      port: u.port || 443,
+      path: `${u.pathname}${u.search}`,
+      method: init.method ?? 'GET',
+      headers: init.headers,
+      agent,
+    };
+    if (typeof init.lookup === 'function') {
+      // Test-only DNS override; production callers never set this.
+      requestOptions.lookup = init.lookup;
+    }
+
+    const req = https.request(requestOptions, (res) => {
+      const chunks = [];
+      res.on('data', (chunk) => { chunks.push(chunk); });
+      res.on('end', () => {
+        const buffer = Buffer.concat(chunks);
+        const body = buffer.toString('utf8');
+        const status = res.statusCode ?? 0;
+        resolve({
+          ok: status >= 200 && status < 300,
+          status,
+          statusText: res.statusMessage ?? '',
+          headers: res.headers,
+          json: async () => JSON.parse(body),
+          text: async () => body,
+        });
+      });
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    if (init.body !== undefined && init.body !== null) {
+      req.write(init.body);
+    }
+    req.end();
+  });
+};
 
 // ---------------------------------------------------------------------------
 // Sidecar state — discover the Office sidecar via state file
@@ -515,7 +588,9 @@ const sidecarRequest = async (app, action, params = {}) => {
 
   const makeRequest = async (token) => {
     const url = `https://127.0.0.1:${state.port}/${app}/${action}`;
-    const response = await fetch(url, {
+    // Use the loopback-scoped HTTPS helper rather than global fetch so the
+    // dev-cert relaxation is per-request and only effective for loopback hosts.
+    const response = await loopbackHttpsRequest(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -999,7 +1074,8 @@ server.registerTool(TOOL_NAMES.status, {
 
   try {
     const url = `https://127.0.0.1:${state.port}/health`;
-    const response = await fetch(url);
+    // Loopback-scoped helper — see comment above `loopbackHttpsRequest`.
+    const response = await loopbackHttpsRequest(url);
     const health = await response.json();
 
     const connected = health.connected || {};
@@ -3846,6 +3922,9 @@ if (isMainModule) {
 export const __test = {
   ensureSidecar,
   loadSidecarState,
+  loopbackHttpsAgent,
+  loopbackHttpsRequest,
+  isLoopbackHostname,
   setSpawnSidecarAndWaitForTests(fn: typeof defaultSpawnSidecarAndWait) {
     spawnSidecarAndWait = fn;
   },
