@@ -175,8 +175,18 @@ describe('Speech tools', () => {
         env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
       });
 
+      // Use an in-workspace (os.tmpdir() default) missing-file path so
+      // the M3.9 sandbox does NOT trigger before the FILE_NOT_FOUND
+      // branch — this test is the no-such-file regression, not the
+      // out-of-sandbox regression (those live in
+      // test/transcription-security.test.ts).
+      const missingInTmp = path.join(
+        fs.realpathSync(os.tmpdir()),
+        `nonexistent-audio-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`,
+      );
+
       const result = await testClient.callTool('transcribe_audio', {
-        file_path: '/tmp/nonexistent-audio-file-12345.mp3',
+        file_path: missingInTmp,
       });
 
       // Must return isError: true via withErrorHandling
