@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeQboql } from '../utils.js';
+import { withErrorHandling, escapeQboql, requireProdWritesEnabled } from '../utils.js';
 import { qboFetch, qboQuery } from '../client.js';
 
 export function registerVendorTools(server: McpServer): void {
@@ -56,6 +56,7 @@ Example: { "displayName": "AWS", "email": "billing@aws.amazon.com", "companyName
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
+      requireProdWritesEnabled();
       const vendorBody: Record<string, unknown> = { DisplayName: args.displayName };
       if (args.email) vendorBody.PrimaryEmailAddr = { Address: args.email };
       if (args.phone) vendorBody.PrimaryPhone = { FreeFormNumber: args.phone };

@@ -45,7 +45,11 @@ COMMON MISTAKES:
         environment: z.enum(['sandbox', 'production']).optional().default('production')
           .describe('"sandbox" or "production" (default: production)'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+      // configure_quickbooks stores credentials via the host bridge; it does NOT
+      // perform any destructive write against the user's QuickBooks company data.
+      // The QB_ALLOW_PROD_WRITES gate (see utils.ts) targets QuickBooks data
+      // mutations only, so configure_quickbooks is annotated as non-destructive.
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     },
     withErrorHandling(async (args) => {
       const cid = args.clientId.trim();

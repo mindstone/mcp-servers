@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeQboql } from '../utils.js';
+import { withErrorHandling, escapeQboql, requireProdWritesEnabled } from '../utils.js';
 import { qboFetch, qboQuery } from '../client.js';
 
 export function registerCustomerTools(server: McpServer): void {
@@ -57,6 +57,7 @@ Example: { "displayName": "Jane Smith", "email": "jane@smith.com", "phone": "555
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
+      requireProdWritesEnabled();
       const customerBody: Record<string, unknown> = { DisplayName: args.displayName };
       if (args.email) customerBody.PrimaryEmailAddr = { Address: args.email };
       if (args.phone) customerBody.PrimaryPhone = { FreeFormNumber: args.phone };
