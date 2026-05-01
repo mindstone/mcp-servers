@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { resolveSavePath, getWorkspaceRoot } from '../src/tools/path-safety.js';
+import * as fs from 'fs';
+import * as os from 'os';
+import { resolveSavePath, resolveSourcePath, getWorkspaceRoot } from '../src/tools/path-safety.js';
 import * as path from 'path';
 
 describe('Path traversal safety — resolveSavePath', () => {
@@ -179,6 +181,135 @@ describe('Path traversal safety — resolveSavePath', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toContain('workspace root');
+    }
+  });
+});
+
+/**
+ * M3-fix-C — canonical-prefix fix for resolveSourcePath.
+ *
+ * On macOS, `os.tmpdir()` and the well-known `/tmp` alias are reachable
+ * through a symlink (e.g. `/tmp` → `/private/tmp`). Previously the
+ * lexical-prefix check fired BEFORE realpath canonicalisation, which
+ * wrongly rejected in-workspace files supplied via the symlinked alias.
+ *
+ * The fix canonicalises the deepest existing ancestor of the candidate
+ * path before the prefix check. Regression-tests below confirm `..`
+ * traversal, out-of-root absolutes, and in-workspace symlinks pointing
+ * outside the workspace are still rejected (VAL-CROSS-013).
+ */
+describe('resolveSourcePath — canonical-prefix sandbox (M3-fix-C)', () => {
+  const createdFiles: string[] = [];
+  const createdSymlinks: string[] = [];
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    for (const link of createdSymlinks) {
+      try { fs.unlinkSync(link); } catch { /* ignore */ }
+    }
+    createdSymlinks.length = 0;
+    for (const f of createdFiles) {
+      try { fs.unlinkSync(f); } catch { /* ignore */ }
+    }
+    createdFiles.length = 0;
+  });
+
+  /**
+   * Find a directory accessible via two paths: a symlinked alias and its
+   * canonical (realpath'd) target. Returns null if no such pair exists
+   * (e.g. on Linux where `/tmp` is typically a real directory).
+   */
+  function findSymlinkAlias(): { alias: string; canonical: string } | null {
+    const candidates = ['/tmp'];
+    for (const c of candidates) {
+      try {
+        if (!fs.existsSync(c)) continue;
+        const real = fs.realpathSync(c);
+        if (real !== c) {
+          return { alias: c, canonical: real };
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    return null;
+  }
+
+  it('VAL-NANO-105 — accepts in-workspace file reached through symlinked workspace prefix', () => {
+    if (process.platform === 'win32') return;
+    const aliasInfo = findSymlinkAlias();
+    if (!aliasInfo) return; // platform has no symlinked alias to test against
+
+    const uniq = `nano-105-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
+    const realFile = path.join(aliasInfo.canonical, uniq);
+    const aliasFile = path.join(aliasInfo.alias, uniq);
+    fs.writeFileSync(realFile, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    createdFiles.push(realFile);
+
+    vi.stubEnv('MCP_WORKSPACE_PATH', aliasInfo.alias);
+
+    const result = resolveSourcePath(aliasFile);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // Canonicalised path is returned (under the realpath of the workspace).
+      expect(result.path).toBe(realFile);
+    }
+  });
+
+  // ---------------------- VAL-CROSS-013 regression ----------------------
+
+  it('VAL-CROSS-013 — `..` traversal still refused under symlinked workspace alias', () => {
+    if (process.platform === 'win32') return;
+    const aliasInfo = findSymlinkAlias();
+    if (!aliasInfo) return;
+
+    vi.stubEnv('MCP_WORKSPACE_PATH', aliasInfo.alias);
+
+    const traversal = path.join(aliasInfo.alias, '..', '..', 'etc', 'passwd');
+    const result = resolveSourcePath(traversal);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/workspace|sandbox|outside/i);
+    }
+  });
+
+  it('VAL-CROSS-013 — absolute out-of-root path still refused (no fs lookup of missing leaf required)', () => {
+    if (process.platform === 'win32') return;
+    const aliasInfo = findSymlinkAlias();
+    if (!aliasInfo) return;
+
+    vi.stubEnv('MCP_WORKSPACE_PATH', aliasInfo.alias);
+
+    // Non-existent leaf — must still be rejected before any disk read of the leaf.
+    const result = resolveSourcePath('/etc/this-file-does-not-exist-nano-105.png');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/workspace|sandbox|outside/i);
+    }
+  });
+
+  it('VAL-CROSS-013 — in-workspace symlink pointing OUTSIDE the workspace still refused', () => {
+    if (process.platform === 'win32') return;
+
+    // Create an isolated workspace + an isolated outside dir, BOTH realpath'd.
+    const workspaceDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'nano-105-ws-')));
+    const outsideDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'nano-105-out-')));
+    try {
+      const target = path.join(outsideDir, 'escape.png');
+      fs.writeFileSync(target, Buffer.from([1, 2, 3]));
+      const link = path.join(workspaceDir, 'escape.png');
+      fs.symlinkSync(target, link);
+      createdSymlinks.push(link);
+
+      vi.stubEnv('MCP_WORKSPACE_PATH', workspaceDir);
+      const result = resolveSourcePath(link);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toMatch(/workspace|sandbox|outside|symlink/i);
+      }
+    } finally {
+      try { fs.rmSync(workspaceDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      try { fs.rmSync(outsideDir, { recursive: true, force: true }); } catch { /* ignore */ }
     }
   });
 });
