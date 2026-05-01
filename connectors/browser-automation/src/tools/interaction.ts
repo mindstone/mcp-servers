@@ -153,23 +153,36 @@ WORKFLOW: browser_snapshot → find input @ref → browser_fill`,
     }),
   );
 
-  server.registerTool(
-    'browser_evaluate',
-    {
-      description: 'Execute JavaScript in the page context and return the result.',
-      inputSchema: {
-        script: z.string().describe('JavaScript code to execute'),
+  // M3.12 — `browser_evaluate` lets the model run arbitrary JavaScript inside
+  // the page context, which is the security equivalent of giving it a shell
+  // on whatever site it has just navigated to. To prevent prompt-injected
+  // content from doing this silently, the tool is registered ONLY when the
+  // host explicitly opts in via `BROWSER_AUTOMATION_ALLOW_EVAL=1`. Without
+  // that env var the tool is not in the tools list at all (the LLM cannot
+  // even see it). When enabled it carries `destructiveHint: true` so MCP
+  // hosts can require explicit user confirmation before each invocation.
+  if (process.env.BROWSER_AUTOMATION_ALLOW_EVAL === '1') {
+    server.registerTool('browser_evaluate', // eslint-disable-line @typescript-eslint/quotes
+      {
+        description:
+          'Execute JavaScript in the page context and return the result. ' +
+          'DESTRUCTIVE: this is equivalent to running arbitrary code with the privileges of the current page; ' +
+          'hosts SHOULD require user confirmation before each call. ' +
+          'Only registered when BROWSER_AUTOMATION_ALLOW_EVAL=1 is set.',
+        inputSchema: {
+          script: z.string().describe('JavaScript code to execute'),
+        },
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
       },
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: true,
-      },
-    },
-    withErrorHandling(async (args) => {
-      const result = await execAgentBrowser(['eval', args.script]);
-      return JSON.stringify({ ok: true, result: result.stdout.trim() });
-    }),
-  );
+      withErrorHandling(async (args) => {
+        const result = await execAgentBrowser(['eval', args.script]);
+        return JSON.stringify({ ok: true, result: result.stdout.trim() });
+      }),
+    );
+  }
 }

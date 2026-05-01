@@ -1,7 +1,13 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { execAgentBrowser } from '../browser-client.js';
-import { withErrorHandling } from '../utils.js';
+import { validateUrlScheme, withErrorHandling } from '../utils.js';
+
+// URL scheme deny-list applied to browser_authenticate (validated by
+// `validateUrlScheme` in utils.ts): only http: and https: URLs are
+// permitted; about:blank is special-cased. Refused: file:, chrome:,
+// chrome-extension:, javascript:, data:, view-source:, and about: URLs
+// other than about:blank.
 
 export function registerSessionTools(server: McpServer): void {
   server.registerTool(
@@ -56,7 +62,7 @@ export function registerSessionTools(server: McpServer): void {
 WHEN TO USE: "I need to access LinkedIn", "Log me into WhatsApp", etc.
 Tell the user to close the browser when done logging in, or call browser_close.`,
       inputSchema: {
-        url: z.string().describe('Website URL to open for login'),
+        url: z.string().describe('Website URL to open for login (http://, https://, or about:blank)'),
       },
       annotations: {
         readOnlyHint: false,
@@ -66,6 +72,7 @@ Tell the user to close the browser when done logging in, or call browser_close.`
       },
     },
     withErrorHandling(async (args) => {
+      validateUrlScheme(args.url);
       await execAgentBrowser(['open', args.url], { headed: true });
       return JSON.stringify({
         ok: true,
