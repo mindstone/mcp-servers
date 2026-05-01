@@ -9,10 +9,81 @@ import { ConnectorError, type SaveResult } from '../types.js';
 // we defensively strip both because callers (or attackers crafting
 // tool-arguments) commonly use them to evade naive trailing-LIMIT
 // regexes.
+//
+// The walker is QUOTE-AWARE: characters inside a SOQL single-quoted string
+// literal are preserved verbatim. SOQL string literals support two escape
+// forms for an embedded apostrophe: doubled-quote `''` and backslash-quote
+// `\'`. We honour both, plus generic backslash-escapes (`\\`, `\n`, etc.)
+// which simply consume the next character. Without quote-awareness, a
+// query like `WHERE Website = 'https://example.com/path'` would be
+// corrupted to `WHERE Website = 'https:` (unterminated literal), since
+// the naive global regex would treat the `//` inside the quoted span as
+// a line comment.
 function stripSoqlComments(query: string): string {
-  return query
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/\/\/[^\n]*/g, ' ');
+  let out = '';
+  let i = 0;
+  const n = query.length;
+  while (i < n) {
+    const ch = query[i];
+
+    // Inside a single-quoted SOQL string literal: copy verbatim until the
+    // matching close-quote, honouring backslash escapes and the doubled-
+    // apostrophe escape ('').
+    if (ch === "'") {
+      out += ch;
+      i++;
+      while (i < n) {
+        const c = query[i];
+        if (c === '\\' && i + 1 < n) {
+          // Generic backslash escape: keep both characters verbatim.
+          out += c + query[i + 1];
+          i += 2;
+          continue;
+        }
+        if (c === "'") {
+          // Doubled-apostrophe = literal apostrophe inside the literal.
+          if (i + 1 < n && query[i + 1] === "'") {
+            out += "''";
+            i += 2;
+            continue;
+          }
+          // Closing quote.
+          out += "'";
+          i++;
+          break;
+        }
+        out += c;
+        i++;
+      }
+      continue;
+    }
+
+    // Outside any quoted literal: strip block + line comments.
+    if (ch === '/' && i + 1 < n) {
+      const next = query[i + 1];
+      if (next === '*') {
+        // Block comment: consume up to the closing */ (or EOF).
+        i += 2;
+        while (i < n && !(query[i] === '*' && i + 1 < n && query[i + 1] === '/')) {
+          i++;
+        }
+        if (i < n) i += 2; // skip the closing */
+        out += ' ';
+        continue;
+      }
+      if (next === '/') {
+        // Line comment: consume up to (but not including) the newline.
+        i += 2;
+        while (i < n && query[i] !== '\n') i++;
+        out += ' ';
+        continue;
+      }
+    }
+
+    out += ch;
+    i++;
+  }
+  return out;
 }
 
 /**
