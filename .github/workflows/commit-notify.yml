@@ -1,0 +1,106 @@
+name: Commit Notifications
+
+# Post push notifications to Slack for all commits on main.
+# Reuses the same SLACK_WEBHOOK_URL secret as pr-notify.yml so commit
+# notifications land in the same channel as PR notifications.
+#
+# Security notes for future maintainers:
+# - All ${{ github.* }} values are passed through `env:` rather than inline
+#   so they are never substituted directly into the shell script. Do not
+#   move them back inline.
+# - Commit subjects ($SUBJECT) are attacker-influenced text (a contributor
+#   can craft a malicious commit message in a PR that gets merged). They
+#   are only ever passed as `printf` arguments inside double-quoted variable
+#   expansions, which is safe. DO NOT eval, source, or shell-substitute
+#   them, and DO NOT remove the `--rawfile` jq passthrough below (which
+#   guarantees JSON escaping of the Slack payload).
+# - Fail-soft: if the secret is missing (e.g. on a fork), skip silently.
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    name: Slack Commit Notification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build commit message
+        id: message
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+          PUSHER: ${{ github.actor }}
+          REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          REPO_URL="https://github.com/${REPO}"
+
+          # Handle first push (before is all zeros)
+          if [[ "$BEFORE_SHA" == "0000000000000000000000000000000000000000" ]]; then
+            SHAS=$(git log --format="%H" -10 "$AFTER_SHA")
+          else
+            SHAS=$(git log --format="%H" "${BEFORE_SHA}..${AFTER_SHA}" | tac)
+          fi
+
+          COMMIT_COUNT=$(echo "$SHAS" | grep -c .)
+
+          # Detect automated commits (e.g. dependabot, release bots)
+          LATEST_AUTHOR=$(git log -1 --format="%an" "$AFTER_SHA")
+          if [[ "$LATEST_AUTHOR" == "github-actions[bot]" ]]; then
+            ATTRIBUTION="automatically by CI"
+          else
+            ATTRIBUTION="by ${PUSHER}"
+          fi
+
+          # Build commit list with links. SUBJECT is attacker-influenced text:
+          # only used as a printf argument, never shell-evaluated.
+          COMMITS=""
+          while IFS= read -r sha; do
+            [[ -z "$sha" ]] && continue
+            SHORT_SHA="${sha:0:7}"
+            SUBJECT=$(git log -1 --format="%s" "$sha")
+            if [[ -n "$COMMITS" ]]; then
+              COMMITS+=$'\n'
+            fi
+            COMMITS+=$(printf '<%s/commit/%s|%s> - %s' "$REPO_URL" "$sha" "$SHORT_SHA" "$SUBJECT")
+          done <<< "$SHAS"
+
+          REPO_NAME="${REPO#*/}"
+
+          if [[ "$COMMIT_COUNT" -eq 1 ]]; then
+            HEADER="${COMMIT_COUNT} new commit pushed to *${REF_NAME}* on <${REPO_URL}|${REPO_NAME}> ${ATTRIBUTION}"
+          else
+            HEADER="${COMMIT_COUNT} new commits pushed to *${REF_NAME}* on <${REPO_URL}|${REPO_NAME}> ${ATTRIBUTION}"
+          fi
+
+          MESSAGE="${HEADER}"$'\n'"${COMMITS}"
+
+          # Write to file so the next step doesn't have to deal with multiline
+          # GITHUB_OUTPUT escaping.
+          printf '%s' "$MESSAGE" > /tmp/slack-message.txt
+
+      - name: Post to Slack
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_WEBHOOK_URL not configured — skipping notification"
+            exit 0
+          fi
+
+          # jq --rawfile + --arg ensures commit text is JSON-escaped and
+          # cannot break out of the `text` field.
+          payload="$(jq -n --rawfile text /tmp/slack-message.txt '{text: $text}')"
+
+          curl -sS -X POST "$SLACK_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$payload"
