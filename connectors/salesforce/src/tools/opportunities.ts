@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeSOQL, validateFields, validateAndMergeCustomFields, formatSOQLDate, checkSaveResult } from '../utils.js';
+import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, formatSOQLDate, checkSaveResult } from '../utils.js';
 import { withConnection } from '../client.js';
 import { ConnectorError, type SaveResult } from '../types.js';
 
@@ -26,7 +26,7 @@ export function registerOpportunityTools(server: McpServer): void {
         const fields = validateFields(args.fields || [], defaultFields);
         let query = `SELECT ${fields.join(', ')} FROM Opportunity`;
         const conditions: string[] = [];
-        if (args.name_contains) conditions.push(`Name LIKE '%${escapeSOQL(args.name_contains)}%'`);
+        if (args.name_contains) conditions.push(`Name LIKE '%${escapeSOQLLike(args.name_contains)}%'`);
         if (args.stage) conditions.push(`StageName = '${escapeSOQL(args.stage)}'`);
         if (args.related_account_id) conditions.push(`AccountId = '${escapeSOQL(args.related_account_id)}'`);
         if (args.close_date_from) conditions.push(`CloseDate >= ${formatSOQLDate(args.close_date_from, 'close_date_from')}`);

@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeSOQL, validateFields, validateAndMergeCustomFields, checkSaveResult } from '../utils.js';
+import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, checkSaveResult } from '../utils.js';
 import { withConnection } from '../client.js';
 import { type SaveResult } from '../types.js';
 
@@ -24,7 +24,7 @@ export function registerAccountTools(server: McpServer): void {
         const fields = validateFields(args.fields || [], defaultFields);
         let query = `SELECT ${fields.join(', ')} FROM Account`;
         const conditions: string[] = [];
-        if (args.name_contains) conditions.push(`Name LIKE '%${escapeSOQL(args.name_contains)}%'`);
+        if (args.name_contains) conditions.push(`Name LIKE '%${escapeSOQLLike(args.name_contains)}%'`);
         if (args.industry) conditions.push(`Industry = '${escapeSOQL(args.industry)}'`);
         if (args.account_type) conditions.push(`Type = '${escapeSOQL(args.account_type)}'`);
         if (conditions.length > 0) query += ` WHERE ${conditions.join(' AND ')}`;

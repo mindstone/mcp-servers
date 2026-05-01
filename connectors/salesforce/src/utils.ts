@@ -41,10 +41,36 @@ export function withErrorHandling<T>(
 
 /**
  * Escape a string value for safe use in SOQL queries.
+ *
+ * Escapes the four characters that SOQL gives special meaning to:
+ *   - `\\`  (backslash — the SOQL escape character)
+ *   - `'`   (single quote — string delimiter; SOQL doubles the quote)
+ *   - `%`   (LIKE wildcard — matches zero-or-more characters)
+ *   - `_`   (LIKE wildcard — matches exactly one character)
+ *
+ * The wildcard characters MUST be escaped at every interpolation site so
+ * that user-supplied substrings cannot expand the pattern beyond the
+ * literal value the caller intended. For LIKE sites, prefer the
+ * dedicated `escapeSOQLLike` helper for an explicit signal of intent.
  */
 export function escapeSOQL(value: string): string {
   if (!value) return '';
-  return value.replace(/\\/g, '\\\\').replace(/'/g, "''");
+  return value
+    // Backslash MUST be escaped first to avoid double-escaping.
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "''")
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_');
+}
+
+/**
+ * Escape a user-supplied substring for interpolation inside a SOQL
+ * `LIKE '%...%'` clause. Identical to `escapeSOQL` semantically (both
+ * escape `\\`, `'`, `%`, `_`) but exists as a separate helper so every
+ * `LIKE` site is unambiguously marked as wildcard-aware.
+ */
+export function escapeSOQLLike(value: string): string {
+  return escapeSOQL(value);
 }
 
 /**
