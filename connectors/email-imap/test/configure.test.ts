@@ -92,6 +92,59 @@ describe('Configure tool', () => {
     expect(result.isError).toBe(true);
   });
 
+  // VAL-EMAIL-026 — configure_email_imap MUST NOT silently default to icloud
+  // when neither a `provider` argument nor `EMAIL_IMAP_PROVIDER` env var is
+  // set. Behaviour must match index.ts startup (M3.4): auto-detect via
+  // detectProviderFromEmail and refuse unknown domains with a clear error.
+  describe('VAL-EMAIL-026 — provider auto-detect parity (no silent iCloud fallback)', () => {
+    it.each([
+      {
+        case: 'auto-detects gmail from email when no provider arg or env is set',
+        email: 'alice@gmail.com',
+        expectIsError: false,
+        expectProvider: 'gmail',
+      },
+      {
+        case: 'unknown domain refuses with provider-detection error',
+        email: 'x@unknown.example',
+        expectIsError: true,
+        expectProvider: undefined,
+      },
+    ])('$case', async ({ email, expectIsError, expectProvider }) => {
+      const { createTestClient } = await import('./helpers/mcp-test-client.js');
+
+      testClient = await createTestClient({
+        env: {
+          EMAIL_IMAP_EMAIL: '',
+          EMAIL_IMAP_PASSWORD: '',
+          EMAIL_IMAP_PROVIDER: '',
+          MCP_HOST_BRIDGE_STATE: '',
+        },
+      });
+
+      const result = await testClient.callTool('configure_email_imap', {
+        email,
+        password: 'app-specific-pwd',
+      });
+
+      if (expectIsError) {
+        expect(result.isError).toBe(true);
+        const json = result.json as Record<string, unknown>;
+        expect(json.ok).toBe(false);
+        const errorMsg = String(json.error ?? '').toLowerCase();
+        expect(errorMsg).toMatch(/provider/);
+        expect(errorMsg).toMatch(/detect|unknown|unrecognis|set email_imap_provider/);
+        // Defence-in-depth: must not silently resolve to icloud anywhere.
+        expect(json.provider).not.toBe('icloud');
+      } else {
+        expect(result.isError).toBeFalsy();
+        const json = result.json as Record<string, unknown>;
+        expect(json.ok).toBe(true);
+        expect(json.provider).toBe(expectProvider);
+      }
+    });
+  });
+
   it('unconfigured tool calls return error with resolution hint', async () => {
     const { createTestClient } = await import('./helpers/mcp-test-client.js');
 

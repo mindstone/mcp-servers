@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { bridgeRequest, BRIDGE_STATE_PATH } from '../bridge.js';
-import { getPreset } from '../presets.js';
+import { detectProviderFromEmail, getPreset, listPresetKeys } from '../presets.js';
 import { EmailImapError } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 import { initClients } from './index.js';
@@ -59,7 +59,27 @@ export function registerConfigureTools(server: McpServer): void {
       const email = args.email.trim();
       const password = args.password.trim();
       const providerArg = args.provider?.trim().toLowerCase() ?? '';
-      const provider = providerArg || EMAIL_IMAP_PROVIDER?.trim().toLowerCase() || 'icloud';
+      const envProvider = EMAIL_IMAP_PROVIDER?.trim().toLowerCase() ?? '';
+      // Mirror index.ts startup (M3.4 / VAL-EMAIL-012, VAL-EMAIL-026):
+      // never silently default to a provider the caller did not pick.
+      // If neither the tool argument nor the env var is set, auto-detect
+      // from the email's domain, and refuse when no preset claims it.
+      let provider = providerArg || envProvider;
+      if (!provider) {
+        const detected = detectProviderFromEmail(email);
+        if (!detected) {
+          const supported = [...listPresetKeys(), 'custom'].join(', ');
+          throw new EmailImapError(
+            `Unable to detect email provider from address "${email}": ` +
+              `no preset claims its domain. Set EMAIL_IMAP_PROVIDER explicitly ` +
+              `or pass the "provider" argument. Supported providers: ${supported}.`,
+            'PROVIDER_DETECTION_FAILED',
+            `Pass an explicit "provider" argument (one of: ${supported}) ` +
+              `or set the EMAIL_IMAP_PROVIDER env var before calling configure_email_imap.`,
+          );
+        }
+        provider = detected;
+      }
 
       // For known providers, validate the preset
       if (provider !== 'custom') {
