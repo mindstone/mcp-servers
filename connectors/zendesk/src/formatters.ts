@@ -22,16 +22,48 @@ import type {
 export const UNTRUSTED_TICKET_OPEN = '<untrusted-content source="external-ticket">';
 export const UNTRUSTED_TICKET_CLOSE = '</untrusted-content>';
 
+// Match any close-tag variant of the `<untrusted-content>` envelope:
+// case-insensitive, optional whitespace (space or tab) before `>`. Used to
+// neutralise attacker-supplied close tags inside body content before
+// concatenation with the open/close sentinels — see VAL-ZENDESK-009 /
+// VAL-CROSS-011 / VAL-CROSS-012.
+const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content[ \t]*>/gi;
+const ESCAPED_UNTRUSTED_CLOSE_TAG = '<\\/untrusted-content>';
+
+function escapeCloseTagSentinels(s: string): string {
+  return s.replace(UNTRUSTED_CLOSE_TAG_VARIANT, ESCAPED_UNTRUSTED_CLOSE_TAG);
+}
+
 /**
  * Wrap a body string in the external-ticket envelope. Returns `undefined`
  * for null/undefined/non-string/empty input so callers can skip the field
  * entirely rather than emit an empty envelope.
+ *
+ * Any `</untrusted-content>` (and case / whitespace variants) embedded in
+ * `s` is rewritten to a benign textual form before concatenation, so an
+ * attacker controlling ticket content cannot break out of the envelope.
+ *
+ * Idempotent: when `s` is already a properly-shaped envelope (starts with
+ * OPEN, ends with CLOSE, and contains no internal close-tag variants),
+ * the original string is returned unchanged so `wrap(wrap(s)) === wrap(s)`.
  */
 export function wrapUntrustedTicketContent(s: string | null | undefined): string | undefined {
   if (s === null || s === undefined) return undefined;
   if (typeof s !== 'string') return undefined;
   if (s.length === 0) return undefined;
-  return `${UNTRUSTED_TICKET_OPEN}${s}${UNTRUSTED_TICKET_CLOSE}`;
+  if (
+    s.startsWith(UNTRUSTED_TICKET_OPEN) &&
+    s.endsWith(UNTRUSTED_TICKET_CLOSE)
+  ) {
+    const inner = s.slice(
+      UNTRUSTED_TICKET_OPEN.length,
+      s.length - UNTRUSTED_TICKET_CLOSE.length,
+    );
+    if (!/<\/untrusted-content[ \t]*>/i.test(inner)) {
+      return s;
+    }
+  }
+  return `${UNTRUSTED_TICKET_OPEN}${escapeCloseTagSentinels(s)}${UNTRUSTED_TICKET_CLOSE}`;
 }
 
 /**
