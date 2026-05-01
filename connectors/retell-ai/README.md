@@ -39,6 +39,32 @@ Set the following environment variable:
 }
 ```
 
+## Security: outbound phone calls require host confirmation (MUST)
+
+`create_phone_call` is annotated `destructiveHint: true`. **The MCP host MUST
+require explicit user confirmation before invoking this tool.** Outbound calls
+are billed per minute against your Retell AI plan and a misfired call has
+real-world consequences (a stranger's phone rings, a recording is captured,
+your account is charged) that cannot be undone.
+
+Hosts integrating this connector are required to:
+
+- Surface the proposed `from_number` and `to_number` to the user before each
+  invocation.
+- Block the call until the user explicitly confirms.
+- Never auto-approve `create_phone_call` based on prior approvals — each call
+  MUST be confirmed individually.
+
+`from_number` and `to_number` are validated against the E.164 regex
+`/^\+[1-9]\d{1,14}$/` before any upstream request is made. Numbers must:
+
+- Start with `+`, followed by a country-code digit 1-9 (no leading zero).
+- Contain only digits — spaces, dashes, parentheses are rejected.
+- Be 2-15 digits long inclusive of the country code.
+
+Malformed numbers are rejected locally with a structured
+`INVALID_PHONE_NUMBER` error and are never sent upstream.
+
 ## Available Tools (15)
 
 ### Phone Calls
