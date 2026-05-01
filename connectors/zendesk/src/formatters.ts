@@ -1,11 +1,95 @@
 import type {
   FormatOptions,
   ZendeskTicket,
+  ZendeskComment,
   ZendeskUser,
   ZendeskGroup,
   ZendeskTicketField,
   ZendeskMacro,
 } from './types.js';
+
+// ---------------------------------------------------------------------------
+// Untrusted-content envelope helpers (M3.5b)
+//
+// Body content returned by Zendesk (ticket descriptions, comment bodies,
+// search-result subjects/descriptions) is third-party text that an end-user
+// or external requester wrote. We wrap it in <untrusted-content
+// source="external-ticket">...</untrusted-content> so the host LLM can
+// recognise it as data, not instructions. Connector-controlled metadata
+// (ids, statuses, priorities, requester ids, timestamps) is NEVER wrapped.
+// ---------------------------------------------------------------------------
+
+export const UNTRUSTED_TICKET_OPEN = '<untrusted-content source="external-ticket">';
+export const UNTRUSTED_TICKET_CLOSE = '</untrusted-content>';
+
+/**
+ * Wrap a body string in the external-ticket envelope. Returns `undefined`
+ * for null/undefined/non-string/empty input so callers can skip the field
+ * entirely rather than emit an empty envelope.
+ */
+export function wrapUntrustedTicketContent(s: string | null | undefined): string | undefined {
+  if (s === null || s === undefined) return undefined;
+  if (typeof s !== 'string') return undefined;
+  if (s.length === 0) return undefined;
+  return `${UNTRUSTED_TICKET_OPEN}${s}${UNTRUSTED_TICKET_CLOSE}`;
+}
+
+/**
+ * Return a shallow clone of the ticket with the `description` field wrapped.
+ * Used by `get_zendesk_ticket` (where the LLM-facing surface is the ticket
+ * body rather than the subject, which the connector may itself reference).
+ * Metadata (id, status, priority, requester_id, timestamps, tags...) is left
+ * untouched.
+ */
+export function wrapTicketBodyFields(ticket: ZendeskTicket): ZendeskTicket {
+  const wrapped: ZendeskTicket = { ...ticket };
+  const wd = wrapUntrustedTicketContent(ticket.description);
+  if (wd !== undefined) wrapped.description = wd;
+  return wrapped;
+}
+
+/**
+ * Return a shallow clone of the ticket with the body fields wrapped for
+ * consumption by `search_zendesk_tickets`. Subjects are wrapped because
+ * search results carry attacker-controlled subject text directly (e.g.
+ * matches on `subject:` queries). Descriptions are wrapped where present.
+ */
+export function wrapTicketBodyFieldsForSearch(ticket: ZendeskTicket): ZendeskTicket {
+  const wrapped: ZendeskTicket = { ...ticket };
+  const ws = wrapUntrustedTicketContent(ticket.subject);
+  if (ws !== undefined) wrapped.subject = ws;
+  const wd = wrapUntrustedTicketContent(ticket.description);
+  if (wd !== undefined) wrapped.description = wd;
+  return wrapped;
+}
+
+/**
+ * Return a shallow clone of the comment with body fields wrapped. Wraps
+ * `body`, and (when present) the optional `html_body` / `plain_body`
+ * fields the Zendesk REST API may return for HTML/plain renderings.
+ */
+export function wrapCommentBodyFields<
+  T extends ZendeskComment & { html_body?: string | null; plain_body?: string | null }
+>(comment: T): T {
+  const wrapped: T = { ...comment };
+  const wb = wrapUntrustedTicketContent(comment.body);
+  if (wb !== undefined) wrapped.body = wb;
+  const maybeHtml = (comment as { html_body?: string | null }).html_body;
+  if (maybeHtml !== undefined) {
+    const wh = wrapUntrustedTicketContent(maybeHtml);
+    if (wh !== undefined) {
+      (wrapped as { html_body?: string }).html_body = wh;
+    }
+  }
+  const maybePlain = (comment as { plain_body?: string | null }).plain_body;
+  if (maybePlain !== undefined) {
+    const wp = wrapUntrustedTicketContent(maybePlain);
+    if (wp !== undefined) {
+      (wrapped as { plain_body?: string }).plain_body = wp;
+    }
+  }
+  return wrapped;
+}
 
 export function formatTicket(ticket: ZendeskTicket, options: FormatOptions = {}): string {
   const format = options.format || 'concise';

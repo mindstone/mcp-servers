@@ -105,7 +105,10 @@ describe('Ticket tools', () => {
       const data = result.json as any;
       expect(data.ok).toBe(true);
       expect(data.comments).toHaveLength(1);
-      expect(data.comments[0].body).toBe('First comment');
+      // M3.5b: comment bodies are wrapped in the untrusted-content envelope.
+      expect(data.comments[0].body).toBe(
+        '<untrusted-content source="external-ticket">First comment</untrusted-content>',
+      );
     });
   });
 
