@@ -327,7 +327,11 @@ async function runOAuthCallbackServer(
 ): Promise<{ success: boolean; username?: string; error?: string }> {
   const state = crypto.randomBytes(32).toString('hex');
   const port = parseInt(process.env.OUTREACH_OAUTH_PORT || '0', 10);
-  const bindHost = process.env.MCP_OAUTH_BIND_HOST || '127.0.0.1';
+  // Hard-coded loopback bind. We deliberately do NOT honour an env override
+  // (previously `MCP_OAUTH_BIND_HOST`): an OAuth callback server holding a
+  // short-lived authorization code is a privilege-bearing local service and
+  // must never be exposed beyond loopback. (M3.3 — VAL-OUTREACH-001..004.)
+  const bindHost = '127.0.0.1';
   const timeoutMs = 5 * 60 * 1000; // 5 minutes
 
   return new Promise((resolve) => {

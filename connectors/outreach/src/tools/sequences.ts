@@ -86,7 +86,12 @@ COMMON MISTAKES: Prospect must not already be active in the same sequence.`,
       }),
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        // Enrolling a prospect in a sequence triggers real outbound emails to
+        // the prospect — undeniably destructive in the MCP-annotation sense
+        // (cannot be silently undone, has external side-effects on a real
+        // person's inbox). Hosts MUST gate this behind user confirmation.
+        // (M3.3 — VAL-OUTREACH-005..007.)
+        destructiveHint: true,
         idempotentHint: false,
         openWorldHint: true,
       },
