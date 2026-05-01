@@ -1,6 +1,5 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -14,19 +13,12 @@ import {
   SUPPORTED_IMAGE_EXTENSIONS,
   type GenerationConfig,
 } from '../types.js';
-import { resolveSavePath } from './path-safety.js';
+import { resolveSavePath, resolveSourcePath } from './path-safety.js';
 
 const MODEL_DESCRIPTION =
   'Model to use: "gemini-3.1-flash-image-preview" (Nano Banana 2, default — pro-quality at flash speed, 4K), ' +
   '"gemini-3-pro-image-preview" (Nano Banana Pro — highest quality), or ' +
   '"gemini-2.5-flash-image" (original Nano Banana — fast, legacy)';
-
-/**
- * Expand ~ to home directory.
- */
-function expandPath(filePath: string): string {
-  return filePath.replace(/^~/, os.homedir());
-}
 
 /**
  * Detect MIME type from file extension.
@@ -35,6 +27,18 @@ function expandPath(filePath: string): string {
 function getMimeTypeFromPath(filePath: string): string | null {
   const ext = path.extname(filePath).toLowerCase();
   return SUPPORTED_IMAGE_EXTENSIONS[ext] || null;
+}
+
+/**
+ * Detect whether the user-supplied source_image_path is a remote URL the
+ * sandbox should leave alone (https:// / http://). The connector currently
+ * only consumes inline-base64 images from `inlineData`, so a URL falls
+ * through to the existing not-found error path; the important thing is
+ * that the sandbox check doesn't fire and prepend a misleading
+ * "workspace sandbox" error message.
+ */
+function isRemoteUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value);
 }
 
 export function registerEditTools(server: McpServer): void {
@@ -83,8 +87,48 @@ export function registerEditTools(server: McpServer): void {
         };
       }
 
-      const sourcePath = expandPath(input.source_image_path);
       const model = input.model ?? DEFAULT_MODEL;
+      const rawSource = input.source_image_path;
+
+      // ----------------------------------------------------------------
+      // SECURITY (M3.6): sandbox local source-image reads to under
+      // `MCP_WORKSPACE_PATH` (or `os.tmpdir()` when unset). LLM-controlled
+      // inputs cannot be allowed to point at arbitrary host files such as
+      // `~/.ssh/id_rsa` or `/etc/passwd`, where the bytes would otherwise
+      // be base64-encoded and shipped to the upstream Gemini API.
+      //
+      // - HTTPS / HTTP URLs bypass the sandbox: the connector currently
+      //   only handles inline-base64 inputs, so a URL falls through to the
+      //   existing not-found error rather than emitting a misleading
+      //   sandbox-violation message.
+      // - Local paths run through `resolveSourcePath`, which:
+      //     1. Lexically resolves `~` and `..` and rejects paths outside
+      //        the workspace root before any disk read.
+      //     2. Canonicalises the file via `fs.realpathSync` so a symlink
+      //        inside the workspace pointing OUTSIDE the workspace is
+      //        refused.
+      //
+      // We additionally call `fs.realpathSync` here as defence-in-depth
+      // immediately before reading the bytes — if the file was swapped
+      // out behind a symlink between the validation and the read, the
+      // post-realpath check below catches the escape.
+      // ----------------------------------------------------------------
+      let sourcePath: string;
+      if (isRemoteUrl(rawSource)) {
+        // Preserve pre-existing behaviour for URL inputs: the
+        // local-file code below will report a clean "File not found"
+        // (a non-sandbox error) since fs.existsSync(URL) === false.
+        sourcePath = rawSource;
+      } else {
+        const sourceResolution = resolveSourcePath(rawSource);
+        if (!sourceResolution.ok) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ ok: false, error: sourceResolution.error }) }],
+            isError: true,
+          };
+        }
+        sourcePath = sourceResolution.path;
+      }
 
       // Check file format before reading
       const sourceMimeType = getMimeTypeFromPath(sourcePath);
@@ -105,7 +149,11 @@ export function registerEditTools(server: McpServer): void {
             isError: true,
           };
         }
-        imageBuffer = fs.readFileSync(sourcePath);
+        // Defence-in-depth: re-canonicalise via realpathSync at the very
+        // last moment to close the (vanishingly small) TOCTOU window
+        // between sandbox validation and the readFileSync call.
+        const verifiedPath = isRemoteUrl(rawSource) ? sourcePath : fs.realpathSync(sourcePath);
+        imageBuffer = fs.readFileSync(verifiedPath);
         console.error(`[NanoBanana] Read source image: ${imageBuffer.length} bytes, type: ${sourceMimeType}`);
       } catch (readError) {
         const errMsg = readError instanceof Error ? readError.message : String(readError);

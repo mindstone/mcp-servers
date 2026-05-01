@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
@@ -15,7 +16,7 @@ export type ResolveResult =
   | { ok: false; error: string };
 
 /**
- * Derive the canonical workspace root directory.
+ * Derive the canonical workspace root directory for SAVING outputs.
  *
  * Priority: MCP_WORKSPACE_PATH env var > process.cwd()
  * The result is always resolved to an absolute path.
@@ -26,6 +27,95 @@ export function getWorkspaceRoot(): string {
     return path.resolve(envRoot.trim());
   }
   return path.resolve(process.cwd());
+}
+
+/**
+ * Derive the canonical workspace root for READING source images.
+ *
+ * Per the M3.6 sandbox spec:
+ *   - `MCP_WORKSPACE_PATH` if set (and non-empty), else `os.tmpdir()`.
+ *   - The root is canonicalised through `fs.realpathSync` so the prefix-check
+ *     in `resolveSourcePath` is stable on platforms where the system tmpdir
+ *     itself is reached through a symlink (e.g. macOS: /var/folders/... →
+ *     /private/var/folders/..., or /tmp → /private/tmp).
+ *   - If `realpathSync` fails (e.g. user pointed `MCP_WORKSPACE_PATH` at a
+ *     non-existent dir), we fall back to the lexically-resolved path so the
+ *     subsequent containment check still produces a clean refusal rather than
+ *     crashing.
+ */
+export function getSourceWorkspaceRoot(): string {
+  const envRoot = process.env.MCP_WORKSPACE_PATH;
+  const raw = envRoot && envRoot.trim() ? envRoot.trim() : os.tmpdir();
+  const lexical = path.resolve(raw);
+  try {
+    return fs.realpathSync(lexical);
+  } catch {
+    return lexical;
+  }
+}
+
+/**
+ * Validate that `sourcePath` (an LLM-supplied input to `nano_banana_edit`)
+ * resolves to a real file under the source workspace root, even after
+ * symlink resolution. Returns the canonicalised path on success.
+ *
+ * Security rules:
+ *  - Tilde (`~`) is expanded to `os.homedir()` lexically; the expanded path
+ *    must still be inside the workspace root.
+ *  - Lexical `path.resolve` collapses `..` segments; a path that resolves
+ *    outside the root is rejected before any disk read.
+ *  - Existing files have their canonical path computed via `fs.realpathSync`
+ *    so a symlink inside the root pointing OUTSIDE the root is refused.
+ *  - HTTPS / HTTP URLs are NOT validated by this helper — callers are
+ *    expected to detect URL-shaped inputs and bypass the sandbox.
+ *
+ * On rejection, the error string includes both the substring "workspace" and
+ * "sandbox" so validators / log scanners can match either keyword.
+ */
+export function resolveSourcePath(sourcePath: string): ResolveResult {
+  const root = getSourceWorkspaceRoot();
+  const denyMessage = `source_image_path is outside the workspace sandbox root (${root}). Got: ${sourcePath}`;
+
+  const isInsideRoot = (p: string): boolean =>
+    p === root || p.startsWith(root + path.sep);
+
+  // Step 1: lexical normalisation — expand `~`, collapse `..`, absolutise.
+  const expanded = sourcePath.startsWith('~')
+    ? path.join(os.homedir(), sourcePath.slice(1))
+    : sourcePath;
+  const lexical = path.resolve(expanded);
+
+  // Step 2: pre-flight prefix check on the lexically-resolved path. This
+  // catches `..` traversal and absolute paths outside the root WITHOUT ever
+  // touching disk, which keeps the rejection deterministic when the path
+  // doesn't exist (e.g. `~/Documents/secret.png` on a host without that
+  // file).
+  if (!isInsideRoot(lexical)) {
+    return { ok: false, error: denyMessage };
+  }
+
+  // Step 3: canonicalise via realpath so a symlink inside the root pointing
+  // OUTSIDE the root is caught.
+  let canonical: string;
+  try {
+    canonical = fs.realpathSync(lexical);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { ok: false, error: `File not found: ${sourcePath}` };
+    }
+    throw err;
+  }
+
+  if (!isInsideRoot(canonical)) {
+    return {
+      ok: false,
+      error:
+        `source_image_path resolves outside the workspace sandbox root (${root}); ` +
+        `symlinks may not escape the workspace. Got: ${sourcePath}`,
+    };
+  }
+
+  return { ok: true, path: canonical };
 }
 
 /**
