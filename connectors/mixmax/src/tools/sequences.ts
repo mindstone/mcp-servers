@@ -116,7 +116,7 @@ TEMPLATE VARIABLES: If the sequence stages use variables like {{first_name}}, pa
           }),
         ).min(1).describe('Array of recipients to add (each must have an email)'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiTokenError();
