@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeSOQL, validateFields, validateAndMergeCustomFields, formatSOQLDate, checkSaveResult } from '../utils.js';
+import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, formatSOQLDate, checkSaveResult } from '../utils.js';
 import { withConnection } from '../client.js';
 import { ConnectorError, type SaveResult } from '../types.js';
 
@@ -28,7 +28,7 @@ export function registerTaskTools(server: McpServer): void {
         const fields = validateFields(args.fields || [], defaultFields);
         let query = `SELECT ${fields.join(', ')} FROM Task`;
         const conditions: string[] = [];
-        if (args.subject_contains) conditions.push(`Subject LIKE '%${escapeSOQL(args.subject_contains)}%'`);
+        if (args.subject_contains) conditions.push(`Subject LIKE '%${escapeSOQLLike(args.subject_contains)}%'`);
         if (args.status) conditions.push(`Status = '${escapeSOQL(args.status)}'`);
         if (args.priority) conditions.push(`Priority = '${escapeSOQL(args.priority)}'`);
         if (args.who_id) conditions.push(`WhoId = '${escapeSOQL(args.who_id)}'`);

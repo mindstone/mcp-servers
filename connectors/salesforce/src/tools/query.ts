@@ -4,6 +4,53 @@ import { withErrorHandling, validateObjectName, validateFields, isValidQueryFiel
 import { withConnection } from '../client.js';
 import { ConnectorError, type SaveResult } from '../types.js';
 
+// Strip SQL-style line ("// ...") and block ("/* ... ") comments from a
+// SOQL query. SOQL itself does not officially support either form, but
+// we defensively strip both because callers (or attackers crafting
+// tool-arguments) commonly use them to evade naive trailing-LIMIT
+// regexes.
+function stripSoqlComments(query: string): string {
+  return query
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\/\/[^\n]*/g, ' ');
+}
+
+/**
+ * Enforce a hard cap on the LIMIT clause of a caller-supplied SOQL query.
+ *
+ * The cap is applied AFTER stripping line and block comments and trailing
+ * whitespace, so trailing-comment/whitespace bypass attempts (LIMIT 5000
+ * followed by trailing whitespace, line comments, or block comments) are
+ * neutralised. OFFSET clauses are preserved on the output side, and a
+ * caller-supplied OFFSET-without-LIMIT triggers an inserted cap.
+ *
+ * The result is a single, syntactically valid SOQL statement with exactly
+ * one `LIMIT <n>` clause where `n <= maxLimit`, and at most one trailing
+ * `OFFSET <n>` clause.
+ */
+export function applyQueryLimitCap(rawQuery: string, maxLimit: number): string {
+  const cleaned = stripSoqlComments(rawQuery).trim();
+  let base = cleaned;
+  let offsetClause = '';
+  const offsetMatch = base.match(/^([\s\S]*?)\s+OFFSET\s+(\d+)\s*$/i);
+  if (offsetMatch) {
+    base = offsetMatch[1];
+    offsetClause = ` OFFSET ${offsetMatch[2]}`;
+  }
+  const limitMatch = base.match(/^([\s\S]*?)\s+LIMIT\s+(\d+)\s*$/i);
+  let head: string;
+  let limit: number;
+  if (limitMatch) {
+    head = limitMatch[1].trimEnd();
+    const current = parseInt(limitMatch[2], 10);
+    limit = Math.min(current, maxLimit);
+  } else {
+    head = base.trimEnd();
+    limit = maxLimit;
+  }
+  return `${head} LIMIT ${limit}${offsetClause}`;
+}
+
 export function registerQueryTools(server: McpServer): void {
   server.registerTool(
     'salesforce_query',
@@ -16,17 +63,8 @@ export function registerQueryTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       return withConnection(undefined, async (conn) => {
-        let query = args.query.trim();
         const MAX_LIMIT = 200;
-        const limitMatch = query.match(/\bLIMIT\s+(\d+)\s*$/i);
-        if (limitMatch) {
-          const currentLimit = parseInt(limitMatch[1], 10);
-          if (currentLimit > MAX_LIMIT) {
-            query = query.replace(/\bLIMIT\s+\d+\s*$/i, `LIMIT ${MAX_LIMIT}`);
-          }
-        } else {
-          query = `${query} LIMIT ${MAX_LIMIT}`;
-        }
+        const query = applyQueryLimitCap(args.query, MAX_LIMIT);
         const result = await conn.query(query);
         return JSON.stringify({ ok: true, records: result.records, totalSize: result.totalSize, done: result.done });
       });

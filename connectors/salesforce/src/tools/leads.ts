@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeSOQL, validateFields, validateAndMergeCustomFields, checkSaveResult } from '../utils.js';
+import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, checkSaveResult } from '../utils.js';
 import { withConnection } from '../client.js';
 import { ConnectorError, type SaveResult } from '../types.js';
 
@@ -26,11 +26,11 @@ export function registerLeadTools(server: McpServer): void {
         let query = `SELECT ${fields.join(', ')} FROM Lead`;
         const conditions: string[] = [];
         if (args.name_contains) {
-          const escaped = escapeSOQL(args.name_contains);
+          const escaped = escapeSOQLLike(args.name_contains);
           conditions.push(`(FirstName LIKE '%${escaped}%' OR LastName LIKE '%${escaped}%')`);
         }
-        if (args.company_contains) conditions.push(`Company LIKE '%${escapeSOQL(args.company_contains)}%'`);
-        if (args.email_contains) conditions.push(`Email LIKE '%${escapeSOQL(args.email_contains)}%'`);
+        if (args.company_contains) conditions.push(`Company LIKE '%${escapeSOQLLike(args.company_contains)}%'`);
+        if (args.email_contains) conditions.push(`Email LIKE '%${escapeSOQLLike(args.email_contains)}%'`);
         if (args.status) conditions.push(`Status = '${escapeSOQL(args.status)}'`);
         if (conditions.length > 0) query += ` WHERE ${conditions.join(' AND ')}`;
         const limit = Math.min(Math.max(1, args.limit ?? 50), 200);

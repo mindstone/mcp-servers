@@ -239,7 +239,11 @@ async function runOAuthCallbackServer(
   const codeVerifier = crypto.randomBytes(32).toString('base64url');
   const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
   const port = parseInt(process.env.SALESFORCE_OAUTH_PORT || '0', 10);
-  const bindHost = process.env.MCP_OAUTH_BIND_HOST || '127.0.0.1';
+  // Hard-coded loopback bind. We deliberately do NOT honour an env override
+  // (previously `MCP_OAUTH_BIND_HOST`): an OAuth callback server with a
+  // short-lived auth code is a privilege-bearing local service and must
+  // never be exposed beyond loopback. (M3.2 — VAL-SALESFORCE-017..019.)
+  const bindHost = '127.0.0.1';
   const isSandbox = process.env.SALESFORCE_SANDBOX === 'true';
   const loginBase = isSandbox ? 'https://test.salesforce.com' : 'https://login.salesforce.com';
   const timeoutMs = 5 * 60 * 1000;
