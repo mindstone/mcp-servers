@@ -17,6 +17,50 @@ import {
   type MessageParts,
 } from './shared.js';
 
+// LLM01 mitigation: wrap third-party email body content in an explicit
+// untrusted-content envelope so the host LLM treats it as data, not as
+// instructions. Subject, headers, and attachment metadata are NOT wrapped —
+// only the body fields. Wrapping is content-agnostic: it is applied even if
+// the body is empty or contains prompt-injection text.
+//
+// Any `</untrusted-content>` (and case / whitespace variants) embedded in the
+// body is rewritten to a benign textual form before concatenation so an
+// attacker controlling email body content cannot break out of the envelope —
+// see VAL-EMAIL-115 / VAL-CROSS-011 / VAL-CROSS-012.
+export const UNTRUSTED_EMAIL_OPEN = '<untrusted-content source="external-email">';
+export const UNTRUSTED_EMAIL_CLOSE = '</untrusted-content>';
+
+const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content[ \t]*>/gi;
+const ESCAPED_UNTRUSTED_CLOSE_TAG = '<\\/untrusted-content>';
+
+function escapeCloseTagSentinels(s: string): string {
+  return s.replace(UNTRUSTED_CLOSE_TAG_VARIANT, ESCAPED_UNTRUSTED_CLOSE_TAG);
+}
+
+/**
+ * Wrap an email body string in the external-email envelope.
+ *
+ * Idempotent: when `body` is already a properly-shaped envelope (starts with
+ * OPEN, ends with CLOSE, and contains no internal close-tag variants), the
+ * original string is returned unchanged so `wrap(wrap(s)) === wrap(s)`.
+ */
+export function wrapUntrustedEmailBody(body: string): string {
+  if (
+    body.startsWith(UNTRUSTED_EMAIL_OPEN) &&
+    body.endsWith(UNTRUSTED_EMAIL_CLOSE) &&
+    body.length >= UNTRUSTED_EMAIL_OPEN.length + UNTRUSTED_EMAIL_CLOSE.length
+  ) {
+    const inner = body.slice(
+      UNTRUSTED_EMAIL_OPEN.length,
+      body.length - UNTRUSTED_EMAIL_CLOSE.length,
+    );
+    if (!/<\/untrusted-content[ \t]*>/i.test(inner)) {
+      return body;
+    }
+  }
+  return `${UNTRUSTED_EMAIL_OPEN}${escapeCloseTagSentinels(body)}${UNTRUSTED_EMAIL_CLOSE}`;
+}
+
 export function registerMessageTools(server: McpServer): void {
   // ── email_search_messages ───────────────────────────────────────
 
@@ -161,14 +205,6 @@ export function registerMessageTools(server: McpServer): void {
             ? htmlBody.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
             : textBody;
 
-        // LLM01 mitigation: wrap third-party email body content in an explicit
-        // untrusted-content envelope so the host LLM treats it as data, not as
-        // instructions. Subject, headers, and attachment metadata are NOT
-        // wrapped — only the body fields. Wrapping is content-agnostic: it is
-        // applied even if the body is empty or contains prompt-injection text.
-        const wrapUntrusted = (body: string): string =>
-          `<untrusted-content source="external-email">${body}</untrusted-content>`;
-
         return JSON.stringify({
           ok: true,
           message: {
@@ -178,7 +214,7 @@ export function registerMessageTools(server: McpServer): void {
             to: formatAddresses(fetchedMessage.envelope?.to),
             date: formatDate(fetchedMessage.envelope?.date),
             messageId: fetchedMessage.envelope?.messageId ?? null,
-            textBody: wrapUntrusted(fallbackTextBody),
+            textBody: wrapUntrustedEmailBody(fallbackTextBody),
             // Drive htmlBody presence from the upstream MIME signal
             // (parts.htmlPart) rather than the truthiness of the decoded
             // body string. This way an inbound message with an EMPTY
@@ -187,7 +223,7 @@ export function registerMessageTools(server: McpServer): void {
             // with the documented contract that wrapping is content-
             // agnostic and presence reflects the source MIME structure.
             ...(parts.htmlPart !== undefined
-              ? { htmlBody: wrapUntrusted(htmlBody ?? '') }
+              ? { htmlBody: wrapUntrustedEmailBody(htmlBody ?? '') }
               : {}),
             attachments: parts.attachments,
           },
