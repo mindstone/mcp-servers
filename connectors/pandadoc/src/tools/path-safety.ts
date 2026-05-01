@@ -32,6 +32,36 @@ export function getUploadWorkspaceRoot(): string {
 }
 
 /**
+ * Canonicalise the deepest existing ancestor of an absolute path and
+ * re-append the missing tail (M3-fix-C). This lets the lexical-prefix
+ * containment check accept in-workspace files supplied via a symlinked
+ * alias of the workspace root (e.g. `/tmp` → `/private/tmp` on macOS)
+ * while still rejecting `..` traversal and out-of-root absolutes
+ * deterministically WITHOUT requiring the leaf file to exist.
+ */
+function canonicalisePrefix(absoluteLexical: string): string {
+  const tail: string[] = [];
+  let cur = absoluteLexical;
+  while (true) {
+    try {
+      const real = fs.realpathSync(cur);
+      return tail.length === 0 ? real : path.join(real, ...tail.reverse());
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') {
+        throw err;
+      }
+    }
+    const parent = path.dirname(cur);
+    if (parent === cur) {
+      return absoluteLexical;
+    }
+    tail.push(path.basename(cur));
+    cur = parent;
+  }
+}
+
+/**
  * Validate that `inputPath` resolves to a real file inside the upload
  * workspace root, even after symlink resolution. Returns the canonical
  * path on success.
@@ -61,10 +91,14 @@ export function resolveUploadPath(inputPath: string): ResolveResult {
     : inputPath;
   const lexical = path.resolve(expanded);
 
-  // Step 2: pre-flight prefix check on the lexically-resolved path. This
-  // catches `..` traversal and absolute paths outside the root WITHOUT ever
-  // touching disk.
-  if (!isInsideRoot(lexical)) {
+  // Step 2: canonicalise the deepest existing ancestor (M3-fix-C). This
+  // is what makes `/tmp/foo.pdf` work when the workspace root is the
+  // symlinked alias `/tmp` and the canonical root is `/private/tmp`. It
+  // ALSO keeps the rejection deterministic when the leaf file does not
+  // exist (`..` traversal and out-of-root absolutes still resolve to a
+  // path under their canonical parent and fail the prefix check).
+  const canonicalCandidate = canonicalisePrefix(lexical);
+  if (!isInsideRoot(canonicalCandidate)) {
     return { ok: false, error: denyMessage };
   }
 
