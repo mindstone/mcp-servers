@@ -2,6 +2,30 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { retellFetch, requireApiKey } from '../client.js';
 import { withErrorHandling } from '../utils.js';
+import { ConnectorError } from '../types.js';
+
+/**
+ * E.164 phone-number regex.
+ *
+ * - Leading `+`
+ * - First digit MUST be 1-9 (no leading zero in the country code)
+ * - Total of 2-15 digits after the `+` (E.164 max length is 15 digits inclusive
+ *   of country code)
+ *
+ * Spaces, dashes, parentheses, and any other formatting characters are
+ * rejected — callers must normalise before invoking this tool.
+ */
+const E164_REGEX = /^\+[1-9]\d{1,14}$/;
+
+function validateE164(field: 'from_number' | 'to_number', value: string): void {
+  if (!E164_REGEX.test(value)) {
+    throw new ConnectorError(
+      `${field} must be in E.164 format (e.g. +14155551234)`,
+      'INVALID_PHONE_NUMBER',
+      'Provide a phone number with a leading "+", a country code starting with a digit 1-9, and 1-14 additional digits. No spaces, dashes, parentheses, or other formatting characters.',
+    );
+  }
+}
 
 export function registerCallTools(server: McpServer): void {
   server.registerTool(
@@ -42,6 +66,10 @@ COST: Uses phone minutes from your Retell AI plan. Calls are billed per minute.`
       },
     },
     withErrorHandling(async (args) => {
+      // Validate phone numbers BEFORE requireApiKey / outbound request so a
+      // malformed number can never reach Retell's billing surface.
+      validateE164('from_number', args.from_number);
+      validateE164('to_number', args.to_number);
       requireApiKey();
       const body: Record<string, unknown> = {
         from_number: args.from_number,
