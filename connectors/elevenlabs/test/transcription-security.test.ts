@@ -249,6 +249,113 @@ describe('transcribe_audio — path sandbox (M3.9)', () => {
     expect(combined).toMatch(/MCP_WORKSPACE_PATH/);
   });
 
+  // ---------------------- M3-fix-C — canonical-prefix ----------------------
+
+  /**
+   * Find a directory accessible via two paths: a symlinked alias and its
+   * canonical (realpath'd) target. Returns null if no such pair exists
+   * (e.g. on Linux where `/tmp` is typically a real directory).
+   */
+  function findSymlinkAlias(): { alias: string; canonical: string } | null {
+    const candidates = ['/tmp'];
+    for (const c of candidates) {
+      try {
+        if (!fs.existsSync(c)) continue;
+        const real = fs.realpathSync(c);
+        if (real !== c) {
+          return { alias: c, canonical: real };
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    return null;
+  }
+
+  it('VAL-ELEVENLABS-104 — ENOENT under symlinked workspace alias returns FILE_NOT_FOUND, not sandbox-deny', async () => {
+    if (process.platform === 'win32') return;
+    const aliasInfo = findSymlinkAlias();
+    if (!aliasInfo) return; // platform has no symlinked alias to test
+
+    const { handlers, getCalls } = captureSttHandlers();
+    mswServer.use(...handlers);
+
+    testClient = await createTestClient({
+      env: {
+        ELEVENLABS_API_KEY: MOCK_API_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        // Use the symlinked alias as the workspace root
+        MCP_WORKSPACE_PATH: aliasInfo.alias,
+      },
+    });
+
+    // Request an in-workspace path under the alias that doesn't exist.
+    const missing = path.join(
+      aliasInfo.alias,
+      `eleven-104-missing-${process.pid}-${Date.now()}.mp3`,
+    );
+    const result = await testClient.callTool('transcribe_audio', {
+      file_path: missing,
+    });
+
+    expect(result.isError).toBe(true);
+    const parsed = JSON.parse(result.text);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.code).toBe('FILE_NOT_FOUND');
+    // Must NOT surface as a sandbox-deny error.
+    expect(parsed.error).not.toMatch(/outside the workspace sandbox/i);
+    expect(getCalls()).toBe(0);
+  });
+
+  it('VAL-CROSS-013 — `..` traversal still refused under symlinked workspace alias', async () => {
+    if (process.platform === 'win32') return;
+    const aliasInfo = findSymlinkAlias();
+    if (!aliasInfo) return;
+
+    const { handlers, getCalls } = captureSttHandlers();
+    mswServer.use(...handlers);
+
+    testClient = await createTestClient({
+      env: {
+        ELEVENLABS_API_KEY: MOCK_API_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        MCP_WORKSPACE_PATH: aliasInfo.alias,
+      },
+    });
+
+    const traversal = path.join(aliasInfo.alias, '..', '..', 'etc', 'passwd');
+    const result = await testClient.callTool('transcribe_audio', {
+      file_path: traversal,
+    });
+    expect(result.isError).toBe(true);
+    expect(result.text).toMatch(/workspace|sandbox|outside/i);
+    expect(getCalls()).toBe(0);
+  });
+
+  it('VAL-CROSS-013 — absolute out-of-root path still refused (no fs lookup of missing leaf required)', async () => {
+    if (process.platform === 'win32') return;
+    const aliasInfo = findSymlinkAlias();
+    if (!aliasInfo) return;
+
+    const { handlers, getCalls } = captureSttHandlers();
+    mswServer.use(...handlers);
+
+    testClient = await createTestClient({
+      env: {
+        ELEVENLABS_API_KEY: MOCK_API_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        MCP_WORKSPACE_PATH: aliasInfo.alias,
+      },
+    });
+
+    const result = await testClient.callTool('transcribe_audio', {
+      file_path: '/etc/this-file-does-not-exist-eleven-104.mp3',
+    });
+    expect(result.isError).toBe(true);
+    expect(result.text).toMatch(/workspace|sandbox|outside/i);
+    expect(getCalls()).toBe(0);
+  });
+
   // ---------------------- REGRESSION ----------------------
 
   it('VAL-ELEVENLABS-301 — pre-existing FILE_NOT_FOUND happy path is preserved for in-workspace missing files', async () => {

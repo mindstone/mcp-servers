@@ -43,6 +43,38 @@ export function getAudioWorkspaceRoot(): string {
 }
 
 /**
+ * Canonicalise the deepest existing ancestor of an absolute path and
+ * re-append the missing tail (M3-fix-C). This lets the lexical-prefix
+ * containment check accept in-workspace files supplied via a symlinked
+ * alias of the workspace root (e.g. `/tmp` → `/private/tmp` on macOS)
+ * while still rejecting `..` traversal and out-of-root absolutes
+ * deterministically WITHOUT requiring the leaf file to exist. Critical
+ * for the ENOENT branch: the in-workspace-but-missing case must classify
+ * as FILE_NOT_FOUND, not as a sandbox-deny.
+ */
+function canonicalisePrefix(absoluteLexical: string): string {
+  const tail: string[] = [];
+  let cur = absoluteLexical;
+  while (true) {
+    try {
+      const real = fs.realpathSync(cur);
+      return tail.length === 0 ? real : path.join(real, ...tail.reverse());
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') {
+        throw err;
+      }
+    }
+    const parent = path.dirname(cur);
+    if (parent === cur) {
+      return absoluteLexical;
+    }
+    tail.push(path.basename(cur));
+    cur = parent;
+  }
+}
+
+/**
  * Validate that an LLM-supplied `file_path` argument resolves to a real
  * file under the audio workspace sandbox root, even after symlink
  * resolution. Returns the canonicalised path on success.
@@ -75,25 +107,29 @@ export function resolveAudioPath(filePath: string): ResolveResult {
     : filePath;
   const lexical = path.resolve(expanded);
 
-  // Step 2: canonicalise via realpath. This catches symlink escapes AND
-  // resolves callers passing paths through symlinked tmpdir prefixes
-  // (e.g. macOS where /tmp -> /private/tmp and /var/folders/... ->
-  // /private/var/folders/...). If the file does not exist, we fall back
-  // to a lexical prefix check so that `..` traversal / out-of-root paths
-  // still produce a deterministic refusal without requiring the targeted
-  // host file to exist.
+  // Step 2: canonicalise the deepest existing ancestor (M3-fix-C) and
+  // run the prefix check against the canonical candidate. This is what
+  // makes `/tmp/foo.mp3` work when the workspace root is the symlinked
+  // alias `/tmp` and the canonical root is `/private/tmp`. Doing this
+  // BEFORE the realpath of the leaf is crucial for the ENOENT branch:
+  // an in-workspace-but-missing file must classify as FILE_NOT_FOUND,
+  // not as a sandbox-deny. Conversely, `..` traversal and out-of-root
+  // absolutes still fail this check without requiring the leaf to
+  // exist.
+  const canonicalCandidate = canonicalisePrefix(lexical);
+  if (!isInsideRoot(canonicalCandidate)) {
+    return { ok: false, error: denyMessage };
+  }
+
+  // Step 3: full realpath on the input. This catches the (rare) case
+  // where the leaf itself is a symlink inside the root pointing OUTSIDE
+  // the root. If the file does not exist, surface FILE_NOT_FOUND now
+  // that we know the candidate is in-workspace.
   let canonical: string;
   try {
     canonical = fs.realpathSync(lexical);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      // No such file. Apply the lexical containment check so callers
-      // who pass a workspace-internal but missing path get the existing
-      // FILE_NOT_FOUND error, while callers who pass an outside-root
-      // path that doesn't exist still get the sandbox refusal.
-      if (!isInsideRoot(lexical)) {
-        return { ok: false, error: denyMessage };
-      }
       return { ok: false, error: `File not found: ${filePath}` };
     }
     throw err;
