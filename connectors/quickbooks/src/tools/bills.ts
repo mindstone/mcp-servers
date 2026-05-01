@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeQboql, validateAlphanumericId } from '../utils.js';
+import { withErrorHandling, escapeQboql, validateAlphanumericId, requireProdWritesEnabled } from '../utils.js';
 import { qboFetch, qboQuery } from '../client.js';
 
 export function registerBillTools(server: McpServer): void {
@@ -57,6 +57,7 @@ WORKFLOW:
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
+      requireProdWritesEnabled();
       const billBody: Record<string, unknown> = {
         VendorRef: { value: args.vendorId },
         Line: args.lines.map((line) => ({

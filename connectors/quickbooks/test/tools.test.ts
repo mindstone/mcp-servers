@@ -139,6 +139,8 @@ describe('create_quickbooks_invoice', () => {
   });
 
   it('creates an invoice', async () => {
+    // Mutating tools require QB_ALLOW_PROD_WRITES=1 (M3.13 secure-by-default gate).
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
     mswServer.use(...createQuickBooksHandlers());
     testClient = await createTestClient({ env: defaultEnv() });
 
@@ -161,6 +163,8 @@ describe('create_quickbooks_customer', () => {
   });
 
   it('creates a customer', async () => {
+    // Mutating tools require QB_ALLOW_PROD_WRITES=1 (M3.13 secure-by-default gate).
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
     mswServer.use(...createQuickBooksHandlers());
     testClient = await createTestClient({ env: defaultEnv() });
 
@@ -201,6 +205,8 @@ describe('create_quickbooks_bill', () => {
   });
 
   it('creates a bill', async () => {
+    // Mutating tools require QB_ALLOW_PROD_WRITES=1 (M3.13 secure-by-default gate).
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
     mswServer.use(...createQuickBooksHandlers());
     testClient = await createTestClient({ env: defaultEnv() });
 
@@ -242,6 +248,8 @@ describe('create_quickbooks_vendor', () => {
   });
 
   it('creates a vendor', async () => {
+    // Mutating tools require QB_ALLOW_PROD_WRITES=1 (M3.13 secure-by-default gate).
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
     mswServer.use(...createQuickBooksHandlers());
     testClient = await createTestClient({ env: defaultEnv() });
 

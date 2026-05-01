@@ -5,6 +5,39 @@
 
 QuickBooks Online MCP server for Model Context Protocol hosts. Manage invoices, bills, customers, vendors, employees, and accounts in QuickBooks Online through a standardised MCP interface.
 
+## ⚠️ Breaking change in 0.3.0 — production writes are gated by default
+
+Starting with **version 0.3.0**, every QuickBooks-mutating tool
+(`create_quickbooks_invoice`, `create_quickbooks_bill`,
+`create_quickbooks_customer`, `create_quickbooks_vendor`) is **secure-by-default**:
+the tool refuses to execute and returns a structured error unless the host
+sets `QB_ALLOW_PROD_WRITES=1` in the environment. Read-only tools
+(`list_*`, `get_*`, `query_*`, `configure_quickbooks`) are unaffected.
+
+This is a deliberate guard-rail to prevent an LLM agent from accidentally
+writing to a real QuickBooks production company. Hosts that have integrated
+0.2.x and rely on those mutating tools must opt in by setting the
+environment variable on the next upgrade.
+
+### Migration from 0.2.x → 0.3.0
+
+To preserve the previous (write-enabled) behaviour, add `QB_ALLOW_PROD_WRITES=1`
+to the `env` block of your host configuration alongside the existing
+`QUICKBOOKS_*` variables. Without it, the four mutating tools will return:
+
+```json
+{
+  "ok": false,
+  "error": "QuickBooks mutating tools refuse to run unless QB_ALLOW_PROD_WRITES=1 is set. ...",
+  "code": "QB_ALLOW_PROD_WRITES_REQUIRED"
+}
+```
+
+We strongly recommend keeping the gate **closed** in any host where the LLM
+should not be able to issue production writes (sandbox, staging, demo, or
+read-only analyst workflows). Set the variable only in environments where
+QuickBooks writes are an intentional capability.
+
 ## Requirements
 
 - Node.js 20+
@@ -41,6 +74,12 @@ node dist/index.js
 - `QUICKBOOKS_REFRESH_TOKEN` — OAuth 2.0 refresh token
 - `QUICKBOOKS_REALM_ID` — QuickBooks company (realm) ID
 - `QUICKBOOKS_ENVIRONMENT` — `sandbox` or `production` (default: `production`)
+- `QB_ALLOW_PROD_WRITES` — set to **exactly** `1` to enable the four
+  mutating tools (`create_quickbooks_invoice`, `create_quickbooks_bill`,
+  `create_quickbooks_customer`, `create_quickbooks_vendor`). Any other
+  value (unset, empty, `true`, `yes`, `0`, …) keeps the secure-by-default
+  gate closed and the mutating tools refuse to run. Read-only tools are
+  unaffected. **Required since 0.3.0** to preserve 0.2.x write behaviour.
 - `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
 - `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
 
