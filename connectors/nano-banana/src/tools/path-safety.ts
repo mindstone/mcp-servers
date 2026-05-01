@@ -55,6 +55,46 @@ export function getSourceWorkspaceRoot(): string {
 }
 
 /**
+ * Canonicalise the deepest existing ancestor of an absolute path and
+ * re-append the missing tail. This is the M3-fix-C primitive that lets
+ * the lexical-prefix containment check accept in-workspace files
+ * supplied via a symlinked alias of the workspace root (e.g. `/tmp` →
+ * `/private/tmp` on macOS) while still rejecting `..` traversal and
+ * out-of-root absolutes deterministically WITHOUT requiring the leaf
+ * file to exist.
+ *
+ * Algorithm: walk up the path popping the leaf into a tail buffer until
+ * `fs.realpathSync` succeeds on the remaining ancestor; rejoin that
+ * canonical ancestor with the popped tail. If the walk reaches the
+ * filesystem root without ever succeeding (impossible for absolute
+ * paths in practice, since "/" always exists), fall back to the
+ * lexical input so the subsequent containment check still produces a
+ * clean refusal.
+ */
+function canonicalisePrefix(absoluteLexical: string): string {
+  const tail: string[] = [];
+  let cur = absoluteLexical;
+  while (true) {
+    try {
+      const real = fs.realpathSync(cur);
+      return tail.length === 0 ? real : path.join(real, ...tail.reverse());
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') {
+        throw err;
+      }
+    }
+    const parent = path.dirname(cur);
+    if (parent === cur) {
+      // Reached filesystem root without resolving; fall back to lexical.
+      return absoluteLexical;
+    }
+    tail.push(path.basename(cur));
+    cur = parent;
+  }
+}
+
+/**
  * Validate that `sourcePath` (an LLM-supplied input to `nano_banana_edit`)
  * resolves to a real file under the source workspace root, even after
  * symlink resolution. Returns the canonicalised path on success.
@@ -85,17 +125,20 @@ export function resolveSourcePath(sourcePath: string): ResolveResult {
     : sourcePath;
   const lexical = path.resolve(expanded);
 
-  // Step 2: pre-flight prefix check on the lexically-resolved path. This
-  // catches `..` traversal and absolute paths outside the root WITHOUT ever
-  // touching disk, which keeps the rejection deterministic when the path
-  // doesn't exist (e.g. `~/Documents/secret.png` on a host without that
-  // file).
-  if (!isInsideRoot(lexical)) {
+  // Step 2: canonicalise the deepest existing ancestor (M3-fix-C). This
+  // is what makes `/tmp/foo.png` work when the workspace root is the
+  // symlinked alias `/tmp` and the canonical root is `/private/tmp`. It
+  // ALSO keeps the rejection deterministic when the leaf file does not
+  // exist (`..` traversal and out-of-root absolutes still resolve to a
+  // path under their canonical parent and fail the prefix check).
+  const canonicalCandidate = canonicalisePrefix(lexical);
+  if (!isInsideRoot(canonicalCandidate)) {
     return { ok: false, error: denyMessage };
   }
 
-  // Step 3: canonicalise via realpath so a symlink inside the root pointing
-  // OUTSIDE the root is caught.
+  // Step 3: full realpath so a symlink inside the root pointing OUTSIDE
+  // the root is caught (defence in depth — Step 2 already canonicalised
+  // existing ancestors, but the leaf may itself be a symlink).
   let canonical: string;
   try {
     canonical = fs.realpathSync(lexical);
