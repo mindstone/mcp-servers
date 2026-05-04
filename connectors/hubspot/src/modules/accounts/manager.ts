@@ -239,12 +239,11 @@ class AccountManager {
   }
   
   async getAccounts(): Promise<HubSpotAccountInfo[]> {
-    try {
-      const config = await this.readAccountsConfig();
-      
-      const results: HubSpotAccountInfo[] = [];
-      
-      for (const account of config.accounts || []) {
+    const config = await this.readAccountsConfig();
+
+    const results: HubSpotAccountInfo[] = [];
+
+    for (const account of config.accounts || []) {
         let status: 'active' | 'expired' | 'error' = 'error';
 
         try {
@@ -277,11 +276,8 @@ class AccountManager {
           grantedScopes: account.grantedScopes,
         });
       }
-      
-      return results;
-    } catch {
-      return [];
-    }
+
+    return results;
   }
 
   async saveAccounts(

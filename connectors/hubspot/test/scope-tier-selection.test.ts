@@ -61,4 +61,12 @@ describe('HubSpotServer getScopeTier', () => {
     const server = new HubSpotServer();
     await expect(readScopeTier(server)).resolves.toBe('full');
   });
+
+  it('fails closed to readonly when accounts.json read fails (fail-open security guard)', async () => {
+    process.env.HUBSPOT_ACCOUNT_EMAIL = 'selected@example.com';
+    getAccountsMock.mockRejectedValue(Object.assign(new Error('permission denied'), { code: 'EACCES' }));
+
+    const server = new HubSpotServer();
+    await expect(readScopeTier(server)).resolves.toBe('readonly');
+  });
 });
