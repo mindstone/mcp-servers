@@ -70,15 +70,32 @@ async function packTarball(packageRoot: string): Promise<string> {
 
 async function extractTarball(tarball: string): Promise<string> {
   const extractDir = fs.mkdtempSync(path.join(os.tmpdir(), 'slack-probe-extract-'));
-  return new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const proc = spawn('tar', ['-xzf', tarball, '-C', extractDir, '--strip-components=1'], {
       stdio: 'inherit',
     });
     proc.on('exit', (code) => {
       if (code !== 0) return reject(new Error(`tar -xzf failed with code ${code}`));
-      resolve(extractDir);
+      resolve();
     });
   });
+  // Install only production deps so the probe runs against the same
+  // dependency graph an `npx -y @mindstone-engineering/mcp-server-slack`
+  // user would get. --no-package-lock keeps it fast; --omit=dev cuts
+  // vitest/msw/tsx noise. The probe is exercising runtime, not build.
+  console.log(`[live-probe] Installing production deps in ${extractDir}…`);
+  await new Promise<void>((resolve, reject) => {
+    const proc = spawn(
+      'npm',
+      ['install', '--omit=dev', '--no-audit', '--no-fund', '--no-package-lock', '--ignore-scripts'],
+      { cwd: extractDir, stdio: 'inherit' },
+    );
+    proc.on('exit', (code) => {
+      if (code !== 0) return reject(new Error(`npm install in extracted dir failed (code ${code})`));
+      resolve();
+    });
+  });
+  return extractDir;
 }
 
 async function main() {
