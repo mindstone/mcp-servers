@@ -170,12 +170,16 @@ export class HubSpotServer {
         ? accounts.find((account) => account.email?.trim().toLowerCase() === selectedEmail)
         : undefined;
       const storedTier = selectedAccount?.scopeTier;
-      // Validate the stored value to avoid fail-open on corrupted data
       if (storedTier === 'readonly' || storedTier === 'full') {
         return storedTier;
       }
-    } catch {
-      // Ignore - fall through to default
+    } catch (error) {
+      // Fail-closed: corrupt or unreadable accounts.json must not silently expand
+      // the tool surface to 'full'. Surface the failure and downgrade to 'readonly'.
+      logger.error('Failed to resolve HubSpot scope tier from accounts.json; falling back to readonly', {
+        error: error instanceof Error ? { name: error.name, message: error.message } : String(error),
+      });
+      return 'readonly';
     }
     return 'full';
   }
