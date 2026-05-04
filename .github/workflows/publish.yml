@@ -9,6 +9,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Required for npm provenance: the workflow must mint an OIDC token
+      # that npm verifies against Sigstore to produce a signed attestation
+      # linking the published tarball to this repo + tag + commit.
+      id-token: write
     outputs:
       connector: ${{ steps.meta.outputs.connector }}
       package: ${{ steps.meta.outputs.package }}
@@ -91,9 +95,50 @@ jobs:
             exit 1
           fi
 
-      - name: Publish to npm
+      - name: Generate CycloneDX SBOM
         working-directory: connectors/${{ steps.meta.outputs.connector }}
-        run: npm publish --access public
+        # Generates a CycloneDX 1.5 SBOM enumerating production dependencies
+        # and their resolved versions/integrity hashes. Pinned to an exact
+        # version (no caret, no latest) per supply-chain hygiene. Excludes
+        # devDependencies — only the runtime closure ships with the package.
+        run: |
+          npx --yes @cyclonedx/cyclonedx-npm@2.0.0 \
+            --omit dev \
+            --spec-version 1.5 \
+            --output-format JSON \
+            --output-file sbom.cdx.json
+          echo "SBOM components:"
+          node -e "const s=require('./sbom.cdx.json'); console.log('  count=' + (s.components||[]).length); console.log('  format=' + s.bomFormat + ' v' + s.specVersion);"
+
+      - name: Upload SBOM as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.connector }}-${{ steps.meta.outputs.version }}-sbom
+          path: connectors/${{ steps.meta.outputs.connector }}/sbom.cdx.json
+          retention-days: 365
+          if-no-files-found: error
+
+      - name: Verify CHANGELOG.md mentions this version
+        working-directory: connectors/${{ steps.meta.outputs.connector }}
+        env:
+          TAG_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          if [ ! -f CHANGELOG.md ]; then
+            echo "ERROR: CHANGELOG.md is required for publish (per security-review process gate)"
+            exit 1
+          fi
+          if ! grep -q "\[${TAG_VERSION}\]" CHANGELOG.md; then
+            echo "ERROR: CHANGELOG.md does not contain a [${TAG_VERSION}] entry"
+            exit 1
+          fi
+
+      - name: Publish to npm with provenance
+        working-directory: connectors/${{ steps.meta.outputs.connector }}
+        # --provenance produces a Sigstore-signed attestation linking the
+        # published tarball to this exact workflow run, repo, ref, and commit.
+        # Requires id-token: write permission (granted at job level above)
+        # and an npm token of type "automation" (publish-only, no 2FA prompt).
+        run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
