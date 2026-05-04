@@ -1,0 +1,50 @@
+{
+  "name": "@mindstone-engineering/mcp-server-hubspot",
+  "version": "0.1.0",
+  "description": "HubSpot MCP server — CRM objects, associations, properties, marketing, files, workflows, and account diagnostics",
+  "license": "FSL-1.1-MIT",
+  "type": "module",
+  "bin": {
+    "mcp-server-hubspot": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mindstone/mcp-servers.git",
+    "directory": "connectors/hubspot"
+  },
+  "homepage": "https://github.com/mindstone/mcp-servers/tree/main/connectors/hubspot",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc && shx chmod +x dist/index.js && bash scripts/check-no-bridge-strings.sh",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build && npm run test && bash scripts/check-no-bridge-strings.sh",
+    "watch": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@mindstone-engineering/mcp-test-harness": "file:../../test-harness",
+    "@types/node": "^22",
+    "@vitest/coverage-v8": "^4.1.3",
+    "msw": "^2.13.2",
+    "shx": "^0.3.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.2",
+    "vitest": "^4.1.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
