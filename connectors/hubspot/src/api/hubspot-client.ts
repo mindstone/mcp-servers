@@ -1,5 +1,5 @@
 import logger from '../utils/logger.js';
-import { getOAuthClient } from '../modules/accounts/oauth.js';
+import { refreshTokenForAccount } from '../modules/accounts/oauth.js';
 
 const HUBSPOT_API_BASE = 'https://api.hubapi.com';
 const MAX_HUBSPOT_REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
@@ -51,8 +51,12 @@ export interface HubSpotTokenData {
   access_token: string;
   refresh_token?: string;
   expires_in?: number;
+  expires_at?: number;
   token_type?: string;
   hub_id?: number;
+  user?: string;
+  grantedScopes?: string[];
+  schemaVersion?: number;
 }
 
 export interface HubSpotAccount {
@@ -317,6 +321,16 @@ export class HubSpotApiError extends Error {
   ) {
     super(message);
     this.name = 'HubSpotApiError';
+  }
+}
+
+export class HubSpotAuthRequiredError extends Error {
+  constructor(
+    public readonly reason: 'token_missing' | 'missing_refresh_token' | 'refresh_disabled' | 'invalid_grant',
+    public readonly cause?: unknown,
+  ) {
+    super(`HubSpot authentication required (${reason})`);
+    this.name = 'HubSpotAuthRequiredError';
   }
 }
 
@@ -870,11 +884,13 @@ export class HubSpotClient {
   }
 }
 
-import { getAccountManager } from '../modules/accounts/manager.js';
+import {
+  getAccountManager,
+  TokenFileMissingError,
+} from '../modules/accounts/manager.js';
 
 let clientInstance: HubSpotClient | null = null;
 let currentEmail: string | null = null;
-let refreshInProgress: Promise<void> | null = null;
 
 /**
  * Check if token is expired or expiring soon
@@ -906,64 +922,38 @@ export async function getHubSpotClientAsync(email?: string): Promise<HubSpotClie
   }
   
   const targetEmail = instanceEmail;
-  let token = await manager.getToken(targetEmail);
+  let token: HubSpotTokenData;
+  try {
+    token = await manager.loadToken(targetEmail);
+  } catch (error) {
+    if (error instanceof TokenFileMissingError) {
+      throw new HubSpotAuthRequiredError('token_missing', error);
+    }
+    throw error;
+  }
   
-  if (!token || !token.access_token) {
-    throw new Error(`No valid token for account ${targetEmail}. Please re-authenticate.`);
+  if (!token.access_token) {
+    throw new HubSpotAuthRequiredError('token_missing');
   }
   
   // Check if token needs refresh
   if (isTokenExpired(token.expires_at)) {
-    if (!token.refresh_token) {
-      throw new Error(`Token expired for ${targetEmail} and no refresh token available. Please re-authenticate.`);
+    const refreshResult = await refreshTokenForAccount(targetEmail, token);
+    if (refreshResult.status === 'auth_required') {
+      if (refreshResult.reason === 'refresh_disabled') {
+        throw new HubSpotAuthRequiredError('refresh_disabled');
+      }
+      if (refreshResult.reason === 'missing_refresh_token') {
+        throw new HubSpotAuthRequiredError('missing_refresh_token');
+      }
+      throw new HubSpotAuthRequiredError('invalid_grant');
     }
-    
-    // Prevent concurrent refresh attempts with a simple lock
-    if (refreshInProgress) {
-      logger.debug(`Waiting for existing refresh to complete for ${targetEmail}`);
-      await refreshInProgress;
-      // After waiting, re-fetch the token
-      token = await manager.getToken(targetEmail);
-      if (!token || !token.access_token) {
-        throw new Error(`Token refresh failed for ${targetEmail}. Please re-authenticate.`);
-      }
-    } else {
-      // Perform the refresh
-      refreshInProgress = (async () => {
-        try {
-          logger.info(`Refreshing expired token for ${targetEmail}`);
-          const oauthClient = getOAuthClient();
-          const newTokenData = await oauthClient.refreshToken(token!.refresh_token!);
-          
-          // Preserve user and hub_id from original token
-          newTokenData.user = token!.user || targetEmail;
-          newTokenData.hub_id = token!.hub_id;
-          
-          await manager.saveToken(targetEmail, newTokenData);
-          logger.info(`Token refreshed successfully for ${targetEmail}`);
-          
-          // Update local token reference
-          token = newTokenData;
-          
-          // Invalidate cached client so it gets recreated with new token
-          if (currentEmail === targetEmail) {
-            clientInstance = null;
-          }
-        } catch (refreshError) {
-          logger.error(`Failed to refresh token for ${targetEmail}:`, refreshError);
-          throw new Error(`Token expired and refresh failed for ${targetEmail}. Please re-authenticate.`);
-        } finally {
-          refreshInProgress = null;
-        }
-      })();
-      
-      await refreshInProgress;
-      
-      // Re-fetch token after refresh
-      token = await manager.getToken(targetEmail);
-      if (!token || !token.access_token) {
-        throw new Error(`Token refresh failed for ${targetEmail}. Please re-authenticate.`);
-      }
+
+    token = refreshResult.token;
+    logger.info(`Token refreshed successfully for ${targetEmail}`);
+
+    if (currentEmail === targetEmail) {
+      clientInstance = null;
     }
   }
   

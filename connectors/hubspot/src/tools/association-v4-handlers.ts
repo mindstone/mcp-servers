@@ -1,15 +1,33 @@
 import { getHubSpotClientAsync, HubSpotApiError } from '../api/hubspot-client.js';
+import {
+  parseHubSpotError as parseSharedHubSpotError,
+  type ParsedHubSpotError,
+} from '../utils/error-parser.js';
 import logger from '../utils/logger.js';
 
 /**
  * Parse HubSpot API error for AI-friendly messages (v4 Associations)
  */
-function parseHubSpotError(error: unknown, context: { feature: string; operation: string; args?: unknown }): {
-  error: string;
-  errorCode: string;
-  suggestion: string;
-  details?: unknown;
-} {
+function parseHubSpotError(
+  error: unknown,
+  context: { feature: string; operation: string; args?: unknown },
+): ParsedHubSpotError {
+  const sharedParsed = parseSharedHubSpotError(error, {
+    objectType: context.feature,
+    operation: context.operation,
+    args: context.args,
+  });
+  if (
+    'status' in sharedParsed ||
+    sharedParsed.errorCode === 'REFRESH_TRANSIENT' ||
+    sharedParsed.errorCode === 'REFRESH_RATE_LIMITED' ||
+    sharedParsed.errorCode === 'REFRESH_MALFORMED_RESPONSE' ||
+    sharedParsed.errorCode === 'REFRESH_LOCK_FAILED' ||
+    sharedParsed.errorCode === 'TOKEN_PERSIST_FAILED'
+  ) {
+    return sharedParsed;
+  }
+
   if (error instanceof HubSpotApiError) {
     const details = error.details as Record<string, unknown> | undefined;
     const message = details?.message as string || error.message;
@@ -56,11 +74,13 @@ function parseHubSpotError(error: unknown, context: { feature: string; operation
     };
   }
 
-  return {
-    error: `Unexpected error: ${error instanceof Error ? error.message : String(error)}`,
-    errorCode: 'UNKNOWN_ERROR',
-    suggestion: 'Check your HubSpot connection and try again.'
-  };
+  return sharedParsed.errorCode === 'UNKNOWN_ERROR'
+    ? {
+      error: `Unexpected error: ${error instanceof Error ? error.message : String(error)}`,
+      errorCode: 'UNKNOWN_ERROR',
+      suggestion: 'Check your HubSpot connection and try again.'
+    }
+    : sharedParsed;
 }
 
 export async function handleListAssociationLabels(args: {

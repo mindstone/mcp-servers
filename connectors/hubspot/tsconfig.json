@@ -10,6 +10,7 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
+    "removeComments": true,
     "resolveJsonModule": true,
     "outDir": "./dist",
     "rootDir": "./src"

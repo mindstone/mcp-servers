@@ -1,4 +1,11 @@
-import { HubSpotApiError } from '../api/hubspot-client.js';
+import { HubSpotApiError, HubSpotAuthRequiredError } from '../api/hubspot-client.js';
+import {
+  RefreshMalformedResponseError,
+  RefreshRateLimitedError,
+  RefreshTransientError,
+} from '../modules/accounts/oauth.js';
+import { TokenPersistFailedError } from '../modules/accounts/manager.js';
+import { RefreshLockFailedError } from './credentialLock.js';
 
 export interface HubSpotErrorContext {
   objectType?: string;
@@ -6,17 +13,88 @@ export interface HubSpotErrorContext {
   args?: unknown;
 }
 
-export interface ParsedHubSpotError {
+export interface ParsedStructuredHubSpotError {
   error: string;
   errorCode: string;
   suggestion: string;
   details?: unknown;
 }
 
+export interface ParsedAuthRequiredResponse {
+  status: 'auth_required';
+  user_action: { id: 'hubspot.connect_account' };
+  agent_action: {
+    instruction:
+      'Tell the user that HubSpot needs reauthentication. The host will open the OAuth flow in their browser; once complete, retry the original request.';
+  };
+  setupToolName: 'authenticate_hubspot_account';
+}
+
+export type ParsedHubSpotError = ParsedStructuredHubSpotError | ParsedAuthRequiredResponse;
+
+function buildAuthRequiredResponse(): ParsedAuthRequiredResponse {
+  return {
+    status: 'auth_required',
+    user_action: { id: 'hubspot.connect_account' },
+    agent_action: {
+      instruction:
+        'Tell the user that HubSpot needs reauthentication. The host will open the OAuth flow in their browser; once complete, retry the original request.'
+    },
+    setupToolName: 'authenticate_hubspot_account'
+  };
+}
+
 /**
  * Parse HubSpot API error into AI-friendly structured error payload.
  */
 export function parseHubSpotError(error: unknown, context: HubSpotErrorContext): ParsedHubSpotError {
+  if (error instanceof HubSpotAuthRequiredError) {
+    return buildAuthRequiredResponse();
+  }
+
+  if (error instanceof TokenPersistFailedError) {
+    return {
+      error: 'Failed to persist refreshed HubSpot credentials',
+      errorCode: 'TOKEN_PERSIST_FAILED',
+      suggestion: 'Reconnect HubSpot and retry. If this persists, verify filesystem permissions for the HubSpot config directory.'
+    };
+  }
+
+  if (error instanceof RefreshRateLimitedError) {
+    return {
+      error: 'HubSpot token refresh is rate limited',
+      errorCode: 'REFRESH_RATE_LIMITED',
+      suggestion: 'Retry after the indicated backoff window.',
+      details: {
+        retry_after: error.retryAfterSeconds
+      }
+    };
+  }
+
+  if (error instanceof RefreshMalformedResponseError) {
+    return {
+      error: 'HubSpot returned a malformed token refresh response',
+      errorCode: 'REFRESH_MALFORMED_RESPONSE',
+      suggestion: 'Retry the request. If this persists, reconnect HubSpot.'
+    };
+  }
+
+  if (error instanceof RefreshTransientError) {
+    return {
+      error: 'HubSpot token refresh failed temporarily',
+      errorCode: 'REFRESH_TRANSIENT',
+      suggestion: 'Retry in a moment. If failures continue, reconnect HubSpot.'
+    };
+  }
+
+  if (error instanceof RefreshLockFailedError) {
+    return {
+      error: 'HubSpot credential lock is busy',
+      errorCode: 'REFRESH_LOCK_FAILED',
+      suggestion: 'Retry shortly. If this persists, reconnect HubSpot.'
+    };
+  }
+
   if (error instanceof HubSpotApiError) {
     const details = error.details as Record<string, unknown> | undefined;
     const message = (details?.message as string) || error.message;

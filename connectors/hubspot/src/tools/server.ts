@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { createRequire } from 'node:module';
 import logger from '../utils/logger.js';
+import { HubSpotAuthRequiredError } from '../api/hubspot-client.js';
 import { allTools } from './definitions.js';
 import { getAccountManager } from '../modules/accounts/manager.js';
 import {
@@ -610,6 +611,10 @@ export class HubSpotServer {
         };
       } catch (error) {
         logger.error(`Error executing tool ${request.params.name}`, error);
+
+        if (error instanceof HubSpotAuthRequiredError) {
+          return this.buildAuthRequiredToolResult();
+        }
         
         // Check if error message is already a structured JSON error from our handlers
         let errorPayload: object;
@@ -617,6 +622,9 @@ export class HubSpotServer {
           try {
             // Our handlers throw errors with JSON.stringify'd structured errors
             const parsed = JSON.parse(error.message);
+            if (parsed.status === 'auth_required') {
+              return this.buildAuthRequiredToolResult();
+            }
             if (parsed.errorCode && parsed.suggestion) {
               // This is our structured error format, use it directly
               errorPayload = parsed;
