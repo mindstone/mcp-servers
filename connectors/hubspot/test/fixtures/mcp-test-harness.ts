@@ -18,6 +18,7 @@ export interface McpTestConfig {
 
 export interface McpTestClient {
   listTools(): Promise<Tool[]>;
+  getServerVersion(): { name: string; version: string } | undefined;
   callToolJson<T = unknown>(name: string, args?: Record<string, unknown>): Promise<T>;
   callToolText(name: string, args?: Record<string, unknown>): Promise<string>;
   callToolRaw(name: string, args?: Record<string, unknown>): Promise<CallToolResult>;
@@ -85,6 +86,14 @@ export async function createMcpTestClient(config: McpTestConfig): Promise<McpTes
     async listTools(): Promise<Tool[]> {
       const result = await client.listTools();
       return result.tools;
+    },
+    getServerVersion(): { name: string; version: string } | undefined {
+      const serverVersion = client.getServerVersion();
+      if (!serverVersion) return undefined;
+      return {
+        name: serverVersion.name,
+        version: serverVersion.version,
+      };
     },
     async callToolJson<T = unknown>(toolName: string, toolArgs?: Record<string, unknown>): Promise<T> {
       const text = await this.callToolText(toolName, toolArgs);

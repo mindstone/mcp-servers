@@ -45,7 +45,7 @@ The host recognises this shape and drives the browser OAuth flow.
 
 ## Tools
 
-The server exposes the full HubSpot tool surface (90+ tools), including:
+The server exposes the full HubSpot tool surface (92 tools), including:
 
 - Account diagnostics (`list_hubspot_accounts`, `authenticate_hubspot_account`, `remove_hubspot_account`)
 - CRM objects and associations

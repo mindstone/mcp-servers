@@ -2,9 +2,50 @@ import logger from '../utils/logger.js';
 import { getOAuthClient } from '../modules/accounts/oauth.js';
 
 const HUBSPOT_API_BASE = 'https://api.hubapi.com';
+const MAX_HUBSPOT_REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
+export const DEFAULT_HUBSPOT_REQUEST_TIMEOUT_MS = 60_000;
 
 // Buffer time before expiration to trigger refresh (5 minutes)
 const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000;
+
+export function resolveHubSpotRequestTimeoutMs(envValue = process.env.HUBSPOT_REQUEST_TIMEOUT_MS): number {
+  if (!envValue || envValue.trim().length === 0) {
+    return DEFAULT_HUBSPOT_REQUEST_TIMEOUT_MS;
+  }
+
+  if (!/^\d+$/.test(envValue)) {
+    throw new Error(
+      `Invalid HUBSPOT_REQUEST_TIMEOUT_MS: "${envValue}". ` +
+      `Expected a positive integer in milliseconds (max ${MAX_HUBSPOT_REQUEST_TIMEOUT_MS}).`
+    );
+  }
+
+  const parsed = Number(envValue);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(
+      `Invalid HUBSPOT_REQUEST_TIMEOUT_MS: "${envValue}". ` +
+      `Expected a positive integer in milliseconds (max ${MAX_HUBSPOT_REQUEST_TIMEOUT_MS}).`
+    );
+  }
+
+  if (parsed > MAX_HUBSPOT_REQUEST_TIMEOUT_MS) {
+    throw new Error(
+      `Invalid HUBSPOT_REQUEST_TIMEOUT_MS: "${envValue}". ` +
+      `Must be less than or equal to ${MAX_HUBSPOT_REQUEST_TIMEOUT_MS} (5 minutes).`
+    );
+  }
+
+  return parsed;
+}
+
+export function composeHubSpotRequestSignal(
+  callerSignal?: AbortSignal,
+  envValue = process.env.HUBSPOT_REQUEST_TIMEOUT_MS
+): AbortSignal {
+  const timeoutMs = resolveHubSpotRequestTimeoutMs(envValue);
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  return callerSignal ? AbortSignal.any([callerSignal, timeoutSignal]) : timeoutSignal;
+}
 
 export interface HubSpotTokenData {
   access_token: string;
@@ -289,9 +330,11 @@ export class HubSpotClient {
   private async request<T>(
     method: string,
     endpoint: string,
-    body?: unknown
+    body?: unknown,
+    options?: { signal?: AbortSignal }
   ): Promise<T> {
     const url = `${HUBSPOT_API_BASE}${endpoint}`;
+    const signal = composeHubSpotRequestSignal(options?.signal);
     
     logger.debug(`HubSpot API ${method} ${endpoint}`);
 
@@ -302,6 +345,7 @@ export class HubSpotClient {
         'Content-Type': 'application/json',
       },
       body: body ? JSON.stringify(body) : undefined,
+      signal,
     });
 
     if (!response.ok) {

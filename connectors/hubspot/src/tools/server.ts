@@ -1,6 +1,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { createRequire } from 'node:module';
 import logger from '../utils/logger.js';
 import { allTools } from './definitions.js';
 import { getAccountManager } from '../modules/accounts/manager.js';
@@ -122,6 +123,10 @@ import {
   AttachFileToRecordArgs
 } from './file-handlers.js';
 
+const require = createRequire(import.meta.url);
+const pkg = require('../../package.json') as { version: string };
+export const SERVER_VERSION: string = pkg.version;
+
 export class HubSpotServer {
   private server: Server;
   private toolAliases: Map<string, string>;
@@ -130,7 +135,7 @@ export class HubSpotServer {
     this.server = new Server(
       {
         name: 'HubSpot MCP Server',
-        version: '1.0.0'
+        version: SERVER_VERSION
       },
       {
         capabilities: {
@@ -648,7 +653,7 @@ export class HubSpotServer {
 
   async run(): Promise<void> {
     try {
-      logger.info('HubSpot MCP Server v1.0.0 starting...');
+      logger.info(`HubSpot MCP Server v${SERVER_VERSION} starting...`);
 
       this.server.onerror = (error) => {
         logger.error('MCP Server error', error);
