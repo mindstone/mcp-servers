@@ -113,7 +113,7 @@ const loopbackHttpsRequest = (url, init = {}) => {
 // Sidecar state — discover the Office sidecar via state file
 // ---------------------------------------------------------------------------
 
-const stateFilePath = process.env.REBEL_OFFICE_SIDECAR_STATE;
+const stateFilePath = process.env.MCP_OFFICE_SIDECAR_STATE;
 const stateDir = stateFilePath ? path.dirname(stateFilePath) : null;
 const lastFailureFilePath = stateDir ? path.join(stateDir, 'sidecar-last-failure.json') : null;
 
@@ -371,7 +371,7 @@ const defaultSpawnSidecarAndWait = async () => {
   }
 
   if (!stateDir) {
-    throw new Error('REBEL_OFFICE_SIDECAR_STATE env not set — cannot determine state directory.');
+    throw new Error('MCP_OFFICE_SIDECAR_STATE env not set — cannot determine state directory.');
   }
 
   fs.mkdirSync(stateDir, { recursive: true });
@@ -379,10 +379,10 @@ const defaultSpawnSidecarAndWait = async () => {
   await new Promise((resolve, reject) => {
     const env = {
       ...process.env,
-      REBEL_OFFICE_SIDECAR_STATE_DIR: stateDir,
+      MCP_OFFICE_SIDECAR_STATE_DIR: stateDir,
     };
     const addinDir = resolveAddinDir();
-    if (addinDir) env.REBEL_OFFICE_ADDIN_DIR = addinDir;
+    if (addinDir) env.MCP_OFFICE_ADDIN_DIR = addinDir;
 
     const child = spawn(process.execPath, [script], {
       env,
@@ -448,7 +448,7 @@ const defaultSpawnSidecarAndWait = async () => {
 let spawnSidecarAndWait = defaultSpawnSidecarAndWait;
 
 const ensureSidecar = async () => {
-  if (process.env.REBEL_DISABLE_OFFICE_SIDECAR === '1') {
+  if (process.env.MCP_OFFICE_SIDECAR_DISABLE === '1') {
     throw createKillSwitchError();
   }
 
@@ -472,7 +472,7 @@ const ensureSidecar = async () => {
   }
 
   if (!stateDir || !lockFilePath) {
-    throw new Error('REBEL_OFFICE_SIDECAR_STATE env not set — cannot determine state directory.');
+    throw new Error('MCP_OFFICE_SIDECAR_STATE env not set — cannot determine state directory.');
   }
 
   fs.mkdirSync(stateDir, { recursive: true });

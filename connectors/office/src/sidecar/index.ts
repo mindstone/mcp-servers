@@ -232,7 +232,7 @@ function parseWsMessage(data: RawData): AddinToSidecarMessage | null {
 export async function startOfficeSidecar(options: StartSidecarOptions = {}): Promise<OfficeSidecar> {
   const token = generateToken();
   const host = options.host ?? DEFAULT_HOST;
-  const stateDir = options.stateDirectory ?? process.env['REBEL_OFFICE_SIDECAR_STATE_DIR'];
+  const stateDir = options.stateDirectory ?? process.env['MCP_OFFICE_SIDECAR_STATE_DIR'];
 
   // --- Resolve add-in static files directory ---
   const addinDir = options.addinDir ?? undefined;

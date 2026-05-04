@@ -26,6 +26,12 @@
           "isRequired": true,
           "isSecret": true,
           "format": "string"
+        },
+        {
+          "name": "MCP_WORKSPACE_PATH",
+          "description": "Workspace directory for document upload sources. Defaults to os.tmpdir() when unset.",
+          "isRequired": false,
+          "format": "filepath"
         }
       ]
     }

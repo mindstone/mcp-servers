@@ -26,6 +26,12 @@
           "isRequired": true,
           "isSecret": true,
           "format": "string"
+        },
+        {
+          "name": "MCP_WORKSPACE_PATH",
+          "description": "Workspace directory for transcription audio file inputs. Defaults to os.tmpdir() when unset.",
+          "isRequired": false,
+          "format": "filepath"
         }
       ]
     }

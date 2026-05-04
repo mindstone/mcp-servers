@@ -40,6 +40,18 @@
           "isRequired": false,
           "default": "600000",
           "format": "number"
+        },
+        {
+          "name": "RUNWAY_ALLOWED_ROOT",
+          "description": "Sandbox root for local-file inputs to upload tools. Defaults to os.tmpdir().",
+          "isRequired": false,
+          "format": "filepath"
+        },
+        {
+          "name": "RUNWAY_DOWNLOAD_ROOT",
+          "description": "Sandbox root for downloaded outputs. Defaults to ~/Downloads/runway-mcp.",
+          "isRequired": false,
+          "format": "filepath"
         }
       ]
     }
