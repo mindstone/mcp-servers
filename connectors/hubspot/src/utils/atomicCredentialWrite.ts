@@ -1,4 +1,4 @@
-// vendored from MindstoneRebel-1@830f3bb810a658e8c95ab35be7389d473e91ca71
+// vendored from upstream commit 830f3bb810a658e8c95ab35be7389d473e91ca71
 // keep byte-equivalent (modulo import path); see check-atomic-helper-equivalence.ts
 import crypto from 'node:crypto';
 import fs from 'node:fs';
