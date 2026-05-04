@@ -22,6 +22,7 @@ This server is designed for host-orchestrated OAuth. It reads host-managed crede
 
 - `HUBSPOT_CLIENT_ID`
 - `HUBSPOT_CLIENT_SECRET`
+- `HUBSPOT_SOURCE_LABEL` (optional) — overrides the source attribution label used on new records (default: `HubSpot MCP`)
 
 The server still boots without these values (unconfigured mode), but tools requiring authenticated HubSpot API access return structured `auth_required` responses.
 
@@ -59,6 +60,7 @@ The server exposes the full HubSpot tool surface (90+ tools), including:
 - File tools enforce workspace containment using `MCP_WORKSPACE_PATH` + canonical path checks.
 - Local credentials are read from host-managed files; account selection is pinned by `HUBSPOT_ACCOUNT_EMAIL`.
 - The OSS package does not run a local OAuth callback server in v0.1.0; OAuth is host-orchestrated.
+- Source attribution labels are applied only to new writes. Existing HubSpot record content is never retroactively rewritten.
 
 ## License
 

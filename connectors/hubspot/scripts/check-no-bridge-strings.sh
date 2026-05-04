@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 # Verify the published artefact contains no bridge/callback server strings.
-# Host-neutrality string sweeps (`Mindstone`, `Rebel`, `nspr`) are staged
-# separately and can be enabled with HUBSPOT_STRICT_HOST_NEUTRALITY=1.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -9,23 +7,16 @@ PKG_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DIST="$PKG_ROOT/dist"
 
 # Patterns that must NEVER appear in the published artefact.
-# Always blocked in v0.1.0
 PATTERNS=(
   "MINDSTONE_REBEL_BRIDGE_STATE"
   "MCP_HOST_BRIDGE_STATE"
   "callback-server"
   "OAuthCallbackServer"
   "http.createServer"
+  "Mindstone"
+  "Rebel"
+  "nspr"
 )
-
-# Stage 2.5 host-neutrality sweep (opt-in for now).
-if [[ "${HUBSPOT_STRICT_HOST_NEUTRALITY:-0}" == "1" ]]; then
-  PATTERNS+=(
-    "Mindstone"
-    "Rebel"
-    "nspr"
-  )
-fi
 
 found_any=0
 
@@ -46,8 +37,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 2. Scan the packed tarball — catches files outside dist/ that npm ships
-#    regardless of `files` config (README.md, LICENSE, package.json…).
+# 2. Scan dist/ inside the packed tarball (the runtime artifact users execute).
 # ---------------------------------------------------------------------------
 if [[ -d "$DIST" ]]; then
   TMP_PACK_DIR="$(mktemp -d -t hubspot-mcp-bridge-scan-XXXXXX)"
@@ -65,21 +55,23 @@ if [[ -d "$DIST" ]]; then
     echo "[check-no-bridge-strings] FAIL: no tarball produced in $TMP_PACK_DIR." >&2
     exit 1
   fi
-  echo "[check-no-bridge-strings] Scanning tarball: $TARBALL" >&2
+  echo "[check-no-bridge-strings] Scanning dist/ inside tarball: $TARBALL" >&2
 
-  # Extract every file's contents to stdout and grep for each pattern.
-  # `tar -xzOf -` outputs every file content concatenated, which is fine
-  # because any match anywhere in the tarball must fail the gate.
-  TARBALL_DUMP_FILE="$TMP_PACK_DIR/dump.txt"
-  if ! tar -xzOf "$TARBALL" >"$TARBALL_DUMP_FILE" 2>/dev/null; then
+  if ! tar -xzf "$TARBALL" -C "$TMP_PACK_DIR" 2>/dev/null; then
     echo "[check-no-bridge-strings] FAIL: failed to extract tarball for scan." >&2
     exit 1
   fi
 
+  TARBALL_DIST="$TMP_PACK_DIR/package/dist"
+  if [[ ! -d "$TARBALL_DIST" ]]; then
+    echo "[check-no-bridge-strings] FAIL: packed tarball missing package/dist." >&2
+    exit 1
+  fi
+
   for pattern in "${PATTERNS[@]}"; do
-    if matches=$(grep -F -n "$pattern" "$TARBALL_DUMP_FILE" 2>/dev/null); then
-      echo "[check-no-bridge-strings] FAIL (tarball): pattern '$pattern' found in packed tarball:" >&2
-      echo "$matches" | head -20 >&2
+    if matches=$(grep -rn -F "$pattern" "$TARBALL_DIST" 2>/dev/null); then
+      echo "[check-no-bridge-strings] FAIL (tarball dist/): pattern '$pattern' found in packed tarball dist/:" >&2
+      echo "$matches" >&2
       found_any=1
     fi
   done

@@ -1,5 +1,5 @@
 import { getHubSpotClientAsync, SearchFilter, SearchRequest, HubSpotApiError } from '../api/hubspot-client.js';
-import { injectRebelMetadata } from '../utils/user-context.js';
+import { injectHostMetadata } from '../utils/user-context.js';
 import { parseHubSpotError as parseSharedHubSpotError } from '../utils/error-parser.js';
 import logger from '../utils/logger.js';
 
@@ -208,7 +208,7 @@ async function getObject(objectType: string, objectId: string, args: GetArgs) {
 async function createObject(objectType: string, args: CreateArgs) {
   try {
     const client = await getHubSpotClientAsync();
-    const enrichedProperties = await injectRebelMetadata(args.properties, objectType);
+    const enrichedProperties = await injectHostMetadata(args.properties, objectType);
     const result = await client.createObject(objectType, enrichedProperties);
     logger.info(`Created ${objectType} with ID: ${result.id}`);
     return result;
@@ -346,7 +346,7 @@ export async function handleGetLead(args: { leadId: string } & GetArgs) {
 export async function handleCreateLead(args: { properties: Record<string, string>; contactId: string }) {
   try {
     const client = await getHubSpotClientAsync();
-    const enrichedProperties = await injectRebelMetadata(args.properties, 'leads');
+    const enrichedProperties = await injectHostMetadata(args.properties, 'leads');
     const associations = [{
       to: { id: args.contactId },
       types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 578 }] // lead_to_primary_contact
@@ -394,7 +394,7 @@ export async function handleDeleteTask(args: { taskId: string }) {
 export async function handleCreateNote(args: NoteCreateArgs) {
   try {
     const client = await getHubSpotClientAsync();
-    const enrichedProperties = await injectRebelMetadata(args.properties, 'notes');
+    const enrichedProperties = await injectHostMetadata(args.properties, 'notes');
     const note = await client.createObject('notes', enrichedProperties);
     
     // Create associations if provided
@@ -632,7 +632,7 @@ async function getEngagement(engagementType: string, engagementId: string, prope
 async function createEngagement(engagementType: string, args: EngagementCreateArgs) {
   try {
     const client = await getHubSpotClientAsync();
-    const enrichedProperties = await injectRebelMetadata(args.properties, engagementType);
+    const enrichedProperties = await injectHostMetadata(args.properties, engagementType);
     
     // Build associations array if provided
     let associations: Array<{ to: { id: string }; types: Array<{ associationCategory: string; associationTypeId: number }> }> | undefined;
@@ -797,7 +797,7 @@ export async function handleGetLineItem(args: { lineItemId: string; properties?:
 export async function handleCreateLineItem(args: { properties: Record<string, string>; dealId?: string }) {
   try {
     const client = await getHubSpotClientAsync();
-    const enrichedProperties = await injectRebelMetadata(args.properties, 'line_items');
+    const enrichedProperties = await injectHostMetadata(args.properties, 'line_items');
     
     // Build associations array if dealId provided
     const associations = args.dealId ? [{

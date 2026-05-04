@@ -3,6 +3,7 @@ import { getAccountManager } from '../modules/accounts/manager.js';
 import logger from './logger.js';
 
 const OWNER_LOOKUP_TIMEOUT_MS = 3000;
+const DEFAULT_SOURCE_LABEL = 'HubSpot MCP';
 
 const SOURCE_DETAIL_SUPPORTED_TYPES = new Set([
   'contacts', 'companies', 'deals', 'tickets', 'tasks', 'products'
@@ -54,13 +55,14 @@ async function getCurrentUserOwnerInfo(): Promise<OwnerInfo | null> {
 }
 
 function getSourceDetailString(ownerInfo: OwnerInfo | null, email: string): string {
+  const sourceLabel = process.env.HUBSPOT_SOURCE_LABEL?.trim() || DEFAULT_SOURCE_LABEL;
   if (ownerInfo && ownerInfo.fullName) {
-    return `Created by ${ownerInfo.fullName} via Rebel`;
+    return `Created by ${ownerInfo.fullName} via ${sourceLabel}`;
   }
-  return `Created by ${email} via Rebel`;
+  return `Created by ${email} via ${sourceLabel}`;
 }
 
-export async function injectRebelMetadata(
+export async function injectHostMetadata(
   properties: Record<string, string> | null | undefined,
   objectType: string
 ): Promise<Record<string, string>> {
@@ -88,7 +90,7 @@ export async function injectRebelMetadata(
 
     return safeProps;
   } catch (error) {
-    logger.debug(`Rebel metadata injection skipped (${objectType}):`, error);
+    logger.debug(`Host metadata injection skipped (${objectType}):`, error);
     return safeProps;
   }
 }
