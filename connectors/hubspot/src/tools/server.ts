@@ -158,15 +158,18 @@ export class HubSpotServer {
   }
 
   private async getScopeTier(): Promise<'readonly' | 'full'> {
-    // Priority: env var > first account's stored tier > default 'full'
+    // Priority: env var > selected account's stored tier > default 'full'
     if (process.env.HUBSPOT_SCOPE_TIER === 'readonly' || process.env.HUBSPOT_SCOPE_TIER === 'full') {
       return process.env.HUBSPOT_SCOPE_TIER;
     }
-    // Read from accounts.json (set during OAuth)
     try {
       const accountManager = getAccountManager();
       const accounts = await accountManager.getAccounts();
-      const storedTier = accounts[0]?.scopeTier;
+      const selectedEmail = process.env.HUBSPOT_ACCOUNT_EMAIL?.trim().toLowerCase();
+      const selectedAccount = selectedEmail
+        ? accounts.find((account) => account.email?.trim().toLowerCase() === selectedEmail)
+        : undefined;
+      const storedTier = selectedAccount?.scopeTier;
       // Validate the stored value to avoid fail-open on corrupted data
       if (storedTier === 'readonly' || storedTier === 'full') {
         return storedTier;
