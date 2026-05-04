@@ -1,6 +1,10 @@
 import { readFile, stat, realpath } from 'node:fs/promises';
 import path, { basename } from 'node:path';
 import { getHubSpotClientAsync, HubSpotApiError } from '../api/hubspot-client.js';
+import {
+  parseHubSpotError as parseSharedHubSpotError,
+  type ParsedHubSpotError,
+} from '../utils/error-parser.js';
 import { injectHostMetadata } from '../utils/user-context.js';
 import logger from '../utils/logger.js';
 
@@ -47,12 +51,23 @@ async function assertWorkspaceContainedFilePath(filePath: string): Promise<strin
   return resolvedFilePath;
 }
 
-function parseFileError(error: unknown, operation: string): {
-  error: string;
-  errorCode: string;
-  suggestion: string;
-  details?: unknown;
-} {
+function parseFileError(error: unknown, operation: string): ParsedHubSpotError {
+  const sharedParsed = parseSharedHubSpotError(error, {
+    objectType: 'files',
+    operation,
+    args: { operation },
+  });
+  if (
+    'status' in sharedParsed ||
+    sharedParsed.errorCode === 'REFRESH_TRANSIENT' ||
+    sharedParsed.errorCode === 'REFRESH_RATE_LIMITED' ||
+    sharedParsed.errorCode === 'REFRESH_MALFORMED_RESPONSE' ||
+    sharedParsed.errorCode === 'REFRESH_LOCK_FAILED' ||
+    sharedParsed.errorCode === 'TOKEN_PERSIST_FAILED'
+  ) {
+    return sharedParsed;
+  }
+
   if (error instanceof HubSpotApiError) {
     if (error.statusCode === 401) {
       return { error: 'HubSpot authentication expired', errorCode: 'AUTH_EXPIRED', suggestion: 'Call list_hubspot_accounts then authenticate_hubspot_account.' };
@@ -75,7 +90,9 @@ function parseFileError(error: unknown, operation: string): {
   if (msg.includes('ENOENT') || msg.includes('no such file')) {
     return { error: `File not found: ${msg}`, errorCode: 'FILE_NOT_FOUND', suggestion: 'Check the file path exists and is accessible.' };
   }
-  return { error: msg, errorCode: 'UNKNOWN_ERROR', suggestion: `Check inputs for ${operation} and try again.` };
+  return sharedParsed.errorCode === 'UNKNOWN_ERROR'
+    ? { error: msg, errorCode: 'UNKNOWN_ERROR', suggestion: `Check inputs for ${operation} and try again.` }
+    : sharedParsed;
 }
 
 function isStructuredError(error: unknown): boolean {
