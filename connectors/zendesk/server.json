@@ -23,7 +23,8 @@
         {
           "name": "ZENDESK_CONFIG_PATH",
           "description": "Path to the config directory containing accounts.json and credentials/",
-          "isRequired": true,
+          "isRequired": false,
+          "default": "~/.mcp/zendesk",
           "isSecret": false,
           "format": "filepath"
         },

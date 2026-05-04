@@ -36,8 +36,8 @@
         },
         {
           "name": "MCP_WORKSPACE_PATH",
-          "description": "Workspace root for local file tools",
-          "isRequired": true,
+          "description": "Workspace root for local file tools (required only when invoking upload/attach tools)",
+          "isRequired": false,
           "isSecret": false,
           "format": "filepath"
         },
@@ -61,6 +61,37 @@
           "isRequired": false,
           "default": "HubSpot MCP",
           "format": "string"
+        },
+        {
+          "name": "HUBSPOT_DISABLE_REFRESH",
+          "description": "Set to 1 to disable token refresh on this surface (use on cloud so desktop remains the sole refresh authority)",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "HUBSPOT_ALLOW_CLOUD_REFRESH",
+          "description": "Set to 1 to allow refresh on the cloud surface even when HUBSPOT_DISABLE_REFRESH=1 (escape hatch)",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "HUBSPOT_REQUEST_TIMEOUT_MS",
+          "description": "Outbound HTTP request timeout in milliseconds (max 300000 = 5 min)",
+          "isRequired": false,
+          "default": "60000",
+          "format": "number"
+        },
+        {
+          "name": "HUBSPOT_SCOPE_TIER",
+          "description": "OAuth scope tier — 'readonly' or 'full'. Overrides the per-account stored tier",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "HUBSPOT_REFRESH_LOCK_STALE_MS",
+          "description": "Stale-lock detection threshold for the credential refresh mutex (advanced)",
+          "isRequired": false,
+          "format": "number"
         }
       ]
     }

@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-office",
   "title": "Microsoft Office",
   "description": "Microsoft Office MCP server: read and edit Word documents, Excel workbooks, and PowerPoint files",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,24 +14,36 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone-engineering/mcp-server-office",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
       },
       "environmentVariables": [
         {
-          "name": "REBEL_OFFICE_SIDECAR_STATE",
+          "name": "MCP_OFFICE_SIDECAR_STATE",
           "description": "Absolute path to sidecar state file (host-managed; sidecar writes port + token here)",
           "isRequired": true,
           "isSecret": false,
           "format": "filepath"
         },
         {
-          "name": "REBEL_DISABLE_OFFICE_SIDECAR",
+          "name": "MCP_OFFICE_SIDECAR_DISABLE",
           "description": "Kill-switch — set to 1 to refuse to spawn or talk to the sidecar",
           "isRequired": false,
           "format": "string"
+        },
+        {
+          "name": "MCP_OFFICE_SIDECAR_STATE_DIR",
+          "description": "Sidecar state directory (certs, per-app manifests). Normally derived from MCP_OFFICE_SIDECAR_STATE; hosts managing the sidecar lifecycle directly can override.",
+          "isRequired": false,
+          "format": "filepath"
+        },
+        {
+          "name": "MCP_OFFICE_ADDIN_DIR",
+          "description": "Absolute path to the built add-in static files. Defaults to the package's dist/addin/ directory.",
+          "isRequired": false,
+          "format": "filepath"
         }
       ]
     }
@@ -39,15 +51,9 @@
   "_meta": {
     "io.modelcontextprotocol.registry/publisher-provided": {
       "com.mindstone.rebel": {
-        "catalogIds": [
-          "bundled-microsoft-calendar",
-          "bundled-microsoft-files",
-          "bundled-microsoft-mail",
-          "bundled-microsoft-sharepoint",
-          "bundled-microsoft-teams"
-        ],
-        "consolidator": "office",
-        "provider": "rebel-oss"
+        "catalogId": "bundled-office",
+        "provider": "rebel-oss",
+        "platforms": ["darwin", "win32"]
       }
     }
   }

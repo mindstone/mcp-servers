@@ -28,19 +28,19 @@ export interface SidecarLastFailureReadOptions {
 export const SIDECAR_STATE_FILE_NAME = 'sidecar-state.json';
 export const SIDECAR_LAST_FAILURE_FILE_NAME = 'sidecar-last-failure.json';
 
-export function resolveStateFilePath(stateDirectory = process.env.REBEL_OFFICE_SIDECAR_STATE_DIR): string {
+export function resolveStateFilePath(stateDirectory = process.env.MCP_OFFICE_SIDECAR_STATE_DIR): string {
   if (!stateDirectory || stateDirectory.trim().length === 0) {
-    throw new Error('REBEL_OFFICE_SIDECAR_STATE_DIR is required.');
+    throw new Error('MCP_OFFICE_SIDECAR_STATE_DIR is required.');
   }
 
   return path.join(stateDirectory, SIDECAR_STATE_FILE_NAME);
 }
 
 export function resolveLastFailureFilePath(
-  stateDirectory = process.env.REBEL_OFFICE_SIDECAR_STATE_DIR,
+  stateDirectory = process.env.MCP_OFFICE_SIDECAR_STATE_DIR,
 ): string {
   if (!stateDirectory || stateDirectory.trim().length === 0) {
-    throw new Error('REBEL_OFFICE_SIDECAR_STATE_DIR is required.');
+    throw new Error('MCP_OFFICE_SIDECAR_STATE_DIR is required.');
   }
 
   return path.join(stateDirectory, SIDECAR_LAST_FAILURE_FILE_NAME);
@@ -85,7 +85,7 @@ export async function atomicWriteFile(targetPath: string, payload: string): Prom
 
 export async function writeStateFile(
   state: SidecarState,
-  stateDirectory = process.env.REBEL_OFFICE_SIDECAR_STATE_DIR,
+  stateDirectory = process.env.MCP_OFFICE_SIDECAR_STATE_DIR,
 ): Promise<string> {
   const stateFilePath = resolveStateFilePath(stateDirectory);
   await atomicWriteFile(stateFilePath, JSON.stringify(state));
@@ -102,7 +102,7 @@ export async function writeLastFailureFile(
 }
 
 export async function readLastFailureFile(
-  stateDirectory = process.env.REBEL_OFFICE_SIDECAR_STATE_DIR,
+  stateDirectory = process.env.MCP_OFFICE_SIDECAR_STATE_DIR,
   options: SidecarLastFailureReadOptions = {},
 ): Promise<SidecarLastFailure | null> {
   const lastFailureFilePath = resolveLastFailureFilePath(stateDirectory);

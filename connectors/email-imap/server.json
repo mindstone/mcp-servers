@@ -74,14 +74,14 @@
         },
         {
           "name": "EMAIL_IMAP_MAX_RECIPIENTS",
-          "description": "Maximum combined To+CC+BCC recipients per email_send call",
+          "description": "Safety cap: maximum combined To+CC+BCC recipients per email_send call. Defaults to 25; raising bypasses spam-prevention guardrails against prompt-injection-driven mass sends.",
           "isRequired": false,
           "default": "25",
           "format": "number"
         },
         {
           "name": "EMAIL_IMAP_RATE_LIMIT_PER_HOUR",
-          "description": "Maximum email_send calls per rolling window",
+          "description": "Safety cap: maximum email_send calls per rolling window. Defaults to 50; protects against runaway sends when injection content escapes the LLM's intent.",
           "isRequired": false,
           "default": "50",
           "format": "number"
@@ -99,7 +99,11 @@
   "_meta": {
     "io.modelcontextprotocol.registry/publisher-provided": {
       "com.mindstone.rebel": {
-        "catalogId": "bundled-custom-email",
+        "catalogIds": [
+          "bundled-custom-email",
+          "bundled-icloud-mail",
+          "bundled-yahoo-mail"
+        ],
         "provider": "rebel-oss"
       }
     }

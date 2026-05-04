@@ -28,6 +28,13 @@
           "format": "string"
         },
         {
+          "name": "AGENT_BROWSER_SHOW_WINDOW",
+          "description": "Set to 'false' to run the browser headless. Default is visible (true).",
+          "isRequired": false,
+          "default": "true",
+          "format": "string"
+        },
+        {
           "name": "BROWSER_AUTOMATION_ALLOW_EVAL",
           "description": "Set to 1 to register the browser_evaluate tool (off by default for security)",
           "isRequired": false,

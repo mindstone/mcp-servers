@@ -60,6 +60,13 @@
           "isRequired": false,
           "default": "60000",
           "format": "number"
+        },
+        {
+          "name": "SLACK_MAX_RETRIES",
+          "description": "WebClient retries on transient failures (0-20). Lower this on cloud to avoid stacking long retry budgets into multi-minute hangs.",
+          "isRequired": false,
+          "default": "10",
+          "format": "number"
         }
       ]
     }

@@ -27,7 +27,7 @@
       "com.mindstone.rebel": {
         "catalogId": "bundled-apple-shortcuts",
         "provider": "rebel-oss",
-        "platform": "darwin"
+        "platforms": ["darwin"]
       }
     }
   }

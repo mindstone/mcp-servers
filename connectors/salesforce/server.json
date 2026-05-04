@@ -59,6 +59,19 @@
           "isRequired": false,
           "default": "~/.mcp/salesforce",
           "format": "filepath"
+        },
+        {
+          "name": "SALESFORCE_OAUTH_PORT",
+          "description": "OAuth callback port (0 = OS-assigned)",
+          "isRequired": false,
+          "default": "0",
+          "format": "number"
+        },
+        {
+          "name": "SALESFORCE_OAUTH_SCOPES",
+          "description": "Space-separated OAuth scopes",
+          "isRequired": false,
+          "format": "string"
         }
       ]
     }
