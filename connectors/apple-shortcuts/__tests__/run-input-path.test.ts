@@ -5,7 +5,7 @@
  * file must be unlinked in a `finally` block on every exit path.
  */
 
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
 import fs from "node:fs";
 import os from "node:os";
