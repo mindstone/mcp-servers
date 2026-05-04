@@ -1,0 +1,75 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mindstone/mcp-server-slack",
+  "title": "Slack",
+  "description": "Slack MCP server: channels, messages, threads, reactions, users, files, and scheduled messages",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/mindstone/mcp-servers",
+    "source": "github",
+    "subfolder": "connectors/slack"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@mindstone-engineering/mcp-server-slack",
+      "version": "0.1.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "SLACK_CONFIG_PATH",
+          "description": "Path to the host-managed Slack config directory",
+          "isRequired": true,
+          "isSecret": false,
+          "format": "filepath"
+        },
+        {
+          "name": "SLACK_TEAM_ID",
+          "description": "Slack workspace team ID (one process per workspace)",
+          "isRequired": true,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "SLACK_CLIENT_ID",
+          "description": "Slack OAuth Connected App client ID",
+          "isRequired": true,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "SLACK_CLIENT_SECRET",
+          "description": "Slack OAuth Connected App client secret",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "SLACK_DISABLE_REFRESH",
+          "description": "Set to 1 to disable token refresh on this surface (cloud surface)",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "SLACK_REQUEST_TIMEOUT_MS",
+          "description": "Override the upstream timeout (max 300000ms = 5 min)",
+          "isRequired": false,
+          "default": "60000",
+          "format": "number"
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "com.mindstone.rebel": {
+        "catalogId": "bundled-slack",
+        "provider": "rebel-oss"
+      }
+    }
+  }
+}

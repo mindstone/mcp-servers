@@ -1,0 +1,54 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mindstone/mcp-server-office",
+  "title": "Microsoft Office",
+  "description": "Microsoft Office MCP server: read and edit Word documents, Excel workbooks, and PowerPoint files",
+  "version": "0.1.1",
+  "repository": {
+    "url": "https://github.com/mindstone/mcp-servers",
+    "source": "github",
+    "subfolder": "connectors/office"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@mindstone-engineering/mcp-server-office",
+      "version": "0.1.1",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "REBEL_OFFICE_SIDECAR_STATE",
+          "description": "Absolute path to sidecar state file (host-managed; sidecar writes port + token here)",
+          "isRequired": true,
+          "isSecret": false,
+          "format": "filepath"
+        },
+        {
+          "name": "REBEL_DISABLE_OFFICE_SIDECAR",
+          "description": "Kill-switch — set to 1 to refuse to spawn or talk to the sidecar",
+          "isRequired": false,
+          "format": "string"
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "com.mindstone.rebel": {
+        "catalogIds": [
+          "bundled-microsoft-calendar",
+          "bundled-microsoft-files",
+          "bundled-microsoft-mail",
+          "bundled-microsoft-sharepoint",
+          "bundled-microsoft-teams"
+        ],
+        "consolidator": "office",
+        "provider": "rebel-oss"
+      }
+    }
+  }
+}

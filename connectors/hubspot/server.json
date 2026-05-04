@@ -1,0 +1,76 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mindstone/mcp-server-hubspot",
+  "title": "HubSpot",
+  "description": "HubSpot MCP server: CRM objects, associations, properties, marketing, files, and workflows",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/mindstone/mcp-servers",
+    "source": "github",
+    "subfolder": "connectors/hubspot"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@mindstone-engineering/mcp-server-hubspot",
+      "version": "0.1.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "HUBSPOT_CONFIG_DIR",
+          "description": "Directory containing accounts.json and credentials/*.token.json",
+          "isRequired": true,
+          "isSecret": false,
+          "format": "filepath"
+        },
+        {
+          "name": "HUBSPOT_ACCOUNT_EMAIL",
+          "description": "Account selector — one MCP process per HubSpot account",
+          "isRequired": true,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "MCP_WORKSPACE_PATH",
+          "description": "Workspace root for local file tools",
+          "isRequired": true,
+          "isSecret": false,
+          "format": "filepath"
+        },
+        {
+          "name": "HUBSPOT_CLIENT_ID",
+          "description": "HubSpot OAuth client ID",
+          "isRequired": true,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "HUBSPOT_CLIENT_SECRET",
+          "description": "HubSpot OAuth client secret",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "HUBSPOT_SOURCE_LABEL",
+          "description": "Source attribution label applied to new records",
+          "isRequired": false,
+          "default": "HubSpot MCP",
+          "format": "string"
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "com.mindstone.rebel": {
+        "catalogId": "bundled-hubspot",
+        "provider": "rebel-oss"
+      }
+    }
+  }
+}
