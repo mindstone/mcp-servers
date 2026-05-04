@@ -1,0 +1,54 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mindstone/mcp-server-napkin",
+  "title": "Napkin",
+  "description": "Napkin AI visual generation MCP server for Model Context Protocol hosts",
+  "version": "0.3.1",
+  "repository": {
+    "url": "https://github.com/mindstone/mcp-servers",
+    "source": "github",
+    "subfolder": "connectors/napkin"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@mindstone-engineering/mcp-server-napkin",
+      "version": "0.3.1",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "NAPKIN_API_KEY",
+          "description": "Napkin AI API key",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "MCP_WORKSPACE_PATH",
+          "description": "Workspace directory for saving generated visuals",
+          "isRequired": false,
+          "format": "filepath"
+        },
+        {
+          "name": "NAPKIN_REQUEST_TIMEOUT_MS",
+          "description": "Outbound HTTP request timeout in milliseconds (max 1800000)",
+          "isRequired": false,
+          "default": "60000",
+          "format": "number"
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "com.mindstone.rebel": {
+        "catalogId": "bundled-napkin",
+        "provider": "rebel-oss"
+      }
+    }
+  }
+}

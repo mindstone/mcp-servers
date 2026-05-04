@@ -1,0 +1,41 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mindstone/mcp-server-freshdesk",
+  "title": "Freshdesk",
+  "description": "Freshdesk Support MCP server for Model Context Protocol hosts",
+  "version": "0.2.1",
+  "repository": {
+    "url": "https://github.com/mindstone/mcp-servers",
+    "source": "github",
+    "subfolder": "connectors/freshdesk"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@mindstone-engineering/mcp-server-freshdesk",
+      "version": "0.2.1",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "FRESHDESK_CONFIG_PATH",
+          "description": "Path to the config directory storing per-account credentials",
+          "isRequired": false,
+          "default": "~/.mcp/freshdesk",
+          "format": "filepath"
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "com.mindstone.rebel": {
+        "catalogId": "bundled-freshdesk",
+        "provider": "rebel-oss"
+      }
+    }
+  }
+}
