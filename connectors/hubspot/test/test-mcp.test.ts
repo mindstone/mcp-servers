@@ -138,6 +138,7 @@ function createStandardRoutes() {
             company: 'Acme Corp',
             phone: '+1-555-0101',
             jobtitle: 'VP of Sales',
+            notes: 'Legacy note text via Rebel',
           },
           createdAt: '2026-01-01T00:00:00Z',
           updatedAt: '2026-01-15T00:00:00Z',
@@ -338,7 +339,7 @@ describe('HubSpot MCP - mock API tests', () => {
     expect(result.results[0].email).toBe('test@example.com');
   });
 
-  // ─── FOX-2660: Rebel metadata injection tests ───────────────────────────
+  // ─── FOX-2660: host metadata injection tests ───────────────────────────
 
   it('create_hubspot_contact injects hs_object_source_detail_2', async () => {
     mockApi.clearLog();
@@ -357,7 +358,7 @@ describe('HubSpot MCP - mock API tests', () => {
     );
     expect(createReq).toBeDefined();
     const body = createReq!.body as { properties: Record<string, string> };
-    expect(body.properties.hs_object_source_detail_2).toContain('via Rebel');
+    expect(body.properties.hs_object_source_detail_2).toContain('via HubSpot MCP');
   });
 
   it('create_hubspot_deal injects both source detail and owner', async () => {
@@ -378,7 +379,7 @@ describe('HubSpot MCP - mock API tests', () => {
     );
     expect(createReq).toBeDefined();
     const body = createReq!.body as { properties: Record<string, string> };
-    expect(body.properties.hs_object_source_detail_2).toContain('via Rebel');
+    expect(body.properties.hs_object_source_detail_2).toContain('via HubSpot MCP');
     expect(body.properties.hubspot_owner_id).toBe('5001');
   });
 
@@ -400,6 +401,18 @@ describe('HubSpot MCP - mock API tests', () => {
     const body = createReq!.body as { properties: Record<string, string> };
     expect(body.properties.hubspot_owner_id).toBe('9999');
     expect(body.properties.hs_object_source_detail_2).toBe('Custom source');
+  });
+
+  it('get_hubspot_contact preserves legacy "via Rebel" body content on reads', async () => {
+    const result = await client.callToolJson<{
+      id: string;
+      properties: { notes: string };
+    }>('get_hubspot_contact', {
+      contactId: '101',
+      properties: ['notes'],
+    });
+
+    expect(result.properties.notes).toBe('Legacy note text via Rebel');
   });
 
   it('top-level hubspot_owner_id takes precedence over properties bag value', async () => {
@@ -1373,7 +1386,7 @@ describe('HubSpot MCP - metadata injection with no owners (free account)', () =>
     expect(createReq).toBeDefined();
     const body = createReq!.body as { properties: Record<string, string> };
     expect(body.properties.hs_object_source_detail_2).toContain('test@example.com');
-    expect(body.properties.hs_object_source_detail_2).toContain('via Rebel');
+    expect(body.properties.hs_object_source_detail_2).toContain('via HubSpot MCP');
   });
 
   it('create_hubspot_deal sets source detail and uses provided owner even with no owners API', async () => {
@@ -1389,7 +1402,7 @@ describe('HubSpot MCP - metadata injection with no owners (free account)', () =>
     );
     expect(createReq).toBeDefined();
     const body = createReq!.body as { properties: Record<string, string> };
-    expect(body.properties.hs_object_source_detail_2).toContain('via Rebel');
+    expect(body.properties.hs_object_source_detail_2).toContain('via HubSpot MCP');
     expect(body.properties.hubspot_owner_id).toBe('7777');
   });
 });
@@ -1454,7 +1467,7 @@ describe('HubSpot MCP - metadata injection with owner API failure', () => {
     expect(createReq).toBeDefined();
     const body = createReq!.body as { properties: Record<string, string> };
     // Source detail should still be set using email fallback
-    expect(body.properties.hs_object_source_detail_2).toContain('via Rebel');
+    expect(body.properties.hs_object_source_detail_2).toContain('via HubSpot MCP');
   });
 
   it('create_hubspot_deal succeeds with explicit owner even when owner lookup fails', async () => {
@@ -1472,7 +1485,7 @@ describe('HubSpot MCP - metadata injection with owner API failure', () => {
     );
     expect(createReq).toBeDefined();
     const body = createReq!.body as { properties: Record<string, string> };
-    expect(body.properties.hs_object_source_detail_2).toContain('via Rebel');
+    expect(body.properties.hs_object_source_detail_2).toContain('via HubSpot MCP');
     expect(body.properties.hubspot_owner_id).toBe('8888');
   });
 });

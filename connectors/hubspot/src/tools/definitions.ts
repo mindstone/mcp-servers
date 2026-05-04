@@ -214,7 +214,7 @@ USE THIS WHEN:
 
 REQUIRED: email (strongly recommended - used for deduplication)
 
-NOTE: Rebel automatically sets hs_object_source_detail_2 for source attribution.
+NOTE: The server automatically sets hs_object_source_detail_2 for source attribution.
 
 COMMON PROPERTIES:
 - email, firstname, lastname
@@ -225,7 +225,7 @@ COMMON PROPERTIES:
 - hubspot_owner_id: assign to a team member (RECOMMENDED — get IDs from list_hubspot_owners)
 
 COMMON MISTAKES:
-- NOT specifying hubspot_owner_id — if omitted, the contact may be assigned to the HubSpot account used to connect Rebel (the integration account), not the intended owner. Use list_hubspot_owners to find the correct owner ID.
+- NOT specifying hubspot_owner_id — if omitted, the contact may be assigned to the HubSpot integration account used by your host, not the intended owner. Use list_hubspot_owners to find the correct owner ID.
 - If list_hubspot_owners returns empty (e.g., free accounts), you may proceed without hubspot_owner_id.
 
 RETURNS: Created contact with id and properties`,
@@ -368,7 +368,7 @@ COMMON PROPERTIES:
 - hubspot_owner_id: assign to team member (RECOMMENDED — get IDs from list_hubspot_owners)
 
 COMMON MISTAKES:
-- NOT specifying hubspot_owner_id — if omitted, the company may be assigned to the HubSpot account used to connect Rebel (the integration account), not the intended owner. Use list_hubspot_owners to find the correct owner ID.
+- NOT specifying hubspot_owner_id — if omitted, the company may be assigned to the HubSpot integration account used by your host, not the intended owner. Use list_hubspot_owners to find the correct owner ID.
 - If list_hubspot_owners returns empty (e.g., free accounts), you may proceed without hubspot_owner_id.
 
 RETURNS: Created company with id and properties`,
@@ -496,9 +496,9 @@ REQUIRED: dealname, hubspot_owner_id
 
 IMPORTANT: Use list_hubspot_pipelines first to get valid pipeline and dealstage IDs!
 
-FALLBACK FIELDS (set by Rebel only if not provided):
-- hubspot_owner_id: FALLBACK ONLY — if not provided via the top-level parameter, falls back to the HubSpot account used to connect Rebel. This is usually the WRONG person on team accounts.
-- hs_object_source_detail_2: records that this deal was created via Rebel
+FALLBACK FIELDS (set by the server only if not provided):
+- hubspot_owner_id: FALLBACK ONLY — if not provided via the top-level parameter, falls back to the HubSpot integration account used by your host. This is usually the WRONG person on team accounts.
+- hs_object_source_detail_2: records that this deal was created via your MCP host
 
 COMMON PROPERTIES (inside the properties object):
 - dealname (deal/opportunity name)
@@ -515,7 +515,7 @@ WORKFLOW:
 
 COMMON MISTAKES:
 - Using this tool when the user says "lead" or "create a lead" — leads are a separate HubSpot object type. Use create_hubspot_lead instead.
-- NOT specifying hubspot_owner_id — if omitted, the deal is silently assigned to the HubSpot account used to connect Rebel (the integration account), NOT the intended deal owner. This causes incorrect assignment notifications and pipeline confusion. ALWAYS call list_hubspot_owners to find the correct owner ID.
+- NOT specifying hubspot_owner_id — if omitted, the deal is silently assigned to the HubSpot integration account used by your host, NOT the intended deal owner. This causes incorrect assignment notifications and pipeline confusion. ALWAYS call list_hubspot_owners to find the correct owner ID.
 - Using display names instead of IDs for pipeline/dealstage — always use list_hubspot_pipelines to get valid IDs first.
 
 RETURNS: Created deal with id and properties`,

@@ -1,7 +1,7 @@
 import { readFile, stat, realpath } from 'node:fs/promises';
 import path, { basename } from 'node:path';
 import { getHubSpotClientAsync, HubSpotApiError } from '../api/hubspot-client.js';
-import { injectRebelMetadata } from '../utils/user-context.js';
+import { injectHostMetadata } from '../utils/user-context.js';
 import logger from '../utils/logger.js';
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
@@ -282,7 +282,7 @@ export async function handleAttachFileToRecord(args: AttachFileToRecordArgs) {
       hs_attachment_ids: fileId
     };
 
-    const enrichedNoteProperties = await injectRebelMetadata(noteProperties, 'notes');
+    const enrichedNoteProperties = await injectHostMetadata(noteProperties, 'notes');
     const note = await client.createObject('notes', enrichedNoteProperties);
     logger.info(`Created note ${note.id} with attachment ${fileId}`);
 
