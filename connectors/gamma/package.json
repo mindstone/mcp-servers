@@ -1,6 +1,7 @@
 {
   "name": "@mindstone-engineering/mcp-server-gamma",
   "version": "0.3.1",
+  "mcpName": "io.github.mindstone/mcp-server-gamma",
   "description": "Gamma AI presentation generation MCP server for Model Context Protocol hosts",
   "license": "FSL-1.1-MIT",
   "type": "module",
