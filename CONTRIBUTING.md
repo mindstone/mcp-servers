@@ -32,12 +32,49 @@ test-harness/      # Shared test utilities (linked via file: dependency)
 ## Adding a New Connector
 
 1. Copy `connectors/_template/` to `connectors/<your-connector>/`
-2. Update `package.json` with the connector name and description
-3. Update the `LICENSE` file — replace the placeholder software name
-4. Implement the connector following the patterns in existing connectors
-5. Add tests using the shared test harness
-6. Add a `README.md` with setup and configuration instructions
-7. Submit a pull request
+2. Update `package.json` with the connector name and description (replace every `CONNECTOR_NAME` placeholder; keep the `mcpName` field — see [Registry submission](#registry-submission) below)
+3. Update `server.json` — replace every `CONNECTOR_NAME`, `CONNECTOR_TITLE`, and `CONNECTOR_DESCRIPTION` placeholder; declare every required and optional environment variable in `packages[0].environmentVariables`; remove the placeholder `CONNECTOR_API_KEY` block if your connector uses a different auth model
+4. Update the `LICENSE` file — replace the placeholder software name
+5. Implement the connector following the patterns in existing connectors
+6. Add tests using the shared test harness
+7. Add a `README.md` with setup and configuration instructions
+8. Verify locally: `npm run build && npm test && mcp-publisher validate server.json` (see [Registry submission](#registry-submission) for the publisher CLI)
+9. Submit a pull request
+
+## Registry Submission
+
+Every connector ships a `server.json` manifest so it can be discovered through the [official MCP Registry](https://registry.modelcontextprotocol.io). The template includes one already; you only need to fill in the placeholders.
+
+### What you need to know
+
+- The `name` field uses reverse-DNS namespacing under the org's GitHub identity: `io.github.mindstone/mcp-server-<connector>`. Do not change the `io.github.mindstone/` prefix — the registry uses GitHub OIDC to verify ownership of that namespace.
+- The `mcpName` field in `package.json` MUST equal `server.json.name`. The registry reads `mcpName` from the published npm metadata to confirm whoever pushes the manifest owns the package. CI checks this for you (see `.github/workflows/server-json-check.yml`).
+- Three versions must stay in sync: the git tag, `package.json.version`, and `server.json.version` (which is also `server.json.packages[0].version`). The publish workflow already enforces this for tags ↔ package.json; the new CI job enforces it across `server.json` too.
+- The `_meta.io.modelcontextprotocol.registry/publisher-provided.com.mindstone.rebel` block carries `catalogId` and `provider` for round-trip identity with the Rebel app's connector catalog. Leave these in unless you know your connector will never be added to Rebel's catalog.
+
+### Validating locally
+
+```bash
+# Install the publisher CLI once (macOS via Homebrew)
+brew install mcp-publisher
+# Linux: download from https://github.com/modelcontextprotocol/registry/releases
+
+cd connectors/<your-connector>
+mcp-publisher validate server.json
+```
+
+A passing validate is required before opening a PR. CI runs the same check on every PR — see `.github/workflows/server-json-check.yml`.
+
+### Publishing to the registry
+
+Maintainer task, not a contributor task. After a connector is tagged and the npm publish workflow ships a new version, the maintainer registers (or updates) the entry with:
+
+```bash
+mcp-publisher login github-oidc
+mcp-publisher publish connectors/<connector>/server.json
+```
+
+This step is currently manual; it will move into the publish workflow once provenance attestations land.
 
 ## Development Guidelines
 
