@@ -2728,14 +2728,26 @@ automation scopes; if it still fails, your portal may require the v3 enrollment 
 ];
 
 // Export all tools
-export const AUTH_EXEMPT_TOOL_NAMES = [
+export const LOCAL_ONLY_TOOL_NAMES = [
   'list_hubspot_accounts',
   'remove_hubspot_account'
 ] as const;
 
-const AUTH_EXEMPT_TOOL_SET = new Set<string>(AUTH_EXEMPT_TOOL_NAMES);
+export const AUTH_EXEMPT_TOOL_NAMES = [...LOCAL_ONLY_TOOL_NAMES] as const;
 
-export const allTools: ToolMetadata[] = [
+export const DESTRUCTIVE_TOOL_NAME_PATTERN = /^(create|update|delete|remove|send|configure|post|patch|put|enrol|activate|deactivate|attach|import)_/;
+
+export const FORCE_DESTRUCTIVE_TOOL_NAMES = [
+  'authenticate_hubspot_account',
+  'complete_hubspot_auth',
+  'remove_hubspot_account',
+] as const;
+
+const LOCAL_ONLY_TOOL_SET = new Set<string>(LOCAL_ONLY_TOOL_NAMES);
+const AUTH_EXEMPT_TOOL_SET = new Set<string>(AUTH_EXEMPT_TOOL_NAMES);
+const FORCE_DESTRUCTIVE_TOOL_SET = new Set<string>(FORCE_DESTRUCTIVE_TOOL_NAMES);
+
+const BASE_TOOLS: ToolMetadata[] = [
   ...accountTools,
   ...contactTools,
   ...companyTools,
@@ -2759,7 +2771,23 @@ export const allTools: ToolMetadata[] = [
   ...knowledgeBaseTools,
   ...fileTools,
   ...workflowTools
-].map((tool) => ({
-  ...tool,
-  requiresAuth: !AUTH_EXEMPT_TOOL_SET.has(tool.name)
-}));
+];
+
+function applyCohortHygieneAnnotations(tool: ToolMetadata): ToolMetadata {
+  const shouldForceDestructiveHint =
+    DESTRUCTIVE_TOOL_NAME_PATTERN.test(tool.name) ||
+    FORCE_DESTRUCTIVE_TOOL_SET.has(tool.name);
+  const openWorldHint = !LOCAL_ONLY_TOOL_SET.has(tool.name);
+
+  return {
+    ...tool,
+    requiresAuth: !AUTH_EXEMPT_TOOL_SET.has(tool.name),
+    annotations: {
+      ...tool.annotations,
+      destructiveHint: shouldForceDestructiveHint ? true : tool.annotations?.destructiveHint,
+      openWorldHint,
+    },
+  };
+}
+
+export const allTools: ToolMetadata[] = BASE_TOOLS.map(applyCohortHygieneAnnotations);
