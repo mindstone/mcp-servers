@@ -1,6 +1,7 @@
 {
   "name": "@mindstone-engineering/mcp-server-runway",
   "version": "0.3.1",
+  "mcpName": "io.github.mindstone/mcp-server-runway",
   "description": "Runway ML MCP server for Model Context Protocol hosts — AI video, image, audio generation, custom voices, task management",
   "license": "FSL-1.1-MIT",
   "type": "module",

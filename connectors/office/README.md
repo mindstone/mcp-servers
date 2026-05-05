@@ -46,7 +46,7 @@ node dist/index.js
 
 1. The host (e.g. Mindstone Rebel) spawns the stdio MCP server.
 2. The MCP server expects a running Office sidecar — it discovers it via the
-   state file path in `REBEL_OFFICE_SIDECAR_STATE`.
+   state file path in `MCP_OFFICE_SIDECAR_STATE`.
 3. If no sidecar is running, the MCP server lazy-spawns one from
    `dist/sidecar/cli.js`.
 4. On first start, the sidecar generates a trusted localhost HTTPS certificate
@@ -67,24 +67,24 @@ node dist/index.js
 
 **Read by the stdio MCP server (`dist/index.js`):**
 
-- `REBEL_OFFICE_SIDECAR_STATE` — **required**. Absolute path to the sidecar state
+- `MCP_OFFICE_SIDECAR_STATE` — **required**. Absolute path to the sidecar state
   file (JSON). The MCP server reads `port` and `token` from this file to talk
   to the sidecar; the sidecar writes it on startup. The state file's parent
   directory doubles as the sidecar's state directory (certs, per-app
   manifests).
-- `REBEL_DISABLE_OFFICE_SIDECAR` — optional kill-switch. When set (`1`), the
+- `MCP_OFFICE_SIDECAR_DISABLE` — optional kill-switch. When set (`1`), the
   MCP server refuses to talk to or spawn the sidecar.
 
 **Read by the sidecar (`dist/sidecar/cli.js`) — normally set by the MCP server
 when it lazy-spawns the sidecar, but documented here for hosts that manage the
 sidecar lifecycle directly:**
 
-- `REBEL_OFFICE_SIDECAR_STATE_DIR` — **required** by the sidecar. Directory for
+- `MCP_OFFICE_SIDECAR_STATE_DIR` — **required** by the sidecar. Directory for
   the state file, HTTPS certificates, and generated per-app manifests
   (`manifest.word.xml`, `manifest.excel.xml`, `manifest.powerpoint.xml`). The
   MCP server derives this from the parent directory of
-  `REBEL_OFFICE_SIDECAR_STATE` and passes it through automatically.
-- `REBEL_OFFICE_ADDIN_DIR` — optional. Absolute path to the built add-in static
+  `MCP_OFFICE_SIDECAR_STATE` and passes it through automatically.
+- `MCP_OFFICE_ADDIN_DIR` — optional. Absolute path to the built add-in static
   files (the directory containing `taskpane.html`, `taskpane.js`, and
   `assets/`). The MCP server sets this to the package's `dist/addin/`
   directory; hosts serving a custom add-in bundle can override it.
@@ -96,7 +96,7 @@ sidecar lifecycle directly:**
 The Office connector is designed to be managed by a host application (like
 Mindstone Rebel) that owns the sidecar lifecycle. Running it directly from
 Claude Desktop is possible but the host must provide a writable
-`REBEL_OFFICE_SIDECAR_STATE` path.
+`MCP_OFFICE_SIDECAR_STATE` path.
 
 ```json
 {
@@ -105,7 +105,7 @@ Claude Desktop is possible but the host must provide a writable
       "command": "npx",
       "args": ["-y", "@mindstone-engineering/mcp-server-office"],
       "env": {
-        "REBEL_OFFICE_SIDECAR_STATE": "/absolute/path/to/sidecar-state.json"
+        "MCP_OFFICE_SIDECAR_STATE": "/absolute/path/to/sidecar-state.json"
       }
     }
   }
@@ -121,7 +121,7 @@ Claude Desktop is possible but the host must provide a writable
   "command": "npx",
   "args": ["-y", "@mindstone-engineering/mcp-server-office@0.1.0"],
   "env": {
-    "REBEL_OFFICE_SIDECAR_STATE": "~/Library/Application Support/mindstone-rebel/office-sidecar/sidecar-state.json"
+    "MCP_OFFICE_SIDECAR_STATE": "~/Library/Application Support/mindstone-rebel/office-sidecar/sidecar-state.json"
   },
   "description": "Microsoft Office integration — Word, Excel, PowerPoint.",
   "catalogId": "bundled-office"
@@ -141,7 +141,7 @@ returned by `listTools`.
 ## Smoke test
 
 ```bash
-REBEL_OFFICE_SIDECAR_STATE=/tmp/rebel-office-smoke/sidecar-state.json \
+MCP_OFFICE_SIDECAR_STATE=/tmp/rebel-office-smoke/sidecar-state.json \
   node dist/index.js
 ```
 

@@ -1,0 +1,111 @@
+name: server.json check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mcp-publisher
+        run: |
+          set -euo pipefail
+          # Pinned to v1.7.7 — installing the released binary directly because
+          # `go install …cmd/mcp-publisher` was removed from the upstream source
+          # tree at v1.7.7. Bump cautiously when newer releases appear.
+          VERSION="v1.7.7"
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/${VERSION}/mcp-publisher_linux_amd64.tar.gz" | tar -xz
+          sudo install -m 0755 mcp-publisher /usr/local/bin/mcp-publisher
+          mcp-publisher --version
+
+      - name: Validate every connector
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          fail=0
+          summary=()
+
+          for d in connectors/*/; do
+            name="$(basename "$d")"
+            # _template is starter scaffolding with placeholders; skip it.
+            if [ "$name" = "_template" ]; then
+              continue
+            fi
+
+            sj="${d}server.json"
+            pj="${d}package.json"
+
+            has_sj=0
+            has_mcpname=0
+            [ -f "$sj" ] && has_sj=1
+            if [ -f "$pj" ] && grep -q '"mcpName"' "$pj"; then
+              has_mcpname=1
+            fi
+
+            # Drift detection — both files must opt in together
+            if [ "$has_sj" -eq 1 ] && [ "$has_mcpname" -eq 0 ]; then
+              echo "::error file=${pj}::server.json present but mcpName missing in package.json (registry needs both)"
+              summary+=("FAIL ${name}: mcpName missing")
+              fail=1
+              continue
+            fi
+            if [ "$has_sj" -eq 0 ] && [ "$has_mcpname" -eq 1 ]; then
+              echo "::error file=${sj}::mcpName declared in package.json but server.json missing"
+              summary+=("FAIL ${name}: server.json missing")
+              fail=1
+              continue
+            fi
+
+            if [ "$has_sj" -eq 0 ]; then
+              summary+=("SKIP ${name}: not yet onboarded to registry")
+              continue
+            fi
+
+            # Cross-file consistency — checks the publisher CLI does NOT do
+            sj_name=$(node -e "process.stdout.write(require('./${sj}').name)")
+            pj_mcpname=$(node -e "process.stdout.write(require('./${pj}').mcpName)")
+            sj_version=$(node -e "process.stdout.write(require('./${sj}').version)")
+            pj_version=$(node -e "process.stdout.write(require('./${pj}').version)")
+            sj_pkg_version=$(node -e "process.stdout.write(require('./${sj}').packages[0].version)")
+            sj_pkg_identifier=$(node -e "process.stdout.write(require('./${sj}').packages[0].identifier)")
+            pj_name=$(node -e "process.stdout.write(require('./${pj}').name)")
+
+            if [ "$sj_name" != "$pj_mcpname" ]; then
+              echo "::error file=${sj}::name (${sj_name}) does not match package.json mcpName (${pj_mcpname})"
+              fail=1
+            fi
+            if [ "$sj_version" != "$pj_version" ]; then
+              echo "::error file=${sj}::version (${sj_version}) does not match package.json version (${pj_version})"
+              fail=1
+            fi
+            if [ "$sj_version" != "$sj_pkg_version" ]; then
+              echo "::error file=${sj}::version (${sj_version}) does not match packages[0].version (${sj_pkg_version})"
+              fail=1
+            fi
+            if [ "$sj_pkg_identifier" != "$pj_name" ]; then
+              echo "::error file=${sj}::packages[0].identifier (${sj_pkg_identifier}) does not match package.json name (${pj_name})"
+              fail=1
+            fi
+
+            # Authoritative schema + registry-rule check
+            if mcp-publisher validate "$sj"; then
+              summary+=("PASS ${name}")
+            else
+              echo "::error file=${sj}::mcp-publisher validate failed"
+              summary+=("FAIL ${name}: mcp-publisher validate")
+              fail=1
+            fi
+          done
+
+          echo
+          echo "=== server.json check summary ==="
+          printf '%s\n' "${summary[@]}"
+          exit $fail

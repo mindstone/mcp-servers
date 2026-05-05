@@ -1,0 +1,75 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mindstone/mcp-server-quickbooks",
+  "title": "QuickBooks Online",
+  "description": "QuickBooks Online MCP server: invoices, bills, customers, vendors, employees, and accounts",
+  "version": "0.3.0",
+  "repository": {
+    "url": "https://github.com/mindstone/mcp-servers",
+    "source": "github",
+    "subfolder": "connectors/quickbooks"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@mindstone-engineering/mcp-server-quickbooks",
+      "version": "0.3.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "QUICKBOOKS_CLIENT_ID",
+          "description": "Intuit Developer app client ID",
+          "isRequired": true,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "QUICKBOOKS_CLIENT_SECRET",
+          "description": "Intuit Developer app client secret",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "QUICKBOOKS_REFRESH_TOKEN",
+          "description": "OAuth 2.0 refresh token",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "QUICKBOOKS_REALM_ID",
+          "description": "QuickBooks company (realm) ID",
+          "isRequired": true,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "QUICKBOOKS_ENVIRONMENT",
+          "description": "sandbox or production",
+          "isRequired": false,
+          "default": "production",
+          "format": "string"
+        },
+        {
+          "name": "QB_ALLOW_PROD_WRITES",
+          "description": "Set to exactly 1 to enable mutating tools (secure-by-default; required since 0.3.0)",
+          "isRequired": false,
+          "format": "string"
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "com.mindstone.rebel": {
+        "catalogId": "bundled-quickbooks",
+        "provider": "rebel-oss"
+      }
+    }
+  }
+}

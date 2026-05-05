@@ -1,0 +1,111 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mindstone/mcp-server-email-imap",
+  "title": "Email (IMAP/SMTP)",
+  "description": "Email IMAP/SMTP MCP server: iCloud, Gmail, Yahoo, Outlook, and custom IMAP providers",
+  "version": "0.2.2",
+  "repository": {
+    "url": "https://github.com/mindstone/mcp-servers",
+    "source": "github",
+    "subfolder": "connectors/email-imap"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@mindstone-engineering/mcp-server-email-imap",
+      "version": "0.2.2",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "EMAIL_IMAP_EMAIL",
+          "description": "Email address",
+          "isRequired": true,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "EMAIL_IMAP_PASSWORD",
+          "description": "App-specific password",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "EMAIL_IMAP_PROVIDER",
+          "description": "Provider — icloud, gmail, yahoo, outlook, or custom (auto-detected from email domain if unset)",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "EMAIL_IMAP_IMAP_HOST",
+          "description": "Custom IMAP host (for provider=custom)",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "EMAIL_IMAP_SMTP_HOST",
+          "description": "Custom SMTP host (for provider=custom)",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "EMAIL_IMAP_IMAP_PORT",
+          "description": "Custom IMAP port",
+          "isRequired": false,
+          "default": "993",
+          "format": "number"
+        },
+        {
+          "name": "EMAIL_IMAP_SMTP_PORT",
+          "description": "Custom SMTP port",
+          "isRequired": false,
+          "default": "587",
+          "format": "number"
+        },
+        {
+          "name": "EMAIL_IMAP_ALLOW_PLAINTEXT",
+          "description": "Set to 1 to opt into cleartext IMAP/SMTP (strongly discouraged)",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "EMAIL_IMAP_MAX_RECIPIENTS",
+          "description": "Safety cap: maximum combined To+CC+BCC recipients per email_send call. Defaults to 25; raising bypasses spam-prevention guardrails against prompt-injection-driven mass sends.",
+          "isRequired": false,
+          "default": "25",
+          "format": "number"
+        },
+        {
+          "name": "EMAIL_IMAP_RATE_LIMIT_PER_HOUR",
+          "description": "Safety cap: maximum email_send calls per rolling window. Defaults to 50; protects against runaway sends when injection content escapes the LLM's intent.",
+          "isRequired": false,
+          "default": "50",
+          "format": "number"
+        },
+        {
+          "name": "EMAIL_IMAP_RATE_LIMIT_WINDOW_MS",
+          "description": "Sliding-window length for the rate limit (ms)",
+          "isRequired": false,
+          "default": "3600000",
+          "format": "number"
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "com.mindstone.rebel": {
+        "catalogIds": [
+          "bundled-custom-email",
+          "bundled-icloud-mail",
+          "bundled-yahoo-mail"
+        ],
+        "provider": "rebel-oss"
+      }
+    }
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mindstone/mcp-server-outreach",
+  "title": "Outreach",
+  "description": "Outreach sales engagement MCP server: prospects, sequences, accounts, tasks, and mailings",
+  "version": "0.1.2",
+  "repository": {
+    "url": "https://github.com/mindstone/mcp-servers",
+    "source": "github",
+    "subfolder": "connectors/outreach"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@mindstone-engineering/mcp-server-outreach",
+      "version": "0.1.2",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "OUTREACH_CLIENT_ID",
+          "description": "Outreach OAuth client ID (recommended path)",
+          "isRequired": true,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "OUTREACH_CLIENT_SECRET",
+          "description": "Outreach OAuth client secret (recommended path)",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "OUTREACH_ACCESS_TOKEN",
+          "description": "Static access token (alternative to OAuth)",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "OUTREACH_CONFIG_DIR",
+          "description": "Custom config directory",
+          "isRequired": false,
+          "default": "~/.mcp/outreach",
+          "format": "filepath"
+        },
+        {
+          "name": "OUTREACH_OAUTH_PORT",
+          "description": "OAuth callback port (0 = OS-assigned)",
+          "isRequired": false,
+          "default": "0",
+          "format": "number"
+        },
+        {
+          "name": "OUTREACH_OAUTH_SCOPES",
+          "description": "Space-separated OAuth scopes",
+          "isRequired": false,
+          "format": "string"
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "com.mindstone.rebel": {
+        "catalogId": "bundled-outreach",
+        "provider": "rebel-oss"
+      }
+    }
+  }
+}

@@ -170,7 +170,7 @@ beforeAll(async () => {
   stateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'office-server-ensure-sidecar-'));
   stateFilePath = path.join(stateDir, 'sidecar-state.json');
   lastFailureFilePath = path.join(stateDir, 'sidecar-last-failure.json');
-  process.env.REBEL_OFFICE_SIDECAR_STATE = stateFilePath;
+  process.env.MCP_OFFICE_SIDECAR_STATE = stateFilePath;
   const serverModule = (await import('../src/index.js')) as unknown as {
     __test: EnsureSidecarTestHooks;
   };
@@ -178,7 +178,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  delete process.env.REBEL_DISABLE_OFFICE_SIDECAR;
+  delete process.env.MCP_OFFICE_SIDECAR_DISABLE;
   hooks.resetForTests();
   await fs.mkdir(stateDir, { recursive: true });
 });
@@ -322,21 +322,41 @@ describe('server.cjs ensureSidecar', () => {
   it('throws a brand-voice kill-switch error without leaking the env var name', async () => {
     const spawnSpy = vi.fn(async () => {});
     hooks.setSpawnSidecarAndWaitForTests(spawnSpy);
-    process.env.REBEL_DISABLE_OFFICE_SIDECAR = '1';
+    process.env.MCP_OFFICE_SIDECAR_DISABLE = '1';
 
     const error = await hooks.ensureSidecar().then(
       () => {
-        throw new Error('Expected REBEL_DISABLE_OFFICE_SIDECAR to reject ensureSidecar().');
+        throw new Error('Expected MCP_OFFICE_SIDECAR_DISABLE to reject ensureSidecar().');
       },
       (caught) => caught as Error & { code?: string },
     );
 
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toBe('The Office connection has been turned off for this Rebel installation.');
-    expect(error.message).not.toContain('REBEL_DISABLE_OFFICE_SIDECAR');
+    expect(error.message).not.toContain('MCP_OFFICE_SIDECAR_DISABLE');
     expect(error.message.toLowerCase()).not.toContain('env variable');
     expect(error.code).toBe('kill-switch');
     expect(spawnSpy).not.toHaveBeenCalled();
+  });
+
+  it('honors the legacy REBEL_DISABLE_OFFICE_SIDECAR kill-switch for backward compat', async () => {
+    const spawnSpy = vi.fn(async () => {});
+    hooks.setSpawnSidecarAndWaitForTests(spawnSpy);
+    process.env.REBEL_DISABLE_OFFICE_SIDECAR = '1';
+
+    const error = await hooks.ensureSidecar().then(
+      () => {
+        throw new Error('Expected legacy kill-switch to reject ensureSidecar().');
+      },
+      (caught) => caught as Error & { code?: string },
+    );
+
+    expect(error.code).toBe('kill-switch');
+    expect(error.message).not.toContain('REBEL_DISABLE_OFFICE_SIDECAR');
+    expect(error.message).not.toContain('MCP_OFFICE_SIDECAR_DISABLE');
+    expect(spawnSpy).not.toHaveBeenCalled();
+
+    delete process.env.REBEL_DISABLE_OFFICE_SIDECAR;
   });
 
   it('writes a pid-dead fallback sentinel with lastEagerStartErrorCode when spawning lazily', async () => {
