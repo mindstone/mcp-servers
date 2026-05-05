@@ -15,19 +15,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.23'
-
       - name: Install mcp-publisher
         run: |
           set -euo pipefail
-          go install github.com/modelcontextprotocol/registry/cmd/mcp-publisher@latest
+          # Pinned to v1.7.7 — installing the released binary directly because
+          # `go install …cmd/mcp-publisher` was removed from the upstream source
+          # tree at v1.7.7. Bump cautiously when newer releases appear.
+          VERSION="v1.7.7"
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/${VERSION}/mcp-publisher_linux_amd64.tar.gz" | tar -xz
+          sudo install -m 0755 mcp-publisher /usr/local/bin/mcp-publisher
           mcp-publisher --version
 
       - name: Validate every connector
-        env:
-          PATH: ${{ env.PATH }}:${{ env.HOME }}/go/bin
         run: |
           set -euo pipefail
           shopt -s nullglob
