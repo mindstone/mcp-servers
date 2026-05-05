@@ -247,8 +247,10 @@ export async function handleGetKbArticle(args: GetKbArticleArgs): Promise<Record
   try {
     const client = await getHubSpotClientAsync();
 
-    // Escape any quotes in articleId to prevent GraphQL injection
-    const safeArticleId = args.articleId.replace(/"/g, '\\"');
+    // Escape backslashes first, then quotes — to prevent GraphQL string-injection
+    // via inputs that end in or contain a backslash (e.g. `bad\` would otherwise
+    // let the trailing backslash escape the closing quote in the template literal).
+    const safeArticleId = args.articleId.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
     const query = `{
   KB {

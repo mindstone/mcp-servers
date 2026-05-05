@@ -247,12 +247,15 @@ export async function createMockApiServer(routes: MockRoute[]): Promise<MockApiS
         res.end(JSON.stringify(response.body));
       }
     } catch (error) {
+      // Test fixture: surface a generic message to the wire and log the real
+      // error to stderr for the developer running the tests. Avoids leaking
+      // stack-trace / internal-state details into the response body even in
+      // the unlikely case the harness is ever pointed at a non-test consumer.
+      // eslint-disable-next-line no-console
+      console.error('[mcp-test-harness] mock handler threw:', error);
       res.statusCode = 500;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({
-        error: 'Mock handler error',
-        message: error instanceof Error ? error.message : String(error)
-      }));
+      res.end(JSON.stringify({ error: 'Mock handler error' }));
     }
   });
 
