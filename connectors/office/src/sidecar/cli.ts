@@ -9,8 +9,8 @@
  * and outputs the connection details as JSON to stdout.
  *
  * Environment variables:
- *   REBEL_OFFICE_SIDECAR_STATE_DIR — Required. Directory for state file, certs, and manifests.
- *   REBEL_OFFICE_ADDIN_DIR         — Optional. Path to built add-in static files.
+ *   MCP_OFFICE_SIDECAR_STATE_DIR — Required. Directory for state file, certs, and manifests.
+ *   MCP_OFFICE_ADDIN_DIR         — Optional. Path to built add-in static files.
  */
 
 import { startOfficeSidecar } from './index.js';
@@ -20,13 +20,13 @@ process.on('disconnect', () => {
   process.exit(0);
 });
 
-const stateDir = process.env['REBEL_OFFICE_SIDECAR_STATE_DIR'];
+const stateDir = process.env['MCP_OFFICE_SIDECAR_STATE_DIR'];
 if (!stateDir) {
-  console.error('[office-sidecar-cli] REBEL_OFFICE_SIDECAR_STATE_DIR is required');
+  console.error('[office-sidecar-cli] MCP_OFFICE_SIDECAR_STATE_DIR is required');
   process.exit(1);
 }
 
-const addinDir = process.env['REBEL_OFFICE_ADDIN_DIR'];
+const addinDir = process.env['MCP_OFFICE_ADDIN_DIR'];
 
 try {
   const sidecar = await startOfficeSidecar({

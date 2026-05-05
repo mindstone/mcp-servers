@@ -1,0 +1,67 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mindstone/mcp-server-runway",
+  "title": "Runway ML",
+  "description": "Runway ML MCP server: AI video, image, audio, voice generation, and task management",
+  "version": "0.3.1",
+  "repository": {
+    "url": "https://github.com/mindstone/mcp-servers",
+    "source": "github",
+    "subfolder": "connectors/runway"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@mindstone-engineering/mcp-server-runway",
+      "version": "0.3.1",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "RUNWAYML_API_SECRET",
+          "description": "Runway API key (from dev.runwayml.com)",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "RUNWAY_REQUEST_TIMEOUT_MS",
+          "description": "Outbound HTTP request timeout in milliseconds (max 1800000)",
+          "isRequired": false,
+          "default": "60000",
+          "format": "number"
+        },
+        {
+          "name": "RUNWAY_UPLOAD_TIMEOUT_MS",
+          "description": "Signed-URL upload timeout for large local files in milliseconds",
+          "isRequired": false,
+          "default": "600000",
+          "format": "number"
+        },
+        {
+          "name": "RUNWAY_ALLOWED_ROOT",
+          "description": "Sandbox root for local-file inputs to upload tools. Defaults to os.tmpdir().",
+          "isRequired": false,
+          "format": "filepath"
+        },
+        {
+          "name": "RUNWAY_DOWNLOAD_ROOT",
+          "description": "Sandbox root for downloaded outputs. Defaults to ~/Downloads/runway-mcp.",
+          "isRequired": false,
+          "format": "filepath"
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "com.mindstone.rebel": {
+        "catalogId": "bundled-runway",
+        "provider": "rebel-oss"
+      }
+    }
+  }
+}

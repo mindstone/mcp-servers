@@ -155,6 +155,12 @@ function sendTaskpaneHtml(
       'Content-Type': 'text/html; charset=utf-8',
       'Content-Length': buf.length,
       'Cache-Control': 'no-cache',
+      // Defense-in-depth: even though the route is on https://127.0.0.1:<port> with
+      // browser default-deny CORS, set explicit headers so the auth token embedded
+      // in the page can't be exfiltrated via a permissive CORS regression or sniffing.
+      'Cross-Origin-Resource-Policy': 'same-origin',
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer',
     });
     res.end(buf);
   } catch {
@@ -232,7 +238,7 @@ function parseWsMessage(data: RawData): AddinToSidecarMessage | null {
 export async function startOfficeSidecar(options: StartSidecarOptions = {}): Promise<OfficeSidecar> {
   const token = generateToken();
   const host = options.host ?? DEFAULT_HOST;
-  const stateDir = options.stateDirectory ?? process.env['REBEL_OFFICE_SIDECAR_STATE_DIR'];
+  const stateDir = options.stateDirectory ?? process.env['MCP_OFFICE_SIDECAR_STATE_DIR'];
 
   // --- Resolve add-in static files directory ---
   const addinDir = options.addinDir ?? undefined;

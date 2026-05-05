@@ -1,0 +1,26 @@
+{
+  "id": "slack",
+  "name": "Slack",
+  "description": "Manage Slack workspaces — channels, messages, threads, reactions, users, files, bookmarks, scheduled messages, search",
+  "category": "Communication",
+  "icon": "slack",
+  "maturity": "stable",
+  "verifiedSource": true,
+  "requiresSetup": true,
+  "setupFields": [
+    {
+      "key": "SLACK_CLIENT_ID",
+      "label": "OAuth Client ID",
+      "description": "Your Slack OAuth app client ID",
+      "required": true,
+      "secret": false
+    },
+    {
+      "key": "SLACK_CLIENT_SECRET",
+      "label": "OAuth Client Secret",
+      "description": "Your Slack OAuth app client secret",
+      "required": true,
+      "secret": true
+    }
+  ]
+}

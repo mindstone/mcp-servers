@@ -1,0 +1,55 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mindstone/mcp-server-zendesk",
+  "title": "Zendesk",
+  "description": "Zendesk MCP server for Model Context Protocol hosts",
+  "version": "0.3.1",
+  "repository": {
+    "url": "https://github.com/mindstone/mcp-servers",
+    "source": "github",
+    "subfolder": "connectors/zendesk"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@mindstone-engineering/mcp-server-zendesk",
+      "version": "0.3.1",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "ZENDESK_CONFIG_PATH",
+          "description": "Path to the config directory containing accounts.json and credentials/",
+          "isRequired": false,
+          "default": "~/.mcp/zendesk",
+          "isSecret": false,
+          "format": "filepath"
+        },
+        {
+          "name": "ZENDESK_CLIENT_ID",
+          "description": "Optional OAuth client ID for legacy token refresh flows",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "ZENDESK_CLIENT_SECRET",
+          "description": "Optional OAuth client secret for legacy token refresh flows",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "com.mindstone.rebel": {
+        "catalogId": "bundled-zendesk",
+        "provider": "rebel-oss"
+      }
+    }
+  }
+}

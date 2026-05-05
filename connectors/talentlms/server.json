@@ -1,0 +1,55 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mindstone/mcp-server-talentlms",
+  "title": "TalentLMS",
+  "description": "TalentLMS MCP server: users, courses, groups, branches, reporting, and assessments",
+  "version": "0.2.1",
+  "repository": {
+    "url": "https://github.com/mindstone/mcp-servers",
+    "source": "github",
+    "subfolder": "connectors/talentlms"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@mindstone-engineering/mcp-server-talentlms",
+      "version": "0.2.1",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "TALENTLMS_API_KEY",
+          "description": "TalentLMS API key",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "TALENTLMS_DOMAIN",
+          "description": "TalentLMS subdomain (e.g. acme for acme.talentlms.com)",
+          "isRequired": true,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "TALENTLMS_REQUEST_TIMEOUT",
+          "description": "Request timeout in milliseconds",
+          "isRequired": false,
+          "default": "30000",
+          "format": "number"
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "com.mindstone.rebel": {
+        "catalogId": "bundled-talentlms",
+        "provider": "rebel-oss"
+      }
+    }
+  }
+}

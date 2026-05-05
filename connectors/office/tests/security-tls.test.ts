@@ -93,9 +93,9 @@ beforeAll(async () => {
   // and that importing the module does NOT set it back to '0'.
   delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
 
-  // The module reads REBEL_OFFICE_SIDECAR_STATE at import time to derive paths.
+  // The module reads MCP_OFFICE_SIDECAR_STATE at import time to derive paths.
   stateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'office-security-tls-'));
-  process.env.REBEL_OFFICE_SIDECAR_STATE = path.join(stateDir, 'sidecar-state.json');
+  process.env.MCP_OFFICE_SIDECAR_STATE = path.join(stateDir, 'sidecar-state.json');
 
   serverModule = (await import('../src/index.js')) as unknown as ServerModule;
 });

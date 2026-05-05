@@ -1,0 +1,62 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mindstone/mcp-server-gamma",
+  "title": "Gamma",
+  "description": "Gamma AI presentation generation MCP server for Model Context Protocol hosts",
+  "version": "0.3.1",
+  "repository": {
+    "url": "https://github.com/mindstone/mcp-servers",
+    "source": "github",
+    "subfolder": "connectors/gamma"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@mindstone-engineering/mcp-server-gamma",
+      "version": "0.3.1",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "GAMMA_API_KEY",
+          "description": "Gamma API key (create at https://gamma.app/settings/api-keys)",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "GAMMA_EXPORT_POLL_INTERVAL_MS",
+          "description": "Export poll interval in milliseconds",
+          "isRequired": false,
+          "default": "5000",
+          "format": "number"
+        },
+        {
+          "name": "GAMMA_EXPORT_POLL_MAX_ATTEMPTS",
+          "description": "Maximum export poll attempts",
+          "isRequired": false,
+          "default": "12",
+          "format": "number"
+        },
+        {
+          "name": "GAMMA_REQUEST_TIMEOUT_MS",
+          "description": "Outbound HTTP request timeout in milliseconds (max 1800000)",
+          "isRequired": false,
+          "default": "60000",
+          "format": "number"
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "com.mindstone.rebel": {
+        "catalogId": "bundled-gamma",
+        "provider": "rebel-oss"
+      }
+    }
+  }
+}

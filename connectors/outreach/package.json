@@ -1,6 +1,7 @@
 {
   "name": "@mindstone-engineering/mcp-server-outreach",
   "version": "0.1.2",
+  "mcpName": "io.github.mindstone/mcp-server-outreach",
   "description": "Outreach sales engagement MCP server — prospects, sequences, accounts, tasks, and mailings via Outreach API",
   "license": "FSL-1.1-MIT",
   "type": "module",

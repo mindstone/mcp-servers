@@ -1,6 +1,7 @@
 {
   "name": "@mindstone-engineering/mcp-server-apple-shortcuts",
   "version": "0.1.1",
+  "mcpName": "io.github.mindstone/mcp-server-apple-shortcuts",
   "description": "MCP server for Apple Shortcuts via the macOS shortcuts CLI",
   "license": "FSL-1.1-MIT",
   "type": "module",
@@ -24,7 +25,8 @@
     "build": "tsc",
     "prepare": "npm run build",
     "start": "node dist/index.js",
-    "test": "npm run build && node --test __tests__/*.test.ts"
+    "test": "npm run build && vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
@@ -32,9 +34,10 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.3"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   }
 }
