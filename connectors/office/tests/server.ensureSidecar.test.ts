@@ -339,6 +339,26 @@ describe('server.cjs ensureSidecar', () => {
     expect(spawnSpy).not.toHaveBeenCalled();
   });
 
+  it('honors the legacy REBEL_DISABLE_OFFICE_SIDECAR kill-switch for backward compat', async () => {
+    const spawnSpy = vi.fn(async () => {});
+    hooks.setSpawnSidecarAndWaitForTests(spawnSpy);
+    process.env.REBEL_DISABLE_OFFICE_SIDECAR = '1';
+
+    const error = await hooks.ensureSidecar().then(
+      () => {
+        throw new Error('Expected legacy kill-switch to reject ensureSidecar().');
+      },
+      (caught) => caught as Error & { code?: string },
+    );
+
+    expect(error.code).toBe('kill-switch');
+    expect(error.message).not.toContain('REBEL_DISABLE_OFFICE_SIDECAR');
+    expect(error.message).not.toContain('MCP_OFFICE_SIDECAR_DISABLE');
+    expect(spawnSpy).not.toHaveBeenCalled();
+
+    delete process.env.REBEL_DISABLE_OFFICE_SIDECAR;
+  });
+
   it('writes a pid-dead fallback sentinel with lastEagerStartErrorCode when spawning lazily', async () => {
     const spawnSpy = vi.fn(async () => {});
     hooks.setSpawnSidecarAndWaitForTests(spawnSpy);

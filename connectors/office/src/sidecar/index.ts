@@ -155,6 +155,12 @@ function sendTaskpaneHtml(
       'Content-Type': 'text/html; charset=utf-8',
       'Content-Length': buf.length,
       'Cache-Control': 'no-cache',
+      // Defense-in-depth: even though the route is on https://127.0.0.1:<port> with
+      // browser default-deny CORS, set explicit headers so the auth token embedded
+      // in the page can't be exfiltrated via a permissive CORS regression or sniffing.
+      'Cross-Origin-Resource-Policy': 'same-origin',
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer',
     });
     res.end(buf);
   } catch {

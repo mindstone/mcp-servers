@@ -414,8 +414,16 @@ const defaultSpawnSidecarAndWait = async () => {
       }
     });
 
+    // Always kill the spawned child on startup failure or timeout. Without this,
+    // an orphan can keep running, write state, and bind to fallback ports — leaving
+    // the next ensureSidecar() call to potentially adopt a sidecar of unknown vintage.
+    const killChildIfAlive = () => {
+      try { if (!child.killed) child.kill('SIGTERM'); } catch { /* ignore */ }
+    };
+
     child.on('error', (err) => {
       sidecarChild = null;
+      killChildIfAlive();
       settle(reject, err);
     });
 
@@ -426,6 +434,7 @@ const defaultSpawnSidecarAndWait = async () => {
 
     // Timeout after 30s
     setTimeout(() => {
+      killChildIfAlive();
       settle(reject, new Error('Sidecar startup timed out after 30s'));
     }, 30_000);
   });
@@ -448,7 +457,19 @@ const defaultSpawnSidecarAndWait = async () => {
 let spawnSidecarAndWait = defaultSpawnSidecarAndWait;
 
 const ensureSidecar = async () => {
-  if (process.env.MCP_OFFICE_SIDECAR_DISABLE === '1') {
+  // Honor both new (MCP_OFFICE_SIDECAR_DISABLE) and legacy (REBEL_DISABLE_OFFICE_SIDECAR)
+  // kill-switch env vars. Legacy support exists so v0.1.1 → v0.1.3 upgrades don't silently
+  // ignore an existing operator-set kill-switch (security override). Slated for removal once
+  // the legacy name is confirmed unused in the field.
+  const newKillSwitch = process.env.MCP_OFFICE_SIDECAR_DISABLE === '1';
+  const legacyKillSwitch = process.env.REBEL_DISABLE_OFFICE_SIDECAR === '1';
+  if (newKillSwitch || legacyKillSwitch) {
+    if (legacyKillSwitch && !newKillSwitch) {
+      // Dev-side log only — must NOT leak env var name into user-visible error message.
+      process.stderr.write(
+        '[office-mcp] Legacy kill-switch env detected (deprecated); please migrate to the documented current name.\n',
+      );
+    }
     throw createKillSwitchError();
   }
 
