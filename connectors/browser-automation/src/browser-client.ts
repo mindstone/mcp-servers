@@ -37,6 +37,29 @@ function buildEnv(): Record<string, string> {
 }
 
 /**
+ * Resolve whether the browser window should be visible for this invocation.
+ *
+ * Resolution order (highest precedence first):
+ *   1. Explicit `options.headed` from the caller (true → headed, false → headless).
+ *      Used by `browser_authenticate` and any future caller that wants to
+ *      override the user's preference for a specific operation.
+ *   2. The `AGENT_BROWSER_SHOW_WINDOW` env var, set by the host application
+ *      from the user's connector setupField:
+ *        - 'false' / '0' → headless (work out of sight)
+ *        - 'true' / '1' / unset → headed (visible window)
+ *
+ * The visible default is deliberate: showing the browser builds user trust by
+ * letting them watch what the agent is doing. Hosts (or power users) who
+ * prefer the quieter behaviour can opt out by setting the env var to 'false'.
+ */
+function resolveHeaded(optionHeaded: boolean | undefined, env: Record<string, string>): boolean {
+  if (optionHeaded !== undefined) return optionHeaded;
+  const raw = env.AGENT_BROWSER_SHOW_WINDOW?.trim().toLowerCase();
+  if (raw === 'false' || raw === '0') return false;
+  return true;
+}
+
+/**
  * Pinned version of agent-browser used by the npx fallback.
  *
  * Why pinned: keeps fallback behavior reproducible. Bump when verified against
@@ -53,9 +76,12 @@ const NPX_FALLBACK_VERSION = '0.26.0';
  * AFTER the command — putting them first makes the CLI report
  * "Unknown command: --headed" and exit 1.
  *
- * Headless is the agent-browser default; we only inject `--headed` (after the
- * command) when explicitly requested. There is no `--headless` flag — passing
- * one would be a CLI error.
+ * Visibility default is HEADED — users see the browser window so they can
+ * watch what the agent is doing (the trust-by-transparency choice). Hosts
+ * that want quiet operation set `AGENT_BROWSER_SHOW_WINDOW=false`. Callers
+ * can override per-call with `options.headed`. There is no `--headless` flag
+ * on the CLI — passing one would be a CLI error — so headless is the absence
+ * of `--headed`.
  *
  * Falls back to `npx -y agent-browser@<NPX_FALLBACK_VERSION>` if the binary is
  * not on PATH. Uses execFile (no shell) to prevent command injection.
@@ -69,8 +95,8 @@ export async function execAgentBrowser(
 
   // Inject --headed AFTER the command (positional index 1). The CLI parses
   // the first positional as the command name, so flags must follow it.
-  // Headless is the default; no flag needed to opt in.
-  if (options?.headed && args.length > 0) {
+  // Headless is the absence of --headed; the CLI has no --headless flag.
+  if (resolveHeaded(options?.headed, env) && args.length > 0) {
     args = [args[0], '--headed', ...args.slice(1)];
   }
 

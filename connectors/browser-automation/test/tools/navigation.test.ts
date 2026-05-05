@@ -113,8 +113,11 @@ describe('Navigation tools — Browser Automation', () => {
   // `--headless` or `--headed` before the command, the CLI errors with
   // "Unknown command: --headed" and exits 1.
   //
-  // Headless is the default — no flag should be injected at all.
-  it('does NOT inject --headless before the command (regression: agent-browser would reject it)', async () => {
+  // The CLI has no `--headless` flag at all (headless is the absence of
+  // `--headed`), so it must NEVER appear. `--headed` may appear depending on
+  // the user's `AGENT_BROWSER_SHOW_WINDOW` preference, but always AFTER the
+  // command — never as the first positional.
+  it('never injects --headless and never puts a flag in the command slot', async () => {
     const childProcess = await import('node:child_process');
     const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
 
@@ -137,8 +140,34 @@ describe('Navigation tools — Browser Automation', () => {
     expect(capturedCalls[0][0]).toBe('open');
     for (const args of capturedCalls) {
       expect(args).not.toContain('--headless');
-      // The valid flag is --headed, and only when explicitly opted-in.
+      expect(args[0].startsWith('--')).toBe(false);
+    }
+  });
+
+  // When the host opts the user out of the visible window, the CLI args are
+  // the bare command — no `--headed`, and (still) no `--headless`.
+  it('omits --headed when AGENT_BROWSER_SHOW_WINDOW=false', async () => {
+    vi.stubEnv('AGENT_BROWSER_SHOW_WINDOW', 'false');
+    const childProcess = await import('node:child_process');
+    const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
+
+    const capturedCalls: string[][] = [];
+    mockExecFile.mockImplementation((_cmd: string, args: string[], _opts: unknown, callback: Function) => {
+      capturedCalls.push(args);
+      callback(null, '', '');
+    });
+
+    testClient = await createTestClient();
+
+    await testClient.client.callTool({
+      name: 'browser_navigate',
+      arguments: { url: 'https://example.com' },
+    });
+
+    expect(capturedCalls.length).toBeGreaterThanOrEqual(1);
+    for (const args of capturedCalls) {
       expect(args).not.toContain('--headed');
+      expect(args).not.toContain('--headless');
     }
   });
 
