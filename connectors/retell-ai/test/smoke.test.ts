@@ -10,14 +10,19 @@ const EXPECTED_TOOLS = [
   'create_retell_llm',
   'create_web_call',
   'get_agent',
+  'get_agent_versions',
   'get_call',
+  'get_phone_number',
   'get_retell_llm',
   'list_agents',
   'list_calls',
   'list_phone_numbers',
   'list_retell_llms',
   'list_voices',
+  'publish_agent',
+  'stop_call',
   'update_agent',
+  'update_phone_number',
   'update_retell_llm',
 ];
 
@@ -32,7 +37,7 @@ describe('Smoke test — Retell AI MCP server', () => {
     if (testClient) await testClient.close();
   });
 
-  it('should register all 15 tools via MCP protocol', async () => {
+  it('should register all 20 tools via MCP protocol', async () => {
     mswServer.use(...createRetellHandlers());
 
     testClient = await createTestClient({
@@ -45,7 +50,7 @@ describe('Smoke test — Retell AI MCP server', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map(t => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(15);
+    expect(toolsResult.tools).toHaveLength(20);
     expect(toolNames).toEqual(EXPECTED_TOOLS);
   });
 
@@ -81,6 +86,7 @@ describe('Smoke test — Retell AI MCP server', () => {
     const readOnlyTools = [
       'get_agent', 'list_agents', 'get_call', 'list_calls',
       'get_retell_llm', 'list_retell_llms', 'list_voices', 'list_phone_numbers',
+      'get_agent_versions', 'get_phone_number',
     ];
 
     const destructiveTools = [
@@ -88,6 +94,7 @@ describe('Smoke test — Retell AI MCP server', () => {
       'create_phone_call', 'create_web_call',
       'create_agent', 'create_retell_llm',
       'configure_retell_api_key',
+      'stop_call', 'publish_agent', 'update_phone_number',
     ];
 
     for (const tool of toolsResult.tools) {

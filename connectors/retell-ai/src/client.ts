@@ -16,11 +16,17 @@ function getErrorResolution(status: number, detail?: string): string {
   if (status === 401 || msg.includes('unauthorized') || msg.includes('invalid api key')) {
     return 'Authentication failed. Check your Retell AI API key. Get one at https://www.retellai.com/dashboard';
   }
+  if (status === 402 || msg.includes('trial') || msg.includes('payment')) {
+    return 'Payment required. Add a payment method at https://www.retellai.com/dashboard';
+  }
   if (status === 403 || msg.includes('quota') || msg.includes('limit') || msg.includes('insufficient')) {
     return 'Insufficient permissions or quota exceeded. Check your plan at https://www.retellai.com/dashboard';
   }
   if (status === 404) {
-    return 'Resource not found. Check that the ID is correct. Use list_agents, list_calls, or list_retell_llms to browse available resources.';
+    return 'Resource not found. The ID may be wrong, or the resource was deleted. Use list_agents, list_calls, list_retell_llms, or list_phone_numbers to browse available resources.';
+  }
+  if (status === 409) {
+    return 'Conflict — the resource was modified concurrently. Retry the operation.';
   }
   if (status === 422 || msg.includes('validation')) {
     return 'Invalid request parameters. Check the input values and try again.';
@@ -87,7 +93,7 @@ export async function retellFetch<T>(
     }
 
     // Some endpoints return 204 No Content
-    if (response.status === 204) {
+    if (response.status === 204 || response.headers.get('content-length') === '0') {
       return {} as T;
     }
 
