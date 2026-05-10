@@ -34,6 +34,11 @@
     "@modelcontextprotocol/sdk": "^1.26.0",
     "zod": "^3.23.0"
   },
+  "overrides": {
+    "fast-uri": "^3.1.2",
+    "hono": "^4.12.18",
+    "ip-address": "^10.2.0"
+  },
   "devDependencies": {
     "@mindstone-engineering/mcp-test-harness": "file:../../test-harness",
     "@types/node": "^22",
