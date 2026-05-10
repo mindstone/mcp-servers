@@ -22,7 +22,7 @@ describe('create_phone_call — E.164 validation (M3.10)', () => {
   it('VAL-RETELL-001 — valid E.164 NANP number accepted, upstream invoked once', async () => {
     let upstreamCount = 0;
     mswServer.use(
-      http.post(`${RETELL_API_BASE}/create-phone-call`, async ({ request }) => {
+      http.post(`${RETELL_API_BASE}/v2/create-phone-call`, async ({ request }) => {
         const auth = request.headers.get('authorization');
         if (auth !== `Bearer ${MOCK_API_KEY}`) {
           return HttpResponse.json({ error_message: 'unauth' }, { status: 401 });
@@ -51,7 +51,7 @@ describe('create_phone_call — E.164 validation (M3.10)', () => {
   it('VAL-RETELL-002 — international E.164 (UK, 13 digits) accepted', async () => {
     let upstreamCount = 0;
     mswServer.use(
-      http.post(`${RETELL_API_BASE}/create-phone-call`, () => {
+      http.post(`${RETELL_API_BASE}/v2/create-phone-call`, () => {
         upstreamCount++;
         return HttpResponse.json({ call_id: 'c2', status: 'queued' });
       }),
@@ -80,7 +80,7 @@ describe('create_phone_call — E.164 validation (M3.10)', () => {
   ): Promise<void> {
     let upstreamCount = 0;
     mswServer.use(
-      http.post(`${RETELL_API_BASE}/create-phone-call`, () => {
+      http.post(`${RETELL_API_BASE}/v2/create-phone-call`, () => {
         upstreamCount++;
         return HttpResponse.json({ call_id: 'should_not_happen' });
       }),

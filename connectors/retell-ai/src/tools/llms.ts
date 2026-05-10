@@ -3,30 +3,57 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { retellFetch, requireApiKey } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 
+const MODEL_OPTIONS_HINT = 'Options: gpt-4.1, gpt-4.1-mini, gpt-5, gpt-5-mini, gpt-5.5, claude-4.5-sonnet, claude-4.6-sonnet, claude-4.5-haiku, gemini-2.5-flash-lite, gemini-3.0-flash, gemini-3.1-flash-lite.';
+
 export function registerLlmTools(server: McpServer): void {
   server.registerTool(
     'update_retell_llm',
     {
-      description: `Update the LLM configuration that controls what a voice agent says during calls. This is the most important tool for customizing agent behavior.
+      description: `Update a Retell LLM response engine's prompt, model, or behavior settings.
 
-HOW TO FIND THE LLM ID:
-1. get_agent(agent_id) → response_engine.llm_id
-2. Use that llm_id with this tool
+WHEN TO USE:
+- Before making a call, to set the conversation instructions/prompt
+- To change the LLM model or temperature
+- To update the agent's opening message
 
-KEY FIELDS:
-- general_prompt: The system prompt — controls the agent's personality, instructions, and behavior
-- begin_message: First thing the agent says when the call connects
-- model: LLM model to use (e.g. "gpt-4o", "claude-3.5-sonnet")
+CRITICAL: This is the #1 most important step before any phone call. The general_prompt controls what the agent says. If you skip this, the agent will use the PREVIOUS call's prompt.
 
-IMPORTANT: After updating, wait 2-3 seconds before creating a call to let the config propagate.
+WORKFLOW:
+1. get_agent → find the agent's retell_llm_id (in response_engine.llm_id)
+2. update_retell_llm → set the prompt and behavior
+3. get_agent_versions/publish_agent if the agent version needs publishing
+4. Wait 2-3 seconds for propagation
+5. create_phone_call
 
-RETURNS: Updated LLM configuration object.`,
+MODEL OPTIONS: gpt-4.1, gpt-4.1-mini, gpt-5, gpt-5-mini, gpt-5.5, claude-4.5-sonnet, claude-4.6-sonnet, claude-4.5-haiku, gemini-2.5-flash-lite, gemini-3.0-flash, gemini-3.1-flash-lite.
+
+EXAMPLE:
+{ "llm_id": "llm_xxx", "general_prompt": "You are calling to confirm tomorrow's appointment. Be concise and polite.", "begin_message": "Hi, this is Alex calling to confirm your appointment.", "model": "gpt-5.5" }
+
+COMMON MISTAKES:
+- Skipping this before create_phone_call, causing the previous call's prompt to run
+- Updating the wrong llm_id; get it from get_agent.response_engine.llm_id
+- Forgetting to publish the agent/version after changing call behavior
+
+ERROR RECOVERY:
+- 401: API key is missing or invalid → configure_retell_api_key
+- 404: llm_id not found → get_agent or list_retell_llms
+- 422: invalid model/prompt/tools → use a listed model and valid JSON tool config
+
+RELATED TOOLS:
+- get_agent: Find the linked response_engine.llm_id
+- get_retell_llm: Inspect current prompt/model before changing
+- publish_agent/get_agent_versions: Make agent changes live
+- create_phone_call/create_web_call: Test the updated behavior
+
+RETURNS: llm_id, general_prompt, begin_message, model, model_temperature, general_tools, updated timestamps.`,
       inputSchema: {
-        llm_id: z.string().describe('The LLM config ID to update. Get this from get_agent → response_engine.llm_id.'),
-        general_prompt: z.string().optional().describe('The system prompt / instructions for the voice agent.'),
-        begin_message: z.string().optional().describe('The first message the agent speaks when the call connects.'),
-        model: z.string().optional().describe('LLM model to use (e.g. "gpt-4o", "claude-3.5-sonnet").'),
-        general_tools: z.array(z.unknown()).optional().describe('Tools available to the LLM during calls (advanced).'),
+        llm_id: z.string().describe('The LLM config ID to update. Get from get_agent → response_engine.llm_id or list_retell_llms.'),
+        general_prompt: z.string().optional().describe('System prompt/instructions for the voice agent. This controls what the agent says; update it before each call-specific scenario.'),
+        begin_message: z.string().optional().describe('First message the agent speaks when the call connects (e.g. "Hi, this is Sarah from Acme Corp.").'),
+        model: z.string().optional().describe(`LLM model. ${MODEL_OPTIONS_HINT}`),
+        model_temperature: z.number().min(0).max(2).optional().describe('Temperature (0=deterministic, 2=creative). Default: varies by model.'),
+        general_tools: z.array(z.unknown()).optional().describe('Tools available to the LLM during calls (advanced). Must match Retell tool schema.'),
       },
       annotations: {
         readOnlyHint: false,
@@ -42,6 +69,7 @@ RETURNS: Updated LLM configuration object.`,
       if (args.general_prompt !== undefined) body.general_prompt = args.general_prompt;
       if (args.begin_message !== undefined) body.begin_message = args.begin_message;
       if (args.model !== undefined) body.model = args.model;
+      if (args.model_temperature !== undefined) body.model_temperature = args.model_temperature;
       if (args.general_tools !== undefined) body.general_tools = args.general_tools;
 
       const result = await retellFetch<Record<string, unknown>>(
@@ -60,14 +88,29 @@ RETURNS: Updated LLM configuration object.`,
   server.registerTool(
     'get_retell_llm',
     {
-      description: `Get the full LLM configuration — prompt, greeting, model, and tools.
+      description: `Get details of a Retell LLM response engine (prompt, model, tools).
 
-HOW TO FIND THE LLM ID:
-get_agent(agent_id) → response_engine.llm_id
+WHEN TO USE:
+- Inspect current prompt/model before update_retell_llm
+- Confirm which prompt an agent will use before a call
+- Debug why an agent said the wrong thing
 
-RETURNS: Full LLM config including general_prompt, begin_message, model, and general_tools.`,
+COMMON MISTAKES:
+- Looking at the agent only; the actual call instructions live in the Retell LLM
+- Editing a different LLM than the one returned by get_agent.response_engine.llm_id
+
+ERROR RECOVERY:
+- 401: API key is missing or invalid → configure_retell_api_key
+- 404: llm_id not found → get_agent/list_retell_llms and retry
+
+RELATED TOOLS:
+- get_agent: Find response_engine.llm_id for an agent
+- update_retell_llm: Change the prompt/model
+- list_retell_llms: Browse available LLM configs
+
+RETURNS: llm_id, general_prompt, begin_message, model, model_temperature, general_tools, timestamps.`,
       inputSchema: {
-        llm_id: z.string().describe('The LLM config ID. Get from get_agent → response_engine.llm_id.'),
+        llm_id: z.string().describe('The Retell LLM config ID. Usually get this from get_agent → response_engine.llm_id.'),
       },
       annotations: {
         readOnlyHint: true,
@@ -89,17 +132,38 @@ RETURNS: Full LLM config including general_prompt, begin_message, model, and gen
   server.registerTool(
     'create_retell_llm',
     {
-      description: `Create a new LLM configuration for use with a voice agent.
+      description: `Create a new Retell LLM response engine with prompt and model settings.
 
-WORKFLOW:
-1. create_retell_llm → get llm_id
-2. create_agent with response_engine: { type: "retell-llm", llm_id: "<new_id>" }
+WHEN TO USE:
+- Creating a new agent that needs its own prompt/model config
+- Separating a new call workflow from an existing agent's LLM
+- Testing a new prompt without overwriting a production LLM
 
-RETURNS: New LLM config object with generated llm_id.`,
+WORKFLOW: Create the LLM first, then create_agent with response_engine: { "type": "retell-llm", "llm_id": "<returned llm_id>" }.
+
+EXAMPLE:
+{ "general_prompt": "You confirm appointment times and answer basic scheduling questions.", "begin_message": "Hi, I'm calling to confirm your appointment.", "model": "gpt-5.5" }
+
+MODEL OPTIONS: gpt-4.1, gpt-4.1-mini, gpt-5, gpt-5-mini, gpt-5.5, claude-4.5-sonnet, claude-4.6-sonnet, claude-4.5-haiku, gemini-2.5-flash-lite, gemini-3.0-flash, gemini-3.1-flash-lite.
+
+COMMON MISTAKES:
+- Creating multiple near-identical LLMs instead of updating the existing one
+- Creating the LLM but never attaching it to an agent
+
+ERROR RECOVERY:
+- 401: API key is missing or invalid → configure_retell_api_key
+- 422: invalid model/prompt → use a listed model and non-empty prompt
+
+RELATED TOOLS:
+- list_retell_llms/get_retell_llm: Reuse or inspect existing configs
+- create_agent/update_agent: Attach the new llm_id to an agent
+- update_retell_llm: Modify this config later
+
+RETURNS: llm_id, general_prompt, begin_message, model, model_temperature, general_tools, timestamps.`,
       inputSchema: {
-        general_prompt: z.string().optional().describe('System prompt for the voice agent.'),
-        begin_message: z.string().optional().describe('First message spoken when call connects.'),
-        model: z.string().optional().describe('LLM model to use (e.g. "gpt-4o", "claude-3.5-sonnet").'),
+        general_prompt: z.string().optional().describe('System prompt/instructions for the voice agent. Keep it call-ready and explicit.'),
+        begin_message: z.string().optional().describe('First message spoken when the call connects.'),
+        model: z.string().optional().describe(`LLM model. ${MODEL_OPTIONS_HINT}`),
       },
       annotations: {
         readOnlyHint: false,
@@ -131,14 +195,32 @@ RETURNS: New LLM config object with generated llm_id.`,
   server.registerTool(
     'list_retell_llms',
     {
-      description: `List all LLM configurations in your Retell AI account.
+      description: `List all Retell LLM response engine configurations.
 
 WHEN TO USE:
-- Browsing available LLM configs
-- Finding the right llm_id before linking it to an agent
+- Find llm_id values before get_retell_llm/update_retell_llm
+- Inventory prompt/model configurations
+- Decide whether to reuse an LLM or create a new one
 
-RETURNS: Array of LLM config objects with llm_id, general_prompt, model, and timestamps.`,
-      inputSchema: {},
+COMMON MISTAKES:
+- Updating an arbitrary llm_id without checking which agent uses it
+- Assuming list order implies which LLM is active; use get_agent to confirm bindings
+
+ERROR RECOVERY:
+- 401: API key is missing or invalid → configure_retell_api_key
+- 422: invalid pagination params → keep limit between 1 and 1000
+
+RELATED TOOLS:
+- get_retell_llm: Inspect one returned llm_id
+- update_retell_llm: Change prompt/model
+- get_agent/list_agents: See which agents reference each LLM
+- create_retell_llm: Create a separate config when reuse is unsafe
+
+RETURNS: llms, count, pagination_key, has_more. Each LLM includes llm_id, prompt/model fields, and timestamps when available.`,
+      inputSchema: {
+        limit: z.number().int().min(1).max(1000).optional().describe('Max results to return (default: 50, max: 1000).'),
+        pagination_key: z.string().optional().describe('Pagination key from the previous response for the next page.'),
+      },
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -146,17 +228,32 @@ RETURNS: Array of LLM config objects with llm_id, general_prompt, model, and tim
         openWorldHint: true,
       },
     },
-    withErrorHandling(async () => {
+    withErrorHandling(async (args) => {
       requireApiKey();
-      const result = await retellFetch<unknown[]>(
-        '/list-retell-llms',
+      const params = new URLSearchParams();
+      if (args.limit !== undefined) params.set('limit', String(args.limit));
+      if (args.pagination_key) params.set('pagination_key', args.pagination_key);
+      const qs = params.toString();
+
+      const result = await retellFetch<unknown>(
+        `/v2/list-retell-llms${qs ? `?${qs}` : ''}`,
         { method: 'GET' },
       );
+
+      const resultObj = (result && typeof result === 'object' && !Array.isArray(result))
+        ? result as Record<string, unknown>
+        : null;
+      const items = resultObj && Array.isArray(resultObj.items)
+        ? (resultObj.items as unknown[])
+        : (Array.isArray(result) ? result as unknown[] : []);
+
       return JSON.stringify({
         ok: true,
-        llms: result,
-        count: Array.isArray(result) ? result.length : 0,
-        message: `Found ${Array.isArray(result) ? result.length : 0} LLM config(s).`,
+        llms: items,
+        count: items.length,
+        pagination_key: resultObj?.pagination_key,
+        has_more: resultObj?.has_more,
+        message: `Found ${items.length} LLM config(s).`,
       });
     }),
   );
