@@ -24,7 +24,7 @@
   "scripts": {
     "build": "tsc && shx chmod +x dist/index.js && bash scripts/check-no-bridge-strings.sh",
     "prepare": "npm run build",
-    "prepublishOnly": "npm run build && npm run test && bash scripts/check-no-bridge-strings.sh",
+    "prepublishOnly": "npm run build && npm run test && bash scripts/check-no-bridge-strings.sh && npm audit --omit=dev --audit-level=high",
     "watch": "tsc --watch",
     "start": "node dist/index.js",
     "test": "vitest run",
@@ -32,9 +32,26 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "proper-lockfile": "^4.1.2",
     "zod": "^3.23.0"
+  },
+  "overrides": {
+    "express-rate-limit": "^8.5.1",
+    "fast-uri": "^3.1.2",
+    "hono": "^4.12.18",
+    "ip-address": "^10.2.0"
+  },
+  "_overridesRollbackNote": {
+    "rationale": "Transitive dependencies of @modelcontextprotocol/sdk had unpatched advisories at the time of pin (SDK 1.29.0). Overrides force-resolve to fixed versions; prepublishOnly's `npm audit --omit=dev --audit-level=high` gate fails-loud on regression.",
+    "advisories": {
+      "fast-uri": ["GHSA-q3j6-qgpj-74h6 (path traversal)", "GHSA-v39h-62p7-jpjc (host confusion)"],
+      "hono": ["GHSA-qp7p-654g-cw7p (CSS injection)", "GHSA-hm8q-7f3q-5f36 (JWT NumericDate validation)", "GHSA-p77w-8qqv-26rm (cache cross-user leakage)"],
+      "express-rate-limit": ["transitive via ip-address"],
+      "ip-address": ["fixed in 10.x"]
+    },
+    "removalProcedure": "When a new @modelcontextprotocol/sdk release resolves these transitively, remove the corresponding override entry and re-run `npm install && npm audit --omit=dev --audit-level=high`. Each override can be removed independently as upstream catches up.",
+    "trackingUpstream": "https://github.com/modelcontextprotocol/typescript-sdk — watch for SDK version that updates these dependencies"
   },
   "devDependencies": {
     "@mindstone/mcp-test-harness": "file:../../test-harness",
