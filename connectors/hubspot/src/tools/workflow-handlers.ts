@@ -5,6 +5,7 @@ import {
 } from '../api/hubspot-client.js';
 import { parseHubSpotError, summariseHubSpotApiError } from '../utils/error-parser.js';
 import logger from '../utils/logger.js';
+import { assertMaxFanOut } from './input-limits.js';
 
 interface ListWorkflowsArgs {
   limit?: number;
@@ -185,6 +186,8 @@ export async function handleDeactivateWorkflow(args: ToggleWorkflowArgs): Promis
 }
 
 export async function handleEnrolInWorkflow(args: EnrolInWorkflowArgs): Promise<unknown> {
+  assertMaxFanOut(args.objectIds, 'objectIds');
+
   try {
     const client = await getHubSpotClientAsync();
     return await client.enrollInWorkflow(args.flowId, args.objectIds, args.objectType || 'contacts');

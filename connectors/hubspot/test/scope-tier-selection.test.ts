@@ -1,8 +1,35 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const getAccountsMock = vi.fn();
+const {
+  getAccountsMock,
+  MockHubSpotConfigDirInvalidError,
+  MockTokenPersistFailedError,
+} = vi.hoisted(() => {
+  const getAccountsMock = vi.fn();
+
+  class MockHubSpotConfigDirInvalidError extends Error {
+    readonly code = 'HUBSPOT_CONFIG_DIR_INVALID';
+
+    constructor(message: string) {
+      super(message);
+      this.name = 'HubSpotConfigDirInvalidError';
+    }
+  }
+
+  class MockTokenPersistFailedError extends Error {
+    readonly code = 'TOKEN_PERSIST_FAILED';
+  }
+
+  return {
+    getAccountsMock,
+    MockHubSpotConfigDirInvalidError,
+    MockTokenPersistFailedError,
+  };
+});
 
 vi.mock('../src/modules/accounts/manager.js', () => ({
+  HubSpotConfigDirInvalidError: MockHubSpotConfigDirInvalidError,
+  TokenPersistFailedError: MockTokenPersistFailedError,
   getAccountManager: () => ({
     getAccounts: getAccountsMock,
   }),
@@ -68,5 +95,13 @@ describe('HubSpotServer getScopeTier', () => {
 
     const server = new HubSpotServer();
     await expect(readScopeTier(server)).resolves.toBe('readonly');
+  });
+
+  it('propagates HUBSPOT_CONFIG_DIR validation errors instead of silently downgrading to readonly', async () => {
+    process.env.HUBSPOT_ACCOUNT_EMAIL = 'selected@example.com';
+    getAccountsMock.mockRejectedValue(new MockHubSpotConfigDirInvalidError('HUBSPOT_CONFIG_DIR points at home'));
+
+    const server = new HubSpotServer();
+    await expect(readScopeTier(server)).rejects.toBeInstanceOf(MockHubSpotConfigDirInvalidError);
   });
 });

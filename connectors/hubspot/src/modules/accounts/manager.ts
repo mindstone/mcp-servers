@@ -1,4 +1,6 @@
+import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { atomicCredentialWrite } from '../../utils/atomicCredentialWrite.js';
 import { deriveHubSpotAccountHash } from '../../utils/accountHash.js';
@@ -6,6 +8,7 @@ import { withHubSpotCredentialLock } from '../../utils/credentialLock.js';
 import logger from '../../utils/logger.js';
 
 const TOKEN_SCHEMA_VERSION = 1;
+const CONFIG_DIR_MODE = 0o700;
 
 export interface HubSpotAccountInfo {
   email: string;
@@ -147,12 +150,154 @@ export class TokenPersistFailedError extends Error {
   }
 }
 
+export class HubSpotConfigDirInvalidError extends Error {
+  readonly code = 'HUBSPOT_CONFIG_DIR_INVALID';
+  readonly cause?: unknown;
+
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.name = 'HubSpotConfigDirInvalidError';
+    Object.defineProperty(this, 'cause', {
+      value: cause,
+      enumerable: false,
+      writable: false,
+      configurable: false,
+    });
+  }
+}
+
 function isErrno(error: unknown, code: string): boolean {
   return (error as NodeJS.ErrnoException | undefined)?.code === code;
 }
 
 function isPermissionError(error: unknown): boolean {
   return isErrno(error, 'EACCES') || isErrno(error, 'EPERM');
+}
+
+function resolveProtectedPath(candidatePath: string): string {
+  const absolutePath = path.resolve(candidatePath);
+  try {
+    return fsSync.realpathSync.native(absolutePath);
+  } catch {
+    return absolutePath;
+  }
+}
+
+function normalizeSystemPathAliases(absolutePath: string): string {
+  let normalizedPath = absolutePath;
+  for (const aliasPath of [os.tmpdir(), os.homedir()]) {
+    if (!aliasPath) {
+      continue;
+    }
+
+    const resolvedAliasPath = path.resolve(aliasPath);
+    const realAliasPath = resolveProtectedPath(resolvedAliasPath);
+    if (resolvedAliasPath === realAliasPath) {
+      continue;
+    }
+
+    const relativePath = path.relative(resolvedAliasPath, normalizedPath);
+    if (
+      relativePath === '' ||
+      (
+        relativePath.length > 0 &&
+        !relativePath.startsWith('..') &&
+        !path.isAbsolute(relativePath)
+      )
+    ) {
+      normalizedPath = relativePath === '' ? realAliasPath : path.join(realAliasPath, relativePath);
+    }
+  }
+  return normalizedPath;
+}
+
+function isSamePathOrAncestor(candidatePath: string, targetPath: string): boolean {
+  const relativePath = path.relative(candidatePath, targetPath);
+  return relativePath === '' || (
+    relativePath.length > 0 &&
+    !relativePath.startsWith('..') &&
+    !path.isAbsolute(relativePath)
+  );
+}
+
+function walkPathComponents(absolutePath: string): string[] {
+  const parsed = path.parse(absolutePath);
+  const relativePath = path.relative(parsed.root, absolutePath);
+  const components = relativePath.length > 0
+    ? relativePath.split(path.sep).filter((component) => component.length > 0)
+    : [];
+
+  const paths = [parsed.root];
+  let currentPath = parsed.root;
+  for (const component of components) {
+    currentPath = path.join(currentPath, component);
+    paths.push(currentPath);
+  }
+  return paths;
+}
+
+function assertNoSymlinkComponents(absolutePath: string): void {
+  for (const componentPath of walkPathComponents(absolutePath)) {
+    const stats = fsSync.lstatSync(componentPath);
+    if (stats.isSymbolicLink()) {
+      throw new HubSpotConfigDirInvalidError(
+        `HUBSPOT_CONFIG_DIR must not contain symlinked path components: ${absolutePath}`,
+      );
+    }
+  }
+}
+
+function isProtectedConfigDir(resolvedConfigDir: string): boolean {
+  const protectedPaths = [
+    path.parse(resolvedConfigDir).root,
+    os.homedir(),
+    os.tmpdir(),
+    process.env.MCP_WORKSPACE_PATH,
+  ]
+    .filter((protectedPath): protectedPath is string => typeof protectedPath === 'string' && protectedPath.length > 0)
+    .map(resolveProtectedPath);
+
+  return protectedPaths.some((protectedPath) => isSamePathOrAncestor(resolvedConfigDir, protectedPath));
+}
+
+export function validateConfigDir(dir: string): string {
+  const requestedConfigDir = normalizeSystemPathAliases(path.resolve(dir));
+  const existedBeforeValidation = fsSync.existsSync(requestedConfigDir);
+
+  try {
+    fsSync.mkdirSync(requestedConfigDir, { recursive: true, mode: CONFIG_DIR_MODE });
+    assertNoSymlinkComponents(requestedConfigDir);
+
+    const resolvedConfigDir = fsSync.realpathSync.native(requestedConfigDir);
+    assertNoSymlinkComponents(resolvedConfigDir);
+
+    const stats = fsSync.lstatSync(requestedConfigDir);
+    if (stats.isSymbolicLink() || !stats.isDirectory()) {
+      throw new HubSpotConfigDirInvalidError(
+        `HUBSPOT_CONFIG_DIR must resolve to a real directory: ${requestedConfigDir}`,
+      );
+    }
+
+    if (isProtectedConfigDir(resolvedConfigDir)) {
+      throw new HubSpotConfigDirInvalidError(
+        `HUBSPOT_CONFIG_DIR points at a protected directory or one of its ancestors: ${requestedConfigDir}`,
+      );
+    }
+
+    if (!existedBeforeValidation) {
+      fsSync.chmodSync(resolvedConfigDir, CONFIG_DIR_MODE);
+    }
+
+    return resolvedConfigDir;
+  } catch (error) {
+    if (error instanceof HubSpotConfigDirInvalidError) {
+      throw error;
+    }
+    throw new HubSpotConfigDirInvalidError(
+      `HUBSPOT_CONFIG_DIR is invalid: ${requestedConfigDir}`,
+      error,
+    );
+  }
 }
 
 function ensureObject(value: unknown): Record<string, unknown> {
@@ -179,19 +324,29 @@ class AccountsConfigParseError extends Error {
 
 class AccountManager {
   private configDir: string;
+  private configDirValidatedOnUse = false;
   private accountsConfigCache: AccountsConfig | null = null;
   private accountsConfigCacheIdentity: AccountsConfigIdentity = null;
   
   constructor() {
-    this.configDir = process.env.HUBSPOT_CONFIG_DIR || path.join(process.env.HOME || '', '.hubspot-mcp');
+    const requestedConfigDir = process.env.HUBSPOT_CONFIG_DIR || path.join(os.homedir(), '.hubspot-mcp');
+    this.configDir = validateConfigDir(requestedConfigDir);
+  }
+
+  private getConfigDir(): string {
+    if (!this.configDirValidatedOnUse) {
+      this.configDir = validateConfigDir(this.configDir);
+      this.configDirValidatedOnUse = true;
+    }
+    return this.configDir;
   }
   
   private get accountsPath(): string {
-    return path.join(this.configDir, 'accounts.json');
+    return path.join(this.getConfigDir(), 'accounts.json');
   }
   
   private get credentialsDir(): string {
-    return path.join(this.configDir, 'credentials');
+    return path.join(this.getConfigDir(), 'credentials');
   }
 
   private getTokenPath(email: string): string {
@@ -427,7 +582,7 @@ class AccountManager {
   }
 
   private async writeAccountsConfig(accounts: StoredAccountRecord[]): Promise<void> {
-    await fs.mkdir(this.configDir, { recursive: true, mode: 0o700 });
+    await fs.mkdir(this.getConfigDir(), { recursive: true, mode: 0o700 });
     await atomicCredentialWrite(this.accountsPath, JSON.stringify({ accounts }, null, 2), { mode: 0o600 });
     this.invalidateAccountsConfigCache();
   }
@@ -437,7 +592,7 @@ class AccountManager {
   }
 
   private async withAccountsLock<T>(fn: () => Promise<T>): Promise<T> {
-    await fs.mkdir(this.configDir, { recursive: true, mode: 0o700 });
+    await fs.mkdir(this.getConfigDir(), { recursive: true, mode: 0o700 });
     return withHubSpotCredentialLock(this.accountsPath, async () => fn());
   }
 

@@ -8,6 +8,10 @@ import {
 } from '../utils/error-parser.js';
 import { injectHostMetadata } from '../utils/user-context.js';
 import logger from '../utils/logger.js';
+import {
+  assertAssociationFanOut,
+  assertStringBodySize,
+} from './input-limits.js';
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
 const WORKSPACE_ENV_VAR = 'MCP_WORKSPACE_PATH';
@@ -257,6 +261,9 @@ export async function handleAttachFileToRecord(args: AttachFileToRecordArgs) {
     }
 
     const { contactIds, companyIds, dealIds, ticketIds } = args.associations;
+    assertAssociationFanOut(args.associations);
+    assertStringBodySize(args.noteBody, 'noteBody');
+
     if (!contactIds?.length && !companyIds?.length && !dealIds?.length && !ticketIds?.length) {
       throw new Error(JSON.stringify({
         error: 'At least one association is required',
