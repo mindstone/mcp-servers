@@ -13,7 +13,7 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install mcp-publisher
         run: |
@@ -21,8 +21,16 @@ jobs:
           # Pinned to v1.7.7 — installing the released binary directly because
           # `go install …cmd/mcp-publisher` was removed from the upstream source
           # tree at v1.7.7. Bump cautiously when newer releases appear.
+          #
+          # SHA-256 verified against the value captured at audit time
+          # (FOX-3319, 2026-05-13). Bumping VERSION REQUIRES re-running
+          # `curl -fsSL <url> | sha256sum` and updating EXPECTED_SHA256
+          # in the SAME commit. CI fails-closed if the hash drifts.
           VERSION="v1.7.7"
-          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/${VERSION}/mcp-publisher_linux_amd64.tar.gz" | tar -xz
+          EXPECTED_SHA256="a7aeba18c00caeae509d1dd74494b0a260a4245bcc65b25b8284ad709fa71676"
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/${VERSION}/mcp-publisher_linux_amd64.tar.gz" -o mcp-publisher.tgz
+          echo "${EXPECTED_SHA256}  mcp-publisher.tgz" | sha256sum -c -
+          tar -xzf mcp-publisher.tgz
           sudo install -m 0755 mcp-publisher /usr/local/bin/mcp-publisher
           mcp-publisher --version
 

@@ -1,0 +1,17 @@
+# Dependabot — keeps SHA-pinned GitHub Actions current.
+# Per FOX-3319 P0 R3: actions are pinned to commit SHAs. Dependabot is
+# allowed to open PRs that update those SHAs (it preserves the `# v4.2.2`
+# comment style). All such PRs are gated by CODEOWNERS on `.github/`.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: ci
+      include: scope
