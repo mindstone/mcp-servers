@@ -1,6 +1,7 @@
 import { getHubSpotClientAsync, HubSpotApiError } from '../api/hubspot-client.js';
 import {
   parseHubSpotError as parseSharedHubSpotError,
+  summariseHubSpotApiError,
   type ParsedHubSpotError,
 } from '../utils/error-parser.js';
 import logger from '../utils/logger.js';
@@ -30,7 +31,6 @@ function parseHubSpotError(
 
   if (error instanceof HubSpotApiError) {
     const details = error.details as Record<string, unknown> | undefined;
-    const message = details?.message as string || error.message;
 
     if (error.statusCode === 401) {
       return {
@@ -50,8 +50,8 @@ function parseHubSpotError(
       const isListLabels = context.operation === 'list_labels';
       return {
         error: isListLabels
-          ? `No association labels found for this object pair: ${message}`
-          : `Association not found: ${message}`,
+          ? 'No association labels found for this object pair'
+          : 'Association not found',
         errorCode: 'NOT_FOUND',
         suggestion: isListLabels
           ? 'Verify the object type names are correct (e.g., "contacts", "companies", "deals", "tickets"). Not all object pairs have association labels.'
@@ -67,16 +67,16 @@ function parseHubSpotError(
     }
 
     return {
-      error: `Association API error: ${message}`,
+      error: 'Association API error',
       errorCode: 'API_ERROR',
       suggestion: 'Check your inputs and try again.',
-      details: error.details
+      details: summariseHubSpotApiError(error, { operation: context.operation })
     };
   }
 
   return sharedParsed.errorCode === 'UNKNOWN_ERROR'
     ? {
-      error: `Unexpected error: ${error instanceof Error ? error.message : String(error)}`,
+      error: 'Unexpected error',
       errorCode: 'UNKNOWN_ERROR',
       suggestion: 'Check your HubSpot connection and try again.'
     }
@@ -92,12 +92,12 @@ export async function handleListAssociationLabels(args: {
     const result = await client.listAssociationLabels(args.fromObjectType, args.toObjectType);
     return { labels: result.results };
   } catch (error) {
-    logger.error('Failed to list association labels', { args, error });
     const parsed = parseHubSpotError(error, {
       feature: 'associations_v4',
       operation: 'list_labels',
       args
     });
+    logger.error('Failed to list association labels', parsed);
     throw new Error(JSON.stringify(parsed));
   }
 }
@@ -128,12 +128,12 @@ export async function handleCreateLabeledAssociation(args: {
       result
     };
   } catch (error) {
-    logger.error('Failed to create labeled association', { args, error });
     const parsed = parseHubSpotError(error, {
       feature: 'associations_v4',
       operation: 'create_labeled',
       args
     });
+    logger.error('Failed to create labeled association', parsed);
     throw new Error(JSON.stringify(parsed));
   }
 }

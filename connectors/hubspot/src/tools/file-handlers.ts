@@ -3,6 +3,7 @@ import path, { basename } from 'node:path';
 import { getHubSpotClientAsync, HubSpotApiError } from '../api/hubspot-client.js';
 import {
   parseHubSpotError as parseSharedHubSpotError,
+  summariseHubSpotApiError,
   type ParsedHubSpotError,
 } from '../utils/error-parser.js';
 import { injectHostMetadata } from '../utils/user-context.js';
@@ -84,7 +85,12 @@ function parseFileError(error: unknown, operation: string): ParsedHubSpotError {
     if (error.statusCode === 429) {
       return { error: 'Rate limited', errorCode: 'RATE_LIMITED', suggestion: 'Wait a few seconds and retry.' };
     }
-    return { error: error.message, errorCode: 'API_ERROR', suggestion: 'Check HubSpot connection and try again.', details: error.details };
+    return {
+      error: 'HubSpot files API error',
+      errorCode: 'API_ERROR',
+      suggestion: 'Check HubSpot connection and try again.',
+      details: summariseHubSpotApiError(error, { operation })
+    };
   }
   const msg = error instanceof Error ? error.message : 'Unknown error';
   if (msg.includes('ENOENT') || msg.includes('no such file')) {
