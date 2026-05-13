@@ -3,7 +3,14 @@ build/
 dist/
 *.tgz
 .DS_Store
+
+# .npmrc — ignore everywhere EXCEPT the repo root, where we ship a
+# tracked security-defaults file (min-release-age, save-exact, etc.).
+# Nested .npmrc files are still ignored so contributor auth tokens can't
+# leak into a commit.
 .npmrc
+!/.npmrc
+
 .env
 .env.*
 .factory/
