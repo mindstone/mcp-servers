@@ -1,4 +1,5 @@
 import { getAccountManager } from '../modules/accounts/manager.js';
+import { deriveHubSpotAccountHash } from '../utils/accountHash.js';
 import logger from '../utils/logger.js';
 
 export interface AuthenticateAccountArgs {
@@ -10,7 +11,7 @@ export interface CompleteAuthArgs {
 }
 
 export interface RemoveAccountArgs {
-  email: string;
+  email?: string;
 }
 
 export function buildHubSpotAuthRequiredResponse() {
@@ -82,16 +83,30 @@ export async function handleRemoveAccount(args: RemoveAccountArgs) {
         isError: true
       };
     }
+
+    if (args.email !== process.env.HUBSPOT_ACCOUNT_EMAIL) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            status: 'error',
+            errorCode: 'WRONG_ACCOUNT',
+            message: 'Can only remove the configured account.'
+          }, null, 2)
+        }],
+        isError: true
+      };
+    }
     
     await manager.removeAccount(args.email);
-    logger.info(`Removed HubSpot account: ${args.email}`);
+    logger.info({ account: deriveHubSpotAccountHash(args.email) }, 'account_removed');
     
     return {
       content: [{
         type: 'text' as const,
         text: JSON.stringify({
           status: 'success',
-          message: `Successfully disconnected HubSpot account: ${args.email}`,
+          message: 'Successfully disconnected the configured HubSpot account.',
           note: 'To reconnect, use authenticate_hubspot_account.'
         }, null, 2)
       }]

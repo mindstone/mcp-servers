@@ -27,20 +27,47 @@ function formatMessage(level: LogLevel, message: string, data?: unknown): string
   return `[${timestamp}] [${level.toUpperCase()}] ${message}${dataStr}`;
 }
 
-const logger = {
-  debug(message: string, data?: unknown): void {
+function normalizeLogArgs(
+  first: string | Record<string, unknown>,
+  second?: unknown,
+): { message: string; data?: unknown } {
+  if (typeof first === 'string') {
+    return { message: first, data: second };
+  }
+
+  return { message: typeof second === 'string' ? second : '', data: first };
+}
+
+type LogMethod = {
+  (message: string, data?: unknown): void;
+  (data: Record<string, unknown>, message: string): void;
+};
+
+interface Logger {
+  debug: LogMethod;
+  info: LogMethod;
+  warn: LogMethod;
+  error: LogMethod;
+}
+
+const logger: Logger = {
+  debug(first: string | Record<string, unknown>, second?: unknown): void {
+    const { message, data } = normalizeLogArgs(first, second);
     console.error(formatMessage('debug', message, data));
   },
 
-  info(message: string, data?: unknown): void {
+  info(first: string | Record<string, unknown>, second?: unknown): void {
+    const { message, data } = normalizeLogArgs(first, second);
     console.error(formatMessage('info', message, data));
   },
 
-  warn(message: string, data?: unknown): void {
+  warn(first: string | Record<string, unknown>, second?: unknown): void {
+    const { message, data } = normalizeLogArgs(first, second);
     console.error(formatMessage('warn', message, data));
   },
 
-  error(message: string, data?: unknown): void {
+  error(first: string | Record<string, unknown>, second?: unknown): void {
+    const { message, data } = normalizeLogArgs(first, second);
     console.error(formatMessage('error', message, data));
   }
 };

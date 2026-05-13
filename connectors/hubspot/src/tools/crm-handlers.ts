@@ -153,43 +153,46 @@ function parseHubSpotError(
 
 // Generic search handler with improved query support
 async function searchObjects(objectType: string, args: SearchArgs) {
-  const client = await getHubSpotClientAsync();
-  const searchRequest: SearchRequest = {
-    limit: args.limit || 10,
-    properties: args.properties
-  };
-
-  // Add explicit filters if provided
-  if (args.filters && args.filters.length > 0) {
-    searchRequest.filterGroups = [{ filters: args.filters }];
-  }
-
-  // Handle text query by searching appropriate fields for the object type
-  if (args.query && args.query.trim()) {
-    const searchFields = SEARCHABLE_TEXT_FIELDS[objectType] || [];
-    if (searchFields.length > 0) {
-      // Create OR filter group - search any of the text fields
-      // HubSpot search uses filter groups with AND within group, OR between groups
-      const queryFilters = searchFields.map(field => ({
-        filters: [{ propertyName: field, operator: 'CONTAINS_TOKEN', value: args.query! }]
-      }));
-      
-      // If we have existing filters, combine with AND logic
-      if (searchRequest.filterGroups && searchRequest.filterGroups.length > 0) {
-        // Existing filters get combined with each query filter group
-        const existingFilters = searchRequest.filterGroups[0].filters;
-        searchRequest.filterGroups = queryFilters.map(qf => ({
-          filters: [...existingFilters, ...qf.filters]
-        }));
-      } else {
-        searchRequest.filterGroups = queryFilters;
-      }
-    } else {
-      logger.warn(`No searchable text fields defined for ${objectType}, ignoring query parameter`);
-    }
-  }
-
   try {
+    // Structural requirement: acquire the HubSpot client inside try/catch so
+    // refresh-path auth errors are mapped via parseHubSpotError() and surface
+    // as contractual auth_required responses (not UNKNOWN_ERROR).
+    const client = await getHubSpotClientAsync();
+    const searchRequest: SearchRequest = {
+      limit: args.limit || 10,
+      properties: args.properties
+    };
+
+    // Add explicit filters if provided
+    if (args.filters && args.filters.length > 0) {
+      searchRequest.filterGroups = [{ filters: args.filters }];
+    }
+
+    // Handle text query by searching appropriate fields for the object type
+    if (args.query && args.query.trim()) {
+      const searchFields = SEARCHABLE_TEXT_FIELDS[objectType] || [];
+      if (searchFields.length > 0) {
+        // Create OR filter group - search any of the text fields
+        // HubSpot search uses filter groups with AND within group, OR between groups
+        const queryFilters = searchFields.map(field => ({
+          filters: [{ propertyName: field, operator: 'CONTAINS_TOKEN', value: args.query! }]
+        }));
+
+        // If we have existing filters, combine with AND logic
+        if (searchRequest.filterGroups && searchRequest.filterGroups.length > 0) {
+          // Existing filters get combined with each query filter group
+          const existingFilters = searchRequest.filterGroups[0].filters;
+          searchRequest.filterGroups = queryFilters.map(qf => ({
+            filters: [...existingFilters, ...qf.filters]
+          }));
+        } else {
+          searchRequest.filterGroups = queryFilters;
+        }
+      } else {
+        logger.warn(`No searchable text fields defined for ${objectType}, ignoring query parameter`);
+      }
+    }
+
     const result = await client.searchObjects(objectType, searchRequest);
     logger.info(`Found ${result.results.length} ${objectType}`);
     return result;
@@ -607,7 +610,6 @@ const ENGAGEMENT_ASSOCIATION_TYPES = {
 };
 
 async function searchEngagement(engagementType: string, args: EngagementSearchArgs) {
-  const client = await getHubSpotClientAsync();
   const searchRequest: { limit: number; properties?: string[]; filterGroups?: Array<{ filters: Array<{ propertyName: string; operator: string; value: string }> }> } = {
     limit: args.limit || 10,
     properties: args.properties
@@ -618,6 +620,9 @@ async function searchEngagement(engagementType: string, args: EngagementSearchAr
   }
   
   try {
+    // Structural requirement: keep getHubSpotClientAsync() inside this try/catch
+    // so refresh failures map through parseHubSpotError() to auth_required.
+    const client = await getHubSpotClientAsync();
     return await client.searchEngagements(engagementType, searchRequest);
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType: engagementType, operation: 'search', args });
