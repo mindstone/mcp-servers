@@ -176,7 +176,7 @@ jobs:
           node -e "const s=require('./sbom.cdx.json'); console.log('  count=' + (s.components||[]).length); console.log('  format=' + s.bomFormat + ' v' + s.specVersion);"
 
       - name: Upload SBOM as workflow artifact
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ steps.meta.outputs.connector }}-${{ steps.meta.outputs.version }}-sbom
           path: connectors/${{ steps.meta.outputs.connector }}/sbom.cdx.json
@@ -212,7 +212,7 @@ jobs:
           fi
 
       - name: Upload tarball artefact for publish job
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: npm-tarball
           path: connectors/${{ steps.meta.outputs.connector }}/${{ steps.pack.outputs.pack_filename }}
