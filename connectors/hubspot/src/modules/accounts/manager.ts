@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { atomicCredentialWrite } from '../../utils/atomicCredentialWrite.js';
+import { deriveHubSpotAccountHash } from '../../utils/accountHash.js';
 import { withHubSpotCredentialLock } from '../../utils/credentialLock.js';
 import logger from '../../utils/logger.js';
 
@@ -31,10 +32,12 @@ export function sanitizeEmail(email: string): string {
 }
 
 type ScopeTier = 'readonly' | 'full';
+type StoredAccountStatus = 'error';
 
 export type StoredAccountRecord = {
   email: string;
   hubId: number;
+  status?: StoredAccountStatus;
   scopeTier?: ScopeTier;
   grantedScopes?: string[];
 };
@@ -43,7 +46,14 @@ type AccountsConfig = {
   accounts: StoredAccountRecord[];
 };
 
-class TokenFileError extends Error {
+type AccountsConfigIdentity =
+  | {
+      mtimeMs: number;
+      size: number;
+    }
+  | null;
+
+export class TokenFileError extends Error {
   readonly cause?: unknown;
 
   constructor(
@@ -92,6 +102,13 @@ export class TokenFileFutureSchemaError extends TokenFileError {
       tokenPath,
     );
     this.name = 'TokenFileFutureSchemaError';
+  }
+}
+
+export class TokenFileMismatchError extends TokenFileError {
+  constructor(tokenPath: string) {
+    super('Token file user does not match requested account', 'TOKEN_FILE_MISMATCH', tokenPath);
+    this.name = 'TokenFileMismatchError';
   }
 }
 
@@ -145,8 +162,25 @@ function ensureObject(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+class AccountsConfigParseError extends Error {
+  readonly cause?: unknown;
+
+  constructor(public readonly accountsPath: string, cause?: unknown) {
+    super(`Failed to parse accounts config: ${accountsPath}`);
+    this.name = 'AccountsConfigParseError';
+    Object.defineProperty(this, 'cause', {
+      value: cause,
+      enumerable: false,
+      writable: false,
+      configurable: false,
+    });
+  }
+}
+
 class AccountManager {
   private configDir: string;
+  private accountsConfigCache: AccountsConfig | null = null;
+  private accountsConfigCacheIdentity: AccountsConfigIdentity = null;
   
   constructor() {
     this.configDir = process.env.HUBSPOT_CONFIG_DIR || path.join(process.env.HOME || '', '.hubspot-mcp');
@@ -189,38 +223,213 @@ class AccountManager {
     return new TokenFileReadError(tokenPath, error);
   }
 
-  private async readAccountsConfig(): Promise<AccountsConfig> {
+  private cloneAccountsConfig(config: AccountsConfig): AccountsConfig {
+    return {
+      accounts: config.accounts.map((account) => ({
+        ...account,
+        ...(account.grantedScopes ? { grantedScopes: [...account.grantedScopes] } : {}),
+      })),
+    };
+  }
+
+  private invalidateAccountsConfigCache(): void {
+    this.accountsConfigCache = null;
+    this.accountsConfigCacheIdentity = null;
+  }
+
+  private areAccountsConfigIdentitiesEqual(
+    left: AccountsConfigIdentity,
+    right: AccountsConfigIdentity,
+  ): boolean {
+    if (left === null || right === null) {
+      return left === right;
+    }
+
+    return left.mtimeMs === right.mtimeMs && left.size === right.size;
+  }
+
+  private async getAccountsConfigIdentity(): Promise<AccountsConfigIdentity> {
     try {
-      const data = await fs.readFile(this.accountsPath, 'utf-8');
-      const parsed = ensureObject(JSON.parse(data));
-      const rawAccounts = Array.isArray(parsed.accounts) ? parsed.accounts : [];
-      const accounts: StoredAccountRecord[] = [];
-      for (const entry of rawAccounts) {
-        if (!entry || typeof entry !== 'object') continue;
-        const item = entry as Record<string, unknown>;
-        const email = typeof item.email === 'string' ? item.email : null;
-        const hubId = typeof item.hubId === 'number' ? item.hubId : null;
-        if (!email || hubId === null) continue;
-        const scopeTier = item.scopeTier === 'readonly' || item.scopeTier === 'full'
-          ? item.scopeTier
-          : undefined;
-        const grantedScopes = Array.isArray(item.grantedScopes)
-          ? item.grantedScopes.filter((scope): scope is string => typeof scope === 'string')
-          : undefined;
-        accounts.push({ email, hubId, scopeTier, grantedScopes });
+      const stats = await fs.stat(this.accountsPath);
+      return {
+        mtimeMs: stats.mtimeMs,
+        size: stats.size,
+      };
+    } catch (error) {
+      if (isErrno(error, 'ENOENT')) {
+        return null;
       }
-      return { accounts };
+      throw error;
+    }
+  }
+
+  private async readAccountsConfigFromDisk(): Promise<AccountsConfig> {
+    let data: string;
+    try {
+      data = await fs.readFile(this.accountsPath, 'utf-8');
     } catch (error) {
       if (isErrno(error, 'ENOENT')) {
         return { accounts: [] };
       }
       throw error;
     }
+
+    let parsed: Record<string, unknown>;
+    try {
+      if (data.length === 0) {
+        throw new Error('accounts_json_empty');
+      }
+      parsed = ensureObject(JSON.parse(data));
+    } catch (error) {
+      throw new AccountsConfigParseError(this.accountsPath, error);
+    }
+
+    const rawAccounts = Array.isArray(parsed.accounts) ? parsed.accounts : [];
+    const accounts: StoredAccountRecord[] = [];
+    const sanitizedEmailEntries = new Map<string, StoredAccountRecord[]>();
+    for (const entry of rawAccounts) {
+      if (!entry || typeof entry !== 'object') continue;
+      const item = entry as Record<string, unknown>;
+      const email = typeof item.email === 'string' ? item.email : null;
+      const hubId = typeof item.hubId === 'number' ? item.hubId : null;
+      if (!email || hubId === null) continue;
+      const scopeTier = item.scopeTier === 'readonly' || item.scopeTier === 'full'
+        ? item.scopeTier
+        : undefined;
+      const grantedScopes = Array.isArray(item.grantedScopes)
+        ? item.grantedScopes.filter((scope): scope is string => typeof scope === 'string')
+        : undefined;
+      const hasStatus = Object.prototype.hasOwnProperty.call(item, 'status');
+      const statusValue = item.status;
+      const status: StoredAccountStatus | undefined = (() => {
+        if (!hasStatus) {
+          return undefined;
+        }
+        if (statusValue === 'error') {
+          return 'error';
+        }
+
+        logger.warn(
+          {
+            unknownStatus: statusValue,
+            email: deriveHubSpotAccountHash(email),
+          },
+          'accounts_config_unknown_status_treated_as_error',
+        );
+        return 'error';
+      })();
+      const account: StoredAccountRecord = {
+        email,
+        hubId,
+        ...(status ? { status } : {}),
+        scopeTier,
+        grantedScopes,
+      };
+      accounts.push(account);
+      const collisionKey = sanitizeEmail(email).toLowerCase();
+      const entries = sanitizedEmailEntries.get(collisionKey) ?? [];
+      entries.push(account);
+      sanitizedEmailEntries.set(collisionKey, entries);
+    }
+    for (const [collisionKey, entries] of sanitizedEmailEntries) {
+      const distinctEmails = new Set(entries.map((account) => account.email));
+      if (distinctEmails.size <= 1) {
+        continue;
+      }
+      for (const account of entries) {
+        account.status = 'error';
+      }
+      logger.error(
+        { collisionHash: deriveHubSpotAccountHash(collisionKey) },
+        'sanitize_email_collision',
+      );
+    }
+    return { accounts };
+  }
+
+  private async readAccountsConfig(): Promise<AccountsConfig> {
+    const readConfigSnapshot = async (): Promise<{
+      config: AccountsConfig | null;
+      identityAfterRead: AccountsConfigIdentity;
+      parseFailed: boolean;
+    }> => {
+      try {
+        const config = await this.readAccountsConfigFromDisk();
+        const identityAfterRead = await this.getAccountsConfigIdentity();
+        return { config, identityAfterRead, parseFailed: false };
+      } catch (error) {
+        if (error instanceof AccountsConfigParseError) {
+          const identityAfterRead = await this.getAccountsConfigIdentity();
+          return { config: null, identityAfterRead, parseFailed: true };
+        }
+        throw error;
+      }
+    };
+
+    const identityBeforeRead = await this.getAccountsConfigIdentity();
+    if (
+      this.accountsConfigCache &&
+      this.areAccountsConfigIdentitiesEqual(this.accountsConfigCacheIdentity, identityBeforeRead)
+    ) {
+      return this.cloneAccountsConfig(this.accountsConfigCache);
+    }
+
+    const firstRead = await readConfigSnapshot();
+
+    if (
+      firstRead.parseFailed ||
+      !this.areAccountsConfigIdentitiesEqual(identityBeforeRead, firstRead.identityAfterRead)
+    ) {
+      const retryIdentityBeforeRead = await this.getAccountsConfigIdentity();
+      const retryRead = await readConfigSnapshot();
+
+      if (
+        retryRead.parseFailed ||
+        !retryRead.config ||
+        !this.areAccountsConfigIdentitiesEqual(retryIdentityBeforeRead, retryRead.identityAfterRead)
+      ) {
+        this.invalidateAccountsConfigCache();
+        logger.warn(
+          {
+            firstRead: {
+              mtimeBeforeMs: identityBeforeRead?.mtimeMs ?? null,
+              sizeBefore: identityBeforeRead?.size ?? null,
+              mtimeAfterMs: firstRead.identityAfterRead?.mtimeMs ?? null,
+              sizeAfter: firstRead.identityAfterRead?.size ?? null,
+              parseFailed: firstRead.parseFailed,
+            },
+            retryRead: {
+              mtimeBeforeMs: retryIdentityBeforeRead?.mtimeMs ?? null,
+              sizeBefore: retryIdentityBeforeRead?.size ?? null,
+              mtimeAfterMs: retryRead.identityAfterRead?.mtimeMs ?? null,
+              sizeAfter: retryRead.identityAfterRead?.size ?? null,
+              parseFailed: retryRead.parseFailed,
+            },
+          },
+          'accounts_config_read_torn',
+        );
+        return { accounts: [] };
+      }
+
+      this.accountsConfigCache = retryRead.config;
+      this.accountsConfigCacheIdentity = retryRead.identityAfterRead;
+      return this.cloneAccountsConfig(retryRead.config);
+    }
+
+    if (!firstRead.config) {
+      this.invalidateAccountsConfigCache();
+      return { accounts: [] };
+    }
+
+    this.accountsConfigCache = firstRead.config;
+    this.accountsConfigCacheIdentity = firstRead.identityAfterRead;
+    return this.cloneAccountsConfig(firstRead.config);
   }
 
   private async writeAccountsConfig(accounts: StoredAccountRecord[]): Promise<void> {
     await fs.mkdir(this.configDir, { recursive: true, mode: 0o700 });
     await atomicCredentialWrite(this.accountsPath, JSON.stringify({ accounts }, null, 2), { mode: 0o600 });
+    this.invalidateAccountsConfigCache();
   }
 
   private async writeTokenFile(tokenPath: string, tokenData: TokenData): Promise<void> {
@@ -246,25 +455,27 @@ class AccountManager {
     for (const account of config.accounts || []) {
         let status: 'active' | 'expired' | 'error' = 'error';
 
-        try {
-          const token = await this.loadToken(account.email);
-          // Use 5-minute buffer to match auto-refresh logic
-          const bufferMs = 5 * 60 * 1000;
-          const isValid = token.expires_at && token.expires_at > (Date.now() + bufferMs);
+        if (account.status !== 'error') {
+          try {
+            const token = await this.loadToken(account.email);
+            // Use 5-minute buffer to match auto-refresh logic
+            const bufferMs = 5 * 60 * 1000;
+            const isValid = token.expires_at && token.expires_at > (Date.now() + bufferMs);
 
-          if (isValid) {
-            status = 'active';
-          } else if (token.refresh_token) {
-            // Token expired but has refresh_token - will auto-refresh on next use
-            status = 'active';
-          } else {
-            status = 'expired';
-          }
-        } catch (error) {
-          if (error instanceof TokenFileMissingError) {
-            status = 'expired';
-          } else {
-            status = 'error';
+            if (isValid) {
+              status = 'active';
+            } else if (token.refresh_token) {
+              // Token expired but has refresh_token - will auto-refresh on next use
+              status = 'active';
+            } else {
+              status = 'expired';
+            }
+          } catch (error) {
+            if (error instanceof TokenFileMissingError) {
+              status = 'expired';
+            } else {
+              status = 'error';
+            }
           }
         }
         
@@ -348,6 +559,15 @@ class AccountManager {
       }
     }
 
+    if (parsed.user !== undefined) {
+      if (typeof parsed.user !== 'string') {
+        throw new TokenFileCorruptError(tokenPath, new Error('Invalid user in token file'));
+      }
+      if (parsed.user.toLowerCase() !== email.toLowerCase()) {
+        throw new TokenFileMismatchError(tokenPath);
+      }
+    }
+
     const tokenData = parsed as unknown as TokenData;
     if (tokenData.schemaVersion === undefined) {
       // Intentionally no write-back here to avoid stale-overwrite races:
@@ -384,6 +604,7 @@ class AccountManager {
         accounts.push({ email, hubId, grantedScopes: normalizedTokenData.grantedScopes });
       }
       await this.writeAccountsConfig(accounts);
+      await this.readAccountsConfig();
     };
 
     try {
@@ -392,7 +613,7 @@ class AccountManager {
       } else {
         await this.withAccountsAndEmailLock(email, persist);
       }
-      logger.info(`Saved token for ${email}`);
+      logger.info({ account: deriveHubSpotAccountHash(email) }, 'token_saved');
     } catch (error) {
       if (error instanceof TokenPersistFailedError) {
         throw error;
@@ -409,6 +630,7 @@ class AccountManager {
       const { accounts } = await this.readAccountsConfig();
       const updatedAccounts = accounts.filter((account) => account.email !== email);
       await this.writeAccountsConfig(updatedAccounts);
+      await this.readAccountsConfig();
 
       try {
         await fs.unlink(tokenPath);
@@ -419,7 +641,7 @@ class AccountManager {
       }
     });
 
-    logger.info(`Removed account ${email}`);
+    logger.info({ account: deriveHubSpotAccountHash(email) }, 'account_removed');
   }
 
   async hasConfiguredAccountEmail(): Promise<boolean> {
@@ -433,6 +655,9 @@ class AccountManager {
     if (!matchingAccount) {
       return false;
     }
+    if (matchingAccount.status === 'error') {
+      return false;
+    }
 
     try {
       const token = await this.loadToken(configuredEmail);
@@ -441,6 +666,7 @@ class AccountManager {
       if (
         error instanceof TokenFileMissingError ||
         error instanceof TokenFileCorruptError ||
+        error instanceof TokenFileMismatchError ||
         error instanceof TokenFilePermissionDeniedError ||
         error instanceof TokenFileFutureSchemaError ||
         error instanceof TokenFileReadError
@@ -472,6 +698,9 @@ class AccountManager {
       throw new Error(
         `HUBSPOT_ACCOUNT_EMAIL (${configuredEmail}) does not match any connected HubSpot account. Please reconnect or select a valid account email.`
       );
+    }
+    if (matchingAccount.status === 'error') {
+      throw new Error('Configured account has a sanitiser collision and is unavailable; remove or rename one of the colliding accounts.');
     }
 
     return matchingAccount.email;

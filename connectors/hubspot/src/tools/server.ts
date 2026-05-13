@@ -263,8 +263,7 @@ export class HubSpotServer {
         }
 
         if (toolMetadata.requiresAuth) {
-          const hasConfiguredAuth =
-            this.hasOAuthClientCredentials() && await this.hasConfiguredAccountSelection();
+          const hasConfiguredAuth = await this.hasConfiguredAccountSelection();
           if (!hasConfiguredAuth) {
             return this.buildAuthRequiredToolResult();
           }
@@ -630,7 +629,14 @@ export class HubSpotServer {
             // Our handlers throw errors with JSON.stringify'd structured errors
             const parsed = JSON.parse(error.message);
             if (parsed.status === 'auth_required') {
-              return this.buildAuthRequiredToolResult();
+              return {
+                content: [{
+                  type: 'text',
+                  text: JSON.stringify(parsed, null, 2)
+                }],
+                isError: true,
+                _meta: {}
+              };
             }
             if (parsed.errorCode && parsed.suggestion) {
               // This is our structured error format, use it directly

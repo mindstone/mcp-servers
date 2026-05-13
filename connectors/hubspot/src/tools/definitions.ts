@@ -119,7 +119,7 @@ Use this when:
 
 This permanently removes the account's access tokens. The user will need to re-authenticate to use HubSpot again.`,
     aliases: ['disconnect_hubspot', 'delete_hubspot_account', 'hubspot_logout'],
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: false, destructiveHint: true },
     inputSchema: {
       type: 'object',
       properties: {

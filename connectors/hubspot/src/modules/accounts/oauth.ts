@@ -149,6 +149,15 @@ export class RefreshMalformedResponseError extends Error {
   }
 }
 
+export class RefreshNoClientCredsError extends Error {
+  readonly code = 'REFRESH_NO_CLIENT_CREDS';
+
+  constructor() {
+    super('HubSpot OAuth client credentials are required to refresh tokens');
+    this.name = 'RefreshNoClientCredsError';
+  }
+}
+
 export type RefreshAuthRequiredReason = 'refresh_disabled' | 'invalid_grant' | 'missing_refresh_token';
 
 export type RefreshTokenForAccountResult =
@@ -256,6 +265,10 @@ function shouldDisableRefresh(): boolean {
   const refreshDisabled = process.env.HUBSPOT_DISABLE_REFRESH === '1';
   const allowCloudRefresh = process.env.HUBSPOT_ALLOW_CLOUD_REFRESH === '1';
   return refreshDisabled && !allowCloudRefresh;
+}
+
+function hasOAuthClientCredentials(): boolean {
+  return !!(process.env.HUBSPOT_CLIENT_ID && process.env.HUBSPOT_CLIENT_SECRET);
 }
 
 function isTokenResponse(value: unknown): value is HubSpotTokenResponse {
@@ -413,6 +426,10 @@ export async function refreshTokenForAccount(
 
   if (!currentToken.refresh_token) {
     return { status: 'auth_required', reason: 'missing_refresh_token' };
+  }
+
+  if (!hasOAuthClientCredentials()) {
+    throw new RefreshNoClientCredsError();
   }
 
   enforceRefreshCooldown(email);

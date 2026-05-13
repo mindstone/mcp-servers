@@ -1,6 +1,7 @@
 import { HubSpotApiError, HubSpotAuthRequiredError } from '../api/hubspot-client.js';
 import {
   RefreshMalformedResponseError,
+  RefreshNoClientCredsError,
   RefreshRateLimitedError,
   RefreshTransientError,
 } from '../modules/accounts/oauth.js';
@@ -22,6 +23,7 @@ export interface ParsedStructuredHubSpotError {
 
 export interface ParsedAuthRequiredResponse {
   status: 'auth_required';
+  errorCode?: string;
   user_action: { id: 'hubspot.connect_account' };
   agent_action: {
     instruction:
@@ -32,9 +34,10 @@ export interface ParsedAuthRequiredResponse {
 
 export type ParsedHubSpotError = ParsedStructuredHubSpotError | ParsedAuthRequiredResponse;
 
-function buildAuthRequiredResponse(): ParsedAuthRequiredResponse {
+function buildAuthRequiredResponse(errorCode?: string): ParsedAuthRequiredResponse {
   return {
     status: 'auth_required',
+    ...(errorCode ? { errorCode } : {}),
     user_action: { id: 'hubspot.connect_account' },
     agent_action: {
       instruction:
@@ -77,6 +80,10 @@ export function parseHubSpotError(error: unknown, context: HubSpotErrorContext):
       errorCode: 'REFRESH_MALFORMED_RESPONSE',
       suggestion: 'Retry the request. If this persists, reconnect HubSpot.'
     };
+  }
+
+  if (error instanceof RefreshNoClientCredsError) {
+    return buildAuthRequiredResponse(error.code);
   }
 
   if (error instanceof RefreshTransientError) {

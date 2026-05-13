@@ -1,5 +1,6 @@
 import logger from '../utils/logger.js';
 import { refreshTokenForAccount } from '../modules/accounts/oauth.js';
+import { deriveHubSpotAccountHash } from '../utils/accountHash.js';
 
 const HUBSPOT_API_BASE = 'https://api.hubapi.com';
 const MAX_HUBSPOT_REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
@@ -950,7 +951,7 @@ export async function getHubSpotClientAsync(email?: string): Promise<HubSpotClie
     }
 
     token = refreshResult.token;
-    logger.info(`Token refreshed successfully for ${targetEmail}`);
+    logger.info({ account: deriveHubSpotAccountHash(targetEmail) }, 'token_refreshed');
 
     if (currentEmail === targetEmail) {
       clientInstance = null;
