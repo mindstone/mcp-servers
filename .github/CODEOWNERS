@@ -1,0 +1,29 @@
+# CODEOWNERS — sensitive-path gate (FOX-3319 / supply-chain audit P1 R5).
+#
+# Order matters: later patterns override earlier ones. The catch-all at the
+# bottom intentionally requires maintainer review on EVERY PR; per-path
+# entries above it tighten that to specific reviewer sets.
+#
+# Replace @mindstone-engineering/<team> placeholders with the real GitHub
+# team slugs once those teams exist on the org. Keep at least one human
+# fallback owner per critical path so PRs are never auto-mergeable.
+
+# --- CI / release pipeline. Compromise = arbitrary publish. -----------------
+/.github/                                @mindstone-engineering/oss-maintainers
+/.github/workflows/                      @mindstone-engineering/oss-maintainers
+/.github/CODEOWNERS                      @mindstone-engineering/oss-maintainers
+
+# --- Dependency surface per connector. Lockfile drives what the publish ----
+#     job installs; package.json drives lifecycle hooks. Both gate on
+#     maintainer review.
+/connectors/*/package.json               @mindstone-engineering/oss-maintainers
+/connectors/*/package-lock.json          @mindstone-engineering/oss-maintainers
+/connectors/_template/                   @mindstone-engineering/oss-maintainers
+
+# --- Legal & security posture. ---------------------------------------------
+/LICENSE                                 @mindstone-engineering/oss-maintainers
+/SECURITY.md                             @mindstone-engineering/oss-maintainers
+/docs/security/                          @mindstone-engineering/oss-maintainers
+
+# --- Shared test harness ships into every connector's devDependencies. -----
+/test-harness/                           @mindstone-engineering/oss-maintainers
