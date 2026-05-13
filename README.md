@@ -51,7 +51,18 @@ See each server's README for configuration and host setup instructions. Some con
 
 This monorepo follows a defence-in-depth posture for tool-call hosts. Highlights include:
 
-- **Workflow safety.** GitHub Actions workflows are env-fy'd against script injection (CWE-94), every action is pinned to a commit SHA (kept current by Dependabot), and each job is granted a least-privilege `permissions:` block. Publish is split into a build job (no secrets, lifecycle scripts run) and a publish job (`--ignore-scripts`, OIDC trusted publishing with `--provenance`, gated by the `npm-publish` environment). See [docs/security/AUDIT_FOX-3319_tanstack_supply_chain.md](docs/security/AUDIT_FOX-3319_tanstack_supply_chain.md) for the supply-chain threat model and [docs/security/BRANCH_PROTECTION.md](docs/security/BRANCH_PROTECTION.md) for required GitHub settings.
+- **Workflow safety.** GitHub Actions workflows are env-fy'd against script injection (CWE-94), every action is pinned to a commit SHA (kept current by Dependabot), and each job is granted a least-privilege `permissions:` block. Publish is split into a build job (does the install/test/pack with no publish credentials) and a publish job (downloads the packed tarball, runs only `npm publish --ignore-scripts --provenance` under OIDC trusted publishing, gated by the `npm-publish` environment). The publish job invokes NO third-party JS — `tsc`, `vitest`, lifecycle scripts, etc. all run upstream, away from `id-token: write`. See [docs/security/AUDIT_FOX-3319_tanstack_supply_chain.md](docs/security/AUDIT_FOX-3319_tanstack_supply_chain.md) for the supply-chain threat model and [docs/security/BRANCH_PROTECTION.md](docs/security/BRANCH_PROTECTION.md) for required GitHub settings.
+- **Release-age cool-down.** The repo-level `.npmrc` sets `min-release-age=7` (days), so CI refuses to install dependency versions published in the last week. This blocks the "same-day malicious re-publish" path that ships post-`npm audit`-clean PRs into a release tag.
+
+### Recommendations for consumers
+
+These connectors are published as plain npm packages. The strongest single thing you can do to protect yourself from a future supply-chain compromise of *any* npm package (these or otherwise) is to use a client that does not run lifecycle scripts by default:
+
+- **pnpm** (`pnpm install` / `pnpm dlx`) — does not execute `postinstall`/`prepare` hooks unless explicitly allowlisted via `onlyBuiltDependencies`. pnpm v11+ also defaults to a 24-hour `minimumReleaseAge` cool-down.
+- **bun** (`bunx`) — same default, no lifecycle scripts unless allowlisted.
+- **npm** — if you must use npm, set `min-release-age=7` and `ignore-scripts=true` in your global `~/.npmrc`. Requires npm v11.10+ for `min-release-age`.
+
+None of our published packages need `postinstall` to function, so disabling lifecycle scripts in your installer of choice is safe.
 - **Untrusted-content envelopes.** External content from email, helpdesk, and ticketing systems (email-imap, freshdesk, zendesk) is wrapped in `<untrusted-content source="...">` envelopes with close-tag breakout escaping, so an LLM host can recognise and refuse instruction-injection attempts.
 - **Workspace sandboxing.** File-uploading connectors (nano-banana, pandadoc, elevenlabs) constrain reads to `MCP_WORKSPACE_PATH` (or `os.tmpdir()`) with canonical-prefix containment that handles symlinked roots like `/tmp` → `/private/tmp`.
 - **Secure-by-default writes.** Production-impacting writes (QuickBooks invoices/bills/customers/vendors) require an explicit `QB_ALLOW_PROD_WRITES=1` opt-in env var; outreach prospect-enrolment and mixmax sequence-recipient tools carry `destructiveHint: true` so hosts surface confirmation prompts.
