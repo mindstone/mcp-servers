@@ -13,6 +13,7 @@ import {
   refreshTokenForAccount,
 } from '../src/modules/accounts/oauth.js';
 import { __resetAccountManagerForTests, type TokenData } from '../src/modules/accounts/manager.js';
+import { parseHubSpotError } from '../src/utils/error-parser.js';
 
 const TEST_EMAIL = 'refresh@example.com';
 
@@ -45,6 +46,19 @@ afterEach(() => {
 });
 
 describe('HubSpot refresh failure mapping', () => {
+  it('maps refresh rate limits without a raw details payload', () => {
+    const parsed = parseHubSpotError(new RefreshRateLimitedError(17), {
+      objectType: 'tokens',
+      operation: 'refresh',
+    });
+
+    expect(parsed).toMatchObject({
+      errorCode: 'REFRESH_RATE_LIMITED',
+      retryAfterSeconds: 17,
+    });
+    expect(JSON.stringify(parsed)).not.toContain('details');
+  });
+
   it('maps invalid_grant to auth_required result', async () => {
     const configDir = createConfigDir('hubspot-refresh-invalid-grant-');
     process.env.HUBSPOT_CONFIG_DIR = configDir;

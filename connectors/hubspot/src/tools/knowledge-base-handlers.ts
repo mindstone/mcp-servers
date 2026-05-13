@@ -99,8 +99,9 @@ function handleGraphQLErrors(response: GraphQLResponse<unknown>, operation: stri
     );
   }
 
-  // Generic GraphQL error
-  throw new Error(`GraphQL error during ${operation}: ${errorMessages}`);
+  // Generic GraphQL error. Do not echo HubSpot's raw GraphQL error text:
+  // it can include customer-entered article content or validation echoes.
+  throw new Error(`GraphQL error during ${operation}`);
 }
 
 function parseKnowledgeBaseError(
@@ -207,7 +208,7 @@ export async function handleListKbArticles(args: ListKbArticlesArgs): Promise<{
 
     // Log raw response shape for diagnostics
     if (response.errors) {
-      logger.warn('GraphQL KB list returned errors', { errors: response.errors });
+      logger.warn('GraphQL KB list returned errors', { errorCount: response.errors.length });
     }
     logger.debug('GraphQL KB list response', {
       hasData: !!response.data,
@@ -269,9 +270,8 @@ export async function handleGetKbArticle(args: GetKbArticleArgs): Promise<Record
     logger.debug('GraphQL KB get query', { articleId: args.articleId });
     const response = await client.graphqlQuery<KbArticleSingleResponse>(query);
 
-    // Log raw response shape for diagnostics
     if (response.errors) {
-      logger.warn('GraphQL KB get returned errors', { errors: response.errors });
+      logger.warn('GraphQL KB get returned errors', { errorCount: response.errors.length });
     }
     logger.debug('GraphQL KB get response', {
       hasData: !!response.data,

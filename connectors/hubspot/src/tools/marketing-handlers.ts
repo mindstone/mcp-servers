@@ -1,6 +1,7 @@
 import { getHubSpotClientAsync, HubSpotApiError } from '../api/hubspot-client.js';
 import {
   parseHubSpotError as parseSharedHubSpotError,
+  summariseHubSpotApiError,
   type ParsedHubSpotError,
 } from '../utils/error-parser.js';
 import logger from '../utils/logger.js';
@@ -100,16 +101,16 @@ function parseHubSpotError(
     }
     
     return {
-      error: message,
+      error: 'HubSpot marketing API error',
       errorCode: 'API_ERROR',
       suggestion: 'Check the request parameters and try again.',
-      details
+      details: summariseHubSpotApiError(error, { operation: context.operation })
     };
   }
 
   return sharedParsed.errorCode === 'UNKNOWN_ERROR'
     ? {
-      error: String(error),
+      error: 'Unexpected HubSpot marketing error',
       errorCode: 'UNKNOWN_ERROR',
       suggestion: 'An unexpected error occurred. Check HubSpot connection status.'
     }

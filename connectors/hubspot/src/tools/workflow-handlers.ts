@@ -3,7 +3,7 @@ import {
   HubSpotApiError,
   WorkflowActionInput
 } from '../api/hubspot-client.js';
-import { parseHubSpotError } from '../utils/error-parser.js';
+import { parseHubSpotError, summariseHubSpotApiError } from '../utils/error-parser.js';
 import logger from '../utils/logger.js';
 
 interface ListWorkflowsArgs {
@@ -49,12 +49,12 @@ export async function handleListWorkflows(args: ListWorkflowsArgs): Promise<unkn
     const result = await client.listWorkflows(args.limit);
     return { workflows: result.results, paging: result.paging };
   } catch (error) {
-    logger.error('Failed to list workflows', { args, error });
     const parsed = parseHubSpotError(error, {
       objectType: 'workflows',
       operation: 'list',
       args
     });
+    logger.error('Failed to list workflows', parsed);
     throw new Error(JSON.stringify(parsed));
   }
 }
@@ -64,12 +64,12 @@ export async function handleGetWorkflow(args: GetWorkflowArgs): Promise<unknown>
     const client = await getHubSpotClientAsync();
     return await client.getWorkflow(args.flowId);
   } catch (error) {
-    logger.error('Failed to get workflow', { args, error });
     const parsed = parseHubSpotError(error, {
       objectType: 'workflows',
       operation: 'get',
       args
     });
+    logger.error('Failed to get workflow', parsed);
     throw new Error(JSON.stringify(parsed));
   }
 }
@@ -87,12 +87,12 @@ export async function handleCreateWorkflow(args: CreateWorkflowArgs): Promise<un
     logger.info(`Created workflow ${result.id}`);
     return result;
   } catch (error) {
-    logger.error('Failed to create workflow', { args, error });
     const parsed = parseHubSpotError(error, {
       objectType: 'workflows',
       operation: 'create',
       args
     });
+    logger.error('Failed to create workflow', parsed);
     throw new Error(JSON.stringify(parsed));
   }
 }
@@ -109,12 +109,12 @@ export async function handleUpdateWorkflow(args: UpdateWorkflowArgs): Promise<un
     logger.info(`Updated workflow ${args.flowId}`);
     return result;
   } catch (error) {
-    logger.error('Failed to update workflow', { args, error });
     const parsed = parseHubSpotError(error, {
       objectType: 'workflows',
       operation: 'update',
       args
     });
+    logger.error('Failed to update workflow', parsed);
     throw new Error(JSON.stringify(parsed));
   }
 }
@@ -138,12 +138,12 @@ export async function handleDeleteWorkflow(args: DeleteWorkflowArgs): Promise<un
       message: `Workflow ${args.flowId} deleted`
     };
   } catch (error) {
-    logger.error('Failed to delete workflow', { args, error });
     const parsed = parseHubSpotError(error, {
       objectType: 'workflows',
       operation: 'delete',
       args
     });
+    logger.error('Failed to delete workflow', parsed);
     throw new Error(JSON.stringify(parsed));
   }
 }
@@ -156,12 +156,12 @@ export async function handleActivateWorkflow(args: ToggleWorkflowArgs): Promise<
     logger.info(`Activated workflow ${args.flowId}`);
     return result;
   } catch (error) {
-    logger.error('Failed to activate workflow', { args, error });
     const parsed = parseHubSpotError(error, {
       objectType: 'workflows',
       operation: 'activate',
       args
     });
+    logger.error('Failed to activate workflow', parsed);
     throw new Error(JSON.stringify(parsed));
   }
 }
@@ -174,12 +174,12 @@ export async function handleDeactivateWorkflow(args: ToggleWorkflowArgs): Promis
     logger.info(`Deactivated workflow ${args.flowId}`);
     return result;
   } catch (error) {
-    logger.error('Failed to deactivate workflow', { args, error });
     const parsed = parseHubSpotError(error, {
       objectType: 'workflows',
       operation: 'deactivate',
       args
     });
+    logger.error('Failed to deactivate workflow', parsed);
     throw new Error(JSON.stringify(parsed));
   }
 }
@@ -189,15 +189,15 @@ export async function handleEnrolInWorkflow(args: EnrolInWorkflowArgs): Promise<
     const client = await getHubSpotClientAsync();
     return await client.enrollInWorkflow(args.flowId, args.objectIds, args.objectType || 'contacts');
   } catch (error) {
-    logger.error('Failed to enrol in workflow', { args, error });
-
     if (error instanceof HubSpotApiError && (error.statusCode === 403 || error.statusCode === 404)) {
-      throw new Error(JSON.stringify({
+      const parsed = {
         error: `Workflow enrollment via v4 Automation API failed (${error.statusCode})`,
         errorCode: error.statusCode === 403 ? 'SCOPE_MISSING' : 'NOT_FOUND',
         suggestion: 'Reconnect HubSpot to refresh automation scopes. If this persists, your portal may require the v3 workflow enrollment endpoint instead of v4.',
-        details: error.details
-      }));
+        details: summariseHubSpotApiError(error, { operation: 'enrol' })
+      };
+      logger.error('Failed to enrol in workflow', parsed);
+      throw new Error(JSON.stringify(parsed));
     }
 
     const parsed = parseHubSpotError(error, {
@@ -205,6 +205,7 @@ export async function handleEnrolInWorkflow(args: EnrolInWorkflowArgs): Promise<
       operation: 'enrol',
       args
     });
+    logger.error('Failed to enrol in workflow', parsed);
     throw new Error(JSON.stringify(parsed));
   }
 }

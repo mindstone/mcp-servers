@@ -2,6 +2,7 @@ import { getHubSpotClientAsync, SearchFilter, SearchRequest, HubSpotApiError } f
 import { injectHostMetadata } from '../utils/user-context.js';
 import {
   parseHubSpotError as parseSharedHubSpotError,
+  summariseHubSpotApiError,
   type ParsedHubSpotError,
 } from '../utils/error-parser.js';
 import logger from '../utils/logger.js';
@@ -75,13 +76,20 @@ function parseHubSpotError(
     if (category === 'VALIDATION_ERROR' || error.statusCode === 400) {
       // Check for invalid property values
       if (message.includes('Property values were not valid')) {
-        const propertyErrors = details?.errors as Array<{ context?: { propertyName?: string[] }; message?: string }> || [];
-        const invalidProps = propertyErrors.map(e => e.context?.propertyName?.[0]).filter(Boolean);
+        const propertyErrors = details?.errors as Array<{ context?: { propertyName?: string[] | string } }> || [];
+        const invalidProps = [...new Set(propertyErrors.flatMap((propertyError) => {
+          const propertyName = propertyError.context?.propertyName;
+          if (Array.isArray(propertyName)) return propertyName;
+          return typeof propertyName === 'string' ? [propertyName] : [];
+        }).filter((propertyName): propertyName is string => propertyName.length > 0))];
         return {
-          error: `Invalid property values for: ${invalidProps.join(', ')}`,
+          error: invalidProps.length > 0
+            ? `Invalid property values for: ${invalidProps.join(', ')}`
+            : 'HubSpot rejected one or more property values',
           errorCode: 'INVALID_PROPERTY_VALUE',
           suggestion: `Check the allowed values for these properties using list_hubspot_properties for ${context.objectType}. Common issues: 'industry' requires specific enum values, dates need ISO format.`,
-          details: propertyErrors
+          invalidProperties: invalidProps,
+          details: summariseHubSpotApiError(error, { operation: context.operation })
         };
       }
       
@@ -91,14 +99,15 @@ function parseHubSpotError(
           error: `Search request failed - likely invalid filter syntax or unsearchable property`,
           errorCode: 'INVALID_SEARCH_REQUEST',
           suggestion: `Use filters with valid operators (EQ, NEQ, CONTAINS_TOKEN, IN, GT, LT, etc.) on searchable properties. For text search, omit 'query' and use filters on specific properties like 'dealname', 'email', or 'name'.`,
-          details: context.args
+          details: summariseHubSpotApiError(error, { operation: context.operation })
         };
       }
       
       return {
-        error: `Validation failed: ${message}`,
+        error: 'HubSpot validation failed',
         errorCode: 'VALIDATION_ERROR',
-        suggestion: 'Check that all required properties are provided and values match expected formats.'
+        suggestion: 'Check that all required properties are provided and values match expected formats.',
+        details: summariseHubSpotApiError(error, { operation: context.operation })
       };
     }
     

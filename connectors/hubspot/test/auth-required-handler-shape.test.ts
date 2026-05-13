@@ -53,6 +53,10 @@ function assertAuthRequiredPayload(payload: unknown): void {
     setupToolName: 'authenticate_hubspot_account',
   });
   expect((payload as { errorCode?: string }).errorCode).not.toBe('UNKNOWN_ERROR');
+  const serialized = JSON.stringify(payload);
+  expect(serialized).not.toContain('details');
+  expect(serialized).not.toContain('expired-access-token');
+  expect(serialized).not.toContain('expired-refresh-token');
 }
 
 describe('auth_required error shape from handler catch paths', () => {

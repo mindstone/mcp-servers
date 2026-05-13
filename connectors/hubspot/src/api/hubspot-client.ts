@@ -1,6 +1,7 @@
 import logger from '../utils/logger.js';
 import { refreshTokenForAccount } from '../modules/accounts/oauth.js';
 import { deriveHubSpotAccountHash } from '../utils/accountHash.js';
+import { summariseHubSpotApiError } from '../utils/error-parser.js';
 
 const HUBSPOT_API_BASE = 'https://api.hubapi.com';
 const MAX_HUBSPOT_REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
@@ -46,6 +47,28 @@ export function composeHubSpotRequestSignal(
   const timeoutMs = resolveHubSpotRequestTimeoutMs(envValue);
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   return callerSignal ? AbortSignal.any([callerSignal, timeoutSignal]) : timeoutSignal;
+}
+
+function parseRetryAfterSeconds(headerValue: string | null): number | undefined {
+  if (!headerValue || headerValue.trim().length === 0) {
+    return undefined;
+  }
+
+  const trimmed = headerValue.trim();
+  if (/^\d+$/.test(trimmed)) {
+    return Number.parseInt(trimmed, 10);
+  }
+
+  const asDateMs = Date.parse(trimmed);
+  if (!Number.isNaN(asDateMs)) {
+    return Math.max(0, Math.ceil((asDateMs - Date.now()) / 1000));
+  }
+
+  return undefined;
+}
+
+function readRetryAfterHeader(headers: Headers): string | null {
+  return headers.get('retry-after') ?? headers.get('Retry-After');
 }
 
 export interface HubSpotTokenData {
@@ -318,7 +341,9 @@ export class HubSpotApiError extends Error {
   constructor(
     message: string,
     public statusCode: number,
-    public details?: unknown
+    public details?: unknown,
+    public readonly requestId?: string,
+    public readonly retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = 'HubSpotApiError';
@@ -371,12 +396,30 @@ export class HubSpotClient {
       } catch {
         // Leave as text for non-JSON error bodies
       }
+      const requestId =
+        response.headers.get('x-hubspot-correlation-id') ||
+        response.headers.get('x-hubspot-request-id') ||
+        response.headers.get('x-request-id') ||
+        undefined;
+      const retryAfterSeconds =
+        response.status === 429
+          ? parseRetryAfterSeconds(readRetryAfterHeader(response.headers))
+          : undefined;
+      const errorSummary = summariseHubSpotApiError(
+        { statusCode: response.status, details: errorDetails, requestId, retryAfterSeconds },
+        { operation: `${method} ${endpoint}` },
+      );
       
-      logger.error(`HubSpot API error: ${response.status}`, errorDetails);
+      logger.error(
+        { ...errorSummary },
+        'hubspot_api_error',
+      );
       throw new HubSpotApiError(
         `HubSpot API error: ${response.status} ${response.statusText}`,
         response.status,
-        errorDetails
+        errorDetails,
+        requestId,
+        retryAfterSeconds,
       );
     }
 
@@ -807,7 +850,17 @@ export class HubSpotClient {
       const errorText = await response.text();
       let errorDetails: unknown = errorText;
       try { errorDetails = JSON.parse(errorText); } catch { /* keep as text */ }
-      throw new HubSpotApiError(`HubSpot API error: ${response.status} ${response.statusText}`, response.status, errorDetails);
+      const requestId =
+        response.headers.get('x-hubspot-correlation-id') ||
+        response.headers.get('x-hubspot-request-id') ||
+        response.headers.get('x-request-id') ||
+        undefined;
+      throw new HubSpotApiError(
+        `HubSpot API error: ${response.status} ${response.statusText}`,
+        response.status,
+        errorDetails,
+        requestId,
+      );
     }
 
     return response.json() as Promise<{ id: string; name: string; path: string; url: string; size: number; access: string }>;
