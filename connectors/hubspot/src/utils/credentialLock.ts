@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import type * as ProperLockfile from 'proper-lockfile';
+import logger from './logger.js';
 
 const require = createRequire(import.meta.url);
 const properLockfile: typeof ProperLockfile = require('proper-lockfile');
@@ -17,8 +18,29 @@ export interface CredentialLockOptions {
 const DEFAULT_STALE_MS = 90_000;
 const DEFAULT_UPDATE_MS = 5_000;
 const DEFAULT_RETRIES = { retries: 5, minTimeout: 100, maxTimeout: 500 };
+const DEFAULT_HUBSPOT_REQUEST_TIMEOUT_MS = 60_000;
+const MAX_HUBSPOT_REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
+const MIN_ENV_STALE_MS = 30_000;
+const MAX_ENV_STALE_MS = 900_000;
 
-function resolveStaleMs(override?: number): number {
+function resolveRequestTimeoutMsForLockBound(envValue = process.env.HUBSPOT_REQUEST_TIMEOUT_MS): number {
+  if (!envValue || envValue.trim().length === 0) {
+    return DEFAULT_HUBSPOT_REQUEST_TIMEOUT_MS;
+  }
+
+  if (!/^\d+$/.test(envValue)) {
+    return DEFAULT_HUBSPOT_REQUEST_TIMEOUT_MS;
+  }
+
+  const parsed = Number(envValue);
+  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > MAX_HUBSPOT_REQUEST_TIMEOUT_MS) {
+    return DEFAULT_HUBSPOT_REQUEST_TIMEOUT_MS;
+  }
+
+  return parsed;
+}
+
+export function resolveStaleMs(override?: number): number {
   if (typeof override === 'number') {
     return override;
   }
@@ -30,10 +52,34 @@ function resolveStaleMs(override?: number): number {
 
   const parsed = Number(envValue);
   if (!Number.isFinite(parsed) || parsed <= 0) {
+    logger.warn(
+      { envValue, fallbackMs: DEFAULT_STALE_MS },
+      'hubspot_refresh_lock_stale_ms_invalid',
+    );
     return DEFAULT_STALE_MS;
   }
 
-  return parsed;
+  const minStaleMs = Math.max(
+    parsed,
+    resolveRequestTimeoutMsForLockBound() + 10_000,
+    MIN_ENV_STALE_MS,
+  );
+  const boundedStaleMs = Math.min(minStaleMs, MAX_ENV_STALE_MS);
+
+  if (boundedStaleMs !== parsed) {
+    logger.warn(
+      {
+        envValue,
+        parsedMs: parsed,
+        resolvedMs: boundedStaleMs,
+        minMs: Math.max(resolveRequestTimeoutMsForLockBound() + 10_000, MIN_ENV_STALE_MS),
+        maxMs: MAX_ENV_STALE_MS,
+      },
+      'hubspot_refresh_lock_stale_ms_bounded',
+    );
+  }
+
+  return boundedStaleMs;
 }
 
 export class RefreshLockFailedError extends Error {

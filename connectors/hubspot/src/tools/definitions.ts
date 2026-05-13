@@ -1,3 +1,5 @@
+import { MAX_FAN_OUT, MAX_STRING_BODY_LENGTH } from './input-limits.js';
+
 export interface ToolMetadata {
   name: string;
   category: string;
@@ -237,7 +239,7 @@ RETURNS: Created contact with id and properties`,
         properties: {
           type: 'object',
           description: 'Contact properties object',
-          additionalProperties: { type: 'string' }
+          additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH }
         }
       },
       required: ['properties']
@@ -265,7 +267,7 @@ RETURNS: Updated contact object`,
         properties: {
           type: 'object',
           description: 'Properties to update (only include changed fields)',
-          additionalProperties: { type: 'string' }
+          additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH }
         }
       },
       required: ['contactId', 'properties']
@@ -380,7 +382,7 @@ RETURNS: Created company with id and properties`,
         properties: {
           type: 'object',
           description: 'Company properties object',
-          additionalProperties: { type: 'string' }
+          additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH }
         }
       },
       required: ['properties']
@@ -402,7 +404,7 @@ PREREQUISITE: Get companyId from search_hubspot_companies first`,
       type: 'object',
       properties: {
         companyId: { type: 'string', description: 'HubSpot company ID' },
-        properties: { type: 'object', description: 'Properties to update', additionalProperties: { type: 'string' } }
+        properties: { type: 'object', description: 'Properties to update', additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH } }
       },
       required: ['companyId', 'properties']
     }
@@ -525,7 +527,7 @@ RETURNS: Created deal with id and properties`,
       type: 'object',
       properties: {
         hubspot_owner_id: { type: 'string', description: 'Owner ID for the deal (REQUIRED — get from list_hubspot_owners). If omitted, falls back to the integration account which is usually wrong for team accounts.' },
-        properties: { type: 'object', description: 'Deal properties object', additionalProperties: { type: 'string' } }
+        properties: { type: 'object', description: 'Deal properties object', additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH } }
       },
       required: ['properties', 'hubspot_owner_id']
     }
@@ -553,7 +555,7 @@ PREREQUISITE: Get dealId from search_hubspot_deals first`,
       type: 'object',
       properties: {
         dealId: { type: 'string', description: 'HubSpot deal ID' },
-        properties: { type: 'object', description: 'Properties to update', additionalProperties: { type: 'string' } }
+        properties: { type: 'object', description: 'Properties to update', additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH } }
       },
       required: ['dealId', 'properties']
     }
@@ -625,7 +627,7 @@ export const ticketTools: ToolMetadata[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        properties: { type: 'object', description: 'Ticket properties', additionalProperties: { type: 'string' } }
+        properties: { type: 'object', description: 'Ticket properties', additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH } }
       },
       required: ['properties']
     }
@@ -639,7 +641,7 @@ export const ticketTools: ToolMetadata[] = [
       type: 'object',
       properties: {
         ticketId: { type: 'string', description: 'HubSpot ticket ID' },
-        properties: { type: 'object', description: 'Properties to update', additionalProperties: { type: 'string' } }
+        properties: { type: 'object', description: 'Properties to update', additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH } }
       },
       required: ['ticketId', 'properties']
     }
@@ -767,7 +769,7 @@ RETURNS: Created lead with id and properties`,
         properties: {
           type: 'object',
           description: 'Lead properties object (hs_lead_name required)',
-          additionalProperties: { type: 'string' }
+          additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH }
         },
         contactId: {
           type: 'string',
@@ -804,7 +806,7 @@ RETURNS: Updated lead object`,
         properties: {
           type: 'object',
           description: 'Properties to update (only include changed fields)',
-          additionalProperties: { type: 'string' }
+          additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH }
         }
       },
       required: ['leadId', 'properties']
@@ -878,7 +880,7 @@ export const taskTools: ToolMetadata[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        properties: { type: 'object', description: 'Task properties', additionalProperties: { type: 'string' } }
+        properties: { type: 'object', description: 'Task properties', additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH } }
       },
       required: ['properties']
     }
@@ -892,7 +894,7 @@ export const taskTools: ToolMetadata[] = [
       type: 'object',
       properties: {
         taskId: { type: 'string', description: 'HubSpot task ID' },
-        properties: { type: 'object', description: 'Properties to update', additionalProperties: { type: 'string' } }
+        properties: { type: 'object', description: 'Properties to update', additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH } }
       },
       required: ['taskId', 'properties']
     }
@@ -933,15 +935,15 @@ Or use the convenience tool attach_file_to_record for a one-step workflow.`,
     inputSchema: {
       type: 'object',
       properties: {
-        properties: { type: 'object', description: 'Note properties (hs_note_body required)', additionalProperties: { type: 'string' } },
+        properties: { type: 'object', description: 'Note properties (hs_note_body required)', additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH } },
         associations: {
           type: 'object',
           description: 'Associate note with records',
           properties: {
-            contactIds: { type: 'array', items: { type: 'string' } },
-            companyIds: { type: 'array', items: { type: 'string' } },
-            dealIds: { type: 'array', items: { type: 'string' } },
-            ticketIds: { type: 'array', items: { type: 'string' } }
+            contactIds: { type: 'array', items: { type: 'string' }, maxItems: MAX_FAN_OUT },
+            companyIds: { type: 'array', items: { type: 'string' }, maxItems: MAX_FAN_OUT },
+            dealIds: { type: 'array', items: { type: 'string' }, maxItems: MAX_FAN_OUT },
+            ticketIds: { type: 'array', items: { type: 'string' }, maxItems: MAX_FAN_OUT }
           }
         }
       },
@@ -1560,14 +1562,14 @@ RETURNS: Created call with id`,
     inputSchema: {
       type: 'object',
       properties: {
-        properties: { type: 'object', description: 'Call properties object', additionalProperties: { type: 'string' } },
+        properties: { type: 'object', description: 'Call properties object', additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH } },
         associations: {
           type: 'object',
           description: 'Link call to CRM records',
           properties: {
-            contactIds: { type: 'array', items: { type: 'string' }, description: 'Contact IDs to associate' },
-            companyIds: { type: 'array', items: { type: 'string' }, description: 'Company IDs to associate' },
-            dealIds: { type: 'array', items: { type: 'string' }, description: 'Deal IDs to associate' }
+            contactIds: { type: 'array', items: { type: 'string' }, maxItems: MAX_FAN_OUT, description: 'Contact IDs to associate' },
+            companyIds: { type: 'array', items: { type: 'string' }, maxItems: MAX_FAN_OUT, description: 'Company IDs to associate' },
+            dealIds: { type: 'array', items: { type: 'string' }, maxItems: MAX_FAN_OUT, description: 'Deal IDs to associate' }
           }
         }
       },
@@ -1614,14 +1616,14 @@ RETURNS: Created meeting with id`,
     inputSchema: {
       type: 'object',
       properties: {
-        properties: { type: 'object', description: 'Meeting properties object', additionalProperties: { type: 'string' } },
+        properties: { type: 'object', description: 'Meeting properties object', additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH } },
         associations: {
           type: 'object',
           description: 'Link meeting to CRM records',
           properties: {
-            contactIds: { type: 'array', items: { type: 'string' }, description: 'Attendee contact IDs' },
-            companyIds: { type: 'array', items: { type: 'string' }, description: 'Company IDs' },
-            dealIds: { type: 'array', items: { type: 'string' }, description: 'Related deal IDs' }
+            contactIds: { type: 'array', items: { type: 'string' }, maxItems: MAX_FAN_OUT, description: 'Attendee contact IDs' },
+            companyIds: { type: 'array', items: { type: 'string' }, maxItems: MAX_FAN_OUT, description: 'Company IDs' },
+            dealIds: { type: 'array', items: { type: 'string' }, maxItems: MAX_FAN_OUT, description: 'Related deal IDs' }
           }
         }
       },
@@ -1761,7 +1763,7 @@ RETURNS: Created product with id`,
         properties: { 
           type: 'object', 
           description: 'Product properties (name required)', 
-          additionalProperties: { type: 'string' } 
+          additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH }
         }
       },
       required: ['properties']
@@ -1784,7 +1786,7 @@ RETURNS: Updated product`,
       type: 'object',
       properties: {
         productId: { type: 'string', description: 'HubSpot product ID' },
-        properties: { type: 'object', description: 'Properties to update', additionalProperties: { type: 'string' } }
+        properties: { type: 'object', description: 'Properties to update', additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH } }
       },
       required: ['productId', 'properties']
     }
@@ -1893,7 +1895,7 @@ RETURNS: Created line item with id`,
         properties: { 
           type: 'object', 
           description: 'Line item properties (name, quantity, price required)', 
-          additionalProperties: { type: 'string' } 
+          additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH }
         },
         dealId: { type: 'string', description: 'Deal ID to associate (recommended)' }
       },
@@ -2206,6 +2208,7 @@ Common properties: email, firstname, lastname, phone, company, jobtitle, lifecyc
         ids: { 
           type: 'array', 
           items: { type: 'string' }, 
+          maxItems: MAX_FAN_OUT,
           description: 'Contact IDs to fetch (max 100)' 
         },
         properties: { 
@@ -2473,15 +2476,15 @@ RETURNS: { fileId, noteId, fileName, associations }`,
       properties: {
         filePath: { type: 'string', description: 'Local file path to upload (use this OR fileUrl)' },
         fileUrl: { type: 'string', description: 'Public URL to import (use this OR filePath)' },
-        noteBody: { type: 'string', description: 'Optional note text to accompany the attachment' },
+        noteBody: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH, description: 'Optional note text to accompany the attachment' },
         associations: {
           type: 'object',
           description: 'Records to attach the file to (at least one required)',
           properties: {
-            contactIds: { type: 'array', items: { type: 'string' }, description: 'Contact IDs' },
-            companyIds: { type: 'array', items: { type: 'string' }, description: 'Company IDs' },
-            dealIds: { type: 'array', items: { type: 'string' }, description: 'Deal IDs' },
-            ticketIds: { type: 'array', items: { type: 'string' }, description: 'Ticket IDs' }
+            contactIds: { type: 'array', items: { type: 'string' }, maxItems: MAX_FAN_OUT, description: 'Contact IDs' },
+            companyIds: { type: 'array', items: { type: 'string' }, maxItems: MAX_FAN_OUT, description: 'Company IDs' },
+            dealIds: { type: 'array', items: { type: 'string' }, maxItems: MAX_FAN_OUT, description: 'Deal IDs' },
+            ticketIds: { type: 'array', items: { type: 'string' }, maxItems: MAX_FAN_OUT, description: 'Ticket IDs' }
           }
         }
       },
@@ -2715,6 +2718,7 @@ automation scopes; if it still fails, your portal may require the v3 enrollment 
         objectIds: {
           type: 'array',
           description: 'Record IDs to enrol',
+          maxItems: MAX_FAN_OUT,
           items: { type: 'string' }
         },
         objectType: {

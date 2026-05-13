@@ -5,7 +5,10 @@ import { createRequire } from 'node:module';
 import logger from '../utils/logger.js';
 import { HubSpotAuthRequiredError } from '../api/hubspot-client.js';
 import { allTools } from './definitions.js';
-import { getAccountManager } from '../modules/accounts/manager.js';
+import {
+  getAccountManager,
+  HubSpotConfigDirInvalidError,
+} from '../modules/accounts/manager.js';
 import {
   handleListAccounts,
   handleAuthenticateAccount,
@@ -174,6 +177,10 @@ export class HubSpotServer {
         return storedTier;
       }
     } catch (error) {
+      if (error instanceof HubSpotConfigDirInvalidError) {
+        throw error;
+      }
+
       // Fail-closed: corrupt or unreadable accounts.json must not silently expand
       // the tool surface to 'full'. Surface the failure and downgrade to 'readonly'.
       logger.error('Failed to resolve HubSpot scope tier from accounts.json; falling back to readonly', {
@@ -638,7 +645,7 @@ export class HubSpotServer {
                 _meta: {}
               };
             }
-            if (parsed.errorCode && parsed.suggestion) {
+            if (parsed.errorCode && (parsed.suggestion || parsed.status === 'error' || parsed.isError === true)) {
               // This is our structured error format, use it directly
               errorPayload = parsed;
             } else {

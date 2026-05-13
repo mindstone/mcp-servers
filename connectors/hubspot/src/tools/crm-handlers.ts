@@ -6,6 +6,10 @@ import {
   type ParsedHubSpotError,
 } from '../utils/error-parser.js';
 import logger from '../utils/logger.js';
+import {
+  assertAssociationFanOut,
+  assertRecordStringBodySizes,
+} from './input-limits.js';
 
 interface SearchArgs {
   query?: string;
@@ -226,6 +230,8 @@ async function getObject(objectType: string, objectId: string, args: GetArgs) {
 
 // Generic create handler
 async function createObject(objectType: string, args: CreateArgs) {
+  assertRecordStringBodySizes(args.properties);
+
   try {
     const client = await getHubSpotClientAsync();
     const enrichedProperties = await injectHostMetadata(args.properties, objectType);
@@ -241,6 +247,8 @@ async function createObject(objectType: string, args: CreateArgs) {
 
 // Generic update handler
 async function updateObject(objectType: string, objectId: string, args: UpdateArgs) {
+  assertRecordStringBodySizes(args.properties);
+
   try {
     const client = await getHubSpotClientAsync();
     const result = await client.updateObject(objectType, objectId, args.properties);
@@ -364,6 +372,8 @@ export async function handleGetLead(args: { leadId: string } & GetArgs) {
 }
 
 export async function handleCreateLead(args: { properties: Record<string, string>; contactId: string }) {
+  assertRecordStringBodySizes(args.properties);
+
   try {
     const client = await getHubSpotClientAsync();
     const enrichedProperties = await injectHostMetadata(args.properties, 'leads');
@@ -412,6 +422,9 @@ export async function handleDeleteTask(args: { taskId: string }) {
 
 // Note handler
 export async function handleCreateNote(args: NoteCreateArgs) {
+  assertRecordStringBodySizes(args.properties);
+  assertAssociationFanOut(args.associations);
+
   try {
     const client = await getHubSpotClientAsync();
     const enrichedProperties = await injectHostMetadata(args.properties, 'notes');
@@ -652,6 +665,9 @@ async function getEngagement(engagementType: string, engagementId: string, prope
 }
 
 async function createEngagement(engagementType: string, args: EngagementCreateArgs) {
+  assertRecordStringBodySizes(args.properties);
+  assertAssociationFanOut(args.associations);
+
   try {
     const client = await getHubSpotClientAsync();
     const enrichedProperties = await injectHostMetadata(args.properties, engagementType);
@@ -817,6 +833,8 @@ export async function handleGetLineItem(args: { lineItemId: string; properties?:
 }
 
 export async function handleCreateLineItem(args: { properties: Record<string, string>; dealId?: string }) {
+  assertRecordStringBodySizes(args.properties);
+
   try {
     const client = await getHubSpotClientAsync();
     const enrichedProperties = await injectHostMetadata(args.properties, 'line_items');

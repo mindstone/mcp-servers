@@ -5,6 +5,7 @@ import {
   type ParsedHubSpotError,
 } from '../utils/error-parser.js';
 import logger from '../utils/logger.js';
+import { assertMaxFanOut } from './input-limits.js';
 
 /**
  * Parse HubSpot API error for AI-friendly messages
@@ -309,11 +310,9 @@ export async function handleListListMembers(args: { listId: string; limit?: numb
 }
 
 export async function handleBatchReadContacts(args: { ids: string[]; properties?: string[] }) {
+  assertMaxFanOut(args.ids, 'ids');
+
   try {
-    if (args.ids.length > 100) {
-      throw new Error('Maximum 100 contact IDs per batch request. Split into multiple calls.');
-    }
-    
     const client = await getHubSpotClientAsync();
     const result = await client.batchReadContacts(args.ids, args.properties);
     
