@@ -1,6 +1,6 @@
-# @mindstone-engineering/mcp-server-napkin
+# @mindstone/mcp-server-napkin
 
-[![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-napkin.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-napkin)
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-napkin.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-napkin)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 Napkin AI visual generation MCP server for Model Context Protocol hosts. Generate professional visuals — diagrams, infographics, and illustrations — from text descriptions, check generation status, and download results through a standardised MCP interface.
@@ -23,7 +23,7 @@ npm run build
 ### npx (once published)
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-napkin
+npx -y @mindstone/mcp-server-napkin
 ```
 
 ### Local
@@ -51,7 +51,7 @@ node dist/index.js
   "mcpServers": {
     "Napkin": {
       "command": "npx",
-      "args": ["-y", "@mindstone-engineering/mcp-server-napkin"],
+      "args": ["-y", "@mindstone/mcp-server-napkin"],
       "env": {
         "NAPKIN_API_KEY": "your-api-key"
       }

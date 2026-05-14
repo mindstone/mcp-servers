@@ -38,7 +38,7 @@ Defect discovered in published version
 ### Deprecate a version (preferred path)
 
 ```bash
-npm deprecate '@mindstone-engineering/mcp-server-<connector>@<version>' \
+npm deprecate '@mindstone/mcp-server-<connector>@<version>' \
   'SECURITY: <one-line summary>. Upgrade to <fixed-version> immediately. See https://github.com/mindstone/mcp-servers/security/advisories/<advisory-id>'
 ```
 
@@ -51,12 +51,12 @@ This adds a deprecation warning visible to every consumer running `npm install`.
 3. Add a `## [<new-version>] — <date>` section to `CHANGELOG.md` describing the fix as a `### Security` entry.
 4. Tag: `git tag <connector>-v<new-version>` then push the tag.
 5. The `Publish` workflow runs automatically and ships the patch with `--provenance`.
-6. Verify on npm: `npm view @mindstone-engineering/mcp-server-<connector>@<new-version>` shows the new version with the published Sigstore attestation.
+6. Verify on npm: `npm view @mindstone/mcp-server-<connector>@<new-version>` shows the new version with the published Sigstore attestation.
 
 ### Unpublish (last resort, ≤72h only)
 
 ```bash
-npm unpublish '@mindstone-engineering/mcp-server-<connector>@<version>'
+npm unpublish '@mindstone/mcp-server-<connector>@<version>'
 ```
 
 Only acceptable when:

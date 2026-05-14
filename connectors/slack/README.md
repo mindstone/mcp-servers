@@ -5,7 +5,7 @@ Slack workspace MCP server — channels, messages, threads, reactions, users, fi
 ## Installation
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-slack
+npx -y @mindstone/mcp-server-slack
 ```
 
 ## Configuration

@@ -4,7 +4,7 @@ import { existsSync } from 'fs';
 import { mswServer } from './helpers/setup.js';
 import { createMixmaxHandlers } from './helpers/mixmax-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
-import { createStdioTestClient, type McpTestClient as StdioMcpTestClient } from '@mindstone-engineering/mcp-test-harness';
+import { createStdioTestClient, type McpTestClient as StdioMcpTestClient } from '@mindstone/mcp-test-harness';
 
 describe('Smoke test — tool registration', () => {
   let testClient: McpTestClient;

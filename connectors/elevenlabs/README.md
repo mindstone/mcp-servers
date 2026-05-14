@@ -1,6 +1,6 @@
-# @mindstone-engineering/mcp-server-elevenlabs
+# @mindstone/mcp-server-elevenlabs
 
-[![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-elevenlabs.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-elevenlabs)
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-elevenlabs.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 ElevenLabs MCP server for Model Context Protocol hosts. Generate speech, music, and sound effects, browse voices, and transcribe audio using the ElevenLabs API through a standardised MCP interface.
@@ -23,7 +23,7 @@ npm run build
 ### npx (once published)
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-elevenlabs
+npx -y @mindstone/mcp-server-elevenlabs
 ```
 
 ### Local
@@ -49,7 +49,7 @@ node dist/index.js
   "mcpServers": {
     "ElevenLabs": {
       "command": "npx",
-      "args": ["-y", "@mindstone-engineering/mcp-server-elevenlabs"],
+      "args": ["-y", "@mindstone/mcp-server-elevenlabs"],
       "env": {
         "ELEVENLABS_API_KEY": "your-api-key"
       }

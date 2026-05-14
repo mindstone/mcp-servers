@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as http from 'node:http';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
-import { createTempConfig, type TempConfigResult } from '@mindstone-engineering/mcp-test-harness';
+import { createTempConfig, type TempConfigResult } from '@mindstone/mcp-test-harness';
 
 const SRC_DIR = path.resolve(import.meta.dirname, '../src');
 const TEST_DIR = path.resolve(import.meta.dirname, '.');

@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import { createOutreachHandlers, MOCK_ACCESS_TOKEN } from './helpers/outreach-mock-api.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
-import { createTempConfig, type TempConfigResult } from '@mindstone-engineering/mcp-test-harness';
+import { createTempConfig, type TempConfigResult } from '@mindstone/mcp-test-harness';
 
 function setupAuth() {
   return createTempConfig({

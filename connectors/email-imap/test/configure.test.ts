@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi, beforeEach } from 'vitest';
 import { createImapMock } from './helpers/imap-mock.js';
 import { createSmtpMock } from './helpers/smtp-mock.js';
 import { mswServer } from './helpers/setup.js';
-import { createBridgeHandlers } from '@mindstone-engineering/mcp-test-harness';
+import { createBridgeHandlers } from '@mindstone/mcp-test-harness';
 import { http, HttpResponse } from 'msw';
 
 const { MockImapFlow } = createImapMock();

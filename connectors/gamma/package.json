@@ -1,5 +1,5 @@
 {
-  "name": "@mindstone-engineering/mcp-server-gamma",
+  "name": "@mindstone/mcp-server-gamma",
   "version": "0.3.1",
   "mcpName": "io.github.mindstone/mcp-server-gamma",
   "description": "Gamma AI presentation generation MCP server for Model Context Protocol hosts",
@@ -35,7 +35,7 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@mindstone-engineering/mcp-test-harness": "file:../../test-harness",
+    "@mindstone/mcp-test-harness": "file:../../test-harness",
     "@types/node": "^22",
     "@vitest/coverage-v8": "^4.1.3",
     "msw": "^2.13.2",

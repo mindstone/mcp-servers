@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
-      "identifier": "@mindstone-engineering/mcp-server-humaans",
+      "identifier": "@mindstone/mcp-server-humaans",
       "version": "0.2.1",
       "runtimeHint": "npx",
       "transport": {

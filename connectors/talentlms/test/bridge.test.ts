@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import { createTalentLMSHandlers } from './helpers/talentlms-mock-server.js';
-import { createBridgeHandlers } from '@mindstone-engineering/mcp-test-harness';
+import { createBridgeHandlers } from '@mindstone/mcp-test-harness';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
 import { MOCK_API_KEY, MOCK_DOMAIN } from './fixtures/talentlms-data.js';
 import * as fs from 'fs';

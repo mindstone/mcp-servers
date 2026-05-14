@@ -1,6 +1,6 @@
-# @mindstone-engineering/mcp-server-pandadoc
+# @mindstone/mcp-server-pandadoc
 
-[![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-pandadoc.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-pandadoc)
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-pandadoc.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-pandadoc)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 PandaDoc document automation MCP server for Model Context Protocol hosts. Create, send, and manage documents, templates, and e-signatures through a standardised MCP interface.
@@ -23,7 +23,7 @@ npm run build
 ### npx (once published)
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-pandadoc
+npx -y @mindstone/mcp-server-pandadoc
 ```
 
 ### Local
@@ -49,7 +49,7 @@ node dist/index.js
   "mcpServers": {
     "PandaDoc": {
       "command": "npx",
-      "args": ["-y", "@mindstone-engineering/mcp-server-pandadoc"],
+      "args": ["-y", "@mindstone/mcp-server-pandadoc"],
       "env": {
         "PANDADOC_API_KEY": "your-api-key"
       }

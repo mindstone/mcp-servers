@@ -1,5 +1,5 @@
 {
-  "name": "@mindstone-engineering/mcp-server-email-imap",
+  "name": "@mindstone/mcp-server-email-imap",
   "version": "0.2.2",
   "mcpName": "io.github.mindstone/mcp-server-email-imap",
   "description": "Email IMAP/SMTP MCP server for Model Context Protocol hosts — supports iCloud Mail, Yahoo Mail, and custom IMAP providers",
@@ -37,7 +37,7 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@mindstone-engineering/mcp-test-harness": "file:../../test-harness",
+    "@mindstone/mcp-test-harness": "file:../../test-harness",
     "@types/node": "^22",
     "@types/nodemailer": "^6.4.0",
     "@vitest/coverage-v8": "^4.1.3",

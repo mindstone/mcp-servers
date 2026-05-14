@@ -1,7 +1,7 @@
 # FOX-3319 — Supply-Chain Audit: TanStack-Class Risk on `mcp-servers`
 
 **Date:** 2026-05-13
-**Scope:** `github.com/mindstone-engineering/mcp-servers` (OSS connectors monorepo)
+**Scope:** `github.com/mindstone/mcp-servers` (OSS connectors monorepo)
 **Branch audited:** `feature/hubspot-oss-v0.1.0` @ `6d3d36a`
 **Audit type:** Repo-specific supply-chain threat model after the TanStack compromise pattern (untrusted PR / cache / artefact code influencing trusted publication).
 
@@ -38,7 +38,7 @@ A canonical "TanStack-style" compromise chains four ingredients:
 
 The two cache/artefact pillars of the TanStack chain (#1 trust-leak, #2 cross-context state) are not exploitable today — the repo simply doesn't have those mechanisms. The remaining exposure is the **classic dependency-substitution / build-time-RCE → token exfiltration** chain that converges on the publish job:
 
-> A malicious dependency landed via reviewed PR → `npm ci` in the tag-triggered publish job runs lifecycle hooks → `NPM_TOKEN` / `CATALOG_SYNC_TOKEN` exfiltrated → arbitrary packages published under `@mindstone-engineering/`.
+> A malicious dependency landed via reviewed PR → `npm ci` in the tag-triggered publish job runs lifecycle hooks → `NPM_TOKEN` / `CATALOG_SYNC_TOKEN` exfiltrated → arbitrary packages published under `@mindstone/`.
 
 This is the same outcome class as TanStack, reached by a different (and shorter) path.
 
@@ -77,8 +77,8 @@ Concrete kill-chain that would currently succeed against `mcp-servers` if a mali
    - Or attacker themselves opens a "fix audit warning / minor bump" PR.
 5. **Tag push.** Routine release: a maintainer pushes tag `<x>-v1.3.0`. `publish.yml` triggers.
 6. **RCE in publish job.** First step in publish job is `npm ci`. `some-helper@1.2.1`'s `postinstall` script runs. Same shell, same env block, has `NODE_AUTH_TOKEN=$NPM_TOKEN` (set in the publish step), `GITHUB_TOKEN` (default), and after step boundaries, runner state has `secrets.NPM_TOKEN` reachable via filesystem (`~/.npmrc` is written by `setup-node` in this job).
-7. **Token exfil & follow-on publish.** Attacker now holds an automation token with publish rights on the `@mindstone-engineering` scope. They can publish replacement versions of any connector under that scope from anywhere.
-8. **Downstream blast radius.** Hosts (Claude Desktop, Cursor, Rebel) running `npx -y @mindstone-engineering/mcp-server-*` pull the malicious replacement on next invocation. No provenance attestation means consumers cannot detect the swap. The `dispatch-catalog-sync` mechanism in our pipeline also auto-notifies the private `MindstoneRebel` repo, potentially shortening time-to-trust on the bad version inside Rebel's catalog.
+7. **Token exfil & follow-on publish.** Attacker now holds an automation token with publish rights on the `@mindstone` scope. They can publish replacement versions of any connector under that scope from anywhere.
+8. **Downstream blast radius.** Hosts (Claude Desktop, Cursor, Rebel) running `npx -y @mindstone/mcp-server-*` pull the malicious replacement on next invocation. No provenance attestation means consumers cannot detect the swap. The `dispatch-catalog-sync` mechanism in our pipeline also auto-notifies the private `MindstoneRebel` repo, potentially shortening time-to-trust on the bad version inside Rebel's catalog.
 
 The chain assumes only **one** social-engineering step (a single approving review) and **one** prior unrelated PR (the initial benign dep addition). No fork PR, no cache poisoning, no `pull_request_target` abuse is required.
 
@@ -137,7 +137,7 @@ To confirm the chain is broken after P0:
 
 1. Confirm `permissions: id-token: write` is scoped to a single step in `publish.yml` only.
 2. Confirm `NPM_TOKEN` is removed from repo secrets (or kept only as emergency manual-publish, with audit log review).
-3. `npm view @mindstone-engineering/mcp-server-<x> --json` shows `dist.attestations` populated on the next release.
+3. `npm view @mindstone/mcp-server-<x> --json` shows `dist.attestations` populated on the next release.
 4. `actionlint -shellcheck=` clean across all workflows.
 5. `git grep -nE '@(v[0-9]|main|master)\s*$' .github/workflows` returns zero non-SHA refs.
 6. `sha256sum -c` step present in `server-json-check.yml` against a checked-in expected hash.
@@ -167,7 +167,7 @@ This section consolidates findings raised during the post-remediation review pas
 3. **Provenance is "origin, not intent."** A direct quote from the HN thread that we now treat as load-bearing: *"SLSA provenance confirms which pipeline produced the artifact, not whether the pipeline was behaving as intended. A compromised build step can produce a validly-attested but malicious package."* OIDC trusted publishing does NOT solve compile-time / build-tool compromise; it only solves token theft.
 
 4. **pnpm helps in two specific places, neither of which is the publish job itself.**
-   - **Consumer side:** pnpm does not run lifecycle scripts by default (`onlyBuiltDependencies` allowlist). A consumer running `pnpm install @mindstone-engineering/mcp-server-x` is protected from a malicious `postinstall` we might inadvertently publish.
+   - **Consumer side:** pnpm does not run lifecycle scripts by default (`onlyBuiltDependencies` allowlist). A consumer running `pnpm install @mindstone/mcp-server-x` is protected from a malicious `postinstall` we might inadvertently publish.
    - **CI cache-cooldown:** pnpm v11 ships with `minimumReleaseAge: 1440` (24h) by default. New malicious republishes have to survive 24h+ before a CI run can install them. npm v11.10+ has the equivalent setting as `min-release-age` (in days).
    None of this addresses GitHub Actions cache poisoning. That risk is structurally absent in this repo (we never use `actions/cache`), but the lesson is that switching package managers is **not** a remedy on its own.
 
@@ -179,7 +179,7 @@ This section consolidates findings raised during the post-remediation review pas
 | F15 | **HIGH** | Provenance opt-out | `--provenance` is automatic with trusted publishing but can be disabled via `NPM_CONFIG_PROVENANCE=false` (env, .npmrc, or `publishConfig` in package.json). A malicious PR could disable provenance while keeping the trusted-publisher binding, shipping authenticated-but-unattested packages. | **[FIXED]** Publish step now sets `NPM_CONFIG_PROVENANCE=true` at the **workflow env block**, which env-precedence overrides any per-package opt-out. `--provenance` is also passed explicitly on the command line for defence-in-depth. |
 | F16 | **HIGH** | Release-age cool-down | Neither the audit's original remediation nor `npm audit` catches a brand-new malicious republish of a previously-clean dep (the "Shai-Hulud-style" replication path in the TanStack chain). A maintainer-approved Renovate/Dependabot bump can land the malicious version into `package-lock.json` within minutes of upstream publish. | **[FIXED, RELEASE-TIME ONLY]** Publish workflow's build step sets `NPM_CONFIG_MIN_RELEASE_AGE=7` (days) in its env block, so any release tag must clear a 7-day cool-down on every locked dep. Publish workflow installs `npm@^11.10.0` first so the setting is honoured. **Scoped to release time, not PR CI**: applying repo-wide via `.npmrc` would break PR CI every time a connector's lockfile contained a freshly-merged dep bump. Maintainer override is to comment out the env line per-tag — loud in the workflow log. |
 | F17 | **MEDIUM** | Caret ranges | `^x.y.z` ranges in `connectors/*/package.json` mean a contributor running `npm install <dep>` locally (then committing the updated lockfile) re-resolves the range and can pull a newer-than-intended version. `npm ci` in our publish path is bounded by lockfile, but the **entry path** for lockfile changes (local-dev `npm install`) is unbounded. | **[PARTIAL]** `.npmrc` now sets `save-exact=true` and `save-prefix=""` so future `npm install` invocations write exact versions. Existing `^` ranges in 24 connector manifests are left in place to avoid a churn-blast in this commit; tracked as R14. |
-| F18 | **MEDIUM** | Trusted-publisher workflow binding scope | npm trusted publisher bindings are scoped to a repo + workflow-file path + environment. If multiple `@mindstone-engineering/mcp-server-*` packages are all bound to the same workflow, a malicious PR that changes `package.json.name` of connector A to point at package B can publish to B's name from a tag intended for A. There is no per-package-name check in the workflow today. | **[OPEN]** R15: Add an explicit assertion in the publish step that `package.json.name` matches `@mindstone-engineering/mcp-server-${CONNECTOR}` before `npm publish`. Also add CODEOWNERS-gated approval for any `package.json.name` change. |
+| F18 | **MEDIUM** | Trusted-publisher workflow binding scope | npm trusted publisher bindings are scoped to a repo + workflow-file path + environment. If multiple `@mindstone/mcp-server-*` packages are all bound to the same workflow, a malicious PR that changes `package.json.name` of connector A to point at package B can publish to B's name from a tag intended for A. There is no per-package-name check in the workflow today. | **[OPEN]** R15: Add an explicit assertion in the publish step that `package.json.name` matches `@mindstone/mcp-server-${CONNECTOR}` before `npm publish`. Also add CODEOWNERS-gated approval for any `package.json.name` change. |
 | F19 | **MEDIUM** | NPM_TOKEN fallback governance | If the npm-side trusted publisher binding is mis-configured at first publish attempt, the workflow will fail. Operational pressure is to "fix" it by re-adding `NPM_TOKEN`. There is no structural prevention against the secret being re-added to the `npm-publish` environment later. | **[OPEN]** R16: BRANCH_PROTECTION.md already documents "Environment secrets: none". Track via a periodic cron-job audit (out of scope of this commit) that asserts `npm-publish` has no secrets. |
 
 ### 8.3 New / revised remediations (R12–R16)
@@ -189,7 +189,7 @@ This section consolidates findings raised during the post-remediation review pas
 | **R12. Artifact-handoff between build and publish** | `publish.yml` | M | Build job packs tarball with `--ignore-scripts`, uploads via `actions/upload-artifact@v4` (run-scoped, not the cache). Publish job downloads + `npm publish <tarball>`. No JS executes in the OIDC-bearing job. **[FIXED]** |
 | **R13. Force provenance at workflow env level** | `publish.yml` | XS | `NPM_CONFIG_PROVENANCE=true` in env block of publish step; can't be opted out by repo config. **[FIXED]** |
 | **R14. Release-age cool-down via repo `.npmrc`** | `.npmrc`, `.gitignore`, `publish.yml`, `_template/package.json` | S | `min-release-age=7`, `save-exact=true`, `save-prefix=""`, `audit-level=high`, `provenance=true`. Publish workflow upgrades npm to 11.10+ to honour `min-release-age`. `packageManager: "npm@11.10.0"` pinned in the connector template. **[FIXED]** |
-| **R15. Per-publish package-name assertion** | `publish.yml` (build job) | XS | Before packing, assert `package.json.name == "@mindstone-engineering/mcp-server-${CONNECTOR}"`. Prevents trusted-publisher binding confusion where a PR-renamed manifest publishes to a sibling package. **[OPEN]** |
+| **R15. Per-publish package-name assertion** | `publish.yml` (build job) | XS | Before packing, assert `package.json.name == "@mindstone/mcp-server-${CONNECTOR}"`. Prevents trusted-publisher binding confusion where a PR-renamed manifest publishes to a sibling package. **[OPEN]** |
 | **R16. Periodic environment-secrets audit** | new `.github/workflows/audit-environment-secrets.yml` (weekly cron) | S | Use `gh api repos/.../environments/npm-publish/secrets` and fail-loud if the list is non-empty. **[OPEN]** |
 
 ### 8.4 What pnpm would and would not buy us
@@ -210,7 +210,7 @@ The shortest viable adversary path now is:
 3. A maintainer cuts a release tag. Build job runs `npm ci`, then `npm run build` (the malicious dep executes here), poisoning `dist/`. Tests pass (or don't, depending on attacker subtlety).
 4. Build job packs the poisoned `dist/` into a tarball and uploads it as an artifact.
 5. Publish job downloads the tarball and runs `npm publish <tarball>`. Provenance attestation is generated — but it attests *origin*, not *intent*. The attested tarball contains poisoned compiled code.
-6. Consumers `npx -y @mindstone-engineering/mcp-server-x` and execute the poisoned code on their machines.
+6. Consumers `npx -y @mindstone/mcp-server-x` and execute the poisoned code on their machines.
 
 What was eliminated vs the original chain:
 - ✅ OIDC token exfil from publish job: gone. Publish job has no JS hook to hijack.
@@ -233,6 +233,6 @@ Add to §6:
 11. `publish.yml` build job uses `actions/upload-artifact@b4b15b8c…` (v4.4.3) pinned; publish job uses `actions/download-artifact@fa0a91b8…` (v4.1.8) pinned.
 12. Publish job does NOT contain any step that invokes `tsc`, `shx`, `vitest`, `node ./scripts/`, or `npm run *`.
 13. Publish job's env block contains `NPM_CONFIG_PROVENANCE: 'true'`.
-14. `package.json.name == "@mindstone-engineering/mcp-server-<connector>"` assertion present in publish.yml (R15) — **NOT YET DONE**.
+14. `package.json.name == "@mindstone/mcp-server-<connector>"` assertion present in publish.yml (R15) — **NOT YET DONE**.
 15. Periodic environment-secrets audit workflow exists (R16) — **NOT YET DONE**.
 

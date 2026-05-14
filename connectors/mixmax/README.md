@@ -1,6 +1,6 @@
-# @mindstone-engineering/mcp-server-mixmax
+# @mindstone/mcp-server-mixmax
 
-[![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-mixmax.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-mixmax)
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-mixmax.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-mixmax)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 Mixmax email productivity MCP server for Model Context Protocol hosts. Manage sequences, send tracked emails, use email templates (snippets), view meeting links, and monitor message engagement through a standardised MCP interface.
@@ -23,7 +23,7 @@ npm run build
 ### npx (once published)
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-mixmax
+npx -y @mindstone/mcp-server-mixmax
 ```
 
 ### Local
@@ -49,7 +49,7 @@ node dist/index.js
   "mcpServers": {
     "Mixmax": {
       "command": "npx",
-      "args": ["-y", "@mindstone-engineering/mcp-server-mixmax"],
+      "args": ["-y", "@mindstone/mcp-server-mixmax"],
       "env": {
         "MIXMAX_API_TOKEN": "your-api-token"
       }

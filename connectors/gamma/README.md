@@ -1,6 +1,6 @@
-# @mindstone-engineering/mcp-server-gamma
+# @mindstone/mcp-server-gamma
 
-[![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-gamma.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-gamma)
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-gamma.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-gamma)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 Gamma AI presentation generation MCP server for Model Context Protocol hosts. Create AI-powered presentations, documents, webpages, and social posts, manage themes and folders, and export content through a standardised MCP interface.
@@ -23,7 +23,7 @@ npm run build
 ### npx (once published)
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-gamma
+npx -y @mindstone/mcp-server-gamma
 ```
 
 ### Local
@@ -52,7 +52,7 @@ node dist/index.js
   "mcpServers": {
     "Gamma": {
       "command": "npx",
-      "args": ["-y", "@mindstone-engineering/mcp-server-gamma"],
+      "args": ["-y", "@mindstone/mcp-server-gamma"],
       "env": {
         "GAMMA_API_KEY": "your-api-key"
       }

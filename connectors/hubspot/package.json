@@ -1,5 +1,5 @@
 {
-  "name": "@mindstone-engineering/mcp-server-hubspot",
+  "name": "@mindstone/mcp-server-hubspot",
   "version": "0.1.0",
   "mcpName": "io.github.mindstone/mcp-server-hubspot",
   "description": "HubSpot MCP server — CRM objects, associations, properties, marketing, files, workflows, and account diagnostics",
@@ -37,7 +37,7 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@mindstone-engineering/mcp-test-harness": "file:../../test-harness",
+    "@mindstone/mcp-test-harness": "file:../../test-harness",
     "@types/node": "^22",
     "@types/proper-lockfile": "^4.1.4",
     "@vitest/coverage-v8": "^4.1.3",

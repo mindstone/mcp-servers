@@ -1,6 +1,6 @@
-# @mindstone-engineering/mcp-server-fathom
+# @mindstone/mcp-server-fathom
 
-[![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-fathom.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-fathom)
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-fathom.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-fathom)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 Fathom AI meeting transcription MCP server for Model Context Protocol hosts. List and search meetings, view meeting details, read transcripts, and manage teams through a standardised MCP interface.
@@ -23,7 +23,7 @@ npm run build
 ### npx (once published)
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-fathom
+npx -y @mindstone/mcp-server-fathom
 ```
 
 ### Local
@@ -49,7 +49,7 @@ node dist/index.js
   "mcpServers": {
     "Fathom": {
       "command": "npx",
-      "args": ["-y", "@mindstone-engineering/mcp-server-fathom"],
+      "args": ["-y", "@mindstone/mcp-server-fathom"],
       "env": {
         "FATHOM_API_KEY": "your-api-key"
       }

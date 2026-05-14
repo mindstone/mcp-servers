@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mswServer } from './helpers/setup.js';
 import { createSalesforceHandlers, MOCK_ACCESS_TOKEN, MOCK_INSTANCE_URL } from './helpers/salesforce-mock-api.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
-import { createTempConfig, type TempConfigResult } from '@mindstone-engineering/mcp-test-harness';
+import { createTempConfig, type TempConfigResult } from '@mindstone/mcp-test-harness';
 
 const EXPECTED_TOOLS = [
   'salesforce_connect_account',

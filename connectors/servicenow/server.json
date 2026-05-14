@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
-      "identifier": "@mindstone-engineering/mcp-server-servicenow",
+      "identifier": "@mindstone/mcp-server-servicenow",
       "version": "0.2.1",
       "runtimeHint": "npx",
       "transport": {

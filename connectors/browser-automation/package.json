@@ -1,5 +1,5 @@
 {
-  "name": "@mindstone-engineering/mcp-server-browser-automation",
+  "name": "@mindstone/mcp-server-browser-automation",
   "version": "0.1.6",
   "mcpName": "io.github.mindstone/mcp-server-browser-automation",
   "description": "Browser automation MCP server — visible-by-default browser control via accessibility snapshots, navigation, form filling, screenshots, and tab management. Set AGENT_BROWSER_SHOW_WINDOW=false to run quietly.",
@@ -36,7 +36,7 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@mindstone-engineering/mcp-test-harness": "file:../../test-harness",
+    "@mindstone/mcp-test-harness": "file:../../test-harness",
     "@types/node": "^22",
     "@vitest/coverage-v8": "^4.1.3",
     "msw": "^2.13.2",

@@ -5,7 +5,7 @@
   "category": "productivity",
   "icon": "browser-automation",
   "maturity": "stable",
-  "verifiedSource": "https://github.com/mindstone-engineering/mcp-servers",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
   "requiresSetup": false,
   "setupFields": []
 }

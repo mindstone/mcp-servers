@@ -5,13 +5,13 @@ Voice agent phone calls, call management, agent configuration, LLM prompt manage
 ## Installation
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-retell-ai
+npx -y @mindstone/mcp-server-retell-ai
 ```
 
 Or install globally:
 
 ```bash
-npm install -g @mindstone-engineering/mcp-server-retell-ai
+npm install -g @mindstone/mcp-server-retell-ai
 mcp-server-retell-ai
 ```
 
@@ -30,7 +30,7 @@ Set the following environment variable:
   "mcpServers": {
     "retell-ai": {
       "command": "npx",
-      "args": ["-y", "@mindstone-engineering/mcp-server-retell-ai"],
+      "args": ["-y", "@mindstone/mcp-server-retell-ai"],
       "env": {
         "RETELL_API_KEY": "your-api-key"
       }

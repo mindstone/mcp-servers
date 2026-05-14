@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import { createFreshdeskHandlers } from './helpers/freshdesk-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
-import { createTempConfig } from '@mindstone-engineering/mcp-test-harness';
+import { createTempConfig } from '@mindstone/mcp-test-harness';
 import { makeTicket, makeConversation } from './fixtures/freshdesk-data.js';
 
 const ENVELOPE_OPEN = '<untrusted-content source="external-ticket">';
