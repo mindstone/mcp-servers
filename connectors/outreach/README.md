@@ -1,11 +1,11 @@
-# @mindstone-engineering/mcp-server-outreach
+# @mindstone/mcp-server-outreach
 
 Outreach sales engagement MCP server — prospects, sequences, accounts, tasks, and mailings via Outreach API.
 
 ## Installation
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-outreach
+npx -y @mindstone/mcp-server-outreach
 ```
 
 ## Configuration

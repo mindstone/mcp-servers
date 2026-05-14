@@ -1,6 +1,6 @@
-# @mindstone-engineering/mcp-server-google-analytics
+# @mindstone/mcp-server-google-analytics
 
-[![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-google-analytics.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-google-analytics)
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-google-analytics.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-google-analytics)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 Google Analytics 4 MCP server for Model Context Protocol hosts. Discover account/property structure, explore the live schema, run reports (with row-volume safety), and inspect admin configuration through a standardised MCP interface.
@@ -24,7 +24,7 @@ npm run build
 ### npx (once published)
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-google-analytics
+npx -y @mindstone/mcp-server-google-analytics
 ```
 
 ### Local
@@ -63,7 +63,7 @@ For service accounts, set `GOOGLE_APPLICATION_CREDENTIALS` to the absolute path 
   "mcpServers": {
     "GoogleAnalytics": {
       "command": "npx",
-      "args": ["-y", "@mindstone-engineering/mcp-server-google-analytics"],
+      "args": ["-y", "@mindstone/mcp-server-google-analytics"],
       "env": {
         "GOOGLE_APPLICATION_CREDENTIALS": "/Users/you/.config/gcloud/application_default_credentials.json",
         "GA4_PROPERTY_ID": "123456789"

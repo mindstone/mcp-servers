@@ -1,6 +1,6 @@
-# @mindstone-engineering/mcp-server-servicenow
+# @mindstone/mcp-server-servicenow
 
-[![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-servicenow.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-servicenow)
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-servicenow.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-servicenow)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 ServiceNow ITSM MCP server for Model Context Protocol hosts. Manage incidents, change requests, users, and knowledge base articles in ServiceNow through a standardised MCP interface.
@@ -23,7 +23,7 @@ npm run build
 ### npx (once published)
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-servicenow
+npx -y @mindstone/mcp-server-servicenow
 ```
 
 ### Local
@@ -51,7 +51,7 @@ node dist/index.js
   "mcpServers": {
     "ServiceNow": {
       "command": "npx",
-      "args": ["-y", "@mindstone-engineering/mcp-server-servicenow"],
+      "args": ["-y", "@mindstone/mcp-server-servicenow"],
       "env": {
         "SERVICENOW_INSTANCE": "your-instance",
         "SERVICENOW_USERNAME": "your-username",

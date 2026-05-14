@@ -1,6 +1,6 @@
-# @mindstone-engineering/mcp-server-email-imap
+# @mindstone/mcp-server-email-imap
 
-[![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-email-imap.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-email-imap)
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-email-imap.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-email-imap)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 Email IMAP/SMTP MCP server for Model Context Protocol hosts. Read, search, send, and manage emails through IMAP and SMTP — supports iCloud Mail, Gmail, Yahoo Mail, Outlook / Microsoft 365, and custom IMAP providers.
@@ -23,7 +23,7 @@ npm run build
 ### npx (once published)
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-email-imap
+npx -y @mindstone/mcp-server-email-imap
 ```
 
 ### Local
@@ -81,7 +81,7 @@ these still gets safe behaviour. Hosts can tighten them per deployment.
   "mcpServers": {
     "Email": {
       "command": "npx",
-      "args": ["-y", "@mindstone-engineering/mcp-server-email-imap"],
+      "args": ["-y", "@mindstone/mcp-server-email-imap"],
       "env": {
         "EMAIL_IMAP_EMAIL": "you@icloud.com",
         "EMAIL_IMAP_PASSWORD": "your-app-specific-password",

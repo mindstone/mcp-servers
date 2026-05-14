@@ -1,6 +1,6 @@
-# @mindstone-engineering/mcp-server-zendesk
+# @mindstone/mcp-server-zendesk
 
-[![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-zendesk.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-zendesk)
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-zendesk.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-zendesk)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 Zendesk Support MCP server for Model Context Protocol hosts.
@@ -23,7 +23,7 @@ npm run build
 ### npx (once published)
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-zendesk
+npx -y @mindstone/mcp-server-zendesk
 ```
 
 ### Local
@@ -71,7 +71,7 @@ EOF
   "mcpServers": {
     "Zendesk": {
       "command": "npx",
-      "args": ["-y", "@mindstone-engineering/mcp-server-zendesk"],
+      "args": ["-y", "@mindstone/mcp-server-zendesk"],
       "env": {
         "ZENDESK_CONFIG_PATH": "~/.mcp/zendesk"
       }

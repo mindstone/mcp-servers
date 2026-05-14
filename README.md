@@ -42,7 +42,7 @@ npm run build
 
 Or run directly via npx (once published):
 ```bash
-npx -y @mindstone-engineering/mcp-server-zendesk
+npx -y @mindstone/mcp-server-zendesk
 ```
 
 See each server's README for configuration and host setup instructions. Some connectors require additional environment variables to opt into specific behaviour (e.g. `QB_ALLOW_PROD_WRITES` for QuickBooks production writes, `MCP_WORKSPACE_PATH` for sandboxed file reads, `BROWSER_AUTOMATION_ALLOW_EVAL` for browser-automation script eval) — see the per-connector READMEs for the full list.

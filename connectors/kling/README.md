@@ -1,6 +1,6 @@
-# @mindstone-engineering/mcp-server-kling
+# @mindstone/mcp-server-kling
 
-[![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-kling.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-kling)
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-kling.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-kling)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 Kling AI video generation MCP server for Model Context Protocol hosts. Generate AI videos from text descriptions or images, and manage video generation tasks through a standardised MCP interface.
@@ -23,7 +23,7 @@ npm run build
 ### npx (once published)
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-kling
+npx -y @mindstone/mcp-server-kling
 ```
 
 ### Local
@@ -51,7 +51,7 @@ node dist/index.js
   "mcpServers": {
     "Kling": {
       "command": "npx",
-      "args": ["-y", "@mindstone-engineering/mcp-server-kling"],
+      "args": ["-y", "@mindstone/mcp-server-kling"],
       "env": {
         "KLING_ACCESS_KEY": "your-access-key",
         "KLING_SECRET_KEY": "your-secret-key"

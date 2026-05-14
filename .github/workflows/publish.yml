@@ -66,12 +66,12 @@ jobs:
           NPM_PACKAGE=$(node -p "require('./connectors/$CONNECTOR/package.json').name")
 
           # R15: assert the npm package name matches the expected
-          # @mindstone-engineering/mcp-server-<connector> pattern. Without
+          # @mindstone/mcp-server-<connector> pattern. Without
           # this, a malicious PR that renames package.json.name to a
           # sibling already-trusted package can hijack publishing under
           # the wrong identity (npm trusted publisher binds workflow ->
           # package, not connector slug -> package).
-          EXPECTED="@mindstone-engineering/mcp-server-${CONNECTOR}"
+          EXPECTED="@mindstone/mcp-server-${CONNECTOR}"
           if [ "$NPM_PACKAGE" != "$EXPECTED" ]; then
             echo "ERROR: package.json.name '$NPM_PACKAGE' does not match expected '$EXPECTED'"
             echo "       Refusing to publish to an unexpected package name."

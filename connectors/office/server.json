@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
-      "identifier": "@mindstone-engineering/mcp-server-office",
+      "identifier": "@mindstone/mcp-server-office",
       "version": "0.1.3",
       "runtimeHint": "npx",
       "transport": {

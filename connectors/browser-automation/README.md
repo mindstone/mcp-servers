@@ -5,13 +5,13 @@ Headless browser control via accessibility snapshots — navigate pages, fill fo
 ## Installation
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-browser-automation
+npx -y @mindstone/mcp-server-browser-automation
 ```
 
 Or install globally:
 
 ```bash
-npm install -g @mindstone-engineering/mcp-server-browser-automation
+npm install -g @mindstone/mcp-server-browser-automation
 mcp-server-browser-automation
 ```
 
@@ -48,7 +48,7 @@ No API keys or credentials are required. The server communicates with the browse
   "mcpServers": {
     "browser-automation": {
       "command": "npx",
-      "args": ["-y", "@mindstone-engineering/mcp-server-browser-automation"]
+      "args": ["-y", "@mindstone/mcp-server-browser-automation"]
     }
   }
 }

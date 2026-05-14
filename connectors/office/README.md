@@ -1,6 +1,6 @@
-# @mindstone-engineering/mcp-server-office
+# @mindstone/mcp-server-office
 
-[![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-office.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-office)
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-office.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-office)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 Microsoft Office MCP server — read and edit Word documents, Excel workbooks, and PowerPoint presentations from a Model Context Protocol host.
@@ -33,7 +33,7 @@ npm run build
 ### npx (once published)
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-office
+npx -y @mindstone/mcp-server-office
 ```
 
 ### Local
@@ -103,7 +103,7 @@ Claude Desktop is possible but the host must provide a writable
   "mcpServers": {
     "Office": {
       "command": "npx",
-      "args": ["-y", "@mindstone-engineering/mcp-server-office"],
+      "args": ["-y", "@mindstone/mcp-server-office"],
       "env": {
         "MCP_OFFICE_SIDECAR_STATE": "/absolute/path/to/sidecar-state.json"
       }
@@ -119,7 +119,7 @@ Claude Desktop is possible but the host must provide a writable
   "name": "RebelOffice",
   "type": "stdio",
   "command": "npx",
-  "args": ["-y", "@mindstone-engineering/mcp-server-office@0.1.0"],
+  "args": ["-y", "@mindstone/mcp-server-office@0.1.0"],
   "env": {
     "MCP_OFFICE_SIDECAR_STATE": "~/Library/Application Support/mindstone-rebel/office-sidecar/sidecar-state.json"
   },
@@ -188,7 +188,7 @@ startup regressions.
 ### TODO — future work
 
 Extract these into their own published package (e.g.
-`@mindstone-engineering/app-bridge-core` plus a shared sidecar-protocol
+`@mindstone/app-bridge-core` plus a shared sidecar-protocol
 package) so they become versioned contracts rather than vendored code.
 
 **Until then:** anyone touching either side must manually keep both copies in

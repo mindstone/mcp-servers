@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll, afterEach, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
-import { createBridgeHandlers } from '@mindstone-engineering/mcp-test-harness';
+import { createBridgeHandlers } from '@mindstone/mcp-test-harness';
 import { mswServer } from './helpers/setup.js';
 import { createWorkdayHandlers } from './helpers/workday-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';

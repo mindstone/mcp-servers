@@ -2,7 +2,7 @@ import {
   createInMemoryTestClient,
   type McpTestClient,
   type CallToolResult,
-} from '@mindstone-engineering/mcp-test-harness';
+} from '@mindstone/mcp-test-harness';
 import { vi } from 'vitest';
 
 // CRITICAL: Do NOT add static imports from the connector source (e.g., createServer).

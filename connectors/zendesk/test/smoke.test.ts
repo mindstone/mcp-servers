@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll, afterEach, vi } from 'vitest';
-import { createTempConfig } from '@mindstone-engineering/mcp-test-harness';
+import { createTempConfig } from '@mindstone/mcp-test-harness';
 import { mswServer } from './helpers/setup.js';
 import { createZendeskHandlers } from './helpers/zendesk-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';

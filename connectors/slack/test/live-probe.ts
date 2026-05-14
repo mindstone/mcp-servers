@@ -80,7 +80,7 @@ async function extractTarball(tarball: string): Promise<string> {
     });
   });
   // Install only production deps so the probe runs against the same
-  // dependency graph an `npx -y @mindstone-engineering/mcp-server-slack`
+  // dependency graph an `npx -y @mindstone/mcp-server-slack`
   // user would get. --no-package-lock keeps it fast; --omit=dev cuts
   // vitest/msw/tsx noise. The probe is exercising runtime, not build.
   console.log(`[live-probe] Installing production deps in ${extractDir}…`);

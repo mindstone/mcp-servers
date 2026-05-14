@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
-      "identifier": "@mindstone-engineering/mcp-server-fathom",
+      "identifier": "@mindstone/mcp-server-fathom",
       "version": "0.2.2",
       "runtimeHint": "npx",
       "transport": {

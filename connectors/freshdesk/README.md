@@ -1,6 +1,6 @@
-# @mindstone-engineering/mcp-server-freshdesk
+# @mindstone/mcp-server-freshdesk
 
-[![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-freshdesk.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-freshdesk)
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-freshdesk.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-freshdesk)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 Freshdesk Support MCP server for Model Context Protocol hosts. Manage helpdesk tickets, search and filter support requests, reply to customers, add internal notes, and configure Freshdesk accounts — all through a standardised MCP interface.
@@ -23,7 +23,7 @@ npm run build
 ### npx (once published)
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-freshdesk
+npx -y @mindstone/mcp-server-freshdesk
 ```
 
 ### Local
@@ -49,7 +49,7 @@ node dist/index.js
   "mcpServers": {
     "Freshdesk": {
       "command": "npx",
-      "args": ["-y", "@mindstone-engineering/mcp-server-freshdesk"],
+      "args": ["-y", "@mindstone/mcp-server-freshdesk"],
       "env": {
         "FRESHDESK_CONFIG_PATH": "~/.mcp/freshdesk"
       }

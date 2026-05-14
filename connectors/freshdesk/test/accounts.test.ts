@@ -8,7 +8,7 @@ import {
   createFreshdeskBridgeFailureHandlers,
 } from './helpers/freshdesk-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
-import { createTempConfig } from '@mindstone-engineering/mcp-test-harness';
+import { createTempConfig } from '@mindstone/mcp-test-harness';
 import { writeFileSync, readFileSync, statSync, mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';

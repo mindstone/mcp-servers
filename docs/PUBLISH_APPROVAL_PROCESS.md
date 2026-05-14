@@ -1,6 +1,6 @@
 # Publish Approval Process
 
-Every connector publish to npm under `@mindstone-engineering/mcp-server-*` is gated on an explicit human approval recorded in this repo. This document defines the gate.
+Every connector publish to npm under `@mindstone/mcp-server-*` is gated on an explicit human approval recorded in this repo. This document defines the gate.
 
 ## Why a human gate?
 
@@ -17,7 +17,7 @@ Before tagging `<connector>-v<X.Y.Z>`, confirm in a tracking issue titled `Publi
 - [ ] **CHANGELOG.md:** `[<X.Y.Z>] — <date>` section present and describes user-facing changes + security-relevant changes.
 - [ ] **Version sync:** `package.json#version`, `src/server.ts` `version: '...'`, and the proposed git tag all match.
 - [ ] **Named maintainer on call:** A human takes ownership of the version for the next 7 days for security response. This human's name + GitHub handle are recorded in the issue.
-- [ ] **Publisher set documented:** The npm package's `maintainers` list on npm matches the named maintainer + at least one backup. Verify with `npm view @mindstone-engineering/mcp-server-<connector> maintainers`.
+- [ ] **Publisher set documented:** The npm package's `maintainers` list on npm matches the named maintainer + at least one backup. Verify with `npm view @mindstone/mcp-server-<connector> maintainers`.
 - [ ] **Approval recorded:** A separate human (not the author of the release commit) leaves a `LGTM — approve publish` comment on the tracking issue.
 
 ## What `--provenance` gives us (and doesn't)
@@ -37,10 +37,10 @@ After every publish, the workflow uploads a CycloneDX SBOM as a workflow artifac
 
 ```bash
 # Verify Sigstore attestation
-npm audit signatures @mindstone-engineering/mcp-server-<connector>@<X.Y.Z>
+npm audit signatures @mindstone/mcp-server-<connector>@<X.Y.Z>
 
 # Inspect provenance JSON
-npm view @mindstone-engineering/mcp-server-<connector>@<X.Y.Z> --json | jq .dist.attestations
+npm view @mindstone/mcp-server-<connector>@<X.Y.Z> --json | jq .dist.attestations
 
 # Cross-reference SBOM
 gh run download --repo mindstone/mcp-servers --name <connector>-<X.Y.Z>-sbom

@@ -1,5 +1,5 @@
 {
-  "name": "@mindstone-engineering/mcp-server-workday",
+  "name": "@mindstone/mcp-server-workday",
   "version": "0.2.1",
   "mcpName": "io.github.mindstone/mcp-server-workday",
   "description": "Workday HCM MCP server for Model Context Protocol hosts — workers, profiles, organizations",
@@ -35,7 +35,7 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@mindstone-engineering/mcp-test-harness": "file:../../test-harness",
+    "@mindstone/mcp-test-harness": "file:../../test-harness",
     "@types/node": "^22",
     "@vitest/coverage-v8": "^4.1.3",
     "msw": "^2.13.2",

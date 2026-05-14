@@ -5,7 +5,7 @@ HubSpot MCP server for CRM operations (contacts, companies, deals, tickets, lead
 ## Installation
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-hubspot
+npx -y @mindstone/mcp-server-hubspot
 ```
 
 ## Configuration

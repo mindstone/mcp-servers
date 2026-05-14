@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
-      "identifier": "@mindstone-engineering/mcp-server-quickbooks",
+      "identifier": "@mindstone/mcp-server-quickbooks",
       "version": "0.3.0",
       "runtimeHint": "npx",
       "transport": {

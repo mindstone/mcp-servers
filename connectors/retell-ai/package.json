@@ -1,5 +1,5 @@
 {
-  "name": "@mindstone-engineering/mcp-server-retell-ai",
+  "name": "@mindstone/mcp-server-retell-ai",
   "version": "0.2.0",
   "mcpName": "io.github.mindstone/mcp-server-retell-ai",
   "description": "Retell AI voice agent MCP server — phone calls, agent management, LLM configuration, and voice discovery via Retell AI API",
@@ -40,7 +40,7 @@
     "ip-address": "^10.2.0"
   },
   "devDependencies": {
-    "@mindstone-engineering/mcp-test-harness": "file:../../test-harness",
+    "@mindstone/mcp-test-harness": "file:../../test-harness",
     "@types/node": "^22",
     "@vitest/coverage-v8": "^4.1.3",
     "msw": "^2.13.2",

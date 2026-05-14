@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
-      "identifier": "@mindstone-engineering/mcp-server-browser-automation",
+      "identifier": "@mindstone/mcp-server-browser-automation",
       "version": "0.1.6",
       "runtimeHint": "npx",
       "transport": {

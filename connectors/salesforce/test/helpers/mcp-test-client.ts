@@ -2,7 +2,7 @@ import {
   createInMemoryTestClient,
   type McpTestClient,
   type CallToolResult,
-} from '@mindstone-engineering/mcp-test-harness';
+} from '@mindstone/mcp-test-harness';
 import { vi } from 'vitest';
 
 export type { McpTestClient, CallToolResult };
