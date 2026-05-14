@@ -1,0 +1,76 @@
+# scripts/cliff.toml
+#
+# git-cliff configuration for the LOCAL-ONLY changelog backfill at
+# scripts/backfill-changelog.sh.
+#
+# This file is consumed only by maintainers running the backfill on their
+# workstation; it is NEVER read by any GitHub workflow. The release pipeline
+# (publish.yml) intentionally executes no code-generation tooling -- see
+# docs/security/AUDIT_FOX-3319_tanstack_supply_chain.md for the rationale.
+
+[changelog]
+header = """
+# Changelog
+
+All notable changes to this connector are documented here.
+
+This file follows the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+The history below `[Unreleased]` was reconstructed from git history during the
+`@mindstone-engineering` to `@mindstone` npm scope migration; subsequent entries
+are maintained manually as part of the PR review checklist.
+
+"""
+
+body = """
+{% if version -%}
+## [{{ version }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else -%}
+## [Unreleased]
+{% endif %}
+{% for group, commits in commits | group_by(attribute="group") -%}
+### {{ group | striptags | trim }}
+{% for commit in commits -%}
+- {% if commit.scope %}**{{ commit.scope }}**: {% endif -%}
+{{ commit.message | split(pat="\n") | first | trim }}
+{% endfor %}
+{% endfor -%}
+"""
+
+footer = ""
+trim = true
+postprocessors = []
+
+[git]
+conventional_commits = true
+filter_unconventional = false
+sort_commits = "oldest"
+
+# `tag_pattern` is supplied on the CLI by backfill-changelog.sh so the same
+# config can serve multiple connectors without each one mutating this file.
+
+commit_preprocessors = []
+
+# Parsers match against the full commit message; anchored regexes on `^` are
+# the only safe way to scope to the subject line, since commit bodies often
+# contain words like "security" or "audit" in unrelated footers (e.g. a
+# `feat:` commit whose body says "npm audit clean").
+#
+# Order matters: the first matching parser wins. `chore(deps)` is routed to
+# Security so dependabot transitive-vuln bumps appear in the section that
+# matters to consumers; other chores are skipped.
+commit_parsers = [
+  { message = "^chore\\(deps", group = "Security" },
+  { message = "^feat", group = "Added" },
+  { message = "^fix", group = "Fixed" },
+  { message = "^refactor", group = "Changed" },
+  { message = "^perf", group = "Changed" },
+  { message = "^docs", skip = true },
+  { message = "^test", skip = true },
+  { message = "^style", skip = true },
+  { message = "^build", skip = true },
+  { message = "^ci", skip = true },
+  { message = "^chore", skip = true },
+  { message = ".*", skip = true },
+]
