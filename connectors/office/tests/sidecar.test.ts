@@ -307,9 +307,16 @@ describe('office sidecar', () => {
     const socket = await connectWebSocket(sidecar.port);
 
     sendSocketMessage(socket, { type: 'auth', token: sidecar.token });
-    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(constantTimeSpy).toHaveBeenCalledWith(sidecar.token, sidecar.token);
+    // The server-side auth handler runs on the websocket's `message` event,
+    // which is scheduled across the network round-trip — a single
+    // setTimeout(0) flush is not enough on a loaded CI runner and the
+    // assertion races the spy. Poll until the spy has been called (or fail
+    // with a useful error after vitest's default waitFor budget).
+    await vi.waitFor(() => {
+      expect(constantTimeSpy).toHaveBeenCalledWith(sidecar.token, sidecar.token);
+    });
+
     socket.close();
   });
 
