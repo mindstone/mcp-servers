@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-apple-shortcuts",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "mcpName": "io.github.mindstone/mcp-server-apple-shortcuts",
   "description": "MCP server for Apple Shortcuts via the macOS shortcuts CLI",
   "license": "FSL-1.1-MIT",

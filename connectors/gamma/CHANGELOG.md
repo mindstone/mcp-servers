@@ -11,11 +11,15 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-05-14
 ### Added
 - **registry**: backfill Gamma server.json and bake into _template + CI. New connectors inherit a working server.json from the template with mcpName placeholder; CI gate enforces cross-file consistency and runs mcp-publisher validate on every connector with a server.json.
 
 ### Fixed
 - **ci**: Add npm overrides for fast-uri, hono, ip-address across all connectors.
+
+### Changed
+- Republished under the `@mindstone` npm scope. The legacy `@mindstone-engineering/mcp-server-*` package on this version line will be deprecated as part of the FOX-3319 scope migration; see [MIGRATION.md](../../MIGRATION.md) for the procedure consumers should follow.
 
 ## [0.3.1] - 2026-04-29
 

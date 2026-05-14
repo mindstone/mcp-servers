@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+## [0.2.1] - 2026-05-14
+
+### Changed
+- Republished under the `@mindstone` npm scope. The legacy `@mindstone-engineering/mcp-server-*` package on this version line will be deprecated as part of the FOX-3319 scope migration; see [MIGRATION.md](../../MIGRATION.md) for the procedure consumers should follow.
+
 ## [0.2.0] - 2026-05-10
 
 ### Fixed

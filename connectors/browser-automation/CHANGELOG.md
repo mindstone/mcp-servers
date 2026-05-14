@@ -11,11 +11,15 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-05-14
 ### Added
 - **browser-automation**: Visible by default, gated by AGENT_BROWSER_SHOW_WINDOW. Restores the trust-by-transparency UX (regressed in 0.1.5) so users see Rebel work; hosts can opt out by setting AGENT_BROWSER_SHOW_WINDOW=false.
 
 ### Fixed
 - **ci**: Add npm overrides for fast-uri, hono, ip-address across all connectors.
+
+### Changed
+- Republished under the `@mindstone` npm scope. The legacy `@mindstone-engineering/mcp-server-*` package on this version line will be deprecated as part of the FOX-3319 scope migration; see [MIGRATION.md](../../MIGRATION.md) for the procedure consumers should follow.
 
 ## [0.1.6] - 2026-05-04
 

@@ -11,9 +11,13 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-05-14
 ### Fixed
 - **ci**: Add npm overrides for fast-uri, hono, ip-address across all connectors.
 - **office**: Clear pre-existing high-severity npm audit failure on main.
+
+### Changed
+- Republished under the `@mindstone` npm scope. The legacy `@mindstone-engineering/mcp-server-*` package on this version line will be deprecated as part of the FOX-3319 scope migration; see [MIGRATION.md](../../MIGRATION.md) for the procedure consumers should follow.
 
 ## [0.1.3] - 2026-05-05
 

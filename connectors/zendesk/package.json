@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-zendesk",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "mcpName": "io.github.mindstone/mcp-server-zendesk",
   "description": "Zendesk MCP server for Model Context Protocol hosts",
   "license": "FSL-1.1-MIT",

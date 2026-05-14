@@ -1,8 +1,8 @@
 {
   "name": "@mindstone/mcp-server-elevenlabs",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "mcpName": "io.github.mindstone/mcp-server-elevenlabs",
-  "description": "ElevenLabs MCP server for Model Context Protocol hosts — music, TTS, sound effects, voices, transcription",
+  "description": "ElevenLabs MCP server for Model Context Protocol hosts \u2014 music, TTS, sound effects, voices, transcription",
   "license": "FSL-1.1-MIT",
   "type": "module",
   "bin": {
