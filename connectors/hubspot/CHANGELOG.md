@@ -11,6 +11,28 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-05-14
+### Security
+- **hubspot**: Pre-publish security remediation closing 10 findings (3 CRITICAL, 3 HIGH, 4 MEDIUM) surfaced in the lens-security review. Triple-reviewer + per-stage fix-cycle. See [docs/plans/260512_hubspot_oss_security_remediation.md](../../../../../desktop/MindstoneRebel-1/docs/plans/260512_hubspot_oss_security_remediation.md) in the host repo for the full audit trail.
+  - **C1** — `remove_hubspot_account` auth bypass: scope-check enforced before disk mutation.
+  - **C2** — LICENSE attribution corrected from "Salesforce MCP Server" to the actual maintainer.
+  - **C3** — `sanitizeEmail` collision detection added with new `TokenFileMismatchError`; `(mtimeMs, size)` cache identity prevents race-window reads.
+  - **H1** — Raw email PII removed from logs; replaced with HMAC-SHA256 account hashing keyed by `HUBSPOT_TELEMETRY_SALT` (fail-closed `[salt-missing]` sentinel when env is absent).
+  - **H2** — Raw HubSpot API error bodies no longer surface in tool responses or logs; new `summariseHubSpotApiError` whitelist projection (`{operation, statusCode, errorCode, category, requestId}`) swept across `crm`, `file`, `workflow`, `association-v4`, `marketing`, and `knowledge-base` handlers. `Retry-After` header surfaced on 429s; AbortError / ENOTFOUND / ECONNREFUSED / ETIMEDOUT / EAI_AGAIN / ECONNRESET now classify to `REQUEST_TIMEOUT` / `NETWORK_ERROR` instead of `UNKNOWN_ERROR`.
+  - **H3** — `npm audit --omit=dev --audit-level=high` is now clean: SDK bumped to `^1.29.0` and 4 transitive dependency overrides applied (`fast-uri@^3.1.2`, `hono@^4.12.18`, `express-rate-limit@^8.5.1`, `ip-address@^10.2.0`). Audit gate added to `prepublishOnly`.
+  - **M1** — `requiresAuth` dispatcher gate loosened so refresh-failure handlers can return their full agent-recovery shape (`RefreshNoClientCredsError` → `auth_required`).
+  - **M2** — `HUBSPOT_CONFIG_DIR` now validated at startup: realpath + symlink walk + protected-path rejection (`/`, `$HOME`, `$TMPDIR`, `$MCP_WORKSPACE_PATH`); Darwin `/var` ↔ `/private/var` alias normalization.
+  - **M3** — Refresh lock-stale window bounded `[30s, 900s]` with structured warnings; enterprise-NFS escape hatch raised post fix-cycle.
+  - **M4** — Unbounded fan-out closed: `MAX_FAN_OUT=100` and 1 MiB body cap applied across `file` / `workflow` / `crm` handler families; Zod `maxItems` / `maxLength` added to the matching input schemas; `INPUT_TOO_LARGE` errors now carry field paths.
+
+### Added
+- New utility module `src/utils/accountHash.ts` (HMAC-SHA256, hex-decoded salt, 64-char digest, byte-equivalent to host implementation).
+- New `src/tools/input-limits.ts` providing `MAX_FAN_OUT` and the 1 MiB body-cap helper.
+- 78 new tests covering each finding's positive + recovery path (test count: 120 → 198 → 202).
+
+### Changed
+- `prepublishOnly` now runs `npm audit --omit=dev --audit-level=high` in addition to build + test + bridge-string check.
+
 ## [0.1.1] - 2026-05-14
 ### Added
 - **hubspot**: Stage 2.5 host-neutrality remediation. Replaces Rebel-branded strings with host-neutral labels and exposes HUBSPOT_SOURCE_LABEL env override.
