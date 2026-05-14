@@ -91,6 +91,26 @@ This step is currently manual; it will move into the publish workflow once prove
 - Ensure all existing tests pass: `npm test`
 - Use clear commit messages describing what changed and why
 
+## Release process
+
+Every connector ships its own `CHANGELOG.md` following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The release flow is intentionally manual and human-readable; no tool runs in CI translates commits into release notes (see the [Why no auto-generation in CI](#why-no-auto-generation-in-ci) note below).
+
+### Bumping a connector
+
+1. Bump the version in lockstep in three places:
+   - `connectors/<name>/package.json` — the `version` field
+   - `connectors/<name>/package-lock.json` — the top-level `version` and `packages[""].version`
+   - `connectors/<name>/server.json` — the top-level `version` and `packages[0].version`
+2. Promote `## [Unreleased]` to `## [<new-version>] - YYYY-MM-DD` in `connectors/<name>/CHANGELOG.md` and re-insert an empty `## [Unreleased]` block above it.
+3. Write the release notes yourself. Group entries under the standard headings (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`).
+4. Open a PR. The `CHANGELOG check` workflow (`.github/workflows/changelog-check.yml`) fails the PR if the new `package.json.version` does not have a corresponding `## [<new-version>] - <date>` header in `CHANGELOG.md`, or if that header was carried from `main` rather than introduced in the PR.
+
+### Why no auto-generation in CI
+
+The release pipeline (`.github/workflows/publish.yml`) deliberately executes no code-generation tooling. Any process that translates commit history into release-artifact text expands the attack surface a supply-chain compromise (see [docs/security/AUDIT_FOX-3319_tanstack_supply_chain.md](docs/security/AUDIT_FOX-3319_tanstack_supply_chain.md)) can reach: a malicious dependency that hooks the changelog renderer can rewrite the public-facing notes for every package the workflow has trusted-publisher binding for. The CHANGELOG content that gets shipped is whatever lives in `connectors/<name>/CHANGELOG.md` at the tag commit, period.
+
+For a one-shot migration from a sparse history (or for prototyping while you draft entries yourself), `scripts/backfill-changelog.sh` runs [git-cliff](https://git-cliff.org/) at a SHA-pinned version against your local checkout. **It is local-only by design; never invoke it from a workflow.** Re-running on a connector that already has a `CHANGELOG.md` is a no-op unless you pass `FORCE=1`.
+
 ## Reporting Issues
 
 - **Security vulnerabilities**: See [SECURITY.md](SECURITY.md) — do not open public issues

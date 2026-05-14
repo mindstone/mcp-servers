@@ -1,0 +1,126 @@
+name: CHANGELOG check
+
+# Enforces that every PR which bumps a connector's `package.json.version` also
+# updates the corresponding `connectors/<c>/CHANGELOG.md` with a section header
+# for the new version. This is the human-facing complement to the local-only
+# git-cliff backfill at scripts/backfill-changelog.sh -- the audit pipeline
+# (publish.yml) ships whatever lives in CHANGELOG.md at the tag commit, so the
+# only way the file stays honest is if humans wrote it themselves.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'connectors/*/package.json'
+      - 'connectors/*/CHANGELOG.md'
+
+permissions:
+  contents: read
+
+jobs:
+  changelog-check:
+    name: connector version bumps require a CHANGELOG entry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          # `pull_request` (not `pull_request_target`) means we check out the
+          # PR head with no elevated permissions. No secrets are exposed.
+
+      - name: Resolve PR base SHA
+        id: base
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          BASE_SHA=$(git rev-parse "origin/${BASE_REF}")
+          echo "sha=${BASE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "Base: ${BASE_REF} @ ${BASE_SHA}"
+
+      - name: Verify CHANGELOG entries
+        env:
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          # Enumerate every connector whose package.json changed in this PR.
+          mapfile -t CHANGED_PKG < <(
+            git diff --name-only "${BASE_SHA}" HEAD -- 'connectors/*/package.json' \
+              | grep -v '^connectors/_template/' || true
+          )
+
+          if [ "${#CHANGED_PKG[@]}" -eq 0 ]; then
+            echo "No connector package.json files modified. Nothing to check."
+            exit 0
+          fi
+
+          FAILED=0
+          for pkg in "${CHANGED_PKG[@]}"; do
+            connector=$(echo "$pkg" | awk -F/ '{print $2}')
+
+            # Slug whitelist (matches the publish.yml R15 pattern); rejects
+            # any path traversal or unexpected characters.
+            if ! echo "$connector" | grep -Eq '^[a-z0-9][a-z0-9-]*$'; then
+              echo "::error::Refusing to inspect connector with unexpected slug: $connector"
+              FAILED=1
+              continue
+            fi
+
+            old_version=$(git show "${BASE_SHA}:${pkg}" 2>/dev/null \
+              | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{console.log(JSON.parse(d).version||'')}catch{console.log('')}})" || true)
+            new_version=$(node -e "console.log(require(process.argv[1]).version||'')" "$(pwd)/$pkg")
+
+            if [ -z "$new_version" ]; then
+              echo "::error file=${pkg}::package.json has no version field"
+              FAILED=1
+              continue
+            fi
+
+            if [ "$old_version" = "$new_version" ]; then
+              echo "  ${connector}: version unchanged (${new_version}) — skipping"
+              continue
+            fi
+
+            echo "  ${connector}: ${old_version:-<new>} -> ${new_version}"
+
+            cl="connectors/${connector}/CHANGELOG.md"
+            if [ ! -f "$cl" ]; then
+              echo "::error file=${cl}::version bumped to ${new_version} but CHANGELOG.md is missing"
+              FAILED=1
+              continue
+            fi
+
+            # The CHANGELOG must contain an exact header for the new version.
+            # Accept either a hyphen or em-dash between the version and date
+            # (Keep-a-Changelog formally uses a hyphen; we tolerate em-dash
+            # for the two connectors that pre-date the FOX-3319 migration).
+            if ! grep -E "^## \[${new_version//./\\.}\]( - | — )" "$cl" >/dev/null; then
+              echo "::error file=${cl}::CHANGELOG.md has no '## [${new_version}] - <date>' header"
+              echo "::error file=${cl}::Run no tooling -- add the section by hand. See CONTRIBUTING.md > Release process."
+              FAILED=1
+              continue
+            fi
+
+            # The CHANGELOG itself must have been modified in this PR (catches
+            # the edge case where the new-version header was carried from main
+            # and only package.json was bumped).
+            if ! git diff --name-only "${BASE_SHA}" HEAD -- "$cl" | grep -q .; then
+              echo "::error file=${cl}::version bumped to ${new_version} but CHANGELOG.md was not touched in this PR"
+              FAILED=1
+              continue
+            fi
+
+            echo "    ok: CHANGELOG.md has [${new_version}] section and was modified in this PR"
+          done
+
+          if [ "$FAILED" -ne 0 ]; then
+            echo ""
+            echo "One or more connector version bumps are missing CHANGELOG entries."
+            echo "See CONTRIBUTING.md > Release process for the required format."
+            exit 1
+          fi
+
+          echo ""
+          echo "All connector version bumps have matching CHANGELOG.md entries."
