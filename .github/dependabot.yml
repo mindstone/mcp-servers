@@ -1,7 +1,21 @@
-# Dependabot — keeps SHA-pinned GitHub Actions current.
-# Per FOX-3319 P0 R3: actions are pinned to commit SHAs. Dependabot is
-# allowed to open PRs that update those SHAs (it preserves the `# v4.2.2`
-# comment style). All such PRs are gated by CODEOWNERS on `.github/`.
+# Dependabot configuration.
+#
+# Two ecosystems are watched, with deliberately different policies:
+#
+# 1. github-actions (weekly, routine + security): the workflow files live in
+#    a single directory (.github/workflows/) and are SHA-pinned per FOX-3319
+#    R3. Dependabot bumps both the SHA and the `# v4.2.2` comment in
+#    lockstep, so routine version bumps preserve the audit invariant.
+#    CODEOWNERS on `.github/` already gates these PRs.
+#
+# 2. npm (weekly, SECURITY-ONLY across all 27 package roots): connectors +
+#    test-harness publish to a public registry, so unpatched transitive
+#    CVEs are the highest-impact dependency risk. Routine semver bumps are
+#    intentionally NOT requested -- they would produce 27 PRs per stale
+#    dep per week and drown the signal. `open-pull-requests-limit: 0`
+#    still lets through security-advisory PRs (Dependabot's documented
+#    "Floor" mode); routine bumps land via human PRs as part of release
+#    prep, surfaced by `npm audit --audit-level=high` in CI.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -15,3 +29,59 @@ updates:
     commit-message:
       prefix: ci
       include: scope
+
+  - package-ecosystem: npm
+    # All 27 npm package roots: 26 connectors + the shared test-harness.
+    # _template is intentionally excluded -- it is a scaffold, not a
+    # published artefact, and its outdated state is a copy-on-fork
+    # starting point rather than a security finding.
+    directories:
+      - "/connectors/apple-shortcuts"
+      - "/connectors/browser-automation"
+      - "/connectors/elevenlabs"
+      - "/connectors/email-imap"
+      - "/connectors/fathom"
+      - "/connectors/freshdesk"
+      - "/connectors/gamma"
+      - "/connectors/google-analytics"
+      - "/connectors/hubspot"
+      - "/connectors/humaans"
+      - "/connectors/kling"
+      - "/connectors/mixmax"
+      - "/connectors/nano-banana"
+      - "/connectors/napkin"
+      - "/connectors/office"
+      - "/connectors/outreach"
+      - "/connectors/pandadoc"
+      - "/connectors/quickbooks"
+      - "/connectors/retell-ai"
+      - "/connectors/runway"
+      - "/connectors/salesforce"
+      - "/connectors/servicenow"
+      - "/connectors/slack"
+      - "/connectors/talentlms"
+      - "/connectors/workday"
+      - "/connectors/zendesk"
+      - "/test-harness"
+    schedule:
+      interval: weekly
+    # `0` is the documented Floor flag: Dependabot will not open routine
+    # version-bump PRs, but security-advisory PRs still flow through.
+    # See https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file#open-pull-requests-limit
+    open-pull-requests-limit: 0
+    labels:
+      - dependencies
+      - npm
+      - security
+    commit-message:
+      prefix: fix
+      prefix-development: chore
+      include: scope
+    groups:
+      # When multiple connectors are affected by the same advisory in one
+      # batch, group into a single PR so reviewers see the cross-cutting
+      # patch in one diff. Applies only to security updates.
+      security-fixes:
+        applies-to: security-updates
+        patterns:
+          - "*"
