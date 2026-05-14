@@ -1,8 +1,8 @@
 {
   "name": "@mindstone/mcp-server-browser-automation",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "mcpName": "io.github.mindstone/mcp-server-browser-automation",
-  "description": "Browser automation MCP server — visible-by-default browser control via accessibility snapshots, navigation, form filling, screenshots, and tab management. Set AGENT_BROWSER_SHOW_WINDOW=false to run quietly.",
+  "description": "Browser automation MCP server \u2014 visible-by-default browser control via accessibility snapshots, navigation, form filling, screenshots, and tab management. Set AGENT_BROWSER_SHOW_WINDOW=false to run quietly.",
   "license": "FSL-1.1-MIT",
   "type": "module",
   "bin": {

@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-email-imap",
   "title": "Email (IMAP/SMTP)",
   "description": "Email IMAP/SMTP MCP server: iCloud, Gmail, Yahoo, Outlook, and custom IMAP providers",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-email-imap",
-      "version": "0.2.2",
+      "version": "0.2.3",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
@@ -36,7 +36,7 @@
         },
         {
           "name": "EMAIL_IMAP_PROVIDER",
-          "description": "Provider — icloud, gmail, yahoo, outlook, or custom (auto-detected from email domain if unset)",
+          "description": "Provider \u2014 icloud, gmail, yahoo, outlook, or custom (auto-detected from email domain if unset)",
           "isRequired": false,
           "format": "string"
         },

@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-runway",
   "title": "Runway ML",
   "description": "Runway ML MCP server: AI video, image, audio, voice generation, and task management",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-runway",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
