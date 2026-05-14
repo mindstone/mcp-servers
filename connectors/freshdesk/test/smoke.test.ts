@@ -2,7 +2,7 @@ import { describe, it, expect, afterAll, afterEach, vi } from 'vitest';
 import { mswServer } from './helpers/setup.js';
 import { createFreshdeskHandlers } from './helpers/freshdesk-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
-import { createTempConfig } from '@mindstone-engineering/mcp-test-harness';
+import { createTempConfig } from '@mindstone/mcp-test-harness';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 
@@ -66,7 +66,7 @@ describe('Smoke test — tool registration', () => {
 
 describe('Spawned stdio smoke test', () => {
   it('lists 11 tools from built dist/index.js', async () => {
-    const { createStdioTestClient } = await import('@mindstone-engineering/mcp-test-harness');
+    const { createStdioTestClient } = await import('@mindstone/mcp-test-harness');
     const { join } = await import('path');
 
     const tempConfig = createTempConfig({

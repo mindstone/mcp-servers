@@ -1,5 +1,5 @@
 /**
- * @mindstone-engineering/mcp-test-harness
+ * @mindstone/mcp-test-harness
  *
  * Shared test infrastructure for MCP connector packages.
  *

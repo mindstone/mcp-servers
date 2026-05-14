@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
-      "identifier": "@mindstone-engineering/mcp-server-runway",
+      "identifier": "@mindstone/mcp-server-runway",
       "version": "0.3.1",
       "runtimeHint": "npx",
       "transport": {

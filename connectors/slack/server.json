@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
-      "identifier": "@mindstone-engineering/mcp-server-slack",
+      "identifier": "@mindstone/mcp-server-slack",
       "version": "0.1.0",
       "runtimeHint": "npx",
       "transport": {

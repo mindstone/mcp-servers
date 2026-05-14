@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
-import { createTempConfig, type TempConfigResult } from '@mindstone-engineering/mcp-test-harness';
+import { createTempConfig, type TempConfigResult } from '@mindstone/mcp-test-harness';
 import { MOCK_ACCESS_TOKEN, MOCK_INSTANCE_URL } from './helpers/salesforce-mock-api.js';
 
 describe('Auth mode detection — Salesforce MCP server', () => {
@@ -204,7 +204,7 @@ describe('Token persistence — Salesforce MCP server', () => {
     vi.resetModules();
 
     const { createServer } = await import('../src/server.js');
-    const { createInMemoryTestClient } = await import('@mindstone-engineering/mcp-test-harness');
+    const { createInMemoryTestClient } = await import('@mindstone/mcp-test-harness');
     const client = await createInMemoryTestClient({ createServer });
 
     const result = await client.callTool('salesforce_disconnect_account', {

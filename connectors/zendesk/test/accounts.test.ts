@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { createTempConfig, createBridgeHandlers } from '@mindstone-engineering/mcp-test-harness';
+import { createTempConfig, createBridgeHandlers } from '@mindstone/mcp-test-harness';
 import { mswServer } from './helpers/setup.js';
 import { createZendeskHandlers } from './helpers/zendesk-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';

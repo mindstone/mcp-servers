@@ -6,7 +6,7 @@ import {
   createFreshdeskTimeoutHandlers,
 } from './helpers/freshdesk-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
-import { createTempConfig } from '@mindstone-engineering/mcp-test-harness';
+import { createTempConfig } from '@mindstone/mcp-test-harness';
 
 function makeDefaultConfig() {
   return createTempConfig({

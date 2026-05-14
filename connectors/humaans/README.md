@@ -1,6 +1,6 @@
-# @mindstone-engineering/mcp-server-humaans
+# @mindstone/mcp-server-humaans
 
-[![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-humaans.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-humaans)
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-humaans.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-humaans)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 Humaans HR platform MCP server for Model Context Protocol hosts. Query employee profiles, job roles, time-away requests, company info, and office locations through a standardised MCP interface.
@@ -23,7 +23,7 @@ npm run build
 ### npx (once published)
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-humaans
+npx -y @mindstone/mcp-server-humaans
 ```
 
 ### Local
@@ -49,7 +49,7 @@ node dist/index.js
   "mcpServers": {
     "Humaans": {
       "command": "npx",
-      "args": ["-y", "@mindstone-engineering/mcp-server-humaans"],
+      "args": ["-y", "@mindstone/mcp-server-humaans"],
       "env": {
         "HUMAANS_API_KEY": "your-api-key"
       }

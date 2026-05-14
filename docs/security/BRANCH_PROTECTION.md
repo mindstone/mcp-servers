@@ -1,7 +1,7 @@
 # Branch & Tag Protection Requirements
 
 **Status:** Required for OSS launch. Tracked under FOX-3319 (P1 R8).
-**Audience:** Repo administrators on `mindstone-engineering/mcp-servers`.
+**Audience:** Repo administrators on `mindstone/mcp-servers`.
 
 These settings live in GitHub UI / API, not in repo files, so they are
 documented here to keep settings drift visible and reviewable.
@@ -56,8 +56,8 @@ these settings gate every npm publish.
 
 For OIDC trusted publishing to function, configure on the npm org side:
 
-- Each `@mindstone-engineering/mcp-server-*` package: enable `Trusted Publisher`
-  bound to GitHub repository `mindstone-engineering/mcp-servers`, workflow
+- Each `@mindstone/mcp-server-*` package: enable `Trusted Publisher`
+  bound to GitHub repository `mindstone/mcp-servers`, workflow
   `.github/workflows/publish.yml`, environment `npm-publish`.
 - Org-wide: enforce 2FA for all members.
 - Org-wide: enforce `2FA required for publishing` per package.
@@ -70,17 +70,17 @@ After applying, the following commands should succeed/return as noted:
 
 ```bash
 # Branch protection in place
-gh api repos/mindstone-engineering/mcp-servers/branches/main/protection \
+gh api repos/mindstone/mcp-servers/branches/main/protection \
   --jq '.required_pull_request_reviews.require_code_owner_reviews'
 # expect: true
 
 # Tag protection in place
-gh api repos/mindstone-engineering/mcp-servers/tags/protection \
+gh api repos/mindstone/mcp-servers/tags/protection \
   --jq '.[].pattern'
 # expect: "*-v*"
 
 # OIDC + provenance on next publish
-npm view @mindstone-engineering/mcp-server-<x>@<version> --json \
+npm view @mindstone/mcp-server-<x>@<version> --json \
   | jq '.dist.attestations'
 # expect: non-null with bundleUrl
 ```

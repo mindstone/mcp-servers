@@ -1,4 +1,4 @@
-# Security Policy — `@mindstone-engineering/mcp-server-office`
+# Security Policy — `@mindstone/mcp-server-office`
 
 ## Reporting a Vulnerability
 
@@ -14,7 +14,7 @@ repository-level policy wins.
 
 Email **security@mindstone.com** with:
 
-- **Affected connector(s):** `@mindstone-engineering/mcp-server-office`
+- **Affected connector(s):** `@mindstone/mcp-server-office`
 - **Description:** clear description of the vulnerability
 - **Reproduction steps:** step-by-step instructions to reproduce
 - **Impact assessment:** what an attacker could achieve

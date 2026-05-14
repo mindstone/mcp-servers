@@ -5,7 +5,7 @@
   "category": "communication",
   "icon": "retell-ai",
   "maturity": "stable",
-  "verifiedSource": "https://github.com/mindstone-engineering/mcp-servers",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
   "requiresSetup": true,
   "setupFields": [
     {

@@ -7,7 +7,7 @@
 
 ## Task Description
 
-Get the Zendesk MCP connector live on npm under `@mindstone-engineering/mcp-server-zendesk` with:
+Get the Zendesk MCP connector live on npm under `@mindstone/mcp-server-zendesk` with:
 1. Package rename from `@harryjbloom18/mcp-server-zendesk`
 2. FSL-1.1-MIT licence (replacing placeholder)
 3. Full mock test harness (becomes template for future connectors)
@@ -98,7 +98,7 @@ The FSL-1.1-MIT is a source-available licence from Sentry that converts to MIT a
 **Goal**: Rename package, update licence, ensure `npm pack` produces correct artefact.
 
 **Files changed** (3):
-- `connectors/zendesk/package.json` — rename to `@mindstone-engineering/mcp-server-zendesk`, update `"license": "FSL-1.1-MIT"`, add `"repository"` and `"homepage"` fields, sync version in bin name
+- `connectors/zendesk/package.json` — rename to `@mindstone/mcp-server-zendesk`, update `"license": "FSL-1.1-MIT"`, add `"repository"` and `"homepage"` fields, sync version in bin name
 - `connectors/zendesk/LICENSE` — replace placeholder with full FSL-1.1-MIT text
 - `connectors/zendesk/README.md` — update package name references, npx command
 
@@ -394,7 +394,7 @@ async function setupTestEnvironment(configDir: string) {
   ```
 
 **Repository secrets needed**:
-- `NPM_TOKEN` — npm automation token for `mindstone-engineering` org
+- `NPM_TOKEN` — npm automation token for `mindstone` org
 
 **Tag convention**: `zendesk-v0.2.0`, `zendesk-v0.3.0`, etc. Prefixed with `zendesk-` to support multiple connectors in the monorepo.
 
@@ -455,8 +455,8 @@ async function setupTestEnvironment(configDir: string) {
    - CI runs build+test+publish
    - **OR** manual: `npm publish --provenance --access public`
 3. Post-publish verification:
-   - `npm info @mindstone-engineering/mcp-server-zendesk` — package exists
-   - `npx -y @mindstone-engineering/mcp-server-zendesk` — binary starts (expect stdio MCP handshake)
+   - `npm info @mindstone/mcp-server-zendesk` — package exists
+   - `npx -y @mindstone/mcp-server-zendesk` — binary starts (expect stdio MCP handshake)
    - Verify licence on npmjs.com page shows FSL-1.1-MIT
    - Test in Claude Desktop / Cursor config with npx command
 
@@ -526,7 +526,7 @@ connectors/zendesk/
 | **ESM module isolation fails** — `vi.resetModules()` doesn't fully reset `auth.ts` import-time side effects | Medium | High — tests pollute each other | Use `vi.resetModules()` + dynamic `import()` in a helper function. If that fails, fall back to separate vitest workspace configs per test group with `--pool=forks` and `--poolOptions.forks.singleFork` |
 | **msw v2 doesn't intercept Node.js fetch** — msw v2 uses `interceptors` package which may not support all Node.js fetch implementations | Low | High — all HTTP tests fail | msw v2.x supports native Node.js fetch (≥18). Fallback: `undici.MockAgent` as interceptor. Verify in Stage 2 before writing tests |
 | **InMemoryTransport doesn't work with McpServer** — `McpServer` vs `Server` class compatibility | Low | High — test client doesn't work | `McpServer` inherits from `Server`; `connect(transport)` is on the `Server` base class. Verified in SDK source. If issues arise, use low-level `Server` class directly |
-| **npm publish fails on name conflict** — `@mindstone-engineering/mcp-server-zendesk` already taken | Very Low | High — need different name | Check `npm info @mindstone-engineering/mcp-server-zendesk` before starting. Org-scoped packages under own org are always available |
+| **npm publish fails on name conflict** — `@mindstone/mcp-server-zendesk` already taken | Very Low | High — need different name | Check `npm info @mindstone/mcp-server-zendesk` before starting. Org-scoped packages under own org are always available |
 | **`npm pack` includes test files** — vitest config/test files leak into published package | Low | Medium — bloated package, source leak | `"files": ["dist"]` in package.json already restricts this. Verify with `npm pack --dry-run`. Add `.npmignore` if needed |
 | **CI workflow doesn't trigger** — tag pattern mismatch or permissions issue | Low | Medium — manual publish needed | Test with a `zendesk-v0.0.0-test.1` pre-release tag first. Verify workflow YAML syntax |
 | **429 retry tests are flaky** — timing-dependent retry logic with jitter | Medium | Low — flaky tests | Use `vi.useFakeTimers()` to control `setTimeout`. Mock `Math.random()` for deterministic jitter. Use msw `delay()` for controlled timing |
@@ -536,10 +536,10 @@ connectors/zendesk/
 
 ## Assumptions
 
-1. npm org `mindstone-engineering` exists and `NPM_TOKEN` is available as a repo secret
+1. npm org `mindstone` exists and `NPM_TOKEN` is available as a repo secret
 2. GitHub repo `mindstone/mcp-servers` has Actions enabled
 3. FSL-1.1-MIT is acceptable with Change Date of 2028-04-08 (2 years from first publish)
-4. No existing `@mindstone-engineering/mcp-server-zendesk` package on npm
+4. No existing `@mindstone/mcp-server-zendesk` package on npm
 5. The connector's `@modelcontextprotocol/sdk@^1.26.0` dependency is compatible with InMemoryTransport and Client (verified — both exist in installed version)
 6. `vitest` can handle ESM with `NodeNext` module resolution without special transforms
 
@@ -673,17 +673,17 @@ connectors/zendesk/
 ### Stage 1: Package Identity & Licence — Completed 2026-04-08
 
 **Files changed (5):**
-- `connectors/zendesk/package.json` — Renamed from `@harryjbloom18/mcp-server-zendesk` to `@mindstone-engineering/mcp-server-zendesk`. Updated licence to `FSL-1.1-MIT`. Added `publishConfig.access: "public"`, `repository` (with `directory`), `homepage`. Updated `files` to `["dist", "!dist/**/*.map"]` to exclude source maps. Version kept at `0.2.0`.
+- `connectors/zendesk/package.json` — Renamed from `@harryjbloom18/mcp-server-zendesk` to `@mindstone/mcp-server-zendesk`. Updated licence to `FSL-1.1-MIT`. Added `publishConfig.access: "public"`, `repository` (with `directory`), `homepage`. Updated `files` to `["dist", "!dist/**/*.map"]` to exclude source maps. Version kept at `0.2.0`.
 - `connectors/zendesk/LICENSE` — Replaced placeholder with full FSL-1.1-MIT text. Licensor: Mindstone Engineering. Software: Zendesk MCP Server. Change Date: 2030-04-08 (4 years from first publish). Change License: MIT.
-- `connectors/zendesk/README.md` — Updated all package name references from `@harryjbloom18/...` to `@mindstone-engineering/...`. Added npm version badge and FSL-1.1-MIT licence badge (shields.io). Added licence section at bottom. Updated npx command.
+- `connectors/zendesk/README.md` — Updated all package name references from `@harryjbloom18/...` to `@mindstone/...`. Added npm version badge and FSL-1.1-MIT licence badge (shields.io). Added licence section at bottom. Updated npx command.
 - `connectors/zendesk/src/utils.ts` — Fixed `resolveTempOutputPath()` security issue: replaced `startsWith(tmpdir)` check with `path.relative()` + reject-if-starts-with-`..`-or-is-absolute. Prevents `/tmp-evil/` prefix bypass.
 - `connectors/zendesk/src/server.ts` — No change needed; `version: '0.2.0'` already matches `package.json`.
 
-**Repo root README** (`README.md`): No change needed — already referenced `@mindstone-engineering/mcp-server-zendesk`.
+**Repo root README** (`README.md`): No change needed — already referenced `@mindstone/mcp-server-zendesk`.
 
 **Verification:**
 - `npm run build` — succeeded (exit code 0)
-- `npm pack --dry-run` — correct package name `@mindstone-engineering/mcp-server-zendesk@0.2.0`, 33 files, no `.map` files in tarball, LICENSE and README included
+- `npm pack --dry-run` — correct package name `@mindstone/mcp-server-zendesk@0.2.0`, 33 files, no `.map` files in tarball, LICENSE and README included
 
 **Deviations from plan:** None. FSL-1.1-MIT Change Date set to 2030-04-08 (4 years from first publish per task instructions, not 2 years as originally in plan research notes).
 

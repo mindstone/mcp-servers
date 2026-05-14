@@ -1,3 +1,3 @@
-import { setupMswServer } from '@mindstone-engineering/mcp-test-harness';
+import { setupMswServer } from '@mindstone/mcp-test-harness';
 
 export const mswServer = setupMswServer();

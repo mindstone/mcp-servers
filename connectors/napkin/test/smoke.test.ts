@@ -40,7 +40,7 @@ describe('Smoke test — tool registration', () => {
 
 describe('Spawned stdio smoke test', () => {
   it('lists 4 tools from built dist/index.js', async () => {
-    const { createStdioTestClient } = await import('@mindstone-engineering/mcp-test-harness');
+    const { createStdioTestClient } = await import('@mindstone/mcp-test-harness');
     const { join } = await import('path');
 
     const distPath = join(import.meta.dirname, '..', 'dist', 'index.js');

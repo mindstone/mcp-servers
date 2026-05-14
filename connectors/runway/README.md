@@ -1,6 +1,6 @@
-# @mindstone-engineering/mcp-server-runway
+# @mindstone/mcp-server-runway
 
-[![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-runway.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-runway)
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-runway.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-runway)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 Runway ML MCP server for Model Context Protocol hosts. Generate AI video, images, audio, speech, sound effects, and manage custom voices — all through a standardised MCP interface powered by Runway's generative AI models.
@@ -23,7 +23,7 @@ npm run build
 ### npx (once published)
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-runway
+npx -y @mindstone/mcp-server-runway
 ```
 
 ### Local
@@ -51,7 +51,7 @@ node dist/index.js
   "mcpServers": {
     "Runway": {
       "command": "npx",
-      "args": ["-y", "@mindstone-engineering/mcp-server-runway"],
+      "args": ["-y", "@mindstone/mcp-server-runway"],
       "env": {
         "RUNWAYML_API_SECRET": "your-api-key"
       }

@@ -1,6 +1,6 @@
-# @mindstone-engineering/mcp-server-quickbooks
+# @mindstone/mcp-server-quickbooks
 
-[![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-quickbooks.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-quickbooks)
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-quickbooks.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-quickbooks)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 QuickBooks Online MCP server for Model Context Protocol hosts. Manage invoices, bills, customers, vendors, employees, and accounts in QuickBooks Online through a standardised MCP interface.
@@ -56,7 +56,7 @@ npm run build
 ### npx (once published)
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-quickbooks
+npx -y @mindstone/mcp-server-quickbooks
 ```
 
 ### Local
@@ -92,7 +92,7 @@ node dist/index.js
   "mcpServers": {
     "QuickBooks": {
       "command": "npx",
-      "args": ["-y", "@mindstone-engineering/mcp-server-quickbooks"],
+      "args": ["-y", "@mindstone/mcp-server-quickbooks"],
       "env": {
         "QUICKBOOKS_CLIENT_ID": "your-client-id",
         "QUICKBOOKS_CLIENT_SECRET": "your-client-secret",

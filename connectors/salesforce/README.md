@@ -1,11 +1,11 @@
-# @mindstone-engineering/mcp-server-salesforce
+# @mindstone/mcp-server-salesforce
 
 Salesforce CRM MCP server — accounts, contacts, opportunities, leads, tasks, users, and custom objects via the Salesforce API.
 
 ## Installation
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-salesforce
+npx -y @mindstone/mcp-server-salesforce
 ```
 
 ## Configuration

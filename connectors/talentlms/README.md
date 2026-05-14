@@ -1,6 +1,6 @@
-# @mindstone-engineering/mcp-server-talentlms
+# @mindstone/mcp-server-talentlms
 
-[![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-talentlms.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-talentlms)
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-talentlms.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-talentlms)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 TalentLMS MCP server for Model Context Protocol hosts. Manage users, courses, groups, branches, enrolments, reporting, and assessments in TalentLMS through a standardised MCP interface.
@@ -23,7 +23,7 @@ npm run build
 ### npx (once published)
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-talentlms
+npx -y @mindstone/mcp-server-talentlms
 ```
 
 ### Local
@@ -51,7 +51,7 @@ node dist/index.js
   "mcpServers": {
     "TalentLMS": {
       "command": "npx",
-      "args": ["-y", "@mindstone-engineering/mcp-server-talentlms"],
+      "args": ["-y", "@mindstone/mcp-server-talentlms"],
       "env": {
         "TALENTLMS_API_KEY": "your-api-key",
         "TALENTLMS_DOMAIN": "your-domain"

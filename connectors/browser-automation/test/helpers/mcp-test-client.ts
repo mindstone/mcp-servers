@@ -2,7 +2,7 @@ import {
   createInMemoryTestClient,
   type McpTestClient,
   type CallToolResult,
-} from '@mindstone-engineering/mcp-test-harness';
+} from '@mindstone/mcp-test-harness';
 import { vi } from 'vitest';
 
 // Re-export shared types so test files can import from this path.

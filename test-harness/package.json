@@ -1,5 +1,5 @@
 {
-  "name": "@mindstone-engineering/mcp-test-harness",
+  "name": "@mindstone/mcp-test-harness",
   "version": "0.1.0",
   "description": "Shared test harness for MCP connector packages — InMemoryTransport + stdio client, MSW helpers, bridge mock, temp-config",
   "license": "FSL-1.1-MIT",

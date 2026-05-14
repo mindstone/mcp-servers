@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from 'vitest';
-import { createInMemoryTestClient, type McpTestClient } from '@mindstone-engineering/mcp-test-harness';
+import { createInMemoryTestClient, type McpTestClient } from '@mindstone/mcp-test-harness';
 import { createServer } from '../src/server.js';
 
 describe('Smoke test — scaffold template verification', () => {

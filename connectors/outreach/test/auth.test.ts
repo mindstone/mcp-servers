@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
-import { createTempConfig, type TempConfigResult } from '@mindstone-engineering/mcp-test-harness';
+import { createTempConfig, type TempConfigResult } from '@mindstone/mcp-test-harness';
 
 describe('Auth mode detection — Outreach MCP server', () => {
   let testClient: McpTestClient;
@@ -210,7 +210,7 @@ describe('Token persistence — Outreach MCP server', () => {
     vi.resetModules();
 
     const { createServer } = await import('../src/server.js');
-    const { createInMemoryTestClient } = await import('@mindstone-engineering/mcp-test-harness');
+    const { createInMemoryTestClient } = await import('@mindstone/mcp-test-harness');
     const client = await createInMemoryTestClient({ createServer });
 
     const result = await client.callTool('outreach_disconnect_account', {

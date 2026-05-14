@@ -1,6 +1,6 @@
-# @mindstone-engineering/mcp-server-nano-banana
+# @mindstone/mcp-server-nano-banana
 
-[![npm version](https://img.shields.io/npm/v/@mindstone-engineering/mcp-server-nano-banana.svg)](https://www.npmjs.com/package/@mindstone-engineering/mcp-server-nano-banana)
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-nano-banana.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-nano-banana)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 Nano Banana MCP server — Google Gemini image generation and editing via Model Context Protocol. Generate images from text descriptions and edit existing images using Google Gemini's AI capabilities.
@@ -23,7 +23,7 @@ npm run build
 ### npx (once published)
 
 ```bash
-npx -y @mindstone-engineering/mcp-server-nano-banana
+npx -y @mindstone/mcp-server-nano-banana
 ```
 
 ### Local
@@ -52,7 +52,7 @@ node dist/index.js
   "mcpServers": {
     "NanoBanana": {
       "command": "npx",
-      "args": ["-y", "@mindstone-engineering/mcp-server-nano-banana"],
+      "args": ["-y", "@mindstone/mcp-server-nano-banana"],
       "env": {
         "GEMINI_API_KEY": "your-gemini-api-key"
       }

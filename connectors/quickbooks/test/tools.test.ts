@@ -434,7 +434,7 @@ describe('Bridge integration', () => {
     const bridgeToken = 'test-bridge-token';
 
     // Create a temp bridge state file
-    const { createTempConfig } = await import('@mindstone-engineering/mcp-test-harness');
+    const { createTempConfig } = await import('@mindstone/mcp-test-harness');
     const tempConfig = await createTempConfig({
       configDir: 'quickbooks-bridge-test',
     });
@@ -479,7 +479,7 @@ describe('Bridge integration', () => {
     const bridgePort = 19877;
     const bridgeToken = 'test-bridge-token';
 
-    const { createTempConfig } = await import('@mindstone-engineering/mcp-test-harness');
+    const { createTempConfig } = await import('@mindstone/mcp-test-harness');
     const tempConfig = await createTempConfig({
       configDir: 'quickbooks-bridge-test-2',
     });
