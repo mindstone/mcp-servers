@@ -11,6 +11,7 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-05-14
 ### Added
 - **hubspot**: Stage 2.5 host-neutrality remediation. Replaces Rebel-branded strings with host-neutral labels and exposes HUBSPOT_SOURCE_LABEL env override.
 - **hubspot**: Stage 3 cohort hygiene fixes for v0.1.0. Reads SERVER_VERSION from package.json; adds destructiveHint/openWorldHint sweep; raises request timeout default to 60s with env override.
@@ -22,6 +23,9 @@ are maintained manually as part of the PR review checklist.
 - **hubspot**: align OSS getScopeTier with host consumer matrix. Reads HUBSPOT_SCOPE_TIER first, then matches HUBSPOT_ACCOUNT_EMAIL in accounts.json instead of falling back to accounts[0].scopeTier.
 - **hubspot**: close two silent-failure paths surfaced in Stage 5 round-2 review. getAccounts no longer masks corrupt accounts.json as empty list, and getScopeTier fails closed to readonly instead of silently expanding to full.
 - **hubspot**: Address 4 CodeQL findings on PR #22 — GraphQL injection, logger redaction, test-harness sanitization. Three high-severity findings (one real GraphQL string-injection, two CodeQL false positives mitigated structurally) plus one medium-severity test-fixture stack-trace exposure.
+
+### Changed
+- Republished under the `@mindstone` npm scope. The legacy `@mindstone-engineering/mcp-server-*` package on this version line will be deprecated as part of the FOX-3319 scope migration; see [MIGRATION.md](../../MIGRATION.md) for the procedure consumers should follow.
 
 ## [0.1.0] - 2026-05-04
 

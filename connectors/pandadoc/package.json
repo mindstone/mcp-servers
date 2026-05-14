@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-pandadoc",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "mcpName": "io.github.mindstone/mcp-server-pandadoc",
   "description": "PandaDoc document automation MCP server for Model Context Protocol hosts",
   "license": "FSL-1.1-MIT",
