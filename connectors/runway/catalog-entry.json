@@ -1,0 +1,10 @@
+{
+  "id": "bundled-runway",
+  "name": "Runway ML",
+  "description": "AI media generation via Runway. Video (image-to-video, text-to-video, video-to-video, character performance), image generation, text-to-speech, sound effects, voice dubbing, and voice isolation. Supports local files directly. 'Animate this image' or 'Create a video of ocean waves at sunset'.",
+  "category": "media",
+  "icon": "video",
+  "maturity": "stable",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}

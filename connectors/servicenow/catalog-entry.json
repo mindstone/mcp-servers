@@ -1,0 +1,10 @@
+{
+  "id": "bundled-servicenow",
+  "name": "ServiceNow",
+  "description": "ServiceNow ITSM platform. List, create, and update incidents and change requests. Search knowledge base articles. List users. 'Show my open incidents' or 'Create a P1 incident for the login outage' or 'Find KB articles about VPN setup'.",
+  "category": "productivity",
+  "icon": "wrench",
+  "maturity": "beta",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}

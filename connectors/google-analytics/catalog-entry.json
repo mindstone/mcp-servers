@@ -1,0 +1,10 @@
+{
+  "id": "bundled-google-analytics",
+  "name": "Google Analytics",
+  "description": "Google Analytics 4 reporting and admin visibility. Run reports, search the live property schema, inspect custom dimensions / key events / data streams. 'How many users came from organic search last week?' or 'Show me the top pages by sessions for the past 30 days.'",
+  "category": "analytics",
+  "icon": "bar-chart",
+  "maturity": "beta",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}

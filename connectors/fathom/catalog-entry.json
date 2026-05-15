@@ -1,0 +1,10 @@
+{
+  "id": "bundled-fathom",
+  "name": "Fathom",
+  "description": "Fathom meeting transcripts and summaries. Search by date (after:2024-01-15), participant name, or keywords. Get action items, key topics, and full transcripts. 'Show my meetings from last week' or 'Find meetings with Sarah about the budget'.",
+  "category": "productivity",
+  "icon": "video",
+  "maturity": "stable",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}

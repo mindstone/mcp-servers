@@ -1,0 +1,10 @@
+{
+  "id": "bundled-nano-banana",
+  "name": "Nano Banana",
+  "description": "Google Gemini image generation. Create images from detailed text prompts - describe subject, style, lighting, composition. Edit existing images with instructions. 'Generate a watercolor painting of a cozy coffee shop interior' or 'Edit this photo to make the sky more dramatic'.",
+  "category": "media",
+  "icon": "image",
+  "maturity": "stable",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}

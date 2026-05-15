@@ -1,0 +1,10 @@
+{
+  "id": "bundled-office",
+  "name": "Microsoft Office",
+  "description": "Read, write, annotate, and format Word documents, Excel spreadsheets, and PowerPoint presentations. Add comments, track changes, create charts, and more — all from Rebel.",
+  "category": "productivity",
+  "icon": "file-text",
+  "maturity": "beta",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": false
+}

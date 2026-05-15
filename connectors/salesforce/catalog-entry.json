@@ -1,26 +1,10 @@
 {
-  "id": "salesforce",
+  "id": "bundled-salesforce",
   "name": "Salesforce",
-  "description": "Manage Salesforce CRM — accounts, contacts, opportunities, leads, tasks, users, and custom objects",
-  "category": "CRM",
-  "icon": "salesforce",
-  "maturity": "stable",
-  "verifiedSource": true,
-  "requiresSetup": true,
-  "setupFields": [
-    {
-      "key": "SALESFORCE_CLIENT_ID",
-      "label": "OAuth Client ID",
-      "description": "Your Salesforce Connected App client ID",
-      "required": true,
-      "secret": false
-    },
-    {
-      "key": "SALESFORCE_CLIENT_SECRET",
-      "label": "OAuth Client Secret",
-      "description": "Your Salesforce Connected App client secret",
-      "required": true,
-      "secret": true
-    }
-  ]
+  "description": "Salesforce CRM. Search accounts, contacts, opportunities, leads by name, email, or custom fields. Run SOQL queries (SELECT Id, Name FROM Account WHERE Industry = 'Technology'). Create/update records, log activities. 'Find the Acme account' or 'Show open opportunities over $50k'.",
+  "category": "sales",
+  "icon": "cloud",
+  "maturity": "beta",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
 }

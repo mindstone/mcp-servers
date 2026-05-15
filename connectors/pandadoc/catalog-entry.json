@@ -1,0 +1,10 @@
+{
+  "id": "bundled-pandadoc",
+  "name": "PandaDoc",
+  "description": "PandaDoc document automation. Upload PDFs, create documents from templates, send for e-signature, track status, and download completed documents. 'Upload this contract for signing' or 'Create a proposal from the Q1 template'.",
+  "category": "productivity",
+  "icon": "file-text",
+  "maturity": "stable",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}
