@@ -1,5 +1,7 @@
 # `@mindstone/` scope finalisation — kickoff checklist
 
+> **SUPERSEDED (2026-05-17)**: The CI-publish gates (G1, G4) collapsed when `publish.yml` was retired. The current pre-flight gate set is in the Phase 0 implementer guide (now living in `mindstone/MindstoneRebel`); the bootstrap-publish procedure is in `docs/plans/260517_PHASE_2_BOOTSTRAP_PLAN.md`. This checklist is preserved for historical context.
+
 **Wave start date**: _____________  **Wave lead**: _____________
 
 One-page action gate. Each row maps to a fuller description in `260515_finalise_mindstone_scope_publish.md` (this repo) or `260515_rebel_catalog_handoff.md` (Rebel coordination).
