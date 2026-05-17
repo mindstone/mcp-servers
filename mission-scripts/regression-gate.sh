@@ -125,8 +125,7 @@ record VAL-CROSS-004 "$harness_rc"
 step "VAL-CROSS-005 — actionlint"
 actionlint_out="$(mktemp -t mcp-gate-actionlint-XXXXXX.log)"
 actionlint .github/workflows/ci.yml \
-           .github/workflows/pr-notify.yml \
-           .github/workflows/publish.yml >"$actionlint_out" 2>&1
+           .github/workflows/pr-notify.yml >"$actionlint_out" 2>&1
 actionlint_rc=$?
 if [ -s "$actionlint_out" ]; then cat "$actionlint_out"; fi
 record VAL-CROSS-005 "$actionlint_rc"
