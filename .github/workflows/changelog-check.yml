@@ -3,9 +3,10 @@ name: CHANGELOG check
 # Enforces that every PR which bumps a connector's `package.json.version` also
 # updates the corresponding `connectors/<c>/CHANGELOG.md` with a section header
 # for the new version. This is the human-facing complement to the local-only
-# git-cliff backfill at scripts/backfill-changelog.sh -- the audit pipeline
-# (publish.yml) ships whatever lives in CHANGELOG.md at the tag commit, so the
-# only way the file stays honest is if humans wrote it themselves.
+# git-cliff backfill at scripts/backfill-changelog.sh -- the manual `npm publish`
+# from the wave-lead's dev machine ships whatever lives in CHANGELOG.md at the
+# publish-commit, so the only way the file stays honest is if humans wrote it
+# themselves.
 
 on:
   pull_request:
@@ -60,7 +61,7 @@ jobs:
           for pkg in "${CHANGED_PKG[@]}"; do
             connector=$(echo "$pkg" | awk -F/ '{print $2}')
 
-            # Slug whitelist (matches the publish.yml R15 pattern); rejects
+            # Slug whitelist (matches the FOX-3319 audit R15 pattern); rejects
             # any path traversal or unexpected characters.
             if ! echo "$connector" | grep -Eq '^[a-z0-9][a-z0-9-]*$'; then
               echo "::error::Refusing to inspect connector with unexpected slug: $connector"
