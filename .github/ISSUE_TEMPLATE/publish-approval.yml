@@ -1,0 +1,134 @@
+name: Publish approval
+description: Tracking issue for a per-version publish approval. One per `<connector>-v<X.Y.Z>` tag.
+title: "Publish approval: <connector> v<X.Y.Z>"
+labels: ["publish-approval"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Required by `docs/PUBLISH_APPROVAL_PROCESS.md`. Tag pushes do not auto-publish: the
+        `npm-publish` GitHub Actions environment pauses on a required-reviewer gate. This
+        issue is the policy artefact that records the gate decision; the environment
+        approval is the technical control.
+
+        Open this issue, fill in the checklist, and request review from a maintainer who
+        is NOT the author of the release commit. Both the `LGTM — approve publish`
+        comment and the environment approval are required.
+
+  - type: input
+    id: connector
+    attributes:
+      label: Connector
+      description: Directory slug under `connectors/`, e.g. `fathom`.
+      placeholder: fathom
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: SemVer version being published.
+      placeholder: 0.2.3
+    validations:
+      required: true
+
+  - type: input
+    id: maintainer
+    attributes:
+      label: Named maintainer (7-day on-call)
+      description: GitHub handle of the maintainer taking ownership of this version for the next 7 days. Must NOT be the author of the release commit.
+      placeholder: "@example-user"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: source-review
+    attributes:
+      label: Source-level security review
+      options:
+        - label: At least 2 independent reviewers signed off; all CRITICAL and HIGH findings resolved or explicitly accepted with named risk owner
+          required: true
+
+  - type: checkboxes
+    id: tarball-clean
+    attributes:
+      label: Tarball hygiene (`npm pack --dry-run --ignore-scripts`)
+      options:
+        - label: No `.map` files
+          required: true
+        - label: No `.test.` files or `__tests__/` directories
+          required: true
+        - label: No nested `.tgz`
+          required: true
+        - label: No `.env*` files
+          required: true
+        - label: No `.npmrc`
+          required: true
+        - label: No raw `.ts` source files (only compiled `.js`/`.d.ts`)
+          required: true
+
+  - type: checkboxes
+    id: audit
+    attributes:
+      label: Dependency audit
+      options:
+        - label: "`npm audit --omit=dev --audit-level=high` returns 0 critical / 0 high / 0 moderate (any moderate finding has a named risk owner)"
+          required: true
+
+  - type: checkboxes
+    id: changelog
+    attributes:
+      label: CHANGELOG.md
+      options:
+        - label: "`[<X.Y.Z>] - <date>` section present (hyphen or em-dash both accepted) and describes user-facing changes + security-relevant changes"
+          required: true
+
+  - type: checkboxes
+    id: version-sync
+    attributes:
+      label: Version sync
+      options:
+        - label: "`package.json#version` matches the proposed tag"
+          required: true
+        - label: "`package-lock.json#version` (top-level and `packages[\"\"].version`) matches"
+          required: true
+        - label: "`server.json#version` (top-level and `packages[0].version`) matches"
+          required: true
+
+  - type: checkboxes
+    id: package-name
+    attributes:
+      label: Package name binding (R15)
+      options:
+        - label: "`package.json.name` is exactly `@mindstone/mcp-server-<connector>`"
+          required: true
+
+  - type: checkboxes
+    id: maintainers
+    attributes:
+      label: Maintainer set
+      options:
+        - label: "Named maintainer + at least one backup are listed on the npm package — verify with `npm view @mindstone/mcp-server-<connector> maintainers`"
+          required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Anything reviewer should know (related PRs, downstream coordination, scope-migration sub-wave context, etc.)
+      placeholder: |
+        - Part of FOX-3319 scope finalisation, sub-wave A
+        - Auto-sync PR will open on MindstoneRebel `dev` post-publish
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: final-approval
+    attributes:
+      label: Final approval (filled by reviewer, not author)
+      options:
+        - label: I am NOT the author of the release commit and I have left a `LGTM — approve publish` comment on this issue
+          required: true
+        - label: I have approved the `npm-publish` environment on the workflow run linked from this issue
+          required: true

@@ -1,26 +1,10 @@
 {
-  "id": "outreach",
+  "id": "bundled-outreach",
   "name": "Outreach",
-  "description": "Manage Outreach sales engagement — prospects, sequences, accounts, tasks, and mailings",
-  "category": "Sales",
-  "icon": "outreach",
-  "maturity": "stable",
-  "verifiedSource": true,
-  "requiresSetup": true,
-  "setupFields": [
-    {
-      "key": "OUTREACH_CLIENT_ID",
-      "label": "OAuth Client ID",
-      "description": "Your Outreach OAuth app client ID",
-      "required": true,
-      "secret": false
-    },
-    {
-      "key": "OUTREACH_CLIENT_SECRET",
-      "label": "OAuth Client Secret",
-      "description": "Your Outreach OAuth app client secret",
-      "required": true,
-      "secret": true
-    }
-  ]
+  "description": "Sales engagement: search prospects, manage sequences, track emails and tasks. Enroll prospects in sequences. 'Show my active sequences' or 'Find prospects at Acme'.",
+  "category": "sales",
+  "icon": "send",
+  "maturity": "beta",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
 }

@@ -1,0 +1,10 @@
+{
+  "id": "bundled-kling",
+  "name": "Kling AI",
+  "description": "Kling AI video generation. Create 5-10 second videos from text prompts or still images. Be specific about motion, camera angle, and style. Generation takes 2-5 minutes. 'Create a video of ocean waves crashing on rocks at sunset, slow motion, cinematic' or 'Animate this product photo with a gentle zoom and rotating light'.",
+  "category": "media",
+  "icon": "video",
+  "maturity": "stable",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}

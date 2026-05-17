@@ -1,0 +1,10 @@
+{
+  "id": "bundled-mixmax",
+  "name": "Mixmax",
+  "description": "Email sequences, templates, tracking, and scheduling. List sequences, send tracked emails, use templates, view meeting types. 'Show my active sequences' or 'Send the follow-up template to sarah@acme.com'.",
+  "category": "sales",
+  "icon": "send",
+  "maturity": "stable",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}

@@ -1,0 +1,10 @@
+{
+  "id": "bundled-humaans",
+  "name": "Humaans",
+  "description": "Humaans HR platform. List employees, view org chart, check job roles and departments, see who's on leave, request time off. 'Who's on the engineering team?' or 'Show me Sarah's job history' or 'Request PTO for next Friday'.",
+  "category": "productivity",
+  "icon": "users",
+  "maturity": "stable",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}

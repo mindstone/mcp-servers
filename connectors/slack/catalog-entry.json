@@ -1,26 +1,10 @@
 {
-  "id": "slack",
+  "id": "bundled-slack",
   "name": "Slack",
-  "description": "Manage Slack workspaces — channels, messages, threads, reactions, users, files, bookmarks, scheduled messages, search",
-  "category": "Communication",
-  "icon": "slack",
+  "description": "Search messages, read channels/threads, post messages, add reactions. Invite users to channels, create channels, schedule messages, add bookmarks.",
+  "category": "communication",
+  "icon": "message-square",
   "maturity": "stable",
-  "verifiedSource": true,
-  "requiresSetup": true,
-  "setupFields": [
-    {
-      "key": "SLACK_CLIENT_ID",
-      "label": "OAuth Client ID",
-      "description": "Your Slack OAuth app client ID",
-      "required": true,
-      "secret": false
-    },
-    {
-      "key": "SLACK_CLIENT_SECRET",
-      "label": "OAuth Client Secret",
-      "description": "Your Slack OAuth app client secret",
-      "required": true,
-      "secret": true
-    }
-  ]
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": false
 }

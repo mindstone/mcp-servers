@@ -1,0 +1,10 @@
+{
+  "id": "bundled-quickbooks",
+  "name": "QuickBooks Online",
+  "description": "QuickBooks Online accounting. View and create invoices, bills, customers, vendors, employees, accounts, and more. Search with flexible queries. 'Show my unpaid invoices' or 'Create an invoice for Acme Corp' or 'List expense accounts'.",
+  "category": "payments",
+  "icon": "dollar-sign",
+  "maturity": "stable",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}

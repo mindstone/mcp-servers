@@ -1,30 +1,10 @@
 {
-  "id": "rebel-oss-zendesk",
+  "id": "bundled-zendesk",
   "name": "Zendesk",
-  "description": "Zendesk support tickets and macros. Search by ticket number, requester email, status (open/pending/solved), or keywords. Create tickets, add comments, update status. List, search, and apply macros to tickets.",
+  "description": "Zendesk support tickets and macros. Search by ticket number, requester email, status (open/pending/solved), or keywords. Create tickets, add comments, update status. List, search, and apply macros to tickets. 'Find open tickets from john@acme.com', 'Show high priority tickets from this week', or 'Apply the standard response macro to ticket 12345'.",
   "category": "productivity",
-  "icon": "zendesk",
+  "icon": "headphones",
   "maturity": "stable",
   "verifiedSource": "https://github.com/mindstone/mcp-servers",
-  "requiresSetup": true,
-  "setupFields": [
-    {
-      "key": "ZENDESK_SUBDOMAIN",
-      "label": "Zendesk Subdomain",
-      "type": "text",
-      "placeholder": "acme (for acme.zendesk.com)"
-    },
-    {
-      "key": "ZENDESK_EMAIL",
-      "label": "Email Address",
-      "type": "text",
-      "placeholder": "admin@acme.com"
-    },
-    {
-      "key": "ZENDESK_API_TOKEN",
-      "label": "API Token",
-      "type": "password"
-    }
-  ],
-  "accountIdentity": "subdomain"
+  "requiresSetup": true
 }

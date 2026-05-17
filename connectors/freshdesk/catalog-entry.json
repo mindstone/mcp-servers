@@ -1,0 +1,10 @@
+{
+  "id": "bundled-freshdesk",
+  "name": "Freshdesk",
+  "description": "Freshdesk support tickets. Search by ticket number, requester email, status, or keywords. Create tickets, add replies, update status. 'Show open tickets from john@acme.com' or 'Create a high priority ticket about login issues'.",
+  "category": "productivity",
+  "icon": "headphones",
+  "maturity": "stable",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}

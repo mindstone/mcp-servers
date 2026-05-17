@@ -1,0 +1,10 @@
+{
+  "id": "bundled-apple-shortcuts",
+  "name": "Apple Shortcuts",
+  "description": "Run shortcuts from your macOS Shortcuts library. 'Trigger my Morning Briefing shortcut' or 'List my workflow shortcuts'.",
+  "category": "productivity",
+  "icon": "zap",
+  "maturity": "beta",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": false
+}

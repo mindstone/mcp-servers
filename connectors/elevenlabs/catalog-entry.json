@@ -1,0 +1,10 @@
+{
+  "id": "bundled-elevenlabs",
+  "name": "ElevenLabs",
+  "description": "AI music generation, text-to-speech, sound effects, voice browsing, and speech-to-text via ElevenLabs. Generate original music from prompts with full composition control, create voiceovers with 1000+ voices, produce sound effects, and transcribe audio. 'Compose a 30-second cinematic score' or 'Generate speech with Rachel's voice' or 'Create the sound of rain on a tin roof'.",
+  "category": "media",
+  "icon": "music",
+  "maturity": "stable",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}

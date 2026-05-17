@@ -1,0 +1,10 @@
+{
+  "id": "bundled-talentlms",
+  "name": "TalentLMS",
+  "description": "TalentLMS learning management. List/create users, manage courses, enrol/unenrol learners, track progress, view groups and branches, get test and survey results, generate SSO links. 'Show all active courses' or 'Check Jane's training progress' or 'Enrol the sales team in Onboarding 101'.",
+  "category": "productivity",
+  "icon": "book-open",
+  "maturity": "stable",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}

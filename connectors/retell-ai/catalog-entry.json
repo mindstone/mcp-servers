@@ -1,18 +1,10 @@
 {
-  "id": "rebel-oss-retell-ai",
+  "id": "bundled-retell-ai",
   "name": "Retell AI",
-  "description": "Voice agent phone calls, call management, and agent configuration via Retell AI. Make outbound calls, monitor transcripts, configure voice agents and LLM prompts, and browse available voices and phone numbers.",
+  "description": "Voice agent phone calls via Retell AI. Make outbound calls, configure agent prompts, monitor call status, retrieve transcripts, browse voices and phone numbers. 'Call this number and schedule a meeting' or 'List recent calls and their transcripts'.",
   "category": "communication",
-  "icon": "retell-ai",
-  "maturity": "stable",
+  "icon": "phone",
+  "maturity": "beta",
   "verifiedSource": "https://github.com/mindstone/mcp-servers",
-  "requiresSetup": true,
-  "setupFields": [
-    {
-      "key": "RETELL_API_KEY",
-      "label": "API Key",
-      "type": "password",
-      "placeholder": "Your Retell AI API key"
-    }
-  ]
+  "requiresSetup": true
 }

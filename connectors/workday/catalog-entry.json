@@ -1,0 +1,10 @@
+{
+  "id": "bundled-workday",
+  "name": "Workday",
+  "description": "Workday HCM platform: search workers, view employee profiles, browse org structure. 'Who works in engineering?' or 'Show me Alice's profile' or 'List our departments'.",
+  "category": "productivity",
+  "icon": "building-2",
+  "maturity": "beta",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}

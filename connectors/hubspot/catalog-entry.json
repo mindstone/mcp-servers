@@ -1,0 +1,10 @@
+{
+  "id": "bundled-hubspot",
+  "name": "HubSpot",
+  "description": "HubSpot CRM (92 tools). Contacts, companies, deals, tickets, tasks, products, line items. File uploads & attachments. Lists/segments with batch export. Forms, analytics, marketing emails. Knowledge base articles (read-only). Use wildcards: *contacts*, *deals*, *lists*, *forms*, *email*, *file*, *kb* to filter tools.",
+  "category": "sales",
+  "icon": "users",
+  "maturity": "stable",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": false
+}
