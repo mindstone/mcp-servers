@@ -1,0 +1,10 @@
+{
+  "id": "bundled-gamma",
+  "name": "Gamma",
+  "description": "Gamma AI presentations, documents, and websites. Describe what you want: topic, audience, tone, length. Returns a link to your generated content. 'Create a 10-slide pitch deck about our Q4 results for investors' or 'Make a one-pager explaining our product for new customers'.",
+  "category": "productivity",
+  "icon": "presentation",
+  "maturity": "stable",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}

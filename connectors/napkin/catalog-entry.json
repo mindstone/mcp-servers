@@ -1,0 +1,10 @@
+{
+  "id": "bundled-napkin",
+  "name": "Napkin AI",
+  "description": "Napkin AI visual generation. Turn text into professional diagrams, infographics, and illustrations — mindmaps, timelines, flowcharts, comparisons, and more. 'Create a visual diagram of our product architecture' or 'Turn these bullet points into an infographic'.",
+  "category": "productivity",
+  "icon": "image",
+  "maturity": "stable",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}

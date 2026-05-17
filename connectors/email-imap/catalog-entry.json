@@ -1,0 +1,10 @@
+{
+  "id": "bundled-custom-email",
+  "name": "Custom Email (IMAP/SMTP)",
+  "description": "Connect any email account using IMAP and SMTP. For email providers not listed above — Fastmail, ProtonMail, corporate email, university accounts, self-hosted mail servers, etc.",
+  "category": "communication",
+  "icon": "mail",
+  "maturity": "stable",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}

@@ -1,11 +1,10 @@
 {
-  "id": "rebel-oss-browser-automation",
+  "id": "bundled-browser-automation",
   "name": "Browser Automation",
-  "description": "Headless browser control via accessibility snapshots — navigate pages, fill forms, click elements, take screenshots, and manage tabs. Uses the agent-browser CLI for reliable web automation.",
+  "description": "Browser automation with persistent sessions. Navigate, click, fill forms, take screenshots, extract data using accessibility snapshots. Auto-detects Chrome/Brave. Use ONLY when explicitly asked or when no API/MCP exists for the target site. 'Take a screenshot of my LinkedIn profile' or 'Fill out this web form'.",
   "category": "productivity",
-  "icon": "browser-automation",
+  "icon": "globe",
   "maturity": "stable",
   "verifiedSource": "https://github.com/mindstone/mcp-servers",
-  "requiresSetup": false,
-  "setupFields": []
+  "requiresSetup": true
 }
