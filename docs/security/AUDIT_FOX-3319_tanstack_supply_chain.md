@@ -5,6 +5,18 @@
 **Branch audited:** `feature/hubspot-oss-v0.1.0` @ `6d3d36a`
 **Audit type:** Repo-specific supply-chain threat model after the TanStack compromise pattern (untrusted PR / cache / artefact code influencing trusted publication).
 
+> **Post-pivot status (2026-05-17):** This audit's threat model remains valid. Its recommendation table (sections § 4 R1–R15 and the F-series findings F1–F14) was written against a planned CI-based OIDC publishing model. That model was retired during FOX-3319 itself; publishes now happen manually from the wave-lead's dev machine (see [docs/PUBLISH_APPROVAL_PROCESS.md](../PUBLISH_APPROVAL_PROCESS.md) and [docs/plans/260517_PHASE_2_BOOTSTRAP_PLAN.md](../plans/260517_PHASE_2_BOOTSTRAP_PLAN.md)). The following recommendations are **superseded** by the manual-publish architecture and should be read as historical context only:
+>
+> - **R1 (adopt npm OIDC trusted publishing):** no longer applicable — no CI publish path exists. The credential-exfiltration risk that motivated R1 is mitigated by the absence of any long-lived `NPM_TOKEN` in repo secrets.
+> - **R2 (quarantine lifecycle scripts in publish job):** no longer applicable — no publish job exists.
+> - **R6 (publish environment gate with required reviewer):** replaced by the per-release human gate in `docs/PUBLISH_APPROVAL_PROCESS.md`. The gate is now the wave-lead reading the checklist + WebAuthn 2FA + a second human's `LGTM` comment on the tracking issue.
+> - **R12 (build → publish artefact handoff):** no longer applicable.
+> - **R13 (force provenance at workflow env level):** no longer applicable — provenance attestations are not produced for manual publishes. Recorded as a known regression vs the planned model.
+> - **R14 (release-age cool-down):** still applicable on the consumer side (`min-release-age=7` in `.npmrc`). The publish-time enforcement is moot since there is no CI publish.
+> - **R15 (per-publish package-name assertion):** still applicable, now executed by the wave-lead during the G6 pre-flight (see `docs/plans/260517_PHASE_2_BOOTSTRAP_PLAN.md`).
+>
+> All other recommendations (R3–R5, R7–R11, branch-protection-related items) remain in force. The threat-model sections (§ 1, § 2, § 3) are unchanged.
+
 ---
 
 ## 1. Threat Model Summary

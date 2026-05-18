@@ -1,7 +1,9 @@
 # npm Publish Pipeline — Zendesk MCP Connector
 
+> **Historical (superseded 2026-05-17)**: This document was the original per-connector publish-pipeline plan written when zendesk was being prepared as the first OSS connector. Step 2 ("Publish") references `publish.yml` and the CI-based OIDC publish model, both of which have since been retired. The current publish procedure for zendesk (and every other connector) is the manual `npm publish` runbook in `docs/plans/260517_PHASE_2_BOOTSTRAP_PLAN.md`. The threat model and connector-design notes below remain valid; only the operational steps are out of date.
+
 **Date**: 2026-04-08
-**Status**: Planning
+**Status**: Historical (superseded — see banner above)
 **Confidence**: 92%
 **Complexity**: Medium-High
 

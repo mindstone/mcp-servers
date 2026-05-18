@@ -34,9 +34,11 @@ Replace every reference to `@mindstone-engineering/mcp-server-<connector>` with 
 
 ### What you get on the new scope
 
-- **Provenance attestations**: every release under `@mindstone/` ships an [npm provenance attestation](https://docs.npmjs.com/generating-provenance-statements) signed by GitHub's OIDC issuer, bound to this repository and the `publish.yml` workflow. Verify with `npm audit signatures @mindstone/mcp-server-<connector>@<version>` and `npm view @mindstone/mcp-server-<connector>@<version> --json | jq .dist.attestations`.
+- **Human chain of custody on every release**: every `@mindstone/mcp-server-*` version is published from the named wave-lead's dev machine, behind a hardware-key (WebAuthn) 2FA challenge. See [docs/PUBLISH_APPROVAL_PROCESS.md](docs/PUBLISH_APPROVAL_PROCESS.md) for the per-release human gate that every publish runs through.
 - **`min-release-age` cool-down**: new releases are not installable by name for 7 days after publish; consumers running `npm install` with `min-release-age` enforcement (npm ≥ 11.10) get an automatic incident window before a freshly compromised version can reach their lockfiles. See [docs/security/AUDIT_FOX-3319_tanstack_supply_chain.md](docs/security/AUDIT_FOX-3319_tanstack_supply_chain.md) for the rationale.
 - **No behaviour change**: this is a scope rename plus a patch bump. The tool names, parameters, return shapes, and required env vars are identical.
+
+> **Note on provenance attestations:** Earlier revisions of this document promised Sigstore provenance attestations on every release. The CI-based OIDC publish path that would have produced those attestations was retired during FOX-3319 (see [docs/PUBLISH_APPROVAL_PROCESS.md](docs/PUBLISH_APPROVAL_PROCESS.md)). Consumers who want a provenance chain today get the human-verifiable equivalent: the published tarball's shasum can be reproduced by checking out `mindstone/mcp-servers` at the release commit and running `npm pack` locally.
 
 ### What happens to `@mindstone-engineering/*`
 
@@ -63,75 +65,65 @@ npm install @mindstone/mcp-server-<connector>@<version>
 npm audit signatures @mindstone/mcp-server-<connector>@<version>
 ```
 
-A failed signature verification means the package was published outside the trusted-publisher binding and should not be trusted; report it to [security@mindstone](mailto:security@mindstone) (see [SECURITY.md](SECURITY.md)).
+A failed signature verification on `@mindstone/`'s npm registry signing means the registry record has been tampered with and should not be trusted; report it to [security@mindstone](mailto:security@mindstone) (see [SECURITY.md](SECURITY.md)). Provenance attestations (Sigstore-signed) are **not** produced for manual publishes; see the note above.
 
 ---
 
 ## For maintainers
 
-The npm-side migration is a four-step procedure per package. The repo-side migration has already landed in commits A–D (rename, CHANGELOG backfill, patch bump, PR check). What follows is the work that has to happen on registry.npmjs.org and in the GitHub org settings.
+The npm-side migration is a three-step procedure per package. The repo-side migration has already landed in commits A–E (rename, CHANGELOG backfill, patch bump, PR check, manual-publish pivot). What follows is the work that has to happen on registry.npmjs.org from the wave-lead's dev machine plus a few GitHub org settings.
 
 ### Pre-flight checklist (one time)
 
-- [ ] Replace the `@mindstone/oss-maintainers` placeholder team slug in `.github/CODEOWNERS` with the real GitHub team. The slug must resolve before branch protection takes effect.
-- [ ] Create the `npm-publish` GitHub Actions environment under repo Settings → Environments. Configure at least one required reviewer (a maintainer who is NOT the PR author). The publish job already declares `environment: npm-publish`; without the environment object the job has no required-approval gate.
-- [ ] Enable branch protection on `main` and tag protection on `*-v*` per `docs/security/BRANCH_PROTECTION.md`.
-- [ ] Verify the npm publisher account has 2FA enabled at the org level (`npm access list users mindstone`). The trusted-publisher OIDC path does not bypass this — 2FA still gates the manual deprecate/revoke commands below.
-- [ ] Generate and revoke `NPM_TOKEN` in repo secrets only AFTER the first successful OIDC publish — the token is the legacy fallback and should not coexist with trusted publishing once OIDC works.
+- [x] CODEOWNERS team `@mindstone/oss-maintainers` exists (closed 2026-05-17, id 17581413, member: `harryblam`). Replace placeholder maintainer roster with the real list before Phase 3.
+- [x] `.github/workflows/publish.yml` removed (PR #32 merged 2026-05-17). No CI publish path exists; do not resurrect without revisiting the audit doc.
+- [ ] Enable branch protection on `main` and tag protection on `*-v*` per `docs/security/BRANCH_PROTECTION.md`. (Settings drift check: re-run §5 verification commands in that doc.)
+- [ ] Verify the npm publisher account has 2FA enabled (`npm whoami` → expected `mindstone-engineering`; 2FA mode is WebAuthn-only at time of writing). This account is the single point of authority for every `@mindstone/mcp-server-*` publish.
+- [ ] Confirm `NPM_TOKEN` repo secret is NOT present (`gh secret list --repo mindstone/mcp-servers | grep NPM_TOKEN`). Manual-publish mode does not use long-lived publish tokens; if one exists, revoke it.
+- [ ] Read `docs/PUBLISH_APPROVAL_PROCESS.md` end-to-end. The wave-lead must understand the pre-publish checklist for each connector.
+- [ ] Read `docs/plans/260517_PHASE_2_BOOTSTRAP_PLAN.md` for the per-connector target versions + the canonical runbook.
 
-### Per-package step 1 — Bind the trusted publisher (new scope)
+### Per-package step 1 — Bootstrap publish on `@mindstone/`
 
-For each of the 26 connectors in `connectors/`, configure npm Trusted Publishing on `@mindstone/mcp-server-<connector>`:
-
-1. Visit `https://www.npmjs.com/package/@mindstone/mcp-server-<connector>/access` (the package must exist; for the three connectors that have never been published — hubspot, slack, google-analytics — do step 2 first to create the package, then return here).
-2. Click "Trusted Publisher" → "Configure"
-3. Fill in:
-   - **Repository**: `mindstone/mcp-servers`
-   - **Workflow filename**: `publish.yml`
-   - **Environment name**: `npm-publish`
-4. Save.
-
-This binding is what enables OIDC publishing in step 3.
-
-### Per-package step 2 — Bootstrap publish (only for `hubspot`, `slack`, `google-analytics`)
-
-These three were renamed from `@mindstone-engineering/` to `@mindstone/` before they were ever published, so the new-scope package does not exist on npm yet and trusted publishing has nothing to bind to. Bootstrap each one with a one-time local publish using an automation token + 2FA:
+For each of the 24 connectors that still need a publish under the new scope (see the table in `docs/plans/260517_PHASE_2_BOOTSTRAP_PLAN.md` for the current state), run the canonical procedure from the wave-lead's dev machine:
 
 ```sh
 cd connectors/<connector>
-npm pack --ignore-scripts          # produce the .tgz locally
-npm publish ./*.tgz \
-  --provenance \
-  --access public
+# Run the G6 pre-flight (build + test + audit + pack-scan):
+npm ci --ignore-scripts && npm run build && npm test \
+  && npm audit --omit=dev --audit-level=high \
+  && npm pack --dry-run --ignore-scripts
+
+# When everything is clean, publish. WebAuthn 2FA prompt fires in the system browser:
+npm publish --access=public --provenance=false
 ```
 
-This requires the publishing user to have `publish` rights on the `@mindstone` scope and to complete a 2FA challenge. After the first successful publish, return to step 1 above and configure the trusted-publisher binding. From that point on, the next release flows through the automated `publish.yml` pipeline.
+`--access=public` is required for first-time publishes under the new scope. `--provenance=false` is explicit because no GitHub Actions OIDC token is being minted — manual publishes cannot produce provenance attestations.
 
-### Per-package step 3 — Cut the first OIDC release on `@mindstone/`
-
-For every connector (not just the three above), tag the commit landed by Commit C with the connector-prefixed tag the publish workflow watches:
+After the publish lands, fire the catalog-sync dispatch to Rebel:
 
 ```sh
-git checkout main
-git pull
-git tag <connector>-v<X.Y.Z>      # e.g. zendesk-v0.3.2
-git push origin <connector>-v<X.Y.Z>
+cd /Users/<you>/development/mcp-servers
+MAIN_SHA=$(git rev-parse origin/main)
+gh api repos/mindstone/MindstoneRebel/dispatches \
+  --method POST \
+  -f event_type=connector-published \
+  -F "client_payload[connector]=<connector>" \
+  -F "client_payload[package]=@mindstone/mcp-server-<connector>" \
+  -F "client_payload[version]=<X.Y.Z>" \
+  -F "client_payload[sha]=$MAIN_SHA"
 ```
-
-Pushing the tag triggers `.github/workflows/publish.yml`. The build job packs the tarball with `--ignore-scripts` and uploads it as an artifact; the publish job downloads the artifact and runs `npm publish <tarball> --provenance` only — no JS executes in the OIDC-bearing job. A maintainer reviewer must approve the `npm-publish` environment gate before publish runs.
 
 Verify the publish landed cleanly:
 
 ```sh
-npm view @mindstone/mcp-server-<connector>@<X.Y.Z> --json \
-  | jq '{version, dist:{integrity:.dist.integrity, attestations:.dist.attestations}, _hasShrinkwrap}'
-
-npm audit signatures @mindstone/mcp-server-<connector>@<X.Y.Z>
+npm view @mindstone/mcp-server-<connector>@<X.Y.Z> version
+npm view @mindstone/mcp-server-<connector>@<X.Y.Z> --json | jq '.dist.shasum'
 ```
 
-A clean output should show one attestation under `dist.attestations` and `audit signatures` should report `Verified registry signatures, audited <N> packages` with zero unsigned.
+The shasum should match the `shasum` line printed by `npm publish`. Provenance attestations under `.dist.attestations` will be **null** — that is expected; do not treat null as failure.
 
-### Per-package step 4 — Dual-publish and deprecate `@mindstone-engineering/*`
+### Per-package step 2 — Dual-publish and deprecate `@mindstone-engineering/*`
 
 For every connector that has a published version under the legacy scope, ship the same release bytes once more under the legacy name so consumers who haven't migrated yet can still pull the latest fixed version without a name change:
 
@@ -161,7 +153,7 @@ npm deprecate '@mindstone-engineering/mcp-server-<connector>@*' \
 
 The `*` selector covers every previously published version, including the one you just dual-published. The dual-publish exists so existing lockfiles can resolve `latest`; the deprecation message tells those installs they need to migrate.
 
-### Per-package step 5 (post-window) — Lock down the legacy scope
+### Per-package step 3 (post-window) — Lock down the legacy scope
 
 After the deprecation window (see [Timeline](#timeline)) revoke the legacy scope's ability to receive new publishes:
 
@@ -184,9 +176,10 @@ The packages remain on the registry forever (no unpublish — that would break d
 | Date         | Phase                                                                                                                         | Status |
 |--------------|-------------------------------------------------------------------------------------------------------------------------------|--------|
 | 2026-05-14   | Repo migration commits A–E land (rename, CHANGELOG backfill, patch bump, PR check, MIGRATION.md)                              | done   |
-| 2026-05-14+  | Maintainer ops: trusted-publisher bindings, npm-publish environment gate, branch protection, bootstrap publishes, OIDC tags   | tbd    |
-| 2026-05-14+  | Dual-publish + deprecate every legacy `@mindstone-engineering/mcp-server-*` package                                           | tbd    |
-| 2026-08-14   | Window closes; legacy-scope publish rights revoked (90-day transition)                                                        | tbd    |
+| 2026-05-17   | Catalog backfill (PR #31), manual-publish pivot (PR #32, removes `publish.yml`), Phase 0 implementer guide handed to Rebel    | done   |
+| 2026-05-17+  | Phase 2 — bootstrap publishes from wave-lead's dev machine for the 24 connectors not yet on `@mindstone/`                     | tbd    |
+| 2026-05-17+  | Phase 3 — dual-publish + deprecate every legacy `@mindstone-engineering/mcp-server-*` package                                 | tbd    |
+| 2026-08-14   | Window closes; legacy-scope publish rights revoked (90-day transition from initial wave start)                                | tbd    |
 
 The 90-day window is calibrated to the longest realistic CI cadence on the consumer side: hosts that publish quarterly need at least one quarter to fold in the rename without being blocked by an emergency.
 
@@ -194,11 +187,11 @@ The 90-day window is calibrated to the longest realistic CI cadence on the consu
 
 ## Troubleshooting
 
-**`npm publish` fails with "Trusted publisher misconfigured"**
-The package's trusted-publisher binding does not match the repo + workflow + environment combination. Verify on the package's `/access` page; the three fields must be exactly `mindstone/mcp-servers`, `publish.yml`, `npm-publish`.
+**`npm publish` fails with `403 Forbidden`**
+The publisher account has lost write access on the `@mindstone/` scope, or the local `npm whoami` is not the expected publisher account. Re-run `npm login`; complete the WebAuthn challenge if prompted. If still failing, an org-admin needs to re-grant `publish` on `@mindstone:developers` to `mindstone-engineering`.
 
-**`npm audit signatures` reports `Verified registry signatures` but `dist.attestations` is empty**
-The publish ran without `--provenance` or `NPM_CONFIG_PROVENANCE=true`. Re-publish with the env var set in the workflow step (it is in the current `publish.yml`; only relevant if a maintainer publishes by hand for the bootstrap step).
+**`npm view <pkg>@<ver> --json | jq .dist.attestations` returns null**
+Expected in manual-publish mode. Provenance attestations are not produced for local `npm publish` runs. This is not a failure — see the note in [What you get on the new scope](#what-you-get-on-the-new-scope).
 
 **The dual-publish fails with `403 Forbidden`**
 The publishing user has lost write access to `@mindstone-engineering/`. This is expected after the lockdown step (step 5); if it happens before then, the access was revoked early and the deprecation message can be set without dual-publishing (consumers will see deprecation on whatever version they currently resolve, which is acceptable).
