@@ -1,5 +1,12 @@
 # Finalise `@mindstone/` scope publish — staged execution plan
 
+> **SUPERSEDED (2026-05-17)**: This plan was written against the CI-based OIDC publish model that has since been retired. The active replacements are:
+> - **Phase 0 implementer guide:** now lives in the `mindstone/MindstoneRebel` repo (copied out of mcp-servers on 2026-05-17 per the wave-lead's preference for keeping internal operational detail off the public OSS repo).
+> - **Phase 2 bootstrap plan + tracker:** `docs/plans/260517_PHASE_2_BOOTSTRAP_PLAN.md`
+> - **Per-release human gate:** `docs/PUBLISH_APPROVAL_PROCESS.md` (rewritten for manual mode)
+>
+> Read this document for the threat-model context, the per-package version inventory at 2026-05-15, and the original wave structure. The Phase 2 / Phase 3 procedures themselves are superseded — every step that says "tag triggers `publish.yml`" or "configure Trusted Publisher" is no longer the operative procedure.
+
 **Date**: 2026-05-15
 **Owner**: TBD (named maintainer for the 7-day on-call window, per `docs/PUBLISH_APPROVAL_PROCESS.md`)
 **Scope**: This repo only. The Rebel-side coordination is in the sibling plan `260515_rebel_catalog_handoff.md` and must be read in tandem.

@@ -1,5 +1,7 @@
 # Rebel catalog handoff — `@mindstone/` scope wave
 
+> **Partially superseded (2026-05-17)**: The Rebel-side coordination contract (the R1–R7 gate set, the workflow filename, the catalog-sync dispatch payload shape) is **still valid**. Anything in this document that describes the **mcp-servers side** of the contract — particularly references to `.github/workflows/publish.yml` firing `repository_dispatch` automatically — is **superseded**: that workflow has been deleted. The dispatch is now fired manually from the wave-lead's dev machine after each `npm publish`, using the `gh api repos/mindstone/MindstoneRebel/dispatches` invocation documented in `docs/plans/260517_PHASE_2_BOOTSTRAP_PLAN.md`. The payload shape (`event_type=connector-published`, the four `client_payload` fields) is unchanged.
+
 **Date**: 2026-05-15
 **Owner (mcp-servers side)**: TBD — the named maintainer running `260515_finalise_mindstone_scope_publish.md`
 **Owner (Rebel side)**: TBD — a Rebel maintainer with merge rights on `dev`
