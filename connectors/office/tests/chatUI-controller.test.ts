@@ -214,6 +214,36 @@ afterEach(() => {
 });
 
 describe('office chatUI shared rendering migration (Stage 10)', () => {
+  it('renders a not-ready header and does not mount the controller when bridgeConfig is null (bridgeReady=false)', () => {
+    const harness = createClientHarness();
+    const createIntentClient = vi.fn(() => harness.client);
+    const getInitialSnapshot = vi.fn(() => null);
+    const container = document.createElement('div');
+    document.body.innerHTML = '';
+    document.body.appendChild(container);
+
+    createChatUI(
+      {
+        container,
+        bridgeConfig: null,
+        documentContext: DEFAULT_DOCUMENT_CONTEXT,
+      },
+      {
+        createIntentClient,
+        persistence: createInMemoryChatStatePersistence(null),
+        getInitialSnapshot,
+        probeReachability: async () => true,
+      },
+    );
+
+    expect(getHeader(container).dataset.status).toBe('not-ready');
+    expect(container.textContent).toContain('Rebel is setting up');
+    expect(getTextarea(container).disabled).toBe(true);
+    expect(getSendButton(container).disabled).toBe(true);
+    expect(createIntentClient).not.toHaveBeenCalled();
+    expect(getInitialSnapshot).not.toHaveBeenCalled();
+  });
+
   it('renders send/stream happy path and keeps open-in-Rebel working', async () => {
     const harness = createClientHarness();
     harness.getHistory.mockResolvedValueOnce({

@@ -131,6 +131,71 @@ describe('office chatState bounded scoped records', () => {
     ).not.toBeNull();
   });
 
+  it('isolates persistence between two distinct document scopes', async () => {
+    const scopeA = durableScope(101);
+    const scopeB = durableScope(102);
+    const persistenceA = createOfficeScopedLocalStoragePersistence(scopeA);
+    const persistenceB = createOfficeScopedLocalStoragePersistence(scopeB);
+
+    await persistenceA.set({
+      conversationId: 'conv-scope-a',
+      createdAt: 101,
+      pageTitle: 'Scope A.docx',
+      pageUrl: 'file:///Scope%20A.docx',
+    });
+
+    await expect(persistenceB.get()).resolves.toBeNull();
+
+    await persistenceB.set({
+      conversationId: 'conv-scope-b',
+      createdAt: 102,
+      pageTitle: 'Scope B.docx',
+      pageUrl: 'file:///Scope%20B.docx',
+    });
+
+    await expect(persistenceA.get()).resolves.toEqual({
+      conversationId: 'conv-scope-a',
+      createdAt: 101,
+      pageTitle: 'Scope A.docx',
+      pageUrl: 'file:///Scope%20A.docx',
+    });
+    await expect(persistenceB.get()).resolves.toEqual({
+      conversationId: 'conv-scope-b',
+      createdAt: 102,
+      pageTitle: 'Scope B.docx',
+      pageUrl: 'file:///Scope%20B.docx',
+    });
+  });
+
+  it('gracefully recovers from a malformed scoped record by ignoring it and rebuilding the index', async () => {
+    const corruptedScope = durableScope(201);
+    const recoveredScope = durableScope(202);
+    const corruptedStorageKey = `${CHAT_SCOPE_PREFIX}${encodeURIComponent(corruptedScope.key)}`;
+    const recoveredStorageKey = `${CHAT_SCOPE_PREFIX}${encodeURIComponent(recoveredScope.key)}`;
+
+    window.localStorage.setItem(corruptedStorageKey, '{not-valid-json');
+    window.localStorage.setItem(CHAT_SCOPE_INDEX_KEY, '{not-valid-json');
+
+    const corruptedPersistence = createOfficeScopedLocalStoragePersistence(corruptedScope);
+    await expect(corruptedPersistence.get()).resolves.toBeNull();
+
+    const recoveredPersistence = createOfficeScopedLocalStoragePersistence(recoveredScope);
+    await recoveredPersistence.set({
+      conversationId: 'conv-recovered',
+      createdAt: 202,
+    });
+
+    const rawIndex = window.localStorage.getItem(CHAT_SCOPE_INDEX_KEY);
+    expect(rawIndex).not.toBeNull();
+    const index = JSON.parse(rawIndex ?? '{}') as Record<string, unknown>;
+    expect(index).not.toHaveProperty(corruptedStorageKey);
+    expect(index).toHaveProperty(recoveredStorageKey);
+    await expect(recoveredPersistence.get()).resolves.toEqual({
+      conversationId: 'conv-recovered',
+      createdAt: 202,
+    });
+  });
+
   it('reports write-failed when migration cannot persist the target scope', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const sourceScope = durableScope(1);

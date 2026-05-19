@@ -404,6 +404,31 @@ describe('office sidecar', () => {
     ).toBe(true);
   });
 
+  // TODO(F8): un-skip when upstream gap is closed. See plan doc Stage J F8.
+  it.skip('feeds /diag/log body into /diag/tail (F8 — re-enable after upstream fix)', async () => {
+    const { baseUrl } = await startTestServer();
+    const payload = {
+      event: 'taskpane.fetch.start',
+      data: { requestId: 'req-f8-contract', op: 'sendMessage' },
+    };
+
+    const diagLog = await fetchHttps(`${baseUrl}/diag/log`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Rebel-Diag-Id': 'req-f8-contract',
+      },
+      body: JSON.stringify(payload),
+    });
+    expect(diagLog.status).toBe(204);
+
+    const tail = await fetchHttps(`${baseUrl}/diag/tail`);
+    const tailPayload = (await tail.json()) as { lines: string[]; capturedAt: string };
+    expect(tail.status).toBe(200);
+    expect(tailPayload.lines.some((line) => line.includes(payload.event))).toBe(true);
+    expect(tailPayload.lines.some((line) => line.includes('req-f8-contract'))).toBe(true);
+  });
+
   it('returns 204 from /sidecar/identify for the correct bearer token', async () => {
     const { sidecar, baseUrl } = await startTestServer();
     const response = await fetchHttps(`${baseUrl}/sidecar/identify`, {
