@@ -1,0 +1,10 @@
+{
+  "id": "bundled-replit-ssh",
+  "name": "Replit",
+  "description": "Read and write files on Replit projects over SSH. List directories, check connection, and set up the local SSH key.",
+  "category": "development",
+  "icon": "terminal",
+  "maturity": "beta",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}
