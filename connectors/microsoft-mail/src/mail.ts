@@ -30,7 +30,11 @@ export interface ListEmailsArgs {
   filter?: string;
 }
 
-export async function listEmails(client: Client, args: ListEmailsArgs): Promise<unknown> {
+export async function listEmails(
+  client: Client,
+  args: ListEmailsArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
   const folder = resolveFolder(args.folder ?? 'Inbox');
   const top = Math.min(args.top ?? 25, 100);
 
@@ -47,7 +51,7 @@ export async function listEmails(client: Client, args: ListEmailsArgs): Promise<
 
   endpoint += '?' + queryParams.join('&');
 
-  const response = await client.api(endpoint).get();
+  const response = await client.api(endpoint).options({ signal }).get();
   const emails: EmailMessage[] = response.value ?? [];
 
   const formatted = emails.map((email) => ({
@@ -73,9 +77,14 @@ export interface GetEmailArgs {
   id: string;
 }
 
-export async function getEmail(client: Client, args: GetEmailArgs): Promise<unknown> {
+export async function getEmail(
+  client: Client,
+  args: GetEmailArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
   const email = await client
     .api(`/me/messages/${args.id}`)
+    .options({ signal })
     .select('id,subject,from,toRecipients,ccRecipients,receivedDateTime,body,isRead,hasAttachments,importance')
     .get();
 
@@ -105,6 +114,7 @@ export interface SendEmailArgs {
 export async function sendEmail(
   client: Client,
   args: SendEmailArgs,
+  signal: AbortSignal,
 ): Promise<unknown> {
   const toList = ensureArray(args.to) ?? [];
   const ccList = ensureArray(args.cc);
@@ -124,7 +134,7 @@ export async function sendEmail(
     importance: args.importance ?? 'normal',
   };
 
-  await client.api('/me/sendMail').post({ message });
+  await client.api('/me/sendMail').options({ signal }).post({ message });
 
   return {
     success: true,
@@ -137,13 +147,18 @@ export interface SearchEmailsArgs {
   top?: number;
 }
 
-export async function searchEmails(client: Client, args: SearchEmailsArgs): Promise<unknown> {
+export async function searchEmails(
+  client: Client,
+  args: SearchEmailsArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
   const top = Math.min(args.top ?? 25, 100);
 
   // Note: Microsoft Graph API does not support $orderBy with $search.
   // Search results are automatically sorted by date (newest first).
   const response = await client
     .api('/me/messages')
+    .options({ signal })
     .search(`"${args.query}"`)
     .top(top)
     .select('id,subject,from,receivedDateTime,bodyPreview,isRead')
@@ -173,12 +188,16 @@ export interface ReplyToEmailArgs {
   replyAll?: boolean;
 }
 
-export async function replyToEmail(client: Client, args: ReplyToEmailArgs): Promise<unknown> {
+export async function replyToEmail(
+  client: Client,
+  args: ReplyToEmailArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
   const endpoint = args.replyAll
     ? `/me/messages/${args.id}/replyAll`
     : `/me/messages/${args.id}/reply`;
 
-  await client.api(endpoint).post({
+  await client.api(endpoint).options({ signal }).post({
     comment: args.body,
   });
 
@@ -194,10 +213,14 @@ export interface ForwardEmailArgs {
   comment?: string;
 }
 
-export async function forwardEmail(client: Client, args: ForwardEmailArgs): Promise<unknown> {
+export async function forwardEmail(
+  client: Client,
+  args: ForwardEmailArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
   const toList = ensureArray(args.to) ?? [];
 
-  await client.api(`/me/messages/${args.id}/forward`).post({
+  await client.api(`/me/messages/${args.id}/forward`).options({ signal }).post({
     comment: args.comment ?? '',
     toRecipients: toList.map((email) => ({
       emailAddress: { address: email },
@@ -215,13 +238,17 @@ export interface DeleteEmailArgs {
   permanent?: boolean;
 }
 
-export async function deleteEmail(client: Client, args: DeleteEmailArgs): Promise<unknown> {
+export async function deleteEmail(
+  client: Client,
+  args: DeleteEmailArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
   if (args.permanent) {
-    await client.api(`/me/messages/${args.id}`).delete();
+    await client.api(`/me/messages/${args.id}`).options({ signal }).delete();
     return { success: true, message: 'Email permanently deleted' };
   }
 
-  await client.api(`/me/messages/${args.id}/move`).post({
+  await client.api(`/me/messages/${args.id}/move`).options({ signal }).post({
     destinationId: 'deleteditems',
   });
 
@@ -232,13 +259,17 @@ export interface ListFoldersArgs {
   includeHidden?: boolean;
 }
 
-export async function listFolders(client: Client, args: ListFoldersArgs): Promise<unknown> {
+export async function listFolders(
+  client: Client,
+  args: ListFoldersArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
   let endpoint = '/me/mailFolders';
   if (!args.includeHidden) {
     endpoint += '?$filter=isHidden eq false';
   }
 
-  const response = await client.api(endpoint).get();
+  const response = await client.api(endpoint).options({ signal }).get();
   const folders: MailFolder[] = response.value ?? [];
 
   const formatted = folders.map((folder) => ({
@@ -260,10 +291,14 @@ export interface MoveEmailArgs {
   destinationFolder: string;
 }
 
-export async function moveEmail(client: Client, args: MoveEmailArgs): Promise<unknown> {
+export async function moveEmail(
+  client: Client,
+  args: MoveEmailArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
   const folderId = resolveFolder(args.destinationFolder);
 
-  await client.api(`/me/messages/${args.id}/move`).post({
+  await client.api(`/me/messages/${args.id}/move`).options({ signal }).post({
     destinationId: folderId,
   });
 
@@ -282,6 +317,7 @@ export interface CreateReplyDraftArgs {
 export async function createReplyDraft(
   client: Client,
   args: CreateReplyDraftArgs,
+  signal: AbortSignal,
 ): Promise<unknown> {
   const endpoint = args.replyAll
     ? `/me/messages/${args.id}/createReplyAll`
@@ -297,7 +333,7 @@ export async function createReplyDraft(
     };
   }
 
-  const response = await client.api(endpoint).post(requestBody);
+  const response = await client.api(endpoint).options({ signal }).post(requestBody);
 
   return {
     success: true,
@@ -315,7 +351,11 @@ export interface CreateDraftArgs {
   cc?: string | string[];
 }
 
-export async function createDraft(client: Client, args: CreateDraftArgs): Promise<unknown> {
+export async function createDraft(
+  client: Client,
+  args: CreateDraftArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
   const toList = ensureArray(args.to);
   const ccList = ensureArray(args.cc);
 
@@ -333,7 +373,7 @@ export async function createDraft(client: Client, args: CreateDraftArgs): Promis
     })),
   };
 
-  const response = await client.api('/me/messages').post(draft);
+  const response = await client.api('/me/messages').options({ signal }).post(draft);
 
   return {
     success: true,

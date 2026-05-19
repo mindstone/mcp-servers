@@ -43,15 +43,14 @@ export function extractCallerSignal(extra: unknown): AbortSignal | undefined {
 }
 
 /**
- * Race a promise against an AbortSignal.
+ * Race a promise against an AbortSignal as defence-in-depth.
  *
- * The Microsoft Graph SDK (@microsoft/microsoft-graph-client) does not accept
- * an `AbortSignal` on its fluent request API, so we cannot cancel the underlying
- * `fetch` directly. Instead we race the SDK promise against the composed
- * signal: when it fires (caller cancel or cohort timeout), the tool call
- * returns immediately while the background fetch is left to settle silently.
- * This preserves the host-visible timeout contract at the cost of leaving the
- * upstream socket open until the SDK gives up on its own.
+ * The composed signal is the primary cancellation mechanism: callers thread it
+ * into each Graph request via `GraphRequest.options({ signal })` so the
+ * underlying `fetch` is actually aborted on caller cancel or cohort timeout.
+ * This wrapper guarantees the tool call returns promptly even if some
+ * middleware path drops the signal — in that case the background fetch is
+ * left to settle silently while the host-visible timeout contract is honoured.
  */
 export function runWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise<T>((resolve, reject) => {

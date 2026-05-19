@@ -95,7 +95,7 @@ sign-in, Microsoft 365 tools become available.`,
       },
     },
     withErrorHandling(async (args, extra) => {
-      const result = await callGraph(extra, (c) => listEmails(c, args));
+      const result = await callGraph(extra, (c, signal) => listEmails(c, args, signal));
       return successJson(result);
     }),
   );
@@ -125,7 +125,7 @@ sign-in, Microsoft 365 tools become available.`,
           next_step: 'list_emails',
         });
       }
-      const result = await callGraph(extra, (c) => getEmail(c, { id: args.id! }));
+      const result = await callGraph(extra, (c, signal) => getEmail(c, { id: args.id! }, signal));
       return successJson(result);
     }),
   );
@@ -171,14 +171,18 @@ sign-in, Microsoft 365 tools become available.`,
           next_step: 'send_email',
         });
       }
-      const result = await callGraph(extra, (c) =>
-        sendEmail(c, {
-          to: args.to as string | string[],
-          subject: args.subject as string,
-          body: args.body as string,
-          cc: args.cc as string | string[] | undefined,
-          importance: args.importance as 'low' | 'normal' | 'high' | undefined,
-        }),
+      const result = await callGraph(extra, (c, signal) =>
+        sendEmail(
+          c,
+          {
+            to: args.to as string | string[],
+            subject: args.subject as string,
+            body: args.body as string,
+            cc: args.cc as string | string[] | undefined,
+            importance: args.importance as 'low' | 'normal' | 'high' | undefined,
+          },
+          signal,
+        ),
       );
       return successJson(result);
     }),
@@ -213,8 +217,8 @@ sign-in, Microsoft 365 tools become available.`,
           next_step: 'search_emails',
         });
       }
-      const result = await callGraph(extra, (c) =>
-        searchEmails(c, { query: args.query!, top: args.top }),
+      const result = await callGraph(extra, (c, signal) =>
+        searchEmails(c, { query: args.query!, top: args.top }, signal),
       );
       return successJson(result);
     }),
@@ -250,8 +254,8 @@ sign-in, Microsoft 365 tools become available.`,
           next_step: 'reply_to_email',
         });
       }
-      const result = await callGraph(extra, (c) =>
-        replyToEmail(c, { id: args.id!, body: args.body!, replyAll: args.replyAll }),
+      const result = await callGraph(extra, (c, signal) =>
+        replyToEmail(c, { id: args.id!, body: args.body!, replyAll: args.replyAll }, signal),
       );
       return successJson(result);
     }),
@@ -285,8 +289,12 @@ sign-in, Microsoft 365 tools become available.`,
           next_step: 'forward_email',
         });
       }
-      const result = await callGraph(extra, (c) =>
-        forwardEmail(c, { id: args.id!, to: args.to as string | string[], comment: args.comment }),
+      const result = await callGraph(extra, (c, signal) =>
+        forwardEmail(
+          c,
+          { id: args.id!, to: args.to as string | string[], comment: args.comment },
+          signal,
+        ),
       );
       return successJson(result);
     }),
@@ -323,8 +331,8 @@ sign-in, Microsoft 365 tools become available.`,
           next_step: 'delete_email',
         });
       }
-      const result = await callGraph(extra, (c) =>
-        deleteEmail(c, { id: args.id!, permanent: args.permanent }),
+      const result = await callGraph(extra, (c, signal) =>
+        deleteEmail(c, { id: args.id!, permanent: args.permanent }, signal),
       );
       return successJson(result);
     }),
@@ -351,7 +359,7 @@ sign-in, Microsoft 365 tools become available.`,
       },
     },
     withErrorHandling(async (args, extra) => {
-      const result = await callGraph(extra, (c) => listFolders(c, args));
+      const result = await callGraph(extra, (c, signal) => listFolders(c, args, signal));
       return successJson(result);
     }),
   );
@@ -388,8 +396,8 @@ sign-in, Microsoft 365 tools become available.`,
           next_step: 'list_folders',
         });
       }
-      const result = await callGraph(extra, (c) =>
-        moveEmail(c, { id: args.id!, destinationFolder: args.destinationFolder! }),
+      const result = await callGraph(extra, (c, signal) =>
+        moveEmail(c, { id: args.id!, destinationFolder: args.destinationFolder! }, signal),
       );
       return successJson(result);
     }),
@@ -431,8 +439,8 @@ sign-in, Microsoft 365 tools become available.`,
           next_step: 'list_emails',
         });
       }
-      const result = await callGraph(extra, (c) =>
-        createReplyDraft(c, { id: args.id!, body: args.body, replyAll: args.replyAll }),
+      const result = await callGraph(extra, (c, signal) =>
+        createReplyDraft(c, { id: args.id!, body: args.body, replyAll: args.replyAll }, signal),
       );
       return successJson(result);
     }),
@@ -467,13 +475,17 @@ sign-in, Microsoft 365 tools become available.`,
           next_step: 'create_draft',
         });
       }
-      const result = await callGraph(extra, (c) =>
-        createDraft(c, {
-          to: args.to,
-          subject: args.subject!,
-          body: args.body!,
-          cc: args.cc,
-        }),
+      const result = await callGraph(extra, (c, signal) =>
+        createDraft(
+          c,
+          {
+            to: args.to,
+            subject: args.subject!,
+            body: args.body!,
+            cc: args.cc,
+          },
+          signal,
+        ),
       );
       return successJson(result);
     }),
