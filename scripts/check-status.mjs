@@ -91,14 +91,29 @@ if (existsSync(serverPath)) {
   if (status.version !== server.version) {
     errors.push(`status.version (${status.version}) != server.json version (${server.version})`);
   }
-  const serverEnvNames = (server.packages?.[0]?.environmentVariables ?? [])
+  // Convention: STATUS.json's `auth.envVars` lists every env var that
+  // participates in authentication (secret + non-secret), so an OAuth
+  // connector legitimately lists its CLIENT_ID alongside CLIENT_SECRET.
+  // We enforce two separate properties:
+  //   1. Every SECRET env var declared in server.json (isSecret or name
+  //      matches KEY|TOKEN|SECRET) MUST appear in status.auth.envVars.
+  //      Otherwise STATUS.json silently under-reports the auth surface.
+  //   2. Every name in status.auth.envVars MUST appear in server.json's
+  //      full environmentVariables list. Otherwise STATUS.json drifts
+  //      from the canonical server manifest.
+  const serverEnvAll = (server.packages?.[0]?.environmentVariables ?? []).map((e) => e.name);
+  const serverEnvSecrets = (server.packages?.[0]?.environmentVariables ?? [])
     .filter((e) => e.isSecret || /KEY|TOKEN|SECRET/.test(e.name))
     .map((e) => e.name);
   const statusEnvNames = status.auth?.envVars ?? [];
-  const missing = serverEnvNames.filter((n) => !statusEnvNames.includes(n));
-  const extra = statusEnvNames.filter((n) => !serverEnvNames.includes(n));
-  if (missing.length) errors.push(`status.auth.envVars missing: ${missing.join(', ')}`);
-  if (extra.length) errors.push(`status.auth.envVars has extras not in server.json: ${extra.join(', ')}`);
+  const missing = serverEnvSecrets.filter((n) => !statusEnvNames.includes(n));
+  const extra = statusEnvNames.filter((n) => !serverEnvAll.includes(n));
+  if (missing.length) {
+    errors.push(`status.auth.envVars missing secret env vars from server.json: ${missing.join(', ')}`);
+  }
+  if (extra.length) {
+    errors.push(`status.auth.envVars has names not declared in server.json: ${extra.join(', ')}`);
+  }
 }
 
 const srcDir = join(dir, 'src');
