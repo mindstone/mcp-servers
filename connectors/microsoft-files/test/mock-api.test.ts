@@ -168,6 +168,15 @@ describe('microsoft-files mock-API integration', () => {
     expect(json.next_step).toBe('upload_file');
   });
 
+  it('upload_file rejects empty content for bundled parity', async () => {
+    const result = await client.callTool('upload_file', { path: '/x.txt', content: '' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Missing required parameters');
+    expect(json.next_step).toBe('upload_file');
+  });
+
   // -------------------------------------------------------------------------
   // create_folder
   // -------------------------------------------------------------------------

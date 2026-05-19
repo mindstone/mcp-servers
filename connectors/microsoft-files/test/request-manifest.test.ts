@@ -71,6 +71,12 @@ const MANIFEST: ManifestRow[] = [
     args: { sourcePath: '01ABC', destinationPath: '01DEST' },
   },
   {
+    tool: 'move_file',
+    method: 'PATCH',
+    pathname: '/v1.0/me/drive/items/:id',
+    args: { sourcePath: '01SRC', destinationPath: '01DEST' },
+  },
+  {
     tool: 'get_recent',
     method: 'GET',
     pathname: '/v1.0/me/drive/recent',
@@ -87,6 +93,18 @@ const MANIFEST: ManifestRow[] = [
     method: 'POST',
     pathname: '/v1.0/me/drive/items/:id/createLink',
     args: { path: '01ABC123xyz', type: 'view' },
+  },
+  {
+    tool: 'read_text_file',
+    method: 'GET',
+    pathname: '/v1.0/me/drive/items/:id',
+    args: { path: '01ABC123xyz' },
+  },
+  {
+    tool: 'read_text_file',
+    method: 'GET',
+    pathname: '/v1.0/me/drive/items/:id/content',
+    args: { path: '01ABC123xyz' },
   },
 ];
 

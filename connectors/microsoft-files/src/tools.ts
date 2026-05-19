@@ -168,7 +168,7 @@ export function registerFilesTools(server: McpServer): void {
       },
     },
     withErrorHandling(async (args, extra) => {
-      if (!args.path || args.content == null) {
+      if (!args.path || !args.content) {
         return errorResponse({
           error:
             'Missing required parameters: "path" (destination path) and "content" (file content). Example: { "path": "/Documents/notes.txt", "content": "File content here..." }',

@@ -165,6 +165,19 @@ function isRefreshDisabledError(err: unknown): boolean {
 }
 
 /**
+ * TokenProvider throws explicit reconnect guidance strings for some expiry
+ * branches (`no refresh token`, `refresh failed`) that may not carry Graph
+ * status/code metadata. Map those messages to token_expired so Files still
+ * emits the host-orchestrated `auth_required` envelope.
+ */
+function detectTokenProviderAuthReason(err: unknown): AuthRequiredReason | null {
+  if (!(err instanceof Error)) return null;
+  const msg = err.message.toLowerCase();
+  if (msg.includes('microsoft token expired')) return 'token_expired';
+  return null;
+}
+
+/**
  * Map a Microsoft Graph error / shared TokenProvider error into the right
  * tool response. Returns `auth_required` for token-related failures, the
  * generic recovery-guidance envelope otherwise.
@@ -183,7 +196,7 @@ export function buildErrorResponse(err: unknown): CallToolResult {
       isError: true,
     };
   }
-  const reason = detectAuthRequiredReason(err);
+  const reason = detectAuthRequiredReason(err) ?? detectTokenProviderAuthReason(err);
   if (reason) {
     return {
       content: [
