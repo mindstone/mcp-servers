@@ -1,0 +1,5 @@
+Command: node dist/index.js --version
+Exit: 0
+Elapsed_ms: 442
+Output:
+0.1.0

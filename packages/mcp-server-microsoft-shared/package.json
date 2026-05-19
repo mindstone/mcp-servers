@@ -1,0 +1,54 @@
+{
+  "name": "@mindstone/mcp-server-microsoft-shared",
+  "version": "0.1.0",
+  "description": "Shared Microsoft Graph client, token persistence, logging, and types for @mindstone/mcp-server-microsoft-* connectors",
+  "license": "FSL-1.1-MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mindstone/mcp-servers.git",
+    "directory": "packages/mcp-server-microsoft-shared"
+  },
+  "homepage": "https://github.com/mindstone/mcp-servers/tree/main/packages/mcp-server-microsoft-shared",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "shx rm -rf dist && tsc && npm run security:internal-refs",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build && npm test",
+    "watch": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "security:internal-refs": "node scripts/check-internal-refs.mjs"
+  },
+  "dependencies": {
+    "@microsoft/microsoft-graph-client": "^3.0.7",
+    "isomorphic-fetch": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@vitest/coverage-v8": "^4.1.3",
+    "shx": "^0.3.4",
+    "typescript": "^5.8.2",
+    "vitest": "^4.1.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "npm@11.10.0"
+}

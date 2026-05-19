@@ -1,6 +1,7 @@
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
+import { sanitizeControlledFilename } from './safe-filename.js';
 
 export class WorkspaceManager {
   private basePath: string;
@@ -57,7 +58,7 @@ export class WorkspaceManager {
    */
   async getDownloadPath(email: string, filename: string): Promise<string> {
     await this.initializeAccountDirectories(email);
-    return path.join(this.getDownloadsPath(email), filename);
+    return path.join(this.getDownloadsPath(email), sanitizeControlledFilename(filename));
   }
 
   /**
@@ -65,7 +66,7 @@ export class WorkspaceManager {
    */
   async getUploadPath(email: string, filename: string): Promise<string> {
     await this.initializeAccountDirectories(email);
-    return path.join(this.getUploadsPath(email), filename);
+    return path.join(this.getUploadsPath(email), sanitizeControlledFilename(filename));
   }
 
   /**

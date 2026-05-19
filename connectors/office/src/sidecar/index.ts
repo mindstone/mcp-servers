@@ -202,6 +202,34 @@ function extractBearerToken(req: http.IncomingMessage): string | null {
   return token.length > 0 ? token : null;
 }
 
+/**
+ * DNS-rebinding guard. The sidecar binds to 127.0.0.1 and serves a taskpane
+ * page that embeds the API token, so a browser tricked into hitting
+ * https://attacker.example/<port>/taskpane.html via DNS rebinding could
+ * otherwise steal the token. Office's manifest only ever uses `localhost:<port>`
+ * (see manifest.ts) and curl-style smoke checks use `127.0.0.1:<port>`.
+ * Anything else is hostile.
+ */
+function isLoopbackHost(req: http.IncomingMessage, boundPort: number): boolean {
+  const hostHeader = req.headers.host;
+  if (typeof hostHeader !== 'string' || hostHeader.length === 0) {
+    return false;
+  }
+
+  // Strip optional bracketed IPv6 form, then split host:port from the right.
+  const lastColon = hostHeader.lastIndexOf(':');
+  if (lastColon < 0) {
+    return false;
+  }
+  const rawHost = hostHeader.slice(0, lastColon).replace(/^\[|\]$/g, '').toLowerCase();
+  const rawPort = hostHeader.slice(lastColon + 1);
+  if (rawPort !== String(boundPort)) {
+    return false;
+  }
+
+  return rawHost === '127.0.0.1' || rawHost === 'localhost' || rawHost === '::1';
+}
+
 function parseCommandPath(pathname: string): { app: OfficeApp; action: string } | null {
   const [appRaw, actionRaw, ...rest] = pathname.split('/').filter(Boolean);
   if (rest.length > 0 || !appRaw || !actionRaw) {
@@ -290,6 +318,9 @@ export async function startOfficeSidecar(options: StartSidecarOptions = {}): Pro
       }
 
       if (method === 'GET' && requestUrl.pathname === '/taskpane.html') {
+        if (!isLoopbackHost(req, boundPort)) {
+          throw createUnauthorizedError();
+        }
         if (addinDir) {
           sendTaskpaneHtml(res, path.join(addinDir, 'taskpane.html'), boundPort, token);
         } else {
@@ -300,6 +331,9 @@ export async function startOfficeSidecar(options: StartSidecarOptions = {}): Pro
       }
 
       if (method === 'GET' && requestUrl.pathname === '/taskpane.js') {
+        if (!isLoopbackHost(req, boundPort)) {
+          throw createUnauthorizedError();
+        }
         if (addinDir) {
           sendFile(res, path.join(addinDir, 'taskpane.js'), CONTENT_TYPES['.js']!);
         } else {
@@ -310,6 +344,9 @@ export async function startOfficeSidecar(options: StartSidecarOptions = {}): Pro
       }
 
       if (method === 'GET' && requestUrl.pathname.startsWith('/assets/')) {
+        if (!isLoopbackHost(req, boundPort)) {
+          throw createUnauthorizedError();
+        }
         if (addinDir) {
           const safeName = path.basename(requestUrl.pathname);
           const ext = path.extname(safeName);

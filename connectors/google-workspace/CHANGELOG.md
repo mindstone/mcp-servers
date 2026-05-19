@@ -18,6 +18,9 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ### Known limitations
 - v0.1.0 keeps the existing host-catalog `_meta.com.mindstone.rebel` manifest bridge for round-trip identity.
 
+### Removed
+- Dead unused legacy `src/utils/token.ts` and `src/utils/account.ts` modules. Use `modules/accounts/token.ts` and `modules/accounts/manager.ts` instead.
+
 ## [0.1.0] - 2026-05-19
 
 ### Added
@@ -28,3 +31,6 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ### Security
 - Removed the bundled callback server so OAuth URLs and callback handling stay with the MCP host.
 - Added atomic credential writes, token-refresh disable gating, request timeouts, and internal-reference checks.
+- Sanitized attachment filenames to prevent path traversal via crafted `upload_workspace_attachment` filename argument.
+- Extended `<untrusted-content>` envelope coverage to Contacts, Calendar, Comments, Forms, Tasks, and JSON-return paths.
+- Completed Drive recovery-guidance contract coverage.

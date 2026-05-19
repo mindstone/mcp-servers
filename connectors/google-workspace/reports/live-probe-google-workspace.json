@@ -1,0 +1,237 @@
+{
+  "generatedAt": "2026-05-19T12:18:37.871Z",
+  "initialize": {
+    "ok": true,
+    "serverVersion": {
+      "name": "Google Workspace MCP Server",
+      "version": "0.1.0"
+    },
+    "serverCapabilities": {
+      "resources": {},
+      "tools": {
+        "list": true,
+        "call": true
+      }
+    }
+  },
+  "toolList": {
+    "ok": true,
+    "expected": 104,
+    "count": 104,
+    "sampledAnnotations": [
+      {
+        "tool": "send_workspace_email",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": true
+        }
+      },
+      {
+        "tool": "list_drive_files",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": true
+        }
+      },
+      {
+        "tool": "delete_workspace_calendar_event",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": true
+        }
+      },
+      {
+        "tool": "list_workspace_accounts",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        }
+      },
+      {
+        "tool": "create_task",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": true
+        }
+      }
+    ]
+  },
+  "readOnly": [
+    {
+      "tool": "list_workspace_accounts",
+      "service": "local",
+      "ok": true,
+      "latencyMs": 2
+    },
+    {
+      "tool": "search_workspace_emails",
+      "service": "gmail",
+      "ok": true,
+      "latencyMs": 163
+    },
+    {
+      "tool": "list_workspace_calendar_events",
+      "service": "calendar",
+      "ok": true,
+      "latencyMs": 392
+    },
+    {
+      "tool": "list_drive_files",
+      "service": "drive",
+      "ok": true,
+      "latencyMs": 547
+    },
+    {
+      "tool": "list_drive_files",
+      "service": "drive",
+      "ok": true,
+      "latencyMs": 965
+    },
+    {
+      "tool": "list_drive_files",
+      "service": "drive",
+      "ok": true,
+      "latencyMs": 588
+    },
+    {
+      "tool": "read_workspace_document",
+      "service": "docs",
+      "ok": true,
+      "latencyMs": 1553
+    },
+    {
+      "tool": "list_drive_files",
+      "service": "drive",
+      "ok": true,
+      "latencyMs": 646
+    },
+    {
+      "tool": "read_workspace_spreadsheet",
+      "service": "sheets",
+      "ok": true,
+      "latencyMs": 1330
+    },
+    {
+      "tool": "list_drive_files",
+      "service": "drive",
+      "ok": true,
+      "latencyMs": 652
+    },
+    {
+      "tool": "read_workspace_presentation",
+      "service": "slides",
+      "ok": true,
+      "latencyMs": 1156
+    },
+    {
+      "tool": "get_workspace_contacts",
+      "service": "contacts",
+      "ok": true,
+      "latencyMs": 152
+    },
+    {
+      "tool": "list_tasks",
+      "service": "tasks",
+      "ok": true,
+      "latencyMs": 1,
+      "error": "{\"ok\":false,\"action_required\":\"MCP error -32603: Failed to list tasks: MCP error -32603: Google Tasks access not granted\",\"next_step\":\"Review the error, adjust the request if needed, and retry.\"}",
+      "skipped": true,
+      "skipReason": "{\"ok\":false,\"action_required\":\"MCP error -32603: Failed to list tasks: MCP error -32603: Google Tasks access not granted\",\"next_step\":\"Review the error, adjust the request if needed, and retry.\"}"
+    },
+    {
+      "tool": "list_forms",
+      "service": "forms",
+      "ok": true,
+      "latencyMs": 528
+    },
+    {
+      "tool": "list_form_responses",
+      "service": "forms",
+      "ok": true,
+      "skipped": true,
+      "skipReason": "No Google Forms found for this account",
+      "latencyMs": 0
+    },
+    {
+      "tool": "list_workspace_labels",
+      "service": "gmail",
+      "ok": true,
+      "latencyMs": 116
+    },
+    {
+      "tool": "list_workspace_calendars",
+      "service": "calendar",
+      "ok": true,
+      "latencyMs": 316
+    },
+    {
+      "tool": "list_workspace_calendar_events",
+      "service": "calendar",
+      "ok": true,
+      "latencyMs": 496
+    },
+    {
+      "tool": "list_workspace_calendar_events",
+      "service": "calendar",
+      "ok": true,
+      "latencyMs": 2,
+      "error": "{\"status\":\"auth_required\",\"user_action\":{\"id\":\"google.connect_account\"},\"agent_action\":{\"instruction\":\"Connect Google Workspace to continue. The user will be redirected to Google's sign-in.\"},\"setupToolName\":\"authenticate_workspace_account\"}",
+      "skipped": true,
+      "skipReason": "{\"status\":\"auth_required\",\"user_action\":{\"id\":\"google.connect_account\"},\"agent_action\":{\"instruction\":\"Connect Google Workspace to continue. The user will be redirected to Google's sign-in.\"},\"setupToolName\":\"authenticate_workspace_account\"}"
+    }
+  ],
+  "writes": [
+    {
+      "tool": "manage_workspace_label_assignment",
+      "service": "gmail",
+      "ok": true,
+      "skipped": true,
+      "skipReason": "Scratch Gmail label not found",
+      "latencyMs": 0
+    },
+    {
+      "tool": "create_workspace_calendar_event/delete_workspace_calendar_event",
+      "service": "calendar",
+      "ok": true,
+      "skipped": true,
+      "skipReason": "Scratch calendar not found",
+      "latencyMs": 0
+    }
+  ],
+  "scratchResources": {
+    "gmailLabel": {
+      "found": false
+    },
+    "calendar": {
+      "found": false
+    },
+    "driveFolder": {
+      "found": false
+    }
+  },
+  "oauthRefresh": {
+    "enabledRefresh": {
+      "ok": true,
+      "expiryAdvanced": true,
+      "modePreserved": true
+    },
+    "disableRefresh": {
+      "ok": true,
+      "authRequired": true,
+      "tokenFileUnchanged": true
+    }
+  },
+  "latency": {
+    "thresholdMs": 45000,
+    "p95Ms": 1553,
+    "ok": true
+  },
+  "finalExitStatus": "pass",
+  "errors": [],
+  "packageTarball": "mindstone-mcp-server-google-workspace-0.1.0.tgz"
+}

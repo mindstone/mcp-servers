@@ -1,0 +1,12 @@
+Per-tool untrusted-content coverage
+Generated: 2026-05-19T12:48:41Z
+gmail: 8
+drive: 13
+docs: 5
+sheets: 4
+slides: 7
+contacts: 4
+calendar: 8
+comments: 5
+forms: 5
+tasks: 6

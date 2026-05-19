@@ -1,8 +1,9 @@
 import { getAccountManager } from '../modules/accounts/index.js';
 import { getCommentsService } from '../modules/comments/index.js';
-import { resolveEmail } from '../utils/account.js';
+import { resolveEmail } from '../modules/accounts/index.js';
 import { CommentInfo, ReplyInfo } from '../modules/comments/types.js';
 import { McpToolResponse } from './types.js';
+import { wrapUntrustedContent } from '../utils/untrusted-content.js';
 import {
   readAliasedBoolean,
   readAliasedNumber,
@@ -58,7 +59,7 @@ interface DeleteCommentArgs {
   commentId?: string;
 }
 
-function formatCommentAsText(comment: CommentInfo): string {
+export function formatCommentAsText(comment: CommentInfo): string {
   const lines: string[] = [];
   const status = comment.resolved ? '[RESOLVED]' : '[OPEN]';
   lines.push(`${status} Comment ID: ${comment.commentId}`);
@@ -75,7 +76,7 @@ function formatCommentAsText(comment: CommentInfo): string {
       lines.push(`    - ${reply.author.displayName}: ${reply.content}${action}`);
     }
   }
-  return lines.join('\n');
+  return wrapUntrustedContent(lines.join('\n'), `google-workspace:comments:comment/${comment.commentId}`);
 }
 
 export async function handleListComments(args: ListCommentsArgs): Promise<McpToolResponse | string | object> {
@@ -146,7 +147,10 @@ export async function handleCreateComment(args: CreateCommentArgs): Promise<McpT
     }
 
     const comment = result.data as CommentInfo;
-    return `Comment created successfully.\nComment ID: ${comment.commentId}\nContent: ${comment.content}\nAuthor: ${comment.author.displayName}`;
+    return wrapUntrustedContent(
+      `Comment created successfully.\nComment ID: ${comment.commentId}\nContent: ${comment.content}\nAuthor: ${comment.author.displayName}`,
+      `google-workspace:comments:doc/${fileId}`
+    );
   });
 }
 
@@ -171,7 +175,10 @@ export async function handleResolveComment(args: ResolveCommentArgs): Promise<Mc
     }
 
     const reply = result.data as ReplyInfo;
-    return `Comment ${args.action}d successfully.\nAction: ${reply.action}\nBy: ${reply.author.displayName}`;
+    return wrapUntrustedContent(
+      `Comment ${args.action}d successfully.\nAction: ${reply.action}\nBy: ${reply.author.displayName}`,
+      `google-workspace:comments:comment/${commentId}`
+    );
   });
 }
 
@@ -196,7 +203,10 @@ export async function handleReplyToComment(args: ReplyToCommentArgs): Promise<Mc
     }
 
     const reply = result.data as ReplyInfo;
-    return `Reply created successfully.\nReply ID: ${reply.replyId}\nContent: ${reply.content}\nAuthor: ${reply.author.displayName}`;
+    return wrapUntrustedContent(
+      `Reply created successfully.\nReply ID: ${reply.replyId}\nContent: ${reply.content}\nAuthor: ${reply.author.displayName}`,
+      `google-workspace:comments:comment/${commentId}`
+    );
   });
 }
 

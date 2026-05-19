@@ -34,6 +34,8 @@
     "test:coverage": "vitest run --coverage",
     "tools:inventory": "node scripts/generate-tools-inventory.mjs",
     "tools:annotations": "node scripts/check-tool-annotations.mjs",
+    "request:manifest": "node scripts/generate-request-manifest.mjs",
+    "request:manifest:check": "node scripts/check-request-manifest.mjs",
     "security:internal-refs": "node scripts/check-internal-refs.mjs"
   },
   "dependencies": {

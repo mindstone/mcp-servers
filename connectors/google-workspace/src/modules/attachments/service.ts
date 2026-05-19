@@ -11,6 +11,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { v4 as uuidv4 } from 'uuid';
+import { sanitizeControlledFilename } from '../../utils/safe-filename.js';
 
 // Determine default attachment path based on environment
 function getDefaultAttachmentPath(): string {
@@ -136,11 +137,22 @@ export class AttachmentService {
       // Generate unique ID and create file path
       const id = uuidv4();
       const folderPath = path.join(this.config.basePath!, parentFolder);
-      const filePath = path.join(folderPath, `${id}_${source.metadata.name}`);
+      const safeName = sanitizeControlledFilename(source.metadata.name, 'attachment filename');
+      const folderRealpath = await fs.realpath(folderPath);
+      const filePath = path.join(folderPath, `${id}_${safeName}`);
+      const finalDirectoryRealpath = await fs.realpath(path.dirname(filePath));
+      if (!isPathInsideDirectory(finalDirectoryRealpath, folderRealpath)) {
+        throw new Error('Invalid attachment filename: resolved outside attachment folder');
+      }
 
       // Write file content
       const content = Buffer.from(source.content, 'base64');
-      await fs.writeFile(filePath, content);
+      await fs.writeFile(filePath, content, { flag: 'wx' });
+
+      const writtenFileRealpath = await fs.realpath(filePath);
+      if (!writtenFileRealpath.startsWith(`${folderRealpath}${path.sep}`)) {
+        throw new Error('Invalid attachment filename: written outside attachment folder');
+      }
 
       // Get actual file size
       const stats = await fs.stat(filePath);
@@ -149,7 +161,7 @@ export class AttachmentService {
         success: true,
         attachment: {
           id,
-          name: source.metadata.name,
+          name: safeName,
           mimeType: source.metadata.mimeType,
           size: stats.size,
           path: filePath
@@ -302,34 +314,36 @@ export class AttachmentService {
         };
       }
 
-      // Sanitize filename to prevent path traversal
-      if (filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
+      let safeFilename: string;
+      try {
+        safeFilename = sanitizeControlledFilename(filename, 'attachment filename');
+      } catch {
         return { success: false, error: 'Invalid filename' };
       }
 
       // Case-insensitive match for consistency with Gmail API behavior
-      const filenameLower = filename.toLowerCase();
+      const filenameLower = safeFilename.toLowerCase();
       const matchingFile = files.find(f => f.toLowerCase().endsWith(`_${filenameLower}`));
 
       if (!matchingFile) {
         return {
           success: false,
-          error: `Attachment "${filename}" not found in local storage`
+          error: `Attachment "${safeFilename}" not found in local storage`
         };
       }
 
       const filePath = path.join(folderPath, matchingFile);
       const stats = await fs.stat(filePath);
       const extractedId = matchingFile.substring(0, 36); // UUID is 36 chars
-      const mimeType = path.extname(filename) ?
-        `application/${path.extname(filename).substring(1)}` :
+      const mimeType = path.extname(safeFilename) ?
+        `application/${path.extname(safeFilename).substring(1)}` :
         'application/octet-stream';
 
       return {
         success: true,
         attachment: {
           id: extractedId,
-          name: filename,
+          name: safeFilename,
           mimeType,
           size: stats.size,
           path: filePath
@@ -358,6 +372,12 @@ export class AttachmentService {
 
     try {
       const folderPath = path.join(this.config.basePath!, folder);
+      let safeFilename: string;
+      try {
+        safeFilename = sanitizeControlledFilename(filename, 'attachment filename');
+      } catch {
+        return { success: false, error: 'Invalid filename' };
+      }
       
       // List files in the folder
       let files: string[];
@@ -371,12 +391,12 @@ export class AttachmentService {
       }
 
       // Find file matching pattern: *_${filename}
-      const matchingFile = files.find(f => f.endsWith(`_${filename}`));
+      const matchingFile = files.find(f => f.endsWith(`_${safeFilename}`));
       
       if (!matchingFile) {
         return {
           success: false,
-          error: `Attachment "${filename}" not found in local storage`
+          error: `Attachment "${safeFilename}" not found in local storage`
         };
       }
 
@@ -385,8 +405,8 @@ export class AttachmentService {
       // Get file stats before deletion
       const stats = await fs.stat(filePath);
       const extractedId = matchingFile.substring(0, 36); // UUID is 36 chars
-      const mimeType = path.extname(filename) ? 
-        `application/${path.extname(filename).substring(1)}` : 
+      const mimeType = path.extname(safeFilename) ? 
+        `application/${path.extname(safeFilename).substring(1)}` : 
         'application/octet-stream';
 
       // Delete the file
@@ -396,7 +416,7 @@ export class AttachmentService {
         success: true,
         attachment: {
           id: extractedId,
-          name: filename,
+          name: safeFilename,
           mimeType,
           size: stats.size,
           path: filePath

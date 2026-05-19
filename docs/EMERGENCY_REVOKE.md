@@ -73,7 +73,7 @@ When a published version exposes a credential, rotate before deprecating:
 
 | Credential | How to rotate |
 |---|---|
-| npm `NPM_TOKEN` (in GitHub secrets) | Revoke at https://www.npmjs.com/settings/<user>/tokens, generate a new automation-type token, update `NPM_TOKEN` secret in https://github.com/mindstone/mcp-servers/settings/secrets/actions |
+| npm publisher account | Revoke any active automation tokens at https://www.npmjs.com/settings/<user>/tokens. Manual publishes (see `docs/PUBLISH_APPROVAL_PROCESS.md`) use WebAuthn 2FA rather than a long-lived `NPM_TOKEN`; if a stale `NPM_TOKEN` exists in repo secrets, revoke it both on npm and on GitHub (`gh secret delete NPM_TOKEN --repo mindstone/mcp-servers`) — manual-publish mode does not consume it. |
 | Connector OAuth client secret (e.g. Slack `clientSecret`) | Rotate at the provider's dev console (Slack: api.slack.com/apps/<id>/general → Regenerate). Update `EMBEDDED_CREDENTIALS` in the host repo and ship a host release. **All issued bot tokens remain valid** — the secret is used only for new OAuth flows. |
 | Slack signing secret (webhook adapter) | Rotate at api.slack.com/apps/<id>/general. Update `SLACK_SIGNING_SECRET` in cloud-service env and redeploy. **All in-flight webhook deliveries from before rotation will fail signature verification** — accept this as the cost of rotation. |
 | User bot tokens (`xoxb-...` / `xoxp-...`) | These are not embedded in packages. Rotation happens automatically via refresh-token rotation on next API call (or user re-auth if rotation isn't enabled). No package-side action required. |
@@ -94,7 +94,7 @@ After a deprecation lands:
 | hubspot | TBD | TBD |
 | (others) | See connector-specific README | |
 
-The named maintainer for a connector is the human who approves a publish, holds the 2FA recovery codes for the npm `NPM_TOKEN`, and is paged on a security incident. Maintainership is recorded in the publish-approval GitHub issue at the time of each release.
+The named maintainer for a connector is the human who approves a publish, holds the WebAuthn 2FA recovery codes for the npm publisher account, and is paged on a security incident. Maintainership is recorded in the publish-approval GitHub issue at the time of each release.
 
 ## References
 

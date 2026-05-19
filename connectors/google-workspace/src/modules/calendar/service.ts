@@ -319,7 +319,7 @@ export class CalendarService {
    * Retrieve calendar events with optional filtering.
    * Automatically paginates to get all events in the time range (up to maxResults).
    */
-  async getEvents({ email, query, maxResults = 10, timeMin, timeMax, calendarId }: GetEventsParams): Promise<EventResponse[]> {
+  async getEvents({ email, query, maxResults = 10, timeMin, timeMax, pageToken: initialPageToken, calendarId }: GetEventsParams): Promise<EventResponse[]> {
     const calendar = await this.getCalendarClient(email);
     const targetCalendarId = calendarId || 'primary';
 
@@ -360,7 +360,7 @@ export class CalendarService {
       try {
         // Paginate to get all events up to maxResults
         const allEvents: CalendarEvent[] = [];
-        let pageToken: string | undefined;
+        let pageToken: string | undefined = initialPageToken;
 
         do {
           const { data } = await calendar.events.list({
