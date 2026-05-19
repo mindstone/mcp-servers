@@ -5,6 +5,7 @@ import {
   type GraphClientWithRetry,
   type TokenProvider,
 } from '@mindstone/mcp-server-microsoft-shared';
+import { abortableSignal, extractCallerSignal, runWithSignal } from './utils.js';
 
 const log = createLogger('microsoft-mail-mcp');
 
@@ -61,4 +62,20 @@ export async function withGraphRetry<T>(fn: (client: Client) => Promise<T>): Pro
     }
     throw err;
   }
+}
+
+/**
+ * Run a Graph operation under the cohort timeout + caller abort signal.
+ *
+ * Composes the per-call signal from `extra.signal` (when the MCP host
+ * cancelled the request) with `REQUEST_TIMEOUT_MS`, then races the SDK
+ * promise against it. See `runWithSignal` in utils.ts for the SDK-cancellation
+ * caveat.
+ */
+export async function callGraph<T>(
+  extra: unknown,
+  fn: (client: Client) => Promise<T>,
+): Promise<T> {
+  const signal = abortableSignal(extractCallerSignal(extra));
+  return runWithSignal(withGraphRetry(fn), signal);
 }

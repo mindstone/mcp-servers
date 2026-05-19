@@ -37,8 +37,8 @@ describe('microsoft-mail mock-API integration', () => {
   it('list_emails returns the formatted email list and hits the inbox endpoint', async () => {
     const result = await client.callTool('list_emails', { top: 5 });
     expect(result.isError).not.toBe(true);
-    const json = result.json as { ok: boolean; count: number; folder: string; emails: unknown[] };
-    expect(json.ok).toBe(true);
+    const json = result.json as { ok?: unknown; count: number; folder: string; emails: unknown[] };
+    expect(json.ok).toBeUndefined();
     expect(json.folder).toBe('inbox');
     expect(json.count).toBe(2);
     const listCall = state.requests.find((r) =>
@@ -56,8 +56,9 @@ describe('microsoft-mail mock-API integration', () => {
 
   it('get_email returns email body content', async () => {
     const result = await client.callTool('get_email', { id: 'AAMkAGI2' });
-    const json = result.json as { ok: boolean; body: string };
-    expect(json.ok).toBe(true);
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; body: string };
+    expect(json.ok).toBeUndefined();
     expect(json.body).toContain('Hi');
     const getCall = state.requests.find((r) => r.pathname.includes('/me/messages/AAMkAGI2'));
     expect(getCall).toBeDefined();
@@ -65,20 +66,42 @@ describe('microsoft-mail mock-API integration', () => {
 
   it('get_email returns an error envelope when id is missing', async () => {
     const result = await client.callTool('get_email', {});
-    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(result.isError).toBe(true);
+    const json = result.json as {
+      ok: boolean;
+      error: string;
+      action_required: string;
+      next_step: string;
+    };
     expect(json.ok).toBe(false);
     expect(json.error).toContain('Missing required parameter');
+    expect(json.action_required).toMatch(/message ID/);
     expect(json.next_step).toBe('list_emails');
   });
 
   it('search_emails uses $search with the supplied query', async () => {
     const result = await client.callTool('search_emails', { query: 'project update', top: 10 });
-    const json = result.json as { ok: boolean; query: string; count: number };
-    expect(json.ok).toBe(true);
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; query: string; count: number };
+    expect(json.ok).toBeUndefined();
     expect(json.query).toBe('project update');
     const call = state.requests.find((r) => /\$search=/.test(r.search));
     expect(call).toBeDefined();
     expect(decodeURIComponent(call!.search)).toContain('project update');
+  });
+
+  it('search_emails surfaces friendly guidance when query is missing', async () => {
+    const result = await client.callTool('search_emails', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as {
+      ok: boolean;
+      error: string;
+      action_required: string;
+      next_step: string;
+    };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Missing required parameter');
+    expect(json.next_step).toBe('search_emails');
   });
 
   it('send_email posts to /me/sendMail with the right recipient body', async () => {
@@ -87,8 +110,9 @@ describe('microsoft-mail mock-API integration', () => {
       subject: 'Hi',
       body: 'Hello there',
     });
-    const json = result.json as { ok: boolean; message: string };
-    expect(json.ok).toBe(true);
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; message: string };
+    expect(json.ok).toBeUndefined();
     expect(json.message).toContain('alice@example.com');
     const call = state.requests.find((r) => r.pathname.endsWith('/me/sendMail'));
     expect(call?.method).toBe('POST');
@@ -120,9 +144,48 @@ describe('microsoft-mail mock-API integration', () => {
       subject: '',
       body: 'x',
     });
-    const json = result.json as { ok: boolean; error: string };
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
     expect(json.ok).toBe(false);
     expect(json.error).toContain('Missing required parameters');
+    expect(json.next_step).toBe('send_email');
+  });
+
+  it('send_email rejects "recipient"/"recipients" aliases with explicit guidance', async () => {
+    const recipientResult = await client.callTool('send_email', {
+      recipient: 'alice@example.com',
+      subject: 'Hi',
+      body: 'Hello',
+    });
+    expect(recipientResult.isError).toBe(true);
+    const recipientJson = recipientResult.json as { ok: boolean; error: string; next_step: string };
+    expect(recipientJson.ok).toBe(false);
+    expect(recipientJson.error).toContain('"to" instead of "recipient"/"recipients"');
+    expect(recipientJson.next_step).toBe('send_email');
+
+    const recipientsResult = await client.callTool('send_email', {
+      recipients: ['alice@example.com'],
+      subject: 'Hi',
+      body: 'Hello',
+    });
+    expect(recipientsResult.isError).toBe(true);
+    const recipientsJson = recipientsResult.json as { error: string };
+    expect(recipientsJson.error).toContain('"to" instead of "recipient"/"recipients"');
+  });
+
+  it('send_email rejects "message"/"content"/"text" aliases with explicit guidance', async () => {
+    for (const alias of ['message', 'content', 'text']) {
+      const result = await client.callTool('send_email', {
+        to: 'alice@example.com',
+        subject: 'Hi',
+        [alias]: 'Hello there',
+      });
+      expect(result.isError, `${alias} alias should be rejected`).toBe(true);
+      const json = result.json as { ok: boolean; error: string; next_step: string };
+      expect(json.ok).toBe(false);
+      expect(json.error).toContain('"body" instead of "message"/"content"/"text"');
+      expect(json.next_step).toBe('send_email');
+    }
   });
 
   it('create_draft posts to /me/messages with HTML detection', async () => {
@@ -130,8 +193,9 @@ describe('microsoft-mail mock-API integration', () => {
       subject: 'Draft',
       body: '<p>Draft content</p>',
     });
-    const json = result.json as { ok: boolean; draftId: string };
-    expect(json.ok).toBe(true);
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; draftId: string };
+    expect(json.ok).toBeUndefined();
     expect(json.draftId).toBe('draft-1');
     const call = state.requests.find(
       (r) => r.method === 'POST' && r.pathname.endsWith('/me/messages'),
@@ -144,8 +208,9 @@ describe('microsoft-mail mock-API integration', () => {
 
   it('delete_email defaults to move-to-Deleted-Items (non-destructive trash)', async () => {
     const result = await client.callTool('delete_email', { id: 'msg-1' });
-    const json = result.json as { ok: boolean; message: string };
-    expect(json.ok).toBe(true);
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; message: string };
+    expect(json.ok).toBeUndefined();
     expect(json.message).toContain('Deleted Items');
     const moveCall = state.requests.find(
       (r) => r.method === 'POST' && r.pathname.endsWith('/me/messages/msg-1/move'),
@@ -179,8 +244,9 @@ describe('microsoft-mail mock-API integration', () => {
 
   it('list_folders filters hidden folders by default', async () => {
     const result = await client.callTool('list_folders', {});
-    const json = result.json as { ok: boolean; count: number; folders: unknown[] };
-    expect(json.ok).toBe(true);
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; count: number; folders: unknown[] };
+    expect(json.ok).toBeUndefined();
     expect(json.count).toBe(2);
     const call = state.requests.find((r) => r.pathname.endsWith('/me/mailFolders'));
     expect(call?.search).toMatch(/\$filter=isHidden/);
@@ -194,13 +260,23 @@ describe('microsoft-mail mock-API integration', () => {
     expect(call?.body).toMatchObject({ destinationId: 'archive' });
   });
 
+  it('move_email rejects calls missing id with friendly guidance', async () => {
+    const result = await client.callTool('move_email', { destinationFolder: 'archive' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Missing required parameters');
+    expect(json.next_step).toBe('list_folders');
+  });
+
   it('create_reply_draft hits createReply endpoint and returns draftId', async () => {
     const result = await client.callTool('create_reply_draft', {
       id: 'msg-1',
       body: 'Replying',
     });
-    const json = result.json as { ok: boolean; draftId: string };
-    expect(json.ok).toBe(true);
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; draftId: string };
+    expect(json.ok).toBeUndefined();
     expect(json.draftId).toBe('draft-reply-1');
     const call = state.requests.find((r) => r.pathname.endsWith('/me/messages/msg-1/createReply'));
     expect(call?.body).toMatchObject({

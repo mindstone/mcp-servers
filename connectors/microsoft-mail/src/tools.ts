@@ -1,9 +1,9 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withGraphRetry } from './client.js';
+import { callGraph } from './client.js';
 import {
   authRequiredJson,
-  errorJson,
+  errorResponse,
   successJson,
   withErrorHandling,
 } from './utils.js';
@@ -25,6 +25,21 @@ import {
 const RecipientField = z.union([z.array(z.string()), z.string()]);
 
 const ImportanceEnum = z.enum(['low', 'normal', 'high']);
+
+// send_email accepts unknown keys so the handler can surface bundled-parity
+// alias guidance (`recipient`/`recipients`, `message`/`content`/`text`)
+// rather than letting Zod silently strip them.
+const SendEmailSchema = z
+  .object({
+    to: RecipientField.optional().describe(
+      'Recipient email address(es). Use an array: ["alice@example.com"]',
+    ),
+    subject: z.string().optional().describe('Email subject'),
+    body: z.string().optional().describe('Email body (HTML supported)'),
+    cc: RecipientField.optional().describe('CC recipient(s)'),
+    importance: ImportanceEnum.optional().describe('Email importance'),
+  })
+  .passthrough();
 
 export function registerMailTools(server: McpServer): void {
   // ---------------------------------------------------------------------
@@ -79,8 +94,8 @@ sign-in, Microsoft 365 tools become available.`,
         openWorldHint: true,
       },
     },
-    withErrorHandling(async (args) => {
-      const result = await withGraphRetry((c) => listEmails(c, args));
+    withErrorHandling(async (args, extra) => {
+      const result = await callGraph(extra, (c) => listEmails(c, args));
       return successJson(result);
     }),
   );
@@ -101,16 +116,16 @@ sign-in, Microsoft 365 tools become available.`,
         openWorldHint: true,
       },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
       if (!args.id) {
-        return errorJson({
+        return errorResponse({
           error:
             'Missing required parameter: "id" (the email message ID). Example: { "id": "AAMkAGI2..." }. Use list_emails to find message IDs.',
           action_required: 'Provide the message ID returned by list_emails.',
           next_step: 'list_emails',
         });
       }
-      const result = await withGraphRetry((c) => getEmail(c, { id: args.id! }));
+      const result = await callGraph(extra, (c) => getEmail(c, { id: args.id! }));
       return successJson(result);
     }),
   );
@@ -123,32 +138,48 @@ sign-in, Microsoft 365 tools become available.`,
     {
       description:
         'Send a new email message. "to" and "cc" accept a string or an array of strings. Prefer arrays for multiple recipients (e.g. ["alice@example.com"]).',
-      inputSchema: z.object({
-        to: RecipientField.describe(
-          'Recipient email address(es). Use an array: ["alice@example.com"]',
-        ),
-        subject: z.string().describe('Email subject'),
-        body: z.string().describe('Email body (HTML supported)'),
-        cc: RecipientField.optional().describe('CC recipient(s)'),
-        importance: ImportanceEnum.optional().describe('Email importance'),
-      }).shape,
+      inputSchema: SendEmailSchema,
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
         openWorldHint: true,
       },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
+      if ('recipient' in args || 'recipients' in args) {
+        return errorResponse({
+          error:
+            'Invalid parameter: Use "to" instead of "recipient"/"recipients". Example: { "to": ["alice@example.com"], "subject": "Hello", "body": "Message content" }',
+          action_required: 'Use the "to" parameter (string or array of strings).',
+          next_step: 'send_email',
+        });
+      }
+      if ('message' in args || 'content' in args || 'text' in args) {
+        return errorResponse({
+          error:
+            'Invalid parameter: Use "body" instead of "message"/"content"/"text". Example: { "to": ["alice@example.com"], "subject": "Hello", "body": "Message content" }',
+          action_required: 'Use the "body" parameter to provide the email content.',
+          next_step: 'send_email',
+        });
+      }
       const toList = Array.isArray(args.to) ? args.to : args.to ? [args.to] : [];
       if (!toList.length || !args.subject || !args.body) {
-        return errorJson({
+        return errorResponse({
           error:
             'Missing required parameters. Required: "to" (string or array), "subject" (string), "body" (string). Example: { "to": ["recipient@example.com"], "subject": "Meeting Tomorrow", "body": "Hi, let\'s meet at 3pm." }',
           action_required: 'Provide to, subject, and body fields.',
           next_step: 'send_email',
         });
       }
-      const result = await withGraphRetry((c) => sendEmail(c, args));
+      const result = await callGraph(extra, (c) =>
+        sendEmail(c, {
+          to: args.to as string | string[],
+          subject: args.subject as string,
+          body: args.body as string,
+          cc: args.cc as string | string[] | undefined,
+          importance: args.importance as 'low' | 'normal' | 'high' | undefined,
+        }),
+      );
       return successJson(result);
     }),
   );
@@ -163,7 +194,7 @@ sign-in, Microsoft 365 tools become available.`,
       inputSchema: z.object({
         query: z
           .string()
-          .min(1)
+          .optional()
           .describe('Search query (e.g., "from:john subject:meeting")'),
         top: z.number().optional().describe('Number of results (default: 25)'),
       }).shape,
@@ -173,16 +204,18 @@ sign-in, Microsoft 365 tools become available.`,
         openWorldHint: true,
       },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
       if (!args.query) {
-        return errorJson({
+        return errorResponse({
           error:
             'Missing required parameter: "query" (search text). Example: { "query": "project update", "top": 20 }',
           action_required: 'Provide a non-empty query string.',
           next_step: 'search_emails',
         });
       }
-      const result = await withGraphRetry((c) => searchEmails(c, args));
+      const result = await callGraph(extra, (c) =>
+        searchEmails(c, { query: args.query!, top: args.top }),
+      );
       return successJson(result);
     }),
   );
@@ -195,8 +228,8 @@ sign-in, Microsoft 365 tools become available.`,
     {
       description: 'Reply to an email message.',
       inputSchema: z.object({
-        id: z.string().min(1).describe('Original email message ID'),
-        body: z.string().describe('Reply body (HTML supported)'),
+        id: z.string().optional().describe('Original email message ID'),
+        body: z.string().optional().describe('Reply body (HTML supported)'),
         replyAll: z
           .boolean()
           .optional()
@@ -208,16 +241,18 @@ sign-in, Microsoft 365 tools become available.`,
         openWorldHint: true,
       },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
       if (!args.id || !args.body) {
-        return errorJson({
+        return errorResponse({
           error:
             'Missing required parameters: "id" (email to reply to) and "body" (reply content). Example: { "id": "AAMkAGI2...", "body": "Thanks for your message!", "replyAll": false }',
           action_required: 'Provide both id and body.',
           next_step: 'reply_to_email',
         });
       }
-      const result = await withGraphRetry((c) => replyToEmail(c, args));
+      const result = await callGraph(extra, (c) =>
+        replyToEmail(c, { id: args.id!, body: args.body!, replyAll: args.replyAll }),
+      );
       return successJson(result);
     }),
   );
@@ -230,8 +265,8 @@ sign-in, Microsoft 365 tools become available.`,
     {
       description: 'Forward an email to other recipients.',
       inputSchema: z.object({
-        id: z.string().min(1).describe('Email message ID to forward'),
-        to: RecipientField.describe('Recipient(s) to forward to'),
+        id: z.string().optional().describe('Email message ID to forward'),
+        to: RecipientField.optional().describe('Recipient(s) to forward to'),
         comment: z.string().optional().describe('Optional comment to add'),
       }).shape,
       annotations: {
@@ -240,17 +275,19 @@ sign-in, Microsoft 365 tools become available.`,
         openWorldHint: true,
       },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
       const toList = Array.isArray(args.to) ? args.to : args.to ? [args.to] : [];
       if (!args.id || !toList.length) {
-        return errorJson({
+        return errorResponse({
           error:
             'Missing required parameters: "id" (email to forward) and "to" (string or array). Example: { "id": "AAMkAGI2...", "to": ["colleague@example.com"], "comment": "FYI" }',
           action_required: 'Provide both id and to.',
           next_step: 'forward_email',
         });
       }
-      const result = await withGraphRetry((c) => forwardEmail(c, args));
+      const result = await callGraph(extra, (c) =>
+        forwardEmail(c, { id: args.id!, to: args.to as string | string[], comment: args.comment }),
+      );
       return successJson(result);
     }),
   );
@@ -263,7 +300,7 @@ sign-in, Microsoft 365 tools become available.`,
     {
       description: 'Delete or move an email to trash.',
       inputSchema: z.object({
-        id: z.string().min(1).describe('Email message ID'),
+        id: z.string().optional().describe('Email message ID'),
         permanent: z
           .boolean()
           .optional()
@@ -277,16 +314,18 @@ sign-in, Microsoft 365 tools become available.`,
         openWorldHint: true,
       },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
       if (!args.id) {
-        return errorJson({
+        return errorResponse({
           error:
             'Missing required parameter: "id" (email to delete). Example: { "id": "AAMkAGI2...", "permanent": false }. Set "permanent": true to permanently delete instead of moving to Deleted Items.',
           action_required: 'Provide the message ID.',
           next_step: 'delete_email',
         });
       }
-      const result = await withGraphRetry((c) => deleteEmail(c, args));
+      const result = await callGraph(extra, (c) =>
+        deleteEmail(c, { id: args.id!, permanent: args.permanent }),
+      );
       return successJson(result);
     }),
   );
@@ -311,8 +350,8 @@ sign-in, Microsoft 365 tools become available.`,
         openWorldHint: true,
       },
     },
-    withErrorHandling(async (args) => {
-      const result = await withGraphRetry((c) => listFolders(c, args));
+    withErrorHandling(async (args, extra) => {
+      const result = await callGraph(extra, (c) => listFolders(c, args));
       return successJson(result);
     }),
   );
@@ -325,10 +364,10 @@ sign-in, Microsoft 365 tools become available.`,
     {
       description: 'Move an email to a different folder.',
       inputSchema: z.object({
-        id: z.string().min(1).describe('Email message ID'),
+        id: z.string().optional().describe('Email message ID'),
         destinationFolder: z
           .string()
-          .min(1)
+          .optional()
           .describe(
             'Well-known folder name (inbox, sentitems, drafts, deleteditems, junkemail, archive, outbox), display name, or folder ID from list_folders',
           ),
@@ -340,16 +379,18 @@ sign-in, Microsoft 365 tools become available.`,
         openWorldHint: true,
       },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
       if (!args.id || !args.destinationFolder) {
-        return errorJson({
+        return errorResponse({
           error:
             'Missing required parameters: "id" (email to move) and "destinationFolder" (target folder). Example: { "id": "AAMkAGI2...", "destinationFolder": "inbox" }. Use list_folders to find folder IDs.',
           action_required: 'Provide id and destinationFolder.',
           next_step: 'list_folders',
         });
       }
-      const result = await withGraphRetry((c) => moveEmail(c, args));
+      const result = await callGraph(extra, (c) =>
+        moveEmail(c, { id: args.id!, destinationFolder: args.destinationFolder! }),
+      );
       return successJson(result);
     }),
   );
@@ -363,7 +404,7 @@ sign-in, Microsoft 365 tools become available.`,
       description:
         'Create a draft reply to an existing email, threaded in the same conversation. The draft is saved in Drafts and can be reviewed in Outlook before sending.',
       inputSchema: z.object({
-        id: z.string().min(1).describe('Original email message ID to reply to'),
+        id: z.string().optional().describe('Original email message ID to reply to'),
         body: z
           .string()
           .optional()
@@ -381,16 +422,18 @@ sign-in, Microsoft 365 tools become available.`,
         openWorldHint: true,
       },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
       if (!args.id) {
-        return errorJson({
+        return errorResponse({
           error:
             'Missing required parameter: "id" (the email message ID to reply to). Example: { "id": "AAMkAGI2...", "body": "Thanks for your message!" }',
           action_required: 'Provide the message ID.',
           next_step: 'list_emails',
         });
       }
-      const result = await withGraphRetry((c) => createReplyDraft(c, args));
+      const result = await callGraph(extra, (c) =>
+        createReplyDraft(c, { id: args.id!, body: args.body, replyAll: args.replyAll }),
+      );
       return successJson(result);
     }),
   );
@@ -405,8 +448,8 @@ sign-in, Microsoft 365 tools become available.`,
         'Create a new standalone draft email (saved but not sent). For replying to an existing thread, use create_reply_draft instead.',
       inputSchema: z.object({
         to: RecipientField.optional().describe('Recipient email address(es)'),
-        subject: z.string().describe('Email subject'),
-        body: z.string().describe('Email body (HTML supported)'),
+        subject: z.string().optional().describe('Email subject'),
+        body: z.string().optional().describe('Email body (HTML supported)'),
         cc: RecipientField.optional().describe('CC recipient(s)'),
       }).shape,
       annotations: {
@@ -415,16 +458,23 @@ sign-in, Microsoft 365 tools become available.`,
         openWorldHint: true,
       },
     },
-    withErrorHandling(async (args) => {
+    withErrorHandling(async (args, extra) => {
       if (!args.subject || !args.body) {
-        return errorJson({
+        return errorResponse({
           error:
             'Missing required parameters: "subject" and "body". Example: { "to": ["recipient@example.com"], "subject": "Draft Email", "body": "Content here..." }',
           action_required: 'Provide subject and body.',
           next_step: 'create_draft',
         });
       }
-      const result = await withGraphRetry((c) => createDraft(c, args));
+      const result = await callGraph(extra, (c) =>
+        createDraft(c, {
+          to: args.to,
+          subject: args.subject!,
+          body: args.body!,
+          cc: args.cc,
+        }),
+      );
       return successJson(result);
     }),
   );

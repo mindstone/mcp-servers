@@ -34,6 +34,55 @@ export function abortableSignal(callerSignal?: AbortSignal): AbortSignal {
   return controller.signal;
 }
 
+export function extractCallerSignal(extra: unknown): AbortSignal | undefined {
+  if (extra && typeof extra === 'object' && 'signal' in extra) {
+    const signal = (extra as { signal?: unknown }).signal;
+    if (signal instanceof AbortSignal) return signal;
+  }
+  return undefined;
+}
+
+/**
+ * Race a promise against an AbortSignal.
+ *
+ * The Microsoft Graph SDK (@microsoft/microsoft-graph-client) does not accept
+ * an `AbortSignal` on its fluent request API, so we cannot cancel the underlying
+ * `fetch` directly. Instead we race the SDK promise against the composed
+ * signal: when it fires (caller cancel or cohort timeout), the tool call
+ * returns immediately while the background fetch is left to settle silently.
+ * This preserves the host-visible timeout contract at the cost of leaving the
+ * upstream socket open until the SDK gives up on its own.
+ */
+export function runWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason ?? new Error('Request aborted'));
+      return;
+    }
+    let settled = false;
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      reject(signal.reason ?? new Error('Request aborted'));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (err) => {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener('abort', onAbort);
+        reject(err);
+      },
+    );
+  });
+}
+
 /**
  * Host-orchestrated auth_required envelope. The OSS server emits structural-only
  * payload — no URL, no port — and the host computes the OAuth URL.
@@ -64,12 +113,28 @@ export interface ErrorPayload {
   [key: string]: unknown;
 }
 
-export function errorJson(payload: ErrorPayload): string {
+function errorJson(payload: ErrorPayload): string {
   return JSON.stringify({ ok: false, ...payload });
 }
 
+/**
+ * Build a CallToolResult for a manual validation / business-rule rejection.
+ * Mirrors bundled microsoft-mail's `errorResult` parity: `isError: true` plus
+ * `{ ok: false, error, action_required, next_step }` payload.
+ */
+export function errorResponse(payload: ErrorPayload): CallToolResult {
+  return {
+    content: [{ type: 'text', text: errorJson(payload) }],
+    isError: true,
+  };
+}
+
+/**
+ * Encode a successful tool result as plain JSON, matching bundled
+ * microsoft-mail's `successResult` parity (no `ok: true` wrapper).
+ */
 export function successJson(data: unknown): string {
-  return JSON.stringify({ ok: true, ...(data as Record<string, unknown>) });
+  return JSON.stringify(data);
 }
 
 /**
