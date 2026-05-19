@@ -10,8 +10,26 @@ The history below `[Unreleased]` was reconstructed from git history during the
 are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
+
+## [0.2.0] - 2026-05-19
+
+### Added
+- **office (chat)**: Restore parity between the Office taskpane and Rebel's browser side panel by porting the unified embedded chat UI from MindstoneRebel commit `cfaaba4f5` (Stages 7–12 of the shared embedded-chat unification work, which were deleted from the OSS package before being ported during the original `@mindstone-engineering` → `@mindstone` scope migration). Word, Excel, and PowerPoint now show "What can I help you with?" instead of the pre-chat "Connected to Rebel" / "Recent Commands — No commands yet" status panel.
+- **office (sidecar)**: Mount the App-Bridge `/intent/*` proxy on the sidecar (with token caching, 401 invalidation, and SSE `revoked`-event invalidation), plus the `/diag/{ping,tail,log}` debug-surface routes mandated by `EMBEDDED_CHAT_ARCHITECTURE.md`.
+- **office (addin)**: Document-scoped chat persistence (different Word documents get independent chat histories), `bridgeReady` injection into the taskpane HTML (taskpane gates chat-UI mount on this flag), and `window.__rebelDiag` in-WebView diagnostics surface.
+- **office (vendoring)**: Vendor the shared embedded-chat layers (`intentClient`, `chatController`, `chatUI`) and the App-Bridge intent wire schema (`intentProtocol.ts`) under `src/shared/`. See [`docs/connectors/office-architecture.md`](../../docs/connectors/office-architecture.md) for the manual-sync contract until the planned `@mindstone/app-bridge-core` extraction.
+- **office (tests)**: 66 new tests covering the chat surface (chatClient diagnostics, chatState document-scope persistence + corrupted-record recovery, chatUI controller + header status, sidecar intent-proxy contract + reconnect + bridge-auth, taskpane-html structural contract). Total test count: 88 → 153 passing + 1 skipped (F8 follow-up).
+
+### Changed
+- **office (env)**: Several browser-leaning bits of the shared chat layers ship vendored byte-current with their MindstoneRebel sources; see [`docs/connectors/office-architecture.md`](../../docs/connectors/office-architecture.md) for the parameterisation follow-up.
+- **office (build)**: `dist/addin/taskpane.html` now mounts `<div id="chat-root">` as the user-visible default; the legacy `Recent Commands` panel remains in the markup behind a collapsed "Connection details" debug accordion (`data-open="false"`, `hidden`).
+
 ### Security
 - **sidecar**: Reject unauthenticated requests to `/taskpane.html`, `/taskpane.js`, and `/assets/*` whose `Host` header does not name a loopback host (`localhost`, `127.0.0.1`, or `::1`) on the bound port. The page embeds the WebSocket auth token, so this closes a DNS-rebinding path where a browser tab tricked into resolving an attacker-controlled hostname to 127.0.0.1 could fetch the page cross-origin and exfiltrate the token. Office's manifest only ever uses `localhost:<port>`, so legitimate add-in loads are unaffected.
+
+### Notes
+- Skips `0.1.5` per `mindstone/MindstoneRebel/docs/plans/260519_office_chat_unification_revendor.md` decision D1 (bundle chat unification + the unreleased `0.1.4` scope-rename into a single `0.2.0` minor).
+- Published only under the `@mindstone/` scope. The legacy `@mindstone-engineering/mcp-server-office@0.1.3` install path continues to resolve via the consuming host's `OFFICE_MCP_PACKAGE_SPECS_TO_TRY` fallback until telemetry confirms ≤0.1% legacy-spec hits for ≥30 days; at that point the legacy slot will be removed in `0.2.1`.
 
 ## [0.1.4] - 2026-05-14
 ### Fixed

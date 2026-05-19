@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-office",
   "title": "Microsoft Office",
   "description": "Microsoft Office MCP server: read and edit Word documents, Excel workbooks, and PowerPoint files",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-office",
-      "version": "0.1.4",
+      "version": "0.2.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
