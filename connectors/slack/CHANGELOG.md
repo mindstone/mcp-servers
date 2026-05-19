@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Security
+
+- Bumped 4 transitive dependencies of `@modelcontextprotocol/sdk` to resolve `npm audit` findings (1 HIGH + 3 MODERATE → 0/0/0/0/0):
+  - `fast-uri` 3.1.0 → 3.1.2 — fixes [GHSA-q3j6-qgpj-74h6](https://github.com/advisories/GHSA-q3j6-qgpj-74h6) (HIGH, path traversal via percent-encoded dot segments) and [GHSA-v39h-62p7-jpjc](https://github.com/advisories/GHSA-v39h-62p7-jpjc) (host confusion via percent-encoded authority delimiters), reached via `ajv`.
+  - `hono` 4.12.16 → 4.12.19 — fixes [GHSA-qp7p-654g-cw7p](https://github.com/advisories/GHSA-qp7p-654g-cw7p) (CSS declaration injection in JSX SSR), [GHSA-hm8q-7f3q-5f36](https://github.com/advisories/GHSA-hm8q-7f3q-5f36) (improper `NumericDate` validation in JWT `verify()`), and [GHSA-p77w-8qqv-26rm](https://github.com/advisories/GHSA-p77w-8qqv-26rm) (cache middleware ignores `Vary: Authorization`/`Vary: Cookie`).
+  - `ip-address` 10.1.0 → 10.2.0 — fixes [GHSA-v2v4-37r5-5v8g](https://github.com/advisories/GHSA-v2v4-37r5-5v8g) (XSS in `Address6` HTML-emitting methods), reached via `express-rate-limit`.
+  - `express-rate-limit` 8.4.1 → 8.5.2 — pulls patched `ip-address`.
+
+  All 106 unit tests pass and the slack connector does not exercise any of the vulnerable code paths (no JWT verification, no JSX SSR, no cache middleware, no HTML emission from `ip-address`); this is a hygiene fix for downstream consumers.
+
 ## [0.1.1] - 2026-05-14
 
 ### Changed
