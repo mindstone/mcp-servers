@@ -118,10 +118,7 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
         data: response.data,
       };
     } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
+      throw this.handleError(error, 'Failed to list Drive files');
     }
   }
 
@@ -155,10 +152,7 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
         data: response.data,
       };
     } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
+      throw this.handleError(error, 'Failed to upload Drive file');
     }
   }
 
@@ -245,10 +239,7 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
       const { content, encoding } = decodeContent(response.data, nativeMime);
       return { success: true, data: content, mimeType: nativeMime, encoding, fileName };
     } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
+      throw this.handleError(error, 'Failed to download Drive file');
     }
   }
 

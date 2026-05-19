@@ -8,6 +8,7 @@ import {
   readAliasedBoolean,
   readAliasedString
 } from './arg-aliases.js';
+import { wrapUntrustedContent } from '../utils/untrusted-content.js';
 
 const HOST_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -70,7 +71,26 @@ function formatFilesAsText(files: any[]): string {
     lines.push(`  [id: ${file.id}]`);
   }
 
-  return lines.join('\n');
+  return wrapUntrustedContent(lines.join('\n'), 'google-workspace:drive:file-list');
+}
+
+/** @internal Exported for tests. */
+export function formatDriveRecoveryError(operation: string, error: unknown) {
+  const status = error && typeof error === 'object'
+    ? (error as { code?: unknown; response?: { status?: unknown } }).response?.status
+      ?? (error as { code?: unknown }).code
+    : undefined;
+  const statusText = status ? ` (${status})` : '';
+  const message = error instanceof Error
+    ? error.message
+    : error && typeof error === 'object' && typeof (error as { message?: unknown }).message === 'string'
+      ? (error as { message: string }).message
+      : 'Unknown error';
+  return {
+    ok: false,
+    action_required: `Drive ${operation} failed${statusText}`,
+    next_step: `${message}. Check Google Workspace authentication and Drive permissions, then retry.`,
+  };
 }
 
 interface DriveFileListArgs {
@@ -166,7 +186,7 @@ export async function handleListDriveFiles(args: DriveFileListArgs & Record<stri
     
     // Format as text for better LLM consumption
     if (!result.success) {
-      return `Error listing files: ${result.error || 'Unknown error'}`;
+      return formatDriveRecoveryError('list files', new Error(result.error || 'Unknown error'));
     }
     const files = result.data?.files || [];
     return formatFilesAsText(files);

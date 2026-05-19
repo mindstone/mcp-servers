@@ -21,6 +21,7 @@ import {
   readAliasedString,
   readAliasedValue
 } from './arg-aliases.js';
+import { wrapUntrustedContent } from '../utils/untrusted-content.js';
 
 // Handler argument types
 interface ReadPresentationArgs {
@@ -108,7 +109,7 @@ function formatPresentationResponseAsText(pres: PresentationResponse): string {
     lines.push(pres.content);
   }
   
-  return lines.join('\n');
+  return wrapUntrustedContent(lines.join('\n'), `google-workspace:slides:presentation/${pres.presentationId}`);
 }
 
 /**
@@ -143,7 +144,7 @@ function formatSlidesAsText(slides: SlideInfo[]): string {
     }
   }
 
-  return lines.join('\n');
+  return wrapUntrustedContent(lines.join('\n'), 'google-workspace:slides:list');
 }
 
 /**
@@ -171,7 +172,7 @@ function formatSlideAsText(slide: SlideInfo): string {
     lines.push(`\n[Speaker Notes]: ${slide.speakerNotes.trim()}`);
   }
   
-  return lines.join('\n');
+  return wrapUntrustedContent(lines.join('\n'), `google-workspace:slides:slide/${slide.slideId}`);
 }
 
 /**

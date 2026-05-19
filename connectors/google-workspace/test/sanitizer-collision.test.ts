@@ -14,7 +14,7 @@ describe('account slug collision detection', () => {
     }
   });
 
-  it('skips colliding accounts and keeps the non-colliding subset registered', async () => {
+  it('throws when account emails collide after slug sanitization', async () => {
     cleanupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'google-workspace-collision-'));
     const accountsPath = path.join(cleanupDir, 'accounts.json');
     const credentialsPath = path.join(cleanupDir, 'credentials');
@@ -38,9 +38,8 @@ describe('account slug collision detection', () => {
 
     const { AccountManager } = await import('../src/modules/accounts/manager.js');
     const manager = new AccountManager();
-    await manager.initialize();
-
-    const accounts = await manager.listAccounts();
-    expect(accounts.map(account => account.email)).toEqual(['ok@example.com']);
+    await expect(manager.initialize()).rejects.toMatchObject({
+      code: 'SANITIZED_SLUG_COLLISION',
+    });
   });
 });

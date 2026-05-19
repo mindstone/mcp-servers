@@ -8,6 +8,7 @@ import { TokenManager } from './token.js';
 import { atomicCredentialWrite, sweepStaleTemps } from '../../utils/atomicCredentialWrite.js';
 import { GoogleOAuthClient } from './oauth.js';
 import logger from '../../utils/logger.js';
+import { isUnauthorizedError } from './unauthorized.js';
 
 export class AccountManager {
   private readonly accountsPath: string;
@@ -16,7 +17,9 @@ export class AccountManager {
   private oauthClient!: GoogleOAuthClient;
 
   constructor(config?: AccountModuleConfig) {
-    const defaultPath = process.env.ACCOUNTS_PATH || path.resolve(process.env.HOME || process.cwd(), '.google-workspace-mcp/accounts.json');
+    const defaultPath = process.env.ACCOUNTS_PATH
+      ? validateConfiguredAccountsPath(process.env.ACCOUNTS_PATH)
+      : path.resolve(process.env.HOME || process.cwd(), '.google-workspace-mcp/accounts.json');
     this.accountsPath = config?.accountsPath || defaultPath;
     this.accounts = new Map();
   }
@@ -90,7 +93,15 @@ export class AccountManager {
       // Perform the operation
       return await operation();
     } catch (error) {
-      if (error instanceof Error && 'code' in error && error.code === '401') {
+      if (isUnauthorizedError(error)) {
+        if (isRefreshDisabled()) {
+          throw new AccountError(
+            'Authentication required',
+            'AUTH_REQUIRED',
+            'Connect Google Workspace to continue'
+          );
+        }
+
         // If we get a 401 during operation, try one more token renewal
         logger.warn('Received 401 during operation, attempting final token renewal');
         const finalRenewal = await this.tokenManager.autoRenewToken(email);
@@ -105,7 +116,7 @@ export class AccountManager {
           // Refresh token is invalid/revoked, need full reauth
           throw new AccountError(
             'Authentication failed',
-            'AUTH_REQUIRED',
+            finalRenewal.status === 'AUTH_REQUIRED' ? 'AUTH_REQUIRED' : 'TOKEN_RENEWAL_FAILED',
             finalRenewal.reason || 'Please re-authenticate your account'
           );
         } else {
@@ -164,17 +175,28 @@ export class AccountManager {
         for (const [slug, emails] of slugToEmails) {
           if (emails.size <= 1) continue;
           for (const email of emails) collidingEmails.add(email);
-          logger.error(JSON.stringify({
+          logger.error({
             event: 'google_workspace_sanitized_slug_collision',
+            severity: 'security',
             slug,
-            accountCount: emails.size
-          }));
+            accountCount: emails.size,
+            collidingEmailHashes: [...emails].map(hashEmail),
+          });
+        }
+        if (collidingEmails.size > 0) {
+          throw new AccountError(
+            'Google Workspace account configuration contains colliding account slugs',
+            'SANITIZED_SLUG_COLLISION',
+            'Resolve the colliding Google account emails before starting this connector'
+          );
         }
         for (const account of config.accounts) {
-          if (collidingEmails.has(account.email)) continue;
           this.accounts.set(account.email, account);
         }
       } catch (error) {
+        if (error instanceof AccountError) {
+          throw error;
+        }
         throw new AccountError(
           'Failed to parse accounts configuration',
           'ACCOUNTS_PARSE_ERROR',
@@ -421,4 +443,37 @@ export class AccountManager {
   async saveToken(email: string, tokenData: any) {
     return this.tokenManager.saveToken(email, tokenData);
   }
+}
+
+function isRefreshDisabled(): boolean {
+  return process.env.GOOGLE_WORKSPACE_DISABLE_REFRESH === '1';
+}
+
+function hashEmail(email: string): string {
+  return crypto.createHash('sha256').update(email).digest('hex').slice(0, 12);
+}
+
+function validateConfiguredAccountsPath(rawPath: string): string {
+  const absolutePath = path.resolve(rawPath);
+  let stats: fsSync.Stats;
+  try {
+    stats = fsSync.lstatSync(absolutePath);
+  } catch (error) {
+    throw new AccountError(
+      'ACCOUNTS_PATH is invalid',
+      'CONFIG_PATH_INVALID',
+      'ACCOUNTS_PATH must point to an existing accounts.json file',
+      error
+    );
+  }
+
+  if (stats.isSymbolicLink() || !stats.isFile()) {
+    throw new AccountError(
+      'ACCOUNTS_PATH is invalid',
+      'CONFIG_PATH_INVALID',
+      'ACCOUNTS_PATH must point to a real accounts.json file, not a symlink or directory'
+    );
+  }
+
+  return fsSync.realpathSync.native(absolutePath);
 }

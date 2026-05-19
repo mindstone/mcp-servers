@@ -15,10 +15,27 @@ import { GmailAttachmentService } from './attachment.js';
 import { buildMimeMessage } from './mime-builder.js';
 import { AttachmentResponseTransformer } from '../../attachments/response-transformer.js';
 import { AttachmentIndexService } from '../../attachments/index-service.js';
+import logger from '../../../utils/logger.js';
 
 type GmailMessage = gmail_v1.Schema$Message;
 
 type MessagePart = gmail_v1.Schema$MessagePart;
+
+/**
+ * Google/Gaxios not-found shapes differ by call site and transport.
+ */
+function isNotFoundError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: unknown; status?: unknown; response?: { status?: unknown; statusCode?: unknown } };
+  return candidate.code === 404
+    || candidate.code === '404'
+    || candidate.status === 404
+    || candidate.status === '404'
+    || candidate.response?.status === 404
+    || candidate.response?.status === '404'
+    || candidate.response?.statusCode === 404
+    || candidate.response?.statusCode === '404';
+}
 
 /**
  * Recursively find text/plain or text/html body in nested MIME parts.
@@ -181,11 +198,14 @@ export class EmailService {
           value: h.value || ''
         }))
       };
-    } catch {
-      return null;
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        logger.warn({ err: error, messageId }, 'getMessage failed; treating as not found');
+        return null;
+      }
+      throw error;
     }
   }
-
   /**
    * Get all messages in a thread (for full conversation context)
    */

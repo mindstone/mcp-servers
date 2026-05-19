@@ -10,6 +10,7 @@ import type {
   SpreadsheetResponse,
   SuspiciousWriteWarning,
 } from './types.js';
+import { wrapUntrustedContent } from '../../utils/untrusted-content.js';
 
 /**
  * Construct a Google Sheets URL from spreadsheet ID
@@ -90,7 +91,7 @@ export function formatSpreadsheetHeader(
   }
 
   lines.push('---');
-  return lines.join('\n');
+  return wrapUntrustedContent(lines.join('\n'), 'google-workspace:sheets:values');
 }
 
 /**
@@ -154,7 +155,7 @@ export function formatValuesAsTable(
     lines.push(cells.join(' | '));
   }
 
-  return lines.join('\n');
+  return wrapUntrustedContent(lines.join('\n'), 'google-workspace:sheets:shaped-read');
 }
 
 function formatShapedCell(cell: CellTriad): string | number | boolean | null {
@@ -206,7 +207,7 @@ export function formatShapedReadResponse(response: ShapedReadResponse): string {
     }
   }
 
-  return lines.join('\n');
+  return wrapUntrustedContent(lines.join('\n'), 'google-workspace:sheets:anchor-read');
 }
 
 export function formatAnchorReadResponse(response: AnchorReadResponse): string {
@@ -262,7 +263,7 @@ export function formatAnchorReadResponse(response: AnchorReadResponse): string {
     }
   }
 
-  return lines.join('\n');
+  return wrapUntrustedContent(lines.join('\n'), 'google-workspace:sheets:sheets-list');
 }
 
 /**
@@ -313,7 +314,7 @@ export function formatSpreadsheetAsText(response: SpreadsheetResponse): string {
     parts.push(formatValuesAsTable(response.values));
   }
 
-  return parts.join('\n');
+  return wrapUntrustedContent(parts.join('\n'), `google-workspace:sheets:spreadsheet/${response.spreadsheetId}`);
 }
 
 /**
