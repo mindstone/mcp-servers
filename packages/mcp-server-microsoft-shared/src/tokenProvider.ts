@@ -43,6 +43,15 @@ function isRefreshDisabled(): boolean {
   return process.env.MICROSOFT_DISABLE_REFRESH === '1';
 }
 
+function isMissingFileError(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    (err as { code?: unknown }).code === 'ENOENT'
+  );
+}
+
 function sanitizeEmail(email: string): string {
   return email.replace(/[^a-zA-Z0-9]/g, '-');
 }
@@ -151,14 +160,20 @@ export class TokenProvider {
       const data = await fs.readFile(tokenPath, 'utf-8');
       this.cachedToken = this.normalizeToken(JSON.parse(data) as RawTokenData);
       return this.cachedToken;
-    } catch {
+    } catch (err) {
+      if (!isMissingFileError(err)) {
+        throw err;
+      }
       try {
         const data = await fs.readFile(this.getLegacyTokenPath(), 'utf-8');
         this.cachedToken = this.normalizeToken(JSON.parse(data) as RawTokenData);
         log.info('Loaded token from legacy tokens.json');
         return this.cachedToken;
-      } catch {
-        return null;
+      } catch (legacyErr) {
+        if (isMissingFileError(legacyErr)) {
+          return null;
+        }
+        throw legacyErr;
       }
     }
   }

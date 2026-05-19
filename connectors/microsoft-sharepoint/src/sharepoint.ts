@@ -677,6 +677,7 @@ export async function readSitePage(
   // regardless of layout structure (more reliable than $expand=canvasLayout
   // which requires deep expansion of sections/columns/webparts relationships)
   const contentParts: string[] = [];
+  let contentWarning: string | undefined;
   try {
     const webPartsResponse = await client
       .api(`${pageBase}/webParts`)
@@ -690,8 +691,22 @@ export async function readSitePage(
         contentParts.push(wp.data.properties.description);
       }
     }
-  } catch {
-    // Page type may not support webparts (e.g., news link pages)
+  } catch (err) {
+    const statusCode = (err as { statusCode?: number })?.statusCode;
+    const message = err instanceof Error ? err.message.toLowerCase() : '';
+    const isLikelyUnsupportedPageType =
+      statusCode === 400 ||
+      statusCode === 404 ||
+      message.includes('webpart') ||
+      message.includes('not supported') ||
+      message.includes('resource not found');
+
+    if (!isLikelyUnsupportedPageType) {
+      throw err;
+    }
+
+    contentWarning =
+      'Page body webparts could not be retrieved (page type may not expose webparts via Graph).';
   }
 
   return successResult({
@@ -704,6 +719,7 @@ export async function readSitePage(
     createdAt: page.createdDateTime,
     modifiedAt: page.lastModifiedDateTime,
     contentHtml: contentParts.length > 0 ? contentParts.join('\n\n') : '(no text content found — page may be empty or use non-text web parts)',
+    ...(contentWarning ? { contentWarning } : {}),
   });
 }
 

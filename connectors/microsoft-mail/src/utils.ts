@@ -161,6 +161,13 @@ function isRefreshDisabledError(err: unknown): boolean {
   return false;
 }
 
+function detectTokenProviderAuthReason(err: unknown): AuthRequiredReason | null {
+  if (!(err instanceof Error)) return null;
+  const msg = err.message.toLowerCase();
+  if (msg.includes('microsoft token expired')) return 'token_expired';
+  return null;
+}
+
 /**
  * Map a Microsoft Graph error / shared TokenProvider error into the right
  * tool response. Returns `auth_required` for token-related failures, the
@@ -173,7 +180,7 @@ export function buildErrorResponse(err: unknown): CallToolResult {
       isError: true,
     };
   }
-  const reason = detectAuthRequiredReason(err);
+  const reason = detectAuthRequiredReason(err) ?? detectTokenProviderAuthReason(err);
   if (reason) {
     return {
       content: [
