@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-microsoft-sharepoint",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "mcpName": "io.github.mindstone/mcp-server-microsoft-sharepoint",
   "description": "Microsoft 365 SharePoint MCP server — sites, libraries, lists, pages, search, metadata, and file operations via Microsoft Graph",
   "license": "FSL-1.1-MIT",

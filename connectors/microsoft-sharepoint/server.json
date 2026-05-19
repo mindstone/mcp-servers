@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-microsoft-sharepoint",
   "title": "Microsoft 365 SharePoint",
   "description": "Microsoft 365 SharePoint MCP server: auth, site/library/list/page tooling, metadata, search, and file/list mutations via Microsoft Graph",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-microsoft-sharepoint",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
