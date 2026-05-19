@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-microsoft-calendar",
   "title": "Microsoft 365 Calendar",
   "description": "Microsoft 365 Outlook Calendar MCP server: list, get, create, update, delete, respond to events, check free/busy, and list calendars via Microsoft Graph",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-microsoft-calendar",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
