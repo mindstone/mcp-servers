@@ -1,0 +1,59 @@
+{
+  "name": "@mindstone/mcp-server-google-workspace",
+  "version": "0.1.0",
+  "mcpName": "io.github.mindstone/mcp-server-google-workspace",
+  "description": "Google Workspace MCP server for Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Tasks, and Forms",
+  "license": "FSL-1.1-MIT",
+  "type": "module",
+  "bin": {
+    "mcp-server-google-workspace": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "SECURITY.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mindstone/mcp-servers.git",
+    "directory": "connectors/google-workspace"
+  },
+  "homepage": "https://github.com/mindstone/mcp-servers/tree/main/connectors/google-workspace",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc && shx cp src/tools/definitions/*-overrides.json dist/tools/definitions/ && shx chmod +x dist/index.js && npm run tools:annotations && npm run security:internal-refs",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build && npm test",
+    "watch": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "tools:inventory": "node scripts/generate-tools-inventory.mjs",
+    "tools:annotations": "node scripts/check-tool-annotations.mjs",
+    "security:internal-refs": "node scripts/check-internal-refs.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.7.0",
+    "google-auth-library": "^10.2.0",
+    "googleapis": "^171.4.0",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/uuid": "^10.0.0",
+    "@vitest/coverage-v8": "^4.1.3",
+    "msw": "^2.13.2",
+    "shx": "^0.3.4",
+    "typescript": "^5.8.2",
+    "vitest": "^4.1.3"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "packageManager": "npm@11.10.0",
+  "attribution": "Based on aaronsb/google-workspace-mcp (https://github.com/aaronsb/google-workspace-mcp)"
+}
