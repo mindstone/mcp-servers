@@ -2,7 +2,7 @@
 
 Source-available MCP servers by Mindstone. Works with any MCP host — Claude Desktop, Cursor, Rebel, and others.
 
-Browse all 26 connectors with their version, auth model, and tool count at the [catalogue site](https://mindstone.github.io/mcp-servers/) (regenerated from each connector's `STATUS.json` on every push).
+Browse all 30 connectors with their version, auth model, and tool count at the [catalogue site](https://mindstone.github.io/mcp-servers/) (regenerated from each connector's `STATUS.json` on every push).
 
 ## Connectors
 
@@ -16,6 +16,7 @@ Browse all 26 connectors with their version, auth model, and tool count at the [
 | [freshdesk](connectors/freshdesk/) | Manage helpdesk tickets, search support requests, reply to customers, and add internal notes |
 | [gamma](connectors/gamma/) | Create AI-powered presentations, documents, webpages, and social posts via Gamma |
 | [google-analytics](connectors/google-analytics/) | Discover GA4 accounts and properties, explore the live schema, and run reports via the Google Analytics API |
+| [google-workspace](connectors/google-workspace/) | Read, search, and send across Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, and Comments with host-orchestrated OAuth and per-account on-disk credentials |
 | [hubspot](connectors/hubspot/) | Manage HubSpot CRM — contacts, companies, deals, tickets, leads, tasks, notes, properties, lists, workflows, knowledge base, and files — with multi-account, host-orchestrated OAuth |
 | [humaans](connectors/humaans/) | Query employee profiles, job roles, time-away requests, and company info via Humaans HR |
 | [kling](connectors/kling/) | Generate AI videos from text descriptions or images via Kling AI |
@@ -27,12 +28,14 @@ Browse all 26 connectors with their version, auth model, and tool count at the [
 | [outreach](connectors/outreach/) | Manage prospects, sequences, accounts, tasks, and mailings via the Outreach sales engagement API |
 | [pandadoc](connectors/pandadoc/) | Create, send, and manage documents, templates, and e-signatures via PandaDoc |
 | [quickbooks](connectors/quickbooks/) | Manage invoices, bills, customers, vendors, employees, and accounts in QuickBooks Online |
+| [replit-ssh](connectors/replit-ssh/) | Read, write, list, and check files on Replit projects over SSH/SFTP, with one-shot SSH key + config setup on the operator's machine |
 | [retell-ai](connectors/retell-ai/) | Place voice-agent phone calls, manage agents and LLM prompts, and discover voices via the Retell AI API |
 | [runway](connectors/runway/) | Generate AI video, images, audio, speech, and sound effects via Runway ML |
 | [salesforce](connectors/salesforce/) | Manage accounts, contacts, opportunities, leads, tasks, users, and custom objects via the Salesforce API |
 | [servicenow](connectors/servicenow/) | Manage incidents, change requests, users, and knowledge base articles in ServiceNow |
 | [slack](connectors/slack/) | Multi-workspace Slack — channels, messages, threads, reactions, users, files, bookmarks, and scheduled messages via the Slack Web API, with host-orchestrated OAuth |
 | [talentlms](connectors/talentlms/) | Manage users, courses, groups, branches, enrolments, and assessments in TalentLMS |
+| [vanta](connectors/vanta/) | Read and manage compliance posture in Vanta — vulnerabilities, tests, controls, evidence, resources, people, vendors, documents, and compliance summary |
 | [workday](connectors/workday/) | Query workers, profiles, and organizations in Workday HCM |
 | [zendesk](connectors/zendesk/) | Manage tickets, macros, users, and views in Zendesk Support |
 
