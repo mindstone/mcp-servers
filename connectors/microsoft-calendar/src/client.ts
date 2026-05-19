@@ -47,7 +47,7 @@ export function getTokenProvider(): TokenProvider {
  * Invoke a Graph operation with a single retry on HTTP 401: cached token is
  * invalidated and the operation is retried so a transient stale-cache hit
  * doesn't fail the tool call. Mirrors the bundled `microsoft-calendar` retry
- * semantics in `resources/mcp/microsoft-calendar/src/index.ts`.
+ * semantics in the bundled Microsoft Calendar connector.
  *
  * The composed `signal` is threaded into both the initial attempt and the
  * post-401 retry so a host cancellation or cohort timeout aborts the in-flight

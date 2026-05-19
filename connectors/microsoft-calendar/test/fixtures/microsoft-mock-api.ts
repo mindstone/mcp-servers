@@ -198,7 +198,7 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
             color: 'auto',
             isDefaultCalendar: true,
             canEdit: true,
-            owner: { name: 'Test User', address: 'harry@mindstone.ai' },
+            owner: { name: 'Test User', address: 'user@example.com' },
           },
           {
             id: 'cal-2',
