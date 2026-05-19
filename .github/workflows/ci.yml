@@ -12,6 +12,9 @@ permissions:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -25,7 +28,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ matrix.node-version }}
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm audit --audit-level=high --omit=dev
       - run: npm run build
       - run: npm test
@@ -41,30 +44,101 @@ jobs:
             exit 1
           fi
 
+  discover-connectors:
+    name: Discover connectors for status-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      connectors: ${{ steps.list.outputs.connectors }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - id: list
+        name: List eligible connector directories
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          # Auto-discover every directory under connectors/. Two exclusions:
+          #
+          #   _template          starter scaffolding; placeholders fail validation by design.
+          #   google-workspace   STATUS.json predates the canonical schema and has
+          #                      three legitimate drifts (extra envVars, tool-count
+          #                      registration pattern not recognised by the
+          #                      heuristic in scripts/check-status.mjs, empty
+          #                      hostsTested). Remove from this list once the
+          #                      connector author migrates STATUS.json and/or the
+          #                      script's tool-count detection learns the new pattern.
+          all=()
+          for d in connectors/*/; do
+            name="${d#connectors/}"
+            name="${name%/}"
+            case "$name" in
+              _template|google-workspace) continue ;;
+            esac
+            # Hard slug allowlist. Bash regex (not `grep`) so the match is
+            # whole-string anchored against the full literal name — a value
+            # containing an embedded newline cannot satisfy it on one line and
+            # smuggle anything through on subsequent lines. Length-capped at
+            # 64 chars to prevent a single PR from inflating the matrix.
+            # Matches the same shape as .github/workflows/changelog-check.yml.
+            if [[ ! "$name" =~ ^[a-z0-9][a-z0-9-]{0,63}$ ]]; then
+              echo "::error::connector '$name' does not match slug pattern; refusing to include in matrix"
+              exit 1
+            fi
+            all+=("$name")
+          done
+
+          if [ "${#all[@]}" -eq 0 ]; then
+            echo "::error::no connectors discovered under connectors/"
+            exit 1
+          fi
+
+          json=$(printf '%s\n' "${all[@]}" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "connectors=$json" >> "$GITHUB_OUTPUT"
+          echo "Discovered ${#all[@]} connectors: ${all[*]}"
+
   status-check:
     name: STATUS.json drift check
+    needs: discover-connectors
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
-        # Every connector that publishes a STATUS.json (all 26 today).
-        # Kept independent of the build-and-test matrix because that one is
-        # gated by node-version-x-connector test coverage, while this check
-        # is a single cross-file consistency assertion per connector.
-        connector: [apple-shortcuts, browser-automation, elevenlabs, email-imap, fathom, freshdesk, gamma, google-analytics, hubspot, humaans, kling, mixmax, nano-banana, napkin, office, outreach, pandadoc, quickbooks, retell-ai, runway, salesforce, servicenow, slack, talentlms, workday, zendesk]
+        connector: ${{ fromJSON(needs.discover-connectors.outputs.connectors) }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
       - name: Verify STATUS.json against package.json, server.json, src/
-        run: node scripts/check-status.mjs ${{ matrix.connector }}
+        # CONNECTOR is sourced from the matrix (and the matrix is sourced from
+        # the discover-connectors slug-validated list); passing it as an env
+        # var rather than interpolating ${{ matrix.connector }} directly into
+        # the shell command means that even if the slug guard is ever relaxed,
+        # a hostile name cannot break out of the argv quoting.
+        env:
+          CONNECTOR: ${{ matrix.connector }}
+        run: node scripts/check-status.mjs "$CONNECTOR"
 
   catalogue-check:
     name: Catalogue is up to date
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
@@ -73,9 +147,12 @@ jobs:
 
   notify-failure:
     name: Slack CI Failure
-    needs: [build-and-test, status-check, catalogue-check]
+    needs: [build-and-test, discover-connectors, status-check, catalogue-check]
     if: failure()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
     steps:
       - name: Post to Slack
         env:
