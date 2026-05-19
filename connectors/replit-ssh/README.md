@@ -1,37 +1,121 @@
 # @mindstone/mcp-server-replit-ssh
 
-Replit SSH MCP server — read, write, list, and check files on Replit projects over SSH/SFTP, plus generate the local SSH key and config.
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-replit-ssh.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-replit-ssh)
+[![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
+
+Replit SSH MCP server — read, write, list, and check files on Replit projects over SSH/SFTP, plus one-shot generation of the local SSH key and `~/.ssh/config` block.
+
+*Local Replit SSH MCP. Connects from the operator's machine to `*.replit.dev` hosts only, writes are atomic with SHA-256 read-back, and the `~/.ssh/config` rewrite parses via AST rather than `Match exec` shell evaluation.*
 
 ## Status
 
-- **Version:** 0.1.0 · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-replit-ssh)
-- **Auth:** local SSH key on disk (`~/.ssh/rebel-replit` by default; resolved via `~/.ssh/config` IdentityFile if set)
-- **Tools:** 5 (3 read + 2 write)
-- **Surface:** SSH/SFTP to `*.replit.dev` hosts only
+- **Version:** [0.1.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-replit-ssh)
+- **Auth:** Local SSH key on disk (`~/.ssh/rebel-replit` by default; resolved via `~/.ssh/config` `IdentityFile` if set). No env-var-supplied secrets.
+- **Tools:** [5](./src/server.ts) (connection, files, ssh-setup)
+- **Surface:** local-protocol
+- **Hosts tested:** Mindstone Rebel
+- **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
-## Installation
+## Why this exists
+
+Replit ships a hosted "Agent" experience but does not publish an MCP server for the SSH/SFTP surface its Core users get. The community options at the time we built this either shelled out to the system `ssh` binary (so connection failures surfaced as generic non-zero exit codes) or parsed `~/.ssh/config` with the upstream `ssh-config@5.1.0` package, which evaluates `Match exec "<cmd>"` blocks by running them through the shell — that is local code execution against any consumer that reads a user-controlled config file. We wrote our own so that the host application can read, list, and atomically write files on a Replit project from the operator's own machine, with a host allow-list pinned to `*.replit.dev`, a safe AST-only config evaluator, SHA-256 read-back verification on every write, and a structured recovery contract on every tool error.
+
+## Example interaction
+
+> "List the files in my Replit project, then read `package.json` and tell me which scripts are defined."
+
+Tools the host calls:
+1. `replit_check_connection` — verifies SSH connectivity and SFTP support, returns latency.
+2. `replit_list_files` — lists files and directories at `.`.
+3. `replit_read_file` — reads `package.json` from the project root as UTF-8 text.
+
+Response (trimmed):
+
+```json
+{
+  "ok": true,
+  "files": [
+    { "name": "package.json", "type": "file", "size": 612 },
+    { "name": "src", "type": "directory" }
+  ],
+  "package": {
+    "scripts": {
+      "dev": "node src/index.js",
+      "test": "vitest run"
+    }
+  }
+}
+```
+
+## Requirements
+
+- Node.js 20+
+- npm
+- A Replit account with SSH access (Replit Core or higher)
+- A live `*.replit.dev` host from a Replit project (open the project, click **SSH** → **Connect** → **Connect manually**, copy the host and username)
+- An SSH key registered with Replit at [replit.com/account#ssh-keys](https://replit.com/account#ssh-keys). Run `replit_setup_ssh` once to generate one if you do not already have one.
+
+## Quick Start
+
+### Install & build
+
+```bash
+cd <path-to-repo>/connectors/replit-ssh
+npm install
+npm run build
+```
+
+### npx (once published)
 
 ```bash
 npx -y @mindstone/mcp-server-replit-ssh
 ```
 
-## Prerequisites
+### Local
 
-This server connects to live Replit projects over SSH, so the operator needs:
-
-1. A Replit account with SSH access (Replit Core or higher).
-2. A live `*.replit.dev` host from a Replit project (open the project, click "SSH" → "Connect" → "Connect manually", and copy the host + username from the displayed `ssh` command).
-3. An SSH key registered with Replit at [replit.com/account#ssh-keys](https://replit.com/account#ssh-keys).
-
-The bundled `replit_setup_ssh` tool generates an Ed25519 key at `~/.ssh/rebel-replit`, hardens the file permissions, and appends a `*.replit.dev` block to `~/.ssh/config`. Run it once if no SSH key exists yet, then add the printed public key to Replit. Alternatively, point the existing `~/.ssh/config` `IdentityFile` for `*.replit.dev` at an existing key and the server will use that instead.
+```bash
+node dist/index.js
+```
 
 ## Configuration
 
-This server has no required environment variables. Optional:
+This server has no required environment variables. Authentication is via the local SSH key resolved through `~/.ssh/config`.
 
-- `REPLIT_SSH_REQUEST_TIMEOUT_MS` — per-request timeout in milliseconds (default: 60000). Tool-level timeout for SFTP operations; the lower-level TCP/SSH handshake uses a separate 30-second budget.
+### Optional environment variables
 
-## Tools
+- `REPLIT_SSH_REQUEST_TIMEOUT_MS` — per-request timeout in milliseconds (default: `60000`, max `600000`). Tool-level timeout for SFTP operations; the lower-level TCP/SSH handshake uses a separate 30-second budget.
+
+## Host configuration examples
+
+### Claude Desktop / Cursor
+
+```json
+{
+  "mcpServers": {
+    "ReplitSSH": {
+      "command": "npx",
+      "args": ["-y", "@mindstone/mcp-server-replit-ssh"]
+    }
+  }
+}
+```
+
+### Local development (no npm publish needed)
+
+```json
+{
+  "mcpServers": {
+    "ReplitSSH": {
+      "command": "node",
+      "args": ["<path-to-repo>/connectors/replit-ssh/dist/index.js"]
+    }
+  }
+}
+```
+
+After the host launches the server, run `replit_setup_ssh` once to generate the local key, then add the printed public key to [replit.com/account#ssh-keys](https://replit.com/account#ssh-keys).
+
+## Tools (5)
 
 ### Read
 
@@ -44,29 +128,24 @@ This server has no required environment variables. Optional:
 - `replit_write_file` — atomic write via `temp + ext_openssh_rename` with SHA-256 read-back verification. Fails closed if the server doesn't support atomic overwrite and the target already exists (we never `unlink + rename`, which opens a data-loss window).
 - `replit_setup_ssh` — generate an Ed25519 key pair at `~/.ssh/rebel-replit`, write public/private files with mode `0600` (or `icacls` ACL on Windows), and append a `*.replit.dev` block to `~/.ssh/config`. Idempotent by default; pass `force_regenerate=true` to replace the existing key (you will need to re-register the new public key with Replit).
 
-## Safety notes
+## Security notes
 
 - **Host allowlist.** Only `*.replit.dev` hosts are accepted, case-insensitive suffix match. Any other host is rejected before the SSH connection is opened.
-- **`~/.ssh/` mutation surface.** `replit_setup_ssh` writes to the operator's home directory (`~/.ssh/rebel-replit`, `~/.ssh/rebel-replit.pub`, `~/.ssh/config`). Configuration rewrites use the `ssh-config` library's structured `parse`/`stringify` (not string splicing) so existing entries and comments are preserved.
+- **`~/.ssh/` mutation surface.** `replit_setup_ssh` writes to the operator's home directory (`~/.ssh/rebel-replit`, `~/.ssh/rebel-replit.pub`, `~/.ssh/config`). Configuration rewrites use a safe AST-only evaluator that skips `Match exec` blocks entirely, rather than the upstream `ssh-config.compute()` which would `spawnSync` them through the shell.
 - **Path traversal.** SFTP file paths are POSIX-normalized after rejecting absolute paths and any `..` segments — relative paths only, no escape from the project root.
 - **Atomic write invariant.** `replit_write_file` writes to a randomized temp filename, renames via OpenSSH's POSIX rename extension (`ext_openssh_rename`), and verifies the final file's SHA-256 against the expected hash. If the server lacks the extension and the target file already exists, the write fails rather than falling back to `unlink + rename`.
 - **Read-back verification.** Every `replit_write_file` re-reads the final file and asserts SHA-256 equality before returning `verified: true`.
 
-## Known Limitations
+## Known limitations
 
 ### SSH host-key verification (planned for a future release)
 
-This connector does not currently verify the SSH server's host key when connecting
-to `*.replit.dev` hosts. A network-path man-in-the-middle could intercept SFTP
-sessions to read/modify file contents (the SSH private key itself is not
-exposed via this vector, since public-key auth does not transmit the private key).
+This connector does not currently verify the SSH server's host key when connecting to `*.replit.dev` hosts. A network-path man-in-the-middle could intercept SFTP sessions to read/modify file contents (the SSH private key itself is not exposed via this vector, since public-key auth does not transmit the private key).
 
-This is on the roadmap as a TOFU (trust-on-first-use) verification layer with
-optional Replit-published host-key pinning. Track the issue at <link to be filed>.
+This is on the roadmap as a TOFU (trust-on-first-use) verification layer with optional Replit-published host-key pinning.
 
-Mitigations: avoid using this connector over untrusted networks (public wifi,
-shared ISPs) until host-key verification ships.
+Mitigations: avoid using this connector over untrusted networks (public wifi, shared ISPs) until host-key verification ships.
 
-## License
+## Licence
 
-[FSL-1.1-MIT](./LICENSE)
+[FSL-1.1-MIT](./LICENSE) — Functional Source License, Version 1.1, with MIT future licence. The software converts to MIT licence on 2030-04-08.
