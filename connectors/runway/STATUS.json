@@ -1,0 +1,37 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "runway",
+  "package": "@mindstone/mcp-server-runway",
+  "version": "0.3.2",
+  "auth": {
+    "type": "api-key",
+    "envVars": [
+      "RUNWAYML_API_SECRET"
+    ]
+  },
+  "tools": {
+    "count": 22,
+    "domains": [
+      "video",
+      "image",
+      "audio",
+      "voices",
+      "tasks"
+    ]
+  },
+  "surface": "cloud-api",
+  "hostsTested": [
+    "claude-desktop",
+    "cursor",
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/tools/",
+    "auth": "./src/",
+    "tests": "./test/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-runway",
+    "serverJson": "./server.json"
+  }
+}

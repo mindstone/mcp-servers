@@ -2,6 +2,15 @@
 
 Outreach sales engagement MCP server — prospects, sequences, accounts, tasks, and mailings via Outreach API.
 
+## Status
+
+- **Version:** [0.1.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-outreach)
+- **Auth:** OAuth (local 127.0.0.1 callback) ([`OUTREACH_CLIENT_SECRET`](./server.json))
+- **Tools:** [15](./src/tools/) (prospects, sequences, accounts, tasks)
+- **Surface:** cloud-api
+- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
+- **Machine-readable:** [`STATUS.json`](./STATUS.json)
+
 ## Installation
 
 ```bash

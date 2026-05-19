@@ -1,0 +1,37 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "outreach",
+  "package": "@mindstone/mcp-server-outreach",
+  "version": "0.1.3",
+  "auth": {
+    "type": "oauth-local-callback",
+    "envVars": [
+      "OUTREACH_CLIENT_SECRET",
+      "OUTREACH_ACCESS_TOKEN"
+    ]
+  },
+  "tools": {
+    "count": 15,
+    "domains": [
+      "prospects",
+      "sequences",
+      "accounts",
+      "tasks"
+    ]
+  },
+  "surface": "cloud-api",
+  "hostsTested": [
+    "claude-desktop",
+    "cursor",
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/tools/",
+    "auth": "./src/",
+    "tests": "./test/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-outreach",
+    "serverJson": "./server.json"
+  }
+}

@@ -5,6 +5,15 @@
 
 Kling AI video generation MCP server for Model Context Protocol hosts. Generate AI videos from text descriptions or images, and manage video generation tasks through a standardised MCP interface.
 
+## Status
+
+- **Version:** [0.3.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-kling)
+- **Auth:** API key ([`KLING_ACCESS_KEY`](./server.json))
+- **Tools:** [4](./src/tools/) (video-generation, tasks)
+- **Surface:** cloud-api
+- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
+- **Machine-readable:** [`STATUS.json`](./STATUS.json)
+
 ## Requirements
 
 - Node.js 20+

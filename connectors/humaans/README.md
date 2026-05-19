@@ -5,6 +5,15 @@
 
 Humaans HR platform MCP server for Model Context Protocol hosts. Query employee profiles, job roles, time-away requests, company info, and office locations through a standardised MCP interface.
 
+## Status
+
+- **Version:** [0.2.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-humaans)
+- **Auth:** API key ([`HUMAANS_API_KEY`](./server.json))
+- **Tools:** [11](./src/tools/) (people, job-roles, time-away, company)
+- **Surface:** cloud-api
+- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
+- **Machine-readable:** [`STATUS.json`](./STATUS.json)
+
 ## Requirements
 
 - Node.js 20+

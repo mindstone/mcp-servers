@@ -1,0 +1,37 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "hubspot",
+  "package": "@mindstone/mcp-server-hubspot",
+  "version": "0.1.2",
+  "auth": {
+    "type": "oauth-host-orchestrated",
+    "envVars": [
+      "HUBSPOT_CLIENT_SECRET"
+    ]
+  },
+  "tools": {
+    "count": 92,
+    "domains": [
+      "crm-objects",
+      "associations",
+      "marketing",
+      "files",
+      "workflows"
+    ]
+  },
+  "surface": "cloud-api",
+  "hostsTested": [
+    "claude-desktop",
+    "cursor",
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/tools/",
+    "auth": "./src/",
+    "tests": "./test/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-hubspot",
+    "serverJson": "./server.json"
+  }
+}

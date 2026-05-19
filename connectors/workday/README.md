@@ -5,6 +5,15 @@
 
 Workday HCM MCP server for Model Context Protocol hosts. Query workers, profiles, and organizations in Workday through a standardised MCP interface using OAuth 2.0 authentication.
 
+## Status
+
+- **Version:** [0.2.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-workday)
+- **Auth:** OAuth ([`WORKDAY_REFRESH_TOKEN`](./server.json))
+- **Tools:** [4](./src/tools/) (workers, organizations)
+- **Surface:** cloud-api
+- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
+- **Machine-readable:** [`STATUS.json`](./STATUS.json)
+
 ## Requirements
 
 - Node.js 20+

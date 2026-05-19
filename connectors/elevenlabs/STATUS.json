@@ -1,0 +1,36 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "elevenlabs",
+  "package": "@mindstone/mcp-server-elevenlabs",
+  "version": "0.2.2",
+  "auth": {
+    "type": "api-key",
+    "envVars": [
+      "ELEVENLABS_API_KEY"
+    ]
+  },
+  "tools": {
+    "count": 8,
+    "domains": [
+      "voices",
+      "speech",
+      "music",
+      "transcription"
+    ]
+  },
+  "surface": "cloud-api",
+  "hostsTested": [
+    "claude-desktop",
+    "cursor",
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/tools/",
+    "auth": "./src/",
+    "tests": "./test/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs",
+    "serverJson": "./server.json"
+  }
+}

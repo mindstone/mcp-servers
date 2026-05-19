@@ -1,0 +1,34 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "google-analytics",
+  "package": "@mindstone/mcp-server-google-analytics",
+  "version": "0.1.1",
+  "auth": {
+    "type": "oauth",
+    "envVars": []
+  },
+  "tools": {
+    "count": 25,
+    "domains": [
+      "accounts",
+      "schema",
+      "reporting",
+      "admin"
+    ]
+  },
+  "surface": "cloud-api",
+  "hostsTested": [
+    "claude-desktop",
+    "cursor",
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/tools/",
+    "auth": "./src/",
+    "tests": "./test/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-google-analytics",
+    "serverJson": "./server.json"
+  }
+}

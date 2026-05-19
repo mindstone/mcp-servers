@@ -1,0 +1,34 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "nano-banana",
+  "package": "@mindstone/mcp-server-nano-banana",
+  "version": "0.3.2",
+  "auth": {
+    "type": "api-key",
+    "envVars": [
+      "GEMINI_API_KEY"
+    ]
+  },
+  "tools": {
+    "count": 3,
+    "domains": [
+      "image-generation",
+      "image-editing"
+    ]
+  },
+  "surface": "cloud-api",
+  "hostsTested": [
+    "claude-desktop",
+    "cursor",
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/tools/",
+    "auth": "./src/",
+    "tests": "./test/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-nano-banana",
+    "serverJson": "./server.json"
+  }
+}

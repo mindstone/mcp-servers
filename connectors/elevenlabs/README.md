@@ -5,6 +5,15 @@
 
 ElevenLabs MCP server for Model Context Protocol hosts. Generate speech, music, and sound effects, browse voices, and transcribe audio using the ElevenLabs API through a standardised MCP interface.
 
+## Status
+
+- **Version:** [0.2.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs)
+- **Auth:** API key ([`ELEVENLABS_API_KEY`](./server.json))
+- **Tools:** [8](./src/tools/) (voices, speech, music, transcription)
+- **Surface:** cloud-api
+- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
+- **Machine-readable:** [`STATUS.json`](./STATUS.json)
+
 ## Requirements
 
 - Node.js 20+

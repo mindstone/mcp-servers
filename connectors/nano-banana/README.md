@@ -5,6 +5,15 @@
 
 Nano Banana MCP server — Google Gemini image generation and editing via Model Context Protocol. Generate images from text descriptions and edit existing images using Google Gemini's AI capabilities.
 
+## Status
+
+- **Version:** [0.3.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-nano-banana)
+- **Auth:** API key ([`GEMINI_API_KEY`](./server.json))
+- **Tools:** [3](./src/tools/) (image-generation, image-editing)
+- **Surface:** cloud-api
+- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
+- **Machine-readable:** [`STATUS.json`](./STATUS.json)
+
 ## Requirements
 
 - Node.js 20+

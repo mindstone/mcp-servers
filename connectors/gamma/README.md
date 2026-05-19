@@ -5,6 +5,15 @@
 
 Gamma AI presentation generation MCP server for Model Context Protocol hosts. Create AI-powered presentations, documents, webpages, and social posts, manage themes and folders, and export content through a standardised MCP interface.
 
+## Status
+
+- **Version:** [0.3.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-gamma)
+- **Auth:** API key ([`GAMMA_API_KEY`](./server.json))
+- **Tools:** [6](./src/tools/) (themes, folders, generation)
+- **Surface:** cloud-api
+- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
+- **Machine-readable:** [`STATUS.json`](./STATUS.json)
+
 ## Requirements
 
 - Node.js 20+
