@@ -7,8 +7,10 @@ import {
   logOperation,
   preflightChecks,
   SSH_CONNECT_TIMEOUT_MS,
+  sftpOpWithSignal,
   validatePath,
 } from '../ssh.js';
+import { buildTimeoutError, composeRequestSignal } from '../timeouts.js';
 
 export const listFilesSchema = z.object({
   host: z.string().describe('SSH host (e.g., "<uuid>-00-<hash>.riker.replit.dev")'),
@@ -18,7 +20,10 @@ export const listFilesSchema = z.object({
 
 export type ListFilesArgs = z.infer<typeof listFilesSchema>;
 
-export async function replitListFiles(args: ListFilesArgs): Promise<string> {
+export async function replitListFiles(
+  args: ListFilesArgs,
+  callerSignal?: AbortSignal,
+): Promise<string> {
   const rawPath = args.path?.trim() || '.';
 
   let targetPath = '.';
@@ -33,33 +38,36 @@ export async function replitListFiles(args: ListFilesArgs): Promise<string> {
   const { key, host, user } = checks;
 
   const startTime = Date.now();
+  const signal = composeRequestSignal(callerSignal);
   try {
     const { sftp } = await getConnection(host, user, key);
 
-    const entries = await new Promise<Array<{ name: string; type: 'file' | 'directory'; size: number }>>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(Object.assign(new Error('Timed out listing directory'), { code: 'ETIMEDOUT' })), SSH_CONNECT_TIMEOUT_MS);
-
-      sftp.readdir(targetPath, (err: Error | undefined, list) => {
-        clearTimeout(timeout);
-        if (err) {
-          reject(err);
-          return;
-        }
-        const result = list
-          .filter((entry) => entry.filename !== '.' && entry.filename !== '..')
-          .map((entry) => ({
-            name: entry.filename,
-            type: (entry.attrs.isDirectory() ? 'directory' : 'file') as 'file' | 'directory',
-            size: entry.attrs.size,
-          }));
-        resolve(result);
-      });
-    });
+    const entries = await sftpOpWithSignal<Array<{ name: string; type: 'file' | 'directory'; size: number }>>(
+      signal,
+      SSH_CONNECT_TIMEOUT_MS,
+      (cb) => {
+        sftp.readdir(targetPath, (err: Error | undefined, list) => {
+          if (err) {
+            cb(err);
+            return;
+          }
+          const result = list
+            .filter((entry) => entry.filename !== '.' && entry.filename !== '..')
+            .map((entry) => ({
+              name: entry.filename,
+              type: (entry.attrs.isDirectory() ? 'directory' : 'file') as 'file' | 'directory',
+              size: entry.attrs.size,
+            }));
+          cb(null, result);
+        });
+      },
+    );
 
     logOperation('replit_list_files', host, targetPath, 'ok', Date.now() - startTime);
     return JSON.stringify({ ok: true, path: targetPath, entries });
   } catch (err: unknown) {
     logOperation('replit_list_files', host, targetPath, 'error', Date.now() - startTime);
+    if (signal.aborted) return JSON.stringify(buildTimeoutError());
     const sshErr = err as Error & { code?: number | string; level?: string };
     if (sshErr.level) {
       const connErr = sshErr as SshConnectionError;

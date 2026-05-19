@@ -178,8 +178,9 @@ export async function runSetupSsh(forceRegenerate: boolean): Promise<string> {
       return JSON.stringify({
         ok: false,
         error: 'Permission denied when setting up SSH keys.',
-        resolution: 'The SSH directory or key files may have restrictive permissions.',
-        next_step: { action: 'Check the permissions on your .ssh directory and try again.' },
+        code: 'CONFIG_REWRITE_FAILED',
+        action_required: 'The SSH directory or key files may have restrictive permissions.',
+        next_step: 'Check the permissions on your .ssh directory and retry `replit_setup_ssh`.',
       });
     }
 
@@ -187,8 +188,9 @@ export async function runSetupSsh(forceRegenerate: boolean): Promise<string> {
     return JSON.stringify({
       ok: false,
       error: 'Failed to set up SSH keys.',
-      resolution: 'An unexpected error occurred during SSH key setup.',
-      next_step: { action: 'Try again. If the problem persists, check that you have write access to your home directory.' },
+      code: 'KEY_GENERATION_FAILED',
+      action_required: 'An unexpected error occurred during SSH key setup.',
+      next_step: 'Retry `replit_setup_ssh`. If the problem persists, check that you have write access to your home directory.',
     });
   }
 }

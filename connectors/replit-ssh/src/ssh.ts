@@ -19,8 +19,9 @@ export function validateHost(host: string): StructuredError | null {
     return {
       ok: false,
       error: `Only Replit hosts (*.replit.dev) are supported for security. Received: "${host}"`,
-      resolution: 'Use the SSH host from your Replit project. It should end with .replit.dev.',
-      next_step: { action: 'Copy the SSH command from your Replit project settings and provide the correct host.' },
+      code: 'HOST_NOT_ALLOWED',
+      action_required: 'Use the SSH host from your Replit project. It should end with .replit.dev.',
+      next_step: 'Copy the SSH command from your Replit project settings and retry with the correct host.',
     };
   }
   return null;
@@ -31,8 +32,9 @@ export function validatePath(inputPath: string): { path: string } | StructuredEr
     return {
       ok: false,
       error: 'Path is required and must be a non-empty string.',
-      resolution: 'Provide a valid relative file path.',
-      next_step: { action: 'Specify the file path relative to the project root (e.g., "src/index.ts").' },
+      code: 'PATH_INVALID',
+      action_required: 'Provide a valid relative file path.',
+      next_step: 'Specify the file path relative to the project root (e.g., "src/index.ts").',
     };
   }
 
@@ -40,8 +42,9 @@ export function validatePath(inputPath: string): { path: string } | StructuredEr
     return {
       ok: false,
       error: 'Absolute paths are not allowed. Use a path relative to the project root.',
-      resolution: 'Remove the leading "/" or drive letter from the path.',
-      next_step: { action: 'Provide a relative path like "src/index.ts" instead of "/home/runner/project/src/index.ts".' },
+      code: 'PATH_INVALID',
+      action_required: 'Remove the leading "/" or drive letter from the path.',
+      next_step: 'Provide a relative path like "src/index.ts" instead of "/home/runner/project/src/index.ts".',
     };
   }
 
@@ -51,8 +54,9 @@ export function validatePath(inputPath: string): { path: string } | StructuredEr
     return {
       ok: false,
       error: 'Path traversal ("..") is not allowed for security.',
-      resolution: 'Use a path that stays within the project directory.',
-      next_step: { action: 'Provide a path relative to the project root without ".." segments.' },
+      code: 'PATH_INVALID',
+      action_required: 'Use a path that stays within the project directory.',
+      next_step: 'Provide a path relative to the project root without ".." segments.',
     };
   }
 
@@ -78,6 +82,74 @@ export function logOperation(
   console.error(
     `[replit-ssh] tool=${tool} host=${redactedHost} path=${opPath} result=${result} duration=${durationMs}ms`,
   );
+}
+
+// ─── Signal-aware SFTP helper ────────────────────────────────────────────────
+
+/**
+ * Wraps a node-style SFTP callback in a Promise that also honours an AbortSignal.
+ * If the signal fires before the callback completes, the Promise rejects with an
+ * ETIMEDOUT-coded error so the existing translation paths see it as a timeout.
+ * The underlying ssh2/SFTP callback still runs to completion in the background —
+ * ssh2 does not expose per-request cancellation — but the caller observes the
+ * abort immediately. This is the intended semantics: the request-level budget
+ * is the contract, not the underlying socket.
+ */
+export function sftpOpWithSignal<T>(
+  signal: AbortSignal,
+  fallbackTimeoutMs: number,
+  invoke: (cb: (err: Error | null | undefined, result?: T) => void) => void,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      const reason = signal.reason as { name?: string } | undefined;
+      const isTimeout = reason?.name === 'TimeoutError';
+      reject(
+        Object.assign(
+          new Error(isTimeout ? 'Request timed out' : 'Request aborted'),
+          { code: 'ETIMEDOUT' as const },
+        ),
+      );
+    };
+    const fallbackTimer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(Object.assign(new Error('Operation timed out'), { code: 'ETIMEDOUT' as const }));
+    }, fallbackTimeoutMs);
+    const cleanup = () => {
+      clearTimeout(fallbackTimer);
+      signal.removeEventListener('abort', onAbort);
+    };
+
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+
+    try {
+      invoke((err, result) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(result as T);
+      });
+    } catch (err) {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(err as Error);
+    }
+  });
 }
 
 // ─── Connection Cache ────────────────────────────────────────────────────────
@@ -415,8 +487,9 @@ export function preflightChecks(
       error: JSON.stringify({
         ok: false,
         error: 'Both "host" and "user" parameters are required.',
-        resolution: 'Provide the SSH host and username from your Replit project.',
-        next_step: { action: 'Copy the SSH command from your Replit project settings to get the host and user values.' },
+        code: 'CONFIG_MISSING',
+        action_required: 'Provide the SSH host and username from your Replit project.',
+        next_step: 'Copy the SSH command from your Replit project settings to get the host and user values, then retry.',
       }),
     };
   }
@@ -445,8 +518,9 @@ export function preflightChecks(
       error: JSON.stringify({
         ok: false,
         error: 'SSH private key is invalid or corrupted.',
-        resolution: 'The key file exists but cannot be parsed. It may be in an unsupported format or corrupted.',
-        next_step: { action: 'Run replit_setup_ssh with force_regenerate=true to create a fresh key, then re-add it to your Replit account.' },
+        code: 'CONFIG_INVALID',
+        action_required: 'The key file exists but cannot be parsed. It may be in an unsupported format or corrupted.',
+        next_step: 'Run `replit_setup_ssh` with force_regenerate=true to create a fresh key, then re-add it to your Replit account.',
       }),
     };
   }

@@ -8,8 +8,10 @@ import {
   logOperation,
   preflightChecks,
   SSH_CONNECT_TIMEOUT_MS,
+  sftpOpWithSignal,
   validatePath,
 } from '../ssh.js';
+import { buildTimeoutError, composeRequestSignal } from '../timeouts.js';
 
 export const readFileSchema = z.object({
   host: z.string().describe('SSH host (e.g., "<uuid>-00-<hash>.riker.replit.dev")'),
@@ -19,14 +21,18 @@ export const readFileSchema = z.object({
 
 export type ReadFileArgs = z.infer<typeof readFileSchema>;
 
-export async function replitReadFile(args: ReadFileArgs): Promise<string> {
+export async function replitReadFile(
+  args: ReadFileArgs,
+  callerSignal?: AbortSignal,
+): Promise<string> {
   const rawPath = args.path?.trim();
   if (!rawPath) {
     return JSON.stringify({
       ok: false,
       error: 'The "path" parameter is required.',
-      resolution: 'Provide the path of the file to read.',
-      next_step: { action: 'Specify the file path relative to the project root (e.g., "src/index.ts").' },
+      code: 'PATH_INVALID',
+      action_required: 'Provide the path of the file to read.',
+      next_step: 'Specify the file path relative to the project root (e.g., "src/index.ts").',
     });
   }
 
@@ -37,8 +43,9 @@ export async function replitReadFile(args: ReadFileArgs): Promise<string> {
     return JSON.stringify({
       ok: false,
       error: 'A specific file path is required.',
-      resolution: 'The path "." refers to a directory, not a file.',
-      next_step: { action: 'Provide a file path like "src/index.ts" instead of "."' },
+      code: 'PATH_INVALID',
+      action_required: 'The path "." refers to a directory, not a file.',
+      next_step: 'Provide a file path like "src/index.ts" instead of "."',
     });
   }
 
@@ -47,21 +54,23 @@ export async function replitReadFile(args: ReadFileArgs): Promise<string> {
   const { key, host, user } = checks;
 
   const startTime = Date.now();
+  const signal = composeRequestSignal(callerSignal);
   try {
     const { sftp } = await getConnection(host, user, key);
 
-    const content = await new Promise<Buffer>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(Object.assign(new Error('Timed out reading file'), { code: 'ETIMEDOUT' })), SSH_CONNECT_TIMEOUT_MS);
-
-      sftp.readFile(targetPath, (err: Error | undefined, data: Buffer) => {
-        clearTimeout(timeout);
-        if (err) {
-          reject(err);
-          return;
-        }
-        resolve(data);
-      });
-    });
+    const content = await sftpOpWithSignal<Buffer>(
+      signal,
+      SSH_CONNECT_TIMEOUT_MS,
+      (cb) => {
+        sftp.readFile(targetPath, (err: Error | undefined, data: Buffer) => {
+          if (err) {
+            cb(err);
+            return;
+          }
+          cb(null, data);
+        });
+      },
+    );
 
     const binary = isBinaryContent(content);
 
@@ -86,6 +95,7 @@ export async function replitReadFile(args: ReadFileArgs): Promise<string> {
     });
   } catch (err: unknown) {
     logOperation('replit_read_file', host, targetPath, 'error', Date.now() - startTime);
+    if (signal.aborted) return JSON.stringify(buildTimeoutError());
     const sshErr = err as Error & { code?: number | string; level?: string };
     if (sshErr.level) {
       const connErr = sshErr as SshConnectionError;

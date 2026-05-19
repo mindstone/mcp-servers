@@ -8,7 +8,9 @@ import {
   logOperation,
   preflightChecks,
   SSH_CONNECT_TIMEOUT_MS,
+  sftpOpWithSignal,
 } from '../ssh.js';
+import { buildTimeoutError, composeRequestSignal } from '../timeouts.js';
 
 export const checkConnectionSchema = z.object({
   host: z.string().describe('SSH host (e.g., "<uuid>-00-<hash>.riker.replit.dev")'),
@@ -21,13 +23,16 @@ export const checkConnectionSchema = z.object({
 
 export type CheckConnectionArgs = z.infer<typeof checkConnectionSchema>;
 
-export async function replitCheckConnection(args: CheckConnectionArgs): Promise<string> {
+export async function replitCheckConnection(
+  args: CheckConnectionArgs,
+  callerSignal?: AbortSignal,
+): Promise<string> {
   const checks = preflightChecks(args.host, args.user);
   if ('error' in checks) {
     try {
       const parsed = JSON.parse(checks.error);
       if (parsed.error === 'SSH private key is invalid or corrupted.') {
-        parsed.diagnostics = { keyError: parsed.resolution, keyPath: 'resolved via ~/.ssh/config or ~/.ssh/rebel-replit' };
+        parsed.diagnostics = { keyError: parsed.action_required, keyPath: 'resolved via ~/.ssh/config or ~/.ssh/rebel-replit' };
         return JSON.stringify(parsed);
       }
     } catch { /* not JSON — return as-is */ }
@@ -37,6 +42,7 @@ export async function replitCheckConnection(args: CheckConnectionArgs): Promise<
   const verbose = args.verbose === true;
 
   const startTime = Date.now();
+  const signal = composeRequestSignal(callerSignal);
 
   const keyValidation = validatePrivateKey(key);
   const keyType = keyValidation.valid ? keyValidation.type : 'unknown';
@@ -46,6 +52,10 @@ export async function replitCheckConnection(args: CheckConnectionArgs): Promise<
 
   if (!diagResult.connected || !diagResult.client) {
     logOperation('replit_check_connection', host, '.', 'error', Date.now() - startTime);
+
+    if (signal.aborted) {
+      return JSON.stringify({ ...buildTimeoutError(), diagnostics: { durationMs: diagResult.durationMs, events: diagResult.events, keyType, keyFingerprint } });
+    }
 
     const userError = translateSshError(
       diagResult.error || Object.assign(new Error('Connection failed'), { code: 'UNKNOWN' }) as Error & { code: string },
@@ -65,29 +75,27 @@ export async function replitCheckConnection(args: CheckConnectionArgs): Promise<
 
   const client = diagResult.client;
   try {
-    const sftpResult = await new Promise<{ supported: boolean; workingDirectory: string }>((resolve, reject) => {
-      const sftpTimeout = setTimeout(() => {
-        reject(Object.assign(new Error('SFTP channel open timed out'), { code: 'ETIMEDOUT' }));
-      }, SSH_CONNECT_TIMEOUT_MS);
-
-      client.sftp((err: Error | undefined, sftp: SFTPWrapper) => {
-        clearTimeout(sftpTimeout);
-        if (err) {
-          reject(Object.assign(new Error('SFTP subsystem is not available on this Replit project.'), { code: 'SFTP_UNAVAILABLE' }));
-          return;
-        }
-
-        sftp.realpath('.', (realpathErr: Error | undefined, absPath: string) => {
-          if (realpathErr) {
-            sftp.end();
-            resolve({ supported: true, workingDirectory: 'unknown' });
+    const sftpResult = await sftpOpWithSignal<{ supported: boolean; workingDirectory: string }>(
+      signal,
+      SSH_CONNECT_TIMEOUT_MS,
+      (cb) => {
+        client.sftp((err: Error | undefined, sftp: SFTPWrapper) => {
+          if (err) {
+            cb(Object.assign(new Error('SFTP subsystem is not available on this Replit project.'), { code: 'SFTP_UNAVAILABLE' }));
             return;
           }
-          sftp.end();
-          resolve({ supported: true, workingDirectory: absPath });
+          sftp.realpath('.', (realpathErr: Error | undefined, absPath: string) => {
+            if (realpathErr) {
+              sftp.end();
+              cb(null, { supported: true, workingDirectory: 'unknown' });
+              return;
+            }
+            sftp.end();
+            cb(null, { supported: true, workingDirectory: absPath });
+          });
         });
-      });
-    });
+      },
+    );
 
     logOperation('replit_check_connection', host, '.', 'ok', Date.now() - startTime);
 
@@ -110,6 +118,19 @@ export async function replitCheckConnection(args: CheckConnectionArgs): Promise<
     return JSON.stringify(result);
   } catch (err: unknown) {
     logOperation('replit_check_connection', host, '.', 'error', Date.now() - startTime);
+    if (signal.aborted) {
+      return JSON.stringify({
+        ...buildTimeoutError(),
+        sshConnected: true,
+        diagnostics: {
+          durationMs: diagResult.durationMs,
+          events: diagResult.events,
+          keyType,
+          keyFingerprint,
+          note: 'SSH connection succeeded but the SFTP probe timed out.',
+        },
+      });
+    }
     const sftpError = translateSshError(err as Error & { code?: string; level?: string }, { proxyReachable: true, handshakeCompleted: true });
     return JSON.stringify({
       ...sftpError,

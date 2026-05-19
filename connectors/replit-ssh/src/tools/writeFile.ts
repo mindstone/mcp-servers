@@ -10,8 +10,10 @@ import {
   mkdirRecursive,
   preflightChecks,
   SSH_CONNECT_TIMEOUT_MS,
+  sftpOpWithSignal,
   validatePath,
 } from '../ssh.js';
+import { buildTimeoutError, composeRequestSignal } from '../timeouts.js';
 
 export const writeFileSchema = z.object({
   host: z.string().describe('SSH host (e.g., "<uuid>-00-<hash>.riker.replit.dev")'),
@@ -26,7 +28,10 @@ export const writeFileSchema = z.object({
 
 export type WriteFileArgs = z.infer<typeof writeFileSchema>;
 
-export async function replitWriteFile(args: WriteFileArgs): Promise<string> {
+export async function replitWriteFile(
+  args: WriteFileArgs,
+  callerSignal?: AbortSignal,
+): Promise<string> {
   const rawPath = args.path?.trim();
   const content = args.content;
 
@@ -34,8 +39,9 @@ export async function replitWriteFile(args: WriteFileArgs): Promise<string> {
     return JSON.stringify({
       ok: false,
       error: 'The "path" parameter is required.',
-      resolution: 'Provide the path where the file should be written.',
-      next_step: { action: 'Specify the file path relative to the project root (e.g., "src/index.ts").' },
+      code: 'PATH_INVALID',
+      action_required: 'Provide the path where the file should be written.',
+      next_step: 'Specify the file path relative to the project root (e.g., "src/index.ts").',
     });
   }
 
@@ -43,8 +49,9 @@ export async function replitWriteFile(args: WriteFileArgs): Promise<string> {
     return JSON.stringify({
       ok: false,
       error: 'The "content" parameter is required.',
-      resolution: 'Provide the content to write to the file.',
-      next_step: { action: 'Include the file content in the "content" parameter.' },
+      code: 'PATH_INVALID',
+      action_required: 'Provide the content to write to the file.',
+      next_step: 'Include the file content in the "content" parameter.',
     });
   }
 
@@ -53,8 +60,9 @@ export async function replitWriteFile(args: WriteFileArgs): Promise<string> {
     return JSON.stringify({
       ok: false,
       error: `Unsupported encoding: "${encoding}". Use "utf-8" for text or "base64" for binary files.`,
-      resolution: 'Set encoding to "utf-8" (default) for text, or "base64" for binary files like images.',
-      next_step: { action: 'Retry with encoding set to "utf-8" or "base64".' },
+      code: 'PATH_INVALID',
+      action_required: 'Set encoding to "utf-8" (default) for text, or "base64" for binary files like images.',
+      next_step: 'Retry `replit_write_file` with encoding set to "utf-8" or "base64".',
     });
   }
 
@@ -65,8 +73,9 @@ export async function replitWriteFile(args: WriteFileArgs): Promise<string> {
     return JSON.stringify({
       ok: false,
       error: 'A specific file path is required.',
-      resolution: 'The path "." refers to a directory, not a file.',
-      next_step: { action: 'Provide a file path like "src/index.ts" instead of "."' },
+      code: 'PATH_INVALID',
+      action_required: 'The path "." refers to a directory, not a file.',
+      next_step: 'Provide a file path like "src/index.ts" instead of "."',
     });
   }
   const tempSuffix = randomBytes(4).toString('hex');
@@ -77,6 +86,7 @@ export async function replitWriteFile(args: WriteFileArgs): Promise<string> {
   const { key, host, user } = checks;
 
   const startTime = Date.now();
+  const signal = composeRequestSignal(callerSignal);
   try {
     const { sftp } = await getConnection(host, user, key);
     const contentBuffer = encoding === 'base64' ? Buffer.from(content, 'base64') : Buffer.from(content, 'utf-8');
@@ -87,26 +97,20 @@ export async function replitWriteFile(args: WriteFileArgs): Promise<string> {
       await mkdirRecursive(sftp, parentDir);
     }
 
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(Object.assign(new Error('Timed out writing file'), { code: 'ETIMEDOUT' })), SSH_CONNECT_TIMEOUT_MS);
-
+    await sftpOpWithSignal<void>(signal, SSH_CONNECT_TIMEOUT_MS, (cb) => {
       sftp.writeFile(tempPath, contentBuffer, (err: Error | null | undefined) => {
-        clearTimeout(timeout);
         if (err) {
-          reject(err);
+          cb(err);
           return;
         }
-        resolve();
+        cb(null);
       });
     });
 
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(Object.assign(new Error('Timed out renaming file'), { code: 'ETIMEDOUT' })), SSH_CONNECT_TIMEOUT_MS);
-
+    await sftpOpWithSignal<void>(signal, SSH_CONNECT_TIMEOUT_MS, (cb) => {
       const onDone = (err: Error | null | undefined) => {
-        clearTimeout(timeout);
-        if (err) { reject(err); return; }
-        resolve();
+        if (err) { cb(err); return; }
+        cb(null);
       };
 
       const sftpAny = sftp as unknown as { ext_openssh_rename?: (src: string, dst: string, cb: (err: Error | null | undefined) => void) => void };
@@ -115,8 +119,7 @@ export async function replitWriteFile(args: WriteFileArgs): Promise<string> {
       } else {
         sftp.rename(tempPath, targetPath, (renameErr: Error | null | undefined) => {
           if (!renameErr) { onDone(null); return; }
-          clearTimeout(timeout);
-          reject(Object.assign(
+          cb(Object.assign(
             new Error('Cannot overwrite existing file: server does not support atomic rename. This is unusual for Replit — please retry.'),
             { code: 'RENAME_UNSUPPORTED' },
           ));
@@ -124,16 +127,13 @@ export async function replitWriteFile(args: WriteFileArgs): Promise<string> {
       }
     });
 
-    const readBack = await new Promise<Buffer>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(Object.assign(new Error('Timed out verifying file'), { code: 'ETIMEDOUT' })), SSH_CONNECT_TIMEOUT_MS);
-
+    const readBack = await sftpOpWithSignal<Buffer>(signal, SSH_CONNECT_TIMEOUT_MS, (cb) => {
       sftp.readFile(targetPath, (err: Error | undefined, data: Buffer) => {
-        clearTimeout(timeout);
         if (err) {
-          reject(err);
+          cb(err);
           return;
         }
-        resolve(data);
+        cb(null, data);
       });
     });
 
@@ -146,8 +146,9 @@ export async function replitWriteFile(args: WriteFileArgs): Promise<string> {
       return JSON.stringify({
         ok: false,
         error: 'Write verification failed — the file content does not match what was written.',
-        resolution: 'The file was written but verification detected a mismatch. The file may be corrupted or was modified by another process.',
-        next_step: { action: 'Retry replit_write_file. If the problem persists, check if another process is modifying the file.' },
+        code: 'WRITE_VERIFICATION_FAILED',
+        action_required: 'The file was written but verification detected a mismatch. The file may be corrupted or was modified by another process.',
+        next_step: 'Retry `replit_write_file`. If the problem persists, check if another process is modifying the file.',
         path: targetPath,
         expectedHash,
         actualHash,
@@ -169,9 +170,10 @@ export async function replitWriteFile(args: WriteFileArgs): Promise<string> {
         cleanupSftp.unlink(tempPath, () => resolve());
       });
     } catch {
-      // Best-effort cleanup
+      // best-effort cleanup
     }
 
+    if (signal.aborted) return JSON.stringify(buildTimeoutError());
     const sshErr = err as Error & { code?: number | string; level?: string };
     if (sshErr.level) {
       const connErr = sshErr as SshConnectionError;

@@ -32,8 +32,9 @@ export function resolveKeyPathForHost(host: string): KeyResolution {
       error: {
         ok: false,
         error: `Cannot read SSH config (~/.ssh/config): ${code || 'unknown error'}`,
-        resolution: 'Check file permissions on ~/.ssh/config, or run replit_setup_ssh to create a fresh config.',
-        next_step: { action: 'Ask Rebel to set up Replit SSH to repair the configuration.' },
+        code: 'CONFIG_INVALID',
+        action_required: 'Check file permissions on ~/.ssh/config, or run `replit_setup_ssh` to create a fresh config.',
+        next_step: 'Run `replit_setup_ssh` to repair the configuration, or fix permissions on ~/.ssh/config manually.',
       },
     };
   }
@@ -47,8 +48,9 @@ export function resolveKeyPathForHost(host: string): KeyResolution {
       error: {
         ok: false,
         error: 'SSH config (~/.ssh/config) is malformed and cannot be parsed.',
-        resolution: 'Fix the syntax in ~/.ssh/config, or run replit_setup_ssh to add the Replit entry.',
-        next_step: { action: 'Ask Rebel to set up Replit SSH, or manually repair ~/.ssh/config.' },
+        code: 'CONFIG_INVALID',
+        action_required: 'Fix the syntax in ~/.ssh/config, or run `replit_setup_ssh` to add the Replit entry.',
+        next_step: 'Run `replit_setup_ssh` to repair the config, or manually fix ~/.ssh/config syntax.',
       },
     };
   }
@@ -73,8 +75,9 @@ export function resolveKeyPathForHost(host: string): KeyResolution {
       error: {
         ok: false,
         error: `SSH config specifies key "${rawPath}" for Replit hosts, but the file does not exist.`,
-        resolution: 'Either create the missing key file, update ~/.ssh/config to point to the correct key, or run replit_setup_ssh to set up a new key.',
-        next_step: { action: 'Run replit_setup_ssh to generate a new key, or fix the IdentityFile path in ~/.ssh/config.' },
+        code: 'CONFIG_MISSING',
+        action_required: 'Either create the missing key file, update ~/.ssh/config to point to the correct key, or run `replit_setup_ssh` to set up a new key.',
+        next_step: 'Run `replit_setup_ssh` to generate a new key, or fix the IdentityFile path in ~/.ssh/config.',
       },
     };
   }
@@ -92,23 +95,26 @@ export function readSshKey(keyPath: string): { key: Buffer } | StructuredError {
       return {
         ok: false,
         error: 'Replit SSH key not found.',
-        resolution: 'You need to set up SSH keys for Replit before connecting.',
-        next_step: { action: 'Ask Rebel to set up Replit SSH — it will generate keys and guide you through adding them to your Replit account.' },
+        code: 'CONFIG_MISSING',
+        action_required: 'You need to set up SSH keys for Replit before connecting.',
+        next_step: 'Run `replit_setup_ssh` to generate keys and add the public key to your Replit account.',
       };
     }
     if (code === 'EACCES') {
       return {
         ok: false,
         error: 'Cannot read Replit SSH key — permission denied.',
-        resolution: 'The SSH key file permissions may need repair.',
-        next_step: { action: 'Ask Rebel to set up Replit SSH to repair file permissions.' },
+        code: 'CONFIG_INVALID',
+        action_required: 'The SSH key file permissions may need repair.',
+        next_step: 'Run `replit_setup_ssh` to repair file permissions, or fix permissions on the key file manually.',
       };
     }
     return {
       ok: false,
       error: 'Failed to read Replit SSH key.',
-      resolution: 'There was an unexpected error reading the SSH key file.',
-      next_step: { action: 'Ask Rebel to set up Replit SSH to regenerate the key.' },
+      code: 'IO_ERROR',
+      action_required: 'There was an unexpected error reading the SSH key file.',
+      next_step: 'Run `replit_setup_ssh` to regenerate the key.',
     };
   }
 }
