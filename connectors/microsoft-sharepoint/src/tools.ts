@@ -115,6 +115,32 @@ async function requireSharePointScope(): Promise<CallToolResult | null> {
   }
 }
 
+function ensureRecoveryGuidance(result: ToolResult, toolName: string): CallToolResult {
+  if (!result.isError) return result as CallToolResult;
+  const first = result.content[0];
+  if (!first || first.type !== 'text') return result as CallToolResult;
+
+  try {
+    const parsed = JSON.parse(first.text) as Record<string, unknown>;
+    if (parsed.ok !== false) return result as CallToolResult;
+
+    const patched: Record<string, unknown> = { ...parsed };
+    if (!('action_required' in patched)) {
+      patched.action_required = 'Adjust the arguments based on the error and retry.';
+    }
+    if (!('next_step' in patched)) {
+      patched.next_step = toolName;
+    }
+
+    return {
+      ...result,
+      content: [{ type: 'text', text: JSON.stringify(patched) }],
+    };
+  } catch {
+    return result as CallToolResult;
+  }
+}
+
 function registerScopedTool(server: McpServer, spec: SharePointToolSpec): void {
   server.registerTool(
     spec.name,
@@ -129,7 +155,7 @@ function registerScopedTool(server: McpServer, spec: SharePointToolSpec): void {
       const result = await callGraph(extra, (client, signal) =>
         spec.handler(client, args as Record<string, unknown>, signal),
       );
-      return result as CallToolResult;
+      return ensureRecoveryGuidance(result, spec.name);
     }),
   );
 }

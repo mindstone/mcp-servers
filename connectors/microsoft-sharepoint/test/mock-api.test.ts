@@ -263,8 +263,15 @@ describe('microsoft-sharepoint mock-API integration', () => {
   it('returns explicit guidance when scope-gated tool arguments are missing', async () => {
     const result = await client.callTool('get_sharepoint_site', {});
     expect(result.isError).toBe(true);
-    const json = result.json as { ok: boolean; error: string };
+    const json = result.json as {
+      ok: boolean;
+      error: string;
+      action_required: string;
+      next_step: string;
+    };
     expect(json.ok).toBe(false);
     expect(json.error).toContain('Missing required parameter');
+    expect(json.action_required).toContain('Adjust the arguments');
+    expect(json.next_step).toBe('get_sharepoint_site');
   });
 });
