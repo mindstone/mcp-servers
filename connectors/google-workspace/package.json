@@ -24,7 +24,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc && shx cp src/tools/definitions/*-overrides.json dist/tools/definitions/ && shx chmod +x dist/index.js && npm run tools:annotations && npm run security:internal-refs",
+    "build": "shx rm -rf dist && tsc && shx cp src/tools/definitions/*-overrides.json dist/tools/definitions/ && shx chmod +x dist/index.js && npm run tools:annotations && npm run security:internal-refs",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build && npm test",
     "watch": "tsc --watch",

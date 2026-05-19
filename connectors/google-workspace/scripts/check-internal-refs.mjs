@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const pattern = /@nspr|REBEL_HOST_CONTEXT|rebel\\.local|MINDSTONE_REBEL_BRIDGE_STATE|MCP_HOST_BRIDGE_STATE|\\.rebel-icon/;
+const pattern = /@nspr|REBEL_HOST_CONTEXT|rebel\.local|MINDSTONE_REBEL_BRIDGE_STATE|MCP_HOST_BRIDGE_STATE|\.rebel-icon/;
 const roots = ['src', 'dist'];
 const matches = [];
 
@@ -28,7 +28,7 @@ for (const dir of roots) {
 }
 
 if (matches.length > 0) {
-  console.error(`Internal reference check failed:\\n${matches.join('\\n')}`);
+  console.error(`Internal reference check failed:\n${matches.join('\n')}`);
   process.exit(1);
 }
 

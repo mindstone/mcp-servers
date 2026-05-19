@@ -1,6 +1,7 @@
 /**
  * Utilities for formatting Google Slides content and parsing URLs.
  */
+import { wrapUntrustedContent } from '../../utils/untrusted-content.js';
 
 /**
  * Construct a Google Slides URL from presentation ID
@@ -77,7 +78,7 @@ export function formatPresentationHeader(
   }
 
   lines.push('---');
-  return lines.join('\n');
+  return wrapUntrustedContent(lines.join('\n'), 'google-workspace:slides:slide');
 }
 
 /**
@@ -122,7 +123,7 @@ export function formatPresentationAsText(
   }
 ): string {
   if (options?.includeHeader === false) {
-    return content;
+    return wrapUntrustedContent(content, `google-workspace:slides:presentation/${presentationId}`);
   }
 
   const header = formatPresentationHeader(title, presentationId, {
@@ -130,5 +131,5 @@ export function formatPresentationAsText(
     slideCount: options?.slideCount,
   });
 
-  return `${header}\n${content}`;
+  return wrapUntrustedContent(`${header}\n${content}`, `google-workspace:slides:presentation/${presentationId}`);
 }

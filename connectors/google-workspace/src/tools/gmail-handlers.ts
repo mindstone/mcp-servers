@@ -10,9 +10,10 @@ import {
 import { getAccountManager } from '../modules/accounts/index.js';
 import { AttachmentService } from '../modules/attachments/service.js';
 import { ATTACHMENT_FOLDERS } from '../modules/attachments/types.js';
-import { readFileSync, statSync } from 'fs';
+import { lstatSync, readFileSync, realpathSync, statSync } from 'fs';
 import path from 'path';
 import { McpToolResponse } from './types.js';
+import { wrapUntrustedContent } from '../utils/untrusted-content.js';
 
 // Singleton instances
 let gmailService: ReturnType<typeof getGmailService>;
@@ -109,27 +110,57 @@ const MIME_TYPES: Record<string, string> = {
   '.zip': 'application/zip',
 };
 
-function resolveAttachmentFromPath(filePath: string): { content: string; name: string; mimeType: string; size: number } {
-  const resolved = path.resolve(filePath);
+function isPathInsideDirectory(candidatePath: string, rootPath: string): boolean {
+  return candidatePath === rootPath || candidatePath.startsWith(`${rootPath}${path.sep}`);
+}
 
-  // Security: restrict to workspace path to prevent arbitrary file exfiltration
-  const workspaceBase = process.env.WORKSPACE_BASE_PATH;
-  if (workspaceBase) {
-    const resolvedBase = path.resolve(workspaceBase);
-    if (!resolved.startsWith(resolvedBase + path.sep) && resolved !== resolvedBase) {
-      throw new McpError(
-        ErrorCode.InvalidParams,
-        `Attachment path must be within the workspace directory. Got: ${filePath}`
-      );
-    }
+function getAttachmentWorkspaceRoot(): string {
+  const workspaceBase = process.env.MCP_WORKSPACE_PATH || process.env.WORKSPACE_BASE_PATH;
+  if (!workspaceBase) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'Attachment paths require MCP_WORKSPACE_PATH to be set to the workspace root.'
+    );
   }
 
-  const stats = statSync(resolved);
-  const content = readFileSync(resolved);
-  const ext = path.extname(resolved).toLowerCase();
+  const rootPath = path.resolve(workspaceBase);
+  const rootStats = lstatSync(rootPath);
+  if (rootStats.isSymbolicLink() || !rootStats.isDirectory()) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'MCP_WORKSPACE_PATH must point to a real workspace directory, not a symlink or file.'
+    );
+  }
+
+  return realpathSync.native(rootPath);
+}
+
+/** @internal Exported for tests. */
+export function resolveAttachmentFromPath(filePath: string): { content: string; name: string; mimeType: string; size: number } {
+  const rootRealpath = getAttachmentWorkspaceRoot();
+  const candidatePath = path.resolve(filePath);
+  const candidateStats = lstatSync(candidatePath);
+  if (candidateStats.isSymbolicLink()) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'Attachment path must not be a symbolic link.'
+    );
+  }
+
+  const candidateRealpath = realpathSync.native(candidatePath);
+  if (!isPathInsideDirectory(candidateRealpath, rootRealpath)) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      `Attachment path must be within the workspace directory. Got: ${filePath}`
+    );
+  }
+
+  const stats = statSync(candidateRealpath);
+  const content = readFileSync(candidateRealpath);
+  const ext = path.extname(candidateRealpath).toLowerCase();
   return {
     content: content.toString('base64'),
-    name: path.basename(resolved),
+    name: path.basename(candidateRealpath),
     mimeType: MIME_TYPES[ext] || 'application/octet-stream',
     size: stats.size,
   };
@@ -270,7 +301,7 @@ export function formatEmailsAsText(result: { emails: Array<{ id: string; threadI
     lines.push(`More results available. Use pageToken: "${result.nextPageToken}" to continue.`);
   }
 
-  return lines.join('\n');
+  return wrapUntrustedContent(lines.join('\n'), 'google-workspace:gmail:search');
 }
 
 interface SendEmailRequestParams {
@@ -545,9 +576,9 @@ export function formatThreadAsText(result: { threadId: string; messagesCount: nu
   
   if (messages.length === 0) {
     if (offset > 0) {
-      return `Thread ${threadId} has no more messages beyond offset ${offset} (${messagesCount} total).`;
+      return wrapUntrustedContent(`Thread ${threadId} has no more messages beyond offset ${offset} (${messagesCount} total).`, `google-workspace:gmail:thread/${threadId}`);
     }
-    return `Thread ${threadId} is empty.`;
+    return wrapUntrustedContent(`Thread ${threadId} is empty.`, `google-workspace:gmail:thread/${threadId}`);
   }
 
   // Get subject from first message
@@ -599,7 +630,7 @@ export function formatThreadAsText(result: { threadId: string; messagesCount: nu
     lines.push(`More messages available. Use offset: ${nextOffset} to continue.`);
   }
 
-  return lines.join('\n');
+  return wrapUntrustedContent(lines.join('\n'), `google-workspace:gmail:thread/${threadId}`);
 }
 
 export async function handleGetWorkspaceEmailThread(params: GetThreadParams) {

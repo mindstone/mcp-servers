@@ -17,6 +17,8 @@ import {
 import { AttachmentService } from '../attachments/service.js';
 import { DriveService } from '../drive/service.js';
 import { ATTACHMENT_FOLDERS, AttachmentSource, AttachmentMetadata } from '../attachments/types.js';
+import { AccountError } from '../accounts/types.js';
+import { isUnauthorizedError } from '../accounts/unauthorized.js';
 
 type CalendarEvent = calendar_v3.Schema$Event;
 type GoogleEventAttachment = calendar_v3.Schema$EventAttachment;
@@ -178,8 +180,27 @@ export class CalendarService {
   private async handleCalendarOperation<T>(email: string, operation: () => Promise<T>): Promise<T> {
     try {
       return await operation();
-    } catch (error: any) {
-      if (error.code === 401 || error.code === 403) {
+    } catch (error: unknown) {
+      if (isUnauthorizedError(error)) {
+        if (process.env.GOOGLE_WORKSPACE_DISABLE_REFRESH === '1') {
+          throw new AccountError(
+            'Calendar authentication required',
+            'AUTH_REQUIRED',
+            'Connect Google Workspace to continue'
+          );
+        }
+        const accountManager = getAccountManager();
+        const tokenStatus = await accountManager.validateToken(email);
+        if (tokenStatus.valid && tokenStatus.token) {
+          this.oauth2Client.setCredentials(tokenStatus.token);
+          return await operation();
+        }
+      }
+      const status = error && typeof error === 'object'
+        ? (error as { code?: unknown; response?: { status?: unknown } }).code
+          ?? (error as { response?: { status?: unknown } }).response?.status
+        : undefined;
+      if (status === 403 || status === '403') {
         const accountManager = getAccountManager();
         const tokenStatus = await accountManager.validateToken(email);
         if (tokenStatus.valid && tokenStatus.token) {

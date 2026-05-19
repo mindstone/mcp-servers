@@ -22,6 +22,7 @@ import {
   readAliasedString,
   readAliasedValue
 } from './arg-aliases.js';
+import { wrapUntrustedContent } from '../utils/untrusted-content.js';
 
 // Handler argument types
 interface ReadDocumentArgs {
@@ -111,7 +112,7 @@ function formatDocumentResponseAsText(doc: DocumentResponse): string {
     lines.push(doc.content);
   }
   
-  return lines.join('\n');
+  return wrapUntrustedContent(lines.join('\n'), `google-workspace:docs:document/${doc.documentId}`);
 }
 
 /**
@@ -134,7 +135,7 @@ function formatTabsAsText(tabs: TabInfo[]): string {
     lines.push(line);
   }
 
-  return lines.join('\n');
+  return wrapUntrustedContent(lines.join('\n'), 'google-workspace:docs:tabs');
 }
 
 /**

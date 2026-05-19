@@ -1,6 +1,7 @@
 /**
  * Utilities for formatting Google Docs content and parsing URLs.
  */
+import { wrapUntrustedContent } from '../../utils/untrusted-content.js';
 
 /**
  * Construct a Google Docs URL from document ID
@@ -93,12 +94,12 @@ export function formatDocumentAsText(
   }
 ): string {
   if (options?.includeHeader === false) {
-    return content;
+    return wrapUntrustedContent(content, `google-workspace:docs:document/${documentId}`);
   }
 
   const header = formatDocumentHeader(title, documentId, {
     truncated: options?.truncated,
   });
 
-  return `${header}\n${content}`;
+  return wrapUntrustedContent(`${header}\n${content}`, `google-workspace:docs:document/${documentId}`);
 }

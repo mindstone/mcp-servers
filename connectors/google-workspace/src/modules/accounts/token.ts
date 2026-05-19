@@ -1,9 +1,11 @@
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import path from 'path';
 import { AccountError, TokenStatus, TokenRenewalResult } from './types.js';
 import { GoogleOAuthClient } from './oauth.js';
 import logger from '../../utils/logger.js';
 import { atomicCredentialWrite, sweepStaleTemps } from '../../utils/atomicCredentialWrite.js';
+import { isRefreshTokenInvalidError } from './unauthorized.js';
 
 /**
  * Manages OAuth token operations.
@@ -16,8 +18,9 @@ export class TokenManager {
   private readonly TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000; // 5 minutes buffer
 
   constructor(oauthClient?: GoogleOAuthClient) {
-    const defaultPath = process.env.CREDENTIALS_PATH || path.resolve(process.env.HOME || process.cwd(), '.google-workspace-mcp/credentials');
-    this.credentialsPath = defaultPath;
+    this.credentialsPath = process.env.CREDENTIALS_PATH
+      ? validateConfiguredDirectoryPath(process.env.CREDENTIALS_PATH, 'CREDENTIALS_PATH')
+      : path.resolve(process.env.HOME || process.cwd(), '.google-workspace-mcp/credentials');
     this.oauthClient = oauthClient;
   }
 
@@ -165,11 +168,7 @@ export class TokenManager {
           };
         } catch (error) {
           // Check if the error indicates an invalid/revoked refresh token
-          const errorMessage = error instanceof Error ? error.message.toLowerCase() : '';
-          const isRefreshTokenInvalid = 
-            errorMessage.includes('invalid_grant') || 
-            errorMessage.includes('token has been revoked') ||
-            errorMessage.includes('token not found');
+          const isRefreshTokenInvalid = isRefreshTokenInvalidError(error);
 
           if (!isRefreshTokenInvalid) {
             // If it's not a refresh token issue, try one more time
@@ -201,7 +200,7 @@ export class TokenManager {
           logger.error('Refresh token is invalid or revoked');
           return {
             success: false,
-            status: 'REFRESH_FAILED',
+            status: 'AUTH_REQUIRED',
             reason: 'Refresh token is invalid or revoked',
             canRetry: false
           };
@@ -285,6 +284,13 @@ export class TokenManager {
             };
           } catch (error) {
             logger.error('Token refresh failed', error as Error);
+            if (isRefreshTokenInvalidError(error)) {
+              return {
+                valid: false,
+                status: 'AUTH_REQUIRED',
+                reason: 'Refresh token is invalid or revoked'
+              };
+            }
             return {
               valid: false,
               status: 'REFRESH_FAILED',
@@ -316,4 +322,29 @@ export class TokenManager {
       };
     }
   }
+}
+
+function validateConfiguredDirectoryPath(rawPath: string, envName: string): string {
+  const absolutePath = path.resolve(rawPath);
+  let stats: fsSync.Stats;
+  try {
+    stats = fsSync.lstatSync(absolutePath);
+  } catch (error) {
+    throw new AccountError(
+      `${envName} is invalid`,
+      'CONFIG_PATH_INVALID',
+      `${envName} must point to an existing directory`,
+      error
+    );
+  }
+
+  if (stats.isSymbolicLink() || !stats.isDirectory()) {
+    throw new AccountError(
+      `${envName} is invalid`,
+      'CONFIG_PATH_INVALID',
+      `${envName} must point to a real directory, not a symlink or file`
+    );
+  }
+
+  return fsSync.realpathSync.native(absolutePath);
 }

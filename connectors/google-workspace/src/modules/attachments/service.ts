@@ -14,11 +14,16 @@ import { v4 as uuidv4 } from 'uuid';
 
 // Determine default attachment path based on environment
 function getDefaultAttachmentPath(): string {
-  if (process.env.WORKSPACE_BASE_PATH) {
-    return path.join(process.env.WORKSPACE_BASE_PATH, ATTACHMENT_FOLDERS.ROOT);
+  const workspaceRoot = process.env.MCP_WORKSPACE_PATH || process.env.WORKSPACE_BASE_PATH;
+  if (workspaceRoot) {
+    return path.join(workspaceRoot, ATTACHMENT_FOLDERS.ROOT);
   }
   // Default: use OS temp directory for ephemeral attachment storage
   return path.join(os.tmpdir(), 'google-workspace-mcp', ATTACHMENT_FOLDERS.ROOT);
+}
+
+function isPathInsideDirectory(candidatePath: string, rootPath: string): boolean {
+  return candidatePath === rootPath || candidatePath.startsWith(`${rootPath}${path.sep}`);
 }
 
 const DEFAULT_CONFIG: AttachmentServiceConfig = {
@@ -171,24 +176,21 @@ export class AttachmentService {
     }
 
     try {
-      // Verify file exists and is within workspace
-      if (!filePath.startsWith(this.config.basePath!)) {
-        throw new Error('Invalid file path');
-      }
+      const safeFilePath = await this.resolveContainedAttachmentPath(filePath);
 
-      const content = await fs.readFile(filePath);
-      const stats = await fs.stat(filePath);
+      const content = await fs.readFile(safeFilePath);
+      const stats = await fs.stat(safeFilePath);
 
       return {
         success: true,
         attachment: {
           id: attachmentId,
-          name: path.basename(filePath).substring(37), // Remove UUID prefix
-          mimeType: path.extname(filePath) ? 
-            `application/${path.extname(filePath).substring(1)}` : 
+          name: path.basename(safeFilePath).substring(37), // Remove UUID prefix
+          mimeType: path.extname(safeFilePath) ?
+            `application/${path.extname(safeFilePath).substring(1)}` :
             'application/octet-stream',
           size: stats.size,
-          path: filePath
+          path: safeFilePath
         }
       };
     } catch (error) {
@@ -212,20 +214,17 @@ export class AttachmentService {
     }
 
     try {
-      // Verify file exists and is within workspace
-      if (!filePath.startsWith(this.config.basePath!)) {
-        throw new Error('Invalid file path');
-      }
+      const safeFilePath = await this.resolveContainedAttachmentPath(filePath);
 
       // Get file stats before deletion
-      const stats = await fs.stat(filePath);
-      const name = path.basename(filePath).substring(37); // Remove UUID prefix
-      const mimeType = path.extname(filePath) ? 
-        `application/${path.extname(filePath).substring(1)}` : 
+      const stats = await fs.stat(safeFilePath);
+      const name = path.basename(safeFilePath).substring(37); // Remove UUID prefix
+      const mimeType = path.extname(safeFilePath) ?
+        `application/${path.extname(safeFilePath).substring(1)}` :
         'application/octet-stream';
 
       // Delete the file
-      await fs.unlink(filePath);
+      await fs.unlink(safeFilePath);
 
       return {
         success: true,
@@ -234,7 +233,7 @@ export class AttachmentService {
           name,
           mimeType,
           size: stats.size,
-          path: filePath
+          path: safeFilePath
         }
       };
     } catch (error) {
@@ -250,6 +249,31 @@ export class AttachmentService {
    */
   getAttachmentPath(folder: AttachmentFolderType): string {
     return path.join(this.config.basePath!, folder);
+  }
+
+  private async resolveContainedAttachmentPath(filePath: string): Promise<string> {
+    const basePath = this.config.basePath;
+    if (!basePath) {
+      throw new Error('Attachment base path is not configured');
+    }
+
+    const baseStats = await fs.lstat(basePath);
+    if (baseStats.isSymbolicLink() || !baseStats.isDirectory()) {
+      throw new Error('Attachment base path must be a real directory');
+    }
+
+    const candidateStats = await fs.lstat(filePath);
+    if (candidateStats.isSymbolicLink()) {
+      throw new Error('Attachment path must not be a symbolic link');
+    }
+
+    const rootRealpath = await fs.realpath(basePath);
+    const candidateRealpath = await fs.realpath(filePath);
+    if (!isPathInsideDirectory(candidateRealpath, rootRealpath)) {
+      throw new Error('Invalid file path');
+    }
+
+    return candidateRealpath;
   }
 
   /**
