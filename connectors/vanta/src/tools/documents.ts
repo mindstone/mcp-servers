@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { stringifyToolResult, toToolErrorResponse, validateDocumentUrl, type VantaApiClient } from '../api.js';
+import { stringifyToolResult, toToolErrorResponse, validateDocumentUrlWithDns, type VantaApiClient } from '../api.js';
 
 export const uploadDocumentSchema = z.object({
   document_name: z.string().min(1).describe('Name of the evidence document'),
@@ -16,7 +16,7 @@ export async function vantaUploadDocument(
   args: UploadDocumentArgs,
 ): Promise<string> {
   try {
-    const safeUrl = validateDocumentUrl(args.document_url, 'document_url');
+    const safeUrl = await validateDocumentUrlWithDns(args.document_url, 'document_url');
     const body: Record<string, unknown> = {
       documentName: args.document_name,
       documentUrl: safeUrl.toString(),

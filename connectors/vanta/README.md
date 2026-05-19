@@ -6,7 +6,7 @@ Vanta compliance MCP server — read and write vulnerabilities, tests, controls,
 
 - **Version:** [0.1.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-vanta)
 - **Auth:** OAuth client-credentials grant (`VANTA_CLIENT_ID` + `VANTA_CLIENT_SECRET`)
-- **Tools:** 18 (11 read + 7 write across vulnerabilities, tests, controls, resources, evidence, people, vendors, documents, compliance summary)
+- **Tools:** 18 (13 read + 5 write across vulnerabilities, tests, controls, resources, evidence, people, vendors, documents, compliance summary)
 - **Surface:** cloud-api
 - **Regions:** US, EU, AUS (set via `VANTA_REGION`)
 

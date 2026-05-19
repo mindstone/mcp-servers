@@ -5,19 +5,34 @@
   "package": "@mindstone/mcp-server-vanta",
   "version": "0.1.0",
   "auth": {
-    "type": "oauth-client-credentials",
+    "type": "oauth",
     "envVars": [
-      "VANTA_CLIENT_ID",
-      "VANTA_CLIENT_SECRET",
-      "VANTA_REGION"
+      "VANTA_CLIENT_SECRET"
     ]
   },
   "tools": {
     "count": 18,
-    "readCount": 11,
-    "writeCount": 7
+    "domains": [
+      "vulnerabilities",
+      "tests",
+      "controls",
+      "resources",
+      "evidence",
+      "people",
+      "vendors",
+      "documents"
+    ]
   },
-  "regions": ["us", "eu", "aus"],
-  "rateLimitsPerMinute": 60,
-  "responseSizeCapBytes": 25600
+  "surface": "cloud-api",
+  "hostsTested": [
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/tools/",
+    "auth": "./src/api.ts",
+    "tests": "./test/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-vanta",
+    "serverJson": "./server.json"
+  }
 }

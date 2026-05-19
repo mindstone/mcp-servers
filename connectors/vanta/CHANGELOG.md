@@ -1,17 +1,22 @@
 # Changelog
 
-All notable changes to this connector are documented here.
+All notable changes to this connector are documented here. The format is based on
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
+to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 0.1.0 — 2026-05-19
+## [Unreleased]
 
-Initial release. Ports the bundled Vanta MCP server to OSS.
+## [0.1.0] - 2026-05-19
 
-- 18 tools across 9 domains (vulnerabilities, tests, controls, resources, evidence, people, query results, compliance summary, vendors, documents).
-- 11 read tools + 7 write tools (create_vendor, update_vendor, attach_vendor_document, update_vulnerability, upload_document).
-- OAuth client-credentials grant with 1-hour token TTL and single-flight refresh.
-- Region allowlist: `us`, `eu`, `aus`.
-- 60-requests-per-minute shared rate limiter, retry-after honouring with 2-minute cap, 3-retry budget.
+### Added
+
+- Initial OSS release. Ports the bundled Vanta MCP server to `@mindstone/mcp-server-vanta`.
+- 18 tools across 9 domains: vulnerabilities, tests, controls, resources, evidence, people, query results, compliance summary, vendors, documents.
+- 13 read tools + 5 write tools (`vanta_create_vendor`, `vanta_update_vendor`, `vanta_attach_vendor_document`, `vanta_update_vulnerability`, `vanta_upload_document`).
+- OAuth client-credentials grant with 1-hour token TTL and single-flight token refresh.
+- Region allowlist: `us`, `eu`, `aus`. Invalid `VANTA_REGION` fails closed with `CONFIG_INVALID`.
+- 60-requests-per-minute shared rate limiter, `Retry-After` honoured with a 2-minute cap, 3-retry budget.
 - 25 KB response size cap with binary-search truncation; 2 MB pre-parse safety cap.
-- HTTPS-only URL validation on `attach_vendor_document` and `upload_document` (rejects `file:`, localhost, RFC1918, link-local, and other non-public addresses).
-- Bearer-token redaction in error text.
+- HTTPS-only URL validation on `attach_vendor_document` and `upload_document` (rejects `file:`, localhost, RFC1918, link-local incl. IMDS, IPv6 loopback / link-local / ULA, IPv4-mapped IPv6, and hostnames whose DNS records resolve to any of the above).
+- Bearer / `Authorization` / `access_token` / `refresh_token` / `client_secret` redaction in error text.
 - Recovery-guidance error contract: `{ ok, error, code, action_required, next_step }`.
