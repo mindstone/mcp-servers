@@ -54,6 +54,7 @@ interface FakeBridge {
   mintCallCount: number;
   lastMintBody: { appId: string; clientId: string } | null;
   lastIntentRequest: RecordedRequest | null;
+  intentRequests: RecordedRequest[];
   /** Swap out to make the next /intent/* call return a specific status. */
   intentResponse: {
     status: number;
@@ -80,6 +81,7 @@ async function startFakeBridge(): Promise<FakeBridge> {
     mintCallCount: 0,
     lastMintBody: null,
     lastIntentRequest: null,
+    intentRequests: [],
     intentResponse: {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -131,6 +133,7 @@ async function startFakeBridge(): Promise<FakeBridge> {
           headers: req.headers,
           body: Buffer.concat(chunks).toString('utf8'),
         };
+        state.intentRequests.push(state.lastIntentRequest);
 
         if (state.sseScript && method === 'GET' && /\/stream$/.test(url)) {
           res.writeHead(200, {
@@ -536,5 +539,126 @@ describe('office sidecar — /intent/* proxy', () => {
     expect(received.body).toContain('"conversationId":"c1"');
     expect(received.body).toContain('event: assistant_delta');
     expect(received.body).toContain('"text":"hello"');
+  });
+
+  it('reuses the minted bridge token across multiple /intent/* calls', async () => {
+    const { sidecar, sidecarToken, bridge } = await setupWithBridge();
+    bridge.intentResponse = {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ok: true, service: 'rebel-app-bridge' }),
+    };
+
+    const first = await proxyRequest(sidecar, {
+      method: 'GET',
+      path: '/intent/health',
+      bearer: sidecarToken,
+    });
+    const second = await proxyRequest(sidecar, {
+      method: 'GET',
+      path: '/intent/health',
+      bearer: sidecarToken,
+    });
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(bridge.mintCallCount).toBe(1);
+    expect(bridge.intentRequests).toHaveLength(2);
+    expect(
+      bridge.intentRequests.map((request) => request.headers['authorization']),
+    ).toEqual(['Bearer paired-token-1', 'Bearer paired-token-1']);
+  });
+
+  it('invalidates the cached bridge token when the bridge returns 401, and re-mints on the next /intent/* call', async () => {
+    const { sidecar, sidecarToken, bridge } = await setupWithBridge();
+    bridge.intentResponse = {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ success: false, code: 'UNAUTHORIZED' }),
+    };
+
+    const unauthorized = await proxyRequest(sidecar, {
+      method: 'GET',
+      path: '/intent/health',
+      bearer: sidecarToken,
+    });
+    bridge.intentResponse = {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ok: true, service: 'rebel-app-bridge' }),
+    };
+    const recovered = await proxyRequest(sidecar, {
+      method: 'GET',
+      path: '/intent/health',
+      bearer: sidecarToken,
+    });
+
+    expect(unauthorized.status).toBe(401);
+    expect(recovered.status).toBe(200);
+    expect(bridge.mintCallCount).toBe(2);
+    expect(
+      bridge.intentRequests.map((request) => request.headers['authorization']),
+    ).toEqual(['Bearer paired-token-1', 'Bearer paired-token-2']);
+  });
+
+  it('invalidates the cached bridge token when an SSE response contains a revoked event', async () => {
+    const { sidecar, sidecarToken, bridge } = await setupWithBridge();
+    bridge.sseScript = ['event: revoked\ndata: {"reason":"pairing_revoked"}\n\n'];
+
+    const https = await import('node:https');
+    const revoked = await new Promise<{ status: number; body: string }>(
+      (resolve, reject) => {
+        const req = https.request(
+          {
+            hostname: '127.0.0.1',
+            port: sidecar.port,
+            path: '/intent/conversation/c1/stream',
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${sidecarToken}`,
+              Accept: 'text/event-stream',
+            },
+            rejectUnauthorized: false,
+          },
+          (res) => {
+            const chunks: Buffer[] = [];
+            res.on('data', (c) => {
+              chunks.push(c);
+              if (Buffer.concat(chunks).toString('utf8').includes('event: revoked')) {
+                bridge.stopStream();
+              }
+            });
+            res.on('end', () =>
+              resolve({
+                status: res.statusCode ?? 0,
+                body: Buffer.concat(chunks).toString('utf8'),
+              }),
+            );
+            res.on('error', reject);
+          },
+        );
+        req.on('error', reject);
+        req.end();
+      },
+    );
+
+    bridge.intentResponse = {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ok: true, service: 'rebel-app-bridge' }),
+    };
+    const recovered = await proxyRequest(sidecar, {
+      method: 'GET',
+      path: '/intent/health',
+      bearer: sidecarToken,
+    });
+
+    expect(revoked.status).toBe(200);
+    expect(revoked.body).toContain('event: revoked');
+    expect(recovered.status).toBe(200);
+    expect(bridge.mintCallCount).toBe(2);
+    expect(
+      bridge.intentRequests.map((request) => request.headers['authorization']),
+    ).toEqual(['Bearer paired-token-1', 'Bearer paired-token-2']);
   });
 });
