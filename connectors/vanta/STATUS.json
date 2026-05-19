@@ -1,0 +1,23 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "vanta",
+  "package": "@mindstone/mcp-server-vanta",
+  "version": "0.1.0",
+  "auth": {
+    "type": "oauth-client-credentials",
+    "envVars": [
+      "VANTA_CLIENT_ID",
+      "VANTA_CLIENT_SECRET",
+      "VANTA_REGION"
+    ]
+  },
+  "tools": {
+    "count": 18,
+    "readCount": 11,
+    "writeCount": 7
+  },
+  "regions": ["us", "eu", "aus"],
+  "rateLimitsPerMinute": 60,
+  "responseSizeCapBytes": 25600
+}

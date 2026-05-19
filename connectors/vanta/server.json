@@ -1,0 +1,55 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mindstone/mcp-server-vanta",
+  "title": "Vanta",
+  "description": "Vanta compliance MCP server: vulnerabilities, tests, controls, evidence, resources, people, vendors, compliance summary",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/mindstone/mcp-servers",
+    "source": "github",
+    "subfolder": "connectors/vanta"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@mindstone/mcp-server-vanta",
+      "version": "0.1.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "VANTA_CLIENT_ID",
+          "description": "Vanta OAuth Client ID",
+          "isRequired": true,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "VANTA_CLIENT_SECRET",
+          "description": "Vanta OAuth Client Secret",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "VANTA_REGION",
+          "description": "Vanta API region: us (default), eu, or aus",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string",
+          "default": "us"
+        },
+        {
+          "name": "VANTA_REQUEST_TIMEOUT_MS",
+          "description": "Per-request timeout in milliseconds (default 60000)",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}
