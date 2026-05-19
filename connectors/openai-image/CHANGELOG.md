@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-05-19
+
+### Documentation
+
+- Rewrote `README.md` to follow the structure in [`docs/CONNECTOR_README_GUIDE.md`](../../docs/CONNECTOR_README_GUIDE.md): added an italic positioning line, the `## Status` block with hyperlinked evidence, a `## Why this exists` section, a `## Example interaction` block, the `(2)` tool count in the `## Tools` heading, a Mindstone Rebel host-configuration example, a local-development host-configuration example, and renamed `## Security disclosures` to `## Security notes` for repo-wide grep consistency.
+- Added the connector to the table in the repo-root `README.md`.
+
+### Fixed
+
+- `package-lock.json` top-level and `packages[""]` version fields were stale at `0.1.0`; they now match `package.json` at `0.1.2`.
+
 ## [0.1.1] - 2026-05-19
 
 ### Security

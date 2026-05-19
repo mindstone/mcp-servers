@@ -5,15 +5,15 @@ title: openai-image — mcp-servers catalogue
 
 # openai-image
 
-OpenAI image generation MCP server for Model Context Protocol hosts. Generate and edit images via OpenAI's &#96;gpt-image-2&#96; model — sharp text rendering, multilingual support, four quality levels, three aspect ratios — through a standardised MCP interface.
+OpenAI image generation MCP server — text-to-image and image edits via OpenAI's &#96;gpt-image-2&#96;, with sharp text rendering, multilingual prompts, four quality levels, and three aspect ratios.
 
-
+*Workspace-sandboxed OpenAI image MCP. Generated PNGs land under &#96;MCP_WORKSPACE_PATH&#96; only, every error returns a structured recovery code, and the API key is hard-pinned to &#96;api.openai.com&#96;.*
 
 ## Status
 
 | Field | Value |
 |-------|-------|
-| Version | 0.1.1 |
+| Version | 0.1.2 |
 | Auth | API key (`OPENAI_API_KEY`) |
 | Tools | 2 (image-generation, image-editing) |
 | Surface | cloud API |
