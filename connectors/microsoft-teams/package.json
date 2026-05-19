@@ -36,7 +36,7 @@
     "security:internal-refs": "node scripts/check-internal-refs.mjs"
   },
   "dependencies": {
-    "@mindstone/mcp-server-microsoft-shared": "file:../../packages/mcp-server-microsoft-shared/mindstone-mcp-server-microsoft-shared-0.1.0.tgz",
+    "@mindstone/mcp-server-microsoft-shared": "^0.1.0",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "zod": "^3.23.0"
   },
