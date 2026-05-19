@@ -353,6 +353,57 @@ describe('office sidecar', () => {
     expect(payload.code).toBe('UNAUTHORIZED');
   });
 
+  it('serves /diag/ping, /diag/log, and /diag/tail without auth for Word debugging', async () => {
+    const { baseUrl } = await startTestServer();
+
+    const ping = await fetchHttps(`${baseUrl}/diag/ping`);
+    const pingPayload = (await ping.json()) as {
+      ok: boolean;
+      port: number;
+      tokenPrefix: string;
+      tokenLen: number;
+    };
+    expect(ping.status).toBe(200);
+    expect(pingPayload.ok).toBe(true);
+    expect(pingPayload.port).toBeGreaterThan(0);
+    expect(pingPayload.tokenPrefix.length).toBeGreaterThan(0);
+    expect(pingPayload.tokenLen).toBeGreaterThan(0);
+
+    const diagLog = await fetchHttps(`${baseUrl}/diag/log`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Rebel-Diag-Id': 'req-stage-11',
+      },
+      body: JSON.stringify({
+        event: 'fetch.start',
+        data: { requestId: 'req-stage-11' },
+      }),
+    });
+    expect(diagLog.status).toBe(204);
+    await expect(diagLog.text()).resolves.toBe('');
+
+    const tail = await fetchHttps(`${baseUrl}/diag/tail`);
+    const tailPayload = (await tail.json()) as { lines: string[]; capturedAt: string };
+    expect(tail.status).toBe(200);
+    expect(tailPayload.capturedAt.length).toBeGreaterThan(0);
+    expect(
+      tailPayload.lines.every(
+        (line) =>
+          line.startsWith('[sidecar-diag]') || line.startsWith('[sidecar-proxy]'),
+      ),
+    ).toBe(true);
+    expect(
+      tailPayload.lines.some((line) => line.includes('GET /diag/ping')),
+    ).toBe(true);
+    expect(
+      tailPayload.lines.some((line) => line.includes('path=/diag/log')),
+    ).toBe(true);
+    expect(
+      tailPayload.lines.some((line) => line.includes('requestId=req-stage-11')),
+    ).toBe(true);
+  });
+
   it('returns 204 from /sidecar/identify for the correct bearer token', async () => {
     const { sidecar, baseUrl } = await startTestServer();
     const response = await fetchHttps(`${baseUrl}/sidecar/identify`, {
