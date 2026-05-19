@@ -24,8 +24,8 @@ Napkin AI visual generation MCP server for Model Context Protocol hosts. Generat
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/napkin/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/napkin/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/napkin/test/) |
+| Tools source | [`connectors/napkin/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/napkin/src/tools/) |
+| Tests | [`connectors/napkin/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/napkin/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/napkin/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/napkin/server.json) |
 | npm package | [@mindstone/mcp-server-napkin](https://www.npmjs.com/package/@mindstone/mcp-server-napkin) |

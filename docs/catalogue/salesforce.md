@@ -24,8 +24,8 @@ Salesforce CRM MCP server — accounts, contacts, opportunities, leads, tasks, u
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/salesforce/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/salesforce/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/salesforce/test/) |
+| Tools source | [`connectors/salesforce/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/salesforce/src/tools/) |
+| Tests | [`connectors/salesforce/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/salesforce/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/salesforce/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/salesforce/server.json) |
 | npm package | [@mindstone/mcp-server-salesforce](https://www.npmjs.com/package/@mindstone/mcp-server-salesforce) |

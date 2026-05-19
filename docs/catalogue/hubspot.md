@@ -5,7 +5,7 @@ title: hubspot — mcp-servers catalogue
 
 # hubspot
 
-HubSpot MCP server for CRM operations (contacts, companies, deals, tickets, leads, tasks, notes, associations), properties and owners, marketing/lists, workflows, knowledge base lookups, and file operations.
+HubSpot MCP server for CRM operations &#40;contacts, companies, deals, tickets, leads, tasks, notes, associations&#41;, properties and owners, marketing/lists, workflows, knowledge base lookups, and file operations.
 
 *Multi-account HubSpot MCP with host-orchestrated OAuth, sandboxed file uploads, and source-attribution labels on every new record.*
 
@@ -24,8 +24,8 @@ HubSpot MCP server for CRM operations (contacts, companies, deals, tickets, lead
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/hubspot/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/hubspot/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/hubspot/test/) |
+| Tools source | [`connectors/hubspot/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/hubspot/src/tools/) |
+| Tests | [`connectors/hubspot/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/hubspot/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/hubspot/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/hubspot/server.json) |
 | npm package | [@mindstone/mcp-server-hubspot](https://www.npmjs.com/package/@mindstone/mcp-server-hubspot) |

@@ -24,8 +24,8 @@ Outreach sales engagement MCP server — prospects, sequences, accounts, tasks, 
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/outreach/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/outreach/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/outreach/test/) |
+| Tools source | [`connectors/outreach/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/outreach/src/tools/) |
+| Tests | [`connectors/outreach/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/outreach/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/outreach/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/outreach/server.json) |
 | npm package | [@mindstone/mcp-server-outreach](https://www.npmjs.com/package/@mindstone/mcp-server-outreach) |

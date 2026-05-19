@@ -5,7 +5,7 @@ title: google-analytics — mcp-servers catalogue
 
 # google-analytics
 
-Google Analytics 4 MCP server for Model Context Protocol hosts. Discover account/property structure, explore the live schema, run reports (with row-volume safety), and inspect admin configuration through a standardised MCP interface.
+Google Analytics 4 MCP server for Model Context Protocol hosts. Discover account/property structure, explore the live schema, run reports &#40;with row-volume safety&#41;, and inspect admin configuration through a standardised MCP interface.
 
 
 
@@ -24,8 +24,8 @@ Google Analytics 4 MCP server for Model Context Protocol hosts. Discover account
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/google-analytics/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/google-analytics/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/google-analytics/test/) |
+| Tools source | [`connectors/google-analytics/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/google-analytics/src/tools/) |
+| Tests | [`connectors/google-analytics/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/google-analytics/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/google-analytics/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/google-analytics/server.json) |
 | npm package | [@mindstone/mcp-server-google-analytics](https://www.npmjs.com/package/@mindstone/mcp-server-google-analytics) |

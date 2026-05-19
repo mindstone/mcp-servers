@@ -24,8 +24,8 @@ List and search meetings, view details, read transcripts, and manage teams via F
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/fathom/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/fathom/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/fathom/test/) |
+| Tools source | [`connectors/fathom/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/fathom/src/tools/) |
+| Tests | [`connectors/fathom/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/fathom/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/fathom/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/fathom/server.json) |
 | npm package | [@mindstone/mcp-server-fathom](https://www.npmjs.com/package/@mindstone/mcp-server-fathom) |

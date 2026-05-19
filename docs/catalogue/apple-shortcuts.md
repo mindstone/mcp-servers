@@ -5,7 +5,7 @@ title: apple-shortcuts — mcp-servers catalogue
 
 # apple-shortcuts
 
-An MCP server that exposes Apple Shortcuts functionality to Rebel via the macOS `shortcuts` CLI.
+An MCP server that exposes Apple Shortcuts functionality to Rebel via the macOS &#96;shortcuts&#96; CLI.
 
 
 
@@ -24,7 +24,7 @@ An MCP server that exposes Apple Shortcuts functionality to Rebel via the macOS 
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/apple-shortcuts/CHANGELOG.md) |
-| Tools source | [`src/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/apple-shortcuts/src/) |
+| Tools source | [`connectors/apple-shortcuts/src/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/apple-shortcuts/src/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/apple-shortcuts/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/apple-shortcuts/server.json) |
 | npm package | [@mindstone/mcp-server-apple-shortcuts](https://www.npmjs.com/package/@mindstone/mcp-server-apple-shortcuts) |

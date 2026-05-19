@@ -24,8 +24,8 @@ Zendesk Support MCP server for Model Context Protocol hosts.
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/zendesk/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/zendesk/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/zendesk/test/) |
+| Tools source | [`connectors/zendesk/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/zendesk/src/tools/) |
+| Tests | [`connectors/zendesk/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/zendesk/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/zendesk/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/zendesk/server.json) |
 | npm package | [@mindstone/mcp-server-zendesk](https://www.npmjs.com/package/@mindstone/mcp-server-zendesk) |

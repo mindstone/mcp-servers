@@ -24,8 +24,8 @@ QuickBooks Online MCP server for Model Context Protocol hosts. Manage invoices, 
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/quickbooks/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/quickbooks/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/quickbooks/test/) |
+| Tools source | [`connectors/quickbooks/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/quickbooks/src/tools/) |
+| Tests | [`connectors/quickbooks/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/quickbooks/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/quickbooks/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/quickbooks/server.json) |
 | npm package | [@mindstone/mcp-server-quickbooks](https://www.npmjs.com/package/@mindstone/mcp-server-quickbooks) |

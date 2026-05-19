@@ -24,8 +24,8 @@ PandaDoc document automation MCP server for Model Context Protocol hosts. Create
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/pandadoc/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/pandadoc/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/pandadoc/test/) |
+| Tools source | [`connectors/pandadoc/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/pandadoc/src/tools/) |
+| Tests | [`connectors/pandadoc/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/pandadoc/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/pandadoc/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/pandadoc/server.json) |
 | npm package | [@mindstone/mcp-server-pandadoc](https://www.npmjs.com/package/@mindstone/mcp-server-pandadoc) |

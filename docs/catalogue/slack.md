@@ -24,8 +24,8 @@ Slack workspace MCP server — channels, messages, threads, reactions, users, fi
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/slack/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/slack/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/slack/test/) |
+| Tools source | [`connectors/slack/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/slack/src/tools/) |
+| Tests | [`connectors/slack/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/slack/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/slack/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/slack/server.json) |
 | npm package | [@mindstone/mcp-server-slack](https://www.npmjs.com/package/@mindstone/mcp-server-slack) |

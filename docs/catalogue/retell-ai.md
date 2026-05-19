@@ -5,7 +5,7 @@ title: retell-ai — mcp-servers catalogue
 
 # retell-ai
 
-Voice agent phone calls, call management, agent configuration, LLM prompt management, and voice discovery via [Retell AI](https://www.retellai.com/) API.
+Voice agent phone calls, call management, agent configuration, LLM prompt management, and voice discovery via &#91;Retell AI&#93;&#40;https://www.retellai.com/&#41; API.
 
 
 
@@ -24,8 +24,8 @@ Voice agent phone calls, call management, agent configuration, LLM prompt manage
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/retell-ai/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/retell-ai/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/retell-ai/test/) |
+| Tools source | [`connectors/retell-ai/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/retell-ai/src/tools/) |
+| Tests | [`connectors/retell-ai/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/retell-ai/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/retell-ai/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/retell-ai/server.json) |
 | npm package | [@mindstone/mcp-server-retell-ai](https://www.npmjs.com/package/@mindstone/mcp-server-retell-ai) |

@@ -24,8 +24,8 @@ Freshdesk Support MCP server for Model Context Protocol hosts. Manage helpdesk t
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/freshdesk/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/freshdesk/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/freshdesk/test/) |
+| Tools source | [`connectors/freshdesk/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/freshdesk/src/tools/) |
+| Tests | [`connectors/freshdesk/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/freshdesk/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/freshdesk/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/freshdesk/server.json) |
 | npm package | [@mindstone/mcp-server-freshdesk](https://www.npmjs.com/package/@mindstone/mcp-server-freshdesk) |

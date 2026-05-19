@@ -5,7 +5,7 @@ title: mixmax — mcp-servers catalogue
 
 # mixmax
 
-Mixmax email productivity MCP server for Model Context Protocol hosts. Manage sequences, send tracked emails, use email templates (snippets), view meeting links, and monitor message engagement through a standardised MCP interface.
+Mixmax email productivity MCP server for Model Context Protocol hosts. Manage sequences, send tracked emails, use email templates &#40;snippets&#41;, view meeting links, and monitor message engagement through a standardised MCP interface.
 
 
 
@@ -24,8 +24,8 @@ Mixmax email productivity MCP server for Model Context Protocol hosts. Manage se
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/mixmax/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/mixmax/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/mixmax/test/) |
+| Tools source | [`connectors/mixmax/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/mixmax/src/tools/) |
+| Tests | [`connectors/mixmax/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/mixmax/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/mixmax/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/mixmax/server.json) |
 | npm package | [@mindstone/mcp-server-mixmax](https://www.npmjs.com/package/@mindstone/mcp-server-mixmax) |

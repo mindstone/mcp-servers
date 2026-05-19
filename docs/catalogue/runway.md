@@ -24,8 +24,8 @@ Runway ML MCP server for Model Context Protocol hosts. Generate AI video, images
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/runway/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/runway/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/runway/test/) |
+| Tools source | [`connectors/runway/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/runway/src/tools/) |
+| Tests | [`connectors/runway/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/runway/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/runway/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/runway/server.json) |
 | npm package | [@mindstone/mcp-server-runway](https://www.npmjs.com/package/@mindstone/mcp-server-runway) |
