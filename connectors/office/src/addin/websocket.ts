@@ -19,6 +19,23 @@ export type ConnectionState = 'disconnected' | 'connecting' | 'authenticating' |
 export interface SidecarConfig {
   port: number;
   token: string;
+  /**
+   * Optional App Bridge connection details injected by the sidecar. When
+   * present, the task pane wires up the embedded chat (Stage 8 of
+   * `260421_embedded_chat_in_extension.md`). When absent, the chat UI
+   * stays in a "not-ready" state and the sidecar WS + command relay
+   * continue to work unchanged.
+   */
+  /**
+   * `true` once the sidecar has successfully minted a paired app token
+   * with the bridge at taskpane-HTML-serve time. The task-pane uses this
+   * as a pre-flight gate — when false we render the "Rebel is setting up"
+   * state instead of attempting a first call and seeing it fail. The
+   * paired token itself is NEVER sent into the task-pane; all `/intent/*`
+   * calls go through the sidecar's proxy which holds the token server-
+   * side.
+   */
+  bridgeReady?: boolean;
 }
 
 export type CommandHandler = (
