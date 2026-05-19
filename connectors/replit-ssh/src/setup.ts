@@ -134,8 +134,8 @@ export async function runSetupSsh(forceRegenerate: boolean): Promise<string> {
         configUpdated,
         alreadyExisted,
         usingExistingKey: true,
-        note: `Your SSH config already has a *.replit.dev entry pointing to "${displayKeyPath}". Rebel will use that key (matching OpenSSH behavior).`,
-        nextSteps: `Your existing SSH setup for Replit is detected. Rebel will use the key at ${displayKeyPath}. Verify the publicKey above is registered at replit.com → Account → SSH Keys.`,
+        note: `Your SSH config already has a *.replit.dev entry pointing to "${displayKeyPath}". The MCP server will use that key (matching OpenSSH behavior).`,
+        nextSteps: `Your existing SSH setup for Replit is detected. The MCP server will use the key at ${displayKeyPath}. Verify the publicKey above is registered at replit.com → Account → SSH Keys.`,
       });
     }
 
