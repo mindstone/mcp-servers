@@ -1,0 +1,22 @@
+# Generated alongside docs/catalogue/. Edit scripts/build-catalogue.mjs.
+title: mcp-servers catalogue
+description: Source-available MCP servers by Mindstone — machine-readable index.
+url: https://mindstone.github.io
+baseurl: /mcp-servers
+theme: jekyll-theme-minimal
+markdown: kramdown
+permalink: /:path/:basename:output_ext
+
+# Allowlist: only these paths are published. Everything else under docs/ stays
+# in-repo (and browseable on github.com) but is NOT served by GitHub Pages.
+# This is deliberate — docs/ contains internal release-operations runbooks
+# (PUBLISH_APPROVAL_PROCESS.md, EMERGENCY_REVOKE.md, plans/), security audits,
+# and a Jekyll-incompatible JSON schema that must not appear on the public site.
+exclude:
+  - '*'
+  - '*/'
+
+include:
+  - index.md
+  - catalogue
+  - assets

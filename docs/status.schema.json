@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mindstone/mcp-servers/blob/main/docs/status.schema.json",
+  "title": "Connector STATUS.json",
+  "description": "Machine-readable status block for one MCP server connector. Mirrors the README's '## Status' section and feeds the GitHub Pages catalogue. Verified by scripts/check-status.mjs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "name",
+    "package",
+    "version",
+    "auth",
+    "tools",
+    "surface",
+    "hostsTested",
+    "evidence"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "STATUS.json schema version. Bumped when a required field is added or semantics change; see CONTRIBUTING.md for the migration story."
+    },
+    "name": {
+      "type": "string",
+      "description": "Connector directory name (matches connectors/<name>/).",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "package": {
+      "type": "string",
+      "description": "Published npm package name.",
+      "pattern": "^@mindstone/mcp-server-[a-z0-9-]+$"
+    },
+    "version": {
+      "type": "string",
+      "description": "Current published version. Must match package.json and server.json.",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$"
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "envVars"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "api-key",
+            "basic-auth",
+            "oauth-host-orchestrated",
+            "oauth-local-callback",
+            "oauth",
+            "none",
+            "hybrid",
+            "unknown"
+          ]
+        },
+        "envVars": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true,
+          "description": "Secret-bearing env var names (subset of server.json env vars)."
+        }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "domains"],
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "domains": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 0,
+          "maxItems": 8,
+          "description": "Editorial grouping of tools (e.g. 'meetings', 'transcripts', 'teams')."
+        }
+      }
+    },
+    "surface": {
+      "type": "string",
+      "enum": [
+        "cloud-api",
+        "desktop-addin",
+        "local-cli",
+        "browser-automation",
+        "local-protocol",
+        "TBD"
+      ],
+      "description": "Where the connector runs / what it talks to. 'TBD' is rejected by check-status.mjs."
+    },
+    "hostsTested": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["claude-desktop", "cursor", "mindstone-rebel", "windsurf", "vscode", "raycast"]
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "evidence": {
+      "type": "object",
+      "description": "Repo-relative paths or URLs that prove the claims above. Every claim should have something a reader can click to verify.",
+      "properties": {
+        "changelog": { "type": "string" },
+        "tools": { "type": "string" },
+        "auth": { "type": "string" },
+        "tests": { "type": "string" },
+        "npm": { "type": "string", "format": "uri" },
+        "serverJson": { "type": "string" }
+      },
+      "additionalProperties": { "type": "string" }
+    }
+  }
+}
