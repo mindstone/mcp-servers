@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-05-19
+
 ### Security
 
 - Bumped 4 transitive dependencies of `@modelcontextprotocol/sdk` to resolve `npm audit` findings (1 HIGH + 3 MODERATE → 0/0/0/0/0):
@@ -15,6 +17,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   - `express-rate-limit` 8.4.1 → 8.5.2 — pulls patched `ip-address`.
 
   All 106 unit tests pass and the slack connector does not exercise any of the vulnerable code paths (no JWT verification, no JSX SSR, no cache middleware, no HTML emission from `ip-address`); this is a hygiene fix for downstream consumers.
+
+  Verified end-to-end with `npm run probe:live:gate` against a real Slack workspace: 9/9 probes green (tools/list, 5 read tools, post_slack_message + add_slack_reaction writes), p95 search latency 856 ms.
 
 ## [0.1.1] - 2026-05-14
 
