@@ -60,6 +60,9 @@ export function registerUserTools(server: McpServer): void {
     {
       description:
         'Create a new user in TalentLMS.\n\n' +
+        'Only non-privileged user types (Learner, Trainer) can be created through this tool. ' +
+        'Administrator or SuperAdmin accounts must be provisioned directly in the TalentLMS UI. ' +
+        'This guard prevents prompt-injected tool input from silently escalating privileges.\n\n' +
         'COMMON MISTAKES:\n' +
         '- login must be unique across TalentLMS instance\n' +
         '- email must be unique unless allow_duplicate_emails is enabled',
@@ -69,7 +72,10 @@ export function registerUserTools(server: McpServer): void {
         email: z.string().min(1).describe('Email address'),
         login: z.string().min(1).describe('Login username'),
         password: z.string().optional().describe('Password (auto-generated if omitted)'),
-        user_type: z.string().optional().describe('User type: Learner, Trainer, Admin, SuperAdmin. Default: Learner'),
+        user_type: z
+          .enum(['Learner', 'Trainer'])
+          .optional()
+          .describe('User type: Learner or Trainer. Default: Learner. Administrator/SuperAdmin are intentionally not creatable through this tool.'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
