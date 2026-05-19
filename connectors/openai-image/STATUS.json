@@ -1,0 +1,32 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "openai-image",
+  "package": "@mindstone/mcp-server-openai-image",
+  "version": "0.1.1",
+  "auth": {
+    "type": "api-key",
+    "envVars": [
+      "OPENAI_API_KEY"
+    ]
+  },
+  "tools": {
+    "count": 2,
+    "domains": [
+      "image-generation",
+      "image-editing"
+    ]
+  },
+  "surface": "cloud-api",
+  "hostsTested": [
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/index.ts",
+    "auth": "./src/index.ts",
+    "tests": "./test/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-openai-image",
+    "serverJson": "./server.json"
+  }
+}
