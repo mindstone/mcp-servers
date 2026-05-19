@@ -1,0 +1,31 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "replit-ssh",
+  "package": "@mindstone/mcp-server-replit-ssh",
+  "version": "0.1.0",
+  "auth": {
+    "type": "none",
+    "envVars": []
+  },
+  "tools": {
+    "count": 5,
+    "domains": [
+      "connection",
+      "files",
+      "ssh-setup"
+    ]
+  },
+  "surface": "local-protocol",
+  "hostsTested": [
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/server.ts",
+    "auth": "./src/ssh.ts",
+    "tests": "./test/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-replit-ssh",
+    "serverJson": "./server.json"
+  }
+}
