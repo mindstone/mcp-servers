@@ -5,6 +5,15 @@
 
 TalentLMS MCP server for Model Context Protocol hosts. Manage users, courses, groups, branches, enrolments, reporting, and assessments in TalentLMS through a standardised MCP interface.
 
+## Status
+
+- **Version:** [0.2.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-talentlms)
+- **Auth:** API key ([`TALENTLMS_API_KEY`](./server.json))
+- **Tools:** [24](./src/tools/) (users, courses, groups, reporting, assessments)
+- **Surface:** cloud-api
+- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
+- **Machine-readable:** [`STATUS.json`](./STATUS.json)
+
 ## Requirements
 
 - Node.js 20+

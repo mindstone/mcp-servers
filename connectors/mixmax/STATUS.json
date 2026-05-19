@@ -1,0 +1,36 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "mixmax",
+  "package": "@mindstone/mcp-server-mixmax",
+  "version": "0.2.2",
+  "auth": {
+    "type": "api-key",
+    "envVars": [
+      "MIXMAX_API_TOKEN"
+    ]
+  },
+  "tools": {
+    "count": 10,
+    "domains": [
+      "sequences",
+      "messages",
+      "snippets",
+      "meetings"
+    ]
+  },
+  "surface": "cloud-api",
+  "hostsTested": [
+    "claude-desktop",
+    "cursor",
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/tools/",
+    "auth": "./src/",
+    "tests": "./test/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-mixmax",
+    "serverJson": "./server.json"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "workday",
+  "package": "@mindstone/mcp-server-workday",
+  "version": "0.2.2",
+  "auth": {
+    "type": "oauth",
+    "envVars": [
+      "WORKDAY_CLIENT_SECRET",
+      "WORKDAY_REFRESH_TOKEN"
+    ]
+  },
+  "tools": {
+    "count": 4,
+    "domains": [
+      "workers",
+      "organizations"
+    ]
+  },
+  "surface": "cloud-api",
+  "hostsTested": [
+    "claude-desktop",
+    "cursor",
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/tools/",
+    "auth": "./src/",
+    "tests": "./test/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-workday",
+    "serverJson": "./server.json"
+  }
+}

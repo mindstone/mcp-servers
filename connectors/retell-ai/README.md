@@ -2,6 +2,15 @@
 
 Voice agent phone calls, call management, agent configuration, LLM prompt management, and voice discovery via [Retell AI](https://www.retellai.com/) API.
 
+## Status
+
+- **Version:** [0.2.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-retell-ai)
+- **Auth:** API key ([`RETELL_API_KEY`](./server.json))
+- **Tools:** [20](./src/tools/) (calls, agents, llms, voices)
+- **Surface:** cloud-api
+- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
+- **Machine-readable:** [`STATUS.json`](./STATUS.json)
+
 ## Installation
 
 ```bash
@@ -65,19 +74,22 @@ Hosts integrating this connector are required to:
 Malformed numbers are rejected locally with a structured
 `INVALID_PHONE_NUMBER` error and are never sent upstream.
 
-## Available Tools (15)
+## Tools (20)
 
 ### Phone Calls
 - **create_phone_call** — Create an outbound phone call using a Retell AI voice agent
 - **create_web_call** — Create a browser-based voice call with a Retell AI agent
 - **get_call** — Get details about a specific call (status, transcript, recording)
 - **list_calls** — List and filter calls by agent, time range, or status
+- **stop_call** — Terminate an active call
 
 ### Agents
 - **get_agent** — Get full configuration of a voice agent
 - **list_agents** — List all configured voice agents
 - **create_agent** — Create a new voice agent
 - **update_agent** — Update an existing agent's configuration
+- **publish_agent** — Publish an agent draft to make it callable
+- **get_agent_versions** — List version history for an agent
 
 ### LLM Configuration
 - **update_retell_llm** — Update the LLM configuration (prompt, greeting, model)
@@ -88,6 +100,8 @@ Malformed numbers are rejected locally with a structured
 ### Discovery
 - **list_voices** — List available text-to-speech voices
 - **list_phone_numbers** — List registered phone numbers
+- **get_phone_number** — Get details of a specific phone number
+- **update_phone_number** — Update a phone number's agent assignment
 
 ### Configuration
 - **configure_retell_api_key** — Save your Retell AI API key

@@ -1,0 +1,36 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "servicenow",
+  "package": "@mindstone/mcp-server-servicenow",
+  "version": "0.2.2",
+  "auth": {
+    "type": "basic-auth",
+    "envVars": [
+      "SERVICENOW_PASSWORD"
+    ]
+  },
+  "tools": {
+    "count": 10,
+    "domains": [
+      "incidents",
+      "change-requests",
+      "users",
+      "knowledge"
+    ]
+  },
+  "surface": "cloud-api",
+  "hostsTested": [
+    "claude-desktop",
+    "cursor",
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/tools/",
+    "auth": "./src/",
+    "tests": "./test/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-servicenow",
+    "serverJson": "./server.json"
+  }
+}

@@ -1,0 +1,710 @@
+// NOTE: Keep this template in sync with compose-email.html.
+export const COMPOSE_EMAIL_HTML = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Compose Email</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --panel: #ffffff;
+      --border: #d9dde5;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --input-bg: #ffffff;
+      --button-bg: #1f6feb;
+      --button-text: #ffffff;
+      --button-bg-hover: #1b63d3;
+      --secondary-bg: #f3f4f6;
+      --secondary-text: #1f2937;
+      --secondary-border: #d1d5db;
+      --error-bg: #fef2f2;
+      --error-border: #fecaca;
+      --error-text: #991b1b;
+      --success-bg: #ecfdf5;
+      --success-border: #bbf7d0;
+      --success-text: #166534;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f172a;
+        --panel: #111827;
+        --border: #334155;
+        --text: #e5e7eb;
+        --muted: #9ca3af;
+        --input-bg: #0b1220;
+        --button-bg: #3b82f6;
+        --button-text: #eff6ff;
+        --button-bg-hover: #2563eb;
+        --secondary-bg: #1f2937;
+        --secondary-text: #e5e7eb;
+        --secondary-border: #374151;
+        --error-bg: #2b1011;
+        --error-border: #7f1d1d;
+        --error-text: #fca5a5;
+        --success-bg: #052e1b;
+        --success-border: #166534;
+        --success-text: #86efac;
+      }
+    }
+
+    html[data-theme="light"] {
+      color-scheme: light;
+    }
+
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0f172a;
+      --panel: #111827;
+      --border: #334155;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --input-bg: #0b1220;
+      --button-bg: #3b82f6;
+      --button-text: #eff6ff;
+      --button-bg-hover: #2563eb;
+      --secondary-bg: #1f2937;
+      --secondary-text: #e5e7eb;
+      --secondary-border: #374151;
+      --error-bg: #2b1011;
+      --error-border: #7f1d1d;
+      --error-text: #fca5a5;
+      --success-bg: #052e1b;
+      --success-border: #166534;
+      --success-text: #86efac;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 16px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.4;
+    }
+
+    .wrapper {
+      width: 100%;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .input,
+    .textarea {
+      width: 100%;
+      background: var(--input-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    .input:focus,
+    .textarea:focus {
+      outline: 2px solid rgba(59, 130, 246, 0.35);
+      outline-offset: 1px;
+    }
+
+    .textarea {
+      min-height: 180px;
+      resize: vertical;
+      white-space: pre-wrap;
+    }
+
+    .toggles {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .link-button {
+      border: none;
+      padding: 0;
+      background: none;
+      color: var(--muted);
+      text-decoration: underline;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .link-button:hover {
+      color: var(--text);
+    }
+
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 2px;
+    }
+
+    .button {
+      border-radius: 8px;
+      border: 1px solid transparent;
+      min-height: 36px;
+      padding: 0 14px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background 120ms ease, opacity 120ms ease, border-color 120ms ease;
+    }
+
+    .button:disabled {
+      cursor: not-allowed;
+      opacity: 0.75;
+    }
+
+    .button-primary {
+      background: var(--button-bg);
+      color: var(--button-text);
+    }
+
+    .button-primary:hover:enabled {
+      background: var(--button-bg-hover);
+    }
+
+    .button-secondary {
+      background: var(--secondary-bg);
+      color: var(--secondary-text);
+      border-color: var(--secondary-border);
+    }
+
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      display: inline-block;
+      animation: spin 700ms linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .status {
+      border-radius: 8px;
+      border: 1px solid transparent;
+      padding: 8px 10px;
+      font-size: 13px;
+    }
+
+    .error {
+      background: var(--error-bg);
+      border-color: var(--error-border);
+      color: var(--error-text);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .success {
+      background: var(--success-bg);
+      border-color: var(--success-border);
+      color: var(--success-text);
+    }
+
+    .collapsed {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div id="collapsedState" class="collapsed hidden">
+      <span id="collapsedMessage">Draft collapsed.</span>
+      <button id="reopenButton" type="button" class="button button-secondary">Reopen</button>
+    </div>
+
+    <form id="composeForm" class="card" novalidate>
+      <div class="field">
+        <label for="toInput">To</label>
+        <input id="toInput" class="input" type="text" autocomplete="off" placeholder="name@example.com, team@example.com">
+      </div>
+
+      <div class="toggles">
+        <button id="toggleCcButton" type="button" class="link-button">Add CC</button>
+        <button id="toggleBccButton" type="button" class="link-button">Add BCC</button>
+      </div>
+
+      <div id="ccRow" class="field hidden">
+        <label for="ccInput">CC</label>
+        <input id="ccInput" class="input" type="text" autocomplete="off" placeholder="cc@example.com">
+      </div>
+
+      <div id="bccRow" class="field hidden">
+        <label for="bccInput">BCC</label>
+        <input id="bccInput" class="input" type="text" autocomplete="off" placeholder="bcc@example.com">
+      </div>
+
+      <div class="field">
+        <label for="subjectInput">Subject</label>
+        <input id="subjectInput" class="input" type="text" autocomplete="off" placeholder="Email subject">
+      </div>
+
+      <div class="field">
+        <label for="bodyInput">Body</label>
+        <textarea id="bodyInput" class="textarea" placeholder="Write your email"></textarea>
+      </div>
+
+      <div id="errorBox" class="status error hidden">
+        <span id="errorText"></span>
+        <button id="retryButton" type="button" class="link-button">Retry</button>
+      </div>
+
+      <div id="successBox" class="status success hidden"></div>
+
+      <div class="actions">
+        <button id="cancelButton" type="button" class="button button-secondary">Cancel</button>
+        <button id="sendButton" type="submit" class="button button-primary">
+          <span id="sendSpinner" class="spinner hidden" aria-hidden="true"></span>
+          <span id="sendLabel">Send email</span>
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var RESOURCE_URI = 'ui://google-workspace/compose-email';
+      var currentEmail = '';
+      var pendingRequestId = null;
+      var pendingPayload = null;
+      var sending = false;
+      var collapsed = false;
+
+      var composeForm = document.getElementById('composeForm');
+      var collapsedState = document.getElementById('collapsedState');
+      var collapsedMessage = document.getElementById('collapsedMessage');
+      var reopenButton = document.getElementById('reopenButton');
+
+      var toInput = document.getElementById('toInput');
+      var ccInput = document.getElementById('ccInput');
+      var bccInput = document.getElementById('bccInput');
+      var subjectInput = document.getElementById('subjectInput');
+      var bodyInput = document.getElementById('bodyInput');
+      var ccRow = document.getElementById('ccRow');
+      var bccRow = document.getElementById('bccRow');
+      var toggleCcButton = document.getElementById('toggleCcButton');
+      var toggleBccButton = document.getElementById('toggleBccButton');
+
+      var sendButton = document.getElementById('sendButton');
+      var sendLabel = document.getElementById('sendLabel');
+      var sendSpinner = document.getElementById('sendSpinner');
+      var cancelButton = document.getElementById('cancelButton');
+      var retryButton = document.getElementById('retryButton');
+
+      var errorBox = document.getElementById('errorBox');
+      var errorText = document.getElementById('errorText');
+      var successBox = document.getElementById('successBox');
+
+      function applyThemeFromHostContext() {
+        try {
+          var context = window.__MCP_HOST_CONTEXT__;
+          if (!context || (context.theme !== 'light' && context.theme !== 'dark')) {
+            return;
+          }
+          document.documentElement.setAttribute('data-theme', context.theme);
+        } catch (_) {
+          // Ignore theme extraction errors
+        }
+      }
+
+      function trimString(value) {
+        return String(value || '').trim();
+      }
+
+      function formatAddressItem(item) {
+        if (item && typeof item === 'object') {
+          var email = trimString(item.email || item.address || item.value);
+          var name = trimString(item.name || item.displayName);
+          if (email && name) {
+            return name + ' <' + email + '>';
+          }
+          return email;
+        }
+        return trimString(item);
+      }
+
+      function normalizeAddressList(value) {
+        if (Array.isArray(value)) {
+          return value.map(formatAddressItem).filter(Boolean);
+        }
+        if (typeof value === 'string') {
+          return value
+            .split(',')
+            .map(function (item) { return trimString(item); })
+            .filter(Boolean);
+        }
+        return [];
+      }
+
+      function listToInputValue(list) {
+        return normalizeAddressList(list).join(', ');
+      }
+
+      var resizeQueued = false;
+      function postResize() {
+        if (resizeQueued) return;
+        resizeQueued = true;
+        requestAnimationFrame(function () {
+          resizeQueued = false;
+          var height = Math.max(
+            document.documentElement.scrollHeight,
+            document.body ? document.body.scrollHeight : 0
+          );
+          window.parent.postMessage(
+            { jsonrpc: '2.0', method: 'ui/resize', params: { height: height } },
+            '*'
+          );
+        });
+      }
+
+      function postReady() {
+        window.parent.postMessage(
+          {
+            method: 'mcp-app:ready',
+            params: { resourceUri: RESOURCE_URI }
+          },
+          '*'
+        );
+      }
+
+      function setCollapsed(nextCollapsed, message) {
+        collapsed = nextCollapsed;
+        composeForm.classList.toggle('hidden', collapsed);
+        collapsedState.classList.toggle('hidden', !collapsed);
+        if (message) {
+          collapsedMessage.textContent = message;
+        } else {
+          collapsedMessage.textContent = collapsed ? 'Draft collapsed.' : '';
+        }
+        postResize();
+      }
+
+      function setSending(nextSending) {
+        sending = nextSending;
+        sendButton.disabled = nextSending;
+        cancelButton.disabled = nextSending;
+        toInput.disabled = nextSending;
+        ccInput.disabled = nextSending;
+        bccInput.disabled = nextSending;
+        subjectInput.disabled = nextSending;
+        bodyInput.disabled = nextSending;
+        sendSpinner.classList.toggle('hidden', !nextSending);
+        sendLabel.textContent = nextSending ? 'Sending…' : 'Send email';
+        postResize();
+      }
+
+      function clearError() {
+        errorText.textContent = '';
+        errorBox.classList.add('hidden');
+      }
+
+      function showError(message) {
+        errorText.textContent = message || 'Failed to send email.';
+        errorBox.classList.remove('hidden');
+        postResize();
+      }
+
+      function clearSuccess() {
+        successBox.textContent = '';
+        successBox.classList.add('hidden');
+      }
+
+      function showSuccess(message) {
+        successBox.textContent = message;
+        successBox.classList.remove('hidden');
+        postResize();
+      }
+
+      function setCcVisible(visible) {
+        ccRow.classList.toggle('hidden', !visible);
+        toggleCcButton.textContent = visible ? 'Hide CC' : 'Add CC';
+      }
+
+      function setBccVisible(visible) {
+        bccRow.classList.toggle('hidden', !visible);
+        toggleBccButton.textContent = visible ? 'Hide BCC' : 'Add BCC';
+      }
+
+      function readFormPayload() {
+        var payload = {
+          to: normalizeAddressList(toInput.value),
+          cc: normalizeAddressList(ccInput.value),
+          bcc: normalizeAddressList(bccInput.value),
+          subject: String(subjectInput.value || ''),
+          body: String(bodyInput.value || '')
+        };
+        if (currentEmail) {
+          payload.email = currentEmail;
+        }
+        return payload;
+      }
+
+      function validatePayload(payload) {
+        if (!payload.to || payload.to.length === 0) {
+          return 'Add at least one recipient in To.';
+        }
+        if (!trimString(payload.subject)) {
+          return 'Add a subject before sending.';
+        }
+        if (!trimString(payload.body)) {
+          return 'Add an email body before sending.';
+        }
+        return null;
+      }
+
+      function sendPayload(payload) {
+        pendingPayload = payload;
+        pendingRequestId = 'send-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+        setSending(true);
+        clearError();
+        clearSuccess();
+
+        window.parent.postMessage(
+          {
+            jsonrpc: '2.0',
+            method: 'tools/call',
+            params: {
+              name: 'send_workspace_email',
+              arguments: payload
+            },
+            id: pendingRequestId
+          },
+          '*'
+        );
+      }
+
+      function applyDraftData(rawDraft) {
+        var draft = rawDraft && typeof rawDraft === 'object' ? rawDraft : {};
+        toInput.value = listToInputValue(draft.to);
+        ccInput.value = listToInputValue(draft.cc);
+        bccInput.value = listToInputValue(draft.bcc);
+        subjectInput.value = typeof draft.subject === 'string' ? draft.subject : '';
+        bodyInput.value = typeof draft.body === 'string' ? draft.body : '';
+        currentEmail = typeof draft.email === 'string' ? draft.email : '';
+        setCcVisible(normalizeAddressList(draft.cc).length > 0);
+        setBccVisible(normalizeAddressList(draft.bcc).length > 0);
+        clearError();
+        clearSuccess();
+        postResize();
+      }
+
+      function getDraftFromToolResult(payload) {
+        if (!payload || typeof payload !== 'object') {
+          return null;
+        }
+        // CANONICAL: post-A0 super-mcp hoists structuredContent onto the
+        // outer block; the host posts it through \`params.structuredContent\`.
+        if (payload.structuredContent && typeof payload.structuredContent === 'object') {
+          return payload.structuredContent;
+        }
+        // MIGRATION SHIM: pre-A0 stored sessions replayed through the
+        // current iframe lack \`params.structuredContent\` because the outer
+        // block had no hoist at capture time. Read inner envelope text →
+        // JSON.parse → result.structuredContent. NOT regex-based.
+        //
+        // Lifetime: PERMANENT defensive read-side helper. Pre-A0 sessions
+        // are persisted on disk and may be replayed indefinitely; there is
+        // no time-based sunset. Removing this fallback would silently break
+        // pre-A0 conversation replay.
+        var text = typeof payload.text === 'string' ? payload.text :
+          (Array.isArray(payload.content)
+            ? (payload.content.find(function (c) { return c && c.type === 'text' && typeof c.text === 'string'; }) || {}).text
+            : null);
+        if (typeof text !== 'string') return null;
+        try {
+          var parsed = JSON.parse(text);
+          if (parsed && typeof parsed === 'object' && parsed.result && typeof parsed.result === 'object') {
+            var inner = parsed.result;
+            if (inner.structuredContent && typeof inner.structuredContent === 'object') {
+              return inner.structuredContent;
+            }
+          }
+        } catch (_) {
+          // Likely-envelope heuristic: text starts with \`{\` and contains
+          // \`"package_id"\` in the first 64 chars. If JSON.parse failed on a
+          // likely-envelope, surface a warning so the developer chasing
+          // "compose form is empty on replay" sees a signal. For non-envelope
+          // text (the dominant case), no log fires.
+          var prefix = text.length > 64 ? text.slice(0, 64) : text;
+          var likelyEnvelope = prefix.charAt(0) === '{' && prefix.indexOf('"package_id"') !== -1;
+          if (likelyEnvelope && typeof console !== 'undefined' && typeof console.warn === 'function') {
+            console.warn('[compose-email] Migration shim: JSON.parse failed on likely super-mcp envelope; pre-fill skipped');
+          }
+        }
+        return null;
+      }
+
+      composeForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        if (sending) return;
+
+        var payload = readFormPayload();
+        var validationError = validatePayload(payload);
+        if (validationError) {
+          showError(validationError);
+          return;
+        }
+
+        sendPayload(payload);
+      });
+
+      retryButton.addEventListener('click', function () {
+        if (sending) return;
+        var payload = readFormPayload();
+        var validationError = validatePayload(payload);
+        if (validationError) {
+          showError(validationError);
+          return;
+        }
+        sendPayload(payload);
+      });
+
+      cancelButton.addEventListener('click', function () {
+        if (sending) return;
+        clearError();
+        clearSuccess();
+        setCollapsed(true, 'Draft collapsed. Nothing sent.');
+      });
+
+      reopenButton.addEventListener('click', function () {
+        setCollapsed(false);
+      });
+
+      toggleCcButton.addEventListener('click', function () {
+        setCcVisible(ccRow.classList.contains('hidden'));
+        postResize();
+      });
+
+      toggleBccButton.addEventListener('click', function () {
+        setBccVisible(bccRow.classList.contains('hidden'));
+        postResize();
+      });
+
+      [toInput, ccInput, bccInput, subjectInput, bodyInput].forEach(function (element) {
+        element.addEventListener('input', function () {
+          clearError();
+          clearSuccess();
+          postResize();
+        });
+      });
+
+      window.addEventListener('message', function (event) {
+        var data = event.data;
+        if (!data || typeof data !== 'object') {
+          return;
+        }
+
+        if (data.method === 'ui/notifications/tool-result') {
+          var draft = getDraftFromToolResult(data.params);
+          if (draft) {
+            applyDraftData(draft);
+          }
+          return;
+        }
+
+        if (data.jsonrpc !== '2.0' || !pendingRequestId || data.id !== pendingRequestId) {
+          return;
+        }
+
+        pendingRequestId = null;
+        setSending(false);
+
+        if (data.error) {
+          var errorMessage = data.error && typeof data.error.message === 'string'
+            ? data.error.message
+            : 'Failed to send email.';
+          showError(errorMessage);
+          return;
+        }
+
+        clearError();
+        showSuccess('Email sent successfully.');
+        setCollapsed(true, 'Email sent.');
+        reopenButton.classList.add('hidden');
+      });
+
+      if (typeof ResizeObserver === 'function' && document.body) {
+        var observer = new ResizeObserver(postResize);
+        observer.observe(document.body);
+      }
+
+      applyThemeFromHostContext();
+      setCcVisible(false);
+      setBccVisible(false);
+      setCollapsed(false);
+      postResize();
+      postReady();
+
+      window.parent.postMessage(
+        {
+          jsonrpc: '2.0',
+          method: 'ui/initialize',
+          params: { resourceUri: RESOURCE_URI },
+          id: 'compose-email-init'
+        },
+        '*'
+      );
+    })();
+  </script>
+</body>
+</html>
+`;

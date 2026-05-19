@@ -3,7 +3,46 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-fathom.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-fathom)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Fathom AI meeting transcription MCP server for Model Context Protocol hosts. List and search meetings, view meeting details, read transcripts, and manage teams through a standardised MCP interface.
+List and search meetings, view details, read transcripts, and manage teams via Fathom AI.
+
+*Local-only Fathom MCP. Not the official server — built before Fathom shipped theirs; tokens stay on disk and each release goes through our own security review.*
+
+## Status
+
+- **Version:** [0.2.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-fathom)
+- **Auth:** API key ([`FATHOM_API_KEY`](./server.json))
+- **Tools:** [7](./src/tools/) (meetings, transcripts, teams)
+- **Surface:** cloud-api
+- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
+- **Machine-readable:** [`STATUS.json`](./STATUS.json)
+
+## Why this exists
+
+When we built this in early 2026, Fathom had not published an official MCP server, and the community options available at the time were thin and unmaintained — they listed meetings, but did not cover the team and transcript data our meeting-notes workflows depend on. We wrote our own so that any MCP host could pull Fathom transcripts and meeting details with the same credential handling, timeouts, and safety wrapping we apply across the rest of this repository. Fathom has since released an [official MCP server](https://developers.fathom.ai/mcp-docs); we continue to maintain this one because it runs locally on the user's machine and goes through our own security review before each release.
+
+## Example interaction
+
+> "Pull yesterday's Q3 planning meeting from Fathom and list the action items from the transcript."
+
+Tools the host calls:
+1. `list_fathom_meetings` — filtered by date range, finds the meeting and returns its ID.
+2. `get_fathom_transcript` — fetches the transcript for that meeting ID.
+
+Response (trimmed):
+
+```json
+{
+  "meeting": {
+    "id": "mtg_01HXX...",
+    "title": "Q3 planning",
+    "scheduled_start": "2026-05-18T15:00:00Z"
+  },
+  "transcript": [
+    { "t": "00:02", "speaker": "Alice", "text": "First topic is hiring..." },
+    { "t": "00:47", "speaker": "Bob",   "text": "Let's lock the JD by Friday." }
+  ]
+}
+```
 
 ## Requirements
 
@@ -74,7 +113,7 @@ node dist/index.js
 }
 ```
 
-## Tools (6)
+## Tools (7)
 
 ### Configuration
 - `configure_fathom_api_key` — Configure the Fathom API key
@@ -83,6 +122,7 @@ node dist/index.js
 - `list_fathom_meetings` — List meetings with server-side filtering
 - `get_fathom_meeting` — Get details for a single meeting
 - `get_fathom_transcript` — Get the transcript for a meeting
+- `get_fathom_meeting_participants` — List the participants of a meeting
 
 ### Teams
 - `list_fathom_teams` — List all accessible teams

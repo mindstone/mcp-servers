@@ -1,0 +1,1282 @@
+#!/usr/bin/env node
+import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
+import http from 'node:http';
+import { createRequire } from 'node:module';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
+import { logger, redactSensitiveInLogs } from './logger.js';
+
+const require = createRequire(import.meta.url);
+const packageJson = require('../package.json') as { version: string };
+
+export const SERVER_VERSION = packageJson.version;
+export const DEFAULT_OPENAI_IMAGE_REQUEST_TIMEOUT_MS = 90_000;
+export const NOT_CONFIGURED_RESOLUTION =
+  "Set OPENAI_API_KEY in your MCP host's settings.";
+const MAX_LOCAL_IMAGE_BYTES = 25 * 1024 * 1024;
+const MAX_INLINE_IMAGES = 5;
+const MIN_BASE64_IMAGE_LENGTH = 100;
+// Legacy directory name from a prior bundled host build; preserved verbatim
+// only so existing user folders are detected and migrated to the host-neutral
+// modern directory on first run. New installations never create this path.
+const LEGACY_FALLBACK_DIR_NAME = 'RebelImages';
+const MODERN_FALLBACK_DIR_NAME = 'MCP-Generated-Images';
+export const LEGACY_FALLBACK_FOLDER_NAME = LEGACY_FALLBACK_DIR_NAME;
+export const MODERN_FALLBACK_FOLDER_NAME = MODERN_FALLBACK_DIR_NAME;
+const OPENAI_API_BASE_URL = 'https://api.openai.com';
+const KNOWN_MODELS = new Set([
+  'gpt-image-2',
+  'gpt-image-1.5',
+  'gpt-image-1',
+  'gpt-image-1-mini',
+]);
+
+const SIZE_MAP: Record<string, string> = {
+  square: '1024x1024',
+  portrait: '1024x1536',
+  landscape: '1536x1024',
+};
+
+export type ToolErrorCode =
+  | 'NOT_CONFIGURED'
+  | 'INVALID_API_KEY'
+  | 'RATE_LIMITED'
+  | 'CONTENT_POLICY'
+  | 'WORKSPACE_FENCE_VIOLATION'
+  | 'MODEL_UNAVAILABLE'
+  | 'NETWORK_ERROR'
+  | 'TIMEOUT'
+  | 'WRITE_FAILED'
+  | 'INVALID_IMAGE_DATA';
+
+interface ToolErrorPayload {
+  ok: false;
+  error: string;
+  code: ToolErrorCode;
+  resolution: string;
+}
+
+interface OpenAIErrorData {
+  error?: {
+    message?: string;
+  };
+}
+
+interface OpenAIImageResponse {
+  data?: Array<{
+    b64_json?: string;
+    [key: string]: unknown;
+  }>;
+}
+
+interface LoadedLocalImage {
+  path: string;
+  filename: string;
+  mime: string;
+  data: Buffer;
+}
+
+interface ToolCallbackContext {
+  signal?: AbortSignal;
+}
+
+export class OpenAIImageToolError extends Error {
+  constructor(
+    public readonly code: ToolErrorCode,
+    message: string,
+    public readonly resolution: string,
+  ) {
+    super(message);
+    this.name = 'OpenAIImageToolError';
+  }
+}
+
+const modelSupportsModeration = (model: string): boolean =>
+  model.startsWith('gpt-image-2');
+
+export const configuredModel = (): string =>
+  process.env.OPENAI_IMAGE_MODEL?.trim() || 'gpt-image-2';
+
+export const configuredWorkspacePath = (): string | undefined =>
+  process.env.MCP_WORKSPACE_PATH?.trim() || undefined;
+
+export const configuredApiKey = (): string | undefined => {
+  const raw = process.env.OPENAI_API_KEY;
+  if (!raw) {
+    return undefined;
+  }
+
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === '{{OPENAI_API_KEY}}') {
+    return undefined;
+  }
+
+  return trimmed;
+};
+
+export const resolveRequestTimeoutMs = (): number => {
+  const raw = process.env.OPENAI_IMAGE_REQUEST_TIMEOUT_MS;
+  if (raw === undefined || raw.trim() === '') {
+    return DEFAULT_OPENAI_IMAGE_REQUEST_TIMEOUT_MS;
+  }
+
+  const parsed = parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    logger.warn(
+      '[openai-image] Invalid OPENAI_IMAGE_REQUEST_TIMEOUT_MS; using default.',
+      { rawValue: raw, fallbackMs: DEFAULT_OPENAI_IMAGE_REQUEST_TIMEOUT_MS },
+    );
+    return DEFAULT_OPENAI_IMAGE_REQUEST_TIMEOUT_MS;
+  }
+
+  return parsed;
+};
+
+export const OPENAI_IMAGE_REQUEST_TIMEOUT_MS = resolveRequestTimeoutMs();
+
+if (!KNOWN_MODELS.has(configuredModel())) {
+  logger.warn(
+    '[openai-image] Unknown OPENAI_IMAGE_MODEL value. Continuing with upstream validation.',
+    { model: configuredModel(), knownModels: [...KNOWN_MODELS] },
+  );
+}
+
+const sanitizeUserFacingText = (value: string): string => {
+  const redacted = redactSensitiveInLogs(value);
+  const redactedText = typeof redacted === 'string' ? redacted : String(redacted);
+  return redactedText.replace(
+    /(?:[A-Za-z]:\\|\/)[^\s"'`]+/gu,
+    (match) => path.basename(match.replace(/[\\/]+$/u, '')) || '<path>',
+  );
+};
+
+const toErrorPayload = (error: unknown): ToolErrorPayload => {
+  if (error instanceof OpenAIImageToolError) {
+    return {
+      ok: false,
+      code: error.code,
+      error: sanitizeUserFacingText(error.message),
+      resolution: sanitizeUserFacingText(error.resolution),
+    };
+  }
+
+  return {
+    ok: false,
+    code: 'NETWORK_ERROR',
+    error: 'Network error while processing the image request.',
+    resolution:
+      'Check your network connection and try again. If this keeps happening, increase OPENAI_IMAGE_REQUEST_TIMEOUT_MS.',
+  };
+};
+
+const toErrorToolResult = (payload: ToolErrorPayload): CallToolResult => ({
+  content: [{ type: 'text', text: JSON.stringify(payload) }],
+  isError: true,
+});
+
+export const withErrorHandling = async (
+  operation: () => Promise<CallToolResult>,
+): Promise<CallToolResult> => {
+  try {
+    return await operation();
+  } catch (error) {
+    const payload = toErrorPayload(error);
+    logger.error('[openai-image] Tool call failed.', { payload, error });
+    return toErrorToolResult(payload);
+  }
+};
+
+const ensureConfiguredApiKey = (): string => {
+  const apiKey = configuredApiKey();
+  if (!apiKey) {
+    throw new OpenAIImageToolError(
+      'NOT_CONFIGURED',
+      'OpenAI API key is not configured.',
+      NOT_CONFIGURED_RESOLUTION,
+    );
+  }
+  return apiKey;
+};
+
+const getErrorCode = (error: unknown): string | undefined => {
+  if (typeof error === 'object' && error && 'code' in error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return typeof code === 'string' ? code : undefined;
+  }
+  return undefined;
+};
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return 'unknown error';
+};
+
+/**
+ * Find Chief-of-Staff folder case-insensitively.
+ * Returns the actual folder name found, or null if not found.
+ */
+const findChiefOfStaffFolder = (workspacePath: string): string | null => {
+  try {
+    const entries = fs.readdirSync(workspacePath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (
+        entry.isDirectory() &&
+        entry.name.toLowerCase() === 'chief-of-staff'
+      ) {
+        return entry.name;
+      }
+    }
+  } catch (error) {
+    logger.error('[openai-image] Failed to read workspace directory.', { error });
+  }
+  return null;
+};
+
+const safeLstat = async (targetPath: string): Promise<fs.Stats | null> => {
+  try {
+    return await fs.promises.lstat(targetPath);
+  } catch (error) {
+    if (getErrorCode(error) === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+};
+
+const copyDirectoryPreservingModes = async (
+  sourceDir: string,
+  targetDir: string,
+): Promise<void> => {
+  const sourceStats = await fs.promises.stat(sourceDir);
+  const sourceMode = sourceStats.mode & 0o777;
+  await fs.promises.mkdir(targetDir, {
+    recursive: true,
+    mode: sourceMode,
+  });
+
+  const entries = await fs.promises.readdir(sourceDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const sourcePath = path.join(sourceDir, entry.name);
+    const targetPath = path.join(targetDir, entry.name);
+
+    if (entry.isDirectory()) {
+      await copyDirectoryPreservingModes(sourcePath, targetPath);
+      continue;
+    }
+
+    if (entry.isSymbolicLink()) {
+      const linkTarget = await fs.promises.readlink(sourcePath);
+      await fs.promises.symlink(linkTarget, targetPath);
+      continue;
+    }
+
+    const entryStats = await fs.promises.stat(sourcePath);
+    await fs.promises.copyFile(
+      sourcePath,
+      targetPath,
+      fs.constants.COPYFILE_EXCL,
+    );
+    await fs.promises.chmod(targetPath, entryStats.mode & 0o777);
+  }
+
+  await fs.promises.chmod(targetDir, sourceMode);
+};
+
+export const migrateLegacyFallbackDirectory = async (
+  picturesDir: string = path.join(os.homedir(), 'Pictures'),
+): Promise<string> => {
+  const legacyDir = path.join(picturesDir, LEGACY_FALLBACK_DIR_NAME);
+  const modernDir = path.join(picturesDir, MODERN_FALLBACK_DIR_NAME);
+
+  const [legacyStats, modernStats] = await Promise.all([
+    safeLstat(legacyDir),
+    safeLstat(modernDir),
+  ]);
+
+  if (modernStats?.isSymbolicLink()) {
+    // Target is a symlink — refuse to follow it. Writes redirected through a
+    // symlink we did not create are out of scope; fall through to a sibling
+    // directory so the user can investigate without us silently writing
+    // through an unexpected indirection.
+    const safeFallback = path.join(picturesDir, `${MODERN_FALLBACK_DIR_NAME}-safe`);
+    logger.warn('[openai-image] Modern fallback directory is a symlink; using sibling safe directory instead.', {
+      target: path.basename(modernDir),
+      fallback: path.basename(safeFallback),
+    });
+    await fs.promises.mkdir(safeFallback, { recursive: true, mode: 0o700 });
+    return safeFallback;
+  }
+
+  if (legacyStats?.isSymbolicLink()) {
+    logger.info('[openai-image] Skipping legacy migration because source is a symlink.', {
+      source: path.basename(legacyDir),
+    });
+    if (!modernStats) {
+      await fs.promises.mkdir(modernDir, { recursive: true, mode: 0o700 });
+    }
+    return modernDir;
+  }
+
+  if (legacyStats?.isDirectory() && !modernStats) {
+    try {
+      await fs.promises.rename(legacyDir, modernDir);
+      logger.info('[openai-image] Migrated legacy image folder.', {
+        source: path.basename(legacyDir),
+        target: path.basename(modernDir),
+      });
+      return modernDir;
+    } catch (error) {
+      const code = getErrorCode(error);
+      if (code === 'EEXIST') {
+        logger.info('[openai-image] Skipping legacy migration because target already exists.', {
+          source: path.basename(legacyDir),
+          target: path.basename(modernDir),
+        });
+        return modernDir;
+      }
+
+      if (code === 'EXDEV') {
+        await copyDirectoryPreservingModes(legacyDir, modernDir);
+        await fs.promises.rm(legacyDir, { recursive: true, force: false });
+        logger.info('[openai-image] Migrated legacy image folder across filesystems.', {
+          source: path.basename(legacyDir),
+          target: path.basename(modernDir),
+        });
+        return modernDir;
+      }
+
+      throw error;
+    }
+  }
+
+  if (legacyStats?.isDirectory() && modernStats?.isDirectory()) {
+    logger.info('[openai-image] Legacy image folder detected; migration skipped because target exists.', {
+      source: path.basename(legacyDir),
+      target: path.basename(modernDir),
+    });
+  }
+
+  if (!modernStats) {
+    await fs.promises.mkdir(modernDir, { recursive: true, mode: 0o700 });
+  }
+
+  return modernDir;
+};
+
+let fallbackDirectoryPromise: Promise<string> | null = null;
+
+export const resetFallbackDirectoryCacheForTests = (): void => {
+  fallbackDirectoryPromise = null;
+};
+
+const getImageSaveDir = async (): Promise<string> => {
+  const workspacePath = configuredWorkspacePath();
+  if (workspacePath) {
+    const chiefOfStaff = findChiefOfStaffFolder(workspacePath);
+    if (chiefOfStaff) {
+      return path.join(workspacePath, chiefOfStaff, 'generated-images');
+    }
+    return path.join(workspacePath, 'Chief-of-Staff', 'generated-images');
+  }
+
+  if (!fallbackDirectoryPromise) {
+    fallbackDirectoryPromise = migrateLegacyFallbackDirectory();
+  }
+
+  return fallbackDirectoryPromise;
+};
+
+export const generateFilename = (
+  _prompt: string,
+  index: number,
+  count: number,
+): string => {
+  const suffix = crypto.randomBytes(8).toString('hex');
+  if (count > 1) {
+    return `${Date.now()}-${index + 1}-${suffix}.png`;
+  }
+  return `${Date.now()}-${suffix}.png`;
+};
+
+export const validateBase64ImageData = (
+  base64Value: string | undefined,
+): Buffer => {
+  if (!base64Value || base64Value.length < MIN_BASE64_IMAGE_LENGTH) {
+    throw new OpenAIImageToolError(
+      'INVALID_IMAGE_DATA',
+      'Invalid image data returned by the upstream image API.',
+      'Try the request again with a simpler prompt.',
+    );
+  }
+
+  const buffer = Buffer.from(base64Value, 'base64');
+  if (buffer.length === 0) {
+    throw new OpenAIImageToolError(
+      'INVALID_IMAGE_DATA',
+      'Received empty image data from the upstream image API.',
+      'Try the request again with a simpler prompt.',
+    );
+  }
+
+  return buffer;
+};
+
+export const saveImageToDisk = async (
+  saveDir: string,
+  prompt: string,
+  b64: string,
+  index: number,
+  count: number,
+): Promise<string> => {
+  await fs.promises.mkdir(saveDir, { recursive: true });
+  const buffer = validateBase64ImageData(b64);
+
+  const writeAttempt = async (): Promise<string> => {
+    const filename = generateFilename(prompt, index, count);
+    const savePath = path.join(saveDir, filename);
+    await fs.promises.writeFile(savePath, buffer, { flag: 'wx', mode: 0o600 });
+    const stats = await fs.promises.stat(savePath);
+    if (stats.size === 0) {
+      throw new OpenAIImageToolError(
+        'WRITE_FAILED',
+        'Generated image file was empty after write.',
+        'Try the request again.',
+      );
+    }
+    return savePath;
+  };
+
+  try {
+    return await writeAttempt();
+  } catch (firstError) {
+    if (getErrorCode(firstError) !== 'EEXIST') {
+      throw new OpenAIImageToolError(
+        'WRITE_FAILED',
+        'Failed to save generated image to disk.',
+        'Check folder permissions and available disk space, then try again.',
+      );
+    }
+
+    try {
+      return await writeAttempt();
+    } catch (secondError) {
+      if (getErrorCode(secondError) === 'EEXIST') {
+        throw new OpenAIImageToolError(
+          'WRITE_FAILED',
+          'Failed to save generated image because filenames collided.',
+          'Try the request again.',
+        );
+      }
+      throw new OpenAIImageToolError(
+        'WRITE_FAILED',
+        'Failed to save generated image to disk.',
+        'Check folder permissions and available disk space, then try again.',
+      );
+    }
+  }
+};
+
+const getWorkspacePathResolutionError = (
+  workspacePath: string,
+  error: unknown,
+): string => {
+  const code = getErrorCode(error);
+  if (code === 'EACCES' || code === 'EPERM') {
+    return `Can't access your workspace right now: ${workspacePath}. Check folder permissions and try again.`;
+  }
+  if (code === 'ENOENT') {
+    return `Workspace path is unavailable: ${workspacePath}. Open or create a workspace first.`;
+  }
+  return `Failed to access workspace path: ${workspacePath} — ${getErrorMessage(error)}`;
+};
+
+const getLocalImageReadError = (
+  imageLabel: string,
+  inputPath: string,
+  error: unknown,
+): string => {
+  const code = getErrorCode(error);
+  if (code === 'ENOENT') {
+    return `${imageLabel} not found: ${inputPath}`;
+  }
+  if (code === 'EACCES' || code === 'EPERM') {
+    return `${imageLabel} permission denied: ${inputPath}`;
+  }
+  return `Failed to read ${imageLabel.toLowerCase()}: ${inputPath} — ${getErrorMessage(error)}`;
+};
+
+let workspaceRealPathPromise: Promise<string> | null = null;
+const WORKSPACE_PATH = configuredWorkspacePath();
+
+export const resolveWorkspaceScopedImagePath = async (
+  inputPath: string,
+  imageLabel: string,
+): Promise<
+  { resolvedPath: string; realPath: string } | { errorText: string }
+> => {
+  const workspaceBase = WORKSPACE_PATH;
+  if (!workspaceBase) {
+    return {
+      errorText:
+        'Image path handling requires a workspace. Open or create a workspace first.',
+    };
+  }
+
+  const resolvedPath = path.isAbsolute(inputPath)
+    ? inputPath
+    : path.resolve(workspaceBase, inputPath);
+
+  let workspaceReal: string;
+  try {
+    if (!workspaceRealPathPromise) {
+      workspaceRealPathPromise = fs.promises.realpath(workspaceBase);
+    }
+    workspaceReal = await workspaceRealPathPromise;
+  } catch (error) {
+    workspaceRealPathPromise = null;
+    return { errorText: getWorkspacePathResolutionError(workspaceBase, error) };
+  }
+
+  let targetReal: string;
+  try {
+    targetReal = await fs.promises.realpath(resolvedPath);
+  } catch (error) {
+    return { errorText: getLocalImageReadError(imageLabel, inputPath, error) };
+  }
+
+  const normalizedWorkspace = workspaceReal.endsWith(path.sep)
+    ? workspaceReal
+    : `${workspaceReal}${path.sep}`;
+  const isInsideWorkspace =
+    targetReal === workspaceReal || targetReal.startsWith(normalizedWorkspace);
+
+  if (!isInsideWorkspace) {
+    return {
+      errorText: `${imageLabel} is outside your workspace: ${inputPath}. Move or drag the file into your workspace first, then try again.`,
+    };
+  }
+
+  return { resolvedPath, realPath: targetReal };
+};
+
+export const getSupportedImageMime = (filePath: string): string | null => {
+  const extension = path.extname(filePath).toLowerCase();
+  switch (extension) {
+    case '.png':
+      return 'image/png';
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.webp':
+      return 'image/webp';
+    default:
+      return null;
+  }
+};
+
+const workspaceFenceError = (rawErrorText: string): OpenAIImageToolError => {
+  const sanitized = sanitizeUserFacingText(rawErrorText);
+  const suffix = sanitized.toLowerCase().includes('outside your workspace')
+    ? 'Move or copy the file into your workspace and try again.'
+    : 'Check the file path and workspace access, then try again.';
+  return new OpenAIImageToolError(
+    'WORKSPACE_FENCE_VIOLATION',
+    sanitized,
+    suffix,
+  );
+};
+
+const loadLocalEditImage = async (
+  inputPath: string,
+  options?: { pngOnly?: boolean },
+): Promise<LoadedLocalImage> => {
+  const imageLabel = options?.pngOnly ? 'Mask image' : 'Reference image';
+  const resolvedPathResult = await resolveWorkspaceScopedImagePath(
+    inputPath,
+    imageLabel,
+  );
+  if ('errorText' in resolvedPathResult) {
+    throw workspaceFenceError(resolvedPathResult.errorText);
+  }
+
+  const { resolvedPath, realPath } = resolvedPathResult;
+  const extension = path.extname(realPath).toLowerCase();
+
+  if (options?.pngOnly && extension !== '.png') {
+    throw workspaceFenceError('Mask image must be a PNG file.');
+  }
+
+  let stats: fs.Stats;
+  try {
+    stats = await fs.promises.stat(realPath);
+  } catch (error) {
+    throw workspaceFenceError(getLocalImageReadError(imageLabel, inputPath, error));
+  }
+
+  if (stats.size === 0) {
+    throw workspaceFenceError(`${imageLabel} is empty (0 bytes): ${inputPath}`);
+  }
+
+  if (stats.size > MAX_LOCAL_IMAGE_BYTES) {
+    throw workspaceFenceError(`${imageLabel} exceeds 25MB limit: ${inputPath}`);
+  }
+
+  const mime = options?.pngOnly ? 'image/png' : getSupportedImageMime(realPath);
+  if (!mime) {
+    throw workspaceFenceError(
+      `Unsupported image type: ${extension || path.basename(resolvedPath)}. Supported: PNG, JPEG, WEBP.`,
+    );
+  }
+
+  try {
+    const data = await fs.promises.readFile(realPath);
+    return {
+      path: realPath,
+      filename: path.basename(resolvedPath),
+      mime,
+      data,
+    };
+  } catch (error) {
+    throw workspaceFenceError(getLocalImageReadError(imageLabel, inputPath, error));
+  }
+};
+
+const parseOpenAIErrorMessage = async (response: Response): Promise<string> => {
+  try {
+    const parsed = (await response.clone().json()) as OpenAIErrorData;
+    return parsed.error?.message ?? '';
+  } catch {
+    return '';
+  }
+};
+
+const toOpenAIHttpError = (
+  status: number,
+  upstreamMessage: string,
+  model: string,
+): OpenAIImageToolError => {
+  const lowered = upstreamMessage.toLowerCase();
+
+  if (lowered.includes('content policy')) {
+    return new OpenAIImageToolError(
+      'CONTENT_POLICY',
+      'Content policy violation. Please try a different prompt.',
+      'Revise the prompt and try again.',
+    );
+  }
+
+  if (status === 401) {
+    return new OpenAIImageToolError(
+      'INVALID_API_KEY',
+      'Invalid OpenAI API key.',
+      NOT_CONFIGURED_RESOLUTION,
+    );
+  }
+
+  if (status === 429) {
+    return new OpenAIImageToolError(
+      'RATE_LIMITED',
+      'Rate limit exceeded for the OpenAI image API.',
+      'Wait a moment and try again.',
+    );
+  }
+
+  if (status === 403) {
+    return new OpenAIImageToolError(
+      'MODEL_UNAVAILABLE',
+      `This OpenAI account is not verified for model ${model}.`,
+      'Verify your OpenAI organization access for this model, or switch OPENAI_IMAGE_MODEL.',
+    );
+  }
+
+  return new OpenAIImageToolError(
+    'NETWORK_ERROR',
+    `OpenAI image API request failed with status ${status}.`,
+    'Try again in a moment. If this persists, check OpenAI status and your account permissions.',
+  );
+};
+
+interface FetchAbortController {
+  signal: AbortSignal;
+  timedOut: () => boolean;
+  cleanup: () => void;
+}
+
+const buildFetchController = (callerSignal?: AbortSignal): FetchAbortController => {
+  const controller = new AbortController();
+  let didTimeout = false;
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined = setTimeout(() => {
+    didTimeout = true;
+    controller.abort();
+  }, OPENAI_IMAGE_REQUEST_TIMEOUT_MS);
+
+  const onCallerAbort = (): void => {
+    controller.abort();
+  };
+  if (callerSignal) {
+    if (callerSignal.aborted) {
+      controller.abort();
+    } else {
+      callerSignal.addEventListener('abort', onCallerAbort, { once: true });
+    }
+  }
+
+  return {
+    signal: controller.signal,
+    timedOut: () => didTimeout,
+    cleanup: () => {
+      if (timeoutHandle !== undefined) {
+        clearTimeout(timeoutHandle);
+        timeoutHandle = undefined;
+      }
+      if (callerSignal) {
+        callerSignal.removeEventListener('abort', onCallerAbort);
+      }
+    },
+  };
+};
+
+const networkOrTimeoutError = (controller: FetchAbortController): OpenAIImageToolError => {
+  if (controller.timedOut()) {
+    return new OpenAIImageToolError(
+      'TIMEOUT',
+      `OpenAI image API request exceeded the ${Math.round(OPENAI_IMAGE_REQUEST_TIMEOUT_MS / 1000)}s timeout.`,
+      'Try a smaller batch or simpler prompt, or raise OPENAI_IMAGE_REQUEST_TIMEOUT_MS in your MCP host config.',
+    );
+  }
+  return new OpenAIImageToolError(
+    'NETWORK_ERROR',
+    'Failed to reach OpenAI image API.',
+    'Check your network connection and try again.',
+  );
+};
+
+const postOpenAIJson = async (
+  endpointPath: string,
+  apiKey: string,
+  body: Record<string, unknown>,
+  model: string,
+  callerSignal?: AbortSignal,
+): Promise<OpenAIImageResponse> => {
+  const controller = buildFetchController(callerSignal);
+
+  let response: Response;
+  try {
+    response = await fetch(`${OPENAI_API_BASE_URL}${endpointPath}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    throw networkOrTimeoutError(controller);
+  } finally {
+    controller.cleanup();
+  }
+
+  if (!response.ok) {
+    const message = await parseOpenAIErrorMessage(response);
+    throw toOpenAIHttpError(response.status, message, model);
+  }
+
+  return (await response.json()) as OpenAIImageResponse;
+};
+
+const postOpenAIMultipart = async (
+  endpointPath: string,
+  apiKey: string,
+  form: FormData,
+  model: string,
+  callerSignal?: AbortSignal,
+): Promise<OpenAIImageResponse> => {
+  const controller = buildFetchController(callerSignal);
+
+  let response: Response;
+  try {
+    response = await fetch(`${OPENAI_API_BASE_URL}${endpointPath}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: form,
+      signal: controller.signal,
+    });
+  } catch {
+    throw networkOrTimeoutError(controller);
+  } finally {
+    controller.cleanup();
+  }
+
+  if (!response.ok) {
+    const message = await parseOpenAIErrorMessage(response);
+    throw toOpenAIHttpError(response.status, message, model);
+  }
+
+  return (await response.json()) as OpenAIImageResponse;
+};
+
+const generateImageSchema = z.object({
+  prompt: z
+    .string()
+    .min(1)
+    .describe('Text description of the image to generate'),
+  size: z
+    .enum(['square', 'portrait', 'landscape'])
+    .optional()
+    .describe(
+      'Image dimensions: square (1024x1024), portrait (1024x1536), landscape (1536x1024)',
+    ),
+  quality: z
+    .enum(['low', 'medium', 'high', 'auto'])
+    .optional()
+    .describe('Image quality level (defaults to high)'),
+  count: z
+    .number()
+    .int()
+    .min(1)
+    .max(8)
+    .optional()
+    .describe(
+      'How many images to generate (1-8). Cost multiplies by count.',
+    ),
+  moderation: z
+    .enum(['auto', 'low'])
+    .optional()
+    .describe('Content moderation strictness.'),
+});
+
+const editImageSchema = z.object({
+  prompt: z
+    .string()
+    .min(1)
+    .describe(
+      'What to change in the image. Describe the edit in plain language.',
+    ),
+  image_paths: z
+    .array(z.string().min(1))
+    .min(1)
+    .max(4)
+    .describe(
+      'Absolute or workspace-relative paths to reference images. PNG/JPEG/WEBP only.',
+    ),
+  mask_path: z
+    .string()
+    .optional()
+    .describe(
+      'Optional PNG mask. Transparent areas define the edit region.',
+    ),
+  size: z
+    .enum(['square', 'portrait', 'landscape'])
+    .optional()
+    .describe('Output dimensions.'),
+  quality: z
+    .enum(['low', 'medium', 'high', 'auto'])
+    .optional()
+    .describe('Output quality.'),
+  count: z
+    .number()
+    .int()
+    .min(1)
+    .max(8)
+    .optional()
+    .describe('How many output images to generate (1-8).'),
+  moderation: z
+    .enum(['auto', 'low'])
+    .optional()
+    .describe('Content moderation strictness.'),
+});
+
+const toolSuccessText = (
+  action: 'generated' | 'edited',
+  savedPaths: string[],
+  requestedCount: number,
+): string => {
+  if (savedPaths.length === 0) {
+    return `No usable images were ${action}.`;
+  }
+
+  const baseVerb = action === 'generated' ? 'Generated' : 'Edited';
+  const noun = savedPaths.length === 1 ? 'image' : 'images';
+  const lines = [`${baseVerb} ${savedPaths.length} ${noun}, saved to:`];
+  for (const savedPath of savedPaths) {
+    lines.push(`  ${savedPath}`);
+  }
+
+  if (savedPaths.length < requestedCount) {
+    lines.push(
+      `Requested ${requestedCount}, but only ${savedPaths.length} image(s) were usable.`,
+    );
+  }
+
+  if (savedPaths.length > MAX_INLINE_IMAGES) {
+    lines.push(
+      `Previewing first ${MAX_INLINE_IMAGES} inline; see file paths for the rest.`,
+    );
+  }
+
+  return lines.join('\n');
+};
+
+const mapResponseImages = async (
+  images: OpenAIImageResponse['data'],
+  saveDir: string,
+  prompt: string,
+  requestedCount: number,
+): Promise<Array<{ path: string; b64: string }>> => {
+  if (!images || images.length === 0) {
+    throw new OpenAIImageToolError(
+      'NETWORK_ERROR',
+      'No image data returned from OpenAI.',
+      'Try again with a different prompt.',
+    );
+  }
+
+  const saved: Array<{ path: string; b64: string }> = [];
+  for (const [index, imageData] of images.entries()) {
+    const b64 = imageData?.b64_json;
+    if (!b64) {
+      continue;
+    }
+
+    validateBase64ImageData(b64);
+    const savedPath = await saveImageToDisk(
+      saveDir,
+      prompt,
+      b64,
+      index,
+      requestedCount,
+    );
+    saved.push({ path: savedPath, b64 });
+  }
+
+  if (saved.length === 0) {
+    throw new OpenAIImageToolError(
+      'INVALID_IMAGE_DATA',
+      'No valid image payloads were returned from OpenAI.',
+      'Try again with a different prompt.',
+    );
+  }
+
+  return saved;
+};
+
+const registerTools = (targetServer: McpServer): void => {
+  targetServer.registerTool(
+    'generate_image',
+    {
+      title: 'Generate Image',
+      description:
+        "Generate one or more images using OpenAI's gpt-image-2 family and save outputs to your workspace.",
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
+      inputSchema: generateImageSchema,
+    },
+    async (input, context): Promise<CallToolResult> =>
+      withErrorHandling(async () => {
+        const apiKey = ensureConfiguredApiKey();
+        const model = configuredModel();
+        const size = input.size ?? 'square';
+        const quality = input.quality ?? 'high';
+        const count = input.count ?? 1;
+        const moderation = input.moderation ?? 'auto';
+
+        const body: Record<string, unknown> = {
+          model,
+          prompt: input.prompt,
+          n: count,
+          size: SIZE_MAP[size] || '1024x1024',
+          quality,
+        };
+
+        if (modelSupportsModeration(model)) {
+          body.moderation = moderation;
+        }
+
+        logger.info('[openai-image] Sending generate request.', {
+          size,
+          quality,
+          count,
+          model,
+        });
+
+        const data = await postOpenAIJson(
+          '/v1/images/generations',
+          apiKey,
+          body,
+          model,
+          (context as ToolCallbackContext | undefined)?.signal,
+        );
+        const saveDir = await getImageSaveDir();
+        const savedImages = await mapResponseImages(
+          data.data,
+          saveDir,
+          input.prompt,
+          count,
+        );
+
+        const textMessage = toolSuccessText(
+          'generated',
+          savedImages.map((entry) => entry.path),
+          count,
+        );
+        const inlineImages = savedImages
+          .slice(0, MAX_INLINE_IMAGES)
+          .map(({ b64 }) => ({
+            type: 'image' as const,
+            data: b64,
+            mimeType: 'image/png' as const,
+          }));
+
+        return {
+          content: [{ type: 'text' as const, text: textMessage }, ...inlineImages],
+        };
+      }),
+  );
+
+  targetServer.registerTool(
+    'edit_image',
+    {
+      title: 'Edit Image',
+      description:
+        'Edit one or more existing images with OpenAI image editing and save outputs to your workspace.',
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+        idempotentHint: false,
+      },
+      inputSchema: editImageSchema,
+    },
+    async (input, context): Promise<CallToolResult> =>
+      withErrorHandling(async () => {
+        const apiKey = ensureConfiguredApiKey();
+        const model = configuredModel();
+        const size = input.size ?? 'square';
+        const quality = input.quality ?? 'high';
+        const count = input.count ?? 1;
+        const moderation = input.moderation ?? 'auto';
+
+        const referenceImages: LoadedLocalImage[] = [];
+        for (const imagePath of input.image_paths) {
+          referenceImages.push(await loadLocalEditImage(imagePath));
+        }
+
+        let maskImage: LoadedLocalImage | null = null;
+        if (input.mask_path) {
+          maskImage = await loadLocalEditImage(input.mask_path, { pngOnly: true });
+        }
+
+        const form = new FormData();
+        for (const referenceImage of referenceImages) {
+          form.append(
+            'image[]',
+            new Blob([new Uint8Array(referenceImage.data)], {
+              type: referenceImage.mime,
+            }),
+            referenceImage.filename,
+          );
+        }
+        if (maskImage) {
+          form.append(
+            'mask',
+            new Blob([new Uint8Array(maskImage.data)], { type: 'image/png' }),
+            maskImage.filename,
+          );
+        }
+
+        form.append('prompt', input.prompt);
+        form.append('model', model);
+        form.append('size', SIZE_MAP[size] || '1024x1024');
+        form.append('quality', quality);
+        form.append('n', String(count));
+        if (modelSupportsModeration(model)) {
+          form.append('moderation', moderation);
+        }
+
+        logger.info('[openai-image] Sending edit request.', {
+          size,
+          quality,
+          count,
+          model,
+          referenceCount: referenceImages.length,
+          hasMask: !!maskImage,
+        });
+
+        const data = await postOpenAIMultipart(
+          '/v1/images/edits',
+          apiKey,
+          form,
+          model,
+          (context as ToolCallbackContext | undefined)?.signal,
+        );
+        const saveDir = await getImageSaveDir();
+        const savedImages = await mapResponseImages(
+          data.data,
+          saveDir,
+          input.prompt,
+          count,
+        );
+
+        const textMessage = toolSuccessText(
+          'edited',
+          savedImages.map((entry) => entry.path),
+          count,
+        );
+        const inlineImages = savedImages
+          .slice(0, MAX_INLINE_IMAGES)
+          .map(({ b64 }) => ({
+            type: 'image' as const,
+            data: b64,
+            mimeType: 'image/png' as const,
+          }));
+
+        return {
+          content: [{ type: 'text' as const, text: textMessage }, ...inlineImages],
+        };
+      }),
+  );
+};
+
+export const createServer = (): McpServer => {
+  const server = new McpServer({
+    name: 'OpenAIImageGeneration',
+    version: SERVER_VERSION,
+  });
+  registerTools(server);
+  return server;
+};
+
+export const isLoopbackHost = (host?: string): boolean => {
+  if (!host) return false;
+  return (
+    /^(?:127\.0\.0\.1|localhost)(?::\d{1,5})?$/iu.test(host) ||
+    /^\[::1\](?::\d{1,5})?$/u.test(host)
+  );
+};
+
+export const readJsonBody = async (
+  req: http.IncomingMessage,
+): Promise<unknown> => {
+  if (req.method !== 'POST') {
+    return undefined;
+  }
+
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+
+  if (chunks.length === 0) {
+    return undefined;
+  }
+
+  const rawBody = Buffer.concat(chunks).toString('utf8').trim();
+  if (!rawBody) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(rawBody);
+  } catch {
+    return undefined;
+  }
+};
+
+const startStdioMode = async (): Promise<void> => {
+  const server = createServer();
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  logger.info('[openai-image] Server started on stdio.');
+};
+
+const startHttpMode = async (port: number): Promise<void> => {
+  const httpServer = http.createServer(async (req, res) => {
+    if (!isLoopbackHost(req.headers.host)) {
+      res.statusCode = 403;
+      res.setHeader('Content-Type', 'text/plain');
+      res.end('Forbidden host');
+      return;
+    }
+
+    const requestServer = createServer();
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+    });
+
+    try {
+      await requestServer.connect(transport);
+      const body = await readJsonBody(req);
+      await transport.handleRequest(req, res, body);
+    } catch (error) {
+      logger.error('[openai-image] HTTP request error.', { error });
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.end('Internal error');
+      }
+    } finally {
+      await transport.close().catch(() => undefined);
+      await requestServer.close().catch(() => undefined);
+    }
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    const onError = (error: Error): void => reject(error);
+    httpServer.once('error', onError);
+    httpServer.listen(port, '127.0.0.1', () => {
+      httpServer.off('error', onError);
+      logger.info('[openai-image] HTTP mode listening on loopback.', { port });
+      resolve();
+    });
+  });
+
+  const shutdown = (): void => {
+    httpServer.close(() => process.exit(0));
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+};
+
+const main = async (): Promise<void> => {
+  logger.info('[openai-image] Starting server.', {
+    model: configuredModel(),
+    requestTimeoutMs: OPENAI_IMAGE_REQUEST_TIMEOUT_MS,
+    hasApiKey: !!configuredApiKey(),
+  });
+
+  const httpPort = process.env.MCP_HTTP_PORT;
+  if (httpPort) {
+    const parsedPort = parseInt(httpPort, 10);
+    if (!Number.isFinite(parsedPort) || parsedPort <= 0) {
+      throw new OpenAIImageToolError(
+        'NETWORK_ERROR',
+        `Invalid MCP_HTTP_PORT: ${sanitizeUserFacingText(httpPort)}`,
+        'Set MCP_HTTP_PORT to a valid positive integer.',
+      );
+    }
+    await startHttpMode(parsedPort);
+  } else {
+    await startStdioMode();
+  }
+};
+
+if (process.env.OPENAI_IMAGE_IMPORT_ONLY !== '1') {
+  main().catch((error) => {
+    logger.error('[openai-image] Failed to start server.', { error });
+    process.exit(1);
+  });
+}

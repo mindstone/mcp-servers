@@ -1,0 +1,38 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "vanta",
+  "package": "@mindstone/mcp-server-vanta",
+  "version": "0.1.0",
+  "auth": {
+    "type": "oauth",
+    "envVars": [
+      "VANTA_CLIENT_SECRET"
+    ]
+  },
+  "tools": {
+    "count": 18,
+    "domains": [
+      "vulnerabilities",
+      "tests",
+      "controls",
+      "resources",
+      "evidence",
+      "people",
+      "vendors",
+      "documents"
+    ]
+  },
+  "surface": "cloud-api",
+  "hostsTested": [
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/tools/",
+    "auth": "./src/api.ts",
+    "tests": "./test/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-vanta",
+    "serverJson": "./server.json"
+  }
+}
