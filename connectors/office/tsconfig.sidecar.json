@@ -13,5 +13,10 @@
     "types": ["node"]
   },
   "include": ["src/sidecar/**/*.ts", "src/shared/**/*.ts"],
-  "exclude": ["src/addin/**/*.ts"]
+  "exclude": [
+    "src/addin/**/*.ts",
+    "src/shared/intentClient/**/*.ts",
+    "src/shared/chatController/**/*.ts",
+    "src/shared/chatUI/**/*.ts"
+  ]
 }

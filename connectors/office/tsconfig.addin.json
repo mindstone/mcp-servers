@@ -11,5 +11,12 @@
     "noEmit": true,
     "types": ["office-js"]
   },
-  "include": ["src/addin/**/*.ts", "src/shared/office/**/*.ts"]
+  "include": [
+    "src/addin/**/*.ts",
+    "src/shared/office/**/*.ts",
+    "src/shared/appBridge/**/*.ts",
+    "src/shared/intentClient/**/*.ts",
+    "src/shared/chatController/**/*.ts",
+    "src/shared/chatUI/**/*.ts"
+  ]
 }

@@ -49,7 +49,13 @@ import type { ConnectionManager } from './connectionManager.js';
 
 export type CommandResult =
   | { success: true; data: unknown; commandId: string }
-  | { success: false; error: string; code?: string; commandId: string };
+  | {
+      success: false;
+      error: string;
+      code?: string;
+      details?: Record<string, unknown>;
+      commandId: string;
+    };
 
 interface PendingRequest<TApp extends string> {
   app: TApp;
@@ -287,6 +293,7 @@ export class CommandRouter<TApp extends string = AppType> {
         success: false,
         error: message.error,
         ...(message.code ? { code: message.code } : {}),
+        ...(message.details ? { details: message.details } : {}),
         commandId: message.id,
       });
       return;
