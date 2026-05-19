@@ -1,7 +1,19 @@
 /**
  * Office Add-in taskpane entry script.
+ *
  * Initializes Office.js, connects to the sidecar via WebSocket, dispatches
- * incoming commands to Word command handlers, and updates the minimal status UI.
+ * incoming commands to the host's command handlers, and (Stage 8 of
+ * `260421_embedded_chat_in_extension.md`) hosts the embedded chat UI that
+ * talks directly to Rebel's App Bridge.
+ *
+ * The chat UI and the sidecar WS share the same bearer token but travel
+ * over separate transports:
+ *   - The sidecar WS continues to handle capability relay commands
+ *     (read/insert doc content etc.) exactly as before.
+ *   - The chat UI talks HTTP to the sidecar's `/intent/*` proxy, which
+ *     forwards server-to-server to the App Bridge. The sidecar injects
+ *     `{ port, token, bridgeReady }` into `__REBEL_SIDECAR_CONFIG`; the
+ *     chat UI sits in a "not-ready" state when `bridgeReady !== true`.
  *
  * Runs in the Office WebView (browser context). No React — plain DOM.
  */
@@ -11,6 +23,13 @@ import { getWordCommandHandler } from './commands/wordCommands.js';
 import { getExcelCommandHandler } from './commands/excelCommands.js';
 import { getPowerpointCommandHandler } from './commands/powerpointCommands.js';
 import type { OfficeApp } from '../shared/office/protocol.js';
+import { createChatUI, type ChatController } from './chatUI.js';
+import {
+  installTaskpaneDiagnosticGlobal,
+  type BridgeConfig,
+  type DocumentContext,
+  type TaskpaneDiagnosticApi,
+} from './chatClient.js';
 
 // ---------------------------------------------------------------------------
 // Config resolution
@@ -23,6 +42,7 @@ import type { OfficeApp } from '../shared/office/protocol.js';
 declare global {
   interface Window {
     __REBEL_SIDECAR_CONFIG?: SidecarConfig;
+    __rebelDiag?: TaskpaneDiagnosticApi;
   }
 }
 
@@ -57,8 +77,30 @@ function getSidecarConfig(): SidecarConfig | null {
   return null;
 }
 
+/**
+ * Resolve the sidecar-proxy config from the injected `SidecarConfig`.
+ * Returns null when the sidecar hasn't finished its first bridge-auth
+ * round-trip yet (`bridgeReady !== true`) — in that case the chat UI
+ * stays in "not-ready" and surfaces a graceful "Rebel is setting up"
+ * prompt instead of attempting a call that will immediately 503.
+ *
+ * The paired App Bridge token lives entirely inside the sidecar now;
+ * the task-pane only holds the sidecar's bearer token (also used for
+ * the WebSocket) and calls same-origin `/intent/*` routes that the
+ * sidecar proxies to the bridge.
+ */
+function getBridgeConfig(config: SidecarConfig): BridgeConfig | null {
+  if (config.bridgeReady !== true) {
+    return null;
+  }
+  if (!config.token) {
+    return null;
+  }
+  return { sidecarToken: config.token };
+}
+
 // ---------------------------------------------------------------------------
-// UI helpers
+// Debug section (legacy status + command log)
 // ---------------------------------------------------------------------------
 
 const MAX_LOG_ENTRIES = 5;
@@ -166,6 +208,33 @@ function showConfigError(): void {
     statusEl.classList.add('disconnected');
     textEl.textContent = 'Configuration missing — check sidecar is running';
   }
+  // Make sure the debug panel is visible so users see the config error.
+  const debugRoot = document.getElementById('debug');
+  const debugPanel = document.getElementById('debug-panel');
+  const debugToggle = document.getElementById('debug-toggle');
+  if (debugRoot && debugPanel && debugToggle) {
+    debugRoot.dataset.open = 'true';
+    debugPanel.hidden = false;
+    debugToggle.setAttribute('aria-expanded', 'true');
+  }
+}
+
+function wireDebugToggle(doc: Document = document): void {
+  const root = doc.getElementById('debug');
+  const toggle = doc.getElementById('debug-toggle');
+  const panel = doc.getElementById('debug-panel');
+  if (!root || !toggle || !panel) return;
+
+  const setOpen = (open: boolean): void => {
+    root.dataset.open = open ? 'true' : 'false';
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    panel.hidden = !open;
+  };
+
+  toggle.addEventListener('click', () => {
+    const isOpen = root.dataset.open === 'true';
+    setOpen(!isOpen);
+  });
 }
 
 async function probeHealth(
@@ -295,6 +364,56 @@ export function createTaskpaneController(options: {
 }
 
 // ---------------------------------------------------------------------------
+// Document context capture (Stage 8)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract a best-effort document context for the embedded chat. The task
+ * pane runs inside Word / Excel / PowerPoint — all three expose
+ * `Office.context.document.url` when available (sometimes undefined for
+ * unsaved files). We also attach the host name so Rebel can reason about
+ * which Office app the user is in.
+ */
+function captureDocumentContext(host: OfficeApp): DocumentContext {
+  const ctx: DocumentContext = { host };
+  try {
+    const url = Office?.context?.document?.url;
+    if (typeof url === 'string' && url.length > 0) {
+      ctx.url = url;
+      // Derive a human title from the path / URL.
+      const title = deriveTitleFromUrl(url);
+      if (title) ctx.title = title;
+    }
+  } catch {
+    // Office APIs can throw during early init — no-op.
+  }
+  return ctx;
+}
+
+function deriveTitleFromUrl(url: string): string | undefined {
+  // Handle both file:// style and http(s) URLs. Office sometimes returns
+  // SharePoint / OneDrive URLs (with query strings) and sometimes local
+  // file URLs with percent-encoded paths.
+  try {
+    const parsed = new URL(url);
+    const segments = parsed.pathname.split('/').filter((s) => s.length > 0);
+    const last = segments[segments.length - 1];
+    if (last) {
+      try {
+        return decodeURIComponent(last);
+      } catch {
+        return last;
+      }
+    }
+  } catch {
+    // Not a well-formed URL — try a naive tail slice.
+    const parts = url.split(/[/\\]/).filter((s) => s.length > 0);
+    return parts[parts.length - 1];
+  }
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
 // Multi-app detection and command dispatch
 // ---------------------------------------------------------------------------
 
@@ -328,6 +447,9 @@ function createCommandDispatcher(getHandler: CommandLookup): CommandHandler {
 // ---------------------------------------------------------------------------
 
 export function initializeTaskpane(): void {
+  wireDebugToggle();
+  installTaskpaneDiagnosticGlobal(window);
+
   Office.onReady((info) => {
     console.log(`[rebel-addin] Office.onReady fired — host: ${info.host ?? 'unknown'}`);
 
@@ -353,6 +475,36 @@ export function initializeTaskpane(): void {
 
     console.log(`[rebel-addin] Connecting to sidecar on port ${config.port}`);
 
+    // --- Mount the embedded chat UI ----------------------------------------
+    // The chat UI is independent of the sidecar WS — it talks HTTP to the
+    // App Bridge directly. The sidecar is responsible for injecting
+    // bridge config + a paired token; when either is missing we render a
+    // "Rebel is setting up" state.
+    const chatRoot = document.getElementById('chat-root');
+    let chatController: ChatController | null = null;
+    if (chatRoot) {
+      const bridgeConfig = getBridgeConfig(config);
+      const documentContext = captureDocumentContext(appConfig.app);
+      chatController = createChatUI({
+        container: chatRoot,
+        bridgeConfig,
+        documentContext,
+        getDocumentContext: () => captureDocumentContext(appConfig.app),
+      });
+    }
+
+    const refreshChatDocumentContext = (): void => {
+      chatController?.setDocumentContext(captureDocumentContext(appConfig.app));
+    };
+    const handleVisibilityChange = (): void => {
+      if (document.visibilityState === 'visible') {
+        refreshChatDocumentContext();
+      }
+    };
+    window.addEventListener('focus', refreshChatDocumentContext);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // --- Sidecar WS + command relay (unchanged) ----------------------------
     let controller: ReturnType<typeof createTaskpaneController> | null = null;
     const client = new SidecarWebSocketClient({
       app: appConfig.app,
@@ -365,6 +517,14 @@ export function initializeTaskpane(): void {
 
     controller = createTaskpaneController({ client });
     void client.connect();
+
+    // Clean teardown if the pane is unloaded (rare in Office but polite).
+    window.addEventListener('beforeunload', () => {
+      window.removeEventListener('focus', refreshChatDocumentContext);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      chatController?.dispose();
+      controller?.dispose();
+    });
   });
 }
 

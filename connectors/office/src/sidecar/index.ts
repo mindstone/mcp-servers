@@ -14,6 +14,7 @@ import {
   writeManifest,
   type WefInstallResult,
 } from './manifest.js';
+import { handleIntentProxy } from './intentProxy.js';
 import {
   buildErrorResponse,
   createInternalError,
@@ -55,6 +56,54 @@ function stripCommandId(result: CommandResult): OfficeCommandResult {
 
 const DEFAULT_HOST = '127.0.0.1';
 const WS_PATH = '/ws';
+const DIAG_TAIL_CAPACITY = 50;
+const REQUEST_ID_HEADER_NAME = 'x-rebel-diag-id';
+
+interface DiagTailBuffer {
+  record(line: string): void;
+  dump(): string[];
+}
+
+function createDiagTailBuffer(capacity = DIAG_TAIL_CAPACITY): DiagTailBuffer {
+  const safeCapacity = Number.isFinite(capacity) && capacity > 0
+    ? Math.floor(capacity)
+    : DIAG_TAIL_CAPACITY;
+  const ring = new Array<string>(safeCapacity);
+  let writeIndex = 0;
+  let size = 0;
+
+  return {
+    record(line: string) {
+      ring[writeIndex] = line;
+      writeIndex = (writeIndex + 1) % safeCapacity;
+      if (size < safeCapacity) {
+        size += 1;
+      }
+    },
+    dump() {
+      if (size === 0) return [];
+      const start = size === safeCapacity ? writeIndex : 0;
+      const out: string[] = [];
+      for (let i = 0; i < size; i += 1) {
+        out.push(ring[(start + i) % safeCapacity]!);
+      }
+      return out;
+    },
+  };
+}
+
+function readRequestCorrelationId(
+  header: string | string[] | undefined,
+): string {
+  if (typeof header === 'string') {
+    const trimmed = header.trim();
+    return trimmed.length > 0 ? trimmed.slice(0, 80) : '-';
+  }
+  if (Array.isArray(header)) {
+    return readRequestCorrelationId(header[0]);
+  }
+  return '-';
+}
 
 // ---------------------------------------------------------------------------
 // Content-type map for static file serving
@@ -97,6 +146,11 @@ export interface StartSidecarOptions {
    * Defaults to true when a stateDirectory is provided. Disable for tests.
    */
   installToWefFolders?: boolean;
+  /**
+   * Read-timeout for proxied intent streams (ms). Used to fail fast when the
+   * bridge socket stalls without ending the SSE response.
+   */
+  intentProxyStreamReadTimeoutMs?: number;
 }
 
 export interface OfficeSidecar {
@@ -134,20 +188,297 @@ function sendFile(res: http.ServerResponse, filePath: string, contentType: strin
 }
 
 /**
- * Serve taskpane.html with the sidecar config injected as a script tag.
- * The config allows the add-in to discover the WebSocket port and token.
+ * Best-effort: read the App Bridge state file and extract the bridge's
+ * connection details so the embedded-chat task pane can call `/intent/*`
+ * routes directly.
+ *
+ * The App Bridge writes its state to `userData/mcp/rebel-app-bridge/state.json`.
+ * The Office sidecar's state directory is a sibling: `userData/mcp/rebeloffice/`.
+ * From the sidecar's perspective, the bridge state file is at:
+ *   `<parentOfSidecarStateDir>/rebel-app-bridge/state.json`
+ *
+ * The file is mode 0o600 — only processes running as the same OS user can
+ * read it. Since Rebel spawns the sidecar as a child under the same user,
+ * reading this file is a safe way to obtain the router-internal token
+ * needed to mint a paired app token via `POST /host/mint-app-token`.
+ *
+ * Any failure (missing file, parse error, stale pid) returns `null` — the
+ * task pane then renders the "Rebel is setting up" state rather than
+ * crashing. The chat becomes functional as soon as the bridge is up and
+ * the mint round-trip succeeds.
  */
-function sendTaskpaneHtml(
+interface AppBridgeStateSnapshot {
+  /** Full origin string for the bridge, e.g. `http://127.0.0.1:52320`. */
+  bridgeOrigin: string;
+  /** Bound port — used as an invalidation key for the minted-token cache. */
+  port: number;
+  /** ISO timestamp when the bridge started — also used for cache invalidation. */
+  startedAt: string;
+  /** Router-internal token (file persists a raw copy per `bridge.ts`). */
+  routerToken: string;
+}
+
+function readAppBridgeState(
+  sidecarStateDir: string | undefined,
+): AppBridgeStateSnapshot | null {
+  if (!sidecarStateDir) return null;
+  try {
+    const bridgeStateFile = path.join(
+      path.dirname(sidecarStateDir),
+      'rebel-app-bridge',
+      'state.json',
+    );
+    const raw = fs.readFileSync(bridgeStateFile, 'utf8');
+    const parsed = JSON.parse(raw) as {
+      port?: unknown;
+      pid?: unknown;
+      routerToken?: unknown;
+      startedAt?: unknown;
+    };
+    if (typeof parsed.port !== 'number' || parsed.port <= 0) return null;
+    if (typeof parsed.routerToken !== 'string' || parsed.routerToken.length === 0) {
+      return null;
+    }
+    if (typeof parsed.startedAt !== 'string' || parsed.startedAt.length === 0) {
+      return null;
+    }
+    return {
+      bridgeOrigin: `http://127.0.0.1:${parsed.port}`,
+      port: parsed.port,
+      startedAt: parsed.startedAt,
+      routerToken: parsed.routerToken,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Stable `clientId` persisted in the sidecar's state directory. Keeping it
+ * stable across sidecar restarts means we re-mint against the same slot
+ * rather than leaking a new entry into the bridge state file every time.
+ *
+ * Stored as plain text (`office-client-id`) under the sidecar state dir.
+ * If the file is missing or unreadable we generate a fresh id and persist
+ * it best-effort — a failure to persist just means the next restart gets
+ * a new id (harmless, just produces an extra token entry for a few mins
+ * until the old one is revoked on next mint).
+ */
+const OFFICE_CLIENT_ID_FILE = 'office-client-id';
+
+function resolveOfficeClientId(sidecarStateDir: string | undefined): string {
+  if (!sidecarStateDir) {
+    // No state dir → in-memory only. Still functional; just churns a
+    // token slot per restart, but `mintAppTokenForTrustedHost` revokes
+    // prior tokens by clientId so it's bounded to one slot-per-session.
+    return generateOfficeClientId();
+  }
+  const filePath = path.join(sidecarStateDir, OFFICE_CLIENT_ID_FILE);
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8').trim();
+    if (raw.length > 0 && raw.length < 200) {
+      return raw;
+    }
+  } catch {
+    // Fall through to generation.
+  }
+  const generated = generateOfficeClientId();
+  try {
+    fs.mkdirSync(sidecarStateDir, { recursive: true });
+    fs.writeFileSync(filePath, generated, { encoding: 'utf8', mode: 0o600 });
+  } catch {
+    // Best-effort — still return the id so minting works this session.
+  }
+  return generated;
+}
+
+function generateOfficeClientId(): string {
+  // Short human-readable prefix + 16 hex chars of entropy; matches the
+  // shape of browser-extension clientIds loosely.
+  return `office-${generateToken().slice(0, 16)}`;
+}
+
+/**
+ * Module-level cache for the minted bridge app token. The key is the
+ * bridge's `(port, startedAt)` pair — if the bridge restarts (different
+ * `startedAt` or different `port`), the cache is invalidated and we mint
+ * again on the next taskpane HTML request.
+ */
+interface MintedBridgeToken {
+  /** Bridge cache key — re-mint when either field changes. */
+  bridgePort: number;
+  bridgeStartedAt: string;
+  /** The minted paired app token (raw, never persisted). */
+  bridgeAppToken: string;
+  /** The `clientId` we minted against — required on every `/intent/*` call. */
+  bridgeClientId: string;
+}
+
+let cachedMintedToken: MintedBridgeToken | null = null;
+
+function invalidateCachedMintedToken(reason: 'unauthorized' | 'revoked'): void {
+  if (!cachedMintedToken) return;
+  cachedMintedToken = null;
+  console.error(`[sidecar-diag] mint-cache.invalidated reason=${reason}`);
+}
+
+/**
+ * Request a paired app token from the bridge's host-trusted mint route.
+ * Returns null on any failure; the task pane then renders a graceful
+ * "Rebel is setting up" state rather than crashing.
+ */
+async function requestMintedAppToken(
+  bridge: AppBridgeStateSnapshot,
+  clientId: string,
+): Promise<string | null> {
+  return new Promise<string | null>((resolve) => {
+    const payload = JSON.stringify({ appId: 'office-addin', clientId });
+    const req = http.request(
+      `${bridge.bridgeOrigin}/host/mint-app-token`,
+      {
+        method: 'POST',
+        headers: {
+          // Host guard requires an explicit loopback Host — the node http
+          // client populates this from the URL, which is `127.0.0.1:<port>`.
+          Authorization: `Bearer ${bridge.routerToken}`,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload).toString(),
+        },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          if (res.statusCode !== 200) {
+            resolve(null);
+            return;
+          }
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
+              ok?: unknown;
+              token?: unknown;
+            };
+            if (body.ok === true && typeof body.token === 'string' && body.token.length > 0) {
+              resolve(body.token);
+            } else {
+              resolve(null);
+            }
+          } catch {
+            resolve(null);
+          }
+        });
+      },
+    );
+    req.on('error', () => resolve(null));
+    // Short timeout — the bridge is loopback; 2s is generous.
+    req.setTimeout(2_000, () => {
+      req.destroy();
+      resolve(null);
+    });
+    req.write(payload);
+    req.end();
+  });
+}
+
+/**
+ * Best-effort: ensure we hold a valid minted app token for the current
+ * bridge instance. Reads the bridge state file, checks the cache, and
+ * mints a fresh token if needed. Returns null on any failure — the task
+ * pane falls back to the "Rebel is setting up" state.
+ *
+ * Exposed via an internal reset-for-tests override; in production this is
+ * always called from `sendTaskpaneHtml` at HTML-serve time.
+ */
+async function ensureBridgeAuth(
+  sidecarStateDir: string | undefined,
+): Promise<
+  | {
+      bridgeOrigin: string;
+      bridgeAppToken: string;
+      bridgeClientId: string;
+    }
+  | null
+> {
+  const bridge = readAppBridgeState(sidecarStateDir);
+  if (!bridge) return null;
+
+  // Fast path — cache still valid for this bridge instance.
+  if (
+    cachedMintedToken &&
+    cachedMintedToken.bridgePort === bridge.port &&
+    cachedMintedToken.bridgeStartedAt === bridge.startedAt
+  ) {
+    return {
+      bridgeOrigin: bridge.bridgeOrigin,
+      bridgeAppToken: cachedMintedToken.bridgeAppToken,
+      bridgeClientId: cachedMintedToken.bridgeClientId,
+    };
+  }
+
+  const clientId = resolveOfficeClientId(sidecarStateDir);
+  const token = await requestMintedAppToken(bridge, clientId);
+  if (!token) {
+    // Invalidate any stale cache so we don't keep serving a revoked token.
+    cachedMintedToken = null;
+    return null;
+  }
+
+  cachedMintedToken = {
+    bridgePort: bridge.port,
+    bridgeStartedAt: bridge.startedAt,
+    bridgeAppToken: token,
+    bridgeClientId: clientId,
+  };
+
+  return {
+    bridgeOrigin: bridge.bridgeOrigin,
+    bridgeAppToken: token,
+    bridgeClientId: clientId,
+  };
+}
+
+/** Test-only: drop the mint cache so the next request re-mints. */
+export function __resetBridgeAuthCacheForTests(): void {
+  cachedMintedToken = null;
+}
+
+/**
+ * Serve taskpane.html with the sidecar config injected as a script tag.
+ * The config allows the add-in to discover the WebSocket port and token,
+ * plus (best-effort) the App Bridge origin + a freshly-minted paired
+ * token for the embedded chat.
+ */
+async function sendTaskpaneHtml(
   res: http.ServerResponse,
   htmlPath: string,
   port: number,
   token: string,
-): void {
+  sidecarStateDir: string | undefined,
+): Promise<void> {
   try {
     let html = fs.readFileSync(htmlPath, 'utf8');
 
-    // Inject sidecar config before the closing </head> tag
-    const configScript = `<script>window.__REBEL_SIDECAR_CONFIG=${JSON.stringify({ port, token })};</script>`;
+    // Assemble the injected config. `bridgeReady` is the only bridge-facing
+    // field the task-pane needs: the chat UI uses it as a pre-flight gate
+    // (`true` → show the composer; `false` → show the "Rebel is setting up"
+    // prompt without attempting to send). The paired app token NEVER
+    // crosses into the task-pane any more — all `/intent/*` calls route
+    // through the sidecar's own proxy which holds the token server-side.
+    // This keeps the surface attacker-reachable from inside the WebView
+    // narrow: only the sidecar Bearer token.
+    //
+    // When `ensureBridgeAuth` fails (bridge not running, mint round-trip
+    // times out) we inject `bridgeReady: false`; the sidecar proxy routes
+    // will independently re-check and can still succeed on a subsequent
+    // request if the bridge comes up mid-session.
+    const bridgeAuth = await ensureBridgeAuth(sidecarStateDir);
+    const injectedConfig: Record<string, unknown> = {
+      port,
+      token,
+      bridgeReady: bridgeAuth !== null,
+    };
+
+    const configScript = `<script>window.__REBEL_SIDECAR_CONFIG=${JSON.stringify(injectedConfig)};</script>`;
     html = html.replace('</head>', `${configScript}\n</head>`);
 
     const buf = Buffer.from(html, 'utf8');
@@ -267,6 +598,16 @@ export async function startOfficeSidecar(options: StartSidecarOptions = {}): Pro
   const token = generateToken();
   const host = options.host ?? DEFAULT_HOST;
   const stateDir = options.stateDirectory ?? process.env['MCP_OFFICE_SIDECAR_STATE_DIR'];
+  const diagTail = createDiagTailBuffer(DIAG_TAIL_CAPACITY);
+  const recordDiagLine = (line: string): void => {
+    if (line.startsWith('[sidecar-diag]') || line.startsWith('[sidecar-proxy]')) {
+      diagTail.record(line);
+    }
+  };
+  const emitDiagLine = (line: string): void => {
+    recordDiagLine(line);
+    console.error(line);
+  };
 
   // --- Resolve add-in static files directory ---
   const addinDir = options.addinDir ?? undefined;
@@ -295,11 +636,107 @@ export async function startOfficeSidecar(options: StartSidecarOptions = {}): Pro
   const server = https.createServer(httpsOptions);
 
   server.on('request', async (req: http.IncomingMessage, res: http.ServerResponse) => {
+    // --- Per-request diag instrumentation (260424 — Word taskpane cannot reach bridge) ---
+    // Goal: prove whether the taskpane's fetches arrive at this sidecar, and if so,
+    // whether they pass the bearer check. Emits to stderr so the Electron main process
+    // captures them via `office-sidecar.child-stderr` → main log.
+    const diagId = Math.random().toString(36).slice(2, 10);
+    const diagStart = Date.now();
+    const diagMethod = req.method ?? 'GET';
+    const diagPath = (req.url ?? '/').split('?')[0] ?? '/';
+    const diagOrigin = String(req.headers['origin'] ?? '-');
+    const diagUserAgent = String(req.headers['user-agent'] ?? '-').slice(0, 60);
+    const diagAuthHeader = req.headers['authorization'];
+    const diagHasAuth = typeof diagAuthHeader === 'string' && diagAuthHeader.length > 0;
+    const diagBearer = diagHasAuth && diagAuthHeader.startsWith('Bearer ')
+      ? diagAuthHeader.slice('Bearer '.length)
+      : null;
+    const diagBearerLen = diagBearer?.length ?? 0;
+    const diagBearerPrefix = diagBearer ? diagBearer.slice(0, 4) : '-';
+    const diagBearerOk = diagBearer ? constantTimeStringEqual(diagBearer, token) : false;
+    const requestId = readRequestCorrelationId(req.headers[REQUEST_ID_HEADER_NAME]);
+    emitDiagLine(
+      `[sidecar-diag] req id=${diagId} requestId=${requestId} ${diagMethod} ${diagPath} origin=${diagOrigin} hasAuth=${diagHasAuth} bearerLen=${diagBearerLen} bearerPrefix=${diagBearerPrefix} bearerOk=${diagBearerOk} expectedTokenLen=${token.length} expectedPrefix=${token.slice(0, 4)} ua=${diagUserAgent}`,
+    );
+    // Wrap res.end so we log final status + duration regardless of which branch handled it.
+    const origEnd = res.end.bind(res) as typeof res.end;
+    let endLogged = false;
+    (res as http.ServerResponse).end = ((chunk?: unknown, encoding?: unknown, cb?: unknown) => {
+      if (!endLogged) {
+        endLogged = true;
+        const dur = Date.now() - diagStart;
+        emitDiagLine(
+          `[sidecar-diag] res id=${diagId} requestId=${requestId} status=${res.statusCode} dur=${dur}ms path=${diagPath}`,
+        );
+      }
+      return (origEnd as (c?: unknown, e?: unknown, cb?: unknown) => http.ServerResponse).call(
+        res,
+        chunk,
+        encoding,
+        cb,
+      );
+    }) as typeof res.end;
+
     try {
       const method = req.method ?? 'GET';
       const requestUrl = new URL(req.url ?? '/', `https://${host}`);
 
       // ----- Unauthenticated static routes -----
+
+      // Lightweight diagnostic probe — no auth. Lets humans curl the sidecar
+      // to confirm reachability, and lets the taskpane smoke-test before the
+      // first real fetch. Never returns secrets, only shape + prefixes.
+      if (method === 'GET' && requestUrl.pathname === '/diag/ping') {
+        const body = JSON.stringify({
+          ok: true,
+          pid: process.pid,
+          port: boundPort,
+          tokenPrefix: token.slice(0, 4),
+          tokenLen: token.length,
+          uptimeMs: Date.now() - diagStart + (Date.now() - diagStart), // rough
+          now: new Date().toISOString(),
+        });
+        res.writeHead(200, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'no-store',
+        });
+        res.end(body);
+        return;
+      }
+
+      if (method === 'GET' && requestUrl.pathname === '/diag/tail') {
+        const body = JSON.stringify({
+          lines: diagTail.dump(),
+          capturedAt: new Date().toISOString(),
+        });
+        res.writeHead(200, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'no-store',
+        });
+        res.end(body);
+        return;
+      }
+
+      // Diagnostic logging sink for the taskpane — no auth (we want client-side
+      // errors to surface even when the bearer is wrong). Logs to stderr so the
+      // Electron main process picks it up via `office-sidecar.child-stderr`.
+      if (method === 'POST' && requestUrl.pathname === '/diag/log') {
+        try {
+          const body = await parseJsonBody(req);
+          const line = JSON.stringify(body).slice(0, 2000);
+          console.error(`[taskpane-diag] ${line}`);
+        } catch (err) {
+          console.error(`[taskpane-diag] parse-failed err=${String(err).slice(0, 200)}`);
+        }
+        res.writeHead(204, {
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'no-store',
+        });
+        res.end();
+        return;
+      }
 
       if (method === 'GET' && requestUrl.pathname === '/health') {
         // Core's ConnectionManager tracks connections by `OfficeAppId`
@@ -322,7 +759,13 @@ export async function startOfficeSidecar(options: StartSidecarOptions = {}): Pro
           throw createUnauthorizedError();
         }
         if (addinDir) {
-          sendTaskpaneHtml(res, path.join(addinDir, 'taskpane.html'), boundPort, token);
+          await sendTaskpaneHtml(
+            res,
+            path.join(addinDir, 'taskpane.html'),
+            boundPort,
+            token,
+            stateDir,
+          );
         } else {
           res.writeHead(404, { 'Content-Type': 'text/plain' });
           res.end('Add-in not built. Run: npm run build:addin');
@@ -363,7 +806,47 @@ export async function startOfficeSidecar(options: StartSidecarOptions = {}): Pro
 
       const bearerToken = extractBearerToken(req);
       if (!bearerToken || !constantTimeStringEqual(bearerToken, token)) {
+        emitDiagLine(
+          `[sidecar-diag] AUTH-FAIL id=${diagId} requestId=${requestId} path=${requestUrl.pathname} gotLen=${
+            bearerToken?.length ?? 0
+          } gotPrefix=${bearerToken?.slice(0, 4) ?? '-'} expectedLen=${
+            token.length
+          } expectedPrefix=${token.slice(0, 4)} hasAuthHeader=${
+            req.headers.authorization ? 'yes' : 'no'
+          }`,
+        );
         throw createUnauthorizedError();
+      }
+
+      // ----- App Bridge `/intent/*` proxy -----
+      //
+      // Must come BEFORE the `/{app}/{action}` command-route parser
+      // (which rejects non-POST). The proxy handles GET (history /
+      // stream) and POST (create / message / focus) itself, server-to-
+      // server to the bridge, so the Office task-pane can talk to
+      // `/intent/*` over same-origin HTTPS without hitting the bridge's
+      // extension-only CORS allowlist.
+      //
+      // Any path under `/intent/` is claimed by the proxy — including
+      // ones outside the explicit allowlist, which the proxy renders as
+      // a 404 NOT_FOUND. That way an unknown `/intent/foo` does not
+      // accidentally fall through to the command-route parser and
+      // surface as the generic 400 "only POST" error.
+      if (requestUrl.pathname.startsWith('/intent/')) {
+        await handleIntentProxy(
+          req,
+          res,
+          {
+            ensureBridgeAuth: () => ensureBridgeAuth(stateDir),
+            recordDiagLine,
+            invalidateCachedMintedToken,
+            ...(options.intentProxyStreamReadTimeoutMs !== undefined
+              ? { streamReadTimeoutMs: options.intentProxyStreamReadTimeoutMs }
+              : {}),
+          },
+          requestUrl.pathname,
+        );
+        return;
       }
 
       if (method === 'GET' && requestUrl.pathname === '/sidecar/identify') {
@@ -411,7 +894,11 @@ export async function startOfficeSidecar(options: StartSidecarOptions = {}): Pro
         return;
       }
 
-      console.error('[office-sidecar] HTTPS handler failed', error);
+      console.error(
+        `[office-sidecar] HTTPS handler failed id=${diagId} requestId=${requestId} path=${diagPath} errName=${
+          (error as { name?: string })?.name ?? '-'
+        } errMsg=${String((error as Error)?.message ?? error).slice(0, 300)}`,
+      );
       const internalError = createInternalError();
       sendJson(res, internalError.status, buildErrorResponse(internalError));
     }

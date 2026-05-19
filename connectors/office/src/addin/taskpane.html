@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
   <title>Rebel — Word Add-in</title>
 
   <!-- Office.js CDN — required for all Office Add-ins -->
@@ -14,6 +15,7 @@
 
       --color-bg-page: #f4f7fb;
       --color-surface-1: #ffffff;
+      --color-surface-2: #eef2f7;
       --color-text-primary: #0f172a;
       --color-text-secondary: rgba(15, 23, 42, 0.6);
       --color-border-soft: rgba(226, 232, 240, 0.7);
@@ -30,6 +32,7 @@
       --taskpane-fg: var(--color-text-primary);
       --taskpane-muted: var(--color-text-secondary);
       --taskpane-divider: var(--color-border-soft);
+
       --status-connected-bg: rgba(22, 163, 74, 0.12);
       --status-connected-fg: var(--color-success);
       --status-connected-dot: var(--color-success);
@@ -42,9 +45,15 @@
       --status-rebel-closed-bg: var(--color-muted);
       --status-rebel-closed-fg: var(--color-muted-foreground);
       --status-rebel-closed-dot: var(--color-muted-foreground);
+
       --button-bg: var(--color-primary);
       --button-bg-hover: var(--color-primary-hover);
       --button-fg: var(--color-primary-foreground);
+
+      --bubble-user-bg: var(--color-primary);
+      --bubble-user-fg: var(--color-primary-foreground);
+      --bubble-assistant-bg: var(--color-muted);
+      --bubble-assistant-fg: var(--color-text-primary);
     }
 
     @media (prefers-color-scheme: dark) {
@@ -53,6 +62,7 @@
 
         --color-bg-page: #0a0a0e;
         --color-surface-1: #0d111c;
+        --color-surface-2: #1e293b;
         --color-text-primary: rgba(248, 250, 255, 0.98);
         --color-text-secondary: rgba(226, 232, 240, 0.78);
         --color-border-soft: rgba(148, 163, 184, 0.18);
@@ -68,30 +78,385 @@
         --status-connected-bg: rgba(22, 163, 74, 0.2);
         --status-disconnected-bg: rgba(239, 68, 68, 0.18);
         --status-connecting-bg: rgba(217, 119, 6, 0.18);
+
+        --bubble-assistant-bg: #1e293b;
       }
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
+    html, body, #chat-root {
+      height: 100%;
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       background: var(--taskpane-bg);
       color: var(--taskpane-fg);
+      font-size: 13px;
+      line-height: 1.5;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ----- Chat surface ------------------------------------------------- */
+
+    .chat {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
+    }
+
+    .chat-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--taskpane-divider);
+      background: var(--color-surface-1);
+      flex-shrink: 0;
+    }
+
+    .chat-header-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--status-rebel-closed-dot);
+      flex-shrink: 0;
+    }
+
+    .chat-header[data-status="connected"] .chat-header-dot {
+      background: var(--status-connected-dot);
+    }
+
+    .chat-header[data-status="reconnecting"] .chat-header-dot {
+      background: var(--status-connecting-dot);
+    }
+
+    .chat-header[data-status="reconnecting"] .chat-header-dot {
+      animation: chat-header-dot-pulse 1.2s ease-in-out infinite;
+    }
+
+    @keyframes chat-header-dot-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.45; }
+    }
+
+    .chat-header[data-status="degraded"] .chat-header-dot,
+    .chat-header[data-status="not-ready"] .chat-header-dot {
+      background: var(--status-disconnected-dot);
+    }
+
+    .chat-header-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--taskpane-fg);
+    }
+
+    .chat-header-spacer {
+      flex: 1;
+    }
+
+    .chat-header-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--taskpane-muted);
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+
+    .chat-header-btn:hover:not(:disabled) {
+      background: var(--color-surface-2);
+      color: var(--taskpane-fg);
+    }
+
+    .chat-header-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    .chat-body {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
       padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .chat-empty {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 24px 0;
+    }
+
+    .chat-empty-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--taskpane-fg);
+    }
+
+    .chat-empty-body {
+      font-size: 13px;
+      color: var(--taskpane-muted);
+    }
+
+    .chat-context-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: var(--color-surface-2);
+      border: 1px solid var(--taskpane-divider);
+      font-size: 12px;
+    }
+
+    .chat-context-chip-icon {
+      display: inline-flex;
+      color: var(--taskpane-muted);
+      flex-shrink: 0;
+    }
+
+    .chat-context-chip-text {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .chat-context-chip-title {
+      font-weight: 500;
+      color: var(--taskpane-fg);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .chat-context-chip-url {
+      color: var(--taskpane-muted);
+      font-size: 11px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .chat-messages {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .chat-msg {
+      display: flex;
+    }
+
+    .chat-msg-user {
+      justify-content: flex-end;
+    }
+
+    .chat-msg-assistant {
+      justify-content: flex-start;
+    }
+
+    .chat-bubble {
+      max-width: 85%;
+      padding: 8px 12px;
+      border-radius: 10px;
+      white-space: pre-wrap;
+      word-break: break-word;
       font-size: 13px;
       line-height: 1.5;
     }
 
-    .header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 16px;
+    .chat-msg-user .chat-bubble {
+      background: var(--bubble-user-bg);
+      color: var(--bubble-user-fg);
+      border-bottom-right-radius: 2px;
     }
 
-    .header h1 {
-      font-size: 16px;
-      font-weight: 600;
+    .chat-msg-assistant .chat-bubble {
+      background: var(--bubble-assistant-bg);
+      color: var(--bubble-assistant-fg);
+      border-bottom-left-radius: 2px;
+    }
+
+    .chat-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1em;
+      margin-left: 2px;
+      background: currentColor;
+      vertical-align: text-bottom;
+      animation: chat-cursor-blink 1s infinite;
+    }
+
+    @keyframes chat-cursor-blink {
+      50% { opacity: 0; }
+    }
+
+    .chat-thinking {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 10px 14px;
+    }
+
+    .chat-thinking-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.5;
+      animation: chat-thinking-bounce 1.2s infinite;
+    }
+
+    .chat-thinking-dot:nth-child(2) {
+      animation-delay: 0.15s;
+    }
+
+    .chat-thinking-dot:nth-child(3) {
+      animation-delay: 0.3s;
+    }
+
+    @keyframes chat-thinking-bounce {
+      0%, 80%, 100% { transform: translateY(0); opacity: 0.5; }
+      40% { transform: translateY(-4px); opacity: 1; }
+    }
+
+    .chat-error {
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: var(--status-disconnected-bg);
+      color: var(--status-disconnected-fg);
+      font-size: 12px;
+    }
+
+    .chat-composer {
+      padding: 12px 16px;
+      border-top: 1px solid var(--taskpane-divider);
+      background: var(--color-surface-1);
+      flex-shrink: 0;
+    }
+
+    .chat-composer-field {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      padding: 6px 8px 6px 10px;
+      border-radius: 10px;
+      background: var(--color-surface-2);
+      border: 1px solid var(--taskpane-divider);
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .chat-composer-field:focus-within {
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15);
+    }
+
+    .chat-composer-textarea {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: var(--taskpane-fg);
+      font: inherit;
+      font-size: 13px;
+      line-height: 1.5;
+      resize: none;
+      outline: none;
+      max-height: 160px;
+      min-height: 22px;
+    }
+
+    .chat-composer-textarea::placeholder {
+      color: var(--taskpane-muted);
+    }
+
+    .chat-composer-textarea:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+
+    .chat-composer-send {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: none;
+      border-radius: 6px;
+      background: var(--button-bg);
+      color: var(--button-fg);
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.1s ease;
+      flex-shrink: 0;
+    }
+
+    .chat-composer-send:hover:not(:disabled) {
+      background: var(--button-bg-hover);
+    }
+
+    .chat-composer-send:active:not(:disabled) {
+      transform: scale(0.96);
+    }
+
+    .chat-composer-send:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* ----- Debug section (legacy status + command log) ------------------ */
+
+    .debug {
+      padding: 8px 16px;
+      border-top: 1px solid var(--taskpane-divider);
+      background: var(--color-surface-1);
+      flex-shrink: 0;
+    }
+
+    .debug-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      padding: 4px 0;
+      background: transparent;
+      border: none;
+      color: var(--taskpane-muted);
+      font: inherit;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+    }
+
+    .debug-toggle-caret {
+      transition: transform 0.15s ease;
+    }
+
+    .debug[data-open="true"] .debug-toggle-caret {
+      transform: rotate(90deg);
+    }
+
+    .debug-panel[hidden] {
+      display: none;
+    }
+
+    .debug-panel {
+      padding-top: 8px;
     }
 
     .status {
@@ -100,7 +465,7 @@
       gap: 6px;
       padding: 8px 12px;
       border-radius: 6px;
-      margin-bottom: 16px;
+      margin-bottom: 8px;
       font-weight: 500;
     }
 
@@ -178,12 +543,12 @@
     }
 
     .log-section h2 {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.5px;
       color: var(--taskpane-muted);
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
     .log-entry {
@@ -204,27 +569,38 @@
 
     .log-action { font-family: "SF Mono", "Fira Code", Menlo, monospace; font-size: 11px; }
     .log-time { margin-left: auto; color: var(--taskpane-muted); font-size: 11px; }
-    .log-empty { color: var(--taskpane-muted); font-style: italic; padding: 8px 0; }
+    .log-empty { color: var(--taskpane-muted); font-style: italic; padding: 6px 0; }
   </style>
 </head>
 <body>
-  <div class="header">
-    <h1>Rebel</h1>
-  </div>
+  <!-- Chat surface — taskpane.ts mounts the chat UI here once the sidecar
+       WS connects and (where available) the App Bridge config is injected. -->
+  <div id="chat-root"></div>
 
-  <div id="status" class="status disconnected">
-    <span class="status-dot"></span>
-    <div class="status-content">
-      <span id="status-text" class="status-text">Initializing…</span>
-      <p id="status-detail" class="status-detail" hidden></p>
-      <button id="retry-connect" class="status-button" type="button" hidden>Try again</button>
-    </div>
-  </div>
+  <!-- Debug section — the previous status-only surface, collapsed by default
+       so the chat gets the full pane. Useful for sidecar-connection
+       diagnostics and command-relay troubleshooting. -->
+  <div id="debug" class="debug" data-open="false">
+    <button id="debug-toggle" class="debug-toggle" type="button" aria-expanded="false" aria-controls="debug-panel">
+      <span class="debug-toggle-caret" aria-hidden="true">▸</span>
+      <span>Connection details</span>
+    </button>
+    <div id="debug-panel" class="debug-panel" hidden>
+      <div id="status" class="status disconnected">
+        <span class="status-dot"></span>
+        <div class="status-content">
+          <span id="status-text" class="status-text">Initializing…</span>
+          <p id="status-detail" class="status-detail" hidden></p>
+          <button id="retry-connect" class="status-button" type="button" hidden>Try again</button>
+        </div>
+      </div>
 
-  <div class="log-section">
-    <h2>Recent Commands</h2>
-    <div id="command-log">
-      <div class="log-empty">No commands yet</div>
+      <div class="log-section">
+        <h2>Recent Commands</h2>
+        <div id="command-log">
+          <div class="log-empty">No commands yet</div>
+        </div>
+      </div>
     </div>
   </div>
 
