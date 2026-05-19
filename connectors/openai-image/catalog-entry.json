@@ -1,0 +1,10 @@
+{
+  "id": "openai-image-generation",
+  "name": "OpenAI Image Generation",
+  "description": "Generate and edit images with OpenAI gpt-image-2 — sharp text rendering, multilingual support, and multiple quality levels. Saves to your workspace.",
+  "category": "media",
+  "icon": "image",
+  "maturity": "stable",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}
