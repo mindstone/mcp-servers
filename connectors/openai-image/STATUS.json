@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "name": "openai-image",
   "package": "@mindstone/mcp-server-openai-image",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "auth": {
     "type": "api-key",
     "envVars": [

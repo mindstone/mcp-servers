@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-05-19
+
+### Documentation
+
+- Rewrote `README.md` to follow the structure in [`docs/CONNECTOR_README_GUIDE.md`](../../docs/CONNECTOR_README_GUIDE.md): added npm-version and licence badges, an italic positioning line, the `## Status` block with hyperlinked evidence and `Hosts tested` / `Machine-readable` rows, a `## Why this exists` section, a `## Example interaction` block, `## Host configuration examples` (Claude Desktop / Cursor and local development), the `(5)` tool count in the `## Tools` heading, and renamed `## Installation` → `## Quick Start` (with the three prescribed code blocks) and `## Prerequisites` → `## Requirements` to match the rest of the cohort.
+- Added the connector to the table in the repo-root `README.md`.
+
 ## [0.1.0] — 2026-05-19
 
 Initial public release. Migrated from the bundled `resources/mcp/replit-ssh/` connector in MindstoneRebel, ported to the `@mindstone/mcp-server-*` cohort shape (`McpServer` + `registerTool` + Zod).
