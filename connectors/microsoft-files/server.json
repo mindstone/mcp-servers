@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-microsoft-files",
   "title": "Microsoft 365 Files",
   "description": "Microsoft 365 OneDrive Files MCP server: list, search, get, download, upload, delete, move, copy, share files, and read text contents via Microsoft Graph",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-microsoft-files",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

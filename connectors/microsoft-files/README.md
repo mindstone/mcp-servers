@@ -1,18 +1,50 @@
 # @mindstone/mcp-server-microsoft-files
 
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-microsoft-files.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-files)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 Microsoft 365 OneDrive Files MCP server — list, search, get, download, upload, delete, move, copy, share files, and read text contents via the Microsoft Graph API.
 
-Host-orchestrated OAuth, per-account credentials on disk, and a structured `auth_required` handoff so the host drives the sign-in flow rather than the server. Files reuses the cohort's Microsoft 365 OAuth surface (owned by `@mindstone/mcp-server-microsoft-mail`); it does not declare an authentication tool of its own.
+*Cohort-style Microsoft 365 OneDrive MCP. Reuses the OAuth surface owned by [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/), so the host signs in once and gets files plus mail plus calendar plus Teams plus SharePoint from the same credentials.*
 
 ## Status
 
-- **Version:** [0.1.0](./CHANGELOG.md)
-- **Auth:** OAuth (host-orchestrated, shared with `mcp-server-microsoft-mail`) ([`MS_CLIENT_ID`](./server.json))
-- **Tools:** 13 (list, search, get, download, upload, create folder, delete, move, copy, recent, shared, share, read text)
+- **Version:** [0.1.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-files)
+- **Auth:** OAuth (host-orchestrated, shared with [`mcp-server-microsoft-mail`](../microsoft-mail/)) ([`MS_CLIENT_ID`](./server.json))
+- **Tools:** [13](./src/tools.ts) (files, folders, sharing)
 - **Surface:** cloud-api
-- **Shared library:** [`@mindstone/mcp-server-microsoft-shared`](../../packages/mcp-server-microsoft-shared)
+- **Hosts tested:** Mindstone Rebel
+- **Machine-readable:** [`STATUS.json`](./STATUS.json)
+- **Shared library:** [`@mindstone/mcp-server-microsoft-shared`](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-shared)
+
+## Why this exists
+
+When we ported this in May 2026, Microsoft's own [Graph MCP](https://github.com/microsoft/mcp) lineup did not yet ship a stand-alone OneDrive server, and the community options at the time treated OneDrive as its own login surface — every connector ran a separate OAuth dance and stored its own copy of the refresh token. We pulled the bundled connector out of MindstoneRebel as a 1:1 port so that the same five-connector Microsoft 365 cohort (mail, calendar, files, teams, SharePoint) shares a single set of credentials, a single shared-library package for token persistence and request timeouts, and the structured `auth_required` envelope the host already knows how to recover from. Files reuses [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `authenticate_microsoft_account` tool rather than declaring its own.
+
+## Example interaction
+
+> "Find the latest version of `Q3-plan.docx` in my OneDrive and give me a sharing link my team can read."
+
+Tools the host calls:
+1. `search_files` — `name:Q3-plan.docx`, returns the most recent matching item.
+2. `share_file` — creates a read-only sharing link for that item.
+
+Response (trimmed):
+
+```json
+{
+  "match": {
+    "id": "01H7...",
+    "name": "Q3-plan.docx",
+    "lastModifiedDateTime": "2026-05-18T17:42:00Z"
+  },
+  "share": {
+    "type": "view",
+    "scope": "organization",
+    "webUrl": "https://example-my.sharepoint.com/:w:/g/personal/.../EZk..."
+  }
+}
+```
 
 ## Requirements
 
@@ -22,17 +54,24 @@ Host-orchestrated OAuth, per-account credentials on disk, and a structured `auth
 
 ## Quick Start
 
+### Install & build
+
 ```bash
 cd <path-to-repo>/connectors/microsoft-files
 npm install
 npm run build
-node dist/index.js
 ```
 
-Once published:
+### npx (once published)
 
 ```bash
 npx -y @mindstone/mcp-server-microsoft-files
+```
+
+### Local
+
+```bash
+node dist/index.js
 ```
 
 ## Configuration
@@ -55,7 +94,45 @@ This server runs alongside a host application that owns the Microsoft 365 OAuth 
 | `MICROSOFT_REQUEST_TIMEOUT_MS` | Override the upstream Microsoft Graph request timeout (max `300000` ms). | `60000` |
 | `MICROSOFT_DISABLE_REFRESH` | Set to `1` to disable token refresh on this surface. Tools fail closed with the structured `auth_required` response so the host can drive reauth. Cloud surfaces set this to `1`. | unset |
 
-## Tools
+## Host configuration examples
+
+### Claude Desktop / Cursor
+
+```json
+{
+  "mcpServers": {
+    "Microsoft365Files": {
+      "command": "npx",
+      "args": ["-y", "@mindstone/mcp-server-microsoft-files"],
+      "env": {
+        "MS_CLIENT_ID": "your-entra-application-client-id",
+        "MS_CONFIG_DIR": "/absolute/path/to/microsoft-config"
+      }
+    }
+  }
+}
+```
+
+Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `authenticate_microsoft_account` first; the files tools then reuse the credentials it writes to `${MS_CONFIG_DIR}/`.
+
+### Local development (no npm publish needed)
+
+```json
+{
+  "mcpServers": {
+    "Microsoft365Files": {
+      "command": "node",
+      "args": ["<path-to-repo>/connectors/microsoft-files/dist/index.js"],
+      "env": {
+        "MS_CLIENT_ID": "your-entra-application-client-id",
+        "MS_CONFIG_DIR": "/absolute/path/to/microsoft-config"
+      }
+    }
+  }
+}
+```
+
+## Tools (13)
 
 | Tool | Description |
 | ---- | ----------- |
@@ -73,6 +150,13 @@ This server runs alongside a host application that owns the Microsoft 365 OAuth 
 | `share_file` | Create a sharing link for a file or folder. |
 | `read_text_file` | Read the contents of a text file. |
 
-## License
+## Security notes
 
-[FSL-1.1-MIT](./LICENSE) — Functional Source License, MIT Future License (4-year transition). Free for non-competing use; relicenses to MIT after the transition window.
+- No authentication tool of its own; sign-in is delegated to [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/) so the cohort has a single OAuth surface.
+- Token-provider refresh failures map to the structured `auth_required` response so the host can drive reauth without crashing.
+- `upload_file` enforces empty-content validation in line with the bundled connector to reject zero-byte uploads as a misuse.
+- Per-tool Graph calls run under a composed caller + cohort timeout signal.
+
+## Licence
+
+[FSL-1.1-MIT](./LICENSE) — Functional Source License, Version 1.1, with MIT future licence. Free for non-competing use; relicenses to MIT on the converter date in `LICENSE`.
