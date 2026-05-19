@@ -5,7 +5,7 @@ title: mcp-servers catalogue
 
 # mcp-servers catalogue
 
-A machine-readable index of the [mindstone/mcp-servers](https://github.com/mindstone/mcp-servers) monorepo: 29 source-available MCP servers, audited weekly by the [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/mindstone/mcp-servers).
+A machine-readable index of the [mindstone/mcp-servers](https://github.com/mindstone/mcp-servers) monorepo: 34 source-available MCP servers, audited weekly by the [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/mindstone/mcp-servers).
 
 Each row links to a per-connector page generated from the connector's `STATUS.json`. The data on this site is derived from the source repository on every push to `main` — if it looks stale, the data isn't.
 
@@ -22,6 +22,11 @@ Each row links to a per-connector page generated from the connector's `STATUS.js
 | [hubspot](./catalogue/hubspot.html) | HubSpot MCP server for CRM operations &#40;contacts, companies, deals, tickets, leads, tasks, notes, associations&#41;, properties and owners, marketing/lists, workflows, knowledge base lookups, and file operations. | 0.1.2 | OAuth (host-orchestrated) | 92 | cloud API |
 | [humaans](./catalogue/humaans.html) | Humaans HR platform MCP server for Model Context Protocol hosts. Query employee profiles, job roles, time-away requests, company info, and office locations through a standardised MCP interface. | 0.2.2 | API key | 11 | cloud API |
 | [kling](./catalogue/kling.html) | Kling AI video generation MCP server for Model Context Protocol hosts. Generate AI videos from text descriptions or images, and manage video generation tasks through a standardised MCP interface. | 0.3.2 | API key | 4 | cloud API |
+| [microsoft-calendar](./catalogue/microsoft-calendar.html) | Microsoft 365 Outlook Calendar MCP server — list, get, create, update, delete, respond to events, check free/busy, and list calendars via the Microsoft Graph API. | 0.1.1 | OAuth (host-orchestrated) | 8 | cloud API |
+| [microsoft-files](./catalogue/microsoft-files.html) | Microsoft 365 OneDrive Files MCP server — list, search, get, download, upload, delete, move, copy, share files, and read text contents via the Microsoft Graph API. | 0.1.1 | OAuth (host-orchestrated) | 13 | cloud API |
+| [microsoft-mail](./catalogue/microsoft-mail.html) | Microsoft 365 Outlook Mail MCP server — list, search, read, send, reply, forward, draft, move, and delete email via the Microsoft Graph API. | 0.1.1 | OAuth (host-orchestrated) | 12 | cloud API |
+| [microsoft-sharepoint](./catalogue/microsoft-sharepoint.html) | Microsoft 365 SharePoint MCP server — discover sites, browse document libraries, read pages and lists, search content, and perform SharePoint file/list mutations via the Microsoft Graph API. | 0.1.1 | OAuth (host-orchestrated) | 36 | cloud API |
+| [microsoft-teams](./catalogue/microsoft-teams.html) | Microsoft 365 Teams MCP server — list and read Teams chats, send chat messages, list teams and channels, and read presence via the Microsoft Graph API. | 0.1.1 | OAuth (host-orchestrated) | 7 | cloud API |
 | [mixmax](./catalogue/mixmax.html) | Mixmax email productivity MCP server for Model Context Protocol hosts. Manage sequences, send tracked emails, use email templates &#40;snippets&#41;, view meeting links, and monitor message engagement through a standardised MCP interface. | 0.2.2 | API key | 10 | cloud API |
 | [nano-banana](./catalogue/nano-banana.html) | Nano Banana MCP server — Google Gemini image generation and editing via Model Context Protocol. Generate images from text descriptions and edit existing images using Google Gemini's AI capabilities. | 0.3.2 | API key | 3 | cloud API |
 | [napkin](./catalogue/napkin.html) | Napkin AI visual generation MCP server for Model Context Protocol hosts. Generate professional visuals — diagrams, infographics, and illustrations — from text descriptions, check generation status, and download results through a standardised MCP interface. | 0.3.2 | API key | 4 | cloud API |
