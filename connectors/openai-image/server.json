@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-openai-image",
   "title": "OpenAI Image",
   "description": "OpenAI image generation MCP server for Model Context Protocol hosts",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-openai-image",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

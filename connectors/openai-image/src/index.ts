@@ -29,8 +29,7 @@ const LEGACY_FALLBACK_DIR_NAME = 'RebelImages';
 const MODERN_FALLBACK_DIR_NAME = 'MCP-Generated-Images';
 export const LEGACY_FALLBACK_FOLDER_NAME = LEGACY_FALLBACK_DIR_NAME;
 export const MODERN_FALLBACK_FOLDER_NAME = MODERN_FALLBACK_DIR_NAME;
-const OPENAI_API_BASE_URL =
-  process.env.OPENAI_API_BASE_URL?.trim() || 'https://api.openai.com';
+const OPENAI_API_BASE_URL = 'https://api.openai.com';
 const KNOWN_MODELS = new Set([
   'gpt-image-2',
   'gpt-image-1.5',
@@ -52,6 +51,7 @@ export type ToolErrorCode =
   | 'WORKSPACE_FENCE_VIOLATION'
   | 'MODEL_UNAVAILABLE'
   | 'NETWORK_ERROR'
+  | 'TIMEOUT'
   | 'WRITE_FAILED'
   | 'INVALID_IMAGE_DATA';
 
@@ -301,6 +301,20 @@ export const migrateLegacyFallbackDirectory = async (
     safeLstat(modernDir),
   ]);
 
+  if (modernStats?.isSymbolicLink()) {
+    // Target is a symlink — refuse to follow it. Writes redirected through a
+    // symlink we did not create are out of scope; fall through to a sibling
+    // directory so the user can investigate without us silently writing
+    // through an unexpected indirection.
+    const safeFallback = path.join(picturesDir, `${MODERN_FALLBACK_DIR_NAME}-safe`);
+    logger.warn('[openai-image] Modern fallback directory is a symlink; using sibling safe directory instead.', {
+      target: path.basename(modernDir),
+      fallback: path.basename(safeFallback),
+    });
+    await fs.promises.mkdir(safeFallback, { recursive: true, mode: 0o700 });
+    return safeFallback;
+  }
+
   if (legacyStats?.isSymbolicLink()) {
     logger.info('[openai-image] Skipping legacy migration because source is a symlink.', {
       source: path.basename(legacyDir),
@@ -381,20 +395,15 @@ const getImageSaveDir = async (): Promise<string> => {
 };
 
 export const generateFilename = (
-  prompt: string,
+  _prompt: string,
   index: number,
   count: number,
 ): string => {
-  const slug = prompt
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, '-')
-    .replace(/^-|-$/gu, '')
-    .slice(0, 40);
   const suffix = crypto.randomBytes(8).toString('hex');
   if (count > 1) {
-    return `${Date.now()}-${slug || 'image'}-${index + 1}-${suffix}.png`;
+    return `${Date.now()}-${index + 1}-${suffix}.png`;
   }
-  return `${Date.now()}-${slug || 'image'}-${suffix}.png`;
+  return `${Date.now()}-${suffix}.png`;
 };
 
 export const validateBase64ImageData = (
@@ -695,12 +704,59 @@ const toOpenAIHttpError = (
   );
 };
 
-const buildFetchSignal = (callerSignal?: AbortSignal): AbortSignal => {
-  const builtInTimeoutSignal = AbortSignal.timeout(OPENAI_IMAGE_REQUEST_TIMEOUT_MS);
-  if (!callerSignal) {
-    return builtInTimeoutSignal;
+interface FetchAbortController {
+  signal: AbortSignal;
+  timedOut: () => boolean;
+  cleanup: () => void;
+}
+
+const buildFetchController = (callerSignal?: AbortSignal): FetchAbortController => {
+  const controller = new AbortController();
+  let didTimeout = false;
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined = setTimeout(() => {
+    didTimeout = true;
+    controller.abort();
+  }, OPENAI_IMAGE_REQUEST_TIMEOUT_MS);
+
+  const onCallerAbort = (): void => {
+    controller.abort();
+  };
+  if (callerSignal) {
+    if (callerSignal.aborted) {
+      controller.abort();
+    } else {
+      callerSignal.addEventListener('abort', onCallerAbort, { once: true });
+    }
   }
-  return AbortSignal.any([builtInTimeoutSignal, callerSignal]);
+
+  return {
+    signal: controller.signal,
+    timedOut: () => didTimeout,
+    cleanup: () => {
+      if (timeoutHandle !== undefined) {
+        clearTimeout(timeoutHandle);
+        timeoutHandle = undefined;
+      }
+      if (callerSignal) {
+        callerSignal.removeEventListener('abort', onCallerAbort);
+      }
+    },
+  };
+};
+
+const networkOrTimeoutError = (controller: FetchAbortController): OpenAIImageToolError => {
+  if (controller.timedOut()) {
+    return new OpenAIImageToolError(
+      'TIMEOUT',
+      `OpenAI image API request exceeded the ${Math.round(OPENAI_IMAGE_REQUEST_TIMEOUT_MS / 1000)}s timeout.`,
+      'Try a smaller batch or simpler prompt, or raise OPENAI_IMAGE_REQUEST_TIMEOUT_MS in your MCP host config.',
+    );
+  }
+  return new OpenAIImageToolError(
+    'NETWORK_ERROR',
+    'Failed to reach OpenAI image API.',
+    'Check your network connection and try again.',
+  );
 };
 
 const postOpenAIJson = async (
@@ -710,7 +766,7 @@ const postOpenAIJson = async (
   model: string,
   callerSignal?: AbortSignal,
 ): Promise<OpenAIImageResponse> => {
-  const signal = buildFetchSignal(callerSignal);
+  const controller = buildFetchController(callerSignal);
 
   let response: Response;
   try {
@@ -721,14 +777,12 @@ const postOpenAIJson = async (
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
-      signal,
+      signal: controller.signal,
     });
   } catch (error) {
-    throw new OpenAIImageToolError(
-      'NETWORK_ERROR',
-      'Failed to reach OpenAI image API.',
-      'Check your network connection and try again.',
-    );
+    throw networkOrTimeoutError(controller);
+  } finally {
+    controller.cleanup();
   }
 
   if (!response.ok) {
@@ -746,7 +800,7 @@ const postOpenAIMultipart = async (
   model: string,
   callerSignal?: AbortSignal,
 ): Promise<OpenAIImageResponse> => {
-  const signal = buildFetchSignal(callerSignal);
+  const controller = buildFetchController(callerSignal);
 
   let response: Response;
   try {
@@ -756,14 +810,12 @@ const postOpenAIMultipart = async (
         Authorization: `Bearer ${apiKey}`,
       },
       body: form,
-      signal,
+      signal: controller.signal,
     });
   } catch {
-    throw new OpenAIImageToolError(
-      'NETWORK_ERROR',
-      'Failed to reach OpenAI image API.',
-      'Check your network connection and try again.',
-    );
+    throw networkOrTimeoutError(controller);
+  } finally {
+    controller.cleanup();
   }
 
   if (!response.ok) {

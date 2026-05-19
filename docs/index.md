@@ -5,7 +5,7 @@ title: mcp-servers catalogue
 
 # mcp-servers catalogue
 
-A machine-readable index of the [mindstone/mcp-servers](https://github.com/mindstone/mcp-servers) monorepo: 27 source-available MCP servers, audited weekly by the [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/mindstone/mcp-servers).
+A machine-readable index of the [mindstone/mcp-servers](https://github.com/mindstone/mcp-servers) monorepo: 28 source-available MCP servers, audited weekly by the [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/mindstone/mcp-servers).
 
 Each row links to a per-connector page generated from the connector's `STATUS.json`. The data on this site is derived from the source repository on every push to `main` — if it looks stale, the data isn't.
 
@@ -26,6 +26,7 @@ Each row links to a per-connector page generated from the connector's `STATUS.js
 | [nano-banana](./catalogue/nano-banana.html) | Nano Banana MCP server — Google Gemini image generation and editing via Model Context Protocol. Generate images from text descriptions and edit existing images using Google Gemini's AI capabilities. | 0.3.2 | API key | 3 | cloud API |
 | [napkin](./catalogue/napkin.html) | Napkin AI visual generation MCP server for Model Context Protocol hosts. Generate professional visuals — diagrams, infographics, and illustrations — from text descriptions, check generation status, and download results through a standardised MCP interface. | 0.3.2 | API key | 4 | cloud API |
 | [office](./catalogue/office.html) | Read and edit Word documents, Excel workbooks, and PowerPoint presentations from desktop Microsoft 365 via an Office Add-in sidecar. | 0.1.4 | None | 53 | desktop add-in |
+| [openai-image](./catalogue/openai-image.html) | OpenAI image generation MCP server for Model Context Protocol hosts. Generate and edit images via OpenAI's &#96;gpt-image-2&#96; model — sharp text rendering, multilingual support, four quality levels, three aspect ratios — through a standardised MCP interface. | 0.1.1 | API key | 2 | cloud API |
 | [outreach](./catalogue/outreach.html) | Outreach sales engagement MCP server — prospects, sequences, accounts, tasks, and mailings via Outreach API. | 0.1.3 | OAuth (local 127.0.0.1 callback) | 15 | cloud API |
 | [pandadoc](./catalogue/pandadoc.html) | PandaDoc document automation MCP server for Model Context Protocol hosts. Create, send, and manage documents, templates, and e-signatures through a standardised MCP interface. | 0.2.2 | API key | 9 | cloud API |
 | [quickbooks](./catalogue/quickbooks.html) | QuickBooks Online MCP server for Model Context Protocol hosts. Manage invoices, bills, customers, vendors, employees, and accounts in QuickBooks Online through a standardised MCP interface. | 0.3.1 | OAuth | 13 | cloud API |
