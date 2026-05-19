@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.mindstone/mcp-server-microsoft-teams",
   "title": "Microsoft 365 Teams",
-  "description": "Microsoft 365 Teams MCP server: list chats, read chat messages, send chat messages, list teams and channels, and get presence via Microsoft Graph",
+  "description": "Microsoft 365 Teams via Graph: list chats, read/send messages, list teams/channels, presence.",
   "version": "0.1.1",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",

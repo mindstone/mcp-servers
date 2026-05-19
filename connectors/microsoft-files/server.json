@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.mindstone/mcp-server-microsoft-files",
   "title": "Microsoft 365 Files",
-  "description": "Microsoft 365 OneDrive Files MCP server: list, search, get, download, upload, delete, move, copy, share files, and read text contents via Microsoft Graph",
+  "description": "Microsoft 365 OneDrive files via Graph: list, search, get, upload, download, share, read text.",
   "version": "0.1.1",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",

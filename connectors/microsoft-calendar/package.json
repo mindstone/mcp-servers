@@ -2,7 +2,7 @@
   "name": "@mindstone/mcp-server-microsoft-calendar",
   "version": "0.1.1",
   "mcpName": "io.github.mindstone/mcp-server-microsoft-calendar",
-  "description": "Microsoft 365 Outlook Calendar MCP server — list, get, create, update, delete, respond to events, check free/busy, and list calendars via Microsoft Graph",
+  "description": "Microsoft 365 Outlook calendar via Graph: list, get, create, update, respond, free/busy.",
   "license": "FSL-1.1-MIT",
   "type": "module",
   "bin": {
