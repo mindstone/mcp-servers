@@ -23,6 +23,7 @@ Browse all 26 connectors with their version, auth model, and tool count at the [
 | [nano-banana](connectors/nano-banana/) | Generate and edit images using Google Gemini's AI capabilities |
 | [napkin](connectors/napkin/) | Generate professional visuals — diagrams, infographics, and illustrations — from text via Napkin AI |
 | [office](connectors/office/) | Read and edit Word documents, Excel workbooks, and PowerPoint presentations from desktop Microsoft 365 via an Office Add-in sidecar |
+| [openai-image](connectors/openai-image/) | Generate and edit images via OpenAI's `gpt-image-2` — sharp text rendering, multilingual support, and four quality levels |
 | [outreach](connectors/outreach/) | Manage prospects, sequences, accounts, tasks, and mailings via the Outreach sales engagement API |
 | [pandadoc](connectors/pandadoc/) | Create, send, and manage documents, templates, and e-signatures via PandaDoc |
 | [quickbooks](connectors/quickbooks/) | Manage invoices, bills, customers, vendors, employees, and accounts in QuickBooks Online |
