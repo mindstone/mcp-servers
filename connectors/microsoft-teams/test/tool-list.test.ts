@@ -8,22 +8,22 @@ import {
 
 const EXPECTED_TOOLS = [
   'list_chats',
-  'list_messages',
-  'search_messages',
-  'get_message',
-  'list_team_channels',
-  'send_message',
-  'reply_message',
+  'get_chat',
+  'list_chat_messages',
+  'send_chat_message',
+  'list_teams',
+  'list_channels',
+  'get_presence',
 ];
 
 const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
-  list_chats: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
-  list_messages: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
-  search_messages: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
-  get_message: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
-  list_team_channels: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
-  send_message: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-  reply_message: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  list_chats: { readOnlyHint: true, openWorldHint: true },
+  get_chat: { readOnlyHint: true, openWorldHint: true },
+  list_chat_messages: { readOnlyHint: true, openWorldHint: true },
+  send_chat_message: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  list_teams: { readOnlyHint: true, openWorldHint: true },
+  list_channels: { readOnlyHint: true, openWorldHint: true },
+  get_presence: { readOnlyHint: true, openWorldHint: true },
 };
 
 describe('microsoft-teams tools/list', () => {

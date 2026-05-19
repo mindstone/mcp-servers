@@ -3,28 +3,17 @@ import { z } from 'zod';
 import { callGraph } from './client.js';
 import { successJson, withErrorHandling } from './utils.js';
 import {
-  getMessage,
+  getChat,
+  getPresence,
+  listChannels,
   listChats,
-  listMessages,
-  listTeamChannels,
-  replyMessage,
-  searchMessages,
-  sendMessage,
+  listChatMessages,
+  listTeams,
+  sendChatMessage,
 } from './teams.js';
-
-const OptionalId = z.string().optional();
-const MessageScopeSchema = {
-  chatId: OptionalId.describe('Teams chat ID'),
-  chat_id: OptionalId.describe('Alias for chatId'),
-  teamId: OptionalId.describe('Team ID for channel message operations'),
-  team_id: OptionalId.describe('Alias for teamId'),
-  channelId: OptionalId.describe('Channel ID for channel message operations'),
-  channel_id: OptionalId.describe('Alias for channelId'),
-};
 
 const READ_ANNOTATIONS = {
   readOnlyHint: true,
-  destructiveHint: false,
   openWorldHint: true,
 };
 
@@ -50,99 +39,84 @@ export function registerTeamsTools(server: McpServer): void {
   );
 
   server.registerTool(
-    'list_messages',
+    'get_chat',
     {
-      description:
-        'List recent Teams messages from a chat, or from a team channel when teamId and channelId are provided.',
+      description: 'Get details about a specific chat.',
       inputSchema: z.object({
-        ...MessageScopeSchema,
+        chatId: z.string().describe('Chat ID'),
+      }).shape,
+      annotations: READ_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) =>
+      successJson(await callGraph(extra, (c, signal) => getChat(c, args, signal))),
+    ),
+  );
+
+  server.registerTool(
+    'list_chat_messages',
+    {
+      description: 'Get recent messages from a chat.',
+      inputSchema: z.object({
+        chatId: z.string().describe('Chat ID'),
         top: z.number().optional().describe('Max messages to return (default: 50, max: 50)'),
       }).shape,
       annotations: READ_ANNOTATIONS,
     },
     withErrorHandling(async (args, extra) =>
-      successJson(await callGraph(extra, (c, signal) => listMessages(c, args, signal))),
+      successJson(await callGraph(extra, (c, signal) => listChatMessages(c, args, signal))),
     ),
   );
 
   server.registerTool(
-    'search_messages',
+    'send_chat_message',
     {
-      description: 'Search Teams messages using Microsoft Search.',
+      description: 'Send a message to a chat.',
       inputSchema: z.object({
-        query: z.string().optional().describe('Search query'),
-        top: z.number().optional().describe('Max search results (default: 25, max: 50)'),
-      }).shape,
-      annotations: READ_ANNOTATIONS,
-    },
-    withErrorHandling(async (args, extra) =>
-      successJson(await callGraph(extra, (c, signal) => searchMessages(c, args, signal))),
-    ),
-  );
-
-  server.registerTool(
-    'get_message',
-    {
-      description: 'Get a specific Teams chat or channel message by ID.',
-      inputSchema: z.object({
-        ...MessageScopeSchema,
-        messageId: OptionalId.describe('Teams message ID'),
-        message_id: OptionalId.describe('Alias for messageId'),
-        id: OptionalId.describe('Alias for messageId'),
-      }).shape,
-      annotations: READ_ANNOTATIONS,
-    },
-    withErrorHandling(async (args, extra) =>
-      successJson(await callGraph(extra, (c, signal) => getMessage(c, args, signal))),
-    ),
-  );
-
-  server.registerTool(
-    'list_team_channels',
-    {
-      description:
-        'List channels for a team. If teamId is omitted, lists joined teams with their channels.',
-      inputSchema: z.object({
-        teamId: OptionalId.describe('Team ID. Omit to list joined teams with channels.'),
-        team_id: OptionalId.describe('Alias for teamId'),
-      }).shape,
-      annotations: READ_ANNOTATIONS,
-    },
-    withErrorHandling(async (args, extra) =>
-      successJson(await callGraph(extra, (c, signal) => listTeamChannels(c, args, signal))),
-    ),
-  );
-
-  server.registerTool(
-    'send_message',
-    {
-      description: 'Send a Teams message to a chat or team channel.',
-      inputSchema: z.object({
-        ...MessageScopeSchema,
-        content: z.string().optional().describe('Message content (HTML supported)'),
+        chatId: z.string().describe('Chat ID'),
+        content: z.string().describe('Message content (HTML supported)'),
       }).shape,
       annotations: WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (args, extra) =>
-      successJson(await callGraph(extra, (c, signal) => sendMessage(c, args, signal))),
+      successJson(await callGraph(extra, (c, signal) => sendChatMessage(c, args, signal))),
     ),
   );
 
   server.registerTool(
-    'reply_message',
+    'list_teams',
     {
-      description: 'Reply to a Teams chat or channel message.',
-      inputSchema: z.object({
-        ...MessageScopeSchema,
-        messageId: OptionalId.describe('Teams message ID to reply to'),
-        message_id: OptionalId.describe('Alias for messageId'),
-        id: OptionalId.describe('Alias for messageId'),
-        content: z.string().optional().describe('Reply content (HTML supported)'),
-      }).shape,
-      annotations: WRITE_ANNOTATIONS,
+      description: 'List Teams you are a member of.',
+      inputSchema: z.object({}).shape,
+      annotations: READ_ANNOTATIONS,
     },
     withErrorHandling(async (args, extra) =>
-      successJson(await callGraph(extra, (c, signal) => replyMessage(c, args, signal))),
+      successJson(await callGraph(extra, (c, signal) => listTeams(c, args, signal))),
+    ),
+  );
+
+  server.registerTool(
+    'list_channels',
+    {
+      description: 'List channels in a Team.',
+      inputSchema: z.object({
+        teamId: z.string().describe('Team ID'),
+      }).shape,
+      annotations: READ_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) =>
+      successJson(await callGraph(extra, (c, signal) => listChannels(c, args, signal))),
+    ),
+  );
+
+  server.registerTool(
+    'get_presence',
+    {
+      description: 'Get your current presence status (available, busy, away, etc.).',
+      inputSchema: z.object({}).shape,
+      annotations: READ_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) =>
+      successJson(await callGraph(extra, (c, signal) => getPresence(c, args, signal))),
     ),
   );
 }

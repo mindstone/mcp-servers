@@ -2,7 +2,7 @@
   "name": "@mindstone/mcp-server-microsoft-teams",
   "version": "0.1.0",
   "mcpName": "io.github.mindstone/mcp-server-microsoft-teams",
-  "description": "Microsoft 365 Teams MCP server — list chats and channels, read, search, send, and reply to messages via Microsoft Graph",
+  "description": "Microsoft 365 Teams MCP server — list chats, read chat messages, send chat messages, list teams and channels, and get presence via Microsoft Graph",
   "license": "FSL-1.1-MIT",
   "type": "module",
   "bin": {

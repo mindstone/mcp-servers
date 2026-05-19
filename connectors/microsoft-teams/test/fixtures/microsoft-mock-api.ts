@@ -104,88 +104,27 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
       });
     }),
 
-    http.get(`${GRAPH_BASE}/me/chats/:chatId/messages/:messageId`, async ({ request, params }) => {
+    http.get(`${GRAPH_BASE}/me/chats/:chatId`, async ({ request, params }) => {
       await capture(request);
       return HttpResponse.json({
-        id: String(params.messageId),
-        from: { user: { displayName: 'Alice' } },
-        body: { content: '<p>Detailed message</p>', contentType: 'html' },
-        createdDateTime: '2026-05-19T09:00:00Z',
+        id: String(params.chatId),
+        topic: 'Project Alpha',
+        chatType: 'group',
+        createdDateTime: '2026-05-15T10:00:00Z',
+        lastUpdatedDateTime: '2026-05-19T10:00:00Z',
+        members: [
+          {
+            displayName: 'Alice',
+            email: 'alice@example.com',
+            roles: ['owner'],
+          },
+        ],
       });
     }),
 
     http.post(`${GRAPH_BASE}/me/chats/:chatId/messages`, async ({ request }) => {
       await capture(request);
       return HttpResponse.json({ id: 'msg-new' });
-    }),
-
-    http.post(
-      `${GRAPH_BASE}/me/chats/:chatId/messages/:messageId/replies`,
-      async ({ request }) => {
-        await capture(request);
-        return HttpResponse.json({ id: 'reply-new' });
-      },
-    ),
-
-    http.get(`${GRAPH_BASE}/teams/:teamId/channels/:channelId/messages`, async ({ request }) => {
-      await capture(request);
-      return HttpResponse.json({
-        value: [
-          {
-            id: 'ch-msg-1',
-            from: { user: { displayName: 'Carol' } },
-            body: { content: '<p>Channel update</p>', contentType: 'html' },
-            createdDateTime: '2026-05-19T09:00:00Z',
-          },
-        ],
-      });
-    }),
-
-    http.get(
-      `${GRAPH_BASE}/teams/:teamId/channels/:channelId/messages/:messageId`,
-      async ({ request, params }) => {
-        await capture(request);
-        return HttpResponse.json({
-          id: String(params.messageId),
-          from: { user: { displayName: 'Carol' } },
-          body: { content: '<p>Channel detail</p>', contentType: 'html' },
-          createdDateTime: '2026-05-19T09:00:00Z',
-        });
-      },
-    ),
-
-    http.post(`${GRAPH_BASE}/teams/:teamId/channels/:channelId/messages`, async ({ request }) => {
-      await capture(request);
-      return HttpResponse.json({ id: 'ch-msg-new' });
-    }),
-
-    http.post(
-      `${GRAPH_BASE}/teams/:teamId/channels/:channelId/messages/:messageId/replies`,
-      async ({ request }) => {
-        await capture(request);
-        return HttpResponse.json({ id: 'ch-reply-new' });
-      },
-    ),
-
-    http.post(`${GRAPH_BASE}/search/query`, async ({ request }) => {
-      await capture(request);
-      return HttpResponse.json({
-        value: [
-          {
-            hitsContainers: [
-              {
-                hits: [
-                  {
-                    hitId: 'search-1',
-                    summary: '<p>Matched <b>project</b> update</p>',
-                    resource: { id: 'msg-1', webUrl: 'https://teams.example.com/message/1' },
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      });
     }),
 
     http.get(`${GRAPH_BASE}/teams/:teamId/channels`, async ({ request }) => {
@@ -218,6 +157,19 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
             description: 'Engineering team',
           },
         ],
+      });
+    }),
+
+    http.get(`${GRAPH_BASE}/me/presence`, async ({ request }) => {
+      await capture(request);
+      return HttpResponse.json({
+        availability: 'Available',
+        activity: 'Available',
+        statusMessage: {
+          message: {
+            content: 'Heads down',
+          },
+        },
       });
     }),
   ];

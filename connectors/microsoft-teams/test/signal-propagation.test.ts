@@ -1,17 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Client } from '@mindstone/mcp-server-microsoft-shared';
 import {
-  getMessage,
+  getChat,
+  getPresence,
+  listChannels,
   listChats,
-  listMessages,
-  listTeamChannels,
-  replyMessage,
-  searchMessages,
-  sendMessage,
+  listChatMessages,
+  listTeams,
+  sendChatMessage,
 } from '../src/teams.js';
 
 interface MockBuilder {
   options: ReturnType<typeof vi.fn>;
+  expand: ReturnType<typeof vi.fn>;
   top: ReturnType<typeof vi.fn>;
   select: ReturnType<typeof vi.fn>;
   get: ReturnType<typeof vi.fn>;
@@ -26,6 +27,7 @@ interface MockSetup {
 function createMockClient(): MockSetup {
   const builder = {} as MockBuilder;
   builder.options = vi.fn().mockReturnValue(builder);
+  builder.expand = vi.fn().mockReturnValue(builder);
   builder.top = vi.fn().mockReturnValue(builder);
   builder.select = vi.fn().mockReturnValue(builder);
   builder.get = vi.fn().mockResolvedValue({ value: [] });
@@ -43,60 +45,45 @@ describe('Graph request signal propagation', () => {
     expect(builder.options).toHaveBeenCalledWith({ signal });
   });
 
-  it('listMessages passes signal to GraphRequest.options', async () => {
+  it('getChat passes signal to GraphRequest.options', async () => {
     const { client, builder } = createMockClient();
     const signal = new AbortController().signal;
-    await listMessages(client, { chatId: 'chat-1', top: 5 }, signal);
+    await getChat(client, { chatId: 'chat-1' }, signal);
     expect(builder.options).toHaveBeenCalledWith({ signal });
   });
 
-  it('searchMessages passes signal to GraphRequest.options', async () => {
+  it('listChatMessages passes signal to GraphRequest.options', async () => {
     const { client, builder } = createMockClient();
     const signal = new AbortController().signal;
-    await searchMessages(client, { query: 'project', top: 5 }, signal);
+    await listChatMessages(client, { chatId: 'chat-1', top: 5 }, signal);
     expect(builder.options).toHaveBeenCalledWith({ signal });
   });
 
-  it('getMessage passes signal to GraphRequest.options', async () => {
+  it('sendChatMessage passes signal to GraphRequest.options', async () => {
     const { client, builder } = createMockClient();
     const signal = new AbortController().signal;
-    await getMessage(client, { chatId: 'chat-1', messageId: 'msg-1' }, signal);
+    await sendChatMessage(client, { chatId: 'chat-1', content: 'hello' }, signal);
     expect(builder.options).toHaveBeenCalledWith({ signal });
   });
 
-  it('listTeamChannels passes signal to GraphRequest.options with explicit teamId', async () => {
+  it('listTeams passes signal to GraphRequest.options', async () => {
     const { client, builder } = createMockClient();
     const signal = new AbortController().signal;
-    await listTeamChannels(client, { teamId: 'team-1' }, signal);
+    await listTeams(client, {}, signal);
     expect(builder.options).toHaveBeenCalledWith({ signal });
   });
 
-  it('listTeamChannels passes signal to GraphRequest.options on joinedTeams + channel fan-out', async () => {
-    const { client, builder } = createMockClient();
-    builder.get
-      .mockResolvedValueOnce({ value: [{ id: 'team-1', displayName: 'Team 1' }] })
-      .mockResolvedValueOnce({ value: [{ id: 'channel-1', displayName: 'General' }] });
-    const signal = new AbortController().signal;
-    await listTeamChannels(client, {}, signal);
-    expect(builder.options).toHaveBeenCalledWith({ signal });
-    expect(builder.options.mock.calls.length).toBeGreaterThanOrEqual(2);
-  });
-
-  it('sendMessage passes signal to GraphRequest.options', async () => {
+  it('listChannels passes signal to GraphRequest.options', async () => {
     const { client, builder } = createMockClient();
     const signal = new AbortController().signal;
-    await sendMessage(client, { chatId: 'chat-1', content: 'hello' }, signal);
+    await listChannels(client, { teamId: 'team-1' }, signal);
     expect(builder.options).toHaveBeenCalledWith({ signal });
   });
 
-  it('replyMessage passes signal to GraphRequest.options', async () => {
+  it('getPresence passes signal to GraphRequest.options', async () => {
     const { client, builder } = createMockClient();
     const signal = new AbortController().signal;
-    await replyMessage(
-      client,
-      { chatId: 'chat-1', messageId: 'msg-1', content: 'thanks' },
-      signal,
-    );
+    await getPresence(client, {}, signal);
     expect(builder.options).toHaveBeenCalledWith({ signal });
   });
 });

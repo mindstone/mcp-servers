@@ -48,27 +48,13 @@ function stripHtml(html: string): string {
     .trim();
 }
 
-function messageScopePath(args: ArgBag, nextStep: string): string {
-  const chatId = stringArg(args, 'chatId', 'chat_id');
-  const teamId = stringArg(args, 'teamId', 'team_id');
-  const channelId = stringArg(args, 'channelId', 'channel_id');
-  if (chatId) return `/me/chats/${chatId}/messages`;
-  if (teamId && channelId) return `/teams/${teamId}/channels/${channelId}/messages`;
+function requireStringArg(args: ArgBag, name: string, label: string, nextStep: string): string {
+  const value = stringArg(args, name);
+  if (value) return value;
   throw new TeamsBusinessError(
-    'Provide either "chatId" for a chat message operation, or both "teamId" and "channelId" for a channel message operation.',
+    `Missing required parameter: "${name}" (${label}).`,
     nextStep,
   );
-}
-
-function messagePath(args: ArgBag, nextStep: string): string {
-  const messageId = stringArg(args, 'messageId', 'message_id', 'id');
-  if (!messageId) {
-    throw new TeamsBusinessError(
-      'Missing required parameter: "messageId" (the Teams message ID).',
-      nextStep,
-    );
-  }
-  return `${messageScopePath(args, nextStep)}/${messageId}`;
 }
 
 function formatMessage(msg: ChatMessage): Record<string, unknown> {
@@ -80,6 +66,14 @@ function formatMessage(msg: ChatMessage): Record<string, unknown> {
     createdAt: msg.createdDateTime,
   };
 }
+
+interface ChatMember {
+  displayName: string;
+  email?: string;
+  roles?: string[];
+}
+
+type ChatWithMembers = Omit<Chat, 'members'> & { members?: ChatMember[] };
 
 export async function listChats(
   client: Client,
@@ -113,82 +107,73 @@ export async function listChats(
   };
 }
 
-export async function listMessages(
+export async function getChat(
   client: Client,
   args: ArgBag,
   signal: AbortSignal,
 ): Promise<unknown> {
-  const top = clampTop(numberArg(args, 'top'), 50, 50);
-  const path = messageScopePath(args, 'list_messages');
+  const chatId = requireStringArg(args, 'chatId', 'chat ID', 'get_chat');
+  const chat = (await client
+    .api(`/me/chats/${chatId}`)
+    .options({ signal })
+    .expand('members')
+    .get()) as ChatWithMembers;
 
-  const response = (await client.api(path).options({ signal }).top(top).get()) as MaybeValue<ChatMessage>;
+  return {
+    id: chat.id,
+    topic: chat.topic ?? '(No topic)',
+    type: chat.chatType,
+    createdAt: chat.createdDateTime,
+    lastUpdated: chat.lastUpdatedDateTime,
+    members: chat.members?.map((member) => ({
+      displayName: member.displayName,
+      email: member.email,
+      roles: member.roles,
+    })),
+  };
+}
+
+export async function listChatMessages(
+  client: Client,
+  args: ArgBag,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const chatId = requireStringArg(args, 'chatId', 'chat ID', 'list_chat_messages');
+  const top = clampTop(numberArg(args, 'top'), 50, 50);
+
+  const response = (await client
+    .api(`/me/chats/${chatId}/messages`)
+    .options({ signal })
+    .top(top)
+    .get()) as MaybeValue<ChatMessage>;
   const messages = response.value ?? [];
 
   return {
-    chatId: stringArg(args, 'chatId', 'chat_id'),
-    teamId: stringArg(args, 'teamId', 'team_id'),
-    channelId: stringArg(args, 'channelId', 'channel_id'),
+    chatId,
     count: messages.length,
     messages: messages.map(formatMessage),
   };
 }
 
-export async function searchMessages(
+export async function sendChatMessage(
   client: Client,
   args: ArgBag,
   signal: AbortSignal,
 ): Promise<unknown> {
-  const query = stringArg(args, 'query');
-  if (!query) {
-    throw new TeamsBusinessError(
-      'Missing required parameter: "query" (search text). Example: { "query": "project update", "top": 20 }',
-      'search_messages',
-    );
-  }
-  const size = clampTop(numberArg(args, 'top'), 25, 50);
-
-  const response = (await client
-    .api('/search/query')
-    .options({ signal })
-    .post({
-      requests: [
-        {
-          entityTypes: ['chatMessage'],
-          query: { queryString: query },
-          from: 0,
-          size,
-        },
-      ],
-    })) as {
-    value?: Array<{
-      hitsContainers?: Array<{
-        hits?: Array<{ hitId?: string; summary?: string; resource?: Record<string, unknown> }>;
-      }>;
-    }>;
-  };
-
-  const hits = response.value?.flatMap((container) =>
-    container.hitsContainers?.flatMap((hitContainer) => hitContainer.hits ?? []) ?? [],
-  ) ?? [];
+  const chatId = requireStringArg(args, 'chatId', 'chat ID', 'send_chat_message');
+  const content = requireStringArg(args, 'content', 'message body', 'send_chat_message');
+  const response = (await client.api(`/me/chats/${chatId}/messages`).options({ signal }).post({
+    body: {
+      contentType: content.includes('<') ? 'html' : 'text',
+      content,
+    },
+  })) as { id?: string };
 
   return {
-    query,
-    count: hits.length,
-    messages: hits.map((hit) => ({
-      id: hit.hitId,
-      summary: stripHtml(hit.summary ?? ''),
-      resource: hit.resource,
-    })),
+    success: true,
+    messageId: response.id,
+    message: 'Message sent successfully',
   };
-}
-
-export async function getMessage(
-  client: Client,
-  args: ArgBag,
-  signal: AbortSignal,
-): Promise<unknown> {
-  const msg = (await client.api(messagePath(args, 'get_message')).options({ signal }).get()) as ChatMessage;
-  return formatMessage(msg);
 }
 
 interface Team {
@@ -213,104 +198,66 @@ function formatChannel(channel: Channel): Record<string, unknown> {
   };
 }
 
-export async function listTeamChannels(
+export async function listTeams(
   client: Client,
-  args: ArgBag,
+  _args: ArgBag,
   signal: AbortSignal,
 ): Promise<unknown> {
-  const teamId = stringArg(args, 'teamId', 'team_id');
-  if (teamId) {
-    const response = (await client
-      .api(`/teams/${teamId}/channels`)
-      .options({ signal })
-      .select('id,displayName,description,membershipType')
-      .get()) as MaybeValue<Channel>;
-    const channels = response.value ?? [];
-    return {
-      teamId,
-      count: channels.length,
-      channels: channels.map(formatChannel),
-    };
-  }
-
-  const teamsResponse = (await client
+  const response = (await client
     .api('/me/joinedTeams')
     .options({ signal })
     .select('id,displayName,description')
     .get()) as MaybeValue<Team>;
-  const teams = teamsResponse.value ?? [];
-  const teamsWithChannels = await Promise.all(
-    teams.map(async (team) => {
-      const channelResponse = (await client
-        .api(`/teams/${team.id}/channels`)
-        .options({ signal })
-        .select('id,displayName,description,membershipType')
-        .get()) as MaybeValue<Channel>;
-      const channels = channelResponse.value ?? [];
-      return {
-        id: team.id,
-        name: team.displayName,
-        description: team.description,
-        channelCount: channels.length,
-        channels: channels.map(formatChannel),
-      };
-    }),
-  );
+  const teams = response.value ?? [];
 
   return {
-    count: teamsWithChannels.reduce((sum, team) => sum + team.channelCount, 0),
-    teams: teamsWithChannels,
+    count: teams.length,
+    teams: teams.map((team) => ({
+      id: team.id,
+      name: team.displayName,
+      description: team.description,
+    })),
   };
 }
 
-export async function sendMessage(
+export async function listChannels(
   client: Client,
   args: ArgBag,
   signal: AbortSignal,
 ): Promise<unknown> {
-  const content = stringArg(args, 'content', 'body', 'message');
-  if (!content) {
-    throw new TeamsBusinessError(
-      'Missing required parameter: "content" (message body).',
-      'send_message',
-    );
-  }
-  const response = (await client.api(messageScopePath(args, 'send_message')).options({ signal }).post({
-    body: {
-      contentType: content.includes('<') ? 'html' : 'text',
-      content,
-    },
-  })) as { id?: string };
-
+  const teamId = requireStringArg(args, 'teamId', 'team ID', 'list_channels');
+  const response = (await client
+    .api(`/teams/${teamId}/channels`)
+    .options({ signal })
+    .select('id,displayName,description,membershipType')
+    .get()) as MaybeValue<Channel>;
+  const channels = response.value ?? [];
   return {
-    success: true,
-    messageId: response.id,
-    message: 'Message sent successfully',
+    teamId,
+    count: channels.length,
+    channels: channels.map(formatChannel),
   };
 }
 
-export async function replyMessage(
+interface Presence {
+  availability?: string;
+  activity?: string;
+  statusMessage?: {
+    message?: {
+      content?: string | null;
+    } | null;
+  } | null;
+}
+
+export async function getPresence(
   client: Client,
-  args: ArgBag,
+  _args: ArgBag,
   signal: AbortSignal,
 ): Promise<unknown> {
-  const content = stringArg(args, 'content', 'body', 'message');
-  if (!content) {
-    throw new TeamsBusinessError(
-      'Missing required parameter: "content" (reply body).',
-      'reply_message',
-    );
-  }
-  const response = (await client.api(`${messagePath(args, 'reply_message')}/replies`).options({ signal }).post({
-    body: {
-      contentType: content.includes('<') ? 'html' : 'text',
-      content,
-    },
-  })) as { id?: string };
-
+  const presence = (await client.api('/me/presence').options({ signal }).get()) as Presence;
   return {
-    success: true,
-    messageId: response.id,
-    message: 'Reply sent successfully',
+    availability: presence.availability,
+    activity: presence.activity,
+    statusMessage: presence.statusMessage?.message?.content,
   };
 }

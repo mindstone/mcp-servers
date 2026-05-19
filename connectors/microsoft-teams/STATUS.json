@@ -15,7 +15,9 @@
     "domains": [
       "chats",
       "messages",
-      "channels"
+      "teams",
+      "channels",
+      "presence"
     ]
   },
   "surface": "cloud-api",

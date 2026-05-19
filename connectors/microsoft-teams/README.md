@@ -1,6 +1,6 @@
 # Microsoft 365 Teams MCP Server
 
-Read and write Microsoft Teams chats, messages, and team channels through Microsoft Graph.
+Read and write Microsoft Teams chats, teams, channels, and presence through Microsoft Graph.
 
 ## Installation
 
@@ -25,11 +25,11 @@ This server uses host-orchestrated Microsoft 365 OAuth. Configure these environm
 | Tool | Description |
 |---|---|
 | `list_chats` | List recent Teams chats |
-| `list_messages` | List messages from a chat or channel |
-| `search_messages` | Search Teams messages via Microsoft Search |
-| `get_message` | Get a specific chat or channel message |
-| `list_team_channels` | List channels in a team |
-| `send_message` | Send a Teams chat or channel message |
-| `reply_message` | Reply to a Teams chat or channel message |
+| `get_chat` | Get details about a specific chat |
+| `list_chat_messages` | List recent messages from a chat |
+| `send_chat_message` | Send a message to a chat |
+| `list_teams` | List Teams you are a member of |
+| `list_channels` | List channels in a team |
+| `get_presence` | Get your current presence status |
 
 Some Teams Graph APIs may require tenant admin approval.
