@@ -24,7 +24,7 @@ Read and edit Word documents, Excel workbooks, and PowerPoint presentations from
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/office/CHANGELOG.md) |
-| Tools source | [`src/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/office/src/) |
+| Tools source | [`connectors/office/src/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/office/src/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/office/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/office/server.json) |
 | npm package | [@mindstone/mcp-server-office](https://www.npmjs.com/package/@mindstone/mcp-server-office) |

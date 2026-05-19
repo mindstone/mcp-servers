@@ -24,8 +24,8 @@ ElevenLabs MCP server for Model Context Protocol hosts. Generate speech, music, 
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/elevenlabs/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/elevenlabs/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/elevenlabs/test/) |
+| Tools source | [`connectors/elevenlabs/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/elevenlabs/src/tools/) |
+| Tests | [`connectors/elevenlabs/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/elevenlabs/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/elevenlabs/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/elevenlabs/server.json) |
 | npm package | [@mindstone/mcp-server-elevenlabs](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs) |

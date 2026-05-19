@@ -5,7 +5,7 @@ title: browser-automation — mcp-servers catalogue
 
 # browser-automation
 
-Headless browser control via accessibility snapshots — navigate pages, fill forms, click elements, take screenshots, and manage tabs using the [agent-browser](https://www.npmjs.com/package/agent-browser) CLI.
+Headless browser control via accessibility snapshots — navigate pages, fill forms, click elements, take screenshots, and manage tabs using the &#91;agent-browser&#93;&#40;https://www.npmjs.com/package/agent-browser&#41; CLI.
 
 
 
@@ -24,8 +24,8 @@ Headless browser control via accessibility snapshots — navigate pages, fill fo
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/browser-automation/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/browser-automation/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/browser-automation/test/) |
+| Tools source | [`connectors/browser-automation/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/browser-automation/src/tools/) |
+| Tests | [`connectors/browser-automation/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/browser-automation/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/browser-automation/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/browser-automation/server.json) |
 | npm package | [@mindstone/mcp-server-browser-automation](https://www.npmjs.com/package/@mindstone/mcp-server-browser-automation) |

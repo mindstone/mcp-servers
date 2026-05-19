@@ -24,8 +24,8 @@ Gamma AI presentation generation MCP server for Model Context Protocol hosts. Cr
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/gamma/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/gamma/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/gamma/test/) |
+| Tools source | [`connectors/gamma/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/gamma/src/tools/) |
+| Tests | [`connectors/gamma/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/gamma/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/gamma/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/gamma/server.json) |
 | npm package | [@mindstone/mcp-server-gamma](https://www.npmjs.com/package/@mindstone/mcp-server-gamma) |

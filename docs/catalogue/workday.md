@@ -24,8 +24,8 @@ Workday HCM MCP server for Model Context Protocol hosts. Query workers, profiles
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/workday/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/workday/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/workday/test/) |
+| Tools source | [`connectors/workday/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/workday/src/tools/) |
+| Tests | [`connectors/workday/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/workday/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/workday/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/workday/server.json) |
 | npm package | [@mindstone/mcp-server-workday](https://www.npmjs.com/package/@mindstone/mcp-server-workday) |

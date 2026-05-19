@@ -24,8 +24,8 @@ Humaans HR platform MCP server for Model Context Protocol hosts. Query employee 
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/humaans/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/humaans/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/humaans/test/) |
+| Tools source | [`connectors/humaans/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/humaans/src/tools/) |
+| Tests | [`connectors/humaans/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/humaans/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/humaans/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/humaans/server.json) |
 | npm package | [@mindstone/mcp-server-humaans](https://www.npmjs.com/package/@mindstone/mcp-server-humaans) |

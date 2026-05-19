@@ -24,8 +24,8 @@ Email IMAP/SMTP MCP server for Model Context Protocol hosts. Read, search, send,
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/email-imap/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/email-imap/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/email-imap/test/) |
+| Tools source | [`connectors/email-imap/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/email-imap/src/tools/) |
+| Tests | [`connectors/email-imap/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/email-imap/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/email-imap/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/email-imap/server.json) |
 | npm package | [@mindstone/mcp-server-email-imap](https://www.npmjs.com/package/@mindstone/mcp-server-email-imap) |

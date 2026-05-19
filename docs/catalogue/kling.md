@@ -24,8 +24,8 @@ Kling AI video generation MCP server for Model Context Protocol hosts. Generate 
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/kling/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/kling/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/kling/test/) |
+| Tools source | [`connectors/kling/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/kling/src/tools/) |
+| Tests | [`connectors/kling/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/kling/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/kling/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/kling/server.json) |
 | npm package | [@mindstone/mcp-server-kling](https://www.npmjs.com/package/@mindstone/mcp-server-kling) |

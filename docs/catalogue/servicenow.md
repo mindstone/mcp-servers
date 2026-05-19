@@ -24,8 +24,8 @@ ServiceNow ITSM MCP server for Model Context Protocol hosts. Manage incidents, c
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/servicenow/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/servicenow/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/servicenow/test/) |
+| Tools source | [`connectors/servicenow/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/servicenow/src/tools/) |
+| Tests | [`connectors/servicenow/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/servicenow/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/servicenow/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/servicenow/server.json) |
 | npm package | [@mindstone/mcp-server-servicenow](https://www.npmjs.com/package/@mindstone/mcp-server-servicenow) |

