@@ -1,7 +1,8 @@
 # Phase 2 bootstrap plan + publish tracker — FOX-3319
 
-**Status**: pre-flight ready. Cannot execute until Rebel R5/1 + R7 PRs merge and G6 dry-run produces a clean catalog-sync PR.
+**Status**: 23/24 published as of 2026-05-19. Office held back pending Rebel R5/1 + R5/2 + R5/3 on `dev`. Catalog-sync dispatches to Rebel still pending R7 merge — once R7 lands, fire `gh api ... dispatches` for all 23 published connectors and watch the resulting catalog-sync PRs.
 **Created**: 2026-05-17
+**Last updated**: 2026-05-19 (slack 0.1.2 published, closing the security-patch sub-wave)
 **Owner**: wave-lead (publishes locally from dev machine)
 **Mode**: manual `npm publish` per `docs/PUBLISH_APPROVAL_PROCESS.md`, followed by `gh api ... dispatches` to Rebel.
 
@@ -60,7 +61,7 @@ Format: `connector` | `local_pkg_ver` (target) | `legacy_npm_latest` | `new_npm_
 | runway | 0.3.2 | 0.3.1 | 404 | bootstrap |
 | salesforce | 0.1.2 | 0.1.1 | 404 | bootstrap |
 | servicenow | 0.2.2 | 0.2.1 | 404 | bootstrap |
-| slack | 0.1.1 | N/A (fresh) | 404 | bootstrap (no legacy parity — first-ever publish) |
+| slack | 0.1.2 | N/A (fresh) | exists @ 0.1.2 | DONE — version bumped from 0.1.1 to 0.1.2 to ship the fast-uri / hono / ip-address / express-rate-limit transitive security patches (PR #35) ahead of the inaugural `@mindstone/` publish. Verified end-to-end with `npm run probe:live:gate` (9/9 probes, p95 856 ms). |
 | talentlms | 0.2.2 | 0.2.1 | 404 | bootstrap |
 | workday | 0.2.2 | 0.2.1 | 404 | bootstrap |
 | zendesk | 0.3.2 | 0.3.1 | 404 | bootstrap |
@@ -150,31 +151,33 @@ Update this section as each publish + dispatch + Rebel-merge completes. State le
 -----------------------+----------+---------------+----------+-----------+-----------------------------
 apple-shortcuts        | DONE     | 0.1.2         | n/a      | n/a       | earlier wave burst
 hubspot                | DONE     | 0.1.2         | n/a      | n/a       | earlier wave burst
-browser-automation     | TODO     |               |          |           |
-elevenlabs             | TODO     |               |          |           |
-email-imap             | TODO     |               |          |           |
-fathom                 | TODO     |               |          |           | will be G6 / R1 smoke target
-freshdesk              | TODO     |               |          |           |
-gamma                  | TODO     |               |          |           |
-google-analytics       | TODO     |               |          |           |
-humaans                | TODO     |               |          |           |
-kling                  | TODO     |               |          |           |
-mixmax                 | TODO     |               |          |           |
-nano-banana            | TODO     |               |          |           |
-napkin                 | TODO     |               |          |           |
-office                 | TODO     |               |          |           | also requires R5/2 + R5/3 on Rebel
-outreach               | TODO     |               |          |           |
-pandadoc               | TODO     |               |          |           |
-quickbooks             | TODO     |               |          |           | minor delta vs legacy (0.2.1->0.3.1) — confirm intentional
-retell-ai              | TODO     |               |          |           |
-runway                 | TODO     |               |          |           |
-salesforce             | TODO     |               |          |           |
-servicenow             | TODO     |               |          |           |
-slack                  | TODO     |               |          |           | first-ever publish, no legacy parity
-talentlms              | TODO     |               |          |           |
-workday                | TODO     |               |          |           |
-zendesk                | TODO     |               |          |           |
+browser-automation     | PUB      | 0.1.7         |          |           | published 2026-05-18 wave
+elevenlabs             | PUB      | 0.2.2         |          |           | published 2026-05-18 wave
+email-imap             | PUB      | 0.2.3         |          |           | published 2026-05-18 wave
+fathom                 | PUB      | 0.2.3         |          |           | published 2026-05-18 (was G6 smoke target)
+freshdesk              | PUB      | 0.2.2         |          |           | published 2026-05-18 wave
+gamma                  | PUB      | 0.3.2         |          |           | published 2026-05-18 wave
+google-analytics       | PUB      | 0.1.1         |          |           | published 2026-05-18 wave
+humaans                | PUB      | 0.2.2         |          |           | published 2026-05-18 wave
+kling                  | PUB      | 0.3.2         |          |           | published 2026-05-18 wave
+mixmax                 | PUB      | 0.2.2         |          |           | published 2026-05-18 wave
+nano-banana            | PUB      | 0.3.2         |          |           | published 2026-05-18 wave
+napkin                 | PUB      | 0.3.2         |          |           | published 2026-05-18 wave
+office                 | TODO     |               |          |           | held back — needs R5/2 + R5/3 on Rebel before publish
+outreach               | PUB      | 0.1.3         |          |           | published 2026-05-18 wave
+pandadoc               | PUB      | 0.2.2         |          |           | published 2026-05-18 wave
+quickbooks             | PUB      | 0.3.1         |          |           | published 2026-05-18 wave (intentional 0.2.1->0.3.1 minor delta, confirmed)
+retell-ai              | PUB      | 0.2.1         |          |           | published 2026-05-18 wave
+runway                 | PUB      | 0.3.2         |          |           | published 2026-05-18 wave
+salesforce             | PUB      | 0.1.2         |          |           | published 2026-05-18 wave
+servicenow             | PUB      | 0.2.2         |          |           | published 2026-05-18 wave
+slack                  | PUB      | 0.1.2         |          |           | published 2026-05-19 — security patch sub-wave (PR #35 lockfile fix + PR #36 version bump); live-probe gate 9/9 green
+talentlms              | PUB      | 0.2.2         |          |           | published 2026-05-18 wave
+workday                | PUB      | 0.2.2         |          |           | published 2026-05-18 wave
+zendesk                | PUB      | 0.3.2         |          |           | published 2026-05-18 wave
 ```
+
+Summary: **23/24 PUB** (slack inaugural-publish closed the security-patch sub-wave on 2026-05-19), **1/24 TODO** (office, gated on Rebel R5/2 + R5/3). All 23 `DSP/PR-OPEN/MRG` columns remain blank pending Rebel R7 merge — once R7 lands, fire 23 catalog-sync dispatches in one batch and watch the resulting PRs.
 
 ### Cool-down
 
@@ -207,8 +210,8 @@ Then close the Rebel catalog-sync PR without merging. See `docs/EMERGENCY_REVOKE
 
 1. **Second `@mindstone/` npm member**: add before Phase 3 to remove single-point-of-failure on the publisher account. Candidate: same person being added to `oss-maintainers` GitHub team.
 2. **Provenance attestations**: currently `false` in manual mode. Reconsider after Phase 2 completes — running 24 publishes via OIDC would require all the G1/G4 work the pivot deferred. Decision deferred to post-wave retrospective.
-3. **quickbooks minor-version delta**: legacy is 0.2.1, local is 0.3.1. Confirm intentional with the original committer before publishing. If not intentional, downgrade to 0.2.2 in a follow-up PR.
-4. **slack fresh-fresh**: confirm slack package was never intended to be published under legacy scope (no `@mindstone-engineering/mcp-server-slack` exists on npm). If it was, investigate why.
+3. ~~**quickbooks minor-version delta**~~: confirmed intentional with the committer on 2026-05-18; published at 0.3.1.
+4. ~~**slack fresh-fresh**~~: confirmed — slack was never on legacy scope. Inaugural `@mindstone/` publish landed at 0.1.2 on 2026-05-19 (the 0.1.1 target was bumped to 0.1.2 to ship the transitive-dep security patches in the same artifact).
 
 ---
 
