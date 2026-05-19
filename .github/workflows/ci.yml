@@ -41,9 +41,39 @@ jobs:
             exit 1
           fi
 
+  status-check:
+    name: STATUS.json drift check
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every connector that publishes a STATUS.json (all 26 today).
+        # Kept independent of the build-and-test matrix because that one is
+        # gated by node-version-x-connector test coverage, while this check
+        # is a single cross-file consistency assertion per connector.
+        connector: [apple-shortcuts, browser-automation, elevenlabs, email-imap, fathom, freshdesk, gamma, google-analytics, hubspot, humaans, kling, mixmax, nano-banana, napkin, office, outreach, pandadoc, quickbooks, retell-ai, runway, salesforce, servicenow, slack, talentlms, workday, zendesk]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+      - name: Verify STATUS.json against package.json, server.json, src/
+        run: node scripts/check-status.mjs ${{ matrix.connector }}
+
+  catalogue-check:
+    name: Catalogue is up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+      - name: Check committed docs/ catalogue matches generator output
+        run: node scripts/build-catalogue.mjs --check
+
   notify-failure:
     name: Slack CI Failure
-    needs: [build-and-test]
+    needs: [build-and-test, status-check, catalogue-check]
     if: failure()
     runs-on: ubuntu-latest
     steps:
