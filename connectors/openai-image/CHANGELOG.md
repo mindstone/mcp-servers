@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-05-19
+
+### Security
+
+- **Removed `OPENAI_API_BASE_URL` env override** — the connector now hard-pins to `https://api.openai.com` so an attacker-controlled environment cannot redirect prompts, image bytes, and the bearer token to a non-OpenAI host. (Reviewer finding HIGH-1, Round 1 § 13 review.)
+- **Removed prompt text from saved PNG filenames** — `generateFilename()` previously included a 40-char slug derived from the user prompt, which leaked prompt text into the filesystem and any consumer that read the saved path. Filenames are now `${timestamp}-${randomSuffix}.png` (single image) or `${timestamp}-${index+1}-${randomSuffix}.png` (batches). (Reviewer finding HIGH-2.)
+
+### Added
+
+- **`TIMEOUT` recovery code** — request-timeout failures now return a dedicated `TIMEOUT` code instead of being flattened into `NETWORK_ERROR`. Callers can distinguish timeout from DNS/network/caller-cancellation and surface a useful retry/raise-timeout hint. (Reviewer finding HIGH-3.)
+- Legacy fallback-directory migration now refuses to follow a symlinked modern target (`MCP-Generated-Images` as symlink); a sibling `MCP-Generated-Images-safe/` directory is used instead, with a `WARN`-level log entry. (Reviewer finding MEDIUM-4.)
+
+### Changed
+
+- Replaced the `AbortSignal.timeout()` + `AbortSignal.any()` composition (which leaked the internal timer beyond fetch lifetime) with an explicit `AbortController` + `setTimeout` + `clearTimeout` pattern in `finally`, still composing caller cancellation. The new pattern lets us detect whether the connector-owned timeout fired vs the caller cancelled, which is what enables the new `TIMEOUT` recovery code. (Reviewer finding MEDIUM-3.)
+
+### Documentation
+
+- The full Round 1 § 13 reviewer pass (lens-security + reviewer-gpt5.5-high + lens-behavioral-safety) and the Round 2 fix disposition (this release) are recorded in [`docs/reports/security-reviews/260503_openai-image_0.1.0.md`](https://github.com/mindstone/MindstoneRebel/blob/main/docs/reports/security-reviews/260503_openai-image_0.1.0.md) in the consuming repo.
+
+### Known residual findings (carried to 0.2.0+)
+
+- **MED-1** — Realpath workspace fence is check-then-use (TOCTOU): `targetReal` is `realpath()`-validated against the workspace, but the later `stat()` + `readFile()` happen by path. Active local race could swap the file between fence check and read. Closing this requires opening + validating the file descriptor in one operation; tracked for 0.2.0.
+- **MED-2** — Recovery error-code naming partially diverges from the originally documented contract (`WORKSPACE_FENCE_VIOLATION` vs `WORKSPACE_VIOLATION`, OpenAI-specific codes vs generic `UPSTREAM_ERROR`). Renaming is a breaking change and waits for 0.2.0.
+
 ## [0.1.0] - 2026-05-19
 
 ### Added
