@@ -5,6 +5,15 @@
 
 ServiceNow ITSM MCP server for Model Context Protocol hosts. Manage incidents, change requests, users, and knowledge base articles in ServiceNow through a standardised MCP interface.
 
+## Status
+
+- **Version:** [0.2.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-servicenow)
+- **Auth:** Basic auth (username + password) ([`SERVICENOW_PASSWORD`](./server.json))
+- **Tools:** [10](./src/tools/) (incidents, change-requests, users, knowledge)
+- **Surface:** cloud-api
+- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
+- **Machine-readable:** [`STATUS.json`](./STATUS.json)
+
 ## Requirements
 
 - Node.js 20+

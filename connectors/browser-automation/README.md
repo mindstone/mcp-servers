@@ -2,6 +2,15 @@
 
 Headless browser control via accessibility snapshots — navigate pages, fill forms, click elements, take screenshots, and manage tabs using the [agent-browser](https://www.npmjs.com/package/agent-browser) CLI.
 
+## Status
+
+- **Version:** [0.1.7](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-browser-automation)
+- **Auth:** None ([`server.json`](./server.json))
+- **Tools:** [18](./src/tools/) (navigation, observation, interaction, sessions)
+- **Surface:** browser-automation
+- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
+- **Machine-readable:** [`STATUS.json`](./STATUS.json)
+
 ## Installation
 
 ```bash

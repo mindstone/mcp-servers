@@ -1,0 +1,39 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "salesforce",
+  "package": "@mindstone/mcp-server-salesforce",
+  "version": "0.1.2",
+  "auth": {
+    "type": "oauth-local-callback",
+    "envVars": [
+      "SALESFORCE_CLIENT_SECRET",
+      "SALESFORCE_ACCESS_TOKEN"
+    ]
+  },
+  "tools": {
+    "count": 26,
+    "domains": [
+      "accounts",
+      "contacts",
+      "opportunities",
+      "leads",
+      "tasks",
+      "query"
+    ]
+  },
+  "surface": "cloud-api",
+  "hostsTested": [
+    "claude-desktop",
+    "cursor",
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/tools/",
+    "auth": "./src/",
+    "tests": "./test/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-salesforce",
+    "serverJson": "./server.json"
+  }
+}

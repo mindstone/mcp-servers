@@ -1,11 +1,77 @@
-# Slack MCP Server
+# @mindstone/mcp-server-slack
+
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-slack.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-slack)
+[![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
 Slack workspace MCP server — channels, messages, threads, reactions, users, files, bookmarks, and scheduled messages via the Slack Web API.
 
-## Installation
+*Multi-workspace Slack MCP. Host-driven OAuth, per-workspace credentials files on disk, and a security review on every release.*
+
+## Status
+
+- **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-slack)
+- **Auth:** OAuth (host-orchestrated) ([`SLACK_CLIENT_SECRET`](./server.json))
+- **Tools:** [23](./src/tools/) (messages, channels, threads, users, files)
+- **Surface:** cloud-api
+- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
+- **Machine-readable:** [`STATUS.json`](./STATUS.json)
+
+## Why this exists
+
+When we started building this connector, Slack had not yet released an official MCP server — that came later (announced February 2026, generally available April 2026). The community Slack MCPs available at the time each got parts of the job right, but none of them combined fast user-name lookups for small and medium workspaces, the correct mention format for modern Slack (most still used the deprecated `link_names=true`), support for more than one Slack workspace from the same user account, and tokens that stay on the user's own machine. Slack's [official server](https://docs.slack.dev/ai/slack-mcp-server/) now exists and is a fine choice for many use cases. We continue to maintain this one because the host application handles the login flow, each workspace has its own credentials file on disk under the user's control, and the connector goes through our own security review before each release.
+
+## Example interaction
+
+> "Find the most recent message from Alice in #q3-planning and react with :eyes:."
+
+Tools the host calls:
+1. `lookup_user_by_email` — resolves Alice's email to her Slack user ID.
+2. `search_slack_messages` — searches `#q3-planning` for her most recent message, returning the channel + timestamp.
+3. `add_slack_reaction` — adds the `eyes` reaction to that message.
+
+Response (trimmed):
+
+```json
+{
+  "match": {
+    "channel": "C08X...",
+    "ts": "1715953812.004200",
+    "user": "U07Z...",
+    "text": "Pushed the updated forecast to the doc, ready for review."
+  },
+  "reaction": {
+    "ok": true,
+    "name": "eyes"
+  }
+}
+```
+
+## Requirements
+
+- Node.js 20+
+- npm
+- A host application that performs the Slack OAuth flow and writes per-workspace token files to `${SLACK_CONFIG_PATH}/workspaces/{teamId}.json`. This server reads those files; it does not initiate OAuth itself.
+
+## Quick Start
+
+### Install & build
+
+```bash
+cd <path-to-repo>/connectors/slack
+npm install
+npm run build
+```
+
+### npx (once published)
 
 ```bash
 npx -y @mindstone/mcp-server-slack
+```
+
+### Local
+
+```bash
+node dist/index.js
 ```
 
 ## Configuration
@@ -47,7 +113,51 @@ The host's MCP service recognises this shape and dispatches to its registered Sl
 
 The OSS server **never** initiates OAuth itself.
 
-## Available Tools (23)
+## Host configuration examples
+
+This server is designed for host-orchestrated OAuth: the host writes per-workspace token files to disk and the server reads them. The examples below show the env shape — your host application is responsible for populating `${SLACK_CONFIG_PATH}/workspaces/{teamId}.json` before tool calls succeed.
+
+### Claude Desktop / Cursor
+
+```json
+{
+  "mcpServers": {
+    "Slack": {
+      "command": "npx",
+      "args": ["-y", "@mindstone/mcp-server-slack"],
+      "env": {
+        "SLACK_CONFIG_PATH": "/absolute/path/to/slack-config",
+        "SLACK_TEAM_ID": "T0123ABCD",
+        "SLACK_CLIENT_ID": "your-slack-app-client-id",
+        "SLACK_CLIENT_SECRET": "your-slack-app-client-secret"
+      }
+    }
+  }
+}
+```
+
+Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for that team, every tool call returns a structured `auth_required` response (see the Authentication flow above).
+
+### Local development (no npm publish needed)
+
+```json
+{
+  "mcpServers": {
+    "Slack": {
+      "command": "node",
+      "args": ["<path-to-repo>/connectors/slack/dist/index.js"],
+      "env": {
+        "SLACK_CONFIG_PATH": "/absolute/path/to/slack-config",
+        "SLACK_TEAM_ID": "T0123ABCD",
+        "SLACK_CLIENT_ID": "your-slack-app-client-id",
+        "SLACK_CLIENT_SECRET": "your-slack-app-client-secret"
+      }
+    }
+  }
+}
+```
+
+## Tools (23)
 
 ### Authentication
 - `authenticate_slack_workspace` — Returns structured auth_required response; the host drives OAuth.
@@ -88,20 +198,14 @@ The OSS server **never** initiates OAuth itself.
 - `add_slack_bookmark` — Add a bookmark to a channel.
 - `add_slack_reminder` — \[EXPERIMENTAL\] Create a reminder (Slack API partially deprecated; prefer `schedule_slack_message`).
 
-## Cohort hygiene
+## Security notes
 
-This server bakes in the following cohort-wide MCP-server fixes:
+- **Slack-owned download URL guard** — `download_slack_file` validates that the Slack-supplied `url_private_download` is HTTPS and on `slack.com` / `*.slack.com` before attaching the workspace bearer token.
+- **Atomic, durable token persistence** — token files are written via temp-file + `fsync` + `rename`, then `chmod 0600`, so a crash mid-write cannot lose Slack's single-use refresh token.
+- **Refresh-failure differentiation** — transient network errors, HTTP 429 rate-limits, Slack auth rejections (`invalid_grant`), and malformed responses produce distinct error codes so hosts can react correctly without retrying unrecoverable failures.
+- **No host-internal vocabulary** — host-side bridge identifiers and bundled HTTP paths are explicitly absent from the published artefact (enforced by `scripts/check-no-bridge-strings.sh` during `prepublishOnly`).
 
-- **`SERVER_VERSION` from `package.json`** — never drifts from the published version.
-- **Tool annotations** — every tool declares `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` accurately.
-- **Recovery-guidance contract** — every error response includes `action_required` and `next_step`.
-- **Request timeout** — 60s default, overridable via `SLACK_REQUEST_TIMEOUT_MS`, composed with caller `AbortSignal` via `AbortSignal.any()`.
-- **No host-internal vocabulary** — host-side bridge identifiers and bundled HTTP paths are explicitly absent from the published artefact (enforced by `scripts/check-no-bridge-strings.sh`, which scans the packed tarball during `prepublishOnly`).
-- **MSW request manifest** — tests fail if any production URL drifts from a registered MSW handler.
-- **Atomic, durable token persistence** — temp-file write + `fsync` + `rename` + parent-directory `fsync` (POSIX), with a final explicit `chmod 0600` on the token path; rotated tokens are cached in memory before the disk write so a persistence failure cannot lose Slack's single-use refresh token.
-- **Refresh-failure differentiation** — distinct error codes for transient network errors, HTTP 429 rate-limits (with `retry_after_seconds`), Slack-side auth rejections (`invalid_grant` family — surfaces as `auth_required` so the host can dispatch reauth), and malformed responses.
-- **Slack-owned download URL guard** — `download_slack_file` validates that the Slack-supplied `url_private_download` is HTTPS and on `slack.com` / `*.slack.com` before attaching the workspace bearer token, defending against tampered-API-response token-exfiltration.
-- **Distinct token-file error states** — `loadTokens()` and the workspace listing distinguish missing / permission-denied / corrupt with separate codes so non-technical users get accurate remediation guidance instead of a misleading "fresh install" prompt.
+Full implementation-level notes (request-timeout composition, MSW request manifest, token-file error states, server-version drift checks, etc.) live in [`docs/connectors/slack-cohort-hygiene.md`](../../docs/connectors/slack-cohort-hygiene.md).
 
 ## Live probe
 
@@ -132,6 +236,6 @@ npm run probe:live:gate
 
 `probe:live:gate` sets `LIVE_PROBE_REQUIRE_WRITES=1`, which causes the probe to **fail** rather than skip if `LIVE_PROBE_TEST_CHANNEL_ID` is missing or any write probe doesn't complete cleanly. Use this before cutting a release.
 
-## License
+## Licence
 
-FSL-1.1-MIT
+[FSL-1.1-MIT](./LICENSE) — Functional Source License, Version 1.1, with MIT future licence. The software converts to MIT licence on 2030-04-08.

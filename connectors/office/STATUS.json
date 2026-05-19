@@ -1,0 +1,33 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "office",
+  "package": "@mindstone/mcp-server-office",
+  "version": "0.1.4",
+  "auth": {
+    "type": "none",
+    "envVars": []
+  },
+  "tools": {
+    "count": 53,
+    "domains": [
+      "word",
+      "excel",
+      "powerpoint",
+      "setup"
+    ]
+  },
+  "surface": "desktop-addin",
+  "hostsTested": [
+    "claude-desktop",
+    "cursor",
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/",
+    "auth": "./src/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-office",
+    "serverJson": "./server.json"
+  }
+}

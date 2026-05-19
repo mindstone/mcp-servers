@@ -5,6 +5,15 @@
 
 Email IMAP/SMTP MCP server for Model Context Protocol hosts. Read, search, send, and manage emails through IMAP and SMTP — supports iCloud Mail, Gmail, Yahoo Mail, Outlook / Microsoft 365, and custom IMAP providers.
 
+## Status
+
+- **Version:** [0.2.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-email-imap)
+- **Auth:** App password ([`EMAIL_IMAP_PASSWORD`](./server.json))
+- **Tools:** [9](./src/tools/) (mailbox, messages, send)
+- **Surface:** local-protocol
+- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
+- **Machine-readable:** [`STATUS.json`](./STATUS.json)
+
 ## Requirements
 
 - Node.js 20+

@@ -5,6 +5,15 @@
 
 Google Analytics 4 MCP server for Model Context Protocol hosts. Discover account/property structure, explore the live schema, run reports (with row-volume safety), and inspect admin configuration through a standardised MCP interface.
 
+## Status
+
+- **Version:** [0.1.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-google-analytics)
+- **Auth:** OAuth via Google ADC ([`GOOGLE_APPLICATION_CREDENTIALS`](./server.json))
+- **Tools:** [25](./src/tools/) (accounts, schema, reporting, admin)
+- **Surface:** cloud-api
+- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
+- **Machine-readable:** [`STATUS.json`](./STATUS.json)
+
 ## Requirements
 
 - Node.js 20+

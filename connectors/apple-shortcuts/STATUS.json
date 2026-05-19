@@ -1,0 +1,30 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "apple-shortcuts",
+  "package": "@mindstone/mcp-server-apple-shortcuts",
+  "version": "0.1.2",
+  "auth": {
+    "type": "none",
+    "envVars": []
+  },
+  "tools": {
+    "count": 2,
+    "domains": [
+      "shortcuts"
+    ]
+  },
+  "surface": "local-cli",
+  "hostsTested": [
+    "claude-desktop",
+    "cursor",
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/",
+    "auth": "./src/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-apple-shortcuts",
+    "serverJson": "./server.json"
+  }
+}

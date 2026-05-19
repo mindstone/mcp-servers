@@ -1,0 +1,37 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "talentlms",
+  "package": "@mindstone/mcp-server-talentlms",
+  "version": "0.2.2",
+  "auth": {
+    "type": "api-key",
+    "envVars": [
+      "TALENTLMS_API_KEY"
+    ]
+  },
+  "tools": {
+    "count": 24,
+    "domains": [
+      "users",
+      "courses",
+      "groups",
+      "reporting",
+      "assessments"
+    ]
+  },
+  "surface": "cloud-api",
+  "hostsTested": [
+    "claude-desktop",
+    "cursor",
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/tools/",
+    "auth": "./src/",
+    "tests": "./test/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-talentlms",
+    "serverJson": "./server.json"
+  }
+}

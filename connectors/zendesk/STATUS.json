@@ -1,0 +1,36 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "zendesk",
+  "package": "@mindstone/mcp-server-zendesk",
+  "version": "0.3.2",
+  "auth": {
+    "type": "hybrid",
+    "envVars": [
+      "ZENDESK_CLIENT_SECRET"
+    ]
+  },
+  "tools": {
+    "count": 20,
+    "domains": [
+      "tickets",
+      "users",
+      "comments",
+      "macros"
+    ]
+  },
+  "surface": "cloud-api",
+  "hostsTested": [
+    "claude-desktop",
+    "cursor",
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/tools/",
+    "auth": "./src/",
+    "tests": "./test/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-zendesk",
+    "serverJson": "./server.json"
+  }
+}

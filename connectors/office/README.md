@@ -3,15 +3,48 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-office.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-office)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Microsoft Office MCP server — read and edit Word documents, Excel workbooks, and PowerPoint presentations from a Model Context Protocol host.
+Read and edit Word documents, Excel workbooks, and PowerPoint presentations from desktop Microsoft 365 via an Office Add-in sidecar.
 
-This package bundles three pieces that version together:
+*Desktop-only Office MCP. Edits the Word/Excel/PowerPoint documents the user already has open on macOS or Windows.*
 
-- **Stdio MCP server** (`dist/index.js`) — exposes ~50 Office tools over MCP
-- **Office sidecar** (`dist/sidecar/cli.js`) — a local HTTPS server that bridges the MCP process and the Office task pane over WebSocket
-- **Office Add-in assets** (`dist/addin/`, `manifest.xml`) — the task pane HTML/JS sideloaded into Word, Excel, and PowerPoint
+## Status
 
-Desktop-only: Office Add-in sideload and `office-addin-dev-certs` HTTPS cert generation only work on desktop operating systems (macOS, Windows). There is no cloud mode.
+- **Version:** [0.1.4](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-office)
+- **Auth:** None ([`server.json`](./server.json))
+- **Tools:** [53](./src/) (word, excel, powerpoint, setup)
+- **Surface:** desktop-addin
+- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
+- **Machine-readable:** [`STATUS.json`](./STATUS.json)
+
+## Why this exists
+
+At the time we built this, Microsoft did not ship an MCP server for the *desktop* Office apps, and the community options we found either targeted cloud-stored documents through Microsoft Graph or only worked on Windows. We needed something that could edit a Word document, Excel workbook, or PowerPoint deck the user already has open — on both macOS and Windows — with live access to selections, formulas, and tracked changes. This package bundles the MCP server, the small local helper that talks to Office, and the Office Add-in itself into a single npm install, so the three pieces always ship at the same version.
+
+## Example interaction
+
+> "In the Excel workbook I have open, fill column D with =B*C for each data row and bold the totals row."
+
+Tools the host calls:
+1. `rebel_office_excel_set_formula` — writes `=B<row>*C<row>` into each cell in column D.
+2. `rebel_office_excel_format_range` — applies bold to the totals row range.
+
+Response (trimmed):
+
+```json
+{
+  "set_formula": {
+    "worksheet": "Sheet1",
+    "range": "D2:D24",
+    "formula": "=B2*C2",
+    "filled_rows": 23
+  },
+  "format_range": {
+    "worksheet": "Sheet1",
+    "range": "A25:D25",
+    "bold": true
+  }
+}
+```
 
 ## Requirements
 
@@ -41,25 +74,6 @@ npx -y @mindstone/mcp-server-office
 ```bash
 node dist/index.js
 ```
-
-## How it works
-
-1. The host (e.g. Mindstone Rebel) spawns the stdio MCP server.
-2. The MCP server expects a running Office sidecar — it discovers it via the
-   state file path in `MCP_OFFICE_SIDECAR_STATE`.
-3. If no sidecar is running, the MCP server lazy-spawns one from
-   `dist/sidecar/cli.js`.
-4. On first start, the sidecar generates a trusted localhost HTTPS certificate
-   (`office-addin-dev-certs`), binds to port 52100 (with a small fallback
-   window), writes `manifest.word.xml` / `manifest.excel.xml` /
-   `manifest.powerpoint.xml` into each Office app's WEF folder, and writes
-   a state file containing its port + auth token.
-5. Office detects the sideloaded manifests at launch and shows a Rebel ribbon
-   button. Clicking it opens the add-in task pane, which connects back to the
-   sidecar over authenticated WebSocket.
-6. Tool calls on the MCP server are forwarded via HTTPS to the sidecar, then
-   routed over WebSocket to the task pane, which calls the Office.js APIs in
-   the Word/Excel/PowerPoint context.
 
 ## Configuration
 
@@ -119,7 +133,7 @@ Claude Desktop is possible but the host must provide a writable
   "name": "RebelOffice",
   "type": "stdio",
   "command": "npx",
-  "args": ["-y", "@mindstone/mcp-server-office@0.1.0"],
+  "args": ["-y", "@mindstone/mcp-server-office@0.1.4"],
   "env": {
     "MCP_OFFICE_SIDECAR_STATE": "~/Library/Application Support/mindstone-rebel/office-sidecar/sidecar-state.json"
   },
@@ -128,15 +142,68 @@ Claude Desktop is possible but the host must provide a writable
 }
 ```
 
-## Tools (~50)
+## Tools (53)
 
-- **Setup**: `rebel_office_setup`, `rebel_office_status`
-- **Word** (17): document read/write, selection, search-replace, track-changes, styles, list manipulation, image insert, comments, etc.
-- **Excel** (22): workbook/sheet/range read-write, formulas, formatting, named ranges, tables, charts, pivots, filters, validation, etc.
-- **PowerPoint** (12): slide manipulation, text/shape/image insert, master/layout reads, notes, export, etc.
+### Setup
+- `rebel_office_setup` — Install or repair (or uninstall) the Office add-in.
+- `rebel_office_status` — Check Office connection status for Word, Excel, PowerPoint.
 
-The authoritative tool list and schemas are registered in `src/index.ts` and
-returned by `listTools`.
+### Word (17)
+- `rebel_office_word_read_document` — Read the active Word document body, paginated by paragraph.
+- `rebel_office_word_get_document_structure` — Get the heading/section outline of the document.
+- `rebel_office_word_get_selection` — Get the currently selected text and location.
+- `rebel_office_word_find_text` — Search for text occurrences with surrounding context.
+- `rebel_office_word_insert_text` — Insert text at a location or replace the selection (destructive).
+- `rebel_office_word_replace_text` — Find-and-replace text in the document (destructive).
+- `rebel_office_word_format_text` — Apply font, color, highlight, or alignment formatting (destructive).
+- `rebel_office_word_insert_table` — Insert a table with headers and rows (destructive).
+- `rebel_office_word_insert_image` — Insert an image from a file path or base64 data (destructive).
+- `rebel_office_word_insert_break` — Insert a page or section break (destructive).
+- `rebel_office_word_set_header_footer` — Set header or footer text and alignment (destructive).
+- `rebel_office_word_get_properties` — Get document metadata (title, author, counts).
+- `rebel_office_word_get_comments` — Read comments and reply threads.
+- `rebel_office_word_add_comment` — Add a comment or threaded reply on selected text (destructive).
+- `rebel_office_word_resolve_comment` — Resolve or delete a comment by ID (destructive).
+- `rebel_office_word_get_tracked_changes` — Read tracked changes (revisions).
+- `rebel_office_word_accept_reject_changes` — Accept or reject tracked changes in bulk or by ID (destructive).
+
+### Excel (22)
+- `rebel_office_excel_read_range` — Read cell values from an A1 range or named range.
+- `rebel_office_excel_write_range` — Write a 2D array of values to a range (destructive).
+- `rebel_office_excel_get_worksheets` — List worksheets with positions and used ranges.
+- `rebel_office_excel_add_worksheet` — Add a new worksheet at a chosen position (destructive).
+- `rebel_office_excel_delete_worksheet` — Delete a worksheet and all its data (destructive).
+- `rebel_office_excel_read_table` — Read rows from a named Excel table.
+- `rebel_office_excel_create_table` — Convert a range into a named Excel table (destructive).
+- `rebel_office_excel_set_formula` — Set a formula in a cell, with optional fill-down (destructive).
+- `rebel_office_excel_get_formulas` — Read formula strings (not values) from a range.
+- `rebel_office_excel_create_chart` — Create an embedded chart from a data range (destructive).
+- `rebel_office_excel_format_range` — Apply font, fill, borders, and number formats (destructive).
+- `rebel_office_excel_add_conditional_formatting` — Add color scales, data bars, or rule-based formats (destructive).
+- `rebel_office_excel_sort_range` — Sort a range or table by one or more columns (destructive).
+- `rebel_office_excel_filter_table` — Apply or clear auto-filter on a table or range (destructive).
+- `rebel_office_excel_get_named_ranges` — List named ranges and tables in the workbook.
+- `rebel_office_excel_insert_rows_columns` — Insert rows or columns at a position (destructive).
+- `rebel_office_excel_delete_rows_columns` — Delete rows or columns and their data (destructive).
+- `rebel_office_excel_merge_cells` — Merge or unmerge cells in a range (destructive).
+- `rebel_office_excel_auto_fit` — Auto-fit column widths or row heights (destructive).
+- `rebel_office_excel_add_data_validation` — Add input validation rules to a range (destructive).
+- `rebel_office_excel_get_comments` — Read threaded cell comments.
+- `rebel_office_excel_add_comment` — Add a comment or reply on a cell (destructive).
+
+### PowerPoint (12)
+- `rebel_office_powerpoint_get_slides` — List slides with layout, title, and shape counts.
+- `rebel_office_powerpoint_get_slide_content` — Get all shapes and text on a specific slide.
+- `rebel_office_powerpoint_add_slide` — Add a new slide with a layout and optional content (destructive).
+- `rebel_office_powerpoint_delete_slide` — Delete a slide by index (destructive).
+- `rebel_office_powerpoint_reorder_slides` — Move a slide to a new position (destructive).
+- `rebel_office_powerpoint_add_text_box` — Add a positioned text box to a slide (destructive).
+- `rebel_office_powerpoint_add_image` — Add an image to a slide from path or base64 (destructive).
+- `rebel_office_powerpoint_add_shape` — Add a geometric shape with optional text and fill (destructive).
+- `rebel_office_powerpoint_update_text` — Update text in a shape or layout placeholder (destructive).
+- `rebel_office_powerpoint_get_speaker_notes` — Read speaker notes for one or all slides.
+- `rebel_office_powerpoint_set_speaker_notes` — Set or replace speaker notes for a slide (destructive).
+- `rebel_office_powerpoint_get_presentation_properties` — Get presentation metadata, dimensions, and layouts.
 
 ## Smoke test
 
@@ -157,42 +224,6 @@ manifest. The server does not need a live sidecar to respond to `listTools`.
 See [SECURITY.md](./SECURITY.md) for this connector's security policy and the
 repository-level [SECURITY.md](../../SECURITY.md) for vulnerability reporting.
 
-## Known drift risk: vendored code from the Mindstone Rebel monorepo
+## Architecture and drift-risk notes
 
-Some files in this package are **byte-compatible copies** of code that also
-lives in the Mindstone Rebel monorepo (`github.com/mindstone/MindstoneRebel`).
-They have to stay in sync on both sides; there is no automation today.
-
-**Vendored from Rebel's `src/shared/sidecar/`** (wire-format contract between
-Rebel's main process and this sidecar CLI):
-
-- `src/shared/sidecar/stateFile.ts`
-- `src/shared/sidecar/readySignal.ts`
-- `src/shared/sidecar/constantTime.ts`
-- `src/shared/sidecar/errorMessages.ts`
-
-**Vendored from Rebel's `src/core/appBridge/`** (minimum slice needed for the
-sidecar bundle; ~1,444 LOC across four files):
-
-- `src/shared/appBridge/server/commandRouter.ts`
-- `src/shared/appBridge/server/connectionManager.ts`
-- `src/shared/appBridge/shared/errors.ts`
-- `src/shared/appBridge/shared/protocol.ts`
-
-**If the Rebel-side files change, this package's copies will drift silently.**
-The state-file / ready-signal schemas in particular are a wire-format contract
-— the Rebel main process parses what the sidecar writes — and a silent drift
-will surface as runtime `ReadySignalSchema.safeParse()` failures or sidecar
-startup regressions.
-
-### TODO — future work
-
-Extract these into their own published package (e.g.
-`@mindstone/app-bridge-core` plus a shared sidecar-protocol
-package) so they become versioned contracts rather than vendored code.
-
-**Until then:** anyone touching either side must manually keep both copies in
-sync. When editing here, diff against the corresponding file in the Rebel
-monorepo (`src/shared/sidecar/*` and `src/core/appBridge/*`) and copy the
-change across before landing. Both sides are covered by their own test suites
-but neither proves the other's copy is byte-current.
+Sidecar lifecycle, port allocation, manifest sideloading, and the byte-compatible code vendored from the Mindstone Rebel monorepo are documented in [`docs/connectors/office-architecture.md`](../../docs/connectors/office-architecture.md). That file is the canonical reference if you are debugging the sidecar handshake or planning a release that touches the vendored sidecar/appBridge code.
