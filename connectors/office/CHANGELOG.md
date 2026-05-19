@@ -10,6 +10,8 @@ The history below `[Unreleased]` was reconstructed from git history during the
 are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
+### Security
+- **sidecar**: Reject unauthenticated requests to `/taskpane.html`, `/taskpane.js`, and `/assets/*` whose `Host` header does not name a loopback host (`localhost`, `127.0.0.1`, or `::1`) on the bound port. The page embeds the WebSocket auth token, so this closes a DNS-rebinding path where a browser tab tricked into resolving an attacker-controlled hostname to 127.0.0.1 could fetch the page cross-origin and exfiltrate the token. Office's manifest only ever uses `localhost:<port>`, so legitimate add-in loads are unaffected.
 
 ## [0.1.4] - 2026-05-14
 ### Fixed

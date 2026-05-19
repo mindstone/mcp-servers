@@ -159,6 +159,24 @@ describe('office sidecar', () => {
     });
   });
 
+  it('rejects /taskpane.html requests whose Host header is not a loopback host (DNS-rebinding guard)', async () => {
+    const { baseUrl, sidecar } = await startTestServer();
+    const response = await fetchHttps(`${baseUrl}/taskpane.html`, {
+      headers: { Host: `attacker.example:${sidecar.port}` },
+    });
+    expect(response.status).toBe(401);
+  });
+
+  it('accepts /taskpane.html when Host header is localhost on the bound port', async () => {
+    const { baseUrl, sidecar } = await startTestServer();
+    // No addinDir was passed to startTestServer, so a successful guard pass
+    // falls through to the "Add-in not built" 404 path. Either way, NOT 401.
+    const response = await fetchHttps(`${baseUrl}/taskpane.html`, {
+      headers: { Host: `localhost:${sidecar.port}` },
+    });
+    expect(response.status).not.toBe(401);
+  });
+
   it('accepts auth then register from a Word websocket client', async () => {
     const { sidecar, baseUrl } = await startTestServer();
     const socket = await connectWebSocket(sidecar.port);
