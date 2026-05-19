@@ -14,15 +14,18 @@ Vanta compliance MCP server — read and write vulnerabilities, tests, controls,
 | Field | Value |
 |-------|-------|
 | Version | 0.1.0 |
-| Auth | OAuth (client credentials) (`VANTA_CLIENT_ID`, `VANTA_CLIENT_SECRET`, `VANTA_REGION`) |
-| Tools | 18 (—) |
-| Surface | — |
-| Hosts tested | — |
+| Auth | OAuth (`VANTA_CLIENT_SECRET`) |
+| Tools | 18 (vulnerabilities, tests, controls, resources, evidence, people, vendors, documents) |
+| Surface | cloud API |
+| Hosts tested | Mindstone Rebel |
 
 ## Evidence
 
 | Artefact | Location |
 |----------|----------|
+| Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/vanta/CHANGELOG.md) |
+| Tools source | [`src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/vanta/src/tools/) |
+| Tests | [`test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/vanta/test/) |
 | Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/vanta/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/vanta/server.json) |
 | npm package | [@mindstone/mcp-server-vanta](https://www.npmjs.com/package/@mindstone/mcp-server-vanta) |

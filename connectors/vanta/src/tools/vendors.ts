@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { VantaApiError, stringifyToolResult, toToolErrorResponse, validateDocumentUrl, type VantaApiClient } from '../api.js';
+import { VantaApiError, stringifyToolResult, toToolErrorResponse, validateDocumentUrlWithDns, type VantaApiClient } from '../api.js';
 
 export const listVendorsSchema = z.object({
   category: z.string().optional().describe('Filter by vendor category'),
@@ -139,7 +139,7 @@ export async function vantaAttachVendorDocument(
 ): Promise<string> {
   try {
     client.validateId(args.vendor_id);
-    const safeUrl = validateDocumentUrl(args.document_url, 'document_url');
+    const safeUrl = await validateDocumentUrlWithDns(args.document_url, 'document_url');
     const body: Record<string, unknown> = {
       documentName: args.document_name,
       documentUrl: safeUrl.toString(),

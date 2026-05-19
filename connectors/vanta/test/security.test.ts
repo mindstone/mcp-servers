@@ -1,6 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
-import { validateDocumentUrl, VantaApiError } from '../src/api.js';
+import {
+  setDnsLookupForTesting,
+  validateDocumentUrl,
+  validateDocumentUrlWithDns,
+  VantaApiError,
+} from '../src/api.js';
 
 describe('validateDocumentUrl — SSRF guard', () => {
   describe('accepts safe URLs', () => {
@@ -119,6 +124,37 @@ describe('validateDocumentUrl — SSRF guard', () => {
       expect(() => validateDocumentUrl('https://[fd00::1]/doc.pdf'))
         .toThrowError(VantaApiError);
     });
+
+    it('rejects IPv6 unspecified ::', () => {
+      expect(() => validateDocumentUrl('https://[::]/doc.pdf'))
+        .toThrowError(VantaApiError);
+    });
+  });
+
+  describe('rejects IPv4-mapped IPv6 (C6 fix)', () => {
+    it('rejects [::ffff:127.0.0.1] (mapped loopback)', () => {
+      expect(() => validateDocumentUrl('https://[::ffff:127.0.0.1]/doc.pdf'))
+        .toThrowError(VantaApiError);
+    });
+
+    it('rejects [::ffff:10.0.0.1] (mapped RFC1918)', () => {
+      expect(() => validateDocumentUrl('https://[::ffff:10.0.0.1]/doc.pdf'))
+        .toThrowError(VantaApiError);
+    });
+
+    it('rejects [::ffff:169.254.169.254] (mapped IMDS)', () => {
+      expect(() => validateDocumentUrl('https://[::ffff:169.254.169.254]/doc.pdf'))
+        .toThrowError(VantaApiError);
+    });
+  });
+
+  describe('strips embedded user-info credentials', () => {
+    it('drops https://user:pass@example.com', () => {
+      const url = validateDocumentUrl('https://leaked-token:swordfish@example.com/doc.pdf');
+      expect(url.toString()).not.toMatch(/leaked-token|swordfish/);
+      expect(url.username).toBe('');
+      expect(url.password).toBe('');
+    });
   });
 
   describe('rejects malformed URLs', () => {
@@ -128,6 +164,77 @@ describe('validateDocumentUrl — SSRF guard', () => {
 
     it('rejects a non-URL string', () => {
       expect(() => validateDocumentUrl('not a url')).toThrowError(VantaApiError);
+    });
+  });
+
+  describe('DNS resolution layer (C6 fix — anti-rebind defence in depth)', () => {
+    afterEach(() => {
+      setDnsLookupForTesting(null);
+    });
+
+    it('rejects hostnames whose A record resolves to loopback', async () => {
+      setDnsLookupForTesting(async () => [{ address: '127.0.0.1', family: 4 }]);
+      await expect(
+        validateDocumentUrlWithDns('https://internal-spoof.example.com/doc.pdf'),
+      ).rejects.toThrowError(VantaApiError);
+    });
+
+    it('rejects hostnames whose A record resolves to IMDS', async () => {
+      setDnsLookupForTesting(async () => [{ address: '169.254.169.254', family: 4 }]);
+      await expect(
+        validateDocumentUrlWithDns('https://imds-spoof.example.com/'),
+      ).rejects.toThrowError(VantaApiError);
+    });
+
+    it('rejects hostnames whose AAAA record resolves to IPv6 loopback', async () => {
+      setDnsLookupForTesting(async () => [{ address: '::1', family: 6 }]);
+      await expect(
+        validateDocumentUrlWithDns('https://v6-spoof.example.com/'),
+      ).rejects.toThrowError(VantaApiError);
+    });
+
+    it('rejects hostnames whose AAAA record resolves to IPv4-mapped loopback', async () => {
+      setDnsLookupForTesting(async () => [{ address: '::ffff:127.0.0.1', family: 6 }]);
+      await expect(
+        validateDocumentUrlWithDns('https://mapped-spoof.example.com/'),
+      ).rejects.toThrowError(VantaApiError);
+    });
+
+    it('rejects when DNS lookup itself fails (fail-closed)', async () => {
+      setDnsLookupForTesting(async () => {
+        throw Object.assign(new Error('ENOTFOUND'), { code: 'ENOTFOUND' });
+      });
+      await expect(
+        validateDocumentUrlWithDns('https://nonexistent.example.invalid/'),
+      ).rejects.toThrowError(VantaApiError);
+    });
+
+    it('accepts hostnames whose A records are all public', async () => {
+      setDnsLookupForTesting(async () => [{ address: '93.184.216.34', family: 4 }]);
+      const url = await validateDocumentUrlWithDns('https://example.com/doc.pdf');
+      expect(url.hostname).toBe('example.com');
+    });
+
+    it('rejects when any A record is internal (mixed records)', async () => {
+      setDnsLookupForTesting(async () => [
+        { address: '93.184.216.34', family: 4 },
+        { address: '10.0.0.1', family: 4 },
+      ]);
+      await expect(
+        validateDocumentUrlWithDns('https://mixed-spoof.example.com/'),
+      ).rejects.toThrowError(VantaApiError);
+    });
+
+    it('skips DNS for literal IP hostnames (syntactic check is authoritative)', async () => {
+      let dnsCalls = 0;
+      setDnsLookupForTesting(async () => {
+        dnsCalls += 1;
+        return [{ address: '93.184.216.34', family: 4 }];
+      });
+      await expect(
+        validateDocumentUrlWithDns('https://127.0.0.1/doc.pdf'),
+      ).rejects.toThrowError(VantaApiError);
+      expect(dnsCalls).toBe(0);
     });
   });
 

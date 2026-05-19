@@ -47,9 +47,18 @@
           "description": "Per-request timeout in milliseconds (default 60000)",
           "isRequired": false,
           "isSecret": false,
-          "format": "string"
+          "format": "number",
+          "default": "60000"
         }
       ]
     }
-  ]
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "com.mindstone.rebel": {
+        "catalogId": "bundled-vanta",
+        "provider": "rebel-oss"
+      }
+    }
+  }
 }
