@@ -187,12 +187,14 @@ describe('Replit SSH MCP — mock tests', () => {
       expect(tool.inputSchema.required ?? []).not.toContain('encoding');
     });
 
-    it('replit_setup_ssh has only optional force_regenerate', async () => {
+    it('replit_setup_ssh exposes optional setup toggles', async () => {
       client = await createTestClient(tempHome);
       const tools = await listTools(client);
       const tool = tools.find((t) => t.name === 'replit_setup_ssh')!;
       expect(tool.inputSchema.properties).toHaveProperty('force_regenerate');
+      expect(tool.inputSchema.properties).toHaveProperty('backup_existing_config');
       expect(tool.inputSchema.required ?? []).not.toContain('force_regenerate');
+      expect(tool.inputSchema.required ?? []).not.toContain('backup_existing_config');
     });
   });
 

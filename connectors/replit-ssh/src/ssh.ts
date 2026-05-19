@@ -237,6 +237,7 @@ export function createSshConnection(host: string, user: string, privateKey: Buff
       rejectWithContext(err);
     });
 
+    // SECURITY: SSH host keys not verified — see Known Limitations in README + security review M3.
     client.connect({
       host,
       port: 22,
@@ -408,6 +409,7 @@ export function createDiagnosticSshConnection(
       addEvent('end', 'Connection ended');
     });
 
+    // SECURITY: SSH host keys not verified — see Known Limitations in README + security review M3.
     client.connect({
       host,
       port: 22,

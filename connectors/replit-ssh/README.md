@@ -52,6 +52,21 @@ This server has no required environment variables. Optional:
 - **Atomic write invariant.** `replit_write_file` writes to a randomized temp filename, renames via OpenSSH's POSIX rename extension (`ext_openssh_rename`), and verifies the final file's SHA-256 against the expected hash. If the server lacks the extension and the target file already exists, the write fails rather than falling back to `unlink + rename`.
 - **Read-back verification.** Every `replit_write_file` re-reads the final file and asserts SHA-256 equality before returning `verified: true`.
 
+## Known Limitations
+
+### SSH host-key verification (planned for a future release)
+
+This connector does not currently verify the SSH server's host key when connecting
+to `*.replit.dev` hosts. A network-path man-in-the-middle could intercept SFTP
+sessions to read/modify file contents (the SSH private key itself is not
+exposed via this vector, since public-key auth does not transmit the private key).
+
+This is on the roadmap as a TOFU (trust-on-first-use) verification layer with
+optional Replit-published host-key pinning. Track the issue at <link to be filed>.
+
+Mitigations: avoid using this connector over untrusted networks (public wifi,
+shared ISPs) until host-key verification ships.
+
 ## License
 
 [FSL-1.1-MIT](./LICENSE)

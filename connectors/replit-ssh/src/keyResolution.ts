@@ -6,6 +6,7 @@ import SSHConfig from 'ssh-config';
 
 const { parsePrivateKey } = sshpk;
 
+import { findFirstIdentityFileForHost } from './configEvaluator.js';
 import type { StructuredError } from './errors.js';
 
 export const SSH_KEY_FILENAME = 'rebel-replit';
@@ -55,14 +56,7 @@ export function resolveKeyPathForHost(host: string): KeyResolution {
     };
   }
 
-  const computed = config.compute(host);
-  const identityFile = computed.IdentityFile;
-
-  if (!identityFile) {
-    return { source: 'default', keyPath: SSH_KEY_PATH };
-  }
-
-  const rawPath = Array.isArray(identityFile) ? identityFile[0] : identityFile;
+  const rawPath = findFirstIdentityFileForHost(config, host);
   if (!rawPath) {
     return { source: 'default', keyPath: SSH_KEY_PATH };
   }
