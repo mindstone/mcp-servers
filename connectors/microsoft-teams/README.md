@@ -1,35 +1,154 @@
-# Microsoft 365 Teams MCP Server
+# @mindstone/mcp-server-microsoft-teams
 
-Read and write Microsoft Teams chats, teams, channels, and presence through Microsoft Graph.
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-microsoft-teams.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-teams)
+[![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-## Installation
+Microsoft 365 Teams MCP server — list and read Teams chats, send chat messages, list teams and channels, and read presence via the Microsoft Graph API.
+
+*Cohort-style Microsoft 365 Teams MCP. Reuses the OAuth surface owned by [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/) so the host signs in once and gets Teams plus mail plus calendar plus files plus SharePoint from the same credentials.*
+
+## Status
+
+- **Version:** [0.1.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-teams)
+- **Auth:** OAuth (host-orchestrated, shared with [`mcp-server-microsoft-mail`](../microsoft-mail/)) ([`MS_CLIENT_ID`](./server.json))
+- **Tools:** [7](./src/tools.ts) (chats, messages, teams, channels, presence)
+- **Surface:** cloud-api
+- **Hosts tested:** Mindstone Rebel
+- **Machine-readable:** [`STATUS.json`](./STATUS.json)
+- **Shared library:** [`@mindstone/mcp-server-microsoft-shared`](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-shared)
+
+## Why this exists
+
+When we ported this in May 2026, Microsoft's own [Graph MCP](https://github.com/microsoft/mcp) lineup did not yet ship a stand-alone Teams server, and the community options at the time treated Teams as its own login surface — every connector ran a separate OAuth dance and stored its own copy of the refresh token. We pulled the bundled connector out of MindstoneRebel as a 1:1 port so that the same five-connector Microsoft 365 cohort (mail, calendar, files, teams, SharePoint) shares a single set of credentials, a single shared-library package for token persistence and request timeouts, and the structured `auth_required` envelope the host already knows how to recover from. Teams reuses [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `authenticate_microsoft_account` tool rather than declaring its own. Some Teams Graph APIs may require tenant admin approval — see Microsoft's [Teams Graph docs](https://learn.microsoft.com/en-us/graph/teams-concept-overview).
+
+## Example interaction
+
+> "Show me my last 10 messages in the project chat with Alice and Bob."
+
+Tools the host calls:
+1. `list_chats` — filters chats by participants `alice@example.com` and `bob@example.com`.
+2. `list_chat_messages` — returns the latest 10 messages from the resolved chat ID.
+
+Response (trimmed):
+
+```json
+{
+  "chat": {
+    "id": "19:meeting_...@thread.v2",
+    "topic": "Project planning",
+    "members": ["alice@example.com", "bob@example.com"]
+  },
+  "messages": [
+    { "id": "171...", "from": "Alice", "body": "Pushed the updated forecast", "createdDateTime": "2026-05-19T08:42:00Z" }
+  ]
+}
+```
+
+## Requirements
+
+- Node.js 20+
+- npm
+- A host application that performs the Microsoft OAuth flow and writes per-account token files into `${MS_CONFIG_DIR}/credentials/${sanitised-email}.token.json` and an `${MS_CONFIG_DIR}/accounts.json` index. This server reads those files; it does not initiate OAuth itself.
+
+## Quick Start
+
+### Install & build
+
+```bash
+cd <path-to-repo>/connectors/microsoft-teams
+npm install
+npm run build
+```
+
+### npx (once published)
 
 ```bash
 npx -y @mindstone/mcp-server-microsoft-teams
 ```
 
+### Local
+
+```bash
+node dist/index.js
+```
+
 ## Configuration
 
-This server uses host-orchestrated Microsoft 365 OAuth. Configure these environment variables from your MCP host:
+This server runs alongside a host application that owns the Microsoft 365 OAuth flow. The host writes credentials to disk; this server reads them.
 
-| Variable | Required | Description |
-|---|---:|---|
-| `MS_CLIENT_ID` | yes | Microsoft Entra application client ID |
-| `MS_CONFIG_DIR` | yes | Microsoft config directory containing account credentials |
-| `MS_ACCOUNT_EMAIL` | no | Account email for multi-account mode |
-| `MS_MCP_PACKAGE_ID` | no | Logical package ID in recovery responses |
-| `MICROSOFT_REQUEST_TIMEOUT_MS` | no | Upstream Graph timeout in milliseconds, max 300000 |
+### Required environment variables
 
-## Tools
+| Name | Description |
+| ---- | ----------- |
+| `MS_CLIENT_ID` | Microsoft Entra (Azure AD) application client ID. |
+| `MS_CONFIG_DIR` | Path to the per-user Microsoft config directory (`credentials/`, `accounts.json`). |
+
+### Optional environment variables
+
+| Name | Description | Default |
+| ---- | ----------- | ------- |
+| `MS_ACCOUNT_EMAIL` | Account email when running in multi-account per-instance mode. | First account in `accounts.json`. |
+| `MS_MCP_PACKAGE_ID` | Logical package ID surfaced in error responses. | `Microsoft365Teams` |
+| `MICROSOFT_REQUEST_TIMEOUT_MS` | Override the upstream Microsoft Graph request timeout (max `300000` ms). | `60000` |
+| `MICROSOFT_DISABLE_REFRESH` | Set to `1` to disable token refresh on this surface. Tools fail closed with the structured `auth_required` response so the host can drive reauth. Cloud surfaces set this to `1`. | unset |
+
+## Host configuration examples
+
+### Claude Desktop / Cursor
+
+```json
+{
+  "mcpServers": {
+    "Microsoft365Teams": {
+      "command": "npx",
+      "args": ["-y", "@mindstone/mcp-server-microsoft-teams"],
+      "env": {
+        "MS_CLIENT_ID": "your-entra-application-client-id",
+        "MS_CONFIG_DIR": "/absolute/path/to/microsoft-config"
+      }
+    }
+  }
+}
+```
+
+Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `authenticate_microsoft_account` first; the Teams tools then reuse the credentials it writes to `${MS_CONFIG_DIR}/`.
+
+### Local development (no npm publish needed)
+
+```json
+{
+  "mcpServers": {
+    "Microsoft365Teams": {
+      "command": "node",
+      "args": ["<path-to-repo>/connectors/microsoft-teams/dist/index.js"],
+      "env": {
+        "MS_CLIENT_ID": "your-entra-application-client-id",
+        "MS_CONFIG_DIR": "/absolute/path/to/microsoft-config"
+      }
+    }
+  }
+}
+```
+
+## Tools (7)
 
 | Tool | Description |
-|---|---|
-| `list_chats` | List recent Teams chats |
-| `get_chat` | Get details about a specific chat |
-| `list_chat_messages` | List recent messages from a chat |
-| `send_chat_message` | Send a message to a chat |
-| `list_teams` | List Teams you are a member of |
-| `list_channels` | List channels in a team |
-| `get_presence` | Get your current presence status |
+| ---- | ----------- |
+| `list_chats` | List recent Teams chats. |
+| `get_chat` | Get details about a specific chat. |
+| `list_chat_messages` | List recent messages from a chat. |
+| `send_chat_message` | Send a message to a chat. |
+| `list_teams` | List teams you are a member of. |
+| `list_channels` | List channels in a team. |
+| `get_presence` | Get your current presence status. |
 
 Some Teams Graph APIs may require tenant admin approval.
+
+## Security notes
+
+- No authentication tool of its own; sign-in is delegated to [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/) so the cohort has a single OAuth surface.
+- Per-tool Graph calls run under a composed caller + cohort timeout signal.
+
+## Licence
+
+[FSL-1.1-MIT](./LICENSE) — Functional Source License, Version 1.1, with MIT future licence. Free for non-competing use; relicenses to MIT on the converter date in `LICENSE`.

@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "name": "microsoft-teams",
   "package": "@mindstone/mcp-server-microsoft-teams",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "auth": {
     "type": "oauth-host-orchestrated",
     "envVars": [
