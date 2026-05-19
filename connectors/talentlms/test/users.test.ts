@@ -87,6 +87,28 @@ describe('User tools', () => {
     expect(data.user.id).toBe('4');
   });
 
+  it('create_talentlms_user rejects privileged user_type at the validator', async () => {
+    const client = await getClient();
+    const result = await client.callTool('create_talentlms_user', {
+      first_name: 'Att', last_name: 'Acker', email: 'a@b.test', login: 'a',
+      user_type: 'SuperAdmin',
+    });
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toMatch(/Invalid enum value/);
+    expect(text).toMatch(/user_type/);
+  });
+
+  it('create_talentlms_user accepts Trainer as a non-privileged user_type', async () => {
+    const client = await getClient();
+    const result = await client.callTool('create_talentlms_user', {
+      first_name: 'Tee', last_name: 'Are', email: 'tr@b.test', login: 'tr',
+      user_type: 'Trainer',
+    });
+    const data = JSON.parse(result.content[0].text as string);
+    expect(data.ok).toBe(true);
+  });
+
   it('set_talentlms_user_status deactivates a user', async () => {
     const client = await getClient();
     const result = await client.callTool('set_talentlms_user_status', { user_id: '1', status: 'inactive' });

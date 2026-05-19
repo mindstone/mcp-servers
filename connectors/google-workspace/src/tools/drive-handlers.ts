@@ -1,14 +1,13 @@
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { getAccountManager } from '../modules/accounts/index.js';
+import { getAccountManager, resolveEmail } from '../modules/accounts/index.js';
 import { getDriveService } from '../modules/drive/index.js';
-import { resolveEmail } from '../utils/account.js';
 import { FileListOptions, FileSearchOptions, FileUploadOptions, PermissionOptions } from '../modules/drive/types.js';
 import { McpToolResponse } from './types.js';
 import {
   readAliasedBoolean,
   readAliasedString
 } from './arg-aliases.js';
-import { wrapUntrustedContent } from '../utils/untrusted-content.js';
+import { wrapUntrustedContent, wrapUntrustedJsonStrings } from '../utils/untrusted-content.js';
 
 const HOST_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -93,6 +92,22 @@ export function formatDriveRecoveryError(operation: string, error: unknown) {
   };
 }
 
+function formatDriveToolResponse(operation: string, error: unknown): McpToolResponse {
+  return {
+    content: [{
+      type: 'text',
+      text: JSON.stringify(formatDriveRecoveryError(operation, error), null, 2),
+    }],
+  };
+}
+
+function formatDriveJsonResult(operation: string, result: { success?: boolean; error?: string }, source: string): object {
+  if (result.success === false) {
+    return formatDriveRecoveryError(operation, new Error(result.error || 'Unknown error'));
+  }
+  return wrapUntrustedJsonStrings(result, source) as object;
+}
+
 interface DriveFileListArgs {
   email?: string;
   options?: FileListOptions;
@@ -175,21 +190,25 @@ export async function handleListDriveFiles(args: DriveFileListArgs & Record<stri
   const email = await resolveEmail(args);
   
   return await accountManager.withTokenRenewal(email, async () => {
-    const driveService = await getDriveService();
-    const result = await driveService.listFiles(email, args.options || {});
-    
-    // Return JSON if requested, otherwise format as human-readable text
-    // Return string directly - server.ts handles MCP response wrapping
-    if (returnJson) {
-      return result;  // Server will JSON.stringify
+    try {
+      const driveService = await getDriveService();
+      const result = await driveService.listFiles(email, args.options || {});
+      
+      // Return JSON if requested, otherwise format as human-readable text
+      // Return string directly - server.ts handles MCP response wrapping
+      if (returnJson) {
+        return formatDriveJsonResult('list files', result, 'google-workspace:drive:file-list');
+      }
+      
+      // Format as text for better LLM consumption
+      if (!result.success) {
+        return formatDriveRecoveryError('list files', new Error(result.error || 'Unknown error'));
+      }
+      const files = result.data?.files || [];
+      return formatFilesAsText(files);
+    } catch (error) {
+      return formatDriveRecoveryError('list files', error);
     }
-    
-    // Format as text for better LLM consumption
-    if (!result.success) {
-      return formatDriveRecoveryError('list files', new Error(result.error || 'Unknown error'));
-    }
-    const files = result.data?.files || [];
-    return formatFilesAsText(files);
   });
 }
 
@@ -233,21 +252,25 @@ export async function handleSearchDriveFiles(args: DriveSearchArgs & Record<stri
   const email = await resolveEmail(args);
   
   return await accountManager.withTokenRenewal(email, async () => {
-    const driveService = await getDriveService();
-    const result = await driveService.searchFiles(email, args.options);
-    
-    // Return JSON if requested, otherwise format as human-readable text
-    // Return string directly - server.ts handles MCP response wrapping
-    if (returnJson) {
-      return result;  // Server will JSON.stringify
+    try {
+      const driveService = await getDriveService();
+      const result = await driveService.searchFiles(email, args.options);
+      
+      // Return JSON if requested, otherwise format as human-readable text
+      // Return string directly - server.ts handles MCP response wrapping
+      if (returnJson) {
+        return formatDriveJsonResult('search files', result, 'google-workspace:drive:file-search');
+      }
+      
+      // Format as text for better LLM consumption
+      if (!result.success) {
+        return formatDriveRecoveryError('search files', new Error(result.error || 'Unknown error'));
+      }
+      const files = result.data?.files || [];
+      return formatFilesAsText(files);
+    } catch (error) {
+      return formatDriveRecoveryError('search files', error);
     }
-    
-    // Format as text for better LLM consumption
-    if (!result.success) {
-      return `Error searching files: ${result.error || 'Unknown error'}`;
-    }
-    const files = result.data?.files || [];
-    return formatFilesAsText(files);
   });
 }
 
@@ -273,14 +296,19 @@ export async function handleUploadDriveFile(args: DriveUploadArgs): Promise<McpT
   const email = await resolveEmail(args);
   
   return await accountManager.withTokenRenewal(email, async () => {
-    const driveService = await getDriveService();
-    const result = await driveService.uploadFile(email, args.options);
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(result, null, 2)
-      }]
-    };
+    try {
+      const driveService = await getDriveService();
+      const result = await driveService.uploadFile(email, args.options);
+      if (!result.success) return formatDriveToolResponse('upload file', new Error(result.error || 'Unknown error'));
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify(wrapUntrustedJsonStrings(result, 'google-workspace:drive:file-upload'), null, 2)
+        }]
+      };
+    } catch (error) {
+      return formatDriveToolResponse('upload file', error);
+    }
   });
 }
 
@@ -302,12 +330,17 @@ export async function handleDownloadDriveFile(args: DriveDownloadArgs): Promise<
   const email = await resolveEmail(args);
   
   return await accountManager.withTokenRenewal(email, async () => {
-    const driveService = await getDriveService();
-    const result = await driveService.downloadFile(email, {
-      fileId,
-      mimeType
-    });
-    return JSON.stringify(result);
+    try {
+      const driveService = await getDriveService();
+      const result = await driveService.downloadFile(email, {
+        fileId,
+        mimeType
+      });
+      if (!result.success) return JSON.stringify(formatDriveRecoveryError('download file', new Error(result.error || 'Unknown error')));
+      return JSON.stringify(wrapUntrustedJsonStrings(result, `google-workspace:drive:file/${fileId}`));
+    } catch (error) {
+      return JSON.stringify(formatDriveRecoveryError('download file', error));
+    }
   });
 }
 
@@ -327,14 +360,19 @@ export async function handleCreateDriveFolder(args: DriveFolderArgs): Promise<Mc
   const email = await resolveEmail(args);
   
   return await accountManager.withTokenRenewal(email, async () => {
-    const driveService = await getDriveService();
-    const result = await driveService.createFolder(email, args.name, parentId);
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(result, null, 2)
-      }]
-    };
+    try {
+      const driveService = await getDriveService();
+      const result = await driveService.createFolder(email, args.name, parentId);
+      if (!result.success) return formatDriveToolResponse('create folder', new Error(result.error || 'Unknown error'));
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify(wrapUntrustedJsonStrings(result, 'google-workspace:drive:folder/create'), null, 2)
+        }]
+      };
+    } catch (error) {
+      return formatDriveToolResponse('create folder', error);
+    }
   });
 }
 
@@ -369,14 +407,19 @@ export async function handleUpdateDrivePermissions(args: DrivePermissionArgs): P
   const email = await resolveEmail(args);
   
   return await accountManager.withTokenRenewal(email, async () => {
-    const driveService = await getDriveService();
-    const result = await driveService.updatePermissions(email, args.options);
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(result, null, 2)
-      }]
-    };
+    try {
+      const driveService = await getDriveService();
+      const result = await driveService.updatePermissions(email, args.options);
+      if (!result.success) return formatDriveToolResponse('update permissions', new Error(result.error || 'Unknown error'));
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify(wrapUntrustedJsonStrings(result, `google-workspace:drive:file/${args.options.fileId}/permissions`), null, 2)
+        }]
+      };
+    } catch (error) {
+      return formatDriveToolResponse('update permissions', error);
+    }
   });
 }
 
@@ -397,14 +440,19 @@ export async function handleDeleteDriveFile(args: DriveDeleteArgs): Promise<McpT
   const email = await resolveEmail(args);
   
   return await accountManager.withTokenRenewal(email, async () => {
-    const driveService = await getDriveService();
-    const result = await driveService.deleteFile(email, fileId);
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(result, null, 2)
-      }]
-    };
+    try {
+      const driveService = await getDriveService();
+      const result = await driveService.deleteFile(email, fileId);
+      if (!result.success) return formatDriveToolResponse('delete file', new Error(result.error || 'Unknown error'));
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify(result, null, 2)
+        }]
+      };
+    } catch (error) {
+      return formatDriveToolResponse('delete file', error);
+    }
   });
 }
 
@@ -434,14 +482,19 @@ export async function handleCopyDriveFile(args: DriveCopyArgs): Promise<McpToolR
   const email = await resolveEmail(args);
   
   return await accountManager.withTokenRenewal(email, async () => {
-    const driveService = await getDriveService();
-    const result = await driveService.copyFile(email, fileId, args.name, parentId);
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(result, null, 2)
-      }]
-    };
+    try {
+      const driveService = await getDriveService();
+      const result = await driveService.copyFile(email, fileId, args.name, parentId);
+      if (!result.success) return formatDriveToolResponse('copy file', new Error(result.error || 'Unknown error'));
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify(wrapUntrustedJsonStrings(result, `google-workspace:drive:file/${fileId}/copy`), null, 2)
+        }]
+      };
+    } catch (error) {
+      return formatDriveToolResponse('copy file', error);
+    }
   });
 }
 
@@ -480,16 +533,21 @@ export async function handleMoveDriveFile(args: DriveMoveArgs): Promise<McpToolR
   const email = await resolveEmail(args);
   
   return await accountManager.withTokenRenewal(email, async () => {
-    const driveService = await getDriveService();
-    // Default to '*' (move from all parents) unless explicitly set to something else
-    const effectiveRemoveFromParents = removeFromParents !== undefined ? removeFromParents : '*';
-    const result = await driveService.moveFile(email, fileId, newParentId, effectiveRemoveFromParents);
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(result, null, 2)
-      }]
-    };
+    try {
+      const driveService = await getDriveService();
+      // Default to '*' (move from all parents) unless explicitly set to something else
+      const effectiveRemoveFromParents = removeFromParents !== undefined ? removeFromParents : '*';
+      const result = await driveService.moveFile(email, fileId, newParentId, effectiveRemoveFromParents);
+      if (!result.success) return formatDriveToolResponse('move file', new Error(result.error || 'Unknown error'));
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify(wrapUntrustedJsonStrings(result, `google-workspace:drive:file/${fileId}/move`), null, 2)
+        }]
+      };
+    } catch (error) {
+      return formatDriveToolResponse('move file', error);
+    }
   });
 }
 
@@ -514,14 +572,19 @@ export async function handleTrashDriveFile(args: DriveTrashArgs): Promise<McpToo
   const email = await resolveEmail(args);
   
   return await accountManager.withTokenRenewal(email, async () => {
-    const driveService = await getDriveService();
-    const result = await driveService.trashFile(email, fileId);
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(result, null, 2)
-      }]
-    };
+    try {
+      const driveService = await getDriveService();
+      const result = await driveService.trashFile(email, fileId);
+      if (!result.success) return formatDriveToolResponse('trash file', new Error(result.error || 'Unknown error'));
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify(wrapUntrustedJsonStrings(result, `google-workspace:drive:file/${fileId}/trash`), null, 2)
+        }]
+      };
+    } catch (error) {
+      return formatDriveToolResponse('trash file', error);
+    }
   });
 }
 
@@ -540,14 +603,19 @@ export async function handleUntrashDriveFile(args: DriveTrashArgs): Promise<McpT
   const email = await resolveEmail(args);
   
   return await accountManager.withTokenRenewal(email, async () => {
-    const driveService = await getDriveService();
-    const result = await driveService.untrashFile(email, fileId);
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(result, null, 2)
-      }]
-    };
+    try {
+      const driveService = await getDriveService();
+      const result = await driveService.untrashFile(email, fileId);
+      if (!result.success) return formatDriveToolResponse('untrash file', new Error(result.error || 'Unknown error'));
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify(wrapUntrustedJsonStrings(result, `google-workspace:drive:file/${fileId}/untrash`), null, 2)
+        }]
+      };
+    } catch (error) {
+      return formatDriveToolResponse('untrash file', error);
+    }
   });
 }
 
@@ -572,14 +640,19 @@ export async function handleListFileRevisions(args: DriveRevisionsArgs): Promise
   const email = await resolveEmail(args);
   
   return await accountManager.withTokenRenewal(email, async () => {
-    const driveService = await getDriveService();
-    const result = await driveService.listRevisions(email, fileId);
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(result, null, 2)
-      }]
-    };
+    try {
+      const driveService = await getDriveService();
+      const result = await driveService.listRevisions(email, fileId);
+      if (!result.success) return formatDriveToolResponse('list revisions', new Error(result.error || 'Unknown error'));
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify(wrapUntrustedJsonStrings(result, `google-workspace:drive:file/${fileId}/revisions`), null, 2)
+        }]
+      };
+    } catch (error) {
+      return formatDriveToolResponse('list revisions', error);
+    }
   });
 }
 
@@ -615,8 +688,13 @@ export async function handleDownloadFileRevision(args: DriveDownloadRevisionArgs
   const email = await resolveEmail(args);
   
   return await accountManager.withTokenRenewal(email, async () => {
-    const driveService = await getDriveService();
-    const result = await driveService.downloadRevision(email, fileId, revisionId);
-    return JSON.stringify(result);
+    try {
+      const driveService = await getDriveService();
+      const result = await driveService.downloadRevision(email, fileId, revisionId);
+      if (!result.success) return JSON.stringify(formatDriveRecoveryError('download revision', new Error(result.error || 'Unknown error')));
+      return JSON.stringify(wrapUntrustedJsonStrings(result, `google-workspace:drive:file/${fileId}/revision/${revisionId}`));
+    } catch (error) {
+      return JSON.stringify(formatDriveRecoveryError('download revision', error));
+    }
   });
 }

@@ -1,0 +1,834 @@
+[
+  {
+    "tool": "add_workspace_spreadsheet_sheet",
+    "service": "sheets",
+    "method": "POST",
+    "path": "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}:batchUpdate",
+    "handlerId": "handleAddSheet",
+    "handlerModule": "src/tools/sheets-handlers.ts"
+  },
+  {
+    "tool": "append_to_workspace_document",
+    "service": "docs",
+    "method": "POST",
+    "path": "https://docs.googleapis.com/v1/documents/{documentId}:batchUpdate",
+    "handlerId": "handleAppendDocument",
+    "handlerModule": "src/tools/docs-handlers.ts"
+  },
+  {
+    "tool": "append_to_workspace_spreadsheet",
+    "service": "sheets",
+    "method": "POST",
+    "path": "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}/values/{range}:append",
+    "handlerId": "handleAppendValues",
+    "handlerModule": "src/tools/sheets-handlers.ts"
+  },
+  {
+    "tool": "archive_workspace_email",
+    "service": "gmail",
+    "method": "POST",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/{id}/modify",
+    "handlerId": "handleArchiveWorkspaceEmail",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "authenticate_workspace_account",
+    "service": "local",
+    "method": "LOCAL",
+    "path": "local://auth-required",
+    "handlerId": "handleAuthenticateWorkspaceAccount",
+    "handlerModule": "src/tools/account-handlers.ts"
+  },
+  {
+    "tool": "batch_read_workspace_spreadsheet_values",
+    "service": "sheets",
+    "method": "GET",
+    "path": "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}/values:batchGet",
+    "handlerId": "handleBatchGetValues",
+    "handlerModule": "src/tools/sheets-handlers.ts"
+  },
+  {
+    "tool": "batch_update_workspace_document",
+    "service": "docs",
+    "method": "POST",
+    "path": "https://docs.googleapis.com/v1/documents/{documentId}:batchUpdate",
+    "handlerId": "handleBatchUpdateDocument",
+    "handlerModule": "src/tools/docs-handlers.ts"
+  },
+  {
+    "tool": "batch_update_workspace_presentation",
+    "service": "slides",
+    "method": "POST",
+    "path": "https://slides.googleapis.com/v1/presentations/{presentationId}:batchUpdate",
+    "handlerId": "handleBatchUpdatePresentation",
+    "handlerModule": "src/tools/slides-handlers.ts"
+  },
+  {
+    "tool": "batch_update_workspace_spreadsheet_values",
+    "service": "sheets",
+    "method": "POST",
+    "path": "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}/values:batchUpdate",
+    "handlerId": "handleBatchUpdateValues",
+    "handlerModule": "src/tools/sheets-handlers.ts"
+  },
+  {
+    "tool": "clear_workspace_spreadsheet_values",
+    "service": "sheets",
+    "method": "POST",
+    "path": "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}/values/{range}:clear",
+    "handlerId": "handleClearValues",
+    "handlerModule": "src/tools/sheets-handlers.ts"
+  },
+  {
+    "tool": "complete_task",
+    "service": "tasks",
+    "method": "PUT",
+    "path": "https://tasks.googleapis.com/tasks/v1/lists/{taskListId}/tasks/{taskId}",
+    "handlerId": "handleCompleteTask",
+    "handlerModule": "src/tools/tasks-handlers.ts"
+  },
+  {
+    "tool": "compose_workspace_email",
+    "service": "local",
+    "method": "LOCAL",
+    "path": "local://compose-email-ui",
+    "handlerId": "handleComposeWorkspaceEmail",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "copy_drive_file",
+    "service": "drive",
+    "method": "POST",
+    "path": "https://www.googleapis.com/drive/v3/files/{fileId}/copy",
+    "handlerId": "handleCopyDriveFile",
+    "handlerModule": "src/tools/drive-handlers.ts"
+  },
+  {
+    "tool": "create_drive_folder",
+    "service": "drive",
+    "method": "POST",
+    "path": "https://www.googleapis.com/drive/v3/files",
+    "handlerId": "handleCreateDriveFolder",
+    "handlerModule": "src/tools/drive-handlers.ts"
+  },
+  {
+    "tool": "create_task",
+    "service": "tasks",
+    "method": "POST",
+    "path": "https://tasks.googleapis.com/tasks/v1/lists/{taskListId}/tasks",
+    "handlerId": "handleCreateTask",
+    "handlerModule": "src/tools/tasks-handlers.ts"
+  },
+  {
+    "tool": "create_workspace_calendar_event",
+    "service": "calendar",
+    "method": "POST",
+    "path": "https://www.googleapis.com/calendar/v3/calendars/{calendarId}/events",
+    "handlerId": "handleCreateWorkspaceCalendarEvent",
+    "handlerModule": "src/tools/calendar-handlers.ts"
+  },
+  {
+    "tool": "create_workspace_comment",
+    "service": "drive",
+    "method": "POST",
+    "path": "https://www.googleapis.com/drive/v3/files/{fileId}/comments",
+    "handlerId": "handleCreateComment",
+    "handlerModule": "src/tools/comments-handlers.ts"
+  },
+  {
+    "tool": "create_workspace_document",
+    "service": "docs",
+    "method": "POST",
+    "path": "https://docs.googleapis.com/v1/documents",
+    "handlerId": "handleCreateDocument",
+    "handlerModule": "src/tools/docs-handlers.ts"
+  },
+  {
+    "tool": "create_workspace_draft",
+    "service": "gmail",
+    "method": "POST",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/drafts",
+    "handlerId": "handleCreateWorkspaceDraft",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "create_workspace_label",
+    "service": "gmail",
+    "method": "POST",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/labels",
+    "handlerId": "handleCreateWorkspaceLabel",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "create_workspace_label_filter",
+    "service": "gmail",
+    "method": "POST",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/settings/filters",
+    "handlerId": "handleCreateWorkspaceLabelFilter",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "create_workspace_presentation",
+    "service": "slides",
+    "method": "POST",
+    "path": "https://slides.googleapis.com/v1/presentations",
+    "handlerId": "handleCreatePresentation",
+    "handlerModule": "src/tools/slides-handlers.ts"
+  },
+  {
+    "tool": "create_workspace_spreadsheet",
+    "service": "sheets",
+    "method": "POST",
+    "path": "https://sheets.googleapis.com/v4/spreadsheets",
+    "handlerId": "handleCreateSpreadsheet",
+    "handlerModule": "src/tools/sheets-handlers.ts"
+  },
+  {
+    "tool": "delete_drive_file",
+    "service": "drive",
+    "method": "DELETE",
+    "path": "https://www.googleapis.com/drive/v3/files/{fileId}",
+    "handlerId": "handleDeleteDriveFile",
+    "handlerModule": "src/tools/drive-handlers.ts"
+  },
+  {
+    "tool": "delete_task",
+    "service": "tasks",
+    "method": "DELETE",
+    "path": "https://tasks.googleapis.com/tasks/v1/lists/{taskListId}/tasks/{taskId}",
+    "handlerId": "handleDeleteTask",
+    "handlerModule": "src/tools/tasks-handlers.ts"
+  },
+  {
+    "tool": "delete_workspace_attachment",
+    "service": "local",
+    "method": "LOCAL",
+    "path": "local://attachments/{id}",
+    "handlerId": "handleDeleteWorkspaceAttachment",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "delete_workspace_calendar_event",
+    "service": "calendar",
+    "method": "DELETE",
+    "path": "https://www.googleapis.com/calendar/v3/calendars/{calendarId}/events/{eventId}",
+    "handlerId": "handleDeleteWorkspaceCalendarEvent",
+    "handlerModule": "src/tools/calendar-handlers.ts"
+  },
+  {
+    "tool": "delete_workspace_comment",
+    "service": "drive",
+    "method": "DELETE",
+    "path": "https://www.googleapis.com/drive/v3/files/{fileId}/comments/{commentId}",
+    "handlerId": "handleDeleteComment",
+    "handlerModule": "src/tools/comments-handlers.ts"
+  },
+  {
+    "tool": "delete_workspace_draft",
+    "service": "gmail",
+    "method": "DELETE",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/drafts/{id}",
+    "handlerId": "handleDeleteWorkspaceDraft",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "delete_workspace_label",
+    "service": "gmail",
+    "method": "DELETE",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/labels/{id}",
+    "handlerId": "handleDeleteWorkspaceLabel",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "delete_workspace_label_filter",
+    "service": "gmail",
+    "method": "DELETE",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/settings/filters/{id}",
+    "handlerId": "handleDeleteWorkspaceLabelFilter",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "delete_workspace_spreadsheet_sheet",
+    "service": "sheets",
+    "method": "POST",
+    "path": "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}:batchUpdate",
+    "handlerId": "handleDeleteSheet",
+    "handlerModule": "src/tools/sheets-handlers.ts"
+  },
+  {
+    "tool": "download_drive_file",
+    "service": "drive",
+    "method": "GET",
+    "path": "https://www.googleapis.com/drive/v3/files/{fileId}",
+    "handlerId": "handleDownloadDriveFile",
+    "handlerModule": "src/tools/drive-handlers.ts"
+  },
+  {
+    "tool": "download_file_revision",
+    "service": "drive",
+    "method": "GET",
+    "path": "https://www.googleapis.com/drive/v3/files/{fileId}/revisions/{revisionId}",
+    "handlerId": "handleDownloadFileRevision",
+    "handlerModule": "src/tools/drive-handlers.ts"
+  },
+  {
+    "tool": "download_workspace_attachment",
+    "service": "gmail",
+    "method": "GET",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/{messageId}/attachments/{id}",
+    "handlerId": "handleDownloadWorkspaceAttachment",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "extract_workspace_document_id",
+    "service": "local",
+    "method": "LOCAL",
+    "path": "local://document-id-extractor",
+    "handlerId": "handleExtractDocumentId",
+    "handlerModule": "src/tools/docs-handlers.ts"
+  },
+  {
+    "tool": "extract_workspace_presentation_id",
+    "service": "local",
+    "method": "LOCAL",
+    "path": "local://presentation-id-extractor",
+    "handlerId": "handleExtractPresentationId",
+    "handlerModule": "src/tools/slides-handlers.ts"
+  },
+  {
+    "tool": "extract_workspace_spreadsheet_id",
+    "service": "local",
+    "method": "LOCAL",
+    "path": "local://spreadsheet-id-extractor",
+    "handlerId": "handleExtractSpreadsheetId",
+    "handlerModule": "src/tools/sheets-handlers.ts"
+  },
+  {
+    "tool": "find_and_replace_workspace_document",
+    "service": "docs",
+    "method": "POST",
+    "path": "https://docs.googleapis.com/v1/documents/{documentId}:batchUpdate",
+    "handlerId": "handleFindAndReplace",
+    "handlerModule": "src/tools/docs-handlers.ts"
+  },
+  {
+    "tool": "find_and_replace_workspace_spreadsheet",
+    "service": "sheets",
+    "method": "POST",
+    "path": "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}:batchUpdate",
+    "handlerId": "handleFindReplace",
+    "handlerModule": "src/tools/sheets-handlers.ts"
+  },
+  {
+    "tool": "find_free_slots",
+    "service": "calendar",
+    "method": "GET",
+    "path": "https://www.googleapis.com/calendar/v3/freeBusy",
+    "handlerId": "handleFindFreeSlots",
+    "handlerModule": "src/tools/calendar-handlers.ts"
+  },
+  {
+    "tool": "format_workspace_spreadsheet_cells",
+    "service": "sheets",
+    "method": "POST",
+    "path": "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}:batchUpdate",
+    "handlerId": "handleFormatCells",
+    "handlerModule": "src/tools/sheets-handlers.ts"
+  },
+  {
+    "tool": "get_current_time",
+    "service": "local",
+    "method": "LOCAL",
+    "path": "local://current-time",
+    "handlerId": "handleGetCurrentTime",
+    "handlerModule": "src/tools/calendar-handlers.ts"
+  },
+  {
+    "tool": "get_form",
+    "service": "forms",
+    "method": "GET",
+    "path": "https://forms.googleapis.com/v1/forms/{formId}",
+    "handlerId": "handleGetForm",
+    "handlerModule": "src/tools/forms-handlers.ts"
+  },
+  {
+    "tool": "get_form_response",
+    "service": "forms",
+    "method": "GET",
+    "path": "https://forms.googleapis.com/v1/forms/{formId}/responses/{responseId}",
+    "handlerId": "handleGetFormResponse",
+    "handlerModule": "src/tools/forms-handlers.ts"
+  },
+  {
+    "tool": "get_workspace_calendar_event",
+    "service": "calendar",
+    "method": "GET",
+    "path": "https://www.googleapis.com/calendar/v3/calendars/{calendarId}/events/{eventId}",
+    "handlerId": "handleGetWorkspaceCalendarEvent",
+    "handlerModule": "src/tools/calendar-handlers.ts"
+  },
+  {
+    "tool": "get_workspace_contacts",
+    "service": "contacts",
+    "method": "GET",
+    "path": "https://people.googleapis.com/v1/people/me/connections",
+    "handlerId": "handleGetContacts",
+    "handlerModule": "src/tools/contacts-handlers.ts"
+  },
+  {
+    "tool": "get_workspace_draft",
+    "service": "gmail",
+    "method": "GET",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/drafts/{id}",
+    "handlerId": "handleGetWorkspaceDraft",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "get_workspace_email_thread",
+    "service": "gmail",
+    "method": "GET",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/threads/{id}",
+    "handlerId": "handleGetWorkspaceEmailThread",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "get_workspace_gmail_settings",
+    "service": "gmail",
+    "method": "GET",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/settings/*",
+    "handlerId": "handleGetWorkspaceGmailSettings",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "get_workspace_label",
+    "service": "gmail",
+    "method": "GET",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/labels/{id}",
+    "handlerId": "handleGetWorkspaceLabel",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "get_workspace_slide",
+    "service": "slides",
+    "method": "GET",
+    "path": "https://slides.googleapis.com/v1/presentations/{presentationId}",
+    "handlerId": "handleGetSlide",
+    "handlerModule": "src/tools/slides-handlers.ts"
+  },
+  {
+    "tool": "get_workspace_slide_thumbnail",
+    "service": "slides",
+    "method": "GET",
+    "path": "https://slides.googleapis.com/v1/presentations/{presentationId}/pages/{pageObjectId}/thumbnail",
+    "handlerId": "handleGetSlideThumbnail",
+    "handlerModule": "src/tools/slides-handlers.ts"
+  },
+  {
+    "tool": "list_drive_files",
+    "service": "drive",
+    "method": "GET",
+    "path": "https://www.googleapis.com/drive/v3/files",
+    "handlerId": "handleListDriveFiles",
+    "handlerModule": "src/tools/drive-handlers.ts"
+  },
+  {
+    "tool": "list_file_revisions",
+    "service": "drive",
+    "method": "GET",
+    "path": "https://www.googleapis.com/drive/v3/files/{fileId}/revisions",
+    "handlerId": "handleListFileRevisions",
+    "handlerModule": "src/tools/drive-handlers.ts"
+  },
+  {
+    "tool": "list_form_responses",
+    "service": "forms",
+    "method": "GET",
+    "path": "https://forms.googleapis.com/v1/forms/{formId}/responses",
+    "handlerId": "handleListFormResponses",
+    "handlerModule": "src/tools/forms-handlers.ts"
+  },
+  {
+    "tool": "list_forms",
+    "service": "drive",
+    "method": "GET",
+    "path": "https://www.googleapis.com/drive/v3/files",
+    "handlerId": "handleListForms",
+    "handlerModule": "src/tools/forms-handlers.ts"
+  },
+  {
+    "tool": "list_task_lists",
+    "service": "tasks",
+    "method": "GET",
+    "path": "https://tasks.googleapis.com/tasks/v1/users/@me/lists",
+    "handlerId": "handleListTaskLists",
+    "handlerModule": "src/tools/tasks-handlers.ts"
+  },
+  {
+    "tool": "list_tasks",
+    "service": "tasks",
+    "method": "GET",
+    "path": "https://tasks.googleapis.com/tasks/v1/lists/{taskListId}/tasks",
+    "handlerId": "handleListTasks",
+    "handlerModule": "src/tools/tasks-handlers.ts"
+  },
+  {
+    "tool": "list_workspace_accounts",
+    "service": "local",
+    "method": "LOCAL",
+    "path": "local://accounts",
+    "handlerId": "handleListWorkspaceAccounts",
+    "handlerModule": "src/tools/account-handlers.ts"
+  },
+  {
+    "tool": "list_workspace_calendar_events",
+    "service": "calendar",
+    "method": "GET",
+    "path": "https://www.googleapis.com/calendar/v3/calendars/{calendarId}/events",
+    "handlerId": "handleListWorkspaceCalendarEvents",
+    "handlerModule": "src/tools/calendar-handlers.ts"
+  },
+  {
+    "tool": "list_workspace_calendars",
+    "service": "calendar",
+    "method": "GET",
+    "path": "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+    "handlerId": "handleListWorkspaceCalendars",
+    "handlerModule": "src/tools/calendar-handlers.ts"
+  },
+  {
+    "tool": "list_workspace_comments",
+    "service": "drive",
+    "method": "GET",
+    "path": "https://www.googleapis.com/drive/v3/files/{fileId}/comments",
+    "handlerId": "handleListComments",
+    "handlerModule": "src/tools/comments-handlers.ts"
+  },
+  {
+    "tool": "list_workspace_document_tabs",
+    "service": "docs",
+    "method": "GET",
+    "path": "https://docs.googleapis.com/v1/documents/{documentId}",
+    "handlerId": "handleListDocumentTabs",
+    "handlerModule": "src/tools/docs-handlers.ts"
+  },
+  {
+    "tool": "list_workspace_drafts",
+    "service": "gmail",
+    "method": "GET",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/drafts",
+    "handlerId": "handleListWorkspaceDrafts",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "list_workspace_label_filters",
+    "service": "gmail",
+    "method": "GET",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/settings/filters",
+    "handlerId": "handleListWorkspaceLabelFilters",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "list_workspace_labels",
+    "service": "gmail",
+    "method": "GET",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/labels",
+    "handlerId": "handleListWorkspaceLabels",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "list_workspace_presentation_slides",
+    "service": "slides",
+    "method": "GET",
+    "path": "https://slides.googleapis.com/v1/presentations/{presentationId}",
+    "handlerId": "handleListSlides",
+    "handlerModule": "src/tools/slides-handlers.ts"
+  },
+  {
+    "tool": "list_workspace_spreadsheet_sheets",
+    "service": "sheets",
+    "method": "GET",
+    "path": "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}",
+    "handlerId": "handleListSheets",
+    "handlerModule": "src/tools/sheets-handlers.ts"
+  },
+  {
+    "tool": "manage_workspace_attachment",
+    "service": "gmail",
+    "method": "GET",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/{messageId}/attachments/{id}",
+    "handlerId": "handleManageWorkspaceAttachment",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "manage_workspace_calendar_event",
+    "service": "calendar",
+    "method": "PATCH",
+    "path": "https://www.googleapis.com/calendar/v3/calendars/{calendarId}/events/{eventId}",
+    "handlerId": "handleManageWorkspaceCalendarEvent",
+    "handlerModule": "src/tools/calendar-handlers.ts"
+  },
+  {
+    "tool": "manage_workspace_draft",
+    "service": "gmail",
+    "method": "POST",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/drafts",
+    "handlerId": "handleManageWorkspaceDraft",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "manage_workspace_label",
+    "service": "gmail",
+    "method": "POST",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/labels",
+    "handlerId": "handleManageWorkspaceLabel",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "manage_workspace_label_assignment",
+    "service": "gmail",
+    "method": "POST",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/{id}/modify",
+    "handlerId": "handleManageWorkspaceLabelAssignment",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "manage_workspace_label_filter",
+    "service": "gmail",
+    "method": "POST",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/settings/filters",
+    "handlerId": "handleManageWorkspaceLabelFilter",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "mark_workspace_email_read",
+    "service": "gmail",
+    "method": "POST",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/{id}/modify",
+    "handlerId": "handleMarkWorkspaceEmailRead",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "mark_workspace_email_unread",
+    "service": "gmail",
+    "method": "POST",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/{id}/modify",
+    "handlerId": "handleMarkWorkspaceEmailUnread",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "move_drive_file",
+    "service": "drive",
+    "method": "PATCH",
+    "path": "https://www.googleapis.com/drive/v3/files/{fileId}",
+    "handlerId": "handleMoveDriveFile",
+    "handlerModule": "src/tools/drive-handlers.ts"
+  },
+  {
+    "tool": "read_workspace_document",
+    "service": "docs",
+    "method": "GET",
+    "path": "https://docs.googleapis.com/v1/documents/{documentId}",
+    "handlerId": "handleReadDocument",
+    "handlerModule": "src/tools/docs-handlers.ts"
+  },
+  {
+    "tool": "read_workspace_presentation",
+    "service": "slides",
+    "method": "GET",
+    "path": "https://slides.googleapis.com/v1/presentations/{presentationId}",
+    "handlerId": "handleReadPresentation",
+    "handlerModule": "src/tools/slides-handlers.ts"
+  },
+  {
+    "tool": "read_workspace_spreadsheet",
+    "service": "sheets",
+    "method": "GET",
+    "path": "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}",
+    "handlerId": "handleReadSpreadsheet",
+    "handlerModule": "src/tools/sheets-handlers.ts"
+  },
+  {
+    "tool": "read_workspace_spreadsheet_values",
+    "service": "sheets",
+    "method": "GET",
+    "path": "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}/values/{range}",
+    "handlerId": "handleReadSpreadsheetValues",
+    "handlerModule": "src/tools/sheets-handlers.ts"
+  },
+  {
+    "tool": "remove_workspace_account",
+    "service": "local",
+    "method": "LOCAL",
+    "path": "local://accounts/{email}",
+    "handlerId": "handleRemoveWorkspaceAccount",
+    "handlerModule": "src/tools/account-handlers.ts"
+  },
+  {
+    "tool": "replace_workspace_document",
+    "service": "docs",
+    "method": "POST",
+    "path": "https://docs.googleapis.com/v1/documents/{documentId}:batchUpdate",
+    "handlerId": "handleReplaceDocument",
+    "handlerModule": "src/tools/docs-handlers.ts"
+  },
+  {
+    "tool": "reply_to_workspace_comment",
+    "service": "drive",
+    "method": "POST",
+    "path": "https://www.googleapis.com/drive/v3/files/{fileId}/comments/{commentId}/replies",
+    "handlerId": "handleReplyToComment",
+    "handlerModule": "src/tools/comments-handlers.ts"
+  },
+  {
+    "tool": "resolve_workspace_comment",
+    "service": "drive",
+    "method": "POST",
+    "path": "https://www.googleapis.com/drive/v3/files/{fileId}/comments/{commentId}/replies",
+    "handlerId": "handleResolveComment",
+    "handlerModule": "src/tools/comments-handlers.ts"
+  },
+  {
+    "tool": "respond_to_workspace_calendar_event",
+    "service": "calendar",
+    "method": "PATCH",
+    "path": "https://www.googleapis.com/calendar/v3/calendars/primary/events/{eventId}",
+    "handlerId": "handleManageWorkspaceCalendarEvent",
+    "handlerModule": "src/tools/calendar-handlers.ts"
+  },
+  {
+    "tool": "search_drive_files",
+    "service": "drive",
+    "method": "GET",
+    "path": "https://www.googleapis.com/drive/v3/files",
+    "handlerId": "handleSearchDriveFiles",
+    "handlerModule": "src/tools/drive-handlers.ts"
+  },
+  {
+    "tool": "search_workspace_contacts",
+    "service": "contacts",
+    "method": "GET",
+    "path": "https://people.googleapis.com/v1/people:searchContacts",
+    "handlerId": "handleSearchContacts",
+    "handlerModule": "src/tools/contacts-handlers.ts"
+  },
+  {
+    "tool": "search_workspace_emails",
+    "service": "gmail",
+    "method": "GET",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages",
+    "handlerId": "handleSearchWorkspaceEmails",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "send_workspace_draft",
+    "service": "gmail",
+    "method": "POST",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/drafts/send",
+    "handlerId": "handleSendWorkspaceDraft",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "send_workspace_email",
+    "service": "gmail",
+    "method": "POST",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/send",
+    "handlerId": "handleSendWorkspaceEmail",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "trash_drive_file",
+    "service": "drive",
+    "method": "PATCH",
+    "path": "https://www.googleapis.com/drive/v3/files/{fileId}",
+    "handlerId": "handleTrashDriveFile",
+    "handlerModule": "src/tools/drive-handlers.ts"
+  },
+  {
+    "tool": "trash_workspace_email",
+    "service": "gmail",
+    "method": "POST",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/{id}/trash",
+    "handlerId": "handleTrashWorkspaceEmail",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "untrash_drive_file",
+    "service": "drive",
+    "method": "PATCH",
+    "path": "https://www.googleapis.com/drive/v3/files/{fileId}",
+    "handlerId": "handleUntrashDriveFile",
+    "handlerModule": "src/tools/drive-handlers.ts"
+  },
+  {
+    "tool": "untrash_workspace_email",
+    "service": "gmail",
+    "method": "POST",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/{id}/untrash",
+    "handlerId": "handleUntrashWorkspaceEmail",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "update_drive_permissions",
+    "service": "drive",
+    "method": "POST",
+    "path": "https://www.googleapis.com/drive/v3/files/{fileId}/permissions",
+    "handlerId": "handleUpdateDrivePermissions",
+    "handlerModule": "src/tools/drive-handlers.ts"
+  },
+  {
+    "tool": "update_task",
+    "service": "tasks",
+    "method": "PUT",
+    "path": "https://tasks.googleapis.com/tasks/v1/lists/{taskListId}/tasks/{taskId}",
+    "handlerId": "handleUpdateTask",
+    "handlerModule": "src/tools/tasks-handlers.ts"
+  },
+  {
+    "tool": "update_workspace_draft",
+    "service": "gmail",
+    "method": "PUT",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/drafts/{id}",
+    "handlerId": "handleUpdateWorkspaceDraft",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "update_workspace_label",
+    "service": "gmail",
+    "method": "PATCH",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/labels/{id}",
+    "handlerId": "handleUpdateWorkspaceLabel",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "update_workspace_label_filter",
+    "service": "gmail",
+    "method": "PATCH",
+    "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/settings/filters/{id}",
+    "handlerId": "handleUpdateWorkspaceLabelFilter",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "update_workspace_spreadsheet_values",
+    "service": "sheets",
+    "method": "PUT",
+    "path": "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}/values/{range}",
+    "handlerId": "handleUpdateValues",
+    "handlerModule": "src/tools/sheets-handlers.ts"
+  },
+  {
+    "tool": "upload_drive_file",
+    "service": "drive",
+    "method": "POST",
+    "path": "https://www.googleapis.com/upload/drive/v3/files",
+    "handlerId": "handleUploadDriveFile",
+    "handlerModule": "src/tools/drive-handlers.ts"
+  },
+  {
+    "tool": "upload_workspace_attachment",
+    "service": "local",
+    "method": "LOCAL",
+    "path": "local://attachments/upload",
+    "handlerId": "handleUploadWorkspaceAttachment",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  }
+]

@@ -1,8 +1,7 @@
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { getAccountManager } from '../modules/accounts/index.js';
+import { getAccountManager, resolveEmail } from '../modules/accounts/index.js';
 import { getSlidesService } from '../modules/slides/index.js';
 import { extractPresentationIdFromUrl } from '../modules/slides/formatters.js';
-import { resolveEmail } from '../utils/account.js';
 import {
   ReadPresentationOptions,
   CreatePresentationOptions,
@@ -21,7 +20,7 @@ import {
   readAliasedString,
   readAliasedValue
 } from './arg-aliases.js';
-import { wrapUntrustedContent } from '../utils/untrusted-content.js';
+import { wrapUntrustedContent, wrapUntrustedJsonStrings } from '../utils/untrusted-content.js';
 
 // Handler argument types
 interface ReadPresentationArgs {
@@ -205,7 +204,7 @@ export async function handleReadPresentation(args: ReadPresentationArgs): Promis
     }
     
     if (returnJson) {
-      return result.data;
+      return wrapUntrustedJsonStrings(result.data, `google-workspace:slides:presentation/${presentationId}`);
     }
     
     // Format as human-readable text
@@ -298,7 +297,7 @@ export async function handleGetSlide(args: GetSlideArgs): Promise<McpToolRespons
     }
     
     if (returnJson) {
-      return result.data;
+      return wrapUntrustedJsonStrings(result.data, `google-workspace:slides:slide/${presentationId}`);
     }
     
     // Format as human-readable text
@@ -365,7 +364,7 @@ export async function handleBatchUpdatePresentation(args: BatchUpdatePresentatio
     }
     
     if (returnJson) {
-      return result.data;
+      return wrapUntrustedJsonStrings(result.data, `google-workspace:slides:batch/${presentationId}`);
     }
     
     // Format as human-readable text

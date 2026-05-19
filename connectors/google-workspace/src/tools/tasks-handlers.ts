@@ -1,13 +1,13 @@
 import { getTasksService } from '../modules/tasks/index.js';
-import { resolveEmail } from '../utils/account.js';
+import { getAccountManager, resolveEmail } from '../modules/accounts/index.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { getAccountManager } from '../modules/accounts/index.js';
 import { ListTasksOptions } from '../modules/tasks/types.js';
 import {
   readAliasedBoolean,
   readAliasedNumber,
   readAliasedString
 } from './arg-aliases.js';
+import { wrapUntrustedContent } from '../utils/untrusted-content.js';
 
 // Singleton instances
 let tasksService: ReturnType<typeof getTasksService>;
@@ -90,6 +90,40 @@ export interface DeleteTaskParams {
   taskId: string;
 }
 
+export function formatTasksAsText(
+  tasks: Array<{ id: string; title: string; notes?: string; status: string; due?: string }>,
+  taskListId: string,
+  nextPageToken?: string
+): string {
+  if (tasks.length === 0) {
+    return `No tasks found in task list "${taskListId}".`;
+  }
+
+  const lines: string[] = [];
+  lines.push(`Found ${tasks.length} task${tasks.length !== 1 ? 's' : ''}:\n`);
+  
+  tasks.forEach((task, i) => {
+    const statusIcon = task.status === 'completed' ? '✓' : '○';
+    const dueInfo = task.due ? ` (due: ${task.due.split('T')[0]})` : '';
+    
+    lines.push(`${i + 1}. ${statusIcon} **${task.title}**${dueInfo}`);
+    if (task.notes) {
+      const truncatedNotes = task.notes.length > 100 
+        ? task.notes.substring(0, 100) + '...' 
+        : task.notes;
+      lines.push(`   Notes: ${truncatedNotes}`);
+    }
+    lines.push(`   [id: ${task.id}, status: ${task.status}]`);
+    lines.push('');
+  });
+
+  if (nextPageToken) {
+    lines.push(`More tasks available. Use page_token: "${nextPageToken}" to continue.`);
+  }
+
+  return wrapUntrustedContent(lines.join('\n'), `google-workspace:tasks:list/${taskListId}`);
+}
+
 // ============================================================================
 // Handlers
 // ============================================================================
@@ -133,7 +167,7 @@ export async function handleListTaskLists(params: ListTaskListsParams) {
 
       lines.push('Tip: Use "@default" as task_list_id for the primary task list.');
 
-      return lines.join('\n');
+      return wrapUntrustedContent(lines.join('\n'), 'google-workspace:tasks:task-lists');
     } catch (error) {
       if (error instanceof McpError) throw error;
       throw new McpError(
@@ -182,34 +216,7 @@ export async function handleListTasks(params: ListTasksParams) {
       }
 
       const { tasks, nextPageToken } = result.data || { tasks: [], nextPageToken: undefined };
-      
-      if (tasks.length === 0) {
-        return `No tasks found in task list "${taskListId}".`;
-      }
-
-      const lines: string[] = [];
-      lines.push(`Found ${tasks.length} task${tasks.length !== 1 ? 's' : ''}:\n`);
-      
-      tasks.forEach((task, i) => {
-        const statusIcon = task.status === 'completed' ? '✓' : '○';
-        const dueInfo = task.due ? ` (due: ${task.due.split('T')[0]})` : '';
-        
-        lines.push(`${i + 1}. ${statusIcon} **${task.title}**${dueInfo}`);
-        if (task.notes) {
-          const truncatedNotes = task.notes.length > 100 
-            ? task.notes.substring(0, 100) + '...' 
-            : task.notes;
-          lines.push(`   Notes: ${truncatedNotes}`);
-        }
-        lines.push(`   [id: ${task.id}, status: ${task.status}]`);
-        lines.push('');
-      });
-
-      if (nextPageToken) {
-        lines.push(`More tasks available. Use page_token: "${nextPageToken}" to continue.`);
-      }
-
-      return lines.join('\n');
+      return formatTasksAsText(tasks, taskListId, nextPageToken);
     } catch (error) {
       if (error instanceof McpError) throw error;
       throw new McpError(
@@ -262,7 +269,10 @@ export async function handleCreateTask(params: CreateTaskParams) {
       const dueInfo = task.due ? `\nDue: ${task.due.split('T')[0]}` : '';
       const notesInfo = task.notes ? `\nNotes: ${task.notes}` : '';
       
-      return `Task created successfully!\n\nTitle: ${task.title}${dueInfo}${notesInfo}\nID: ${task.id}\nStatus: ${task.status}`;
+      return wrapUntrustedContent(
+        `Task created successfully!\n\nTitle: ${task.title}${dueInfo}${notesInfo}\nID: ${task.id}\nStatus: ${task.status}`,
+        `google-workspace:tasks:task/${task.id}`
+      );
     } catch (error) {
       if (error instanceof McpError) throw error;
       throw new McpError(
@@ -326,7 +336,10 @@ export async function handleUpdateTask(params: UpdateTaskParams) {
       const dueInfo = task.due ? `\nDue: ${task.due.split('T')[0]}` : '';
       const notesInfo = task.notes ? `\nNotes: ${task.notes}` : '';
       
-      return `Task updated successfully!\n\nTitle: ${task.title}${dueInfo}${notesInfo}\nID: ${task.id}\nStatus: ${task.status}`;
+      return wrapUntrustedContent(
+        `Task updated successfully!\n\nTitle: ${task.title}${dueInfo}${notesInfo}\nID: ${task.id}\nStatus: ${task.status}`,
+        `google-workspace:tasks:task/${task.id}`
+      );
     } catch (error) {
       if (error instanceof McpError) throw error;
       throw new McpError(
@@ -376,7 +389,10 @@ export async function handleCompleteTask(params: CompleteTaskParams) {
       }
 
       const task = result.data!;
-      return `Task completed!\n\nTitle: ${task.title}\nID: ${task.id}\nCompleted: ${task.completed || 'Yes'}`;
+      return wrapUntrustedContent(
+        `Task completed!\n\nTitle: ${task.title}\nID: ${task.id}\nCompleted: ${task.completed || 'Yes'}`,
+        `google-workspace:tasks:task/${task.id}`
+      );
     } catch (error) {
       if (error instanceof McpError) throw error;
       throw new McpError(

@@ -1,8 +1,7 @@
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { getAccountManager } from '../modules/accounts/index.js';
+import { getAccountManager, resolveEmail } from '../modules/accounts/index.js';
 import { getDocsService } from '../modules/docs/index.js';
 import { extractDocumentIdFromUrl } from '../modules/docs/formatters.js';
-import { resolveEmail } from '../utils/account.js';
 import {
   ReadDocumentOptions,
   CreateDocumentOptions,
@@ -22,7 +21,7 @@ import {
   readAliasedString,
   readAliasedValue
 } from './arg-aliases.js';
-import { wrapUntrustedContent } from '../utils/untrusted-content.js';
+import { wrapUntrustedContent, wrapUntrustedJsonStrings } from '../utils/untrusted-content.js';
 
 // Handler argument types
 interface ReadDocumentArgs {
@@ -166,7 +165,7 @@ export async function handleReadDocument(args: ReadDocumentArgs): Promise<McpToo
     }
     
     if (returnJson) {
-      return result.data;
+      return wrapUntrustedJsonStrings(result.data, `google-workspace:docs:document/${documentId}`);
     }
     
     // Format as human-readable text
@@ -387,7 +386,7 @@ export async function handleBatchUpdateDocument(args: BatchUpdateDocumentArgs): 
     }
     
     if (returnJson) {
-      return result.data;
+      return wrapUntrustedJsonStrings(result.data, `google-workspace:docs:batch-update/${documentId}`);
     }
     
     // Format as human-readable text

@@ -22,6 +22,7 @@ export interface FileListOptions {
   folderId?: string;
   query?: string;
   pageSize?: number;
+  pageToken?: string;
   orderBy?: string[];
   fields?: string[];
 }
