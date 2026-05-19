@@ -987,6 +987,16 @@ export class GSuiteServer {
   private formatErrorResponse(error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error occurred';
     const code = error instanceof AccountError ? error.code : undefined;
+    const status = typeof error === 'object' && error !== null
+      ? (error as { response?: { status?: unknown }; status?: unknown; code?: unknown }).response?.status
+        ?? (error as { response?: { status?: unknown }; status?: unknown; code?: unknown }).status
+        ?? (error as { response?: { status?: unknown }; status?: unknown; code?: unknown }).code
+      : undefined;
+    const numericStatus = typeof status === 'number'
+      ? status
+      : typeof status === 'string' && /^\d+$/.test(status)
+        ? Number(status)
+        : undefined;
 
     if (code === 'AUTH_REQUIRED' || code === 'HOST_ORCHESTRATED_AUTH_REQUIRED') {
       return {
@@ -996,6 +1006,41 @@ export class GSuiteServer {
           instruction: "Connect Google Workspace to continue. The user will be redirected to Google's sign-in."
         },
         setupToolName: 'authenticate_workspace_account'
+      };
+    }
+
+    if (numericStatus === 401) {
+      return {
+        status: 'auth_required',
+        user_action: { id: 'google.connect_account' },
+        agent_action: {
+          instruction: "Connect Google Workspace to continue. The user will be redirected to Google's sign-in."
+        },
+        setupToolName: 'authenticate_workspace_account'
+      };
+    }
+
+    if (numericStatus === 403) {
+      return {
+        ok: false,
+        action_required: message,
+        next_step: 'Google Workspace rejected the request due to insufficient permissions or scopes. Reconnect the account with the required scope or ask the file/calendar owner for access, then retry.'
+      };
+    }
+
+    if (numericStatus === 429) {
+      return {
+        ok: false,
+        action_required: message,
+        next_step: 'Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.'
+      };
+    }
+
+    if (numericStatus !== undefined && numericStatus >= 500 && numericStatus <= 599) {
+      return {
+        ok: false,
+        action_required: message,
+        next_step: 'Google Workspace returned a temporary server error. Retry after a short delay; if it keeps failing, narrow the request and try again.'
       };
     }
 

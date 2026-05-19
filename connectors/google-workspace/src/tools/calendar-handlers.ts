@@ -473,6 +473,7 @@ export async function handleListWorkspaceCalendarEvents(params: any) {
   const query = params.query;
   const timeMin = readAliasedString(params, 'time_min', 'timeMin');
   const timeMax = readAliasedString(params, 'time_max', 'timeMax');
+  const pageToken = readAliasedString(params, 'page_token', 'pageToken');
   const returnJson = readAliasedBoolean(params, 'return_json', 'returnJson') ?? false;
   const calendarId = readAliasedString(params, 'calendar_id', 'calendarId');
   const deviceTimezone = readAliasedString(params, 'device_timezone', 'deviceTimezone');
@@ -536,6 +537,7 @@ export async function handleListWorkspaceCalendarEvents(params: any) {
         maxResults: effectiveMaxResults,
         timeMin: effectiveTimeMin,
         timeMax: effectiveTimeMax,
+        pageToken,
         calendarId
       });
 

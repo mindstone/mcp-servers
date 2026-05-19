@@ -107,6 +107,7 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
       const response = await client.files.list({
         q: query.join(' and ') || undefined,
         pageSize: options.pageSize,
+        pageToken: options.pageToken,
         orderBy: options.orderBy?.join(','),
         fields: options.fields?.join(',') || 'files(id, name, mimeType, modifiedTime, size)',
         supportsAllDrives: true,
@@ -306,6 +307,7 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
       const response = await client.files.list({
         q: query.join(' and ') || undefined,
         pageSize: options.pageSize,
+        pageToken: options.pageToken,
         orderBy: options.orderBy?.join(','),
         fields: options.fields?.join(',') || 'files(id, name, mimeType, modifiedTime, size)',
         supportsAllDrives: true,

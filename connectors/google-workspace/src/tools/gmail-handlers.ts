@@ -1,7 +1,7 @@
 import { getGmailService } from '../modules/gmail/index.js';
 import { validateEmail, resolveEmail } from '../utils/account.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { SendEmailParams } from '../modules/gmail/types.js';
+import { GmailError, SendEmailParams } from '../modules/gmail/types.js';
 import {
   ManageLabelParams,
   ManageLabelAssignmentParams,
@@ -784,9 +784,14 @@ export async function handleSendWorkspaceEmail(params: SendEmailRequestParams & 
 
       return await gmailService.sendEmail(emailParams);
     } catch (error) {
+      const details = error instanceof GmailError && error.details
+        ? `${error.message}: ${error.details}`
+        : error instanceof Error
+          ? error.message
+          : 'Unknown error';
       throw new McpError(
         ErrorCode.InternalError,
-        `Failed to send email: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to send email: ${details}`
       );
     }
   });

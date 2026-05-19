@@ -63,6 +63,7 @@ export interface GetEventsParams {
   maxResults?: number;
   timeMin?: string;
   timeMax?: string;
+  pageToken?: string;
   /** Calendar ID to read events from. Defaults to 'primary' (your own calendar). */
   calendarId?: string;
 }
