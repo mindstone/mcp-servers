@@ -1,13 +1,13 @@
 import { getFormsService, FormsService } from '../modules/forms/index.js';
 import { getDriveService, DriveService } from '../modules/drive/index.js';
-import { resolveEmail } from '../utils/account.js';
+import { getAccountManager, resolveEmail } from '../modules/accounts/index.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { getAccountManager } from '../modules/accounts/index.js';
 import { Form, FormItem, FormResponse, Question } from '../modules/forms/types.js';
 import {
   readAliasedNumber,
   readAliasedString
 } from './arg-aliases.js';
+import { wrapUntrustedContent } from '../utils/untrusted-content.js';
 
 const HOST_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -113,7 +113,7 @@ function formatChoiceOptions(question: Question): string {
 /**
  * Format a form item (question) for display.
  */
-function formatFormItem(item: FormItem, index: number): string {
+export function formatFormItem(item: FormItem, index: number): string {
   const lines: string[] = [];
   
   if (item.questionItem?.question) {
@@ -196,7 +196,7 @@ function formatFormItemNonQuestion(item: FormItem): string {
 /**
  * Format answers for display.
  */
-function formatAnswers(answers: Record<string, { questionId: string; textAnswers?: { answers: { value: string }[] }; fileUploadAnswers?: { answers: { fileId: string; fileName: string; mimeType: string }[] }; grade?: { score: number; correct: boolean } }>, form?: Form): string {
+export function formatAnswers(answers: Record<string, { questionId: string; textAnswers?: { answers: { value: string }[] }; fileUploadAnswers?: { answers: { fileId: string; fileName: string; mimeType: string }[] }; grade?: { score: number; correct: boolean } }>, form?: Form): string {
   const lines: string[] = [];
   
   // Build a map of questionId to question title
@@ -296,7 +296,7 @@ export async function handleListForms(params: ListFormsParams) {
       lines.push('Use get_form with the Form ID to see questions and structure.');
       lines.push('Use list_form_responses to see submissions.');
 
-      return lines.join('\n');
+      return wrapUntrustedContent(lines.join('\n'), 'google-workspace:forms:list');
     } catch (error) {
       if (error instanceof McpError) throw error;
       throw new McpError(
@@ -382,7 +382,7 @@ export async function handleGetForm(params: GetFormParams) {
       
       lines.push('\nUse list_form_responses to see submissions for this form.');
 
-      return lines.join('\n');
+      return wrapUntrustedContent(lines.join('\n'), `google-workspace:forms:form/${formId}`);
     } catch (error) {
       if (error instanceof McpError) throw error;
       throw new McpError(
@@ -475,7 +475,7 @@ export async function handleListFormResponses(params: ListFormResponsesParams) {
         lines.push(`---\nMore responses available. Use page_token: "${nextPageToken}" to continue.`);
       }
 
-      return lines.join('\n');
+      return wrapUntrustedContent(lines.join('\n'), `google-workspace:forms:responses/${formId}`);
     } catch (error) {
       if (error instanceof McpError) throw error;
       throw new McpError(
@@ -564,7 +564,7 @@ export async function handleGetFormResponse(params: GetFormResponseParams) {
         lines.push('_No answers in this response._');
       }
 
-      return lines.join('\n');
+      return wrapUntrustedContent(lines.join('\n'), `google-workspace:forms:response/${responseId}`);
     } catch (error) {
       if (error instanceof McpError) throw error;
       throw new McpError(

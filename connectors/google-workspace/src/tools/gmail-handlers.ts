@@ -1,5 +1,5 @@
 import { getGmailService } from '../modules/gmail/index.js';
-import { validateEmail, resolveEmail } from '../utils/account.js';
+import { getAccountManager, validateEmail, resolveEmail } from '../modules/accounts/index.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { GmailError, SendEmailParams } from '../modules/gmail/types.js';
 import {
@@ -7,13 +7,12 @@ import {
   ManageLabelAssignmentParams,
   ManageLabelFilterParams
 } from '../modules/gmail/services/label.js';
-import { getAccountManager } from '../modules/accounts/index.js';
 import { AttachmentService } from '../modules/attachments/service.js';
 import { ATTACHMENT_FOLDERS } from '../modules/attachments/types.js';
 import { lstatSync, readFileSync, realpathSync, statSync } from 'fs';
 import path from 'path';
 import { McpToolResponse } from './types.js';
-import { wrapUntrustedContent } from '../utils/untrusted-content.js';
+import { wrapUntrustedContent, wrapUntrustedJsonStrings } from '../utils/untrusted-content.js';
 
 // Singleton instances
 let gmailService: ReturnType<typeof getGmailService>;
@@ -541,7 +540,7 @@ export async function handleSearchWorkspaceEmails(params: SearchEmailsParams & R
       
       // Return formatted text by default, JSON only when explicitly requested
       if (returnJson) {
-        return result;
+        return wrapUntrustedJsonStrings(result, 'google-workspace:gmail:search');
       }
       return formatEmailsAsText(result);
     } catch (error) {
@@ -664,13 +663,13 @@ export async function handleGetWorkspaceEmailThread(params: GetThreadParams) {
         // Snippet field is preserved so callers can still see what was elided.
         if (includeBody && !includeFullBodies && result.messages.length > DEFAULT_FULL_BODY_TAIL) {
           const tailStart = result.messages.length - DEFAULT_FULL_BODY_TAIL;
-          return {
+          return wrapUntrustedJsonStrings({
             ...result,
             bodies_abbreviated: tailStart,
             messages: result.messages.map((m, i) => i < tailStart ? { ...m, body: undefined } : m),
-          };
+          }, `google-workspace:gmail:thread/${threadId}`);
         }
-        return result;
+        return wrapUntrustedJsonStrings(result, `google-workspace:gmail:thread/${threadId}`);
       }
       return formatThreadAsText(result, offset, includeFullBodies);
     } catch (error) {

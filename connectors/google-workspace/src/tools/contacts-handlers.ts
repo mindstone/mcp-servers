@@ -4,14 +4,14 @@ import {
   ContactsError
 } from "../modules/contacts/types.js";
 import { ContactsService } from "../services/contacts/index.js";
-import { validateEmail, resolveEmail } from "../utils/account.js";
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
-import { getAccountManager } from "../modules/accounts/index.js";
+import { getAccountManager, resolveEmail } from "../modules/accounts/index.js";
 import {
   readAliasedBoolean,
   readAliasedNumber,
   readAliasedString
 } from './arg-aliases.js';
+import { wrapUntrustedContent, wrapUntrustedJsonStrings } from "../utils/untrusted-content.js";
 
 // Singleton instances - Initialize or inject as per project pattern
 let contactsService: ContactsService;
@@ -65,7 +65,7 @@ export async function handleGetContacts(
         pageSize,
         pageToken
       });
-      return result;
+      return wrapUntrustedJsonStrings(result, 'google-workspace:contacts:list');
     } catch (error) {
       if (error instanceof ContactsError) {
         // Map ContactsError to McpError
@@ -100,7 +100,7 @@ interface SearchContactsParams {
 }
 
 // Format contacts as human-readable text
-function formatContactsAsText(results: Array<{ resourceName: string; name?: string; email?: string; phone?: string; organization?: string }>, totalResults: number): string {
+export function formatContactsAsText(results: Array<{ resourceName: string; name?: string; email?: string; phone?: string; organization?: string }>, totalResults: number): string {
   if (results.length === 0) {
     return 'No contacts found matching your search.';
   }
@@ -120,7 +120,7 @@ function formatContactsAsText(results: Array<{ resourceName: string; name?: stri
     lines.push('');
   });
 
-  return lines.join('\n');
+  return wrapUntrustedContent(lines.join('\n'), 'google-workspace:contacts:search');
 }
 
 /**
@@ -155,7 +155,7 @@ export async function handleSearchContacts(
       });
       
       if (returnJson) {
-        return result;
+        return wrapUntrustedJsonStrings(result, 'google-workspace:contacts:search');
       }
       return formatContactsAsText(result.results, result.totalResults);
     } catch (error) {

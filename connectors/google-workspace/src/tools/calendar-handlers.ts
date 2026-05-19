@@ -1,10 +1,10 @@
 import { CalendarService } from '../modules/calendar/service.js';
 import { DriveService } from '../modules/drive/service.js';
-import { validateEmail, resolveEmail } from '../utils/account.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { getAccountManager } from '../modules/accounts/index.js';
+import { getAccountManager, validateEmail, resolveEmail } from '../modules/accounts/index.js';
 import { CalendarError, EventResponse, CalendarListItem, EventTime } from '../modules/calendar/types.js';
 import { google } from 'googleapis';
+import { wrapUntrustedContent, wrapUntrustedJsonStrings } from '../utils/untrusted-content.js';
 
 // Singleton instances
 let driveService: DriveService;
@@ -156,7 +156,7 @@ function formatTimeRange(start: { dateTime?: string; date?: string; timeZone?: s
 /**
  * Format events as human-readable agenda-style text
  */
-function formatEventsAsText(events: EventResponse[], tzInfo: TimezoneInfo): string {
+export function formatEventsAsText(events: EventResponse[], tzInfo: TimezoneInfo): string {
   if (events.length === 0) {
     return 'No events found in the specified time range.';
   }
@@ -229,7 +229,7 @@ function formatEventsAsText(events: EventResponse[], tzInfo: TimezoneInfo): stri
     lines.push('');
   }
 
-  return lines.join('\n');
+  return wrapUntrustedContent(lines.join('\n'), 'google-workspace:calendar:events');
 }
 
 /**
@@ -428,11 +428,11 @@ export async function handleFindFreeSlots(params: {
         };
       }
 
-      return {
+      return wrapUntrustedJsonStrings({
         timezone,
         timeRange: { start: queryTimeMin, end: queryTimeMax },
         calendars: results
-      };
+      }, 'google-workspace:calendar:freebusy');
     } catch (error) {
       if (error instanceof McpError) throw error;
       throw new McpError(
@@ -455,7 +455,7 @@ export async function handleListWorkspaceCalendars(params: { email?: string }) {
   return accountManager.withTokenRenewal(email, async () => {
     try {
       const calendars = await calendarService.listCalendars(email);
-      return calendars;
+      return wrapUntrustedJsonStrings(calendars, 'google-workspace:calendar:list');
     } catch (error) {
       if (error instanceof McpError) throw error;
       throw new McpError(
@@ -546,7 +546,7 @@ export async function handleListWorkspaceCalendarEvents(params: any) {
 
       // Return JSON if requested, otherwise format as human-readable text
       if (returnJson) {
-        return {
+        return wrapUntrustedJsonStrings({
           timezoneInfo: {
             resolved: tzInfo.resolved,
             source: tzInfo.source,
@@ -556,7 +556,7 @@ export async function handleListWorkspaceCalendarEvents(params: any) {
           },
           referenceTimeUTC: new Date().toISOString(),
           events
-        };
+        }, 'google-workspace:calendar:events');
       }
 
       return formatEventsAsText(events, tzInfo);
@@ -586,7 +586,10 @@ export async function handleGetWorkspaceCalendarEvent(params: any) {
 
   return accountManager.withTokenRenewal(email, async () => {
     try {
-      return await calendarService.getEvent(email, eventId, calendarId);
+      return wrapUntrustedJsonStrings(
+        await calendarService.getEvent(email, eventId, calendarId),
+        `google-workspace:calendar:event/${eventId}`
+      );
     } catch (error) {
       throw new McpError(
         ErrorCode.InternalError,
@@ -707,7 +710,7 @@ export async function handleCreateWorkspaceCalendarEvent(params: any) {
 
   return accountManager.withTokenRenewal(email, async () => {
     try {
-      return await calendarService.createEvent({
+      const createdEvent = await calendarService.createEvent({
         email,
         summary,
         description,
@@ -737,6 +740,7 @@ export async function handleCreateWorkspaceCalendarEvent(params: any) {
         colorId,
         transparency
       });
+      return wrapUntrustedJsonStrings(createdEvent, 'google-workspace:calendar:event/create');
     } catch (error) {
       // Check if this is a CalendarError with a specific code (e.g., PERMISSION_DENIED)
       if (error instanceof CalendarError) {
@@ -780,7 +784,7 @@ export async function handleManageWorkspaceCalendarEvent(params: any) {
 
   return accountManager.withTokenRenewal(email, async () => {
     try {
-      return await calendarService.manageEvent({
+      const managedEvent = await calendarService.manageEvent({
         email,
         eventId,
         action,
@@ -788,6 +792,7 @@ export async function handleManageWorkspaceCalendarEvent(params: any) {
         newTimes,
         colorId
       });
+      return wrapUntrustedJsonStrings(managedEvent, `google-workspace:calendar:event/${eventId}`);
     } catch (error) {
       throw new McpError(
         ErrorCode.InternalError,

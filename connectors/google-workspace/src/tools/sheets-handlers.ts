@@ -1,5 +1,5 @@
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { getAccountManager } from '../modules/accounts/index.js';
+import { getAccountManager, resolveEmail } from '../modules/accounts/index.js';
 import { getSheetsService } from '../modules/sheets/index.js';
 import { ActionableA1Error, normaliseA1Range } from '../modules/sheets/a1Utils.js';
 import { rewriteSheetsApiError } from '../modules/sheets/errorRewriter.js';
@@ -12,7 +12,6 @@ import {
   formatValuesAsTable,
   formatSheetsListAsText,
 } from '../modules/sheets/formatters.js';
-import { resolveEmail } from '../utils/account.js';
 import {
   AnchorMode,
   AnchorReadResponse,
@@ -49,6 +48,7 @@ import {
   readAliasedString,
   readAliasedValue
 } from './arg-aliases.js';
+import { wrapUntrustedJsonStrings } from '../utils/untrusted-content.js';
 
 // Handler argument types
 interface ReadSpreadsheetArgs {
@@ -345,7 +345,7 @@ export async function handleReadSpreadsheet(args: ReadSpreadsheetArgs): Promise<
     }
     
     if (returnJson) {
-      return result.data;
+      return wrapUntrustedJsonStrings(result.data, `google-workspace:sheets:spreadsheet/${spreadsheetId}`);
     }
     
     // Format as human-readable text
@@ -415,7 +415,7 @@ export async function handleReadSpreadsheetValues(args: ReadValuesArgs): Promise
     }
     
     if (returnJson) {
-      return result.data;
+      return wrapUntrustedJsonStrings(result.data, `google-workspace:sheets:values/${spreadsheetId}`);
     }
 
     if (isAnchorReadResponse(result.data)) {
@@ -778,7 +778,7 @@ export async function handleBatchGetValues(args: BatchGetValuesArgs): Promise<Mc
     }
     
     if (returnJson) {
-      return result.data;
+      return wrapUntrustedJsonStrings(result.data, `google-workspace:sheets:batch/${spreadsheetId}`);
     }
 
     if (valueView === 'shaped') {
