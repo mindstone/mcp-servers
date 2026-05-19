@@ -157,6 +157,7 @@ export interface ResponseErrorMessage {
   success: false;
   error: string;
   code?: string;
+  details?: Record<string, unknown>;
 }
 
 export type ResponseMessage = ResponseSuccessMessage | ResponseErrorMessage;

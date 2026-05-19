@@ -226,4 +226,4 @@ repository-level [SECURITY.md](../../SECURITY.md) for vulnerability reporting.
 
 ## Architecture and drift-risk notes
 
-Sidecar lifecycle, port allocation, manifest sideloading, and the byte-compatible code vendored from the Mindstone Rebel monorepo are documented in [`docs/connectors/office-architecture.md`](../../docs/connectors/office-architecture.md). That file is the canonical reference if you are debugging the sidecar handshake or planning a release that touches the vendored sidecar/appBridge code.
+Sidecar lifecycle, port allocation, manifest sideloading, and the byte-compatible code vendored from the Mindstone Rebel monorepo are documented in [`docs/connectors/office-architecture.md`](../../docs/connectors/office-architecture.md). That file is the canonical reference if you are debugging the sidecar handshake or planning a release that touches the vendored sidecar/appBridge or chat code.

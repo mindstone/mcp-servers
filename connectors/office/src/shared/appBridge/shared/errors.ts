@@ -267,7 +267,11 @@ function buildMcpText(code: ErrorCode, appLabel?: string): string {
 // WebSocket converters
 // ---------------------------------------------------------------------------
 
-export function toWsErrorMessage(code: ErrorCode, message?: string): ResponseErrorMessage {
+export function toWsErrorMessage(
+  code: ErrorCode,
+  message?: string,
+  details?: Record<string, unknown>,
+): ResponseErrorMessage {
   return {
     type: 'response',
     // Non-correlated errors (e.g. auth failures) use an empty id sentinel;
@@ -276,6 +280,7 @@ export function toWsErrorMessage(code: ErrorCode, message?: string): ResponseErr
     success: false,
     error: message ?? DEFAULT_MESSAGES[code],
     code,
+    ...(details ? { details } : {}),
   };
 }
 
