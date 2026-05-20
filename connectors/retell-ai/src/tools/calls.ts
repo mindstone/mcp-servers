@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { retellFetch, requireApiKey } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { ConnectorError } from '../types.js';
+import { checkDynamicVariableReferences } from '../precall-checks.js';
 
 /**
  * E.164 phone-number regex.
@@ -77,7 +78,7 @@ COST: Uses phone minutes from your Retell AI plan.`,
         override_agent_version: z.union([z.number().int().min(0), z.string()]).optional()
           .describe('Agent version: number (0, 1, 2...) or tag ("latest", "prod"). Use with override_agent_id for reliable routing to a published version.'),
         metadata: z.record(z.unknown()).optional().describe('Custom metadata key-value pairs to attach to this call (for CRM IDs, campaign IDs, user context).'),
-        retell_llm_dynamic_variables: z.record(z.unknown()).optional().describe("Dynamic variables to inject into the prompt template (e.g. { customer_name: 'Jane', account_tier: 'pro' })."),
+        retell_llm_dynamic_variables: z.record(z.unknown()).optional().describe("Dynamic variables to inject into the prompt template (e.g. { customer_name: 'Jane', account_tier: 'pro' }). WARNING: These ONLY work if the LLM prompt already contains matching {{variable_name}} placeholders. If the prompt doesn't reference them, they are silently dropped. Use get_retell_llm to check which variables the prompt supports before relying on this. If you need to inject new context, use update_retell_llm instead."),
       },
       annotations: {
         readOnlyHint: false,
@@ -101,16 +102,31 @@ COST: Uses phone minutes from your Retell AI plan.`,
       if (args.metadata) body.metadata = args.metadata;
       if (args.retell_llm_dynamic_variables) body.retell_llm_dynamic_variables = args.retell_llm_dynamic_variables;
 
-      const result = await retellFetch<Record<string, unknown>>(
-        '/v2/create-phone-call',
-        { method: 'POST', body: JSON.stringify(body) },
-      );
+      const [result, dynamicVarWarnings] = await Promise.all([
+        retellFetch<Record<string, unknown>>(
+          '/v2/create-phone-call',
+          { method: 'POST', body: JSON.stringify(body) },
+        ),
+        args.retell_llm_dynamic_variables
+          ? checkDynamicVariableReferences({
+              fromNumber: args.from_number,
+              dynamicVariables: args.retell_llm_dynamic_variables as Record<string, unknown>,
+              overrideAgentId: args.override_agent_id,
+            })
+          : Promise.resolve(null),
+      ]);
 
-      return JSON.stringify({
+      const response: Record<string, unknown> = {
         ok: true,
         ...result,
         message: `Phone call initiated (call_id: ${result.call_id}). Use get_call to monitor status and retrieve the transcript when the call ends.`,
-      });
+      };
+
+      if (dynamicVarWarnings && dynamicVarWarnings.length > 0) {
+        response.warnings = dynamicVarWarnings;
+      }
+
+      return JSON.stringify(response);
     }),
   );
 
@@ -147,7 +163,7 @@ RETURNS: call_id, web_call_link, status, agent_id, access_token. Share web_call_
         agent_version: z.union([z.number().int().min(0), z.string()]).optional()
           .describe('Agent version to use: number (0, 1, 2...) or tag (e.g. "latest", "prod"). Pass this when validating a specific published version.'),
         metadata: z.record(z.unknown()).optional().describe('Custom metadata for this call (CRM IDs, test labels, scenario names).'),
-        retell_llm_dynamic_variables: z.record(z.unknown()).optional().describe("Dynamic prompt variables used by the Retell LLM prompt template."),
+        retell_llm_dynamic_variables: z.record(z.unknown()).optional().describe("Dynamic prompt variables used by the Retell LLM prompt template. WARNING: Only works if the LLM prompt contains matching {{variable_name}} placeholders. Unmatched variables are silently dropped. Check get_retell_llm first."),
       },
       annotations: {
         readOnlyHint: false,
@@ -165,16 +181,31 @@ RETURNS: call_id, web_call_link, status, agent_id, access_token. Share web_call_
       if (args.metadata) body.metadata = args.metadata;
       if (args.retell_llm_dynamic_variables) body.retell_llm_dynamic_variables = args.retell_llm_dynamic_variables;
 
-      const result = await retellFetch<Record<string, unknown>>(
-        '/v2/create-web-call',
-        { method: 'POST', body: JSON.stringify(body) },
-      );
+      const [result, dynamicVarWarnings] = await Promise.all([
+        retellFetch<Record<string, unknown>>(
+          '/v2/create-web-call',
+          { method: 'POST', body: JSON.stringify(body) },
+        ),
+        args.retell_llm_dynamic_variables
+          ? checkDynamicVariableReferences({
+              fromNumber: '',
+              dynamicVariables: args.retell_llm_dynamic_variables as Record<string, unknown>,
+              overrideAgentId: args.agent_id,
+            })
+          : Promise.resolve(null),
+      ]);
 
-      return JSON.stringify({
+      const response: Record<string, unknown> = {
         ok: true,
         ...result,
         message: `Web call created (call_id: ${result.call_id}). Share the web_call_link with the user to start the call in their browser.`,
-      });
+      };
+
+      if (dynamicVarWarnings && dynamicVarWarnings.length > 0) {
+        response.warnings = dynamicVarWarnings;
+      }
+
+      return JSON.stringify(response);
     }),
   );
 

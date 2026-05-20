@@ -2,6 +2,9 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { retellFetch, requireApiKey } from '../client.js';
 import { withErrorHandling } from '../utils.js';
+import { internal as precallInternal } from '../precall-checks.js';
+
+const { extractReferencedTokens } = precallInternal;
 
 const MODEL_OPTIONS_HINT = 'Options: gpt-4.1, gpt-4.1-mini, gpt-5, gpt-5-mini, gpt-5.5, claude-4.5-sonnet, claude-4.6-sonnet, claude-4.5-haiku, gemini-2.5-flash-lite, gemini-3.0-flash, gemini-3.1-flash-lite.';
 
@@ -125,7 +128,31 @@ RETURNS: llm_id, general_prompt, begin_message, model, model_temperature, genera
         `/get-retell-llm/${encodeURIComponent(args.llm_id)}`,
         { method: 'GET' },
       );
-      return JSON.stringify({ ok: true, ...result });
+
+      const prompt = typeof result.general_prompt === 'string' ? result.general_prompt : undefined;
+      const beginMsg = typeof result.begin_message === 'string' ? result.begin_message : undefined;
+      const referencedVars = extractReferencedTokens(prompt, beginMsg);
+      const varList = [...referencedVars].sort();
+
+      const dynamicVariableAnalysis: Record<string, unknown> = {
+        supported: varList.length > 0,
+        variables: varList,
+      };
+
+      if (varList.length === 0) {
+        dynamicVariableAnalysis.warning =
+          'This prompt does NOT contain any {{variable_name}} placeholders. ' +
+          'Passing retell_llm_dynamic_variables to create_phone_call/create_web_call will have NO EFFECT — ' +
+          'the variables will be silently dropped. To inject call-specific context, you MUST call ' +
+          'update_retell_llm to modify the general_prompt (adding {{placeholders}} or rewriting it entirely) before placing the call.';
+      } else {
+        dynamicVariableAnalysis.note =
+          `This prompt references ${varList.length} dynamic variable(s): ${varList.map((v) => `{{${v}}}`).join(', ')}. ` +
+          'You can pass these via retell_llm_dynamic_variables on create_phone_call/create_web_call. ' +
+          'Any variable NOT in this list will be silently ignored.';
+      }
+
+      return JSON.stringify({ ok: true, ...result, dynamic_variable_analysis: dynamicVariableAnalysis });
     }),
   );
 
