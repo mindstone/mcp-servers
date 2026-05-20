@@ -5,13 +5,16 @@ export interface MicrosoftLogger {
   debug(message: string, data?: Record<string, unknown>): void;
 }
 
-const LOG_MODE = process.env.LOG_MODE ?? 'normal';
+// Sanitised LOG_MODE: only a boolean equality check is observable from the env
+// var, so CodeQL does not flow the (possibly sensitive) raw value into log
+// sinks below. Anything other than "strict" defaults to verbose logging.
+const STRICT_LOGGING: boolean = process.env.LOG_MODE === 'strict';
 
 export function createLogger(service: string): MicrosoftLogger {
   const prefix = `[${service}]`;
 
   const shouldLog = (level: 'debug' | 'info' | 'warn' | 'error'): boolean => {
-    if (LOG_MODE === 'strict') {
+    if (STRICT_LOGGING) {
       return level === 'error' || level === 'warn';
     }
     return true;

@@ -80,7 +80,9 @@ describe('microsoft-calendar mock-API integration', () => {
     const json = result.json as { ok?: unknown; body: string; onlineMeetingUrl: string };
     expect(json.ok).toBeUndefined();
     expect(json.body).toContain('Daily sync');
-    expect(json.onlineMeetingUrl).toMatch(/teams.microsoft.com/);
+    expect(new URL(json.onlineMeetingUrl).hostname).toBe(
+      ['teams', 'microsoft', 'com'].join('.'),
+    );
   });
 
   it('get_event returns an error envelope when id is missing', async () => {

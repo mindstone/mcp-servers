@@ -37,14 +37,24 @@ function clampTop(value: number | undefined, defaultValue: number, maxValue: num
   return Math.max(1, Math.min(value, maxValue));
 }
 
+const HTML_ENTITIES: Record<string, string> = {
+  '&nbsp;': ' ',
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+};
+
 function stripHtml(html: string): string {
+  // Strip <script>/<style> blocks explicitly so the generic `<[^>]*>` pass
+  // cannot leave behind a re-formed `<script>` after one round of removal.
+  // Decode entities in a single pass so `&amp;lt;` does not double-unescape
+  // into `<` after the `&amp;` -> `&` step.
   return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
     .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
+    .replace(/&(?:nbsp|amp|lt|gt|quot);/g, (match) => HTML_ENTITIES[match] ?? match)
     .trim();
 }
 

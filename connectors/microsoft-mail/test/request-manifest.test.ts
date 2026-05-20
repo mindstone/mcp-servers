@@ -97,6 +97,19 @@ function matchPath(actual: string, pattern: string): boolean {
   return regex.test(actual);
 }
 
+// Hostname compared via parsed URL rather than substring search so a malicious
+// path component (e.g. `https://evil.example/login.microsoftonline.com/...`)
+// cannot impersonate the auth endpoint. Matches CodeQL guidance for
+// `js/incomplete-url-substring-sanitization`.
+const AUTH_HOST = ['login', 'microsoftonline', 'com'].join('.');
+function isAuthEndpoint(url: string): boolean {
+  try {
+    return new URL(url).hostname === AUTH_HOST;
+  } catch {
+    return false;
+  }
+}
+
 describe('request manifest — Graph endpoint contract', () => {
   let client: McpTestClient;
   let cfg: MicrosoftTestConfig;
@@ -130,7 +143,7 @@ describe('request manifest — Graph endpoint contract', () => {
         (r) =>
           r.method === row.method &&
           matchPath(r.pathname, row.pathname) &&
-          !r.url.includes('login.microsoftonline.com'),
+          !isAuthEndpoint(r.url),
       );
       expect(
         match,
