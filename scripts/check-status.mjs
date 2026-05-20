@@ -95,15 +95,23 @@ if (existsSync(serverPath)) {
   // participates in authentication (secret + non-secret), so an OAuth
   // connector legitimately lists its CLIENT_ID alongside CLIENT_SECRET.
   // We enforce two separate properties:
-  //   1. Every SECRET env var declared in server.json (isSecret or name
-  //      matches KEY|TOKEN|SECRET) MUST appear in status.auth.envVars.
-  //      Otherwise STATUS.json silently under-reports the auth surface.
+  //   1. Every SECRET env var declared in server.json MUST appear in
+  //      status.auth.envVars. Otherwise STATUS.json silently under-
+  //      reports the auth surface.
   //   2. Every name in status.auth.envVars MUST appear in server.json's
   //      full environmentVariables list. Otherwise STATUS.json drifts
   //      from the canonical server manifest.
+  //
+  // Secret detection trusts the explicit `isSecret` flag in server.json,
+  // matching the convention documented in scripts/lib/install-links.mjs
+  // (~line 55). The earlier name-substring heuristic (`KEY|TOKEN|SECRET`)
+  // mis-classified safe toggles like `MCP_REPLIT_SSH_STRICT_HOST_KEY`,
+  // contradicting the install-links script's canonical interpretation
+  // of the same field. CI rejects manifests that fail
+  // `mcp-publisher validate`, so trusting the flag is correct.
   const serverEnvAll = (server.packages?.[0]?.environmentVariables ?? []).map((e) => e.name);
   const serverEnvSecrets = (server.packages?.[0]?.environmentVariables ?? [])
-    .filter((e) => e.isSecret || /KEY|TOKEN|SECRET/.test(e.name))
+    .filter((e) => e.isSecret === true)
     .map((e) => e.name);
   const statusEnvNames = status.auth?.envVars ?? [];
   const missing = serverEnvSecrets.filter((n) => !statusEnvNames.includes(n));
