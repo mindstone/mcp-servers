@@ -8,6 +8,11 @@ import {
   resolveKeyPathForHost,
   validatePrivateKey,
 } from './keyResolution.js';
+import {
+  computeSha256Fingerprint,
+  SSH_ALGORITHM_ALLOWLIST,
+  verifyHostKey,
+} from './hostVerification.js';
 
 export const HOST_ALLOWLIST_SUFFIX = '.replit.dev';
 export const SSH_CONNECT_TIMEOUT_MS = 30_000;
@@ -204,6 +209,7 @@ export function createSshConnection(host: string, user: string, privateKey: Buff
     const client = new SSHClient();
     let proxyReachable = false;
     let handshakeCompleted = false;
+    let hostVerificationFailure: StructuredError | null = null;
 
     const rejectWithContext = (err: Error & { code?: string; level?: string }) => {
       const enriched: SshConnectionError = err;
@@ -234,16 +240,46 @@ export function createSshConnection(host: string, user: string, privateKey: Buff
 
     client.on('error', (err: Error & { code?: string; level?: string }) => {
       clearTimeout(timeout);
+      if (hostVerificationFailure) {
+        const enriched = Object.assign(
+          new Error(hostVerificationFailure.error),
+          {
+            code: hostVerificationFailure.code,
+            level: 'host-verification',
+            structured: hostVerificationFailure,
+          },
+        );
+        rejectWithContext(enriched);
+        return;
+      }
       rejectWithContext(err);
     });
 
-    // SECURITY: SSH host keys not verified — see Known Limitations in README + security review M3.
+    // AGENTS.md security: ssh2's default behaviour without a hostVerifier is
+    // to accept ANY server host key — i.e. no MitM protection. We pin host
+    // keys via the trust-on-first-use store in hostVerification.ts.
     client.connect({
       host,
       port: 22,
       username: user,
       privateKey,
       readyTimeout: SSH_CONNECT_TIMEOUT_MS,
+      algorithms: SSH_ALGORITHM_ALLOWLIST as unknown as import('ssh2').Algorithms,
+      hostVerifier: (hostKey: Buffer, callback: (valid: boolean) => void) => {
+        const fingerprint = computeSha256Fingerprint(hostKey);
+        const outcome = verifyHostKey(host, fingerprint);
+        if (!outcome.ok) {
+          hostVerificationFailure = outcome.error;
+          callback(false);
+          return;
+        }
+        if (outcome.kind === 'recorded') {
+          console.error(
+            `[replit-ssh] host-key-tofu recorded host=${host.split('.')[0]}.*** fingerprint=${outcome.fingerprint}`,
+          );
+        }
+        callback(true);
+      },
     });
   });
 }
@@ -387,14 +423,23 @@ export function createDiagnosticSshConnection(
       });
     });
 
+    let diagnosticHostVerifierFailure: StructuredError | null = null;
+
     client.on('error', (err: Error & { code?: string; level?: string }) => {
       clearTimeout(timeout);
-      addEvent('error', `code=${err.code || 'none'} level=${err.level || 'none'} message=${err.message}`);
+      const reportedErr = diagnosticHostVerifierFailure
+        ? (Object.assign(new Error(diagnosticHostVerifierFailure.error), {
+            code: diagnosticHostVerifierFailure.code,
+            level: 'host-verification',
+            structured: diagnosticHostVerifierFailure,
+          }) as Error & { code: string; level: string })
+        : err;
+      addEvent('error', `code=${reportedErr.code || 'none'} level=${reportedErr.level || 'none'} message=${reportedErr.message}`);
       resolve({
         connected: false,
         client: null,
         events,
-        error: err,
+        error: reportedErr,
         durationMs: Date.now() - startTime,
         proxyReachable,
         handshakeCompleted,
@@ -409,13 +454,24 @@ export function createDiagnosticSshConnection(
       addEvent('end', 'Connection ended');
     });
 
-    // SECURITY: SSH host keys not verified — see Known Limitations in README + security review M3.
     client.connect({
       host,
       port: 22,
       username: user,
       privateKey,
       readyTimeout: SSH_CONNECT_TIMEOUT_MS,
+      algorithms: SSH_ALGORITHM_ALLOWLIST as unknown as import('ssh2').Algorithms,
+      hostVerifier: (hostKey: Buffer, callback: (valid: boolean) => void) => {
+        const fingerprint = computeSha256Fingerprint(hostKey);
+        const outcome = verifyHostKey(host, fingerprint);
+        addEvent('host_key_verification', `fingerprint=${fingerprint} outcome=${outcome.kind}`);
+        if (!outcome.ok) {
+          diagnosticHostVerifierFailure = outcome.error;
+          callback(false);
+          return;
+        }
+        callback(true);
+      },
       debug: (msg: string) => {
         const lowerMsg = msg.toLowerCase();
         if (lowerMsg.includes('auth') || lowerMsg.includes('publickey') || lowerMsg.includes('password') || lowerMsg.includes('keyboard')) {

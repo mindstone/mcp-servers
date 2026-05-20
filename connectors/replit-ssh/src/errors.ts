@@ -6,6 +6,9 @@ export type ErrorCode =
   | 'PERMISSION_HARDENING_FAILED'
   | 'WINDOWS_USERNAME_MISSING'
   | 'HOST_NOT_ALLOWED'
+  | 'HOST_KEY_UNKNOWN'
+  | 'HOST_KEY_MISMATCH'
+  | 'HOST_KEY_RECORD_FAILED'
   | 'AUTH_FAILED'
   | 'CONNECTION_FAILED'
   | 'CONNECTION_TIMEOUT'
@@ -37,9 +40,13 @@ export interface SshConnectionError extends Error {
 }
 
 export function translateSshError(
-  err: Error & { code?: string; level?: string },
+  err: Error & { code?: string; level?: string; structured?: StructuredError },
   ctx: ConnectionContext = {},
 ): StructuredError {
+  if (err.structured && err.level === 'host-verification') {
+    return err.structured;
+  }
+
   const code = err.code || '';
   const level = err.level || '';
   const message = err.message || '';
