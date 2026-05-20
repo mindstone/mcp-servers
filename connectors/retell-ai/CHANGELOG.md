@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-05-20
+
+### Added
+- **Server-level MCP instructions**: Agents now receive a structured pre-call workflow and dynamic variable guidance on connection, reducing misuse of `retell_llm_dynamic_variables`.
+- **`get_retell_llm` dynamic variable analysis**: Response includes a `dynamic_variable_analysis` field listing detected `{{variable_name}}` placeholders in the prompt, with an explicit warning when none are found explaining that dynamic variables will be silently dropped.
+- **`create_phone_call` / `create_web_call` pre-call warnings**: Wired the existing `checkDynamicVariableReferences` validation into both call tools. When passed dynamic variables don't match prompt placeholders, the response includes actionable warnings (while still placing the call).
+- Pre-call check source (`precall-checks.ts`) and tests committed (previously developed but not included in 0.2.1 publish).
+
+### Improved
+- `retell_llm_dynamic_variables` parameter descriptions on `create_phone_call` and `create_web_call` now warn that unmatched variables are silently dropped.
+
 ## [0.2.1] - 2026-05-14
 
 ### Changed
