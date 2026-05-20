@@ -37,6 +37,8 @@ jobs:
           node-version: '20'
       - name: Check committed catalogue matches generator output
         run: node scripts/build-catalogue.mjs --check
+      - name: Check committed install-links blocks match server.json
+        run: node scripts/gen-install-links.mjs --check
 
   build:
     name: Build site
