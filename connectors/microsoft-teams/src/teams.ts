@@ -45,17 +45,24 @@ const HTML_ENTITIES: Record<string, string> = {
   '&quot;': '"',
 };
 
+const TAG_RE = /<[^>]*>/g;
+const ENTITY_RE = /&(?:nbsp|amp|lt|gt|quot);/g;
+
+// Strip HTML for plain-text display of Teams chat message bodies. The output
+// is always wrapped in an `<untrusted-content>` envelope by the host, so this
+// is a presentation helper, not a security sanitiser. Runs the tag-strip pass
+// in a fixed-point loop so a payload like `<scr<script>ipt>` cannot leave a
+// reconstructed `<script>` behind after a single pass; decodes the five named
+// entities in a single regex pass (lookup-map driven) so a doubly-encoded
+// `&amp;lt;` is not double-unescaped into `<`.
 function stripHtml(html: string): string {
-  // Strip <script>/<style> blocks explicitly so the generic `<[^>]*>` pass
-  // cannot leave behind a re-formed `<script>` after one round of removal.
-  // Decode entities in a single pass so `&amp;lt;` does not double-unescape
-  // into `<` after the `&amp;` -> `&` step.
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&(?:nbsp|amp|lt|gt|quot);/g, (match) => HTML_ENTITIES[match] ?? match)
-    .trim();
+  let previous = '';
+  let current = html;
+  while (current !== previous) {
+    previous = current;
+    current = current.replace(TAG_RE, '');
+  }
+  return current.replace(ENTITY_RE, (match) => HTML_ENTITIES[match] ?? match).trim();
 }
 
 function requireStringArg(args: ArgBag, name: string, label: string, nextStep: string): string {

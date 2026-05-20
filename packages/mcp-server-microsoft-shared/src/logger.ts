@@ -10,6 +10,24 @@ export interface MicrosoftLogger {
 // sinks below. Anything other than "strict" defaults to verbose logging.
 const STRICT_LOGGING: boolean = process.env.LOG_MODE === 'strict';
 
+/**
+ * Redact an email address before it is written to a log sink. Returns a string
+ * shaped like the original (`x***@y*.z*`) so an operator can still distinguish
+ * accounts in a multi-account session, but the local-part and domain
+ * characters are replaced with asterisks. Defeats CodeQL
+ * `js/clear-text-logging` flagging email addresses as sensitive PII.
+ */
+export function redactEmail(email: string): string {
+  const at = email.indexOf('@');
+  if (at <= 0) return '***';
+  const domain = email.slice(at + 1);
+  const redactedDomain = domain
+    .split('.')
+    .map((part) => (part.length > 0 ? part[0] + '*' : '*'))
+    .join('.');
+  return `${email[0]}***@${redactedDomain}`;
+}
+
 export function createLogger(service: string): MicrosoftLogger {
   const prefix = `[${service}]`;
 
