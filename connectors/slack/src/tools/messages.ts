@@ -10,6 +10,7 @@ import {
   resolveUserIdsToCache,
 } from '../helpers.js';
 import { notConnectedJson } from './auth.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 
 const RESPONSE_FORMAT_ENUM = z.enum(['concise', 'detailed']).optional();
 
@@ -79,7 +80,7 @@ Set to_me=true to prepend "to:@<your_username>" automatically.`,
           ts_iso: m.ts ? slackTsToDatetime(m.ts) : undefined,
           channel: m.channel,
           user: m.user,
-          text: m.text,
+          text: wrapUntrusted(m.text, 'slack:search-messages'),
           ...(isConcise ? {} : { permalink: m.permalink }),
         }),
       );
@@ -154,7 +155,7 @@ Additional filters: in:#channel, from:@username, before:/after:DATE, has:link, h
           ts_iso: m.ts ? slackTsToDatetime(m.ts) : undefined,
           channel: m.channel,
           user: m.user,
-          text: m.text,
+          text: wrapUntrusted(m.text, 'slack:search-messages-to-me'),
           ...(isConcise ? {} : { permalink: m.permalink }),
         }),
       );
@@ -240,7 +241,7 @@ Prefers user token (broader read access to public channels).`,
             ts_slack: m.ts,
             ts_iso: m.ts ? slackTsToDatetime(m.ts) : undefined,
             user: m.user,
-            text: m.text,
+            text: wrapUntrusted(m.text, 'slack:get-message-by-permalink:thread'),
             bot_id: (m as unknown as { bot_id?: string }).bot_id,
             subtype: (m as unknown as { subtype?: string }).subtype,
           }));
@@ -300,7 +301,7 @@ Prefers user token (broader read access to public channels).`,
         ts_slack: message.ts,
         ts_iso: message.ts ? slackTsToDatetime(message.ts) : undefined,
         user: message.user,
-        text: message.text,
+        text: wrapUntrusted(message.text, 'slack:get-message-by-permalink'),
         bot_id: (message as unknown as { bot_id?: string }).bot_id,
         subtype: (message as unknown as { subtype?: string }).subtype,
       };
