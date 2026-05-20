@@ -1,0 +1,55 @@
+{
+  "name": "@mindstone/mcp-server-microsoft-sharepoint",
+  "version": "0.1.1",
+  "mcpName": "io.github.mindstone/mcp-server-microsoft-sharepoint",
+  "description": "Microsoft 365 SharePoint via Graph: sites, libraries, pages, lists, search, file/list mutations.",
+  "license": "FSL-1.1-MIT",
+  "type": "module",
+  "bin": {
+    "mcp-server-microsoft-sharepoint": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "server.json"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mindstone/mcp-servers.git",
+    "directory": "connectors/microsoft-sharepoint"
+  },
+  "homepage": "https://github.com/mindstone/mcp-servers/tree/main/connectors/microsoft-sharepoint",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "shx rm -rf dist && tsc && shx chmod +x dist/index.js && npm run security:internal-refs",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build && npm test",
+    "watch": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "security:internal-refs": "node scripts/check-internal-refs.mjs"
+  },
+  "dependencies": {
+    "@mindstone/mcp-server-microsoft-shared": "0.1.0",
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@mindstone/mcp-test-harness": "file:../../test-harness",
+    "@types/node": "^22",
+    "@vitest/coverage-v8": "^4.1.3",
+    "msw": "^2.13.2",
+    "shx": "^0.3.4",
+    "typescript": "^5.8.2",
+    "vitest": "^4.1.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

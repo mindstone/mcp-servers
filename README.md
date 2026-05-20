@@ -2,7 +2,7 @@
 
 Source-available MCP servers by Mindstone. Works with any MCP host — Claude Desktop, Cursor, Rebel, and others.
 
-Browse all 30 connectors with their version, auth model, and tool count at the [catalogue site](https://mindstone.github.io/mcp-servers/) (regenerated from each connector's `STATUS.json` on every push).
+Browse all 35 connectors with their version, auth model, and tool count at the [catalogue site](https://mindstone.github.io/mcp-servers/) (regenerated from each connector's `STATUS.json` on every push).
 
 ## Connectors
 
@@ -20,6 +20,11 @@ Browse all 30 connectors with their version, auth model, and tool count at the [
 | [hubspot](connectors/hubspot/) | Manage HubSpot CRM — contacts, companies, deals, tickets, leads, tasks, notes, properties, lists, workflows, knowledge base, and files — with multi-account, host-orchestrated OAuth |
 | [humaans](connectors/humaans/) | Query employee profiles, job roles, time-away requests, and company info via Humaans HR |
 | [kling](connectors/kling/) | Generate AI videos from text descriptions or images via Kling AI |
+| [microsoft-calendar](connectors/microsoft-calendar/) | List, create, update, and respond to Outlook calendar events, check free/busy, and list calendars; reuses the cohort's host-orchestrated Microsoft 365 OAuth surface |
+| [microsoft-files](connectors/microsoft-files/) | List, search, upload, download, share, and read OneDrive files via Microsoft Graph; reuses the cohort's host-orchestrated Microsoft 365 OAuth surface |
+| [microsoft-mail](connectors/microsoft-mail/) | List, search, read, send, reply, forward, draft, move, and delete Outlook email; owns the cohort's host-orchestrated Microsoft 365 OAuth surface |
+| [microsoft-sharepoint](connectors/microsoft-sharepoint/) | Discover sites, browse libraries, read pages and lists, search content, and mutate SharePoint files/lists with incremental Sites.Read.All consent |
+| [microsoft-teams](connectors/microsoft-teams/) | List and read Teams chats, send chat messages, list teams and channels, and read presence; reuses the cohort's host-orchestrated Microsoft 365 OAuth surface |
 | [mixmax](connectors/mixmax/) | Manage sequences, send tracked emails, use templates, and monitor engagement via Mixmax |
 | [nano-banana](connectors/nano-banana/) | Generate and edit images using Google Gemini's AI capabilities |
 | [napkin](connectors/napkin/) | Generate professional visuals — diagrams, infographics, and illustrations — from text via Napkin AI |

@@ -1,0 +1,32 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "microsoft-files",
+  "package": "@mindstone/mcp-server-microsoft-files",
+  "version": "0.1.1",
+  "auth": {
+    "type": "oauth-host-orchestrated",
+    "envVars": [
+      "MS_CLIENT_ID"
+    ]
+  },
+  "tools": {
+    "count": 13,
+    "domains": [
+      "files",
+      "folders",
+      "sharing"
+    ]
+  },
+  "surface": "cloud-api",
+  "hostsTested": [
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/tools.ts",
+    "auth": "./src/utils.ts",
+    "tests": "./test/",
+    "serverJson": "./server.json"
+  }
+}

@@ -90,6 +90,34 @@ describe('TokenProvider — happy path', () => {
     await expect(provider.getAccessToken()).resolves.toBe('legacy-token');
   });
 
+  it('fails closed when per-account token file is malformed (no legacy fallback)', async () => {
+    writeAccountsFile(configDir, [{ email: 'legacy@example.com' }]);
+    const tokenPath = path.join(configDir, 'credentials', 'legacy-example-com.token.json');
+    fs.mkdirSync(path.dirname(tokenPath), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(tokenPath, '{ not-json', { mode: 0o600 });
+
+    fs.writeFileSync(
+      path.join(configDir, 'tokens.json'),
+      JSON.stringify({
+        access_token: 'legacy-token',
+        expires_at: Date.now() + 60 * 60 * 1000,
+        token_type: 'Bearer',
+      }),
+      { mode: 0o600 },
+    );
+
+    const provider = new TokenProvider(configDir, 'client-id', 'legacy@example.com');
+    await expect(provider.getAccessToken()).rejects.toThrow();
+  });
+
+  it('throws when legacy tokens.json is malformed and per-account file is missing', async () => {
+    writeAccountsFile(configDir, [{ email: 'legacy@example.com' }]);
+    fs.writeFileSync(path.join(configDir, 'tokens.json'), '{ broken-json', { mode: 0o600 });
+
+    const provider = new TokenProvider(configDir, 'client-id', 'legacy@example.com');
+    await expect(provider.getAccessToken()).rejects.toThrow();
+  });
+
   it('throws when no token is found at all', async () => {
     writeAccountsFile(configDir, [{ email: 'nope@example.com' }]);
     const provider = new TokenProvider(configDir, 'client-id', 'nope@example.com');

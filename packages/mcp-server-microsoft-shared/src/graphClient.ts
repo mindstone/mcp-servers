@@ -1,7 +1,7 @@
 import 'isomorphic-fetch';
 import { Client } from '@microsoft/microsoft-graph-client';
 import { TokenProvider, MicrosoftAccount } from './tokenProvider.js';
-import { createLogger } from './logger.js';
+import { createLogger, redactEmail } from './logger.js';
 
 const log = createLogger('microsoft-graph');
 
@@ -55,7 +55,7 @@ export function createGraphClientWithRetry(options: GraphClientOptions): GraphCl
 
   log.debug('Creating Microsoft Graph client', {
     configDir: options.configDir,
-    email: options.email ?? 'default',
+    account: options.email ? redactEmail(options.email) : 'default',
   });
 
   const client = Client.initWithMiddleware({
