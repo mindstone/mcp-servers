@@ -1,0 +1,52 @@
+{
+  "connectorId": "bundled-microsoft-calendar",
+  "status": "pass",
+  "steps": [
+    {
+      "tool": "list_calendars",
+      "args": {},
+      "durationMs": 348.76316700000007,
+      "isError": false,
+      "text": "{\"count\":3,\"calendars\":[{\"id\":\"AQMkADY4ZThlOTY2AC0zYzQ4LTRmMTYtODU5My0xMzQ3YjY1YzdkYWMARgAAA6gh4CQ-EYNHsF4eYuBE2XIHANzOghIjLsRBqx75PvuAXZkAAAIBBgAAANzOghIjLsRBqx75PvuAXZkAAALhkAAAAA==\",\"name\":\"Calendar\",\"color\":\"auto\",\"isDefault\":true,\"canEdit\":true,\"owner\":{\"name\":\"Harry Bloom\",\"address\":\"harry@mindstone.ai\"}},{\"id\":\"AAMkADY4ZThlOTY2LTNjNDgtNGYxNi04NTkzLTEzNDdiNjVjN2RhYwBGAAAAAACoIeAkPxGDR7BeHmLgRNlyBwDczoISIy7EQase_T77gF2ZAAAAAAEGAADczoISIy7EQase_T77gF2ZAAA10fVnAAA=\",\"name\":\"United Kingdom holidays\",\"color\":\"auto\",\"isDefault\":false,\"canEdit\":false,\"owner\":{\"name\":\"Harry Bloom\",\"address\":\"harry@mindstone.ai\"}},{\"id\":\"AAMkADY4ZThlOTY2LTNjNDgtNGYxNi04NTkzLTEzNDdiNjVjN2RhYwBGAAAAAACoIeAkPxGDR7BeHmLgRNlyBwDczoISIy7EQase_T77gF2ZAAAAAAEGAADczoISIy7EQase_T77gF2ZAAA10fVoAAA=\",\"name\":\"Birthdays\",\"color\":\"auto\",\"isDefault\":false,\"canEdit\":false,\"owner\":{\"name\":\"Harry Bloom\",\"address\":\"harry@mindstone.ai\"}}]}",
+      "json": {
+        "count": 3,
+        "calendars": [
+          {
+            "id": "AQMkADY4ZThlOTY2AC0zYzQ4LTRmMTYtODU5My0xMzQ3YjY1YzdkYWMARgAAA6gh4CQ-EYNHsF4eYuBE2XIHANzOghIjLsRBqx75PvuAXZkAAAIBBgAAANzOghIjLsRBqx75PvuAXZkAAALhkAAAAA==",
+            "name": "Calendar",
+            "color": "auto",
+            "isDefault": true,
+            "canEdit": true,
+            "owner": {
+              "name": "Harry Bloom",
+              "address": "harry@mindstone.ai"
+            }
+          },
+          {
+            "id": "AAMkADY4ZThlOTY2LTNjNDgtNGYxNi04NTkzLTEzNDdiNjVjN2RhYwBGAAAAAACoIeAkPxGDR7BeHmLgRNlyBwDczoISIy7EQase_T77gF2ZAAAAAAEGAADczoISIy7EQase_T77gF2ZAAA10fVnAAA=",
+            "name": "United Kingdom holidays",
+            "color": "auto",
+            "isDefault": false,
+            "canEdit": false,
+            "owner": {
+              "name": "Harry Bloom",
+              "address": "harry@mindstone.ai"
+            }
+          },
+          {
+            "id": "AAMkADY4ZThlOTY2LTNjNDgtNGYxNi04NTkzLTEzNDdiNjVjN2RhYwBGAAAAAACoIeAkPxGDR7BeHmLgRNlyBwDczoISIy7EQase_T77gF2ZAAAAAAEGAADczoISIy7EQase_T77gF2ZAAA10fVoAAA=",
+            "name": "Birthdays",
+            "color": "auto",
+            "isDefault": false,
+            "canEdit": false,
+            "owner": {
+              "name": "Harry Bloom",
+              "address": "harry@mindstone.ai"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "p95Ms": 348.76316700000007
+}

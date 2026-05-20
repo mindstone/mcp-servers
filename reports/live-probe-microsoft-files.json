@@ -1,0 +1,33 @@
+{
+  "connectorId": "bundled-microsoft-files",
+  "status": "pass",
+  "steps": [
+    {
+      "tool": "list_files",
+      "args": {
+        "top": 1
+      },
+      "durationMs": 399.32416699999976,
+      "isError": false,
+      "text": "{\"count\":1,\"path\":\"/\",\"items\":[{\"id\":\"016KESMS57ZHEKWPT6HBEIRY5F5FYXOHEI\",\"name\":\"Attachments\",\"type\":\"folder\",\"size\":\"unknown\",\"createdAt\":\"2026-01-24T22:09:21Z\",\"modifiedAt\":\"2026-01-24T22:09:21Z\",\"webUrl\":\"https://mindstone209-my.sharepoint.com/personal/harry_mindstone_ai/Documents/Attachments\",\"childCount\":0,\"path\":\"/drive/root:\"}]}",
+      "json": {
+        "count": 1,
+        "path": "/",
+        "items": [
+          {
+            "id": "016KESMS57ZHEKWPT6HBEIRY5F5FYXOHEI",
+            "name": "Attachments",
+            "type": "folder",
+            "size": "unknown",
+            "createdAt": "2026-01-24T22:09:21Z",
+            "modifiedAt": "2026-01-24T22:09:21Z",
+            "webUrl": "https://mindstone209-my.sharepoint.com/personal/harry_mindstone_ai/Documents/Attachments",
+            "childCount": 0,
+            "path": "/drive/root:"
+          }
+        ]
+      }
+    }
+  ],
+  "p95Ms": 399.32416699999976
+}

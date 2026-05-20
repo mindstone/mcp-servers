@@ -1,0 +1,65 @@
+{
+  "connectorId": "bundled-microsoft-mail",
+  "status": "pass",
+  "steps": [
+    {
+      "tool": "list_emails",
+      "args": {
+        "top": 1
+      },
+      "durationMs": 311.09779100000014,
+      "isError": false,
+      "text": "{\"count\":1,\"folder\":\"inbox\",\"emails\":[{\"id\":\"AAMkADY4ZThlOTY2LTNjNDgtNGYxNi04NTkzLTEzNDdiNjVjN2RhYwBGAAAAAACoIeAkPxGDR7BeHmLgRNlyBwDczoISIy7EQase_T77gF2ZAAAAAAEMAADczoISIy7EQase_T77gF2ZAAExThBRAAA=\",\"subject\":\"What's new in Rebel this week\",\"from\":\"noreply@mindstone.com\",\"fromName\":\"Mindstone Rebel\",\"receivedAt\":\"2026-05-13T10:00:44Z\",\"preview\":\"Steady AI responses\\r\\n ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍\",\"isRead\":false,\"hasAttachments\":false,\"importance\":\"normal\"}]}",
+      "json": {
+        "count": 1,
+        "folder": "inbox",
+        "emails": [
+          {
+            "id": "AAMkADY4ZThlOTY2LTNjNDgtNGYxNi04NTkzLTEzNDdiNjVjN2RhYwBGAAAAAACoIeAkPxGDR7BeHmLgRNlyBwDczoISIy7EQase_T77gF2ZAAAAAAEMAADczoISIy7EQase_T77gF2ZAAExThBRAAA=",
+            "subject": "What's new in Rebel this week",
+            "from": "noreply@mindstone.com",
+            "fromName": "Mindstone Rebel",
+            "receivedAt": "2026-05-13T10:00:44Z",
+            "preview": "Steady AI responses\r\n ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍‎‏﻿ ‌​‍",
+            "isRead": false,
+            "hasAttachments": false,
+            "importance": "normal"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "create_draft",
+      "args": {
+        "to": [
+          "harry@mindstone.ai"
+        ],
+        "subject": "C-live smoke draft 2026-05-19T20:23:33.678Z",
+        "body": "C-live smoke draft for OSS migration verification."
+      },
+      "durationMs": 238.09687500000018,
+      "isError": false,
+      "text": "{\"success\":true,\"draftId\":\"AAMkADY4ZThlOTY2LTNjNDgtNGYxNi04NTkzLTEzNDdiNjVjN2RhYwBGAAAAAACoIeAkPxGDR7BeHmLgRNlyBwDczoISIy7EQase_T77gF2ZAAAAAAEPAADczoISIy7EQase_T77gF2ZAAFA4UL8AAA=\",\"message\":\"Draft created successfully\"}",
+      "json": {
+        "success": true,
+        "draftId": "AAMkADY4ZThlOTY2LTNjNDgtNGYxNi04NTkzLTEzNDdiNjVjN2RhYwBGAAAAAACoIeAkPxGDR7BeHmLgRNlyBwDczoISIy7EQase_T77gF2ZAAAAAAEPAADczoISIy7EQase_T77gF2ZAAFA4UL8AAA=",
+        "message": "Draft created successfully"
+      }
+    },
+    {
+      "tool": "delete_email",
+      "args": {
+        "id": "AAMkADY4ZThlOTY2LTNjNDgtNGYxNi04NTkzLTEzNDdiNjVjN2RhYwBGAAAAAACoIeAkPxGDR7BeHmLgRNlyBwDczoISIy7EQase_T77gF2ZAAAAAAEPAADczoISIy7EQase_T77gF2ZAAFA4UL8AAA=",
+        "permanent": true
+      },
+      "durationMs": 133.8609160000001,
+      "isError": false,
+      "text": "{\"success\":true,\"message\":\"Email permanently deleted\"}",
+      "json": {
+        "success": true,
+        "message": "Email permanently deleted"
+      }
+    }
+  ],
+  "p95Ms": 311.09779100000014
+}

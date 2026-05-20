@@ -1,0 +1,13 @@
+{
+  "status": "pass",
+  "refreshRoundTrip": {
+    "status": "pass",
+    "durationMs": 616,
+    "fileModeOctal": "600"
+  },
+  "disableRefresh": {
+    "status": "pass",
+    "durationMs": 5,
+    "authRequired": true
+  }
+}
