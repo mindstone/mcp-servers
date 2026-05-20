@@ -13,7 +13,7 @@ Read and edit Word documents, Excel workbooks, and PowerPoint presentations from
 
 | Field | Value |
 |-------|-------|
-| Version | 0.1.4 |
+| Version | 0.2.0 |
 | Auth | None (—) |
 | Tools | 53 (word, excel, powerpoint, setup) |
 | Surface | desktop add-in |

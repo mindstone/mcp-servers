@@ -1,0 +1,163 @@
+# @mindstone/mcp-server-microsoft-mail
+
+[![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-microsoft-mail.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-mail)
+[![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
+
+Microsoft 365 Outlook Mail MCP server — list, search, read, send, reply, forward, draft, move, and delete email via the Microsoft Graph API.
+
+*Cohort-style Microsoft 365 mail MCP. Host owns the OAuth flow, this server reads per-account tokens off disk, and each tool fails closed with a structured `auth_required` envelope so the host can drive reauth.*
+
+## Status
+
+- **Version:** [0.1.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-mail)
+- **Auth:** OAuth (host-orchestrated) ([`MS_CLIENT_ID`](./server.json))
+- **Tools:** [12](./src/tools.ts) (messages, folders, drafts)
+- **Surface:** cloud-api
+- **Hosts tested:** Mindstone Rebel
+- **Machine-readable:** [`STATUS.json`](./STATUS.json)
+- **Shared library:** [`@mindstone/mcp-server-microsoft-shared`](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-shared)
+
+## Why this exists
+
+When we ported this in May 2026, Microsoft's own [Graph MCP](https://github.com/microsoft/mcp) lineup did not yet ship a stand-alone Outlook Mail server, and the community options at the time each ran their own browser-callback server during OAuth — which our host application already does, with credentials it has already negotiated for the rest of the cohort. We pulled the bundled connector out of MindstoneRebel as a 1:1 port so the same five-connector Microsoft 365 cohort (mail, calendar, files, teams, SharePoint) shares a single OAuth surface, a single shared-library package for token persistence, request timeouts, and the structured `auth_required` envelope the host already knows how to recover from. This connector owns the cohort's authentication tool (`authenticate_microsoft_account`); the other four connectors reuse the credentials it negotiates.
+
+## Example interaction
+
+> "List my five most recent unread emails from Alice and reply to the latest one with 'thanks, will read tonight'."
+
+Tools the host calls:
+1. `search_emails` — `from:alice@example.com isRead:false`, top 5.
+2. `reply_to_email` — sends a reply on the top-result message ID with the supplied body.
+
+Response (trimmed):
+
+```json
+{
+  "matches": [
+    {
+      "id": "AAMkAD...",
+      "subject": "Q3 planning",
+      "from": "alice@example.com",
+      "receivedDateTime": "2026-05-19T09:14:11Z"
+    }
+  ],
+  "reply": {
+    "id": "AAMkAD...",
+    "isDraft": false
+  }
+}
+```
+
+## Requirements
+
+- Node.js 20+
+- npm
+- A host application that performs the Microsoft OAuth flow and writes per-account token files into `${MS_CONFIG_DIR}/credentials/${sanitised-email}.token.json` and an `${MS_CONFIG_DIR}/accounts.json` index. This server reads those files; it does not initiate OAuth itself.
+
+## Quick Start
+
+### Install & build
+
+```bash
+cd <path-to-repo>/connectors/microsoft-mail
+npm install
+npm run build
+```
+
+### npx (once published)
+
+```bash
+npx -y @mindstone/mcp-server-microsoft-mail
+```
+
+### Local
+
+```bash
+node dist/index.js
+```
+
+## Configuration
+
+This server runs alongside a host application that owns the Microsoft 365 OAuth flow. The host writes credentials to disk; this server reads them.
+
+### Required environment variables
+
+| Name | Description |
+| ---- | ----------- |
+| `MS_CLIENT_ID` | Microsoft Entra (Azure AD) application client ID. |
+| `MS_CONFIG_DIR` | Path to the per-user Microsoft config directory (`credentials/`, `accounts.json`). |
+
+### Optional environment variables
+
+| Name | Description | Default |
+| ---- | ----------- | ------- |
+| `MS_ACCOUNT_EMAIL` | Account email when running in multi-account per-instance mode. | First account in `accounts.json`. |
+| `MS_MCP_PACKAGE_ID` | Logical package ID surfaced in error responses. | `Microsoft365Mail` |
+| `MICROSOFT_REQUEST_TIMEOUT_MS` | Override the upstream Microsoft Graph request timeout (max `300000` ms). | `60000` |
+| `MICROSOFT_DISABLE_REFRESH` | Set to `1` to disable token refresh on this surface. Tools fail closed with the structured `auth_required` response so the host can drive reauth. Cloud surfaces set this to `1`. | unset |
+
+## Host configuration examples
+
+### Claude Desktop / Cursor
+
+```json
+{
+  "mcpServers": {
+    "Microsoft365Mail": {
+      "command": "npx",
+      "args": ["-y", "@mindstone/mcp-server-microsoft-mail"],
+      "env": {
+        "MS_CLIENT_ID": "your-entra-application-client-id",
+        "MS_CONFIG_DIR": "/absolute/path/to/microsoft-config"
+      }
+    }
+  }
+}
+```
+
+Until the host has written `${MS_CONFIG_DIR}/credentials/<account>.token.json` and `${MS_CONFIG_DIR}/accounts.json`, every tool call returns the structured `auth_required` response (the host's MCP service recognises this shape and dispatches to its registered Microsoft 365 OAuth orchestrator).
+
+### Local development (no npm publish needed)
+
+```json
+{
+  "mcpServers": {
+    "Microsoft365Mail": {
+      "command": "node",
+      "args": ["<path-to-repo>/connectors/microsoft-mail/dist/index.js"],
+      "env": {
+        "MS_CLIENT_ID": "your-entra-application-client-id",
+        "MS_CONFIG_DIR": "/absolute/path/to/microsoft-config"
+      }
+    }
+  }
+}
+```
+
+## Tools (12)
+
+| Tool | Description |
+| ---- | ----------- |
+| `authenticate_microsoft_account` | Emit the structured `auth_required` handoff so the host runs the Microsoft 365 OAuth flow. |
+| `list_emails` | List emails in a folder, ordered by most recent. |
+| `get_email` | Read a single email by message ID. |
+| `send_email` | Send a new email message. |
+| `search_emails` | Search emails using Microsoft Search syntax. |
+| `reply_to_email` | Reply (or reply-all) to an existing email. |
+| `forward_email` | Forward an email to additional recipients. |
+| `delete_email` | Move an email to Deleted Items, or hard-delete it. |
+| `list_folders` | List mail folders. |
+| `move_email` | Move an email to a different folder. |
+| `create_reply_draft` | Save a draft reply to an existing email. |
+| `create_draft` | Save a new standalone draft email. |
+
+## Security notes
+
+- Token files are written by the host with mode `0600`; this server reads them via the cohort-shared library, which fails closed on malformed files.
+- `MICROSOFT_DISABLE_REFRESH=1` is the default on cloud surfaces so the desktop session remains the sole refresh-token authority and avoids racing for single-use refresh tokens.
+- Successful tool responses drop the OSS-only `ok:true` wrapper to match the bundled `successResult` shape; manual validation/business errors return `isError:true` with a `{ ok:false, error, action_required, next_step }` payload so the host's recovery layer can act on them.
+- Per-tool Graph calls run under a composed caller + cohort timeout signal via `.options({signal})` plus a `Promise.race` wrapper for defence-in-depth.
+
+## Licence
+
+[FSL-1.1-MIT](./LICENSE) — Functional Source License, Version 1.1, with MIT future licence. Free for non-competing use; relicenses to MIT on the converter date in `LICENSE`.

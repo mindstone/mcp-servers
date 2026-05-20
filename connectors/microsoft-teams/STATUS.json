@@ -1,0 +1,34 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "microsoft-teams",
+  "package": "@mindstone/mcp-server-microsoft-teams",
+  "version": "0.1.1",
+  "auth": {
+    "type": "oauth-host-orchestrated",
+    "envVars": [
+      "MS_CLIENT_ID"
+    ]
+  },
+  "tools": {
+    "count": 7,
+    "domains": [
+      "chats",
+      "messages",
+      "teams",
+      "channels",
+      "presence"
+    ]
+  },
+  "surface": "cloud-api",
+  "hostsTested": [
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/tools.ts",
+    "auth": "./src/utils.ts",
+    "tests": "./test/",
+    "serverJson": "./server.json"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "microsoft-mail",
+  "package": "@mindstone/mcp-server-microsoft-mail",
+  "version": "0.1.1",
+  "auth": {
+    "type": "oauth-host-orchestrated",
+    "envVars": [
+      "MS_CLIENT_ID"
+    ]
+  },
+  "tools": {
+    "count": 12,
+    "domains": [
+      "messages",
+      "folders",
+      "drafts"
+    ]
+  },
+  "surface": "cloud-api",
+  "hostsTested": [
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/tools.ts",
+    "auth": "./src/utils.ts",
+    "tests": "./test/",
+    "serverJson": "./server.json"
+  }
+}

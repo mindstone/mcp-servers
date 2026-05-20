@@ -14,7 +14,7 @@ export {
   MicrosoftRefreshDisabledError,
   MicrosoftRefreshDisabledReason,
 } from './tokenProvider.js';
-export { MicrosoftLogger, createLogger } from './logger.js';
+export { MicrosoftLogger, createLogger, redactEmail } from './logger.js';
 export { windowsToIanaTimezone } from './timezoneMapping.js';
 export { atomicCredentialWrite, sweepStaleTemps } from './utils/atomicCredentialWrite.js';
 export * from './types.js';

@@ -62,22 +62,24 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          # Auto-discover every directory under connectors/. Two exclusions:
+          # Auto-discover every directory under connectors/. Three exclusions:
           #
-          #   _template          starter scaffolding; placeholders fail validation by design.
-          #   google-workspace   STATUS.json predates the canonical schema and has
-          #                      three legitimate drifts (extra envVars, tool-count
-          #                      registration pattern not recognised by the
-          #                      heuristic in scripts/check-status.mjs, empty
-          #                      hostsTested). Remove from this list once the
-          #                      connector author migrates STATUS.json and/or the
-          #                      script's tool-count detection learns the new pattern.
+          #   _template              starter scaffolding; placeholders fail validation by design.
+          #   google-workspace       Tools register from a nested `definitions/` directory, which
+          #                          the heuristic in scripts/check-status.mjs does not recurse
+          #                          into. Remove once the script's tool-count detection learns
+          #                          the new pattern (or the connector migrates to direct
+          #                          registerTool calls).
+          #   microsoft-sharepoint   Tools register from an array via a single loop plus one
+          #                          standalone auth-tool registration; the heuristic counts
+          #                          two registerTool calls but the actual surface is 36 tools.
+          #                          Remove once the heuristic learns this pattern.
           all=()
           for d in connectors/*/; do
             name="${d#connectors/}"
             name="${name%/}"
             case "$name" in
-              _template|google-workspace) continue ;;
+              _template|google-workspace|microsoft-sharepoint) continue ;;
             esac
             # Hard slug allowlist. Bash regex (not `grep`) so the match is
             # whole-string anchored against the full literal name — a value

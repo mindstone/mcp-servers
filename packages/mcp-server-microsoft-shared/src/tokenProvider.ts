@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { createLogger } from './logger.js';
+import { createLogger, redactEmail } from './logger.js';
 import { atomicCredentialWrite, sweepStaleTemps } from './utils/atomicCredentialWrite.js';
 
 import type { MicrosoftAccount, AccountsConfig } from './types.js';
@@ -41,6 +41,15 @@ export class MicrosoftRefreshDisabledError extends Error {
 
 function isRefreshDisabled(): boolean {
   return process.env.MICROSOFT_DISABLE_REFRESH === '1';
+}
+
+function isMissingFileError(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    (err as { code?: unknown }).code === 'ENOENT'
+  );
 }
 
 function sanitizeEmail(email: string): string {
@@ -151,14 +160,20 @@ export class TokenProvider {
       const data = await fs.readFile(tokenPath, 'utf-8');
       this.cachedToken = this.normalizeToken(JSON.parse(data) as RawTokenData);
       return this.cachedToken;
-    } catch {
+    } catch (err) {
+      if (!isMissingFileError(err)) {
+        throw err;
+      }
       try {
         const data = await fs.readFile(this.getLegacyTokenPath(), 'utf-8');
         this.cachedToken = this.normalizeToken(JSON.parse(data) as RawTokenData);
         log.info('Loaded token from legacy tokens.json');
         return this.cachedToken;
-      } catch {
-        return null;
+      } catch (legacyErr) {
+        if (isMissingFileError(legacyErr)) {
+          return null;
+        }
+        throw legacyErr;
       }
     }
   }
@@ -184,12 +199,12 @@ export class TokenProvider {
     if (isExpired && token.refresh_token) {
       const diskToken = await this.loadToken(resolvedEmail);
       if (diskToken && diskToken.expires_at > Date.now() + 5 * 60 * 1000) {
-        log.warn('Token refreshed by another process, using disk token', { email: resolvedEmail });
+        log.warn('Token refreshed by another process, using disk token', { account: redactEmail(resolvedEmail) });
         return diskToken.access_token;
       }
 
       if (isRefreshDisabled()) {
-        log.warn('Token expired and MICROSOFT_DISABLE_REFRESH=1; signalling auth_required', { email: resolvedEmail });
+        log.warn('Token expired and MICROSOFT_DISABLE_REFRESH=1; signalling auth_required', { account: redactEmail(resolvedEmail) });
         throw new MicrosoftRefreshDisabledError(
           resolvedEmail,
           'token_expired',
@@ -197,7 +212,7 @@ export class TokenProvider {
         );
       }
 
-      log.warn('Token expired, attempting refresh', { email: resolvedEmail });
+      log.warn('Token expired, attempting refresh', { account: redactEmail(resolvedEmail) });
       try {
         const refreshedToken = await this.refreshToken(
           diskToken?.refresh_token ?? token.refresh_token,
@@ -205,15 +220,15 @@ export class TokenProvider {
         );
         this.cachedToken = refreshedToken;
         await this.saveToken(resolvedEmail, refreshedToken);
-        log.info('Token refreshed successfully', { email: resolvedEmail });
+        log.info('Token refreshed successfully', { account: redactEmail(resolvedEmail) });
         return refreshedToken.access_token;
       } catch (err) {
         const fallbackToken = await this.loadToken(resolvedEmail);
         if (fallbackToken && fallbackToken.expires_at > Date.now() + 5 * 60 * 1000) {
-          log.warn('Refresh failed but another process refreshed, using disk token', { email: resolvedEmail });
+          log.warn('Refresh failed but another process refreshed, using disk token', { account: redactEmail(resolvedEmail) });
           return fallbackToken.access_token;
         }
-        log.error('Failed to refresh token', { email: resolvedEmail, error: String(err) });
+        log.error('Failed to refresh token', { account: redactEmail(resolvedEmail), error: String(err) });
         throw new Error('Microsoft token expired and refresh failed. Please reconnect your account.');
       }
     }
