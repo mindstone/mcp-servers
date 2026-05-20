@@ -2,9 +2,13 @@
 #
 # The catalogue is generated *before* this workflow runs (scripts/build-catalogue.mjs
 # writes docs/catalogue/ and docs/index.md, which are committed). This workflow
-# only re-validates that the committed catalogue is up to date with each connector's
-# STATUS.json, then publishes the docs/ directory via the official Jekyll Pages
-# action.
+# re-validates that the committed catalogue + one-click install blocks match
+# what the generators would produce. If they do, the docs/ directory is
+# published via the official Jekyll Pages action. If a release commit skipped
+# the regen step and left main out of sync, the verify job self-heals by
+# opening an automated regeneration PR and failing the deploy until that PR
+# is merged. This stops main from advertising a stale catalogue while keeping
+# the recovery path one merge away.
 #
 # Action SHAs match the latest pinned versions of the official Pages workflow.
 # Dependabot (.github/dependabot.yml, github-actions ecosystem) keeps them current.
@@ -23,11 +27,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Detect-drift runs at contents:read so that arbitrary repo code (the
+  # regen scripts) cannot leverage the elevated token used for opening
+  # the auto-PR. If drift is detected the regenerated tree is uploaded as
+  # an artifact and the privileged open-regen-pr job picks it up without
+  # ever invoking the scripts itself. See AGENTS.md security invariant 3.
   verify:
     name: Verify catalogue is up to date
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      drifted: ${{ steps.drift.outputs.drifted }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -35,14 +46,123 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
-      - name: Check committed catalogue matches generator output
-        run: node scripts/build-catalogue.mjs --check
-      - name: Check committed install-links blocks match server.json
-        run: node scripts/gen-install-links.mjs --check
+      # Re-sync to the freshest main so a stale queued run does not produce
+      # a duplicate auto-PR after a previous regen has already merged.
+      - name: Re-sync to origin/main
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git fetch --depth=1 origin main
+          git checkout -B main FETCH_HEAD
+      - name: Regenerate catalogue + install-links
+        run: |
+          node scripts/build-catalogue.mjs
+          node scripts/gen-install-links.mjs
+      - name: Detect drift
+        id: drift
+        run: |
+          set -euo pipefail
+          if [ -n "$(git status --porcelain -- docs connectors)" ]; then
+            echo "Catalogue or install-links blocks are out of date with STATUS.json / server.json:" >&2
+            git status --porcelain -- docs connectors >&2
+            echo "drifted=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "drifted=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Upload regenerated tree
+        if: steps.drift.outputs.drifted == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pages-regen-tree
+          path: |
+            docs/index.md
+            docs/catalogue/**
+            connectors/**/README.md
+          if-no-files-found: error
+          retention-days: 1
+          include-hidden-files: false
+
+  open-regen-pr:
+    name: Open catalogue auto-regen PR
+    needs: [verify]
+    if: needs.verify.outputs.drifted == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Surface heal-mode context up front
+        run: |
+          echo "::notice::Catalogue or install-links drift detected on main; opening an auto-regen PR. If a later step fails with HTTP 403 on the create-pull-request action, enable Settings > Actions > General > 'Allow GitHub Actions to create and approve pull requests' on this repository."
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Re-sync to origin/main
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git fetch --depth=1 origin main
+          git checkout -B main FETCH_HEAD
+      - name: Apply regenerated tree from verify job
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: pages-regen-tree
+          path: .
+      - name: Open auto-regen PR
+        id: cpr
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: chore/pages-regen-catalogue
+          delete-branch: true
+          add-paths: |
+            docs/index.md
+            docs/catalogue/**
+            connectors/**/README.md
+          commit-message: |
+            chore(docs): regenerate catalogue and install-links
+
+            Auto-generated by .github/workflows/pages.yml because a push to main
+            left docs/ or connector README install blocks out of sync with each
+            connector's STATUS.json / server.json. Run locally to reproduce:
+
+              node scripts/build-catalogue.mjs
+              node scripts/gen-install-links.mjs
+          title: 'chore(docs): regenerate catalogue and install-links'
+          body: |
+            The Pages workflow detected drift between the committed `docs/` /
+            connector README install blocks and the output of
+            `scripts/build-catalogue.mjs` and `scripts/gen-install-links.mjs`.
+            Merging this PR will unblock the next Pages deploy.
+
+            Reviewer checklist:
+            - The diff should only touch `docs/index.md`, `docs/catalogue/**`,
+              and `connectors/**/README.md`. Reject if anything else changed.
+            - Safe to merge as-is once the diff is purely generator output; the
+              upstream release commit that introduced the drift is a separate
+              follow-up — open an issue if it looks malformed.
+            - Do NOT push manual edits to `chore/pages-regen-catalogue`. Each
+              workflow run force-pushes the regenerated tree and will overwrite
+              local commits on this branch.
+            - PRs authored by `GITHUB_TOKEN` do **not** trigger required status
+              checks (CI / catalogue verify / etc.) on first open. If branch
+              protection blocks merge until checks run, push an empty commit
+              to this branch (`git commit --allow-empty -m "ci: trigger
+              checks" && git push`) or have an admin merge with the bypass.
+              Long-term, switch the `token:` input on `peter-evans/create-pull-request`
+              to a fine-grained PAT with `pull_request: write` and the workflow
+              will fire automatically.
+          labels: |
+            documentation
+            auto-generated
+      - name: Fail run so the dashboard surfaces the auto-PR
+        run: |
+          echo "::error::Pages deploy intentionally blocked: a catalogue / install-links auto-regen PR has been opened. Merge it to unblock the next Pages deploy."
+          exit 1
 
   build:
     name: Build site
     needs: [verify]
+    if: needs.verify.outputs.drifted == 'false'
     runs-on: ubuntu-latest
     permissions:
       contents: read
