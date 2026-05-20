@@ -12,6 +12,7 @@ import {
   validatePath,
 } from '../ssh.js';
 import { buildTimeoutError, composeRequestSignal } from '../timeouts.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 
 export const readFileSchema = z.object({
   host: z.string().describe('SSH host (e.g., "<uuid>-00-<hash>.riker.replit.dev")'),
@@ -76,11 +77,14 @@ export async function replitReadFile(
 
     logOperation('replit_read_file', host, targetPath, 'ok', Date.now() - startTime);
 
+    // AGENTS.md invariant #6: remote file content is attacker-influenced and
+    // MUST be wrapped before being surfaced to the LLM. The wrapper escapes
+    // any embedded `</untrusted-content>` so the attacker cannot break out.
     if (binary) {
       return JSON.stringify({
         ok: true,
         path: targetPath,
-        content: content.toString('base64'),
+        content: wrapUntrusted(content.toString('base64'), `replit-ssh:read-file:${targetPath}`),
         encoding: 'base64',
         size: content.length,
       });
@@ -89,7 +93,7 @@ export async function replitReadFile(
     return JSON.stringify({
       ok: true,
       path: targetPath,
-      content: content.toString('utf-8'),
+      content: wrapUntrusted(content.toString('utf-8'), `replit-ssh:read-file:${targetPath}`),
       encoding: 'utf-8',
       size: content.length,
     });
