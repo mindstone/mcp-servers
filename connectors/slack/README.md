@@ -9,7 +9,7 @@ Slack workspace MCP server — channels, messages, threads, reactions, users, fi
 
 ## Status
 
-- **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-slack)
+- **Version:** [0.1.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-slack)
 - **Auth:** OAuth (host-orchestrated) ([`SLACK_CLIENT_SECRET`](./server.json))
 - **Tools:** [23](./src/tools/) (messages, channels, threads, users, files)
 - **Surface:** cloud-api
@@ -237,7 +237,8 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 
 ## Security notes
 
-- **Slack-owned download URL guard** — `download_slack_file` validates that the Slack-supplied `url_private_download` is HTTPS and on `slack.com` / `*.slack.com` before attaching the workspace bearer token.
+- **Slack-owned download URL guard** — `download_slack_file` validates that the Slack-supplied `url_private_download` is HTTPS and on `slack.com` / `*.slack.com` before attaching the workspace bearer token. The download helper also sets `redirect: 'manual'` and re-validates every redirect hop, so a 302 from a compromised Slack edge to an attacker-controlled host can never replay the bearer token (added in 0.1.3 to close finding `slack-010`).
+- **Untrusted-content envelopes** — every tool that returns external text wraps it in `<untrusted-content source="…">…</untrusted-content>` envelopes per AGENTS.md invariant #6, with close-tag breakout escaping. This applies to message text, channel topics/purposes, search results, thread replies, unread messages, and downloaded file content/names. Hosts must keep the envelopes intact when surfacing tool output to the model (added in 0.1.3 to close findings `slack-001..007`).
 - **Atomic, durable token persistence** — token files are written via temp-file + `fsync` + `rename`, then `chmod 0600`, so a crash mid-write cannot lose Slack's single-use refresh token.
 - **Refresh-failure differentiation** — transient network errors, HTTP 429 rate-limits, Slack auth rejections (`invalid_grant`), and malformed responses produce distinct error codes so hosts can react correctly without retrying unrecoverable failures.
 - **No host-internal vocabulary** — host-side bridge identifiers and bundled HTTP paths are explicitly absent from the published artefact (enforced by `scripts/check-no-bridge-strings.sh` during `prepublishOnly`).
