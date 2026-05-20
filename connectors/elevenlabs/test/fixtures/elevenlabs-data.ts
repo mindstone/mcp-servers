@@ -28,14 +28,18 @@ export const mockMusicPlan = {
   negative_global_styles: ['aggressive'],
   sections: [
     {
-      style: 'soft piano intro',
-      lyrics: '[instrumental]',
+      section_name: 'Intro',
       duration_ms: 10000,
+      positive_local_styles: ['soft piano', 'gentle pads'],
+      negative_local_styles: ['drums', 'distortion'],
+      lines: [],
     },
     {
-      style: 'full band chorus',
-      lyrics: 'Here comes the sun',
+      section_name: 'Chorus',
       duration_ms: 20000,
+      positive_local_styles: ['full band', 'energetic vocals'],
+      negative_local_styles: ['quiet', 'sparse'],
+      lines: ['Here comes the sun', 'And I say, it\'s all right'],
     },
   ],
 };

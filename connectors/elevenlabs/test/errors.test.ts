@@ -88,6 +88,125 @@ describe('Error handling', () => {
       35_000,
     );
   });
+
+  describe('422 detail surfacing (FastAPI validation arrays)', () => {
+    it('flattens FastAPI 422 detail arrays into actionable field-level messages', async () => {
+      // The real ElevenLabs 422 response uses an array of
+      // { type, loc, msg, input } objects. Before 0.3.0 we threw away
+      // the array shape and surfaced "HTTP 422: unknown" — an LLM agent
+      // couldn't tell which field was wrong. Now we flatten to
+      // "loc.path: msg; loc.path: msg".
+      const { http, HttpResponse } = await import('msw');
+      mswServer.use(
+        http.post('https://api.elevenlabs.io/v1/music', () =>
+          HttpResponse.json(
+            {
+              detail: [
+                {
+                  type: 'missing',
+                  loc: ['body', 'composition_plan', 'sections', 0, 'section_name'],
+                  msg: 'Field required',
+                  input: { foo: 'bar' },
+                },
+                {
+                  type: 'missing',
+                  loc: ['body', 'composition_plan', 'sections', 0, 'lines'],
+                  msg: 'Field required',
+                  input: { foo: 'bar' },
+                },
+              ],
+            },
+            { status: 422 },
+          ),
+        ),
+      );
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('generate_music_from_plan', {
+        composition_plan: {
+          sections: [
+            { section_name: 'X', duration_ms: 5000 },
+          ],
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      const parsed = JSON.parse(result.text);
+      expect(parsed.error).toContain('section_name');
+      expect(parsed.error).toContain('lines');
+      expect(parsed.error).toContain('Field required');
+      expect(parsed.code).toBe('HTTP_422');
+    });
+
+    it('tolerates 422 detail arrays with null/primitive entries', async () => {
+      const { http, HttpResponse } = await import('msw');
+      mswServer.use(
+        http.post('https://api.elevenlabs.io/v1/music', () =>
+          HttpResponse.json(
+            {
+              detail: [
+                null,
+                'just a string',
+                { loc: ['body', 'foo'], msg: 'bad' },
+                { msg: 'no loc' },
+                {},
+              ],
+            },
+            { status: 422 },
+          ),
+        ),
+      );
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('generate_music', {
+        prompt: 'irrelevant',
+      });
+
+      expect(result.isError).toBe(true);
+      const parsed = JSON.parse(result.text);
+      expect(parsed.code).toBe('HTTP_422');
+      // Must include the well-formed entries, must not throw on the null/string ones.
+      expect(parsed.error).toContain('body.foo: bad');
+      expect(parsed.error).toContain('no loc');
+    });
+  });
+
+  describe('401 missing_permissions surfacing', () => {
+    it('surfaces sound_generation scope error as MISSING_PERMISSION with the API message', async () => {
+      const { http, HttpResponse } = await import('msw');
+      mswServer.use(
+        http.post('https://api.elevenlabs.io/v1/sound-generation', () =>
+          HttpResponse.json(
+            {
+              detail: {
+                status: 'missing_permissions',
+                message: 'The API key you used is missing the permission sound_generation to execute this operation.',
+              },
+            },
+            { status: 401 },
+          ),
+        ),
+      );
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('generate_sound_effect', {
+        prompt: 'bell chime',
+        duration_seconds: 1,
+      });
+
+      expect(result.isError).toBe(true);
+      const parsed = JSON.parse(result.text);
+      expect(parsed.code).toBe('MISSING_PERMISSION');
+      expect(parsed.error).toContain('sound_generation');
+      expect(parsed.error).toContain('missing the permission');
+    });
+  });
 });
 
 describe('Configure tool', () => {

@@ -34,26 +34,32 @@ export interface VoicesResponse {
   has_more?: boolean;
 }
 
+/**
+ * ElevenLabs music composition section.
+ *
+ * Field names match the live ElevenLabs API exactly. The previous version of
+ * this connector (≤0.2.2) shipped a `{ style, lyrics, duration_ms }` shape
+ * that the API rejects with HTTP 422; see planning doc
+ * `docs/plans/260520_elevenlabs_oss_connector_fix.md` in MindstoneRebel for
+ * the live-capture trace.
+ */
 export interface CompositionSection {
-  style?: string;
-  lyrics?: string;
-  duration_ms?: number;
+  section_name: string;
+  duration_ms: number;
+  positive_local_styles?: string[];
+  negative_local_styles?: string[];
+  /** Lyric lines for the section. Empty array (or omit) for instrumental sections. */
+  lines?: string[];
 }
 
 export interface CompositionPlan {
   positive_global_styles?: string[];
   negative_global_styles?: string[];
-  sections?: CompositionSection[];
+  sections: CompositionSection[];
 }
 
-export interface MusicPlanResponse {
-  positive_global_styles: string[];
-  negative_global_styles: string[];
-  sections: Array<{
-    style: string;
-    lyrics: string;
-    duration_ms: number;
-  }>;
+export interface MusicPlanResponse extends CompositionPlan {
+  sections: CompositionSection[];
 }
 
 export interface TranscriptionWord {

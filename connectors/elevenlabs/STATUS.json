@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "name": "elevenlabs",
   "package": "@mindstone/mcp-server-elevenlabs",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "auth": {
     "type": "api-key",
     "envVars": [
