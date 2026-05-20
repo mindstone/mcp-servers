@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-05-20
+
 ### Security
 
 - **slack-010** — `download_slack_file` no longer relies on Node's default
@@ -28,6 +30,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   attacker-supplied close tags (`</untrusted-content>` → `<&#47;untrusted-content>`)
   to prevent envelope-breakout prompt injection. Regression tests in
   `test/untrusted-content.test.ts`.
+
+  Both fixes close findings from the deep security review of the migrated
+  Slack connector (audit run `mcp-servers-connectors-20260519`). All 120
+  unit tests pass.
 
 ## [0.1.2] - 2026-05-19
 

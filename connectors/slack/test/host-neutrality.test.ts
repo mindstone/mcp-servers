@@ -74,7 +74,20 @@ function hasForbiddenSubstring(text: string, pkgName: string): string | null {
   const pkgNameLc = pkgName.toLowerCase();
   // Strip out the canonical package name before scanning so install
   // instructions / canonical references don't trip the check.
-  const lc = text.toLowerCase().split(pkgNameLc).join('');
+  //
+  // Also strip the URL-encoded form of the canonical name, which appears
+  // in `vscode:mcp/install?{...}` and `vscode-insiders:mcp/install?{...}`
+  // deep links inside the auto-generated `<!-- BEGIN INSTALL_LINKS -->`
+  // README block. `encodeURIComponent` lower-cases differently than the
+  // upstream encoder (it uppercases hex digits), so we lowercase the
+  // encoded form too before stripping.
+  const pkgNameUrlEncodedLc = encodeURIComponent(pkgName).toLowerCase();
+  const lc = text
+    .toLowerCase()
+    .split(pkgNameLc)
+    .join('')
+    .split(pkgNameUrlEncodedLc)
+    .join('');
   for (const p of FORBIDDEN_PATTERNS) {
     if (lc.includes(p)) return p;
   }
