@@ -13,7 +13,7 @@ Replit SSH MCP server — read, write, list, and check files on Replit projects 
 
 | Field | Value |
 |-------|-------|
-| Version | 0.1.1 |
+| Version | 0.1.2 |
 | Auth | None (—) |
 | Tools | 5 (connection, files, ssh-setup) |
 | Surface | local protocol |
