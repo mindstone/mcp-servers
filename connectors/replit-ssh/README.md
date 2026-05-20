@@ -9,7 +9,7 @@ Replit SSH MCP server — read, write, list, and check files on Replit projects 
 
 ## Status
 
-- **Version:** [0.1.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-replit-ssh)
+- **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-replit-ssh)
 - **Auth:** Local SSH key on disk (`~/.ssh/rebel-replit` by default; resolved via `~/.ssh/config` `IdentityFile` if set). No env-var-supplied secrets.
 - **Tools:** [5](./src/server.ts) (connection, files, ssh-setup)
 - **Surface:** local-protocol
@@ -116,6 +116,8 @@ This server has no required environment variables. Authentication is via the loc
 ### Optional environment variables
 
 - `REPLIT_SSH_REQUEST_TIMEOUT_MS` — per-request timeout in milliseconds (default: `60000`, max `600000`). Tool-level timeout for SFTP operations; the lower-level TCP/SSH handshake uses a separate 30-second budget.
+- `MCP_REPLIT_SSH_STRICT_HOST_KEY` — set to `1` to require pre-populated known-hosts entries. When unset (default), unknown hosts are recorded on first contact (matches OpenSSH's `StrictHostKeyChecking=accept-new`); a fingerprint mismatch on a subsequent connect always fails closed regardless of this flag. See the **SSH host-key verification** entry in *Security notes* below.
+- `MCP_REPLIT_SSH_KNOWN_HOSTS_PATH` — explicit path to the connector's SSH known-hosts file. Defaults to `$MCP_WORKSPACE_PATH/.replit-ssh-known-hosts`, falling back to `$HOME/.replit-mcp/known_hosts`. The file is created with mode `0o600` and the parent directory with mode `0o700`.
 
 ## Host configuration examples
 
@@ -167,16 +169,9 @@ After the host launches the server, run `replit_setup_ssh` once to generate the 
 - **Path traversal.** SFTP file paths are POSIX-normalized after rejecting absolute paths and any `..` segments — relative paths only, no escape from the project root.
 - **Atomic write invariant.** `replit_write_file` writes to a randomized temp filename, renames via OpenSSH's POSIX rename extension (`ext_openssh_rename`), and verifies the final file's SHA-256 against the expected hash. If the server lacks the extension and the target file already exists, the write fails rather than falling back to `unlink + rename`.
 - **Read-back verification.** Every `replit_write_file` re-reads the final file and asserts SHA-256 equality before returning `verified: true`.
-
-## Known limitations
-
-### SSH host-key verification (planned for a future release)
-
-This connector does not currently verify the SSH server's host key when connecting to `*.replit.dev` hosts. A network-path man-in-the-middle could intercept SFTP sessions to read/modify file contents (the SSH private key itself is not exposed via this vector, since public-key auth does not transmit the private key).
-
-This is on the roadmap as a TOFU (trust-on-first-use) verification layer with optional Replit-published host-key pinning.
-
-Mitigations: avoid using this connector over untrusted networks (public wifi, shared ISPs) until host-key verification ships.
+- **SSH host-key verification.** Every outbound SSH connection passes an explicit `hostVerifier` to ssh2 that pins server fingerprints in a per-user known-hosts file (mode `0o600`). The default behaviour mirrors OpenSSH's `StrictHostKeyChecking=accept-new`: the first time the connector reaches a host, the SHA-256 fingerprint is recorded and a notice is logged to stderr; on subsequent connects, a mismatch fails closed with `HOST_KEY_MISMATCH`. Operators who need fail-closed first-contact set `MCP_REPLIT_SSH_STRICT_HOST_KEY=1` and pre-populate the known-hosts file out-of-band (e.g. `ssh-keyscan riker.replit.dev > "$MCP_WORKSPACE_PATH/.replit-ssh-known-hosts"` from a trusted network). Added in 0.1.2 to close audit finding `replit-ssh-001`.
+- **Untrusted-content envelopes.** Content from `replit_read_file` and directory-entry names from `replit_list_files` are wrapped in `<untrusted-content source="…">…</untrusted-content>` envelopes per AGENTS.md invariant #6. Hosts must keep the envelopes intact when surfacing tool output to the model. Added in 0.1.2 to close audit finding `replit-ssh-006`.
+- **Algorithm allow-list.** Outbound SSH connections restrict the negotiated KEX/host-key/cipher/HMAC algorithms to curve25519-sha256 + ssh-ed25519/rsa-sha2-* + ChaCha20-Poly1305/AES-GCM + ETM HMACs. Blocks downgrade negotiation to weaker suites if the proxy is ever misconfigured.
 
 ## Licence
 
