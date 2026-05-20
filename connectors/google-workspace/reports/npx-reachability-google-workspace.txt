@@ -1,0 +1,25 @@
+NPX Reachability Gate — @mindstone/mcp-server-google-workspace@0.1.0
+
+Test:    Stage 3 § 13.7 post-publish reachability gate per planning doc
+         docs/plans/260519_google_workspace_oss_migration.md (locked decision #10)
+
+Command:
+  d=$(mktemp -d) && cd "$d"
+  npm cache clean --force
+  npx -y @mindstone/mcp-server-google-workspace@0.1.0 --version
+
+Result:
+  Output:   0.1.0
+  Exit:     0
+  Elapsed:  4.6 s
+
+Gate budget: 60 s
+Result:      PASS (well under budget)
+
+Date:        2026-05-19
+Registry:    https://registry.npmjs.org/
+Tarball:     mindstone-mcp-server-google-workspace-0.1.0.tgz
+Shasum:      a511ceb774a1ff268c1956177d88073c76388f0d
+Integrity:   sha512-OfiBy1KC3i+E7…QOIvPuVQEKXkg==
+
+Verified by: npm view @mindstone/mcp-server-google-workspace@0.1.0 version → 0.1.0
