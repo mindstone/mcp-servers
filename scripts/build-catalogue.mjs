@@ -22,6 +22,8 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, statSy
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { buildInstallLinks } from './lib/install-links.mjs';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..');
 const connectorsDir = join(repoRoot, 'connectors');
@@ -104,6 +106,20 @@ function buildConnectorInfo(name) {
   const envVars = server?.packages?.[0]?.environmentVariables ?? [];
   const secretEnvNames = envVars.filter((e) => e.isSecret || /KEY|TOKEN|SECRET/.test(e.name)).map((e) => e.name);
 
+  // Derive one-click install URLs from server.json. We swallow malformed
+  // input here (return null) instead of failing the catalogue build, because
+  // the catalogue is rendered on every push and a single bad connector
+  // shouldn't block the site refresh — the install-links --check job in
+  // ci.yml will fail the PR loudly on the same input.
+  let installLinks = null;
+  if (server) {
+    try {
+      installLinks = buildInstallLinks(name, server);
+    } catch (err) {
+      console.error(`build-catalogue: install-links for ${name} skipped: ${err.message}`);
+    }
+  }
+
   return {
     name,
     package: status?.package ?? pkg?.name ?? null,
@@ -125,6 +141,7 @@ function buildConnectorInfo(name) {
     statusJsonUrl: status ? `${REPO_URL}/blob/main/connectors/${name}/STATUS.json` : null,
     sourceUrl: `${REPO_URL}/tree/main/connectors/${name}`,
     readmeUrl: `${REPO_URL}/blob/main/connectors/${name}/README.md`,
+    installLinks,
   };
 }
 
@@ -403,13 +420,40 @@ function connectorPage(c) {
   const version = SEMVER_LIKE_RE.test(String(c.version)) ? c.version : '—';
   const toolCount = Number.isInteger(c.tools?.count) ? c.tools.count : '—';
 
-  // Install section requires a package name. If it's missing (typically
-  // because the connector predates STATUS.json AND has no package.json
-  // name yet), render guidance rather than `npx -y null`.
-  const installBlock =
-    c.package && typeof c.package === 'string' && c.package.length > 0
+  // Install section. When server.json is present we render one-click install
+  // buttons (Cursor / VS Code / VS Code Insiders) plus the npx fallback. The
+  // URLs come from buildInstallLinks() in scripts/lib/install-links.mjs, which
+  // strict-validates every PR-controlled value before letting it into a URL,
+  // so we can embed the URLs directly into Markdown link targets here without
+  // the sanitise() pass we use for table cells. The shields.io badge URLs are
+  // hard-coded constants — no external value flows into them.
+  const installBlock = (() => {
+    if (c.installLinks) {
+      const { cursorUrl, vscodeUrl, vscodeInsidersUrl } = c.installLinks;
+      const cursorBadge =
+        'https://img.shields.io/badge/Add_to_Cursor-black?style=for-the-badge&logo=cursor&logoColor=white';
+      const vscodeBadge =
+        'https://img.shields.io/badge/Add_to_VS_Code-007ACC?style=for-the-badge&logo=visual-studio-code&logoColor=white';
+      const vscodeInsidersBadge =
+        'https://img.shields.io/badge/Add_to_VS_Code_Insiders-24bfa5?style=for-the-badge&logo=visual-studio-code&logoColor=white';
+      const npxLine =
+        c.package && typeof c.package === 'string' && c.package.length > 0
+          ? `Or via npx:\n\n\`\`\`bash\nnpx -y ${c.package}\n\`\`\``
+          : `_See the [README](${c.readmeUrl}) for npx-based install instructions._`;
+      return [
+        `[![Add to Cursor](${cursorBadge})](${cursorUrl})`,
+        `[![Add to VS Code](${vscodeBadge})](${vscodeUrl})`,
+        `[![Add to VS Code Insiders](${vscodeInsidersBadge})](${vscodeInsidersUrl})`,
+        '',
+        npxLine,
+        '',
+        `See the [README](${c.readmeUrl}) for full setup, environment variables, and host-specific examples.`,
+      ].join('\n');
+    }
+    return c.package && typeof c.package === 'string' && c.package.length > 0
       ? `\`\`\`bash\nnpx -y ${c.package}\n\`\`\`\n\nAdd to your MCP host configuration; see the [README](${c.readmeUrl}) for full setup, environment variables, and host-specific examples.`
       : `_Package name not yet set in_ \`package.json\`_. See the [README](${c.readmeUrl}) for install instructions._`;
+  })();
 
   return `---
 layout: default

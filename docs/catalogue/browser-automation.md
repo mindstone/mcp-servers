@@ -34,11 +34,17 @@ Headless browser control via accessibility snapshots — navigate pages, fill fo
 
 ## Install
 
+[![Add to Cursor](https://img.shields.io/badge/Add_to_Cursor-black?style=for-the-badge&logo=cursor&logoColor=white)](cursor://anysphere.cursor-deeplink/mcp/install?name=Browser%20Automation&config=eyJ0eXBlIjoic3RkaW8iLCJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBtaW5kc3RvbmUvbWNwLXNlcnZlci1icm93c2VyLWF1dG9tYXRpb24iXSwiZW52Ijp7IkFHRU5UX0JST1dTRVJfU0VTU0lPTl9OQU1FIjoibWNwIiwiQUdFTlRfQlJPV1NFUl9TSE9XX1dJTkRPVyI6InRydWUifX0)
+[![Add to VS Code](https://img.shields.io/badge/Add_to_VS_Code-007ACC?style=for-the-badge&logo=visual-studio-code&logoColor=white)](vscode:mcp/install?%7B%22name%22%3A%22Browser%20Automation%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40mindstone%2Fmcp-server-browser-automation%22%5D%2C%22env%22%3A%7B%22AGENT_BROWSER_SESSION_NAME%22%3A%22mcp%22%2C%22AGENT_BROWSER_SHOW_WINDOW%22%3A%22true%22%7D%7D)
+[![Add to VS Code Insiders](https://img.shields.io/badge/Add_to_VS_Code_Insiders-24bfa5?style=for-the-badge&logo=visual-studio-code&logoColor=white)](vscode-insiders:mcp/install?%7B%22name%22%3A%22Browser%20Automation%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40mindstone%2Fmcp-server-browser-automation%22%5D%2C%22env%22%3A%7B%22AGENT_BROWSER_SESSION_NAME%22%3A%22mcp%22%2C%22AGENT_BROWSER_SHOW_WINDOW%22%3A%22true%22%7D%7D)
+
+Or via npx:
+
 ```bash
 npx -y @mindstone/mcp-server-browser-automation
 ```
 
-Add to your MCP host configuration; see the [README](https://github.com/mindstone/mcp-servers/blob/main/connectors/browser-automation/README.md) for full setup, environment variables, and host-specific examples.
+See the [README](https://github.com/mindstone/mcp-servers/blob/main/connectors/browser-automation/README.md) for full setup, environment variables, and host-specific examples.
 
 ## Back to catalogue
 
