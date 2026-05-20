@@ -3,7 +3,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { mswServer } from './helpers/setup.js';
-import { createElevenLabsHandlers, createEmptyVoiceSearchHandlers } from './helpers/elevenlabs-mock-server.js';
+import {
+  createElevenLabsHandlers,
+  createEmptyVoiceSearchHandlers,
+  createStthCapturingHandler,
+} from './helpers/elevenlabs-mock-server.js';
+import { http, HttpResponse } from 'msw';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
 import { MOCK_API_KEY, makeFakeAudioBuffer } from './fixtures/elevenlabs-data.js';
 
@@ -63,7 +68,10 @@ describe('Speech tools', () => {
       }
     });
 
-    it('defaults to Rachel when no voice specified', async () => {
+    it('defaults to the first premade voice on the account when no voice specified', async () => {
+      // Regression for 0.3.0: previously hardcoded "Rachel" lookup, which
+      // silently failed on accounts that don't have Rachel. Now we fetch
+      // the account's voices and pick the first premade one.
       mswServer.use(...createElevenLabsHandlers());
       testClient = await createTestClient({
         env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
@@ -76,6 +84,8 @@ describe('Speech tools', () => {
       expect(result.isError).toBeFalsy();
       const parsed = JSON.parse(result.text);
       expect(parsed.ok).toBe(true);
+      // mockVoices[0] is Rachel (premade) so this still picks her, but the
+      // logic now generalises to any premade voice on the account.
       expect(parsed.voice).toBe('Rachel');
 
       // Cleanup
@@ -143,7 +153,96 @@ describe('Speech tools', () => {
     });
   });
 
+  describe('generate_speech — default voice fallback edge cases', () => {
+    function premadeVoice(voice_id: string, name: string) {
+      return { voice_id, name, category: 'premade' as const, description: '', labels: {}, preview_url: '' };
+    }
+    function clonedVoice(voice_id: string, name: string) {
+      return { voice_id, name, category: 'cloned' as const, description: '', labels: {}, preview_url: '' };
+    }
+    function generatedVoice(voice_id: string, name: string) {
+      return { voice_id, name, category: 'generated' as const, description: '', labels: {}, preview_url: '' };
+    }
+
+    function customVoiceHandlers(voices: ReturnType<typeof premadeVoice>[]) {
+      return [
+        http.get('https://api.elevenlabs.io/v2/voices', () =>
+          HttpResponse.json({ voices, has_more: false }),
+        ),
+        http.post('https://api.elevenlabs.io/v1/text-to-speech/:voiceId', () =>
+          new HttpResponse(makeFakeAudioBuffer(2048), {
+            headers: { 'Content-Type': 'audio/mpeg' },
+          }),
+        ),
+      ];
+    }
+
+    it('falls back to the first premade voice when account has both premade and cloned', async () => {
+      mswServer.use(...customVoiceHandlers([
+        clonedVoice('v-cloned-1', 'Cloned A'),
+        premadeVoice('v-premade-1', 'Premade A'),
+      ]));
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+      const result = await testClient.callTool('generate_speech', { text: 'hi' });
+      expect(result.isError).toBeFalsy();
+      const parsed = JSON.parse(result.text);
+      expect(parsed.voice).toBe('Premade A');
+      if (fs.existsSync(parsed.file_path)) fs.unlinkSync(parsed.file_path);
+    });
+
+    it('falls back to the first cloned voice when account has only cloned voices', async () => {
+      mswServer.use(...customVoiceHandlers([
+        clonedVoice('v-cloned-only', 'Cloned Only'),
+      ]));
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+      const result = await testClient.callTool('generate_speech', { text: 'hi' });
+      expect(result.isError).toBeFalsy();
+      const parsed = JSON.parse(result.text);
+      expect(parsed.voice).toBe('Cloned Only');
+      if (fs.existsSync(parsed.file_path)) fs.unlinkSync(parsed.file_path);
+    });
+
+    it('falls back to the first generated voice when account has only generated voices', async () => {
+      mswServer.use(...customVoiceHandlers([
+        generatedVoice('v-gen-only', 'Generated Only'),
+      ]));
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+      const result = await testClient.callTool('generate_speech', { text: 'hi' });
+      expect(result.isError).toBeFalsy();
+      const parsed = JSON.parse(result.text);
+      expect(parsed.voice).toBe('Generated Only');
+      if (fs.existsSync(parsed.file_path)) fs.unlinkSync(parsed.file_path);
+    });
+  });
+
   describe('transcribe_audio', () => {
+    it('sends multipart field `file` plus model_id=scribe_v1 and tag_audio_events=false (NOT `audio`)', async () => {
+      const { handler, captured } = createStthCapturingHandler(MOCK_API_KEY);
+      mswServer.use(handler);
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const tmpFile = path.join(os.tmpdir(), `elevenlabs-shape-${Date.now()}.mp3`);
+      fs.writeFileSync(tmpFile, makeFakeAudioBuffer(128));
+      try {
+        const result = await testClient.callTool('transcribe_audio', { file_path: tmpFile });
+        expect(result.isError).toBeFalsy();
+        expect(captured.hasFile).toBe(true);
+        expect(captured.hasAudio).toBe(false);
+        expect(captured.modelId).toBe('scribe_v1');
+        expect(captured.tagAudioEvents).toBe('false');
+      } finally {
+        fs.unlinkSync(tmpFile);
+      }
+    });
+
     it('transcribes an audio file and returns text', async () => {
       mswServer.use(...createElevenLabsHandlers());
       testClient = await createTestClient({

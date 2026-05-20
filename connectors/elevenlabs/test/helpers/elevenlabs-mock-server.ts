@@ -98,6 +98,39 @@ export function createElevenLabsHandlers(expectedApiKey = MOCK_API_KEY) {
 }
 
 /**
+ * STT handler that captures the multipart form-data fields sent by
+ * `transcribe_audio`. Used to assert that we send `file`+`model_id` (not
+ * the legacy `audio` field name).
+ */
+export function createStthCapturingHandler(expectedApiKey = MOCK_API_KEY) {
+  const captured: {
+    fieldNames: string[];
+    modelId?: string;
+    tagAudioEvents?: string;
+    languageCode?: string;
+    hasFile: boolean;
+    hasAudio: boolean;
+  } = { fieldNames: [], hasFile: false, hasAudio: false };
+
+  const handler = http.post(`${BASE_V1}/speech-to-text`, async ({ request }) => {
+    const authError = checkAuth(request, expectedApiKey);
+    if (authError) return authError;
+    const form = await request.formData();
+    for (const [k] of form) captured.fieldNames.push(k);
+    captured.hasFile = form.has('file');
+    captured.hasAudio = form.has('audio');
+    const m = form.get('model_id');
+    if (typeof m === 'string') captured.modelId = m;
+    const t = form.get('tag_audio_events');
+    if (typeof t === 'string') captured.tagAudioEvents = t;
+    const l = form.get('language_code');
+    if (typeof l === 'string') captured.languageCode = l;
+    return HttpResponse.json(mockTranscription);
+  });
+  return { handler, captured };
+}
+
+/**
  * Creates handlers that return 401 for all ElevenLabs API requests.
  */
 export function createElevenLabsUnauthorizedHandlers() {

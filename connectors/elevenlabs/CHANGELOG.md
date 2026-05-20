@@ -11,6 +11,33 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-20
+
+Triggered by a real conversation where `generate_music_from_plan` returned
+HTTP 422 and the agent shipped an instrumental song the user did not ask for.
+Live-captured the real ElevenLabs API shapes for plan/music/TTS/STT and brought
+every input schema, default, and error path back into spec. See
+`docs/plans/260520_elevenlabs_oss_connector_fix.md` in MindstoneRebel for the
+full trace.
+
+### Fixed
+- **elevenlabs**: `generate_music_from_plan` schema mismatch (the bug behind the original conversation). Sections previously accepted `{ style, lyrics, duration_ms }`, which the API rejects with HTTP 422. The schema now requires `{ section_name, duration_ms, positive_local_styles, negative_local_styles, lines }` exactly as returned by `create_music_plan`. Legacy `{ style, lyrics }` shape is rejected at the Zod boundary with a clear error instead of falling through to a 422.
+- **elevenlabs**: `transcribe_audio` was sending multipart field name `audio` without `model_id` — the API rejects with HTTP 422 "model_id required". Field renamed to `file`, `model_id` defaulted to `scribe_v1`, `tag_audio_events` defaulted to `false` (matching Rebel's main-app convention to avoid `(mouse click)` style transcripts).
+- **elevenlabs**: `generate_speech` default voice was hardcoded "Rachel", which silently failed on accounts without it. Now picks the first premade voice on the account (falls back to first available, errors clearly when the account has zero voices).
+- **elevenlabs**: 422 FastAPI validation arrays were thrown away and surfaced as `HTTP 422: unknown`. Now flattened into `body.<field.path>: <msg>; ...` so agents can self-correct from the error message alone.
+- **elevenlabs**: 401 responses for missing scopes (e.g. `sound_generation`) were masked as generic "Authentication failed". Now surfaced as `MISSING_PERMISSION` with the API's own message and resolution hint pointing to the API key settings page.
+- **elevenlabs**: `force_instrumental: true` combined with `[Verse]/[Chorus]` markers in the prompt silently dropped vocals. The tool description now warns explicitly, and `generate_music` emits a `warnings[]` entry when both are present so the agent can self-correct.
+
+### Added
+- **elevenlabs**: TTS model enum now includes `eleven_v3` (new default), `eleven_flash_v2_5`, `eleven_turbo_v2_5` alongside the prior `eleven_multilingual_v2` and `eleven_monolingual_v1`.
+- **elevenlabs**: `transcribe_audio` now exposes optional `model_id` and `tag_audio_events` inputs (defaults `scribe_v1` / `false`).
+- **elevenlabs**: `generate_music_from_plan` schema validates total duration is between 3s and 10min at the Zod layer.
+- **elevenlabs**: Composition schemas are `.strict()` — unknown keys are rejected at the boundary instead of being silently stripped (prevents accidental legacy-shape submissions).
+- **elevenlabs**: 11 new tests covering the verbatim plan round-trip, legacy-shape rejection, multipart transcription shape, voice-fallback variants (premade / cloned-only / generated-only), force_instrumental warning, 422 array detail flattening, malformed 422 entries, and the new MISSING_PERMISSION path.
+
+### Changed
+- **elevenlabs**: `generate_speech` default `model_id` changed from `eleven_multilingual_v2` to `eleven_v3`.
+
 ## [0.2.2] - 2026-05-14
 ### Added
 - **registry**: Cohort A backfill — 12 API-key OSS connectors get server.json + mcpName. fathom, humaans, kling, mixmax, nano-banana, napkin, pandadoc, freshdesk, elevenlabs, retell-ai, runway, talentlms each gain a registry-shaped server.json (validated against registry.modelcontextprotocol.io) and an mcpName field on package.json under the io.github.mindstone namespace.

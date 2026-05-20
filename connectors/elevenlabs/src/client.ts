@@ -83,25 +83,29 @@ export async function elevenLabsFetch(
     );
   }
 
-  // Handle auth errors
+  // Handle auth errors. ElevenLabs returns 401 both for genuinely invalid
+  // keys AND for valid keys missing a specific scope (e.g. sound_generation).
+  // The latter ships a `detail.status = "missing_permissions"` payload that
+  // the user needs to see in order to fix the key permissions; previously we
+  // threw it away and emitted a bare "Authentication failed".
   if (response.status === 401) {
+    const detail = await extractErrorDetail(response);
+    const isMissingPermission = detail.includes('missing_permissions');
     throw new ElevenLabsError(
-      'Authentication failed',
-      'AUTH_FAILED',
-      getErrorResolution(401),
+      isMissingPermission
+        ? `API key missing required permission: ${detail}`
+        : detail
+          ? `Authentication failed: ${detail}`
+          : 'Authentication failed',
+      isMissingPermission ? 'MISSING_PERMISSION' : 'AUTH_FAILED',
+      isMissingPermission
+        ? 'Regenerate your API key at https://elevenlabs.io/app/settings/api-keys with the missing permission enabled, then call configure_elevenlabs_api_key again.'
+        : getErrorResolution(401),
     );
   }
 
   if (response.status === 403) {
-    let detail = '';
-    try {
-      const errBody = await response.clone().json() as { detail?: { message?: string } | string };
-      if (typeof errBody.detail === 'string') {
-        detail = errBody.detail;
-      } else if (errBody.detail?.message) {
-        detail = errBody.detail.message;
-      }
-    } catch { /* not JSON */ }
+    const detail = await extractErrorDetail(response);
     throw new ElevenLabsError(
       `Access forbidden: ${detail || 'insufficient permissions or quota'}`,
       'AUTH_FAILED',
@@ -111,16 +115,7 @@ export async function elevenLabsFetch(
 
   // Handle other errors
   if (!response.ok) {
-    let detail = '';
-    try {
-      const errBody = await response.clone().json() as { detail?: { message?: string } | string };
-      if (typeof errBody.detail === 'string') {
-        detail = errBody.detail;
-      } else if (errBody.detail?.message) {
-        detail = errBody.detail.message;
-      }
-    } catch { /* not JSON */ }
-
+    const detail = await extractErrorDetail(response);
     throw new ElevenLabsError(
       `ElevenLabs API error (HTTP ${response.status}): ${detail || response.statusText}`,
       `HTTP_${response.status}`,
@@ -129,6 +124,60 @@ export async function elevenLabsFetch(
   }
 
   return response;
+}
+
+/**
+ * Extract a human-readable detail message from an ElevenLabs error response.
+ *
+ * The API uses several detail shapes:
+ *  - `detail: "string message"` (legacy)
+ *  - `detail: { message: "...", status?: "..." }` (current auth/permission errors)
+ *  - `detail: [{ type, loc: ["body", "field", ...], msg, input }, ...]` (FastAPI 422)
+ *
+ * The 422 array form is the one that bit us in
+ * `generate_music_from_plan`: previously we threw away the field-level info
+ * and left the user with `HTTP 422: unknown`. We now flatten the validation
+ * errors into something like
+ *   `body.composition_plan.sections.0.section_name: Field required;
+ *    body.composition_plan.sections.0.lines: Field required`
+ * which is what an LLM agent actually needs to self-correct.
+ */
+async function extractErrorDetail(response: Response): Promise<string> {
+  try {
+    const errBody = (await response.clone().json()) as unknown;
+    const d = (errBody as { detail?: unknown } | null)?.detail;
+    if (d == null) return '';
+    if (typeof d === 'string') return d;
+    if (Array.isArray(d)) {
+      // FastAPI validation errors → "loc.path: msg" joined by "; ".
+      // Skip null/non-object entries defensively rather than throwing.
+      const parts = d
+        .map((e) => {
+          if (!e || typeof e !== 'object') return '';
+          const entry = e as { loc?: unknown; msg?: unknown; type?: unknown };
+          const loc = Array.isArray(entry.loc) ? entry.loc.join('.') : '';
+          const msg = typeof entry.msg === 'string'
+            ? entry.msg
+            : typeof entry.type === 'string'
+              ? entry.type
+              : 'invalid';
+          return loc ? `${loc}: ${msg}` : msg;
+        })
+        .filter((s) => s.length > 0);
+      return parts.join('; ');
+    }
+    if (typeof d === 'object') {
+      const o = d as { message?: unknown; status?: unknown; cause?: unknown };
+      const parts: string[] = [];
+      if (typeof o.status === 'string') parts.push(o.status);
+      if (typeof o.message === 'string') parts.push(o.message);
+      if (typeof o.cause === 'string') parts.push(`cause: ${o.cause}`);
+      return parts.join(' — ');
+    }
+    return '';
+  } catch {
+    return '';
+  }
 }
 
 /**

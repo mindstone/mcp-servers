@@ -23,6 +23,34 @@ async function lookupVoiceByName(apiKey: string, name: string) {
   return data.voices[0];
 }
 
+/**
+ * Pick a sensible default voice from the account.
+ *
+ * The previous version of this connector hardcoded a "Rachel" lookup, which
+ * silently fails on accounts that don't have Rachel in their library (most
+ * personal/business accounts). We now ask the API for the first page of
+ * voices, prefer premade voices, and fall back to whatever the account has.
+ *
+ * If the account has zero voices we surface a clear VOICE_NOT_FOUND with a
+ * resolution that tells the agent to call list_voices first.
+ */
+async function pickDefaultVoice(apiKey: string) {
+  const data = await elevenLabsJson<VoicesResponse>(
+    apiKey,
+    'https://api.elevenlabs.io/v2/voices?page_size=20',
+  );
+  if (!data.voices || data.voices.length === 0) {
+    throw new ElevenLabsError(
+      'No voice specified and the account has no voices.',
+      'VOICE_NOT_FOUND',
+      'Add a voice in https://elevenlabs.io/app/voice-library or pass a voice_id / voice_name explicitly.',
+    );
+  }
+  // Prefer premade voices (curated, generally suitable as defaults).
+  const premade = data.voices.find((v) => v.category === 'premade');
+  return premade ?? data.voices[0];
+}
+
 export function registerSpeechTools(server: McpServer): void {
   // ── generate_speech ───────────────────────────────────────────────────
   server.registerTool(
@@ -30,15 +58,27 @@ export function registerSpeechTools(server: McpServer): void {
     {
       description:
         'Generate spoken audio from text using ElevenLabs text-to-speech. ' +
-        'Use voice_id (direct) or voice_name (fuzzy search). ' +
-        'Models: eleven_multilingual_v2 (default, 29 languages), eleven_monolingual_v1 (English), eleven_turbo_v2_5 (low latency). ' +
+        'Use voice_id (direct) or voice_name (fuzzy search). If neither is provided, ' +
+        'a premade voice from the account is used.\n\n' +
+        'MODELS:\n' +
+        '  - eleven_v3 (default) — most expressive, 70+ languages\n' +
+        '  - eleven_multilingual_v2 — proven multilingual, 29 languages\n' +
+        '  - eleven_flash_v2_5 — low latency\n' +
+        '  - eleven_turbo_v2_5 — low latency variant\n' +
+        '  - eleven_monolingual_v1 — English-only legacy model (kept for backwards compatibility)\n\n' +
         'COST: ~1 credit per 100 characters.',
       inputSchema: z.object({
         text: z.string().min(1).describe('Text to speak. Maximum ~5000 characters per request.'),
-        voice_id: z.string().optional().describe('Direct voice ID. Takes priority over voice_name.'),
-        voice_name: z.string().optional().describe('Voice name for fuzzy search (e.g., "Rachel", "Adam").'),
-        model_id: z.enum(['eleven_multilingual_v2', 'eleven_monolingual_v1', 'eleven_turbo_v2_5']).optional()
-          .describe('TTS model. Default: eleven_multilingual_v2.'),
+        voice_id: z.string().optional().describe('Direct voice ID (from list_voices). Takes priority over voice_name.'),
+        voice_name: z.string().optional().describe('Voice name for fuzzy search (e.g., "Bella", "Sarah"). Use list_voices first to find a name that exists on the account.'),
+        model_id: z.enum([
+          'eleven_v3',
+          'eleven_multilingual_v2',
+          'eleven_flash_v2_5',
+          'eleven_turbo_v2_5',
+          'eleven_monolingual_v1',
+        ]).optional()
+          .describe('TTS model. Default: eleven_v3.'),
         stability: z.number().min(0).max(1).optional().describe('Voice stability 0-1. Default: 0.5.'),
         similarity_boost: z.number().min(0).max(1).optional().describe('Voice similarity 0-1. Default: 0.75.'),
         output_format: z.enum(['mp3_44100_128', 'mp3_44100_192', 'pcm_16000', 'pcm_22050', 'pcm_24000', 'pcm_44100']).optional()
@@ -58,7 +98,7 @@ export function registerSpeechTools(server: McpServer): void {
 
       let voiceId = args.voice_id;
       const voiceName = args.voice_name;
-      const modelId = args.model_id ?? 'eleven_multilingual_v2';
+      const modelId = args.model_id ?? 'eleven_v3';
       const stability = args.stability ?? 0.5;
       const similarityBoost = args.similarity_boost ?? 0.75;
       const outputFormat = args.output_format ?? 'mp3_44100_128';
@@ -71,22 +111,10 @@ export function registerSpeechTools(server: McpServer): void {
           voiceId = voice.voice_id;
           resolvedVoiceName = voice.name;
         } else {
-          // Default to Rachel if no voice specified
-          try {
-            const voice = await lookupVoiceByName(apiKey, 'Rachel');
-            voiceId = voice.voice_id;
-            resolvedVoiceName = voice.name;
-          } catch (err) {
-            // Propagate the error so withErrorHandling emits isError: true
-            if (err instanceof ElevenLabsError) {
-              throw err;
-            }
-            throw new ElevenLabsError(
-              'No voice specified and default voice lookup failed.',
-              'VOICE_NOT_FOUND',
-              'Provide a voice_id or voice_name. Use list_voices to find available voices.',
-            );
-          }
+          // No voice specified — pick a sensible default from the account.
+          const voice = await pickDefaultVoice(apiKey);
+          voiceId = voice.voice_id;
+          resolvedVoiceName = voice.name;
         }
       }
 
