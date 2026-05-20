@@ -147,9 +147,25 @@ jobs:
       - name: Check committed docs/ catalogue matches generator output
         run: node scripts/build-catalogue.mjs --check
 
+  install-links-check:
+    name: One-click install blocks match server.json
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+      - name: Check connector READMEs match install-links generator output
+        run: node scripts/gen-install-links.mjs --check
+
   notify-failure:
     name: Slack CI Failure
-    needs: [build-and-test, discover-connectors, status-check, catalogue-check]
+    needs: [build-and-test, discover-connectors, status-check, catalogue-check, install-links-check]
     if: failure()
     runs-on: ubuntu-latest
     timeout-minutes: 5
