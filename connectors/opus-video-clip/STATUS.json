@@ -1,0 +1,36 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "opus-video-clip",
+  "package": "@mindstone/mcp-server-opus-video-clip",
+  "version": "0.1.0",
+  "auth": {
+    "type": "api-key",
+    "envVars": [
+      "OPUS_API_KEY"
+    ]
+  },
+  "tools": {
+    "count": 21,
+    "domains": [
+      "configure",
+      "brand-templates",
+      "projects",
+      "upload",
+      "censor",
+      "collections",
+      "social-posting"
+    ]
+  },
+  "surface": "cloud-api",
+  "hostsTested": [
+    "mindstone-rebel"
+  ],
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/tools/",
+    "auth": "./src/auth.ts",
+    "tests": "./test/",
+    "serverJson": "./server.json"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "bundled-opus-video-clip",
+  "name": "OpusClip",
+  "description": "OpusClip MCP server. Turn long-form videos into short clips, manage clip projects and collections, run profanity censor jobs, and schedule platform-specific social posts. 'Clip this YouTube talk into vertical shorts' or 'Schedule the top three clips to LinkedIn for Tuesday morning'.",
+  "category": "media",
+  "icon": "video",
+  "maturity": "preview",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}
