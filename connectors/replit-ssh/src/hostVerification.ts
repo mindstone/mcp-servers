@@ -19,20 +19,27 @@
  *
  * Verification model
  * ------------------
- * 1. The first time the connector successfully reaches a Replit host
- *    with `SSH_HOST_KEY_TOFU=1` set, the server's SHA-256 host-key
- *    fingerprint is appended to a known-hosts file owned by the user
- *    (mode 0o600). Subsequent connections verify the presented host
- *    key against the recorded fingerprint and fail-closed on mismatch.
+ * The default behaviour mirrors OpenSSH's `StrictHostKeyChecking=accept-new`,
+ * which is what the misleading `~/.ssh/config` line was already (falsely)
+ * advertising:
  *
- * 2. Without `SSH_HOST_KEY_TOFU=1`, an unknown host fails closed with a
- *    structured `HOST_KEY_UNKNOWN` error guiding the user to opt in
- *    once and then leave TOFU disabled for the lifetime of the
- *    workspace.
+ * 1. First contact with an unknown host: the server's SHA-256 host-key
+ *    fingerprint is recorded to a known-hosts file owned by the user
+ *    (mode 0o600), a notice is logged to stderr, and the connection
+ *    proceeds. This closes the post-first-contact MitM window but does
+ *    NOT defend against a MitM that is already on-path at first
+ *    contact. Operators with stricter requirements can set
+ *    `MCP_REPLIT_SSH_STRICT_HOST_KEY=1` (see (3) below).
  *
- * 3. A mismatch between the recorded fingerprint and the presented
- *    fingerprint always fails closed (`HOST_KEY_MISMATCH`) regardless
- *    of `SSH_HOST_KEY_TOFU` — a strict trust-on-first-use model.
+ * 2. Subsequent contact with a known host: the recorded fingerprint is
+ *    compared against the presented fingerprint. A mismatch ALWAYS
+ *    fails closed (`HOST_KEY_MISMATCH`) regardless of any env-var —
+ *    this catches silent key rotation by a MitM after first contact.
+ *
+ * 3. Strict opt-in: when `MCP_REPLIT_SSH_STRICT_HOST_KEY=1` is set,
+ *    unknown hosts fail closed with a structured `HOST_KEY_UNKNOWN`
+ *    error. Operators using this mode pre-populate the known-hosts
+ *    file out-of-band (e.g. via `ssh-keyscan riker.replit.dev`).
  *
  * Storage
  * -------
@@ -126,40 +133,44 @@ export function verifyHostKey(
         ok: false,
         error: `SSH host-key mismatch for "${host}". Expected ${recorded}, server presented ${presentedFingerprint}. This is either a key rotation by Replit or an active man-in-the-middle attack.`,
         code: 'HOST_KEY_MISMATCH',
-        action_required: `Refusing to connect. Verify the new fingerprint out-of-band (e.g., at https://replit.com support docs). If the change is legitimate, remove the stale entry from ${getKnownHostsPath()} and reconnect with SSH_HOST_KEY_TOFU=1 set once.`,
-        next_step: `Edit ${getKnownHostsPath()} to remove the line for this host, then retry with SSH_HOST_KEY_TOFU=1.`,
+        action_required: `Refusing to connect. Verify the new fingerprint out-of-band (e.g., via ssh-keyscan from a trusted network or the Replit support docs). If the change is legitimate, remove the stale entry from ${getKnownHostsPath()} and reconnect.`,
+        next_step: `Edit ${getKnownHostsPath()} to remove the line for this host, then retry.`,
       },
     };
   }
-  if (process.env.SSH_HOST_KEY_TOFU === '1') {
-    try {
-      appendKnownHost(host, presentedFingerprint);
-      return { ok: true, kind: 'recorded', fingerprint: presentedFingerprint };
-    } catch (err) {
-      return {
-        ok: false,
-        kind: 'unknown',
-        error: {
-          ok: false,
-          error: `SSH_HOST_KEY_TOFU=1 set but recording the host fingerprint failed: ${(err as Error).message}.`,
-          code: 'HOST_KEY_RECORD_FAILED',
-          action_required: `Verify that ${getKnownHostsPath()} is writable by the current user (and its parent directory exists with mode 0700).`,
-          next_step: `Manually create the file with mode 0600 and re-run the tool.`,
-        },
-      };
-    }
-  }
-  return {
-    ok: false,
-    kind: 'unknown',
-    error: {
+  // Default behaviour: trust-on-first-use (matches OpenSSH `accept-new`).
+  // Operators who need stricter behaviour pre-populate the known-hosts
+  // file and set MCP_REPLIT_SSH_STRICT_HOST_KEY=1 so unknown hosts fail
+  // closed.
+  if (process.env.MCP_REPLIT_SSH_STRICT_HOST_KEY === '1') {
+    return {
       ok: false,
-      error: `Unknown SSH host "${host}" (fingerprint ${presentedFingerprint}). Refusing to connect — no trust-on-first-use is performed by default.`,
-      code: 'HOST_KEY_UNKNOWN',
-      action_required: `Set SSH_HOST_KEY_TOFU=1 in the MCP server environment to record this fingerprint once. After the first connection succeeds the fingerprint is pinned in ${getKnownHostsPath()} and subsequent connections do NOT need the env-var set.`,
-      next_step: `Restart with SSH_HOST_KEY_TOFU=1 once, verify the fingerprint matches your expectation, then unset the env-var.`,
-    },
-  };
+      kind: 'unknown',
+      error: {
+        ok: false,
+        error: `Unknown SSH host "${host}" (fingerprint ${presentedFingerprint}). Strict host-key checking is enabled and refuses unknown hosts.`,
+        code: 'HOST_KEY_UNKNOWN',
+        action_required: `Either pre-populate ${getKnownHostsPath()} with the expected fingerprint (e.g. via \`ssh-keyscan riker.replit.dev\` from a trusted network) or unset MCP_REPLIT_SSH_STRICT_HOST_KEY to fall back to trust-on-first-use.`,
+        next_step: `Add a line "${host.toLowerCase()} ${presentedFingerprint}" to ${getKnownHostsPath()} after verifying the fingerprint out-of-band, then retry.`,
+      },
+    };
+  }
+  try {
+    appendKnownHost(host, presentedFingerprint);
+    return { ok: true, kind: 'recorded', fingerprint: presentedFingerprint };
+  } catch (err) {
+    return {
+      ok: false,
+      kind: 'unknown',
+      error: {
+        ok: false,
+        error: `Failed to record the SSH host fingerprint for trust-on-first-use: ${(err as Error).message}.`,
+        code: 'HOST_KEY_RECORD_FAILED',
+        action_required: `Verify that ${getKnownHostsPath()} is writable by the current user (and its parent directory exists with mode 0700).`,
+        next_step: `Manually create the file with mode 0600 and re-run the tool, or set MCP_REPLIT_SSH_KNOWN_HOSTS_PATH to a writable location.`,
+      },
+    };
+  }
 }
 
 /**

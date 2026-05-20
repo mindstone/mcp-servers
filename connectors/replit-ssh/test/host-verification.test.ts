@@ -24,7 +24,7 @@ import {
 let tempDir: string;
 let knownHostsPath: string;
 let originalKnownHostsEnv: string | undefined;
-let originalTofu: string | undefined;
+let originalStrict: string | undefined;
 let originalWorkspaceEnv: string | undefined;
 
 beforeEach(() => {
@@ -32,11 +32,11 @@ beforeEach(() => {
   knownHostsPath = path.join(tempDir, 'known_hosts');
 
   originalKnownHostsEnv = process.env.MCP_REPLIT_SSH_KNOWN_HOSTS_PATH;
-  originalTofu = process.env.SSH_HOST_KEY_TOFU;
+  originalStrict = process.env.MCP_REPLIT_SSH_STRICT_HOST_KEY;
   originalWorkspaceEnv = process.env.MCP_WORKSPACE_PATH;
 
   process.env.MCP_REPLIT_SSH_KNOWN_HOSTS_PATH = knownHostsPath;
-  delete process.env.SSH_HOST_KEY_TOFU;
+  delete process.env.MCP_REPLIT_SSH_STRICT_HOST_KEY;
   delete process.env.MCP_WORKSPACE_PATH;
 });
 
@@ -46,10 +46,10 @@ afterEach(() => {
   } else {
     process.env.MCP_REPLIT_SSH_KNOWN_HOSTS_PATH = originalKnownHostsEnv;
   }
-  if (originalTofu === undefined) {
-    delete process.env.SSH_HOST_KEY_TOFU;
+  if (originalStrict === undefined) {
+    delete process.env.MCP_REPLIT_SSH_STRICT_HOST_KEY;
   } else {
-    process.env.SSH_HOST_KEY_TOFU = originalTofu;
+    process.env.MCP_REPLIT_SSH_STRICT_HOST_KEY = originalStrict;
   }
   if (originalWorkspaceEnv === undefined) {
     delete process.env.MCP_WORKSPACE_PATH;
@@ -79,24 +79,12 @@ describe('computeSha256Fingerprint', () => {
   });
 });
 
-describe('verifyHostKey — pinning / TOFU / mismatch', () => {
+describe('verifyHostKey — auto-TOFU default / mismatch / strict opt-in', () => {
   const host = 'abc-00-def.riker.replit.dev';
   const fp1 = 'SHA256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
   const fp2 = 'SHA256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
-  it('FAILS CLOSED when host is unknown and SSH_HOST_KEY_TOFU is not set', () => {
-    const outcome = verifyHostKey(host, fp1);
-    expect(outcome.ok).toBe(false);
-    if (!outcome.ok) {
-      expect(outcome.kind).toBe('unknown');
-      expect(outcome.error.code).toBe('HOST_KEY_UNKNOWN');
-    }
-    // No file should have been created
-    expect(fs.existsSync(knownHostsPath)).toBe(false);
-  });
-
-  it('RECORDS the fingerprint on first contact when SSH_HOST_KEY_TOFU=1', () => {
-    process.env.SSH_HOST_KEY_TOFU = '1';
+  it('RECORDS the fingerprint on first contact by default (auto-TOFU, matches OpenSSH `accept-new`)', () => {
     const outcome = verifyHostKey(host, fp1);
     expect(outcome.ok).toBe(true);
     if (outcome.ok) {
@@ -109,16 +97,13 @@ describe('verifyHostKey — pinning / TOFU / mismatch', () => {
 
   it('writes the known-hosts file with mode 0o600', () => {
     if (process.platform === 'win32') return; // unix-only check
-    process.env.SSH_HOST_KEY_TOFU = '1';
     verifyHostKey(host, fp1);
     const mode = fs.statSync(knownHostsPath).mode & 0o777;
     expect(mode).toBe(0o600);
   });
 
-  it('MATCHES on subsequent connect (TOFU env-var no longer required)', () => {
-    process.env.SSH_HOST_KEY_TOFU = '1';
+  it('MATCHES on subsequent connect against the recorded fingerprint', () => {
     verifyHostKey(host, fp1);
-    delete process.env.SSH_HOST_KEY_TOFU;
     const outcome = verifyHostKey(host, fp1);
     expect(outcome.ok).toBe(true);
     if (outcome.ok) {
@@ -126,8 +111,7 @@ describe('verifyHostKey — pinning / TOFU / mismatch', () => {
     }
   });
 
-  it('FAILS CLOSED on fingerprint mismatch (MitM detection), even with SSH_HOST_KEY_TOFU=1', () => {
-    process.env.SSH_HOST_KEY_TOFU = '1';
+  it('FAILS CLOSED on fingerprint mismatch (MitM / silent rotation detection)', () => {
     verifyHostKey(host, fp1);
     const outcome = verifyHostKey(host, fp2);
     expect(outcome.ok).toBe(false);
@@ -137,12 +121,57 @@ describe('verifyHostKey — pinning / TOFU / mismatch', () => {
     }
   });
 
+  it('still FAILS CLOSED on mismatch even when MCP_REPLIT_SSH_STRICT_HOST_KEY is set', () => {
+    verifyHostKey(host, fp1);
+    process.env.MCP_REPLIT_SSH_STRICT_HOST_KEY = '1';
+    const outcome = verifyHostKey(host, fp2);
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) {
+      expect(outcome.kind).toBe('mismatch');
+    }
+  });
+
   it('treats host names case-insensitively', () => {
-    process.env.SSH_HOST_KEY_TOFU = '1';
     verifyHostKey(host.toUpperCase(), fp1);
-    delete process.env.SSH_HOST_KEY_TOFU;
     const outcome = verifyHostKey(host.toLowerCase(), fp1);
     expect(outcome.ok).toBe(true);
+  });
+
+  describe('strict mode opt-in (MCP_REPLIT_SSH_STRICT_HOST_KEY=1)', () => {
+    beforeEach(() => {
+      process.env.MCP_REPLIT_SSH_STRICT_HOST_KEY = '1';
+    });
+
+    it('FAILS CLOSED on unknown host when strict mode is enabled', () => {
+      const outcome = verifyHostKey(host, fp1);
+      expect(outcome.ok).toBe(false);
+      if (!outcome.ok) {
+        expect(outcome.kind).toBe('unknown');
+        expect(outcome.error.code).toBe('HOST_KEY_UNKNOWN');
+      }
+      // No file should have been created — strict mode never auto-records
+      expect(fs.existsSync(knownHostsPath)).toBe(false);
+    });
+
+    it('error message tells the operator how to pre-populate or how to disable strict mode', () => {
+      const outcome = verifyHostKey(host, fp1);
+      if (!outcome.ok) {
+        expect(outcome.error.action_required).toMatch(/MCP_REPLIT_SSH_STRICT_HOST_KEY|ssh-keyscan/);
+      }
+    });
+
+    it('ACCEPTS pre-populated known-hosts entries in strict mode', () => {
+      // Disable strict mode briefly to record, then re-enable.
+      delete process.env.MCP_REPLIT_SSH_STRICT_HOST_KEY;
+      verifyHostKey(host, fp1);
+      process.env.MCP_REPLIT_SSH_STRICT_HOST_KEY = '1';
+
+      const outcome = verifyHostKey(host, fp1);
+      expect(outcome.ok).toBe(true);
+      if (outcome.ok) {
+        expect(outcome.kind).toBe('matched');
+      }
+    });
   });
 });
 
