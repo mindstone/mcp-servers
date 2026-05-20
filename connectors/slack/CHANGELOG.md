@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Security
+
+- **slack-010** — `download_slack_file` no longer relies on Node's default
+  `redirect: 'follow'` for the authenticated Slack-CDN download. The download
+  helper now sets `redirect: 'manual'` and re-validates every redirect target
+  via `assertSlackOwnedHttpsUrl()` before reissuing the request with the
+  workspace bearer token. A 302 from a compromised Slack edge or attacker-
+  influenced `url_private_download` to `attacker.example` would previously
+  have leaked the bearer; it is now fail-closed (`SLACK_FILE_URL_UNTRUSTED`).
+  Redirect chains longer than 5 hops are rejected. Regression tests in
+  `test/file-download-redirect.test.ts`.
+
+- **slack-001..007** — every Slack tool that returns external text now wraps
+  that text in an `<untrusted-content source="…">…</untrusted-content>`
+  envelope per AGENTS.md invariant #6. Covers `get_slack_channel_history`,
+  `get_slack_thread_replies`, `search_slack_messages`,
+  `search_slack_messages_to_me`, `get_slack_message_by_permalink`,
+  `list_slack_channels` (topic/purpose), `get_slack_unread_messages`, and the
+  content/name fields of `download_slack_file`. The wrapper escapes
+  attacker-supplied close tags (`</untrusted-content>` → `<&#47;untrusted-content>`)
+  to prevent envelope-breakout prompt injection. Regression tests in
+  `test/untrusted-content.test.ts`.
+
 ## [0.1.2] - 2026-05-19
 
 ### Security

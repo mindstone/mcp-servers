@@ -9,6 +9,7 @@ import {
   resolveUserIdsToCache,
 } from '../helpers.js';
 import { notConnectedJson } from './auth.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 
 export function registerThreadTools(server: McpServer): void {
   server.registerTool(
@@ -53,7 +54,7 @@ Get ts_slack from a message with reply_count > 0 (the thread parent).`,
           ts_slack: msg.ts,
           ts_iso: msg.ts ? slackTsToDatetime(msg.ts) : undefined,
           user: msg.user,
-          text: msg.text,
+          text: wrapUntrusted(msg.text, 'slack:thread-replies'),
         }),
       );
       const nextCursor = result.response_metadata?.next_cursor || null;

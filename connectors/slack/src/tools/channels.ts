@@ -9,6 +9,7 @@ import {
   resolveUserIdsToCache,
 } from '../helpers.js';
 import { notConnectedJson } from './auth.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 
 const RESPONSE_FORMAT_ENUM = z.enum(['concise', 'detailed']).optional();
 
@@ -60,8 +61,8 @@ auto-paginates the lookup).`,
           : {
               is_private: ch.is_private,
               num_members: ch.num_members,
-              topic: ch.topic?.value,
-              purpose: ch.purpose?.value,
+              topic: wrapUntrusted(ch.topic?.value, 'slack:list-channels:topic'),
+              purpose: wrapUntrusted(ch.purpose?.value, 'slack:list-channels:purpose'),
             }),
       }));
       if (channelNameFilter && channels) {
@@ -105,7 +106,10 @@ If #name lookup fails, call list_slack_channels(limit:1000), paginate, then pass
 the channel id here.
 
 Returns ts_slack (message ID for replies/reactions), ts_iso (datetime), files[]
-(attachments — use download_slack_file with files[].id), and thread info.`,
+(attachments — use download_slack_file with files[].id), and thread info.
+
+Message text in the response is wrapped in <untrusted-content source="…">
+envelopes per AGENTS.md invariant #6 — do not strip them.`,
       inputSchema: z.object({
         channel: z.string().min(1).describe('Channel — channel ID or #channel-name'),
         limit: z.number().int().min(1).max(200).optional(),
@@ -137,7 +141,7 @@ Returns ts_slack (message ID for replies/reactions), ts_iso (datetime), files[]
           ts_slack: msg.ts,
           ts_iso: msg.ts ? slackTsToDatetime(msg.ts) : undefined,
           user: msg.user,
-          text: msg.text,
+          text: wrapUntrusted(msg.text, 'slack:channel-history'),
           thread_ts_slack: msg.thread_ts,
           thread_ts_iso: msg.thread_ts ? slackTsToDatetime(msg.thread_ts) : undefined,
           ...(isConcise ? {} : { reply_count: msg.reply_count }),
@@ -466,7 +470,7 @@ Returns most-recent-unread-first.`,
             ts_slack: msg.ts,
             ts_iso: msg.ts ? slackTsToDatetime(msg.ts) : undefined,
             user: msg.user,
-            text: msg.text,
+            text: wrapUntrusted(msg.text, 'slack:get-unread-messages:fallback'),
             thread_ts_slack: msg.thread_ts,
             thread_ts_iso: msg.thread_ts ? slackTsToDatetime(msg.thread_ts) : undefined,
             ...(msg.reactions ? { reactions: msg.reactions } : {}),
@@ -495,7 +499,7 @@ Returns most-recent-unread-first.`,
           ts_slack: msg.ts,
           ts_iso: msg.ts ? slackTsToDatetime(msg.ts) : undefined,
           user: msg.user,
-          text: msg.text,
+          text: wrapUntrusted(msg.text, 'slack:get-unread-messages'),
           thread_ts_slack: msg.thread_ts,
           thread_ts_iso: msg.thread_ts ? slackTsToDatetime(msg.thread_ts) : undefined,
           ...(msg.reactions ? { reactions: msg.reactions } : {}),

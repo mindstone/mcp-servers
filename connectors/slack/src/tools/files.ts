@@ -9,6 +9,7 @@ import {
 } from '../utils.js';
 import { getSlackReaderClient, getTokenProvider } from '../client.js';
 import { notConnectedJson } from './auth.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 
 export function registerFileTools(server: McpServer): void {
   server.registerTool(
@@ -123,12 +124,16 @@ default (max 50MB via max_size_mb). Don't pass message permalinks or thread_ts.`
       // SLACK_FILE_URL_UNTRUSTED on any non-HTTPS / non-slack.com URL.
       assertSlackOwnedHttpsUrl(downloadUrl);
 
-      // Compose cohort timeout into raw fetch so file downloads can't hang
-      // indefinitely on a stalled connection (postmortem 260421).
-      const downloadResponse = await fetch(downloadUrl, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: abortableSignal(),
-      });
+      // `redirect: 'manual'` prevents Node's global fetch from auto-replaying
+      // the Authorization header against a redirect target. Without this, a
+      // 302 from a compromised Slack CDN edge to attacker.example would leak
+      // the workspace bearer token. AGENTS.md invariant #7 bans auto-follow.
+      // If a redirect appears, we re-validate the new target via
+      // assertSlackOwnedHttpsUrl() and issue a fresh authenticated fetch.
+      const downloadResponse = await fetchSlackFileFollowingSlackRedirects(
+        downloadUrl,
+        token,
+      );
       if (!downloadResponse.ok) {
         return errorJson({
           error: `Download failed: ${downloadResponse.status} ${downloadResponse.statusText}`,
@@ -154,13 +159,20 @@ default (max 50MB via max_size_mb). Don't pass message permalinks or thread_ts.`
         ['txt', 'md', 'json', 'csv', 'xml', 'html', 'css', 'js', 'ts', 'yaml', 'yml'].includes(
           file.filetype || '',
         );
-      const content = isTextFile ? buffer.toString('utf-8') : buffer.toString('base64');
+      const rawContent = isTextFile ? buffer.toString('utf-8') : buffer.toString('base64');
       const encoding = isTextFile ? 'utf-8' : 'base64';
+      // Per AGENTS.md invariant #6: file content downloaded from Slack is
+      // fully attacker-influenced (any workspace user can upload a crafted
+      // file). Wrap text content in an <untrusted-content> envelope before
+      // returning it to the LLM. Binary content (base64) is also wrapped
+      // for consistency — escape-on-close-tag is a no-op against base64
+      // alphabet but keeps the envelope contract uniform.
+      const content = wrapUntrusted(rawContent, `slack:download-file:${file.id}`);
       return JSON.stringify({
         ok: true,
         file: {
           id: file.id,
-          name: file.name,
+          name: wrapUntrusted(file.name, `slack:download-file:${file.id}:name`),
           mimetype: file.mimetype,
           filetype: file.filetype,
           size: buffer.length,
@@ -172,5 +184,57 @@ default (max 50MB via max_size_mb). Don't pass message permalinks or thread_ts.`
         size_bytes: buffer.length,
       });
     }),
+  );
+}
+
+/**
+ * Maximum redirect chain length before refusing to follow further. Slack's CDN
+ * legitimately redirects file URLs once or twice across its file edge, but a
+ * deep chain is a strong attacker-controlled-CDN signal.
+ */
+const SLACK_FILE_DOWNLOAD_MAX_REDIRECTS = 5;
+
+/**
+ * Issue a GET against a Slack-owned download URL with the workspace bearer
+ * token attached, refusing to follow any redirect target that is not also a
+ * Slack-owned HTTPS URL.
+ *
+ * Node's global `fetch` defaults to `redirect: 'follow'`, which would replay
+ * the `Authorization` header against an attacker-controlled redirect target if
+ * Slack (or a compromised edge) returned a 302 to a non-Slack host. We instead
+ * walk the chain manually: at each hop we re-validate the redirect target via
+ * `assertSlackOwnedHttpsUrl()` before reissuing the authenticated request.
+ *
+ * Exposed for unit testing.
+ */
+export async function fetchSlackFileFollowingSlackRedirects(
+  initialUrl: string,
+  token: string,
+  fetchImpl: typeof fetch = fetch,
+  signal: AbortSignal = abortableSignal(),
+): Promise<Response> {
+  let currentUrl = initialUrl;
+  for (let hop = 0; hop <= SLACK_FILE_DOWNLOAD_MAX_REDIRECTS; hop += 1) {
+    const response = await fetchImpl(currentUrl, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+      redirect: 'manual',
+      signal,
+    });
+    const status = response.status;
+    if (status >= 300 && status < 400) {
+      const location = response.headers.get('location');
+      if (!location) {
+        return response;
+      }
+      const nextUrl = new URL(location, currentUrl).toString();
+      assertSlackOwnedHttpsUrl(nextUrl);
+      currentUrl = nextUrl;
+      continue;
+    }
+    return response;
+  }
+  throw new Error(
+    `download_slack_file: redirect chain exceeded ${SLACK_FILE_DOWNLOAD_MAX_REDIRECTS} hops; refusing to follow further.`,
   );
 }
