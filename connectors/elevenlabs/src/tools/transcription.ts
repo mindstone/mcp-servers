@@ -20,6 +20,8 @@ export function registerTranscriptionTools(server: McpServer): void {
       inputSchema: z.object({
         file_path: z.string().min(1).describe('Absolute path to local audio file to transcribe.'),
         language_code: z.string().optional().describe('Language code (e.g., "en", "es", "fr"). Auto-detected if omitted.'),
+        model_id: z.enum(['scribe_v1']).optional().describe('STT model. Default: scribe_v1.'),
+        tag_audio_events: z.boolean().optional().describe('When true, include non-speech events like "(laughter)" in the transcript. Default: false.'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
@@ -94,9 +96,14 @@ export function registerTranscriptionTools(server: McpServer): void {
       const fileBuffer = fs.readFileSync(verifiedPath);
       const fileName = path.basename(verifiedPath);
 
-      // Use FormData to send as multipart
+      // Multipart upload. ElevenLabs Speech-to-Text v1 requires:
+      //   - field name `file` (NOT `audio` — see planning doc 260520)
+      //   - `model_id` is mandatory (only `scribe_v1` is currently supported)
+      //   - `tag_audio_events=false` to avoid `(mouse click)` style noise
       const formData = new FormData();
-      formData.append('audio', new Blob([fileBuffer]), fileName);
+      formData.append('file', new Blob([fileBuffer]), fileName);
+      formData.append('model_id', args.model_id ?? 'scribe_v1');
+      formData.append('tag_audio_events', String(args.tag_audio_events ?? false));
       if (args.language_code) {
         formData.append('language_code', args.language_code);
       }
