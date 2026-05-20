@@ -9,11 +9,14 @@ name: CHANGELOG check
 # themselves.
 
 on:
+  # No `paths:` filter on purpose. Branch protection requires this check on
+  # every PR, but a `paths:`-filtered workflow is silently skipped when none
+  # of its paths match — the check-run is never reported and the PR stays
+  # `BLOCKED` forever for any docs-only or CI-only change. Running on every
+  # PR and exiting 0 in the script when no connector package.json changed
+  # makes the check always report a result.
   pull_request:
     branches: [main]
-    paths:
-      - 'connectors/*/package.json'
-      - 'connectors/*/CHANGELOG.md'
 
 permissions:
   contents: read
