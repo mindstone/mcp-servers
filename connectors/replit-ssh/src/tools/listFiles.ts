@@ -11,6 +11,7 @@ import {
   validatePath,
 } from '../ssh.js';
 import { buildTimeoutError, composeRequestSignal } from '../timeouts.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 
 export const listFilesSchema = z.object({
   host: z.string().describe('SSH host (e.g., "<uuid>-00-<hash>.riker.replit.dev")'),
@@ -42,7 +43,7 @@ export async function replitListFiles(
   try {
     const { sftp } = await getConnection(host, user, key);
 
-    const entries = await sftpOpWithSignal<Array<{ name: string; type: 'file' | 'directory'; size: number }>>(
+    const entries = await sftpOpWithSignal<Array<{ name: string | undefined; type: 'file' | 'directory'; size: number }>>(
       signal,
       SSH_CONNECT_TIMEOUT_MS,
       (cb) => {
@@ -54,7 +55,7 @@ export async function replitListFiles(
           const result = list
             .filter((entry) => entry.filename !== '.' && entry.filename !== '..')
             .map((entry) => ({
-              name: entry.filename,
+              name: wrapUntrusted(entry.filename, `replit-ssh:list-files:${targetPath}`),
               type: (entry.attrs.isDirectory() ? 'directory' : 'file') as 'file' | 'directory',
               size: entry.attrs.size,
             }));
