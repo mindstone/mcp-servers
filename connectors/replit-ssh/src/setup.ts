@@ -257,11 +257,17 @@ export async function runSetupSsh(
 
     const existingBlock = config.find({ Host: '*.replit.dev' });
     if (!existingBlock) {
+      // NB: this ~/.ssh/config entry is for the user's OpenSSH command-line
+      // client only. The MCP server itself uses node `ssh2` (see
+      // src/hostVerification.ts) and applies trust-on-first-use against a
+      // separate known-hosts file. Do NOT add a StrictHostKeyChecking key
+      // here — historically `accept-new` was written, which gave the false
+      // impression that the MCP server was performing host-key checks when
+      // it was not.
       config.append({
         Host: '*.replit.dev',
         Port: '22',
         IdentityFile: `~/.ssh/${SSH_KEY_FILENAME}`,
-        StrictHostKeyChecking: 'accept-new',
       });
       configUpdated = true;
     } else {

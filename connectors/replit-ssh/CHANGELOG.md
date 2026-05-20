@@ -6,6 +6,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Security
+
+- **replit-ssh-001 (CRITICAL)** — closed the SSH host-key verification gap
+  documented in the 0.1.0 "Known Limitations". `ssh2.Client.connect()` now
+  passes an explicit `hostVerifier` callback that pins server keys via the
+  trust-on-first-use store in `src/hostVerification.ts`:
+  - Without `SSH_HOST_KEY_TOFU=1` set, an unknown host fails closed with
+    `HOST_KEY_UNKNOWN` (previously: any server host key was accepted).
+  - With `SSH_HOST_KEY_TOFU=1` set, the SHA-256 fingerprint of the
+    presented host key is appended to a per-user known-hosts file
+    (`$MCP_REPLIT_SSH_KNOWN_HOSTS_PATH` → `$MCP_WORKSPACE_PATH/.replit-ssh-known-hosts`
+    → `$HOME/.replit-mcp/known_hosts`), mode 0o600. The env-var only
+    needs to be set once per host.
+  - A subsequent connection that presents a different fingerprint fails
+    closed with `HOST_KEY_MISMATCH` regardless of `SSH_HOST_KEY_TOFU` —
+    strict-on-rotation policy detects active MitM.
+  - The misleading `StrictHostKeyChecking accept-new` line that the
+    setup tool used to append to `~/.ssh/config` has been removed; the
+    MCP server uses node-`ssh2`, not OpenSSH, so that directive was
+    cosmetic but suggested host verification was happening when it was
+    not. The `Host *.replit.dev` block (Port + IdentityFile) still helps
+    users who run the OpenSSH CLI directly.
+  - Outbound `client.connect()` now restricts the negotiated algorithms
+    to the curve25519/ed25519/AEAD/ETM set defined in
+    `SSH_ALGORITHM_ALLOWLIST` — blocks downgrade negotiation to weaker
+    suites.
+  - Regression tests in `test/host-verification.test.ts` cover: unknown
+    host fail-closed, TOFU first-contact record, mode-0o600 file
+    creation, subsequent-connect match, fingerprint-mismatch reject,
+    case-insensitive host matching, and the removal of the misleading
+    `StrictHostKeyChecking accept-new` line from `setup.ts`.
+
+- **replit-ssh-006** — file content read via `replit_read_file` and
+  directory-entry names from `replit_list_files` are now wrapped in
+  `<untrusted-content source="…">…</untrusted-content>` envelopes per
+  AGENTS.md invariant #6. The wrapper escapes any embedded close-tag so
+  an attacker who controls file contents on the remote cannot
+  break out of the envelope to forge model instructions. Regression tests
+  in `test/untrusted-content.test.ts`.
+
 ## [0.1.1] - 2026-05-19
 
 ### Documentation
