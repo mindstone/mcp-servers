@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-replit-ssh",
   "title": "Replit SSH",
   "description": "Read, write, list, and check files on Replit projects over SSH/SFTP, plus SSH key setup.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-replit-ssh",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
@@ -26,6 +26,18 @@
           "isRequired": false,
           "default": "60000",
           "format": "number"
+        },
+        {
+          "name": "MCP_REPLIT_SSH_STRICT_HOST_KEY",
+          "description": "Set to 1 to require pre-populated known-hosts entries. When unset (default), unknown hosts are recorded on first contact (OpenSSH `accept-new` behaviour); a fingerprint mismatch always fails closed.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "MCP_REPLIT_SSH_KNOWN_HOSTS_PATH",
+          "description": "Explicit path to the connector's SSH known-hosts file. Defaults to $MCP_WORKSPACE_PATH/.replit-ssh-known-hosts, then $HOME/.replit-mcp/known_hosts.",
+          "isRequired": false,
+          "format": "filepath"
         }
       ]
     }

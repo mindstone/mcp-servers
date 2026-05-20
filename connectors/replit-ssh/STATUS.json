@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "name": "replit-ssh",
   "package": "@mindstone/mcp-server-replit-ssh",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "auth": {
     "type": "none",
     "envVars": []
