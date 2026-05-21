@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-05-19T12:18:37.871Z",
+  "generatedAt": "2026-05-21T20:28:44.384Z",
   "initialize": {
     "ok": true,
     "serverVersion": {
       "name": "Google Workspace MCP Server",
-      "version": "0.1.0"
+      "version": "0.1.2"
     },
     "serverCapabilities": {
       "resources": {},
@@ -66,73 +66,79 @@
       "tool": "list_workspace_accounts",
       "service": "local",
       "ok": true,
-      "latencyMs": 2
+      "latencyMs": 204
     },
     {
       "tool": "search_workspace_emails",
       "service": "gmail",
       "ok": true,
-      "latencyMs": 163
+      "latencyMs": 181
     },
     {
       "tool": "list_workspace_calendar_events",
       "service": "calendar",
       "ok": true,
-      "latencyMs": 392
+      "latencyMs": 408
     },
     {
       "tool": "list_drive_files",
       "service": "drive",
       "ok": true,
-      "latencyMs": 547
+      "latencyMs": 525
     },
     {
       "tool": "list_drive_files",
       "service": "drive",
       "ok": true,
-      "latencyMs": 965
+      "latencyMs": 394
     },
     {
       "tool": "list_drive_files",
       "service": "drive",
       "ok": true,
-      "latencyMs": 588
+      "latencyMs": 896
     },
     {
       "tool": "read_workspace_document",
       "service": "docs",
       "ok": true,
-      "latencyMs": 1553
+      "skipped": true,
+      "skipReason": "No scratch or fallback Google Doc found",
+      "latencyMs": 0
     },
     {
       "tool": "list_drive_files",
       "service": "drive",
       "ok": true,
-      "latencyMs": 646
+      "latencyMs": 508
     },
     {
       "tool": "read_workspace_spreadsheet",
       "service": "sheets",
       "ok": true,
-      "latencyMs": 1330
+      "skipped": true,
+      "skipReason": "No scratch or fallback Google Sheet found",
+      "latencyMs": 0
     },
     {
       "tool": "list_drive_files",
       "service": "drive",
       "ok": true,
-      "latencyMs": 652
+      "latencyMs": 533
     },
     {
       "tool": "read_workspace_presentation",
       "service": "slides",
       "ok": true,
-      "latencyMs": 1156
+      "skipped": true,
+      "skipReason": "No scratch or fallback Google Slides file found",
+      "latencyMs": 0
     },
     {
       "tool": "get_workspace_contacts",
       "service": "contacts",
       "ok": true,
-      "latencyMs": 152
+      "latencyMs": 164
     },
     {
       "tool": "list_tasks",
@@ -147,7 +153,7 @@
       "tool": "list_forms",
       "service": "forms",
       "ok": true,
-      "latencyMs": 528
+      "latencyMs": 559
     },
     {
       "tool": "list_form_responses",
@@ -161,25 +167,25 @@
       "tool": "list_workspace_labels",
       "service": "gmail",
       "ok": true,
-      "latencyMs": 116
+      "latencyMs": 61
     },
     {
       "tool": "list_workspace_calendars",
       "service": "calendar",
       "ok": true,
-      "latencyMs": 316
+      "latencyMs": 632
     },
     {
       "tool": "list_workspace_calendar_events",
       "service": "calendar",
       "ok": true,
-      "latencyMs": 496
+      "latencyMs": 497
     },
     {
       "tool": "list_workspace_calendar_events",
       "service": "calendar",
       "ok": true,
-      "latencyMs": 2,
+      "latencyMs": 1,
       "error": "{\"status\":\"auth_required\",\"user_action\":{\"id\":\"google.connect_account\"},\"agent_action\":{\"instruction\":\"Connect Google Workspace to continue. The user will be redirected to Google's sign-in.\"},\"setupToolName\":\"authenticate_workspace_account\"}",
       "skipped": true,
       "skipReason": "{\"status\":\"auth_required\",\"user_action\":{\"id\":\"google.connect_account\"},\"agent_action\":{\"instruction\":\"Connect Google Workspace to continue. The user will be redirected to Google's sign-in.\"},\"setupToolName\":\"authenticate_workspace_account\"}"
@@ -228,10 +234,10 @@
   },
   "latency": {
     "thresholdMs": 45000,
-    "p95Ms": 1553,
+    "p95Ms": 896,
     "ok": true
   },
   "finalExitStatus": "pass",
   "errors": [],
-  "packageTarball": "mindstone-mcp-server-google-workspace-0.1.0.tgz"
+  "packageTarball": "mindstone-mcp-server-google-workspace-0.1.2.tgz"
 }
