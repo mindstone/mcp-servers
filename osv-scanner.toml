@@ -1,0 +1,27 @@
+# OSV Scanner / OpenSSF Scorecard ignore list.
+#
+# Format: https://google.github.io/osv-scanner/configuration/
+# Scorecard's Vulnerabilities check honours this file.
+#
+# Each entry MUST include `reason`. Keep `ignoreUntil` populated so stale
+# ignores are surfaced for re-review rather than living indefinitely.
+
+# GHSA-w48q-cv73-mx4w / CVE-2025-66414 — DNS rebinding protection disabled by
+# default in Streamable-HTTP MCP servers.
+#
+# All connectors in this repo run over stdio (npm bin entries spawn a Node
+# process; transport is StdioServerTransport). The advisory only affects
+# HTTP-based MCP servers running on localhost; stdio transport is unreachable
+# from a browser via DNS rebinding. The connectors/google-workspace/ lockfile
+# still pins the SDK at 0.7.0 (pre-fix), but the threat model does not apply.
+[[IgnoredVulns]]
+id = "GHSA-w48q-cv73-mx4w"
+ignoreUntil = 2026-12-01
+reason = "Stdio-only transport; DNS-rebinding attack surface does not apply to any connector in this repo."
+
+# Tracked but NOT ignored (left to surface in Scorecard until released):
+#
+# - GHSA-8r9q-7v3j-jr4g (@modelcontextprotocol/sdk ReDoS in UriTemplate)
+#   Affects: connectors/google-workspace (pinned at @modelcontextprotocol/sdk
+#   0.7.0). Fix requires bumping the dep and shipping a new google-workspace
+#   release. Tracked separately.
