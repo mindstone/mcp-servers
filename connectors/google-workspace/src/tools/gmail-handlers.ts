@@ -416,14 +416,24 @@ function normalizeDraftData(data: ManageDraftParams['data']) {
 export async function handleComposeWorkspaceEmail(
   params: ComposeWorkspaceEmailParams
 ): Promise<ComposeWorkspaceEmailResult> {
-  await initializeServices();
-
-  const email = await resolveEmail(params);
-  const to = Array.isArray(params.to) ? params.to : [];
+  const to = Array.isArray(params.to)
+    ? params.to.filter((addr) => typeof addr === 'string' && addr.trim().length > 0)
+    : [];
   const cc = Array.isArray(params.cc) ? params.cc : [];
   const bcc = Array.isArray(params.bcc) ? params.bcc : [];
   const subject = typeof params.subject === 'string' ? params.subject : '';
   const body = typeof params.body === 'string' ? params.body : '';
+
+  if (to.length === 0 || subject.trim().length === 0 || body.trim().length === 0) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'compose_workspace_email requires non-empty "to" (at least one recipient), "subject", and "body". Provide all three so the editable draft has content for the user to review.'
+    );
+  }
+
+  await initializeServices();
+  const email = await resolveEmail(params);
+
   const recipientSummary = to.length > 0 ? to.join(', ') : '(no recipients)';
   const fallbackSubject = truncateText(subject, 256);
   const fallbackBody = truncateText(body, 5_000);
