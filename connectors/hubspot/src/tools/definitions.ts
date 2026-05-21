@@ -966,16 +966,17 @@ Common association types:
 - contact_to_company
 - deal_to_contact
 - deal_to_company
-- ticket_to_contact`,
+- ticket_to_contact
+- line_item_to_deal`,
     annotations: { readOnlyHint: false, destructiveHint: false },
     inputSchema: {
       type: 'object',
       properties: {
-        fromObjectType: { type: 'string', enum: ['contacts', 'companies', 'deals', 'tickets', 'leads'] },
+        fromObjectType: { type: 'string', description: 'Source object type. Common values: "contacts", "companies", "deals", "tickets", "leads", "products", "line_items", or any custom object name.' },
         fromObjectId: { type: 'string' },
-        toObjectType: { type: 'string', enum: ['contacts', 'companies', 'deals', 'tickets', 'leads'] },
+        toObjectType: { type: 'string', description: 'Target object type. Common values: "contacts", "companies", "deals", "tickets", "leads", "products", "line_items", or any custom object name.' },
         toObjectId: { type: 'string' },
-        associationType: { type: 'string', description: 'Association type (e.g., contact_to_company)' }
+        associationType: { type: 'string', description: 'Association type (e.g., contact_to_company, line_item_to_deal)' }
       },
       required: ['fromObjectType', 'fromObjectId', 'toObjectType', 'toObjectId', 'associationType']
     }
@@ -983,14 +984,22 @@ Common association types:
   {
     name: 'get_hubspot_associations',
     category: 'Associations',
-    description: 'Get all associations of a specific type for an object',
+    description: `Get all associations of a specific type for an object.
+
+Useful for pivoting between object types in either direction, e.g.:
+- deal -> contacts / companies / line_items
+- line_item -> deals (resolves a line item back to its parent deal)
+- ticket -> contacts / companies
+- contact -> deals / companies
+
+RETURNS: { results: [{ id, type }] } — array of associated record IDs.`,
     annotations: { readOnlyHint: true },
     inputSchema: {
       type: 'object',
       properties: {
-        fromObjectType: { type: 'string', enum: ['contacts', 'companies', 'deals', 'tickets', 'leads'] },
+        fromObjectType: { type: 'string', description: 'Source object type. Common values: "contacts", "companies", "deals", "tickets", "leads", "products", "line_items", or any custom object name.' },
         fromObjectId: { type: 'string' },
-        toObjectType: { type: 'string', enum: ['contacts', 'companies', 'deals', 'tickets', 'leads'] }
+        toObjectType: { type: 'string', description: 'Target object type. Common values: "contacts", "companies", "deals", "tickets", "leads", "products", "line_items", or any custom object name.' }
       },
       required: ['fromObjectType', 'fromObjectId', 'toObjectType']
     }
@@ -1003,9 +1012,9 @@ Common association types:
     inputSchema: {
       type: 'object',
       properties: {
-        fromObjectType: { type: 'string', enum: ['contacts', 'companies', 'deals', 'tickets', 'leads'] },
+        fromObjectType: { type: 'string', description: 'Source object type. Common values: "contacts", "companies", "deals", "tickets", "leads", "products", "line_items", or any custom object name.' },
         fromObjectId: { type: 'string' },
-        toObjectType: { type: 'string', enum: ['contacts', 'companies', 'deals', 'tickets', 'leads'] },
+        toObjectType: { type: 'string', description: 'Target object type. Common values: "contacts", "companies", "deals", "tickets", "leads", "products", "line_items", or any custom object name.' },
         toObjectId: { type: 'string' },
         associationType: { type: 'string' }
       },
@@ -1840,14 +1849,24 @@ RETURNS: Array of line items`,
     category: 'Line Items',
     description: `Get a specific line item by ID.
 
-RETURNS: Line item with properties and associations`,
+To resolve a line item back to its parent deal in the same call, pass
+\`associations: ['deals']\`. The response then includes an \`associations\`
+object with \`{ deals: { results: [{ id, type }] } }\`.
+
+RETURNS: Line item object. Includes \`associations\` only when the
+\`associations\` parameter is provided.`,
     aliases: ['get_line_item'],
     annotations: { readOnlyHint: true },
     inputSchema: {
       type: 'object',
       properties: {
         lineItemId: { type: 'string', description: 'HubSpot line item ID' },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' }
+        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' },
+        associations: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional associated object types to include in the response (e.g. ["deals"], ["deals", "products"]). Returns associated record IDs alongside the line item.'
+        }
       },
       required: ['lineItemId']
     }
@@ -2731,6 +2750,90 @@ automation scopes; if it still fails, your portal may require the v3 enrollment 
   }
 ];
 
+// Conversations Inbox tools (read-only ticket thread access)
+export const conversationTools: ToolMetadata[] = [
+  {
+    name: 'list_hubspot_ticket_threads',
+    category: 'Conversations',
+    description: `List conversation threads associated with a HubSpot support ticket.
+
+Use this when you need to read the actual customer messages on a ticket — for example,
+to draft a reply for an unassigned ticket. Tickets in HubSpot only expose the initial
+\`subject\` and \`content\` fields; the full back-and-forth lives on Conversations threads.
+
+Typical workflow:
+1. search_hubspot_tickets to find candidate tickets
+2. list_hubspot_ticket_threads(ticketId) to find the thread(s) attached to a ticket
+3. list_hubspot_thread_messages(threadId) to read the message history
+4. (optional) get_hubspot_thread_message_original_content if a message is truncated
+
+REQUIRES: \`conversations.read\` OAuth scope. If a 403 is returned, reconnect the
+HubSpot account to grant the scope.
+
+RETURNS: { results: [{ id, status, latestMessageTimestamp, ... }], paging? }`,
+    aliases: ['get_ticket_threads', 'list_ticket_conversations'],
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticketId: { type: 'string', maxLength: 64, pattern: '^[a-zA-Z0-9_-]+$', description: 'HubSpot ticket ID' },
+        threadStatus: { type: 'string', enum: ['OPEN', 'CLOSED'], description: 'Optional status filter' },
+        limit: { type: 'number', minimum: 1, maximum: 100, description: 'Max threads to return (HubSpot default 20, max 100)' },
+        after: { type: 'string', maxLength: 256, description: 'Pagination cursor from a previous response.paging.next.after' },
+        archived: { type: 'boolean', description: 'Include archived threads (default false)' }
+      },
+      required: ['ticketId']
+    }
+  },
+  {
+    name: 'list_hubspot_thread_messages',
+    category: 'Conversations',
+    description: `List messages on a conversation thread, in chronological order.
+
+Each message includes \`text\` and/or \`richText\` body, \`sender\`, \`recipients\`,
+\`createdAt\`, \`type\` (MESSAGE | COMMENT | WELCOME_MESSAGE), and \`truncationStatus\`.
+If \`truncationStatus\` indicates the body was truncated, call
+get_hubspot_thread_message_original_content with the same threadId/messageId to fetch
+the full body.
+
+REQUIRES: \`conversations.read\` OAuth scope.
+
+RETURNS: { results: [...messages], paging? }`,
+    aliases: ['get_thread_messages', 'read_thread'],
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        threadId: { type: 'string', maxLength: 64, pattern: '^[a-zA-Z0-9_-]+$', description: 'Conversation thread ID (from list_hubspot_ticket_threads)' },
+        limit: { type: 'number', minimum: 1, maximum: 100, description: 'Max messages to return (HubSpot default 20, max 100)' },
+        after: { type: 'string', maxLength: 256, description: 'Pagination cursor from a previous response.paging.next.after' }
+      },
+      required: ['threadId']
+    }
+  },
+  {
+    name: 'get_hubspot_thread_message_original_content',
+    category: 'Conversations',
+    description: `Fetch the full, untruncated original content of a single conversation message.
+
+Use this only when the message returned from list_hubspot_thread_messages has a
+\`truncationStatus\` indicating its body was truncated. For untruncated messages, the
+body is already present in list_hubspot_thread_messages and this call is unnecessary.
+
+REQUIRES: \`conversations.read\` OAuth scope.`,
+    aliases: ['get_thread_message_full_content'],
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        threadId: { type: 'string', maxLength: 64, pattern: '^[a-zA-Z0-9_-]+$', description: 'Conversation thread ID' },
+        messageId: { type: 'string', maxLength: 64, pattern: '^[a-zA-Z0-9_-]+$', description: 'Message ID within the thread' }
+      },
+      required: ['threadId', 'messageId']
+    }
+  }
+];
+
 // Export all tools
 export const LOCAL_ONLY_TOOL_NAMES = [
   'list_hubspot_accounts',
@@ -2774,7 +2877,8 @@ const BASE_TOOLS: ToolMetadata[] = [
   ...listsTools,
   ...knowledgeBaseTools,
   ...fileTools,
-  ...workflowTools
+  ...workflowTools,
+  ...conversationTools
 ];
 
 function applyCohortHygieneAnnotations(tool: ToolMetadata): ToolMetadata {

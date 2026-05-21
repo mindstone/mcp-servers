@@ -11,7 +11,7 @@ HubSpot MCP server for CRM operations (contacts, companies, deals, tickets, lead
 
 - **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-hubspot)
 - **Auth:** OAuth (host-orchestrated) ([`HUBSPOT_CLIENT_SECRET`](./server.json))
-- **Tools:** [92](./src/tools/) (crm-objects, associations, marketing, files, workflows)
+- **Tools:** [95](./src/tools/) (crm-objects, associations, marketing, files, workflows, conversations)
 - **Surface:** cloud-api
 - **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
@@ -194,7 +194,7 @@ Until the host has written `${HUBSPOT_CONFIG_DIR}/credentials/you@example.com.to
 }
 ```
 
-## Tools (92)
+## Tools (95)
 
 ### Account & authentication
 - `list_hubspot_accounts` — List connected HubSpot accounts and their auth status.

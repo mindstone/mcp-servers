@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "name": "hubspot",
   "package": "@mindstone/mcp-server-hubspot",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "auth": {
     "type": "oauth-host-orchestrated",
     "envVars": [
@@ -11,13 +11,14 @@
     ]
   },
   "tools": {
-    "count": 92,
+    "count": 95,
     "domains": [
       "crm-objects",
       "associations",
       "marketing",
       "files",
-      "workflows"
+      "workflows",
+      "conversations"
     ]
   },
   "surface": "cloud-api",
