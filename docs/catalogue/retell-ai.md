@@ -13,7 +13,7 @@ Voice agent phone calls, call management, agent configuration, LLM prompt manage
 
 | Field | Value |
 |-------|-------|
-| Version | 0.2.1 |
+| Version | 0.2.2 |
 | Auth | API key (`RETELL_API_KEY`) |
 | Tools | 20 (calls, agents, llms, voices) |
 | Surface | cloud API |
