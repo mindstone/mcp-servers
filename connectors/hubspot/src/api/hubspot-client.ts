@@ -10,6 +10,43 @@ export const DEFAULT_HUBSPOT_REQUEST_TIMEOUT_MS = 60_000;
 // Buffer time before expiration to trigger refresh (5 minutes)
 const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000;
 
+// FOX-3354 widened the association-tool input schemas to accept arbitrary
+// HubSpot object types (custom objects like '2-12345' or 'p_widgets'),
+// removing the enum constraint that previously prevented '/' or '?' from
+// reaching path interpolation. These validators enforce the safe shape at
+// the API-client boundary so a tool input with embedded path or query
+// characters can no longer re-route the authenticated request.
+// Pair every validator with encodeURIComponent on the same segment — both
+// the assertion (semantic safety) and the encoding (escape-channel safety)
+// are required for defense in depth.
+const HUBSPOT_OBJECT_TYPE_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
+const HUBSPOT_OBJECT_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+const HUBSPOT_ASSOCIATION_TYPE_RE = /^[a-zA-Z0-9_-]{1,128}$/;
+
+export function assertHubSpotObjectType(value: unknown, field: string): asserts value is string {
+  if (typeof value !== 'string' || !HUBSPOT_OBJECT_TYPE_RE.test(value)) {
+    throw new Error(
+      `INVALID_ARGUMENTS: HubSpot ${field} must match ${HUBSPOT_OBJECT_TYPE_RE.source}`
+    );
+  }
+}
+
+export function assertHubSpotObjectId(value: unknown, field: string): asserts value is string {
+  if (typeof value !== 'string' || !HUBSPOT_OBJECT_ID_RE.test(value)) {
+    throw new Error(
+      `INVALID_ARGUMENTS: HubSpot ${field} must match ${HUBSPOT_OBJECT_ID_RE.source}`
+    );
+  }
+}
+
+export function assertHubSpotAssociationType(value: unknown): asserts value is string {
+  if (typeof value !== 'string' || !HUBSPOT_ASSOCIATION_TYPE_RE.test(value)) {
+    throw new Error(
+      `INVALID_ARGUMENTS: HubSpot associationType must match ${HUBSPOT_ASSOCIATION_TYPE_RE.source}`
+    );
+  }
+}
+
 export function resolveHubSpotRequestTimeoutMs(envValue = process.env.HUBSPOT_REQUEST_TIMEOUT_MS): number {
   if (!envValue || envValue.trim().length === 0) {
     return DEFAULT_HUBSPOT_REQUEST_TIMEOUT_MS;
@@ -439,9 +476,18 @@ export class HubSpotClient {
     return this.request('POST', `/crm/v3/objects/${objectType}`, { properties });
   }
 
-  async getObject(objectType: string, objectId: string, properties?: string[]): Promise<CrmObject> {
-    const params = properties ? `?properties=${properties.join(',')}` : '';
-    return this.request('GET', `/crm/v3/objects/${objectType}/${objectId}${params}`);
+  async getObject(
+    objectType: string,
+    objectId: string,
+    properties?: string[],
+    associations?: string[]
+  ): Promise<CrmObject> {
+    const search = new URLSearchParams();
+    if (properties && properties.length > 0) search.set('properties', properties.join(','));
+    if (associations && associations.length > 0) search.set('associations', associations.join(','));
+    const qs = search.toString();
+    const suffix = qs ? `?${qs}` : '';
+    return this.request('GET', `/crm/v3/objects/${objectType}/${objectId}${suffix}`);
   }
 
   async updateObject(objectType: string, objectId: string, properties: Record<string, string>): Promise<CrmObject> {
@@ -482,9 +528,14 @@ export class HubSpotClient {
     toObjectId: string,
     associationType: string
   ): Promise<void> {
+    assertHubSpotObjectType(fromObjectType, 'fromObjectType');
+    assertHubSpotObjectId(fromObjectId, 'fromObjectId');
+    assertHubSpotObjectType(toObjectType, 'toObjectType');
+    assertHubSpotObjectId(toObjectId, 'toObjectId');
+    assertHubSpotAssociationType(associationType);
     await this.request(
       'PUT',
-      `/crm/v3/objects/${fromObjectType}/${fromObjectId}/associations/${toObjectType}/${toObjectId}/${associationType}`
+      `/crm/v3/objects/${encodeURIComponent(fromObjectType)}/${encodeURIComponent(fromObjectId)}/associations/${encodeURIComponent(toObjectType)}/${encodeURIComponent(toObjectId)}/${encodeURIComponent(associationType)}`
     );
   }
 
@@ -493,9 +544,12 @@ export class HubSpotClient {
     fromObjectId: string,
     toObjectType: string
   ): Promise<{ results: Array<{ id: string; type: string }> }> {
+    assertHubSpotObjectType(fromObjectType, 'fromObjectType');
+    assertHubSpotObjectId(fromObjectId, 'fromObjectId');
+    assertHubSpotObjectType(toObjectType, 'toObjectType');
     return this.request(
       'GET',
-      `/crm/v3/objects/${fromObjectType}/${fromObjectId}/associations/${toObjectType}`
+      `/crm/v3/objects/${encodeURIComponent(fromObjectType)}/${encodeURIComponent(fromObjectId)}/associations/${encodeURIComponent(toObjectType)}`
     );
   }
 
@@ -506,9 +560,14 @@ export class HubSpotClient {
     toObjectId: string,
     associationType: string
   ): Promise<void> {
+    assertHubSpotObjectType(fromObjectType, 'fromObjectType');
+    assertHubSpotObjectId(fromObjectId, 'fromObjectId');
+    assertHubSpotObjectType(toObjectType, 'toObjectType');
+    assertHubSpotObjectId(toObjectId, 'toObjectId');
+    assertHubSpotAssociationType(associationType);
     await this.request(
       'DELETE',
-      `/crm/v3/objects/${fromObjectType}/${fromObjectId}/associations/${toObjectType}/${toObjectId}/${associationType}`
+      `/crm/v3/objects/${encodeURIComponent(fromObjectType)}/${encodeURIComponent(fromObjectId)}/associations/${encodeURIComponent(toObjectType)}/${encodeURIComponent(toObjectId)}/${encodeURIComponent(associationType)}`
     );
   }
 
@@ -517,7 +576,9 @@ export class HubSpotClient {
     fromObjectType: string,
     toObjectType: string
   ): Promise<{ results: AssociationLabel[] }> {
-    return this.request('GET', `/crm/v4/associations/${fromObjectType}/${toObjectType}/labels`);
+    assertHubSpotObjectType(fromObjectType, 'fromObjectType');
+    assertHubSpotObjectType(toObjectType, 'toObjectType');
+    return this.request('GET', `/crm/v4/associations/${encodeURIComponent(fromObjectType)}/${encodeURIComponent(toObjectType)}/labels`);
   }
 
   async createLabeledAssociation(
@@ -527,9 +588,13 @@ export class HubSpotClient {
     toObjectId: string,
     associations: AssociationSpec[]
   ): Promise<{ fromObjectTypeId: string; fromObjectId: number; toObjectTypeId: string; toObjectId: number; labels: string[] }> {
+    assertHubSpotObjectType(fromObjectType, 'fromObjectType');
+    assertHubSpotObjectId(fromObjectId, 'fromObjectId');
+    assertHubSpotObjectType(toObjectType, 'toObjectType');
+    assertHubSpotObjectId(toObjectId, 'toObjectId');
     return this.request(
       'PUT',
-      `/crm/v4/objects/${fromObjectType}/${fromObjectId}/associations/${toObjectType}/${toObjectId}`,
+      `/crm/v4/objects/${encodeURIComponent(fromObjectType)}/${encodeURIComponent(fromObjectId)}/associations/${encodeURIComponent(toObjectType)}/${encodeURIComponent(toObjectId)}`,
       associations
     );
   }
@@ -935,6 +1000,50 @@ export class HubSpotClient {
       body.properties = properties;
     }
     return this.request('POST', '/crm/v3/objects/contacts/batch/read', body);
+  }
+
+  // Conversations Inbox API v3 (read-only — requires `conversations.read` scope)
+  async listConversationThreads(params: {
+    associatedTicketId?: string;
+    associatedContactId?: string;
+    threadStatus?: 'OPEN' | 'CLOSED';
+    limit?: number;
+    after?: string;
+    archived?: boolean;
+  }): Promise<ListResponse<Record<string, unknown>>> {
+    const search = new URLSearchParams();
+    if (params.associatedTicketId) search.set('associatedTicketId', params.associatedTicketId);
+    if (params.associatedContactId) search.set('associatedContactId', params.associatedContactId);
+    if (params.threadStatus) search.set('threadStatus', params.threadStatus);
+    if (params.limit !== undefined) search.set('limit', String(params.limit));
+    if (params.after) search.set('after', params.after);
+    if (params.archived !== undefined) search.set('archived', String(params.archived));
+    const qs = search.toString();
+    return this.request('GET', `/conversations/v3/conversations/threads${qs ? `?${qs}` : ''}`);
+  }
+
+  async listConversationThreadMessages(
+    threadId: string,
+    params: { limit?: number; after?: string } = {}
+  ): Promise<ListResponse<Record<string, unknown>>> {
+    const search = new URLSearchParams();
+    if (params.limit !== undefined) search.set('limit', String(params.limit));
+    if (params.after) search.set('after', params.after);
+    const qs = search.toString();
+    return this.request(
+      'GET',
+      `/conversations/v3/conversations/threads/${encodeURIComponent(threadId)}/messages${qs ? `?${qs}` : ''}`
+    );
+  }
+
+  async getConversationThreadMessageOriginalContent(
+    threadId: string,
+    messageId: string
+  ): Promise<Record<string, unknown>> {
+    return this.request(
+      'GET',
+      `/conversations/v3/conversations/threads/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}/original-content`
+    );
   }
 }
 

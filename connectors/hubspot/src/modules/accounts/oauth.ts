@@ -37,6 +37,7 @@ const HUBSPOT_READ_SCOPES = [
   'crm.objects.products.read',
   'crm.objects.line_items.read',
   'crm.lists.read', // Lists/segments API - requires re-auth for existing users
+  'conversations.read', // Conversations Inbox API: read ticket thread/message bodies (requires re-auth for existing users)
 ];
 
 // Optional scopes (requested via optional_scope; some require paid HubSpot)

@@ -20,6 +20,7 @@ interface SearchArgs {
 
 interface GetArgs {
   properties?: string[];
+  associations?: string[];
 }
 
 interface CreateArgs {
@@ -218,9 +219,11 @@ async function searchObjects(objectType: string, args: SearchArgs) {
 
 // Generic get handler
 async function getObject(objectType: string, objectId: string, args: GetArgs) {
+  // Note: associations is forwarded as ?associations=… so callers can resolve
+  // related records (e.g. line_item -> deals) in a single request.
   try {
     const client = await getHubSpotClientAsync();
-    return await client.getObject(objectType, objectId, args.properties);
+    return await client.getObject(objectType, objectId, args.properties, args.associations);
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType, operation: 'get', args: { objectId, ...args } });
     logger.error(`Get ${objectType} ${objectId} failed:`, parsed);
@@ -828,7 +831,7 @@ export async function handleSearchLineItems(args: SearchArgs) {
   return searchObjects('line_items', args);
 }
 
-export async function handleGetLineItem(args: { lineItemId: string; properties?: string[] }) {
+export async function handleGetLineItem(args: { lineItemId: string; properties?: string[]; associations?: string[] }) {
   return getObject('line_items', args.lineItemId, args);
 }
 
