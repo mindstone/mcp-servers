@@ -1,7 +1,7 @@
 {
   "id": "bundled-hubspot",
   "name": "HubSpot",
-  "description": "HubSpot CRM (92 tools). Contacts, companies, deals, tickets, tasks, products, line items. File uploads & attachments. Lists/segments with batch export. Forms, analytics, marketing emails. Knowledge base articles (read-only). Use wildcards: *contacts*, *deals*, *lists*, *forms*, *email*, *file*, *kb* to filter tools.",
+  "description": "HubSpot CRM (95 tools). Contacts, companies, deals, tickets, tasks, products, line items. File uploads & attachments. Lists/segments with batch export. Forms, analytics, marketing emails. Knowledge base articles (read-only). Read support ticket conversation threads/messages. Use wildcards: *contacts*, *deals*, *lists*, *forms*, *email*, *file*, *kb*, *thread* to filter tools.",
   "category": "sales",
   "icon": "users",
   "maturity": "stable",

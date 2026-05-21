@@ -30,8 +30,8 @@ describe('HubSpot server metadata', () => {
     expect(client.getServerVersion()?.version).toBe(pkg.version);
   });
 
-  it('reports the full 92-tool surface in tools/list', async () => {
+  it('reports the full 95-tool surface in tools/list', async () => {
     const tools = await client.listTools();
-    expect(tools).toHaveLength(92);
+    expect(tools).toHaveLength(95);
   });
 });

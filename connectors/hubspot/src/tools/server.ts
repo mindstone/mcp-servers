@@ -126,6 +126,14 @@ import {
   DeleteFileArgs,
   AttachFileToRecordArgs
 } from './file-handlers.js';
+import {
+  handleListTicketThreads,
+  handleListThreadMessages,
+  handleGetThreadMessageOriginalContent,
+  ListTicketThreadsArgs,
+  ListThreadMessagesArgs,
+  GetThreadMessageOriginalContentArgs
+} from './conversation-handlers.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../../package.json') as { version: string };
@@ -586,6 +594,17 @@ export class HubSpotServer {
             break;
           case 'get_hubspot_kb_article':
             result = await handleGetKbArticle(args as unknown as Parameters<typeof handleGetKbArticle>[0]);
+            break;
+
+          // Conversations (read-only)
+          case 'list_hubspot_ticket_threads':
+            result = await handleListTicketThreads(args as unknown as ListTicketThreadsArgs);
+            break;
+          case 'list_hubspot_thread_messages':
+            result = await handleListThreadMessages(args as unknown as ListThreadMessagesArgs);
+            break;
+          case 'get_hubspot_thread_message_original_content':
+            result = await handleGetThreadMessageOriginalContent(args as unknown as GetThreadMessageOriginalContentArgs);
             break;
 
           // Files

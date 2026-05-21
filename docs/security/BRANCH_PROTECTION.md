@@ -5,6 +5,8 @@
 
 > **Architecture mode (since FOX-3319 pivot, 2026-05-17):** Publishes happen manually from the wave-lead's dev machine. There is no `.github/workflows/publish.yml` and no `npm-publish` GitHub Actions environment. The branch + tag protection rules below still apply (they gate the version-bump PR that defines what gets published), but section §3 of earlier revisions of this document (npm-publish environment) is superseded.
 
+> **Recommended migration to repository rulesets (2026-05-21):** The OpenSSF Scorecard `Branch-Protection` check currently fails with `internal error: some github tokens can't read classic branch protection rules` because the default `GITHUB_TOKEN` used by `.github/workflows/scorecard.yml` cannot read **classic** branch protection. Migrating the `main` rule to a **repository ruleset** (Settings → Rules → Rulesets) lets the default token read it, flips the Scorecard check from `-1` to a real score, and avoids introducing an admin-scope PAT. The required settings (§1 below) translate 1:1 to ruleset toggles. See §6 for the migration runbook.
+
 These settings live in GitHub UI / API, not in repo files, so they are documented here to keep settings drift visible and reviewable.
 
 ## 1. Branch protection — `main`
@@ -84,3 +86,43 @@ gh secret list --repo mindstone/mcp-servers \
 ls .github/workflows/ | grep -i publish
 # expect: (empty)
 ```
+
+## 6. Migration runbook — classic branch protection → repository ruleset
+
+This unblocks the OpenSSF Scorecard `Branch-Protection` check without
+introducing a PAT. Perform on `mindstone/mcp-servers`.
+
+1. **Create the ruleset** at `Settings → Rules → Rulesets → New branch ruleset`.
+   - Name: `main protection`.
+   - Enforcement status: `Active`.
+   - Target branches: `Include default branch`.
+   - Bypass list: empty (no bypass for admins, mirrors §1's "Include administrators: On").
+2. **Enable rules** so they mirror §1 above:
+   - `Restrict deletions`.
+   - `Require linear history`.
+   - `Require signed commits`.
+   - `Require a pull request before merging`:
+     - Required approvals: `1` (raise to `2` once team size allows).
+     - Dismiss stale pull request approvals when new commits are pushed: `On`.
+     - Require review from Code Owners: `On`.
+     - Require approval of the most recent reviewable push: `On`.
+     - Require conversation resolution before merging: `On`.
+   - `Require status checks to pass`:
+     - Require branches to be up to date before merging: `On`.
+     - Required checks: `build-and-test`, `validate`, `changelog-check`.
+   - `Block force pushes`.
+3. **Restrict push access** under the ruleset's `Restrict who can push to matching branches` rule:
+   - Allow only the `@mindstone/oss-maintainers` team.
+4. **Verify the ruleset is read by the default `GITHUB_TOKEN`:**
+   ```bash
+   gh api repos/mindstone/mcp-servers/rules/branches/main \
+     --jq '[.[] | {type, ruleset_source_type}]'
+   # expect: a JSON array enumerating each rule above; ruleset_source_type == "Repository".
+   ```
+5. **Delete the legacy classic branch protection rule** at `Settings → Branches → Branch protection rules → main → Delete`.
+   Only do this AFTER step 4 confirms the ruleset is active and complete.
+6. **Confirm the next Scorecard run** flips `Branch-Protection` from `-1` to a numeric score:
+   - The Scorecard workflow runs on every push to `main` (`.github/workflows/scorecard.yml`); after the next push the badge in `README.md` should reflect the new value.
+   - Alternatively, trigger an ad-hoc run: `gh workflow run scorecard.yml --ref main`.
+
+After migration, update §1 of this document to read "Configure under Settings → Rules → Rulesets" and remove the §1 reference to `Settings → Branches → Add rule`. Tag protection (§2) stays in the `Settings → Tags` UI; tag rulesets are a separate ruleset target if desired.
