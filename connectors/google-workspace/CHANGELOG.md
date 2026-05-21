@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-05-21
+
+### Fixed
+
+- `compose_workspace_email` now fails closed when invoked with empty/missing `to`, `subject`, or `body` instead of silently rendering a blank editable draft form. Throws `McpError(InvalidParams)` so the calling host surfaces the error to the user, who can re-prompt with concrete content. Recipients are also filtered for non-empty strings so `to: [""]` no longer slips past as a valid recipient list. Fixes the silent-failure mode reported in REBEL-5MF where the agent would emit a `presentation: 'primary'` envelope with empty structured content, leaving the user staring at a blank form with no observable error.
+
 ## [0.1.1] - 2026-05-19
 
 ### Documentation
