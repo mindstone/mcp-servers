@@ -11,6 +11,18 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-21
+### Added
+- **hubspot**: Conversations Inbox read tools (FOX-3376) — three new read-only tools let agents pull the actual customer messages on a support ticket so they can draft replies:
+  - `list_hubspot_ticket_threads(ticketId)` — `GET /conversations/v3/conversations/threads?associatedTicketId={id}`.
+  - `list_hubspot_thread_messages(threadId)` — `GET /conversations/v3/conversations/threads/{threadId}/messages`.
+  - `get_hubspot_thread_message_original_content(threadId, messageId)` — fetches the full body when a message is truncated.
+  - Adds `conversations.read` to the OAuth read-scope tier. **Existing accounts must reconnect to grant the new scope.**
+- **hubspot**: `get_hubspot_line_item` now accepts an optional `associations: string[]` argument (FOX-3354). Pass `['deals']` to resolve a line item back to its parent deal in a single call (forwarded to HubSpot as `?associations=deals`). Default behavior is unchanged for callers that don't pass the argument.
+
+### Changed
+- **hubspot**: `get_hubspot_associations` (and `create_hubspot_association` / `delete_hubspot_association`) no longer enum-restrict `fromObjectType` / `toObjectType` to `['contacts','companies','deals','tickets','leads']` (FOX-3354). They now accept any HubSpot object type — including `line_items`, `products`, and custom objects — matching the already-permissive `list_hubspot_association_labels`. This unblocks `line_item -> deal` reads for product-level deal reporting.
+
 ## [0.1.2] - 2026-05-14
 ### Security
 - **hubspot**: Pre-publish security remediation closing 10 findings (3 CRITICAL, 3 HIGH, 4 MEDIUM) surfaced in the lens-security review. Triple-reviewer + per-stage fix-cycle. See [docs/plans/260512_hubspot_oss_security_remediation.md](../../../../../desktop/MindstoneRebel-1/docs/plans/260512_hubspot_oss_security_remediation.md) in the host repo for the full audit trail.

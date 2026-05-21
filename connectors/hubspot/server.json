@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.mindstone/mcp-server-hubspot",
   "title": "HubSpot",
-  "description": "HubSpot MCP server: CRM objects, associations, properties, marketing, files, and workflows",
-  "version": "0.1.2",
+  "description": "HubSpot CRM: contacts, deals, tickets, line items, properties, marketing, files, workflows, threads",
+  "version": "0.2.0",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-hubspot",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

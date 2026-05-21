@@ -13,9 +13,9 @@ HubSpot MCP server for CRM operations &#40;contacts, companies, deals, tickets, 
 
 | Field | Value |
 |-------|-------|
-| Version | 0.1.2 |
+| Version | 0.2.0 |
 | Auth | OAuth (host-orchestrated) (`HUBSPOT_CLIENT_SECRET`) |
-| Tools | 92 (crm-objects, associations, marketing, files, workflows) |
+| Tools | 95 (crm-objects, associations, marketing, files, workflows, conversations) |
 | Surface | cloud API |
 | Hosts tested | Claude Desktop, Cursor, Mindstone Rebel |
 
