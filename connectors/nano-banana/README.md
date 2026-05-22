@@ -11,7 +11,6 @@ Nano Banana MCP server — Google Gemini image generation and editing via Model 
 - **Auth:** API key ([`GEMINI_API_KEY`](./server.json))
 - **Tools:** [3](./src/tools/) (image-generation, image-editing)
 - **Surface:** cloud-api
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Requirements

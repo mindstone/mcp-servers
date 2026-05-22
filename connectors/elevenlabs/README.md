@@ -11,7 +11,6 @@ ElevenLabs MCP server for Model Context Protocol hosts. Generate speech, music, 
 - **Auth:** API key ([`ELEVENLABS_API_KEY`](./server.json))
 - **Tools:** [8](./src/tools/) (voices, speech, music, transcription)
 - **Surface:** cloud-api
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Requirements

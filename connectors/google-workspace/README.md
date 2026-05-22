@@ -8,11 +8,10 @@ Google Workspace MCP server — Gmail, Calendar, Drive, Docs, Sheets, Slides, Co
 
 ## Status
 
-- **Version:** [0.1.1](./CHANGELOG.md) · npm: not yet published
+- **Version:** [0.1.2](./CHANGELOG.md) · npm: not yet published
 - **Auth:** OAuth (host-orchestrated) ([`GOOGLE_CLIENT_SECRET`](./server.json))
 - **Tools:** [94](./src/tools/definitions/) (Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Comments, Account; +10 gated Tasks/Forms behind `ENABLE_GOOGLE_TASKS_FORMS=true`)
 - **Surface:** cloud-api
-- **Hosts tested:** Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 This connector is based on [aaronsb/google-workspace-mcp](https://github.com/aaronsb/google-workspace-mcp) and credited under `package.json#attribution`.

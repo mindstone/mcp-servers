@@ -11,7 +11,6 @@ Napkin AI visual generation MCP server for Model Context Protocol hosts. Generat
 - **Auth:** API key ([`NAPKIN_API_KEY`](./server.json))
 - **Tools:** [4](./src/tools/) (visuals, downloads)
 - **Surface:** cloud-api
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Requirements

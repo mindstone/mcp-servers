@@ -17,7 +17,6 @@ Replit SSH MCP server — read, write, list, and check files on Replit projects 
 | Auth | None (—) |
 | Tools | 5 (connection, files, ssh-setup) |
 | Surface | local protocol |
-| Hosts tested | Mindstone Rebel |
 
 ## Evidence
 

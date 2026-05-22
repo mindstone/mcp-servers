@@ -17,7 +17,6 @@ Zendesk Support MCP server for Model Context Protocol hosts.
 | Auth | Hybrid (`ZENDESK_CLIENT_SECRET`) |
 | Tools | 20 (tickets, users, comments, macros) |
 | Surface | cloud API |
-| Hosts tested | Claude Desktop, Cursor, Mindstone Rebel |
 
 ## Evidence
 

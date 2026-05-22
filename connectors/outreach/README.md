@@ -44,7 +44,6 @@ After clicking the button, your host will prompt you to fill: `OUTREACH_CLIENT_I
 - **Auth:** OAuth (local 127.0.0.1 callback) ([`OUTREACH_CLIENT_SECRET`](./server.json))
 - **Tools:** [15](./src/tools/) (prospects, sequences, accounts, tasks)
 - **Surface:** cloud-api
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Installation

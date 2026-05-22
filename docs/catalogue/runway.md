@@ -17,7 +17,6 @@ Runway ML MCP server for Model Context Protocol hosts. Generate AI video, images
 | Auth | API key (`RUNWAYML_API_SECRET`) |
 | Tools | 22 (video, image, audio, voices, tasks) |
 | Surface | cloud API |
-| Hosts tested | Claude Desktop, Cursor, Mindstone Rebel |
 
 ## Evidence
 

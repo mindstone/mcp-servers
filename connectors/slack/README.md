@@ -13,7 +13,6 @@ Slack workspace MCP server — channels, messages, threads, reactions, users, fi
 - **Auth:** OAuth (host-orchestrated) ([`SLACK_CLIENT_SECRET`](./server.json))
 - **Tools:** [23](./src/tools/) (messages, channels, threads, users, files)
 - **Surface:** cloud-api
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Why this exists

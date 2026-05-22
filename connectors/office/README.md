@@ -13,7 +13,6 @@ Read and edit Word documents, Excel workbooks, and PowerPoint presentations from
 - **Auth:** None ([`server.json`](./server.json))
 - **Tools:** [53](./src/) (word, excel, powerpoint, setup)
 - **Surface:** desktop-addin
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Why this exists

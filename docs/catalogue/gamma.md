@@ -17,7 +17,6 @@ Gamma AI presentation generation MCP server for Model Context Protocol hosts. Cr
 | Auth | API key (`GAMMA_API_KEY`) |
 | Tools | 6 (themes, folders, generation) |
 | Surface | cloud API |
-| Hosts tested | Claude Desktop, Cursor, Mindstone Rebel |
 
 ## Evidence
 

@@ -13,7 +13,6 @@ OpenAI image generation MCP server — text-to-image and image edits via OpenAI'
 - **Auth:** API key ([`OPENAI_API_KEY`](./server.json))
 - **Tools:** [2](./src/index.ts) (image generation, image editing)
 - **Surface:** cloud-api
-- **Hosts tested:** Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Why this exists

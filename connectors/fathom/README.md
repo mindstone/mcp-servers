@@ -13,7 +13,6 @@ List and search meetings, view details, read transcripts, and manage teams via F
 - **Auth:** API key ([`FATHOM_API_KEY`](./server.json))
 - **Tools:** [7](./src/tools/) (meetings, transcripts, teams)
 - **Surface:** cloud-api
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Why this exists

@@ -18,11 +18,6 @@
     ]
   },
   "surface": "desktop-addin",
-  "hostsTested": [
-    "claude-desktop",
-    "cursor",
-    "mindstone-rebel"
-  ],
   "evidence": {
     "changelog": "./CHANGELOG.md",
     "tools": "./src/",

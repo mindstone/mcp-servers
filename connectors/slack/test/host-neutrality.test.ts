@@ -36,18 +36,10 @@ const TARBALL_ALLOWLIST_SUFFIXES = [
 ];
 
 // Line-level allowlist: lines matching any of these regexes are exempt
-// from the forbidden-substring scan. These cover canonical, user-facing
-// places where host-specific vocabulary is the entire point of the
-// field — refusing to allow them would defeat the field's purpose.
-//
-//   1. The "Hosts tested" README line is a documented connector
-//      convention (see `connectors/_template/README.md`) listing the
-//      MCP hosts the maintainers have actually exercised. Listing real
-//      host product names here, including the maintainers' own host,
-//      is required for the field to be meaningful.
-const LINE_ALLOWLIST_PATTERNS: RegExp[] = [
-  /(?:^|\s)\*{0,2}Hosts tested\*{0,2}:/i,
-];
+// from the forbidden-substring scan. Empty by default — the README no
+// longer carries a "Hosts tested" row, and there is no other canonical
+// place where host-specific vocabulary is required.
+const LINE_ALLOWLIST_PATTERNS: RegExp[] = [];
 
 // The npm-canonical package name from package.json. Lines that contain
 // this literal are allowlisted everywhere because the scope is the
@@ -189,19 +181,11 @@ describe('host-neutrality — packed tarball', () => {
 });
 
 describe('host-neutrality — line allowlist', () => {
-  it('exempts the canonical "Hosts tested" line from the forbidden-substring scan', () => {
-    const exempt = [
-      '- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel',
-      'Hosts tested: Mindstone Rebel',
-      '  - **Hosts tested:**   Cursor, Mindstone Rebel  ',
-      'hosts tested: rebel',
-    ];
-    for (const line of exempt) {
-      expect(LINE_ALLOWLIST_PATTERNS.some((re) => re.test(line))).toBe(true);
-    }
+  it('is empty — no canonical user-facing line requires host-specific vocabulary', () => {
+    expect(LINE_ALLOWLIST_PATTERNS).toEqual([]);
   });
 
-  it('does not exempt unrelated lines that merely mention hosts', () => {
+  it('does not exempt lines that mention forbidden host vocabulary', () => {
     const notExempt = [
       'We tested this against several hosts.',
       'Mindstone is a great product.',

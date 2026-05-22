@@ -17,7 +17,6 @@ Kling AI video generation MCP server for Model Context Protocol hosts. Generate 
 | Auth | API key (`KLING_ACCESS_KEY`, `KLING_SECRET_KEY`) |
 | Tools | 4 (video-generation, tasks) |
 | Surface | cloud API |
-| Hosts tested | Claude Desktop, Cursor, Mindstone Rebel |
 
 ## Evidence
 

@@ -17,7 +17,6 @@ OpusClip MCP server for Model Context Protocol hosts. Turn long-form videos into
 | Auth | API key (`OPUS_API_KEY`) |
 | Tools | 21 (configure, brand-templates, projects, upload, censor, collections, social-posting) |
 | Surface | cloud API |
-| Hosts tested | Mindstone Rebel |
 
 ## Evidence
 

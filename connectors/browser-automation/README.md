@@ -41,7 +41,6 @@ After clicking the button, your host will prompt you to fill: `AGENT_BROWSER_SES
 - **Auth:** None ([`server.json`](./server.json))
 - **Tools:** [18](./src/tools/) (navigation, observation, interaction, sessions)
 - **Surface:** browser-automation
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Installation

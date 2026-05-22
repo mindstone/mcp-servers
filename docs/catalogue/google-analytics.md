@@ -17,7 +17,6 @@ Google Analytics 4 MCP server for Model Context Protocol hosts. Discover account
 | Auth | OAuth (—) |
 | Tools | 25 (accounts, schema, reporting, admin) |
 | Surface | cloud API |
-| Hosts tested | Claude Desktop, Cursor, Mindstone Rebel |
 
 ## Evidence
 

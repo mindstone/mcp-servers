@@ -11,7 +11,6 @@ Email IMAP/SMTP MCP server for Model Context Protocol hosts. Read, search, send,
 - **Auth:** App password ([`EMAIL_IMAP_PASSWORD`](./server.json))
 - **Tools:** [9](./src/tools/) (mailbox, messages, send)
 - **Surface:** local-protocol
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Requirements

@@ -44,7 +44,6 @@ After clicking the button, your host will prompt you to fill: `SALESFORCE_CLIENT
 - **Auth:** OAuth (local 127.0.0.1 callback) ([`SALESFORCE_CLIENT_SECRET`](./server.json))
 - **Tools:** [26](./src/tools/) (accounts, contacts, opportunities, leads, tasks, query)
 - **Surface:** cloud-api
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Installation

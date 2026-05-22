@@ -17,7 +17,6 @@ Microsoft 365 Outlook Calendar MCP server — list, get, create, update, delete,
 | Auth | OAuth (host-orchestrated) (`MS_CLIENT_ID`) |
 | Tools | 8 (events, calendars, free-busy) |
 | Surface | cloud API |
-| Hosts tested | Mindstone Rebel |
 
 ## Evidence
 

@@ -17,7 +17,6 @@ An MCP server that exposes Apple Shortcuts functionality to Rebel via the macOS 
 | Auth | None (—) |
 | Tools | 2 (shortcuts) |
 | Surface | local CLI |
-| Hosts tested | Claude Desktop, Cursor, Mindstone Rebel |
 
 ## Evidence
 

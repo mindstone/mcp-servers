@@ -136,10 +136,6 @@ if (!status.surface || status.surface === 'TBD') {
   errors.push('status.surface is unset (TBD) — set to one of cloud-api | desktop-addin | local-cli | browser-automation');
 }
 
-if (!Array.isArray(status.hostsTested) || status.hostsTested.length === 0) {
-  errors.push('status.hostsTested must be a non-empty array');
-}
-
 const readmePath = join(dir, 'README.md');
 if (existsSync(readmePath)) {
   const readme = readFileSync(readmePath, 'utf8');

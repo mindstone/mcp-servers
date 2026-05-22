@@ -11,7 +11,6 @@ Google Analytics 4 MCP server for Model Context Protocol hosts. Discover account
 - **Auth:** OAuth via Google ADC ([`GOOGLE_APPLICATION_CREDENTIALS`](./server.json))
 - **Tools:** [25](./src/tools/) (accounts, schema, reporting, admin)
 - **Surface:** cloud-api
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Requirements

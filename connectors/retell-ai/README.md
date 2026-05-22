@@ -40,7 +40,6 @@ After clicking the button, your host will prompt you to fill: `RETELL_API_KEY`.
 - **Auth:** API key ([`RETELL_API_KEY`](./server.json))
 - **Tools:** [20](./src/tools/) (calls, agents, llms, voices)
 - **Surface:** cloud-api
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Installation

@@ -17,7 +17,6 @@ Headless browser control via accessibility snapshots — navigate pages, fill fo
 | Auth | None (—) |
 | Tools | 18 (navigation, observation, interaction, sessions) |
 | Surface | browser automation |
-| Hosts tested | Claude Desktop, Cursor, Mindstone Rebel |
 
 ## Evidence
 

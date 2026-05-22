@@ -34,7 +34,6 @@ One-line description of what this server does.
 - **Auth:** <one-phrase auth model> ([`ENV_VAR_NAME`](./server.json))
 - **Tools:** [<count>](./src/tools/) (<short domain summary>)
 - **Surface:** cloud-api | desktop-addin | local-cli | browser-automation
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Why this exists
@@ -104,7 +103,6 @@ Three to five rows, plain Markdown bullets, **with every claim linked to evidenc
 - **Auth:** API key ([`FATHOM_API_KEY`](./server.json))
 - **Tools:** [7](./src/tools/) (meetings, transcripts, teams)
 - **Surface:** cloud-api
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 ```
 
@@ -113,7 +111,7 @@ Rules:
 - Every fact that *can* link to its source of truth *should*. Version → `CHANGELOG.md`. Auth → `server.json`. Tools → `src/tools/`. The README's authority is borrowed from the linked artefacts.
 - The final `Machine-readable:` row links to the connector's `STATUS.json` (see below). That file is the source of truth that the catalogue and the parent-README table both consume.
 - Do not add badges to this block. Badges are constrained to the three at the top. Status rows are plain text + inline links because they're grep-able, easy to keep current, and don't add HTTP requests to the README render.
-- The `Hosts tested:` row is editorial. When `lastVerifiedAgainstApi` is set in `STATUS.json`, append a small *"Last verified against the live API: YYYY-MM-DD"* line below the bullet list.
+- When `lastVerifiedAgainstApi` is set in `STATUS.json`, append a small *"Last verified against the live API: YYYY-MM-DD"* line below the bullet list.
 
 ### STATUS.json (machine-readable mirror of the Status block)
 
@@ -137,7 +135,6 @@ Shape (full spec in [`docs/status.schema.json`](./status.schema.json)):
     "domains": ["meetings", "transcripts", "teams"]
   },
   "surface": "cloud-api | desktop-addin | local-cli | browser-automation | local-protocol",
-  "hostsTested": ["claude-desktop", "cursor", "mindstone-rebel"],
   "evidence": {
     "changelog": "./CHANGELOG.md",
     "tools": "./src/tools/",
@@ -151,7 +148,7 @@ Shape (full spec in [`docs/status.schema.json`](./status.schema.json)):
 
 Bootstrapping and maintenance:
 
-- Generate a draft for a single connector with `node scripts/init-status.mjs <connector-name>`. The script reads `package.json`, `server.json`, counts `registerTool()` calls in `src/` (with a fallback that handles the `definitions.ts`-array pattern used by hubspot), and writes a draft. It leaves `surface`, `tools.domains`, `tools.count` (when the heuristics under-report — verify against the README), and `hostsTested` for the human author to confirm.
+- Generate a draft for a single connector with `node scripts/init-status.mjs <connector-name>`. The script reads `package.json`, `server.json`, counts `registerTool()` calls in `src/` (with a fallback that handles the `definitions.ts`-array pattern used by hubspot), and writes a draft. It leaves `surface`, `tools.domains`, and `tools.count` (when the heuristics under-report — verify against the README) for the human author to confirm.
 - Verify it is in sync with the rest of the connector with `node scripts/check-status.mjs <connector-name>`. CI runs this for every connector via the `status-check` matrix in `.github/workflows/ci.yml` and fails the PR on drift: version mismatch, tool-count mismatch, missing/extra secret env vars, `surface: "TBD"`, `## (Available )?Tools (n)` heading drift in the README, or `schemaVersion ≠ 1`.
 - `schemaVersion` is `1` today. When a required field is added or semantics change, the schema version is bumped and `check-status.mjs` rejects older STATUS.json files until they're migrated.
 - All scripts under `scripts/` operate on **one** connector at a time, per the repo-wide rule in `AGENTS.md`. The catalogue builder (`scripts/build-catalogue.mjs`) reads from all connectors but writes only into `docs/`; the committed catalogue is verified against the live generator output by the `catalogue-check` job on every PR.
@@ -376,7 +373,7 @@ A short checklist before pushing:
 
 - [ ] One-line description at the top of the connector README matches the row in the root `README.md` table.
 - [ ] Italic positioning line sits directly under the description and is under ~25 words.
-- [ ] `## Status` block sits directly under the positioning line and lists at least Version, Auth, Tools, Surface, Hosts tested, and `Machine-readable: STATUS.json`. Every claim is hyperlinked to its evidence (CHANGELOG, src/tools/, server.json, npm).
+- [ ] `## Status` block sits directly under the positioning line and lists at least Version, Auth, Tools, Surface, and `Machine-readable: STATUS.json`. Every claim is hyperlinked to its evidence (CHANGELOG, src/tools/, server.json, npm).
 - [ ] `connectors/<name>/STATUS.json` exists, was created from `node scripts/init-status.mjs <name>`, has had its `TBD` fields filled in, and `node scripts/check-status.mjs <name>` passes.
 - [ ] `## Why this exists` follows the Status block, is 80–150 words, and follows the language guidance above.
 - [ ] `## Example interaction` sits directly below "Why this exists", uses the prescribed format, and shows something the connector can actually do today.
