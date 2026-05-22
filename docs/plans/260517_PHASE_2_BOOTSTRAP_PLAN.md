@@ -40,7 +40,7 @@ Format: `connector` | `local_pkg_ver` (target) | `legacy_npm_latest` | `new_npm_
 | Connector | Target version | Legacy latest | New scope state | Action |
 |---|---|---|---|---|
 | apple-shortcuts | 0.1.2 | 0.1.1 | exists @ 0.1.2 | DONE |
-| hubspot | 0.1.2 | 0.1.2 | exists @ 0.1.2 | DONE |
+| hubspot | 0.2.0 | 0.1.2 | exists @ 0.2.0 | DONE (bumped 2026-05-22 via PR #62 — FOX-3354 line_items + FOX-3376 Conversations Inbox; dual-reviewer § 13 caught HIGH F-1 association-path injection + LOW F-2 input bounds, both remediated pre-merge) |
 | browser-automation | 0.1.7 | 0.1.6 | 404 | bootstrap |
 | elevenlabs | 0.2.2 | 0.2.1 | 404 | bootstrap |
 | email-imap | 0.2.3 | 0.2.2 | 404 | bootstrap |
@@ -150,7 +150,7 @@ Update this section as each publish + dispatch + Rebel-merge completes. State le
                        | state    | npm@new       | rebel PR | merge SHA | notes
 -----------------------+----------+---------------+----------+-----------+-----------------------------
 apple-shortcuts        | DONE     | 0.1.2         | n/a      | n/a       | earlier wave burst
-hubspot                | DONE     | 0.1.2         | n/a      | n/a       | earlier wave burst
+hubspot                | DONE     | 0.2.0         | PR#62    | 8032f4b   | 2026-05-22 bump (FOX-3354 + FOX-3376); registry: io.github.mindstone/mcp-server-hubspot@0.2.0; Rebel catalog: 9fd9112f4 on dev; on-call 7d to 2026-05-29 (@harryblam)
 browser-automation     | PUB      | 0.1.7         |          |           | published 2026-05-18 wave
 elevenlabs             | PUB      | 0.2.2         |          |           | published 2026-05-18 wave
 email-imap             | PUB      | 0.2.3         |          |           | published 2026-05-18 wave
