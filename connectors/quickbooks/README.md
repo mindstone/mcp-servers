@@ -11,7 +11,6 @@ QuickBooks Online MCP server for Model Context Protocol hosts. Manage invoices, 
 - **Auth:** OAuth ([`QUICKBOOKS_REFRESH_TOKEN`](./server.json))
 - **Tools:** [13](./src/tools/) (customers, vendors, invoices, bills)
 - **Surface:** cloud-api
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## ⚠️ Breaking change in 0.3.0 — production writes are gated by default

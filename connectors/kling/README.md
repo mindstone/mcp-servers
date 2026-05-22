@@ -11,7 +11,6 @@ Kling AI video generation MCP server for Model Context Protocol hosts. Generate 
 - **Auth:** API key ([`KLING_ACCESS_KEY`](./server.json))
 - **Tools:** [4](./src/tools/) (video-generation, tasks)
 - **Surface:** cloud-api
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Requirements

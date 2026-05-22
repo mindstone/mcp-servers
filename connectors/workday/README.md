@@ -11,7 +11,6 @@ Workday HCM MCP server for Model Context Protocol hosts. Query workers, profiles
 - **Auth:** OAuth ([`WORKDAY_REFRESH_TOKEN`](./server.json))
 - **Tools:** [4](./src/tools/) (workers, organizations)
 - **Surface:** cloud-api
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Requirements

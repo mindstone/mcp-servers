@@ -17,7 +17,6 @@ Read and edit Word documents, Excel workbooks, and PowerPoint presentations from
 | Auth | None (—) |
 | Tools | 53 (word, excel, powerpoint, setup) |
 | Surface | desktop add-in |
-| Hosts tested | Claude Desktop, Cursor, Mindstone Rebel |
 
 ## Evidence
 

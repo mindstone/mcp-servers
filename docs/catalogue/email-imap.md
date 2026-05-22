@@ -17,7 +17,6 @@ Email IMAP/SMTP MCP server for Model Context Protocol hosts. Read, search, send,
 | Auth | API key (`EMAIL_IMAP_PASSWORD`) |
 | Tools | 9 (mailbox, messages, send) |
 | Surface | local protocol |
-| Hosts tested | Claude Desktop, Cursor, Mindstone Rebel |
 
 ## Evidence
 

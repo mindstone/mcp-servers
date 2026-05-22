@@ -17,7 +17,6 @@ Outreach sales engagement MCP server — prospects, sequences, accounts, tasks, 
 | Auth | OAuth (local 127.0.0.1 callback) (`OUTREACH_CLIENT_SECRET`, `OUTREACH_ACCESS_TOKEN`) |
 | Tools | 15 (prospects, sequences, accounts, tasks) |
 | Surface | cloud API |
-| Hosts tested | Claude Desktop, Cursor, Mindstone Rebel |
 
 ## Evidence
 

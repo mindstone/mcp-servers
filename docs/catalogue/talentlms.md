@@ -17,7 +17,6 @@ TalentLMS MCP server for Model Context Protocol hosts. Manage users, courses, gr
 | Auth | API key (`TALENTLMS_API_KEY`) |
 | Tools | 24 (users, courses, groups, reporting, assessments) |
 | Surface | cloud API |
-| Hosts tested | Claude Desktop, Cursor, Mindstone Rebel |
 
 ## Evidence
 

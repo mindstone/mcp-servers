@@ -17,7 +17,6 @@ Voice agent phone calls, call management, agent configuration, LLM prompt manage
 | Auth | API key (`RETELL_API_KEY`) |
 | Tools | 20 (calls, agents, llms, voices) |
 | Surface | cloud API |
-| Hosts tested | Claude Desktop, Cursor, Mindstone Rebel |
 
 ## Evidence
 

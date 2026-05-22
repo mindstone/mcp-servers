@@ -21,9 +21,6 @@
     ]
   },
   "surface": "cloud-api",
-  "hostsTested": [
-    "mindstone-rebel"
-  ],
   "evidence": {
     "changelog": "./CHANGELOG.md",
     "tools": "./src/tools.ts",

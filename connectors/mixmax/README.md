@@ -11,7 +11,6 @@ Mixmax email productivity MCP server for Model Context Protocol hosts. Manage se
 - **Auth:** API key ([`MIXMAX_API_TOKEN`](./server.json))
 - **Tools:** [10](./src/tools/) (sequences, messages, snippets, meetings)
 - **Surface:** cloud-api
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Requirements

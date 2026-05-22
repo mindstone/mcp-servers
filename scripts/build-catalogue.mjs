@@ -130,7 +130,6 @@ function buildConnectorInfo(name) {
     auth: status?.auth ?? { type: 'unknown', envVars: secretEnvNames },
     tools: status?.tools ?? { count: null, domains: [] },
     surface: status?.surface ?? null,
-    hostsTested: status?.hostsTested ?? null,
     evidence: status?.evidence ?? null,
     lastVerifiedAgainstApi: status?.lastVerifiedAgainstApi ?? null,
     hasStatus: !!status,
@@ -144,15 +143,6 @@ function buildConnectorInfo(name) {
     installLinks,
   };
 }
-
-const HOST_LABELS = {
-  'claude-desktop': 'Claude Desktop',
-  cursor: 'Cursor',
-  'mindstone-rebel': 'Mindstone Rebel',
-  windsurf: 'Windsurf',
-  vscode: 'VS Code',
-  raycast: 'Raycast',
-};
 
 const AUTH_LABELS = {
   'api-key': 'API key',
@@ -189,7 +179,6 @@ const SURFACE_LABELS = {
 //   - positioning              (italic line after the tagline)
 //   - description              (package.json fallback for tagline)
 //   - tools.domains[]          (STATUS.json)
-//   - hostsTested[]            (when not in HOST_LABELS)
 //   - auth.type                (when not in AUTH_LABELS)
 //   - auth.envVars[]           (server.json — typed by registry validator)
 //   - surface                  (when not in SURFACE_LABELS)
@@ -273,11 +262,6 @@ const ENV_VAR_RE = /^[A-Z][A-Z0-9_]*$/;
 // and STATUS.json; we additionally reject anything with whitespace or
 // table-control characters). This is paranoia, not validation.
 const SEMVER_LIKE_RE = /^[A-Za-z0-9.+\-_]+$/;
-
-function formatHosts(hosts) {
-  if (!hosts || hosts.length === 0) return '—';
-  return hosts.map((h) => HOST_LABELS[h] ?? sanitise(h)).join(', ');
-}
 
 function formatAuth(auth) {
   if (!auth || !auth.type) return '—';
@@ -474,7 +458,6 @@ ${pendingNotice}
 | Auth | ${formatAuth(c.auth)} (${authEnvVars}) |
 | Tools | ${toolCount} (${domains}) |
 | Surface | ${formatSurface(c.surface)} |
-| Hosts tested | ${formatHosts(c.hostsTested)} |
 
 ## Evidence
 

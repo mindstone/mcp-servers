@@ -13,7 +13,6 @@ Microsoft 365 SharePoint MCP server — discover sites, browse document librarie
 - **Auth:** OAuth (host-orchestrated incremental consent via `authenticate_sharepoint`) ([`MS_CLIENT_ID`](./server.json))
 - **Tools:** [36](./src/tools.ts) (auth + sites, libraries, pages, lists, metadata, search, mutations)
 - **Surface:** cloud-api
-- **Hosts tested:** Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 - **Shared library:** [`@mindstone/mcp-server-microsoft-shared`](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-shared)
 

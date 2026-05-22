@@ -13,7 +13,6 @@ Replit SSH MCP server — read, write, list, and check files on Replit projects 
 - **Auth:** Local SSH key on disk (`~/.ssh/rebel-replit` by default; resolved via `~/.ssh/config` `IdentityFile` if set). No env-var-supplied secrets.
 - **Tools:** [5](./src/server.ts) (connection, files, ssh-setup)
 - **Surface:** local-protocol
-- **Hosts tested:** Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Why this exists

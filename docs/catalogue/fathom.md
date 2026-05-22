@@ -17,7 +17,6 @@ List and search meetings, view details, read transcripts, and manage teams via F
 | Auth | API key (`FATHOM_API_KEY`) |
 | Tools | 7 (meetings, transcripts, teams) |
 | Surface | cloud API |
-| Hosts tested | Claude Desktop, Cursor, Mindstone Rebel |
 
 ## Evidence
 

@@ -16,7 +16,6 @@
 //   - auth.type (best-effort inferred; verify)
 //   - tools.domains (editorial grouping)
 //   - surface (one of: cloud-api | desktop-addin | local-cli | browser-automation | …)
-//   - hostsTested (defaults to the standard three)
 //   - lastVerifiedAgainstApi (null; CI sets this)
 
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
@@ -25,8 +24,6 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..');
-
-const STANDARD_HOSTS = ['claude-desktop', 'cursor', 'mindstone-rebel'];
 
 function fail(msg) {
   console.error(`init-status: ${msg}`);
@@ -129,7 +126,6 @@ const status = {
     domains: [],
   },
   surface: 'TBD',
-  hostsTested: STANDARD_HOSTS,
   evidence: {
     changelog: './CHANGELOG.md',
     tools: existsSync(join(dir, 'src', 'tools')) ? './src/tools/' : './src/',
@@ -154,4 +150,3 @@ console.log('Human review required for these fields:');
 console.log(`  - auth.type:      ${authType} (verify against actual auth code)`);
 console.log(`  - tools.domains:  [] (group tools into 2–4 editorial buckets)`);
 console.log(`  - surface:        TBD (cloud-api | desktop-addin | local-cli | browser-automation)`);
-console.log(`  - hostsTested:    ${JSON.stringify(STANDARD_HOSTS)} (trim or extend as needed)`);

@@ -13,7 +13,6 @@
     "auth",
     "tools",
     "surface",
-    "hostsTested",
     "evidence"
   ],
   "properties": {
@@ -90,15 +89,6 @@
         "TBD"
       ],
       "description": "Where the connector runs / what it talks to. 'TBD' is rejected by check-status.mjs."
-    },
-    "hostsTested": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "enum": ["claude-desktop", "cursor", "mindstone-rebel", "windsurf", "vscode", "raycast"]
-      },
-      "minItems": 1,
-      "uniqueItems": true
     },
     "evidence": {
       "type": "object",

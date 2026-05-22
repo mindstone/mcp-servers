@@ -13,7 +13,6 @@ HubSpot MCP server for CRM operations (contacts, companies, deals, tickets, lead
 - **Auth:** OAuth (host-orchestrated) ([`HUBSPOT_CLIENT_SECRET`](./server.json))
 - **Tools:** [95](./src/tools/) (crm-objects, associations, marketing, files, workflows, conversations)
 - **Surface:** cloud-api
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Why this exists

@@ -17,9 +17,6 @@
     ]
   },
   "surface": "local-protocol",
-  "hostsTested": [
-    "mindstone-rebel"
-  ],
   "evidence": {
     "changelog": "./CHANGELOG.md",
     "tools": "./src/server.ts",

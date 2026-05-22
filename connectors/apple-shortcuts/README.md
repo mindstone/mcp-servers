@@ -38,7 +38,6 @@ No required environment variables — the install completes without prompts.
 - **Auth:** None ([`server.json`](./server.json))
 - **Tools:** [2](./src/) (shortcuts)
 - **Surface:** local-cli
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Prerequisites

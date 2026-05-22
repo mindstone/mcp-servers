@@ -17,7 +17,6 @@ Microsoft 365 Teams MCP server — list and read Teams chats, send chat messages
 | Auth | OAuth (host-orchestrated) (`MS_CLIENT_ID`) |
 | Tools | 7 (chats, messages, teams, channels, presence) |
 | Surface | cloud API |
-| Hosts tested | Mindstone Rebel |
 
 ## Evidence
 

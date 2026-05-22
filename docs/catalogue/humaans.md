@@ -17,7 +17,6 @@ Humaans HR platform MCP server for Model Context Protocol hosts. Query employee 
 | Auth | API key (`HUMAANS_API_KEY`) |
 | Tools | 11 (people, job-roles, time-away, company) |
 | Surface | cloud API |
-| Hosts tested | Claude Desktop, Cursor, Mindstone Rebel |
 
 ## Evidence
 

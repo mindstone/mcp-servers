@@ -19,11 +19,6 @@
     ]
   },
   "surface": "local-protocol",
-  "hostsTested": [
-    "claude-desktop",
-    "cursor",
-    "mindstone-rebel"
-  ],
   "evidence": {
     "changelog": "./CHANGELOG.md",
     "tools": "./src/tools/",

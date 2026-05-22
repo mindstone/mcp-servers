@@ -11,7 +11,6 @@ ServiceNow ITSM MCP server for Model Context Protocol hosts. Manage incidents, c
 - **Auth:** Basic auth (username + password) ([`SERVICENOW_PASSWORD`](./server.json))
 - **Tools:** [10](./src/tools/) (incidents, change-requests, users, knowledge)
 - **Surface:** cloud-api
-- **Hosts tested:** Claude Desktop, Cursor, Mindstone Rebel
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
 ## Requirements

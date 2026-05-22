@@ -17,7 +17,6 @@ Slack workspace MCP server — channels, messages, threads, reactions, users, fi
 | Auth | OAuth (host-orchestrated) (`SLACK_CLIENT_SECRET`) |
 | Tools | 23 (messages, channels, threads, users, files) |
 | Surface | cloud API |
-| Hosts tested | Claude Desktop, Cursor, Mindstone Rebel |
 
 ## Evidence
 

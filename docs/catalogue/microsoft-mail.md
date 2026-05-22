@@ -17,7 +17,6 @@ Microsoft 365 Outlook Mail MCP server — list, search, read, send, reply, forwa
 | Auth | OAuth (host-orchestrated) (`MS_CLIENT_ID`) |
 | Tools | 12 (messages, folders, drafts) |
 | Surface | cloud API |
-| Hosts tested | Mindstone Rebel |
 
 ## Evidence
 
