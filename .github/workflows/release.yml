@@ -219,12 +219,38 @@ jobs:
           fi
           echo "Found server.json"
 
-      - name: Install mcp-publisher
+      - name: Install mcp-publisher (pinned + checksum)
+        env:
+          # Pin to a specific mcp-publisher release. To bump:
+          #   1. Pick a release from https://github.com/modelcontextprotocol/registry/releases
+          #   2. Read the SHA-256 of mcp-publisher_linux_amd64.tar.gz from the assets list
+          #   3. Update both MCP_PUBLISHER_VERSION and MCP_PUBLISHER_SHA256_LINUX_AMD64
+          #   4. Open a PR; do not bump silently.
+          # CI runs on ubuntu-latest -> linux/amd64, so we only need that one SHA.
+          MCP_PUBLISHER_VERSION: v1.7.9
+          MCP_PUBLISHER_SHA256_LINUX_AMD64: ab128162b0616090b47cf245afe0a23f3ef08936fdce19074f5ba0a4469281ac
         run: |
-          set -e
-          # Pinned to a known release; bump explicitly when needed.
-          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m).tar.gz" \
-            | tar -xz -C /usr/local/bin mcp-publisher
+          set -euo pipefail
+          arch="$(uname -m)"
+          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+          if [ "${os}" != "linux" ] || [ "${arch}" != "x86_64" ]; then
+            echo "::error::release.yml only supports linux/amd64 runners; saw ${os}/${arch}"
+            exit 1
+          fi
+          tarball="mcp-publisher_linux_amd64.tar.gz"
+          url="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/${tarball}"
+          curl -fsSL --output "${tarball}" "${url}"
+          actual=$(sha256sum "${tarball}" | awk '{print $1}')
+          expected="${MCP_PUBLISHER_SHA256_LINUX_AMD64}"
+          if [ "${actual}" != "${expected}" ]; then
+            echo "::error::mcp-publisher checksum mismatch"
+            echo "  expected: ${expected}"
+            echo "  actual:   ${actual}"
+            exit 1
+          fi
+          echo "Verified ${tarball} sha256: ${actual}"
+          tar -xzf "${tarball}" -C /usr/local/bin mcp-publisher
+          rm -f "${tarball}"
           mcp-publisher --version
 
       - name: Publish to MCP registry (github-oidc)
