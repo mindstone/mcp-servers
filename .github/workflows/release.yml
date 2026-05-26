@@ -1,0 +1,238 @@
+name: Release
+
+# Triggered when a version-bump commit lands on main (typically from the
+# `npx changeset version` step of `npm run mcp:release` in mindstone-rebel-1).
+# Detects which package(s) had their version field bumped, then publishes each
+# to npm via Trusted Publishing OIDC (provenance attestations + Sigstore) and
+# to the MCP registry via mcp-publisher.
+#
+# Currently scoped to a small allowlist while we validate the OIDC path on
+# the canary connector. Each new connector requires per-package Trusted
+# Publisher setup at npmjs.com before being added here.
+#
+# Source of truth for the design: docs/plans/260525_oss_release_automation.md
+# (in mindstone-rebel-1).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'connectors/**/package.json'
+      - '.github/workflows/release.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  detect:
+    name: Detect bumped packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      packages: ${{ steps.diff.outputs.packages }}
+      has_changes: ${{ steps.diff.outputs.has_changes }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 2
+
+      - name: Detect packages with bumped version
+        id: diff
+        env:
+          # Allowlist of connectors permitted on the OIDC publish path.
+          # Each entry must have:
+          #   - Trusted Publisher configured at npmjs.com for the package
+          #   - npm-publish GitHub environment with reviewers (configured at the repo level)
+          # Expand this list one connector at a time as each is bootstrapped.
+          ALLOWED_CONNECTORS: 'canary'
+        run: |
+          set -euo pipefail
+          changed=()
+          for dir in connectors/*/; do
+            name=$(basename "${dir}")
+            pkg="${dir}package.json"
+            [ -f "${pkg}" ] || continue
+
+            # Only consider packages on the allowlist
+            case " ${ALLOWED_CONNECTORS} " in
+              *" ${name} "*) ;;
+              *) continue ;;
+            esac
+
+            new_version=$(jq -r '.version // ""' "${pkg}")
+            old_version=$(git show HEAD~1:"${pkg}" 2>/dev/null | jq -r '.version // ""' 2>/dev/null || echo "")
+
+            if [ -n "${new_version}" ] && [ "${new_version}" != "${old_version}" ]; then
+              echo "Detected version bump for ${name}: ${old_version:-(none)} -> ${new_version}"
+              changed+=("${name}")
+            fi
+          done
+
+          if [ ${#changed[@]} -eq 0 ]; then
+            echo "No version bumps detected; release will be skipped."
+            echo "has_changes=false" >> "${GITHUB_OUTPUT}"
+            echo "packages=[]" >> "${GITHUB_OUTPUT}"
+          else
+            echo "has_changes=true" >> "${GITHUB_OUTPUT}"
+            json=$(printf '%s\n' "${changed[@]}" | jq -R . | jq -sc .)
+            echo "packages=${json}" >> "${GITHUB_OUTPUT}"
+            echo "Will publish: ${json}"
+          fi
+
+  build:
+    name: Build (${{ matrix.package }})
+    needs: detect
+    if: needs.detect.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.detect.outputs.packages) }}
+    defaults:
+      run:
+        working-directory: connectors/${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build
+        run: npm run build --if-present
+
+      - name: Test
+        run: npm test --if-present
+
+      - name: Pack tarball
+        run: npm pack --ignore-scripts
+
+      - name: Pack hygiene scan
+        run: |
+          set -e
+          tgz=$(ls *.tgz | head -1)
+          [ -n "${tgz}" ] || { echo "::error::npm pack produced no tarball"; exit 1; }
+          # Reject .map, .test., __tests__, .env, .npmrc, raw .ts inside the tarball
+          forbidden=$(tar -tzf "${tgz}" | grep -E '\.map$|\.test\.|__tests__/|\.env|\.npmrc|\.ts$' || true)
+          if [ -n "${forbidden}" ]; then
+            echo "::error::Forbidden files in tarball:"
+            echo "${forbidden}"
+            exit 1
+          fi
+          echo "Tarball clean: ${tgz}"
+
+      - name: Upload tarball artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: tarball-${{ matrix.package }}
+          path: connectors/${{ matrix.package }}/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-npm:
+    name: Publish to npm (${{ matrix.package }})
+    needs: [detect, build]
+    if: needs.detect.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The npm-publish environment must be configured at the repository level
+    # with reviewers (e.g. @mindstone/oss-maintainers) and any required
+    # branch/wait-time protections. This is the human-approval gate
+    # documented in docs/PUBLISH_APPROVAL_PROCESS.md.
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write  # Required for Trusted Publishing OIDC
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        package: ${{ fromJSON(needs.detect.outputs.packages) }}
+    steps:
+      - name: Download tarball artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: tarball-${{ matrix.package }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify tarball matches expected name
+        id: tarball
+        run: |
+          set -e
+          tgz=$(ls *.tgz | head -1)
+          [ -n "${tgz}" ] || { echo "::error::No tarball found"; exit 1; }
+          echo "tarball=${tgz}" >> "${GITHUB_OUTPUT}"
+
+      - name: npm publish (Trusted Publishing OIDC, no scripts)
+        # No NPM_TOKEN — npm CLI uses the OIDC token from id-token: write
+        # to authenticate against the package's Trusted Publisher config.
+        # --provenance generates the Sigstore signature consumers verify
+        # via `npm audit signatures`.
+        run: |
+          npm publish "${{ steps.tarball.outputs.tarball }}" \
+            --access public \
+            --provenance \
+            --ignore-scripts
+
+  publish-mcp-registry:
+    name: Publish to MCP registry (${{ matrix.package }})
+    needs: [detect, publish-npm]
+    if: needs.detect.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write  # Required for github-oidc auth on MCP registry
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        package: ${{ fromJSON(needs.detect.outputs.packages) }}
+    defaults:
+      run:
+        working-directory: connectors/${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Verify server.json present
+        run: |
+          if [ ! -f server.json ]; then
+            echo "::warning::No server.json — skipping MCP registry publish"
+            exit 0
+          fi
+          echo "Found server.json"
+
+      - name: Install mcp-publisher
+        run: |
+          set -e
+          # Pinned to a known release; bump explicitly when needed.
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m).tar.gz" \
+            | tar -xz -C /usr/local/bin mcp-publisher
+          mcp-publisher --version
+
+      - name: Publish to MCP registry (github-oidc)
+        run: |
+          set -e
+          if [ ! -f server.json ]; then
+            echo "Skipping (no server.json)"
+            exit 0
+          fi
+          mcp-publisher login github-oidc
+          mcp-publisher publish

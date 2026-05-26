@@ -2,7 +2,9 @@
 
 Every connector publish to npm under `@mindstone/mcp-server-*` is gated on an explicit human approval. This document defines the gate.
 
-> **Architecture mode (since FOX-3319 pivot, 2026-05-17):** Publishes happen manually from the wave-lead's dev machine using `npm publish`. There is **no CI publish workflow** — the previous `.github/workflows/publish.yml` was deleted. The OIDC / Trusted-Publisher / `npm-publish` GitHub environment model described in earlier revisions of this document is **superseded**; commit history preserves it for reference.
+> **Architecture mode (since FOX-3319 pivot, 2026-05-17):** Publishes happen manually from the wave-lead's dev machine using `npm publish`. There is **no CI publish workflow** — the previous `.github/workflows/publish.yml` was deleted. The OIDC / Trusted-Publisher / `npm-publish` GitHub environment model described in earlier revisions of this document is **superseded** for everyday connectors; commit history preserves it for reference.
+
+> **Canary-only carve-out (2026-05-25):** `.github/workflows/release.yml` was reintroduced with a hardcoded allowlist scoped to a single connector (`canary`) to validate the OIDC Trusted Publishing path before broader rollout. The workflow uses Trusted Publisher OIDC (no `NPM_TOKEN`), generates `--provenance` Sigstore attestations, splits build (no creds) from publish (only `npm publish --ignore-scripts --provenance` and `mcp-publisher publish`), and is gated by the `npm-publish` GitHub environment which provides the human-approval reviewers gate. Adding a non-canary connector to the allowlist requires per-package Trusted Publisher setup at npmjs.com plus explicit sign-off from `@mindstone/oss-maintainers` per the hygiene check below. Source of truth for the design: `docs/plans/260525_oss_release_automation.md` in `mindstone-rebel-1`. Until canary 0.0.1 → 0.0.2 has been driven end-to-end successfully, every other connector continues on the manual flow documented below.
 
 ## Why a human gate?
 
