@@ -1,10 +1,12 @@
 name: Release
 
-# Triggered when a version-bump commit lands on main (typically from the
-# `npx changeset version` step of `npm run mcp:release` in mindstone-rebel-1).
-# Detects which package(s) had their version field bumped, then publishes each
-# to npm via Trusted Publishing OIDC (provenance attestations + Sigstore) and
-# to the MCP registry via mcp-publisher.
+# Triggered when a version-bump commit lands on main (typically from
+# `npm run mcp:release` in mindstone-rebel-1, which drives a script-based
+# version bump across package.json + package-lock.json + server.json +
+# CHANGELOG.md atomically). Detects which package(s) had their version
+# field bumped, then publishes each to npm via Trusted Publishing OIDC
+# (provenance attestations + Sigstore) and to the MCP registry via
+# mcp-publisher.
 #
 # Currently scoped to a small allowlist while we validate the OIDC path on
 # the canary connector. Each new connector requires per-package Trusted
@@ -108,6 +110,24 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org
 
+      - name: Verify package.json identity
+        # Belt-and-braces against publishing the wrong package from the
+        # right directory: assert the connector's package.json.name matches
+        # the matrix label exactly. Catches typos, copy-paste errors, and
+        # malicious overlays where a release commit changed only the body
+        # of a package.json without changing the directory name.
+        run: |
+          set -euo pipefail
+          expected="@mindstone/mcp-server-${{ matrix.package }}"
+          actual=$(jq -r '.name' package.json)
+          if [ "${actual}" != "${expected}" ]; then
+            echo "::error::package.json name mismatch"
+            echo "  expected: ${expected}"
+            echo "  actual:   ${actual}"
+            exit 1
+          fi
+          echo "package.json name verified: ${actual}"
+
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
@@ -120,13 +140,43 @@ jobs:
       - name: Pack tarball
         run: npm pack --ignore-scripts
 
-      - name: Pack hygiene scan
+      - name: Verify tarball contents match expected package
+        # Extract package.json from the tarball (which is what npm publish
+        # consumes) and re-check name + version. This catches the case where
+        # the tarball got assembled from somewhere other than the working
+        # tree (e.g. a `prepack` script — which we disable via --ignore-scripts
+        # — or a future tooling change).
         run: |
-          set -e
+          set -euo pipefail
           tgz=$(ls *.tgz | head -1)
           [ -n "${tgz}" ] || { echo "::error::npm pack produced no tarball"; exit 1; }
-          # Reject .map, .test., __tests__, .env, .npmrc, raw .ts inside the tarball
-          forbidden=$(tar -tzf "${tgz}" | grep -E '\.map$|\.test\.|__tests__/|\.env|\.npmrc|\.ts$' || true)
+          tar -xzOf "${tgz}" package/package.json > /tmp/tarball-pkg.json
+          expected_name="@mindstone/mcp-server-${{ matrix.package }}"
+          tar_name=$(jq -r '.name' /tmp/tarball-pkg.json)
+          tar_version=$(jq -r '.version' /tmp/tarball-pkg.json)
+          src_version=$(jq -r '.version' package.json)
+          if [ "${tar_name}" != "${expected_name}" ]; then
+            echo "::error::Tarball package.json name mismatch"
+            echo "  expected: ${expected_name}"
+            echo "  actual:   ${tar_name}"
+            exit 1
+          fi
+          if [ "${tar_version}" != "${src_version}" ]; then
+            echo "::error::Tarball/source version mismatch"
+            echo "  source:  ${src_version}"
+            echo "  tarball: ${tar_version}"
+            exit 1
+          fi
+          echo "Tarball identity verified: ${tar_name}@${tar_version}"
+
+      - name: Pack hygiene scan
+        run: |
+          set -euo pipefail
+          tgz=$(ls *.tgz | head -1)
+          [ -n "${tgz}" ] || { echo "::error::npm pack produced no tarball"; exit 1; }
+          # Reject sensitive / source-leaking files in the tarball. Expanded
+          # vs the original list per the recent security review.
+          forbidden=$(tar -tzf "${tgz}" | grep -E '\.map$|\.test\.|__tests__/|\.env|\.npmrc|\.yarnrc|\.git[^.]|\.pem$|\.key$|\.ts$|\.tsx$|\.mts$|\.cts$' || true)
           if [ -n "${forbidden}" ]; then
             echo "::error::Forbidden files in tarball:"
             echo "${forbidden}"
