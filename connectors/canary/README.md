@@ -4,7 +4,7 @@ A synthetic MCP server used to validate the rebel-oss release pipeline end-to-en
 
 ## Why this exists
 
-Releasing a real connector for the first time through a brand-new pipeline (Trusted Publishing, GitHub Actions, mcp-publisher, registry sync, host-app catalog) couples two unknowns: the pipeline correctness AND the connector correctness. The canary decouples them — it exercises every step of the pipeline with a tool whose only behaviour is `ping → pong v2: <message>`.
+Releasing a real connector for the first time through a brand-new pipeline (Trusted Publishing, GitHub Actions, mcp-publisher, registry sync, host-app catalog) couples two unknowns: the pipeline correctness AND the connector correctness. The canary decouples them — it exercises every step of the pipeline with a tool whose only behaviour is `ping → pong v3: <message>`.
 
 Once the pipeline has proven itself stable on the canary, real connectors can adopt the same path without piggy-backing on infrastructure debugging.
 
@@ -14,7 +14,7 @@ See [`docs/plans/260525_oss_release_automation.md`](https://github.com/mindstone
 
 ### `ping`
 
-Echo a message back wrapped as `pong v2: <message>`.
+Echo a message back wrapped as `pong v3: <message>`.
 
 | Field | Type | Required | Description |
 |---|---|:---:|---|
@@ -32,7 +32,7 @@ Example:
 Response:
 
 ```
-pong v2: hello
+pong v3: hello
 ```
 
 ## Use locally

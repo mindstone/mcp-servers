@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-canary",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "mcpName": "io.github.mindstone/mcp-server-canary",
   "description": "Canary MCP server used to validate the rebel-oss release pipeline end-to-end. Single ping tool; no external dependencies, no auth, no bridge.",
   "license": "FSL-1.1-MIT",

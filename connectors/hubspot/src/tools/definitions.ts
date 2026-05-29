@@ -19,6 +19,13 @@ export interface ToolMetadata {
   };
 }
 
+const searchPaginationProperties = {
+  after: {
+    type: 'string',
+    description: 'Pagination cursor from paging.next.after. Repeat the same search with this value until paging.next.after is absent.'
+  }
+};
+
 // Account Management Tools
 export const accountTools: ToolMetadata[] = [
   {
@@ -176,7 +183,8 @@ COMMON PROPERTIES to request: email, firstname, lastname, phone, company, jobtit
           description: 'Filter criteria for precise matching'
         },
         properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return (default: basic info)' },
-        limit: { type: 'number', description: 'Max results (default 10, max 100)' }
+        limit: { type: 'number', description: 'Max results (default 10, max 100)' },
+        ...searchPaginationProperties
       }
     }
   },
@@ -325,7 +333,8 @@ COMMON PROPERTIES to request: name, domain, industry, numberofemployees, annualr
         query: { type: 'string', description: 'Free-text search by company name' },
         filters: { type: 'array', items: { type: 'object' }, description: 'Filter criteria' },
         properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' },
-        limit: { type: 'number', description: 'Max results (default 10, max 100)' }
+        limit: { type: 'number', description: 'Max results (default 10, max 100)' },
+        ...searchPaginationProperties
       }
     }
   },
@@ -460,7 +469,8 @@ COMMON PROPERTIES: dealname, amount, dealstage, pipeline, closedate, hubspot_own
         query: { type: 'string', description: 'Free-text search by deal name' },
         filters: { type: 'array', items: { type: 'object' }, description: 'Filter criteria' },
         properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' },
-        limit: { type: 'number', description: 'Max results (default 10, max 100)' }
+        limit: { type: 'number', description: 'Max results (default 10, max 100)' },
+        ...searchPaginationProperties
       }
     }
   },
@@ -594,7 +604,8 @@ export const ticketTools: ToolMetadata[] = [
         query: { type: 'string', description: 'Search query text' },
         filters: { type: 'array', items: { type: 'object' }, description: 'Filter criteria' },
         properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' },
-        limit: { type: 'number', description: 'Max results (default 10)' }
+        limit: { type: 'number', description: 'Max results (default 10)' },
+        ...searchPaginationProperties
       }
     }
   },
@@ -704,7 +715,8 @@ COMMON PROPERTIES to request: hs_lead_name, hs_lead_status, hs_pipeline, hs_pipe
           description: 'Filter criteria for precise matching'
         },
         properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return (default: basic info)' },
-        limit: { type: 'number', description: 'Max results (default 10, max 100)' }
+        limit: { type: 'number', description: 'Max results (default 10, max 100)' },
+        ...searchPaginationProperties
       }
     }
   },
@@ -846,7 +858,8 @@ export const taskTools: ToolMetadata[] = [
       properties: {
         filters: { type: 'array', items: { type: 'object' }, description: 'Filter criteria' },
         properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' },
-        limit: { type: 'number', description: 'Max results (default 10)' }
+        limit: { type: 'number', description: 'Max results (default 10)' },
+        ...searchPaginationProperties
       }
     }
   },
@@ -1458,7 +1471,8 @@ PROPERTIES to request:
       properties: {
         filters: { type: 'array', items: { type: 'object' }, description: 'Filter criteria' },
         properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' },
-        limit: { type: 'number', description: 'Max results (default 10, max 100)' }
+        limit: { type: 'number', description: 'Max results (default 10, max 100)' },
+        ...searchPaginationProperties
       }
     }
   },
@@ -1491,7 +1505,8 @@ PROPERTIES to request:
       properties: {
         filters: { type: 'array', items: { type: 'object' }, description: 'Filter criteria' },
         properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' },
-        limit: { type: 'number', description: 'Max results (default 10, max 100)' }
+        limit: { type: 'number', description: 'Max results (default 10, max 100)' },
+        ...searchPaginationProperties
       }
     }
   },
@@ -1716,7 +1731,8 @@ RETURNS: Array of products with id and properties`,
           }
         },
         properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' },
-        limit: { type: 'number', description: 'Max results (default 10)' }
+        limit: { type: 'number', description: 'Max results (default 10)' },
+        ...searchPaginationProperties
       }
     }
   },
@@ -1840,7 +1856,8 @@ RETURNS: Array of line items`,
           }
         },
         properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' },
-        limit: { type: 'number', description: 'Max results (default 10)' }
+        limit: { type: 'number', description: 'Max results (default 10)' },
+        ...searchPaginationProperties
       }
     }
   },
