@@ -8,9 +8,9 @@ name: Release
 # (provenance attestations + Sigstore) and to the MCP registry via
 # mcp-publisher.
 #
-# Currently scoped to a small allowlist while we validate the OIDC path on
-# the canary connector. Each new connector requires per-package Trusted
-# Publisher setup at npmjs.com before being added here.
+# Publishes any existing connector whose package version is bumped. Brand-new
+# packages still require a manual first publish before this workflow can take
+# over with Trusted Publishing.
 #
 # Source of truth for the design: docs/plans/260525_oss_release_automation.md
 # (in mindstone-rebel-1).
@@ -46,13 +46,6 @@ jobs:
 
       - name: Detect packages with bumped version
         id: diff
-        env:
-          # Allowlist of connectors permitted on the OIDC publish path.
-          # Each entry must have:
-          #   - Trusted Publisher configured at npmjs.com for the package
-          #   - npm-publish GitHub environment with reviewers (configured at the repo level)
-          # Expand this list one connector at a time as each is bootstrapped.
-          ALLOWED_CONNECTORS: 'canary'
         run: |
           set -euo pipefail
           changed=()
@@ -60,12 +53,6 @@ jobs:
             name=$(basename "${dir}")
             pkg="${dir}package.json"
             [ -f "${pkg}" ] || continue
-
-            # Only consider packages on the allowlist
-            case " ${ALLOWED_CONNECTORS} " in
-              *" ${name} "*) ;;
-              *) continue ;;
-            esac
 
             new_version=$(jq -r '.version // ""' "${pkg}")
             old_version=$(git show HEAD~1:"${pkg}" 2>/dev/null | jq -r '.version // ""' 2>/dev/null || echo "")
