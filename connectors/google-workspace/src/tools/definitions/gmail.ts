@@ -371,7 +371,9 @@ Use get_workspace_email_thread with a thread_id from results to get full convers
     category: 'Gmail/Messages',
     description: `Open an inline editable email compose form before sending.
 
-Use this when you want to draft an email for review/editing first. The form lets the user edit To, CC, BCC, Subject, and Body, then explicitly click Send.
+Use this when the user wants an editable review form in Rebel before sending. The form lets the user edit To, CC, BCC, Subject, and Body, then explicitly click Send.
+
+Do NOT use this when the user asks to save/create a Gmail draft, save to drafts, or save the already-drafted email without opening another review UI. Use create_workspace_draft for that.
 
 This tool does not send the email directly. It prepares the draft and launches the inline form.`,
     annotations: { readOnlyHint: false, destructiveHint: false },
@@ -756,7 +758,7 @@ Attachments are NOT automatically carried over — you must explicitly download 
   {
     name: 'create_workspace_draft',
     category: 'Gmail/Drafts',
-    description: `Create a new Gmail draft. Supports plain text and HTML bodies, CC/BCC, reply threading, and attachments.`,
+    description: `Create a new Gmail draft. Use this when the user asks to save to drafts, save/create a Gmail draft, or save an already-drafted email without sending or opening another review UI. Supports plain text and HTML bodies, CC/BCC, reply threading, and attachments.`,
     annotations: { readOnlyHint: false, destructiveHint: false },
     inputSchema: {
       type: 'object',
