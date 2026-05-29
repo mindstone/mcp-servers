@@ -39,12 +39,15 @@ fi
 # ---------------------------------------------------------------------------
 # 2. Scan dist/ inside the packed tarball (the runtime artifact users execute).
 # ---------------------------------------------------------------------------
-if [[ -d "$DIST" ]]; then
+if [[ -d "$DIST" && "${HUBSPOT_SKIP_BRIDGE_TARBALL_SCAN:-}" != "1" ]]; then
   TMP_PACK_DIR="$(mktemp -d -t hubspot-mcp-bridge-scan-XXXXXX)"
   trap 'rm -rf "$TMP_PACK_DIR"' EXIT
 
   echo "[check-no-bridge-strings] Packing tarball into $TMP_PACK_DIR for scan…" >&2
-  if ! ( cd "$PKG_ROOT" && npm pack --pack-destination "$TMP_PACK_DIR" --silent --ignore-scripts >/dev/null ); then
+  if ! (
+    cd "$PKG_ROOT" \
+      && HUBSPOT_SKIP_BRIDGE_TARBALL_SCAN=1 npm pack --pack-destination "$TMP_PACK_DIR" --silent --ignore-scripts >/dev/null
+  ); then
     echo "[check-no-bridge-strings] FAIL: npm pack failed; cannot scan tarball." >&2
     exit 1
   fi
@@ -75,6 +78,8 @@ if [[ -d "$DIST" ]]; then
       found_any=1
     fi
   done
+elif [[ "${HUBSPOT_SKIP_BRIDGE_TARBALL_SCAN:-}" == "1" ]]; then
+  echo "[check-no-bridge-strings] Skipping nested tarball scan during npm pack prepare." >&2
 fi
 
 if [[ $found_any -ne 0 ]]; then
