@@ -51,6 +51,9 @@ jobs:
           changed=()
           for dir in connectors/*/; do
             name=$(basename "${dir}")
+            if [ "${name}" = "_template" ]; then
+              continue
+            fi
             pkg="${dir}package.json"
             [ -f "${pkg}" ] || continue
 
