@@ -40,7 +40,7 @@
     "security:internal-refs": "node scripts/check-internal-refs.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^0.7.0",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "google-auth-library": "^10.2.0",
     "googleapis": "^171.4.0",
     "uuid": "^11.1.0"
