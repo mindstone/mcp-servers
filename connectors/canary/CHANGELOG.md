@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-05-29
+
+### Changed
+
+- Tweak canary pong response to v2
+
 ## [0.0.1] - 2026-05-26
 
 ### Added
