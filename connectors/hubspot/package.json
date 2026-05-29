@@ -1,8 +1,8 @@
 {
   "name": "@mindstone/mcp-server-hubspot",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "mcpName": "io.github.mindstone/mcp-server-hubspot",
-  "description": "HubSpot MCP server \u2014 CRM objects, associations, properties, marketing, files, workflows, and account diagnostics",
+  "description": "HubSpot MCP server — CRM objects, associations, properties, marketing, files, workflows, and account diagnostics",
   "license": "FSL-1.1-MIT",
   "type": "module",
   "bin": {
@@ -45,10 +45,21 @@
   "_overridesRollbackNote": {
     "rationale": "Transitive dependencies of @modelcontextprotocol/sdk had unpatched advisories at the time of pin (SDK 1.29.0). Overrides force-resolve to fixed versions; prepublishOnly's `npm audit --omit=dev --audit-level=high` gate fails-loud on regression.",
     "advisories": {
-      "fast-uri": ["GHSA-q3j6-qgpj-74h6 (path traversal)", "GHSA-v39h-62p7-jpjc (host confusion)"],
-      "hono": ["GHSA-qp7p-654g-cw7p (CSS injection)", "GHSA-hm8q-7f3q-5f36 (JWT NumericDate validation)", "GHSA-p77w-8qqv-26rm (cache cross-user leakage)"],
-      "express-rate-limit": ["transitive via ip-address"],
-      "ip-address": ["fixed in 10.x"]
+      "fast-uri": [
+        "GHSA-q3j6-qgpj-74h6 (path traversal)",
+        "GHSA-v39h-62p7-jpjc (host confusion)"
+      ],
+      "hono": [
+        "GHSA-qp7p-654g-cw7p (CSS injection)",
+        "GHSA-hm8q-7f3q-5f36 (JWT NumericDate validation)",
+        "GHSA-p77w-8qqv-26rm (cache cross-user leakage)"
+      ],
+      "express-rate-limit": [
+        "transitive via ip-address"
+      ],
+      "ip-address": [
+        "fixed in 10.x"
+      ]
     },
     "removalProcedure": "When a new @modelcontextprotocol/sdk release resolves these transitively, remove the corresponding override entry and re-run `npm install && npm audit --omit=dev --audit-level=high`. Each override can be removed independently as upstream catches up.",
     "trackingUpstream": "https://github.com/modelcontextprotocol/typescript-sdk — watch for SDK version that updates these dependencies"

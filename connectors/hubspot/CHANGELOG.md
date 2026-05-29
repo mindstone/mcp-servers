@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-05-29
+
+### Changed
+
+- Fix HubSpot search pagination cursor forwarding
+
 ## [0.2.0] - 2026-05-21
 ### Added
 - **hubspot**: Conversations Inbox read tools (FOX-3376) — three new read-only tools let agents pull the actual customer messages on a support ticket so they can draft replies:
