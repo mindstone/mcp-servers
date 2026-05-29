@@ -146,6 +146,7 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
         },
         media,
         fields: 'id, name, mimeType, webViewLink',
+        supportsAllDrives: true,
       });
 
       return {
@@ -195,9 +196,12 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
           }
         }
 
+        // Note: files.export does NOT accept supportsAllDrives — Workspace export
+        // only applies to native Google Docs/Sheets/Slides, and the parent file.get
+        // above already used supportsAllDrives so we know the file is accessible.
         const response = await client.files.export({
           fileId: options.fileId,
-          mimeType: exportMimeType
+          mimeType: exportMimeType,
         }, {
           responseType: 'arraybuffer'
         }) as unknown as GaxiosResponse<Uint8Array>;
@@ -221,7 +225,8 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
       const nativeMime = file.data.mimeType || 'application/octet-stream';
       const response = await client.files.get({
         fileId: options.fileId,
-        alt: 'media'
+        alt: 'media',
+        supportsAllDrives: true,
       }, {
         responseType: 'arraybuffer'
       }) as unknown as GaxiosResponse<Uint8Array>;
@@ -260,6 +265,7 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
           parents: parentId ? [parentId] : undefined,
         },
         fields: 'id, name, mimeType, webViewLink',
+        supportsAllDrives: true,
       });
 
       return {
@@ -338,6 +344,7 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
           domain: options.domain,
           allowFileDiscovery: options.allowFileDiscovery,
         },
+        supportsAllDrives: true,
       });
 
       return {
@@ -360,6 +367,7 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
 
       await client.files.delete({
         fileId,
+        supportsAllDrives: true,
       });
 
       return {
@@ -386,6 +394,7 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
           parents: parentId ? [parentId] : undefined,
         },
         fields: 'id, name, mimeType, webViewLink, parents',
+        supportsAllDrives: true,
       });
 
       return {
@@ -412,6 +421,7 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
         const fileInfo = await client.files.get({
           fileId,
           fields: 'parents',
+          supportsAllDrives: true,
         });
         parentsToRemove = fileInfo.data.parents?.join(',') || '';
       }
@@ -421,6 +431,7 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
         addParents: newParentId,
         removeParents: parentsToRemove || undefined,
         fields: 'id, name, mimeType, webViewLink, parents',
+        supportsAllDrives: true,
       });
 
       return {
@@ -447,6 +458,7 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
           trashed: true,
         },
         fields: 'id, name, mimeType, trashed',
+        supportsAllDrives: true,
       });
 
       return {
@@ -473,6 +485,7 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
           trashed: false,
         },
         fields: 'id, name, mimeType, trashed, webViewLink, parents',
+        supportsAllDrives: true,
       });
 
       return {

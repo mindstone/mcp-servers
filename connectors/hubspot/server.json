@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-hubspot",
   "title": "HubSpot",
   "description": "HubSpot CRM: contacts, deals, tickets, line items, properties, marketing, files, workflows, threads",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-hubspot",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
@@ -29,7 +29,7 @@
         },
         {
           "name": "HUBSPOT_ACCOUNT_EMAIL",
-          "description": "Account selector \u2014 one MCP process per HubSpot account",
+          "description": "Account selector — one MCP process per HubSpot account",
           "isRequired": true,
           "isSecret": false,
           "format": "string"
@@ -83,7 +83,7 @@
         },
         {
           "name": "HUBSPOT_SCOPE_TIER",
-          "description": "OAuth scope tier \u2014 'readonly' or 'full'. Overrides the per-account stored tier",
+          "description": "OAuth scope tier — 'readonly' or 'full'. Overrides the per-account stored tier",
           "isRequired": false,
           "format": "string"
         },

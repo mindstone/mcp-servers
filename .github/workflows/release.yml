@@ -20,6 +20,7 @@ on:
     branches: [main]
     paths:
       - 'connectors/**/package.json'
+      - 'connectors/**/scripts/**'
       - '.github/workflows/release.yml'
 
 permissions:
@@ -49,8 +50,30 @@ jobs:
         run: |
           set -euo pipefail
           changed=()
+          touched_packages=""
+
+          while IFS= read -r path; do
+            case "${path}" in
+              connectors/*/*)
+                name="${path#connectors/}"
+                name="${name%%/*}"
+                if [ "${name}" != "_template" ]; then
+                  touched_packages="${touched_packages}${name}"$'\n'
+                fi
+                ;;
+            esac
+          done < <(git diff --name-only HEAD~1 HEAD)
+
+          package_touched() {
+            local target="$1"
+            grep -Fxq "${target}" <<< "${touched_packages}"
+          }
+
           for dir in connectors/*/; do
             name=$(basename "${dir}")
+            if [ "${name}" = "_template" ]; then
+              continue
+            fi
             pkg="${dir}package.json"
             [ -f "${pkg}" ] || continue
 
@@ -67,9 +90,11 @@ jobs:
               changed+=("${name}")
             elif [ -n "${new_version}" ]; then
               package_name=$(jq -r '.name // ""' "${pkg}")
-              if [ -n "${package_name}" ] && ! npm view "${package_name}@${new_version}" version >/dev/null 2>&1; then
+              if [ -n "${package_name}" ] && package_touched "${name}" && ! npm view "${package_name}@${new_version}" version >/dev/null 2>&1; then
                 echo "Detected unpublished current version for ${name}: ${package_name}@${new_version}"
                 changed+=("${name}")
+              elif [ -n "${package_name}" ] && ! package_touched "${name}"; then
+                echo "Skipping unpublished-version check for untouched package ${name}"
               fi
             fi
           done
