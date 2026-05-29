@@ -216,7 +216,7 @@ Until the host has written `${HUBSPOT_CONFIG_DIR}/credentials/you@example.com.to
 - `delete_hubspot_company` — Permanently delete a company (destructive).
 
 ### Deals
-- `search_hubspot_deals` — Search deals by query or property filters.
+- `search_hubspot_deals` — Search deals by query or property filters. For full coverage, repeat with `after` from `paging.next.after` until no next cursor is returned.
 - `get_hubspot_deal` — Get a single deal by ID.
 - `create_hubspot_deal` — Create a deal; requires `hubspot_owner_id` (destructive).
 - `update_hubspot_deal` — Update deal properties or move stage (destructive).
