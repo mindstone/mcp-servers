@@ -16,7 +16,7 @@ export function createServer(): McpServer {
     'ping',
     {
       description:
-        'Echo a message back wrapped as "pong: <message>". Used to verify the canary connector is reachable and the release pipeline produced a working build.',
+        'Echo a message back wrapped as "pong v2: <message>". Used to verify the canary connector is reachable and the release pipeline produced a working build.',
       inputSchema: z.object({
         message: z
           .string()
@@ -32,7 +32,7 @@ export function createServer(): McpServer {
         content: [
           {
             type: 'text',
-            text: `pong: ${message}`,
+            text: `pong v2: ${message}`,
           },
         ],
       };

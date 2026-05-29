@@ -3,7 +3,7 @@
  * Canary MCP Server
  *
  * Used to validate the rebel-oss release pipeline end-to-end. Single
- * `ping` tool that returns `pong: <message>`. No external dependencies,
+ * `ping` tool that returns `pong v2: <message>`. No external dependencies,
  * no auth, no bridge — by design.
  *
  * See docs/plans/260525_oss_release_automation.md (in mindstone-rebel-1)

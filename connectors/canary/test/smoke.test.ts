@@ -18,13 +18,13 @@ describe('canary smoke', () => {
     expect(toolsResult.tools[0].name).toBe('ping');
   });
 
-  it('echoes pong: <message>', async () => {
+  it('echoes pong v2: <message>', async () => {
     if (!testClient) {
       testClient = await createInMemoryTestClient({ createServer });
     }
     const result = await testClient.callTool('ping', { message: 'hello' });
     expect(result.isError).toBeFalsy();
-    expect(result.text).toBe('pong: hello');
+    expect(result.text).toBe('pong v2: hello');
   });
 
   it('rejects empty message via Zod', async () => {
