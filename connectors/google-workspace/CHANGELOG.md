@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-05-28
+
+### Fixed
+
+- Drive mutating operations on Shared Drives now succeed instead of returning JSON-RPC `-32603` from a Google API 404. Added `supportsAllDrives: true` to `createFolder`, `uploadFile`, `downloadFile` (file metadata + media download — not export, which doesn't accept the flag), `createPermission`, `deleteFile`, `copyFile`, `moveFile` (both metadata read and parent reassignment), `trashFile`, and `untrashFile`. Read-only `files.list` paths and `downloadRevision`'s file-metadata lookup already passed the flag, and `revisions.list` / `revisions.get` intentionally remain unchanged because the Drive Revisions API does not accept `supportsAllDrives` and does not surface revisions for Shared Drive files. Fixes REBEL-H3 reported by Hannah, where the agent could stage signed PDFs locally but could not create the destination Shared Drive folder to upload them, blocking her "Contract Library Refresh" session.
+
 ## [0.1.2] - 2026-05-21
 
 ### Fixed

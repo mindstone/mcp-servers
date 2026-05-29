@@ -16,6 +16,7 @@ interface SearchArgs {
   filters?: SearchFilter[];
   properties?: string[];
   limit?: number;
+  after?: string;
 }
 
 interface GetArgs {
@@ -174,7 +175,8 @@ async function searchObjects(objectType: string, args: SearchArgs) {
     const client = await getHubSpotClientAsync();
     const searchRequest: SearchRequest = {
       limit: args.limit || 10,
-      properties: args.properties
+      properties: args.properties,
+      after: args.after
     };
 
     // Add explicit filters if provided
@@ -610,6 +612,7 @@ interface EngagementSearchArgs {
   filters?: Array<{ propertyName: string; operator: string; value: string }>;
   properties?: string[];
   limit?: number;
+  after?: string;
 }
 
 interface EngagementCreateArgs {
@@ -635,9 +638,15 @@ const ENGAGEMENT_ASSOCIATION_TYPES = {
 };
 
 async function searchEngagement(engagementType: string, args: EngagementSearchArgs) {
-  const searchRequest: { limit: number; properties?: string[]; filterGroups?: Array<{ filters: Array<{ propertyName: string; operator: string; value: string }> }> } = {
+  const searchRequest: {
+    limit: number;
+    properties?: string[];
+    after?: string;
+    filterGroups?: Array<{ filters: Array<{ propertyName: string; operator: string; value: string }> }>;
+  } = {
     limit: args.limit || 10,
-    properties: args.properties
+    properties: args.properties,
+    after: args.after
   };
   
   if (args.filters && args.filters.length > 0) {
