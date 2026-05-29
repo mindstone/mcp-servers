@@ -20,6 +20,7 @@ on:
     branches: [main]
     paths:
       - 'connectors/**/package.json'
+      - 'connectors/**/scripts/**'
       - '.github/workflows/release.yml'
 
 permissions:
