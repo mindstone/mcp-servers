@@ -22,7 +22,14 @@ import {
   type MockApiServer,
   type MockRequest,
 } from './fixtures/mcp-test-harness.js';
-import { dealTools, contactTools, companyTools, leadTools, knowledgeBaseTools } from '../src/tools/definitions.js';
+import {
+  dealTools,
+  contactTools,
+  companyTools,
+  leadTools,
+  engagementTools,
+  knowledgeBaseTools,
+} from '../src/tools/definitions.js';
 
 /** Set up the HubSpot config directory with a fake account and OAuth token. */
 function createHubSpotConfigDir(): string {
@@ -236,6 +243,44 @@ describe('HubSpot MCP - mock API tests', () => {
         ...createStandardRoutes(),
         createOwnerRoute(),
         createObjectRoute('contacts'),
+        {
+          method: 'POST' as const,
+          path: '/crm/v3/objects/deals/search',
+          handler: (req: MockRequest) => {
+            const body = req.body as { after?: string };
+            if (body.after === '1') {
+              return {
+                body: {
+                  results: [
+                    {
+                      id: '302',
+                      properties: { dealname: 'Second Deal' },
+                      createdAt: '2026-01-03T00:00:00Z',
+                      updatedAt: '2026-01-17T00:00:00Z',
+                      archived: false,
+                    },
+                  ],
+                  paging: {},
+                },
+              };
+            }
+
+            return {
+              body: {
+                results: [
+                  {
+                    id: '301',
+                    properties: { dealname: 'First Deal' },
+                    createdAt: '2026-01-02T00:00:00Z',
+                    updatedAt: '2026-01-16T00:00:00Z',
+                    archived: false,
+                  },
+                ],
+                paging: { next: { after: '1' } },
+              },
+            };
+          },
+        },
         createObjectRoute('deals'),
         createObjectRoute('calls'),
         createObjectRoute('notes'),
@@ -322,6 +367,44 @@ describe('HubSpot MCP - mock API tests', () => {
     expect(result.results).toHaveLength(1);
     expect(result.results[0].properties.name).toBe('Acme Corp');
     expect(result.results[0].properties.domain).toBe('acme.com');
+  });
+
+  it('search_hubspot_deals exposes and forwards the search pagination cursor', async () => {
+    const dealSearchTool = dealTools.find(tool => tool.name === 'search_hubspot_deals');
+    const callSearchTool = engagementTools.find(tool => tool.name === 'search_hubspot_calls');
+    expect(dealSearchTool?.inputSchema.properties.after).toBeDefined();
+    expect(callSearchTool?.inputSchema.properties.after).toBeDefined();
+
+    mockApi.clearLog();
+
+    const firstPage = await client.callToolJson<{
+      results: Array<{ id: string }>;
+      paging?: { next?: { after: string } };
+    }>('search_hubspot_deals', {
+      limit: 1,
+      properties: ['dealname'],
+    });
+
+    expect(firstPage.results[0].id).toBe('301');
+    expect(firstPage.paging?.next?.after).toBe('1');
+
+    const secondPage = await client.callToolJson<{
+      results: Array<{ id: string }>;
+      paging?: { next?: { after: string } };
+    }>('search_hubspot_deals', {
+      limit: 1,
+      properties: ['dealname'],
+      after: firstPage.paging?.next?.after,
+    });
+
+    expect(secondPage.results[0].id).toBe('302');
+
+    const searchRequests = mockApi.requestLog.filter(
+      r => r.method === 'POST' && r.pathname === '/crm/v3/objects/deals/search'
+    );
+    expect(searchRequests).toHaveLength(2);
+    expect(searchRequests[0].body).toMatchObject({ limit: 1, properties: ['dealname'] });
+    expect(searchRequests[1].body).toMatchObject({ limit: 1, properties: ['dealname'], after: '1' });
   });
 
   it('list_hubspot_owners returns team members', async () => {
