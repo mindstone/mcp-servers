@@ -70,6 +70,11 @@ jobs:
             new_version=$(jq -r '.version // ""' "${pkg}")
             old_version=$(git show HEAD~1:"${pkg}" 2>/dev/null | jq -r '.version // ""' 2>/dev/null || echo "")
 
+            if [ -z "${old_version}" ]; then
+              echo "Skipping first-add package ${name}@${new_version}; bootstrap publishes are manual."
+              continue
+            fi
+
             if [ -n "${new_version}" ] && [ "${new_version}" != "${old_version}" ]; then
               echo "Detected version bump for ${name}: ${old_version:-(none)} -> ${new_version}"
               changed+=("${name}")
