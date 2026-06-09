@@ -1,0 +1,24 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 1,
+  "name": "canary",
+  "package": "@mindstone/mcp-server-canary",
+  "version": "0.0.3",
+  "auth": {
+    "type": "none",
+    "envVars": []
+  },
+  "tools": {
+    "count": 1,
+    "domains": []
+  },
+  "surface": "local-protocol",
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/",
+    "auth": "./src/",
+    "tests": "./test/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-canary",
+    "serverJson": "./server.json"
+  }
+}
