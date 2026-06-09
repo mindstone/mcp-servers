@@ -116,6 +116,7 @@ NOTE: The `XERO_CLIENT_BEARER_TOKEN` will take precedence over the `XERO_CLIENT_
 - `list-aged-receivables-by-contact`: Retrieves aged receivables for a contact
 - `list-aged-payables-by-contact`: Retrieves aged payables for a contact
 - `list-contact-groups`: Retrieve a list of contact groups
+- `list-currencies`: Retrieve currencies enabled in the connected Xero organisation
 - `list-invoice-attachments`: Retrieve files attached to a Xero invoice
 - `create-contact`: Create a new contact
 - `create-credit-note`: Create a new credit note
@@ -125,7 +126,7 @@ NOTE: The `XERO_CLIENT_BEARER_TOKEN` will take precedence over the `XERO_CLIENT_
 - `create-credit-note`: Create a new credit note
 - `create-payroll-timesheet`: Create a new Payroll Timesheet
 - `update-contact`: Update an existing contact
-- `update-invoice`: Update an existing draft invoice. Supports optional `currencyCode`, such as `USD`, for draft invoices.
+- `update-invoice`: Update an existing draft invoice. Supports optional `currencyCode`, such as `USD`, when that currency is enabled in the connected Xero organisation.
 - `update-quote`: Update an existing draft quote
 - `update-credit-note`: Update an existing draft credit note
 - `get-invoice-history`: Retrieve the history records for an invoice

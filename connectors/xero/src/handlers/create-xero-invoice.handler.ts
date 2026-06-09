@@ -3,6 +3,7 @@ import { XeroClientResponse } from "../types/tool-response.js";
 import { formatError } from "../helpers/format-error.js";
 import { CurrencyCode, Invoice, LineItemTracking } from "xero-node";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
+import { assertXeroCurrencyEnabled } from "../helpers/xero-currencies.js";
 
 interface InvoiceLineItem {
   description: string;
@@ -23,6 +24,7 @@ async function createInvoice(
   currencyCode: CurrencyCode | undefined,
 ): Promise<Invoice | undefined> {
   await xeroClient.authenticate();
+  await assertXeroCurrencyEnabled(currencyCode);
 
   const invoice: Invoice = {
     type: type,

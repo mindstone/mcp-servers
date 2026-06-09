@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-xero",
   "title": "Xero",
   "description": "Xero MCP server for invoices, contacts, payments, quotes, and financial reports.",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-xero",
-      "version": "0.0.16",
+      "version": "0.0.17",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
