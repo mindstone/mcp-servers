@@ -8,12 +8,10 @@ interface XeroSdkProblem {
 
 interface XeroSdkError {
   response: {
-    statusCode: number;
-    body?: {
-      httpStatusCode?: string;
-      problem?: XeroSdkProblem;
-      Detail?: string;
-    };
+    status?: number;
+    statusCode?: number;
+    body?: unknown;
+    data?: unknown;
   };
 }
 
@@ -21,7 +19,10 @@ function isXeroSdkError(error: unknown): error is XeroSdkError {
   if (typeof error !== "object" || error === null) return false;
   const response = (error as { response?: unknown }).response;
   if (typeof response !== "object" || response === null) return false;
-  return typeof (response as { statusCode?: unknown }).statusCode === "number";
+  return (
+    typeof (response as { statusCode?: unknown }).statusCode === "number" ||
+    typeof (response as { status?: unknown }).status === "number"
+  );
 }
 
 function formatHttpStatus(status: number): string {
@@ -39,6 +40,82 @@ function formatHttpStatus(status: number): string {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getString(
+  record: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  const value = record?.[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function getXeroBody(response: XeroSdkError["response"]): unknown {
+  return response.body ?? response.data;
+}
+
+function getValidationMessages(body: unknown): string[] {
+  if (!isRecord(body)) return [];
+
+  const messages: string[] = [];
+  const collectFromValidationErrors = (value: unknown) => {
+    if (!Array.isArray(value)) return;
+
+    for (const validationError of value) {
+      if (!isRecord(validationError)) continue;
+      const message = getString(validationError, "Message");
+      if (message) messages.push(message);
+    }
+  };
+
+  collectFromValidationErrors(body.ValidationErrors);
+
+  const elements = body.Elements;
+  if (Array.isArray(elements)) {
+    for (const element of elements) {
+      if (!isRecord(element)) continue;
+      collectFromValidationErrors(element.ValidationErrors);
+    }
+  }
+
+  return [...new Set(messages)];
+}
+
+function formatXeroResponseBody(status: number, body: unknown): string {
+  if (!isRecord(body)) return `${status} HTTP error`;
+
+  const problem = isRecord(body.problem)
+    ? (body.problem as XeroSdkProblem & Record<string, unknown>)
+    : undefined;
+
+  const title =
+    problem?.title ??
+    getString(body, "Type") ??
+    getString(body, "httpStatusCode") ??
+    "HTTP error";
+
+  const validationMessages = getValidationMessages(body);
+  const detail =
+    validationMessages.length > 0
+      ? validationMessages.join("; ")
+      : problem?.detail ??
+        getString(body, "Detail") ??
+        getString(body, "Message");
+
+  return detail ? `${status} ${title}: ${detail}` : `${status} ${title}`;
+}
+
+function parseXeroSdkErrorString(error: string): unknown {
+  try {
+    const parsed = JSON.parse(error);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Format error messages for return to the LLM.
  *
@@ -49,25 +126,32 @@ function formatHttpStatus(status: number): string {
 export function formatError(error: unknown): string {
   if (error instanceof AxiosError) {
     const status = error.response?.status;
-    const detail = error.response?.data?.Detail;
 
     if (status !== undefined) {
       const mapped = formatHttpStatus(status);
       if (mapped) return mapped;
+
+      return formatXeroResponseBody(status, error.response?.data);
     }
-    return detail || "An error occurred while communicating with Xero.";
+    return "An error occurred while communicating with Xero.";
+  }
+
+  if (typeof error === "string") {
+    const parsed = parseXeroSdkErrorString(error);
+    return isXeroSdkError(parsed)
+      ? formatError(parsed)
+      : "An unexpected error occurred while communicating with Xero.";
   }
 
   if (isXeroSdkError(error)) {
-    const status = error.response.statusCode;
+    const status = error.response.statusCode ?? error.response.status;
+    if (status === undefined) {
+      return "An unexpected error occurred while communicating with Xero.";
+    }
     const mapped = formatHttpStatus(status);
     if (mapped) return mapped;
 
-    const body = error.response.body;
-    const problem = body?.problem;
-    const title = problem?.title ?? body?.httpStatusCode ?? "HTTP error";
-    const detail = problem?.detail ?? body?.Detail;
-    return detail ? `${status} ${title}: ${detail}` : `${status} ${title}`;
+    return formatXeroResponseBody(status, getXeroBody(error.response));
   }
 
   if (error instanceof Error) {

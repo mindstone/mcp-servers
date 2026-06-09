@@ -7,6 +7,15 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.0.17] - 2026-06-09
+
+### Added
+- Added a `list-currencies` tool that reports currencies enabled in the connected Xero organisation.
+
+### Fixed
+- Validate requested invoice currencies against the connected organisation before creating or updating invoices, so unsupported currencies fail before any invoice write.
+- Surface Xero validation errors from SDK responses without exposing token-bearing request headers.
+
 ## [0.0.16] - 2026-06-09
 
 ### Fixed

@@ -65,6 +65,79 @@ describe("formatError", () => {
     expect(result).not.toContain("set-cookie");
   });
 
+  it("extracts SDK validation errors without leaking request headers", () => {
+    const sdkError = {
+      response: {
+        status: 400,
+        body: {
+          Type: "ValidationException",
+          Message: "A validation exception occurred",
+          Elements: [
+            {
+              ValidationErrors: [
+                {
+                  Message:
+                    "Currency GBP is not enabled for this organisation.",
+                },
+              ],
+            },
+          ],
+        },
+        headers: { "set-cookie": "ak_bmsc=secret" },
+      },
+      request: {
+        headers: { authorization: "Bearer eyJSECRET" },
+      },
+    };
+
+    const result = formatError(sdkError);
+
+    expect(result).toBe(
+      "400 ValidationException: Currency GBP is not enabled for this organisation.",
+    );
+    expect(result).not.toContain("Bearer");
+    expect(result).not.toContain("eyJSECRET");
+    expect(result).not.toContain("set-cookie");
+  });
+
+  it("extracts stringified SDK validation errors without leaking request headers", () => {
+    const sdkError = JSON.stringify({
+      response: {
+        statusCode: 400,
+        body: {
+          Type: "ValidationException",
+          Message: "A validation exception occurred",
+          Elements: [
+            {
+              ValidationErrors: [
+                {
+                  Message:
+                    "Currency GBP is not enabled for this organisation.",
+                },
+              ],
+            },
+          ],
+        },
+        headers: { "set-cookie": "ak_bmsc=secret" },
+        request: {
+          headers: { authorization: "Bearer eyJSECRET" },
+        },
+      },
+      body: {
+        Type: "ValidationException",
+      },
+    });
+
+    const result = formatError(sdkError);
+
+    expect(result).toBe(
+      "400 ValidationException: Currency GBP is not enabled for this organisation.",
+    );
+    expect(result).not.toContain("Bearer");
+    expect(result).not.toContain("eyJSECRET");
+    expect(result).not.toContain("set-cookie");
+  });
+
   it("does not stringify unknown error objects", () => {
     const leakyUnknown = {
       request: { headers: { authorization: "Bearer LEAKY_TOKEN" } },

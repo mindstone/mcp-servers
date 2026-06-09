@@ -3,6 +3,7 @@ import { XeroClientResponse } from "../types/tool-response.js";
 import { formatError } from "../helpers/format-error.js";
 import { CurrencyCode, Invoice, LineItemTracking } from "xero-node";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
+import { assertXeroCurrencyEnabled } from "../helpers/xero-currencies.js";
 
 interface InvoiceLineItem {
   description: string;
@@ -85,6 +86,8 @@ export async function updateXeroInvoice(
         error: `Cannot update invoice because it is not a draft. Current status: ${invoiceStatus}`,
       };
     }
+
+    await assertXeroCurrencyEnabled(currencyCode);
 
     const updatedInvoice = await updateInvoice(
       invoiceId,
