@@ -11,6 +11,9 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Changed
+- Reworked `README.md` to explain when to choose this local Zendesk connector, what support workflows it helps with, and how it handles customer-authored ticket content.
+
 ## [0.3.2] - 2026-05-14
 ### Added
 - **registry**: Cohort B + C backfill — 13 OSS connectors get server.json (12 also get mcpName). google-analytics, hubspot, outreach, quickbooks, salesforce, servicenow, slack, workday, zendesk, office (5-service consolidator), apple-shortcuts, browser-automation, email-imap each gain a registry-shaped server.json validated against registry.modelcontextprotocol.io. mcpName added to 12 of 13 package.json files; browser-automation deferred due to a concurrent agent's uncommitted 0.1.5→0.1.6 version bump in the same file.
@@ -60,5 +63,3 @@ are maintained manually as part of the PR review checklist.
 - Address review findings — fix gitCommit cwd, NODE_PATH, and remaining Rebel naming.
 - Use generic MCP_HOST_BRIDGE_STATE in wiring example for consistency
 - Replace misleading standalone env vars with actual accounts.json setup instructions.
-
-

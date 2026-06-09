@@ -11,6 +11,9 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Changed
+- Reworked `README.md` to explain when to choose this connector, what browser tasks it is useful for, and how its visible-by-default session model helps users follow and trust the automation.
+
 ## [0.1.7] - 2026-05-14
 ### Added
 - **browser-automation**: Visible by default, gated by AGENT_BROWSER_SHOW_WINDOW. Restores the trust-by-transparency UX (regressed in 0.1.5) so users see Rebel work; hosts can opt out by setting AGENT_BROWSER_SHOW_WINDOW=false.
@@ -52,5 +55,3 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 - **browser-automation**: Port Browser Automation MCP connector to OSS npm package.
-
-
