@@ -5,9 +5,9 @@ title: gamma — mcp-servers catalogue
 
 # gamma
 
-Gamma AI presentation generation MCP server for Model Context Protocol hosts. Create AI-powered presentations, documents, webpages, and social posts, manage themes and folders, and export content through a standardised MCP interface.
+Gamma MCP server for creating Gamma presentations, documents, webpages, and social posts, listing themes and folders, and polling async generation/export status.
 
-
+*Best for MCP hosts that want to create Gamma decks and exports from a local package using an API key they already manage.*
 
 ## Status
 

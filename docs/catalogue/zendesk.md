@@ -5,9 +5,9 @@ title: zendesk — mcp-servers catalogue
 
 # zendesk
 
-Zendesk Support MCP server for Model Context Protocol hosts.
+Zendesk Support MCP server — tickets, users, comments, macros, account setup, and support-workflow discovery through a standard stdio MCP package.
 
-
+*Best for support teams that want an assistant to triage, summarize, and update Zendesk tickets from a local MCP host.*
 
 ## Status
 

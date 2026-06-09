@@ -7,7 +7,7 @@ title: salesforce — mcp-servers catalogue
 
 Salesforce CRM MCP server — accounts, contacts, opportunities, leads, tasks, users, and custom objects via the Salesforce API.
 
-
+*Best when an MCP host needs a local, install-and-run CRM connector for everyday sales work rather than a Salesforce-hosted endpoint.*
 
 ## Status
 
