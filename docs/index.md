@@ -5,7 +5,7 @@ title: mcp-servers catalogue
 
 # mcp-servers catalogue
 
-A machine-readable index of the [mindstone/mcp-servers](https://github.com/mindstone/mcp-servers) monorepo: 35 source-available MCP servers, audited weekly by the [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/mindstone/mcp-servers).
+A machine-readable index of the [mindstone/mcp-servers](https://github.com/mindstone/mcp-servers) monorepo: 37 source-available MCP servers, audited weekly by the [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/mindstone/mcp-servers).
 
 Each row links to a per-connector page generated from the connector's `STATUS.json`. The data on this site is derived from the source repository on every push to `main` — if it looks stale, the data isn't.
 
@@ -13,6 +13,7 @@ Each row links to a per-connector page generated from the connector's `STATUS.js
 |-----------|--------------|---------|------|-------|---------|
 | [apple-shortcuts](./catalogue/apple-shortcuts.html) | An MCP server that exposes Apple Shortcuts functionality to Rebel via the macOS &#96;shortcuts&#96; CLI. | 0.1.2 | None | 2 | local CLI |
 | [browser-automation](./catalogue/browser-automation.html) | Headless browser control via accessibility snapshots — navigate pages, fill forms, click elements, take screenshots, and manage tabs using the &#91;agent-browser&#93;&#40;https://www.npmjs.com/package/agent-browser&#41; CLI. | 0.1.7 | None | 18 | browser automation |
+| [canary](./catalogue/canary.html) | A synthetic MCP server used to validate the rebel-oss release pipeline end-to-end. Single &#96;ping&#96; tool; no external dependencies, no auth, no bridge. | 0.0.3 | Unknown | — | — |
 | [elevenlabs](./catalogue/elevenlabs.html) | ElevenLabs MCP server for Model Context Protocol hosts. Generate speech, music, and sound effects, browse voices, and transcribe audio using the ElevenLabs API through a standardised MCP interface. | 0.3.0 | API key | 8 | cloud API |
 | [email-imap](./catalogue/email-imap.html) | Email IMAP/SMTP MCP server for Model Context Protocol hosts. Read, search, send, and manage emails through IMAP and SMTP — supports iCloud Mail, Gmail, Yahoo Mail, Outlook / Microsoft 365, and custom IMAP providers. | 0.2.3 | API key | 9 | local protocol |
 | [fathom](./catalogue/fathom.html) | List and search meetings, view details, read transcripts, and manage teams via Fathom AI. | 0.2.3 | API key | 7 | cloud API |
@@ -45,6 +46,7 @@ Each row links to a per-connector page generated from the connector's `STATUS.js
 | [talentlms](./catalogue/talentlms.html) | TalentLMS MCP server for Model Context Protocol hosts. Manage users, courses, groups, branches, enrolments, reporting, and assessments in TalentLMS through a standardised MCP interface. | 0.2.2 | API key | 24 | cloud API |
 | [vanta](./catalogue/vanta.html) | Vanta compliance MCP server — read and write vulnerabilities, tests, controls, evidence, resources, people, vendors, and compliance summaries via the Vanta API. | 0.1.0 | OAuth | 18 | cloud API |
 | [workday](./catalogue/workday.html) | Workday HCM MCP server for Model Context Protocol hosts. Query workers, profiles, and organizations in Workday through a standardised MCP interface using OAuth 2.0 authentication. | 0.2.2 | OAuth | 4 | cloud API |
+| [xero](./catalogue/xero.html) | This is a Model Context Protocol &#40;MCP&#41; server implementation for Xero. It provides a bridge between the MCP protocol and Xero's API, allowing for standardized access to Xero's accounting and business features. | 0.0.17 | Unknown | — | — |
 | [zendesk](./catalogue/zendesk.html) | Zendesk Support MCP server for Model Context Protocol hosts. | 0.3.2 | Hybrid | 20 | cloud API |
 
 ## How this catalogue is built
