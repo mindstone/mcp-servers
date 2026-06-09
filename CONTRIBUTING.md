@@ -38,8 +38,10 @@ test-harness/      # Shared test utilities (linked via file: dependency)
 5. Implement the connector following the patterns in existing connectors
 6. Add tests using the shared test harness
 7. Add a `README.md` with setup and configuration instructions
-8. Verify locally: `npm run build && npm test && mcp-publisher validate server.json` (see [Registry submission](#registry-submission) for the publisher CLI)
-9. Submit a pull request
+8. Create `STATUS.json`: run `node scripts/init-status.mjs <your-connector>`, then set the `surface` and verify `auth.type` (the script leaves `surface: "TBD"`, which CI rejects). If your connector registers tools in a way `scripts/check-status.mjs` can't count yet (e.g. a `server.tool(...)` factory over an array), see the exclusion list in `.github/workflows/ci.yml` and `docs/plans/260609_catalogue_drift_prevention.md`.
+9. Regenerate the committed derived files and commit them: `node scripts/build-catalogue.mjs && node scripts/gen-install-links.mjs` (adds your catalogue page, the index row, and the README install-links block)
+10. Verify locally: `npm run build && npm test && mcp-publisher validate server.json` (see [Registry submission](#registry-submission) for the publisher CLI)
+11. Submit a pull request
 
 ## Registry Submission
 
@@ -97,13 +99,20 @@ Every connector ships its own `CHANGELOG.md` following [Keep a Changelog](https:
 
 ### Bumping a connector
 
-1. Bump the version in lockstep in three places:
+1. Bump the version in lockstep across these files:
    - `connectors/<name>/package.json` — the `version` field
    - `connectors/<name>/package-lock.json` — the top-level `version` and `packages[""].version`
    - `connectors/<name>/server.json` — the top-level `version` and `packages[0].version`
-2. Promote `## [Unreleased]` to `## [<new-version>] - YYYY-MM-DD` in `connectors/<name>/CHANGELOG.md` and re-insert an empty `## [Unreleased]` block above it.
-3. Write the release notes yourself. Group entries under the standard headings (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`).
-4. Open a PR. The `CHANGELOG check` workflow (`.github/workflows/changelog-check.yml`) fails the PR if the new `package.json.version` does not have a corresponding `## [<new-version>] - <date>` header in `CHANGELOG.md`, or if that header was carried from `main` rather than introduced in the PR.
+   - `connectors/<name>/STATUS.json` — the `version` field, **if the connector has a `STATUS.json`**. This one is easy to miss: it is not touched by the release tooling, but `scripts/check-status.mjs` rejects the drift on CI. (This is exactly the gap that left `main` red for 11+ days — see `docs/plans/260609_catalogue_drift_prevention.md`.)
+2. Regenerate the committed derived files and commit them in the same change:
+   ```bash
+   node scripts/build-catalogue.mjs      # docs/catalogue/<name>.md + docs/index.md (version is shown there)
+   node scripts/gen-install-links.mjs    # README INSTALL_LINKS block (only changes if env vars changed)
+   ```
+   Skipping this is the single most common cause of a red `main`: the catalogue shows the version, so every bump drifts it.
+3. Promote `## [Unreleased]` to `## [<new-version>] - YYYY-MM-DD` in `connectors/<name>/CHANGELOG.md` and re-insert an empty `## [Unreleased]` block above it.
+4. Write the release notes yourself. Group entries under the standard headings (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`).
+5. Open a PR. The `CHANGELOG check` workflow (`.github/workflows/changelog-check.yml`) fails the PR if the new `package.json.version` does not have a corresponding `## [<new-version>] - <date>` header in `CHANGELOG.md`, or if that header was carried from `main` rather than introduced in the PR.
 
 ### Why no auto-generation in CI
 
