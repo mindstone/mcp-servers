@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Window } from 'happy-dom';
-import { COMPOSE_EMAIL_HTML } from '../compose-email-template';
+import { COMPOSE_EMAIL_HTML } from '../src/resources/compose-email-template.js';
 
 let composeWindow: Window | undefined;
 
@@ -23,7 +23,56 @@ function loadComposeEmailWindow(): Window {
 function getFieldValue(window: Window, id: string): string {
   const element = window.document.getElementById(id);
   expect(element).toBeTruthy();
-  return (element as HTMLInputElement | HTMLTextAreaElement).value;
+  return (element as unknown as HTMLInputElement | HTMLTextAreaElement).value;
+}
+
+function setFieldValue(window: Window, id: string, value: string): void {
+  const element = window.document.getElementById(id) as unknown as HTMLInputElement | HTMLTextAreaElement;
+  expect(element).toBeTruthy();
+  element.value = value;
+  element.dispatchEvent(new window.Event('input', { bubbles: true }) as unknown as Event);
+}
+
+function isHidden(window: Window, id: string): boolean {
+  const element = window.document.getElementById(id);
+  expect(element).toBeTruthy();
+  return (element as unknown as HTMLElement).classList.contains('hidden');
+}
+
+/**
+ * Fill the form's required fields and submit, capturing the send-timeout
+ * callback so the test can fire it deterministically (happy-dom window timers
+ * are not driven by vitest fake timers). Returns the captured timeout fn and the
+ * id the iframe posted on its tools/call so a matching reply can be simulated.
+ */
+function submitAndCaptureTimeout(window: Window): { fireTimeout: () => void; requestId: unknown } {
+  setFieldValue(window, 'toInput', 'user@example.com');
+  setFieldValue(window, 'subjectInput', 'Subject');
+  setFieldValue(window, 'bodyInput', 'Hello there');
+
+  let captured: (() => void) | null = null;
+  (window as unknown as { setTimeout: typeof setTimeout }).setTimeout = ((fn: () => void, ms?: number) => {
+    if (ms === 75000) {
+      captured = fn;
+    }
+    return 1 as unknown as ReturnType<typeof setTimeout>;
+  }) as typeof setTimeout;
+
+  const form = window.document.getElementById('composeForm') as unknown as HTMLFormElement;
+  form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }) as unknown as Event);
+
+  const postMessage = window.parent.postMessage as unknown as { mock: { calls: Array<[{ method?: string; id?: unknown }]> } };
+  const toolCall = postMessage.mock.calls.map((call) => call[0]).find((msg) => msg?.method === 'tools/call');
+  expect(toolCall).toBeTruthy();
+  expect(captured).toBeTypeOf('function');
+
+  return { fireTimeout: () => (captured as unknown as () => void)(), requestId: toolCall?.id };
+}
+
+function dispatchToolReply(window: Window, id: unknown, payload: { result?: unknown; error?: unknown }): void {
+  window.dispatchEvent(new window.MessageEvent('message', {
+    data: { jsonrpc: '2.0', id, ...payload },
+  }));
 }
 
 function dispatchToolResult(window: Window, params: Record<string, unknown>): void {
@@ -306,6 +355,58 @@ describe('compose email iframe template', () => {
     expect(getFieldValue(composeWindow, 'toInput')).toBe('existing@example.com');
     expect(getFieldValue(composeWindow, 'subjectInput')).toBe('Existing draft');
     expect(getFieldValue(composeWindow, 'bodyInput')).toBe('Existing body');
+    expectNoConsoleWarnings(composeWindow);
+  });
+
+  it('shows an unknown-outcome state (not failure, not success) when the send gets no reply', () => {
+    composeWindow = loadComposeEmailWindow();
+    const { fireTimeout } = submitAndCaptureTimeout(composeWindow);
+
+    // While in flight, the form is locked.
+    expect((composeWindow.document.getElementById('sendButton') as unknown as HTMLButtonElement).disabled).toBe(true);
+
+    // The reply never arrives; the bounded timeout fires.
+    fireTimeout();
+
+    // The button recovers (no permanent silent-stuck), and we surface an honest
+    // "outcome unknown" state — NOT an error verdict (which would invite a
+    // duplicate send) and NOT success.
+    expect(isHidden(composeWindow, 'unknownBox')).toBe(false);
+    expect(composeWindow.document.getElementById('unknownTitle')?.textContent).toBe('Not sure if this sent.');
+    expect(composeWindow.document.getElementById('unknownText')?.textContent ?? '').toContain('Sent folder');
+    expect(isHidden(composeWindow, 'errorBox')).toBe(true);
+    expect(isHidden(composeWindow, 'successBox')).toBe(true);
+    expect((composeWindow.document.getElementById('sendButton') as unknown as HTMLButtonElement).disabled).toBe(false);
+    expectNoConsoleWarnings(composeWindow);
+  });
+
+  it('a matching reply before the timeout shows success and neutralizes the timeout', () => {
+    composeWindow = loadComposeEmailWindow();
+    const { fireTimeout, requestId } = submitAndCaptureTimeout(composeWindow);
+
+    dispatchToolReply(composeWindow, requestId, { result: { ok: true } });
+
+    expect(isHidden(composeWindow, 'successBox')).toBe(false);
+    expect(isHidden(composeWindow, 'unknownBox')).toBe(true);
+
+    // A late timeout callback (e.g. a stale timer that wasn't cancelled) must be
+    // a no-op now that the request resolved — it must not overwrite success with
+    // the unknown state.
+    fireTimeout();
+    expect(isHidden(composeWindow, 'unknownBox')).toBe(true);
+    expect(isHidden(composeWindow, 'successBox')).toBe(false);
+    expectNoConsoleWarnings(composeWindow);
+  });
+
+  it('clears the unknown-outcome state when the user edits a field to resend', () => {
+    composeWindow = loadComposeEmailWindow();
+    const { fireTimeout } = submitAndCaptureTimeout(composeWindow);
+    fireTimeout();
+    expect(isHidden(composeWindow, 'unknownBox')).toBe(false);
+
+    setFieldValue(composeWindow, 'bodyInput', 'Hello there, edited');
+
+    expect(isHidden(composeWindow, 'unknownBox')).toBe(true);
     expectNoConsoleWarnings(composeWindow);
   });
 
