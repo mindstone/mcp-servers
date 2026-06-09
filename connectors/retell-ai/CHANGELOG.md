@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Reworked `README.md` to explain when to choose this local Retell connector, what voice-agent workflows it helps with, and why call-changing actions need clear user review.
+
 ## [0.2.2] - 2026-05-20
 
 ### Added

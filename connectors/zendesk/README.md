@@ -3,7 +3,9 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-zendesk.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-zendesk)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Zendesk Support MCP server for Model Context Protocol hosts.
+Zendesk Support MCP server — tickets, users, comments, macros, account setup, and support-workflow discovery through a standard stdio MCP package.
+
+*Best for support teams that want an assistant to triage, summarize, and update Zendesk tickets from a local MCP host.*
 
 ## Status
 
@@ -12,6 +14,35 @@ Zendesk Support MCP server for Model Context Protocol hosts.
 - **Tools:** [20](./src/tools/) (tickets, users, comments, macros)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
+
+## Why this exists
+
+Zendesk has announced its own MCP client and server experiences for broader platform integration. This package is for MCP hosts that want a local Zendesk Support connector they can install and run directly.
+
+It helps an assistant do the support work humans usually ask for: find urgent tickets, pull the latest context, draft or add comments, apply macros, look up users and organizations, and inspect support setup. The benefit is faster ticket triage and follow-up while treating customer-authored ticket text as something to quote and summarize, not as instructions to obey.
+
+## Example interaction
+
+> "Find high-priority open Zendesk tickets and show me the latest details for the first one."
+
+Tools the host calls:
+1. `search_zendesk_tickets` — searches `type:ticket status:open priority:high` and returns ticket summaries.
+2. `get_zendesk_ticket` — fetches the selected ticket, including wrapped subject and description text.
+
+Response (trimmed):
+
+```json
+{
+  "ok": true,
+  "ticket": {
+    "id": 12345,
+    "status": "open",
+    "priority": "high",
+    "subject": "<untrusted-content source=\"external-ticket\">Login issue</untrusted-content>",
+    "description": "<untrusted-content source=\"external-ticket\">Customer cannot access the admin dashboard.</untrusted-content>"
+  }
+}
+```
 
 ## Requirements
 
@@ -187,6 +218,14 @@ EOF
 - `list_zendesk_macros` — List or search macros
 - `get_zendesk_macro` — Get macro details
 - `apply_zendesk_macro` — Preview and apply macro to ticket
+
+## Security notes
+
+- Zendesk API-token credentials live in `accounts.json`; OAuth credentials are read from `credentials/*.token.json` under `ZENDESK_CONFIG_PATH`.
+- Host bridge calls, when configured, go to `127.0.0.1` using the token from `MCP_HOST_BRIDGE_STATE`.
+- Ticket subjects, descriptions, and comment bodies are wrapped in `<untrusted-content source="external-ticket">...</untrusted-content>` with close-tag escaping before model exposure.
+- Ticket exports that write files are constrained to the system temp directory.
+- Account removal, ticket updates, ticket comments, and macro application are marked so capable hosts can ask before changing support data.
 
 ## Smoke test
 

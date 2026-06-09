@@ -11,6 +11,9 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Changed
+- Reworked `README.md` to explain when to choose this local Gamma connector, what creation/export workflows it helps with, and the main setup and safety notes.
+
 ## [0.3.2] - 2026-05-14
 ### Added
 - **registry**: backfill Gamma server.json and bake into _template + CI. New connectors inherit a working server.json from the template with mcpName placeholder; CI gate enforces cross-file consistency and runs mcp-publisher validate on every connector with a server.json.
@@ -45,5 +48,3 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 - **gamma**: externalize Gamma MCP connector to standalone package
-
-
