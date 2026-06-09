@@ -9,21 +9,23 @@ A synthetic MCP server used to validate the rebel-oss release pipeline end-to-en
 
 
 
-> **Status: pending.** This connector does not yet have a `STATUS.json`. The values below are derived from `package.json` and `server.json` and have not been editorially reviewed.
-
 ## Status
 
 | Field | Value |
 |-------|-------|
 | Version | 0.0.3 |
-| Auth | Unknown (—) |
-| Tools | — (—) |
-| Surface | — |
+| Auth | None (—) |
+| Tools | 1 (—) |
+| Surface | local protocol |
 
 ## Evidence
 
 | Artefact | Location |
 |----------|----------|
+| Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/canary/CHANGELOG.md) |
+| Tools source | [`connectors/canary/src/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/canary/src/) |
+| Tests | [`connectors/canary/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/canary/test/) |
+| Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/canary/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/canary/server.json) |
 | npm package | [@mindstone/mcp-server-canary](https://www.npmjs.com/package/@mindstone/mcp-server-canary) |
 | Source directory | [`connectors/canary/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/canary) |
