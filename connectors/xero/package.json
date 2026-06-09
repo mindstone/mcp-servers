@@ -1,13 +1,13 @@
 {
   "name": "@mindstone/mcp-server-xero",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "mcpName": "io.github.mindstone/mcp-server-xero",
   "description": "Xero MCP server for invoices, contacts, payments, quotes, and financial reports",
   "license": "MIT",
   "main": "dist/index.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mindstone/mcp-servers.git",
+    "url": "git+https://github.com/mindstone/mcp-servers.git",
     "directory": "connectors/xero"
   },
   "homepage": "https://github.com/mindstone/mcp-servers/tree/main/connectors/xero",

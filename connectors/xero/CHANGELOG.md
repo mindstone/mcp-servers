@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.0.16] - 2026-06-09
+
+### Fixed
+- Replaced unavailable legacy Custom Connection scopes (`accounting.transactions` and `accounting.reports.read`) with the granular scopes exposed by Xero's Custom Connection portal.
+- Kept token request scope guidance, invalid-scope errors, and setup instructions aligned through a shared scope list.
+
 ## [0.0.15] - 2026-06-08
 
 ### Added

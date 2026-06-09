@@ -1,10 +1,11 @@
 import axios from "axios";
 
+import { XERO_CUSTOM_CONNECTION_SCOPE_MESSAGE } from "../clients/xero-scopes.js";
+
 const REQUIRED_SCOPE_MESSAGE =
   "Xero authentication failed: your Custom Connection is missing required scopes. " +
   "Go to https://developer.xero.com/app/manage, select your app, and ensure these scopes are enabled: " +
-  "accounting.transactions, accounting.contacts, accounting.settings, accounting.reports.read, " +
-  "accounting.attachments.read, payroll.settings, payroll.employees, payroll.timesheets";
+  XERO_CUSTOM_CONNECTION_SCOPE_MESSAGE;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
