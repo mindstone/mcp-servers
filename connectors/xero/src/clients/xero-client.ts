@@ -9,6 +9,7 @@ import {
 
 import { ensureError } from "../helpers/ensure-error.js";
 import { formatTokenRequestError } from "../helpers/format-token-error.js";
+import { XERO_CUSTOM_CONNECTION_SCOPE } from "./xero-scopes.js";
 
 dotenv.config();
 
@@ -100,8 +101,6 @@ class CustomConnectionsXeroClient extends MCPXeroClient {
   }
 
   public async getClientCredentialsToken(): Promise<TokenSet> {
-    const scope =
-      "accounting.transactions accounting.contacts accounting.settings accounting.reports.read accounting.attachments.read payroll.settings payroll.employees payroll.timesheets";
     const credentials = Buffer.from(
       `${this.clientId}:${this.clientSecret}`,
     ).toString("base64");
@@ -109,7 +108,9 @@ class CustomConnectionsXeroClient extends MCPXeroClient {
     try {
       const response = await axios.post(
         "https://identity.xero.com/connect/token",
-        `grant_type=client_credentials&scope=${encodeURIComponent(scope)}`,
+        `grant_type=client_credentials&scope=${encodeURIComponent(
+          XERO_CUSTOM_CONNECTION_SCOPE,
+        )}`,
         {
           headers: {
             Authorization: `Basic ${credentials}`,
