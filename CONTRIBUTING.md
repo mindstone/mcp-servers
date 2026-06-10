@@ -85,6 +85,28 @@ This step is currently manual; it will move into the publish workflow once prove
 - **Linting**: Run `npm run lint` before submitting
 - **Dependencies**: Keep dependencies minimal. Use the MCP SDK (`@modelcontextprotocol/sdk`) and Zod for validation
 
+### Date & timestamp fields
+
+Strict MCP hosts validate a tool call against the connector's **exported** JSON
+schema *before* the connector code runs, and LLMs frequently send ISO date
+strings for timestamp fields. A field exported as bare `type: number` therefore
+gets such calls rejected at the host boundary — your runtime coercion never
+runs. Rules:
+
+- **Epoch-ms fields MUST advertise `number | string` in the exported schema**,
+  coerce parseable date strings to epoch ms at runtime, and reject un-parseable
+  strings with an actionable message. Copy the `epochMsField()` helper from
+  `connectors/_template/src/server.ts` (verified to export
+  `anyOf: [integer, string]` under zod v3).
+- **Plain date-string fields** (e.g. `YYYY-MM-DD` passed through to the API)
+  use `z.string()` with the exact accepted format in the description.
+- **Every date/timestamp field's description states the accepted forms with an
+  example**, e.g. `'Unix timestamp in milliseconds (number, e.g. 1735689600000)
+  or a parseable date string (e.g. "2026-01-01")'`.
+
+Add a tools/list test asserting the exported schema accepts both forms — see
+`connectors/retell-ai/test/tools/calls-timestamps.test.ts` for the pattern.
+
 ## Pull Requests
 
 - Keep PRs focused on a single change
