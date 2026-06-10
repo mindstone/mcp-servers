@@ -85,6 +85,7 @@ export const DEFAULT_NEXT_STEP_BY_CODE: Record<string, string> = {
   SLACK_FILE_URL_UNTRUSTED: 'list_slack_workspaces',
   INVALID_TEAM_ID: 'list_slack_workspaces',
   TOKEN_EXPIRED_REFRESH_DISABLED: 'authenticate_slack_workspace',
+  REFRESH_NO_CLIENT_CREDENTIALS: 'authenticate_slack_workspace',
   NOT_CONNECTED: 'authenticate_slack_workspace',
   MISSING_SCOPE: 'authenticate_slack_workspace',
   RATE_LIMITED: 'retry_after_delay',
@@ -123,6 +124,12 @@ export class ConnectorError extends Error {
 /** Error code thrown by the token provider when refresh is disabled and the
  *  token has expired — caller must convert to the `auth_required` shape. */
 export const TOKEN_EXPIRED_REFRESH_DISABLED = 'TOKEN_EXPIRED_REFRESH_DISABLED';
+
+/** Error code thrown when a rotating token needs refreshing but no OAuth client
+ *  credentials (`SLACK_CLIENT_ID`/`SLACK_CLIENT_SECRET`) are configured on this
+ *  surface. Saved non-rotating tokens never reach this — they authorize the API
+ *  directly without client credentials. Caller converts to `auth_required`. */
+export const REFRESH_NO_CLIENT_CREDENTIALS = 'REFRESH_NO_CLIENT_CREDENTIALS';
 
 /**
  * Refresh failure classification — distinct codes per failure mode so the

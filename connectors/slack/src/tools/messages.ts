@@ -418,7 +418,6 @@ Posted as the user — messages are editable in Slack.`,
         ts_slack: result.ts,
         ts_iso: result.ts ? slackTsToDatetime(result.ts) : undefined,
         text: result.message?.text,
-        message: result.message?.text,
         ...(dmRecipient
           ? {
               recipient: {

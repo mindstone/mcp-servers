@@ -2,6 +2,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import {
   ConnectorError,
   REFRESH_AUTH_REJECTED,
+  REFRESH_NO_CLIENT_CREDENTIALS,
   REQUEST_TIMEOUT_MS,
   TOKEN_EXPIRED_REFRESH_DISABLED,
 } from './types.js';
@@ -11,13 +12,16 @@ import {
  * shape rather than the generic `{ ok: false, ... }` error envelope.
  *
  * Stage 0 host's `AuthOrchestrator` listens for `status: 'auth_required'`
- * — a refresh failure where Slack rejected the refresh token, OR a
- * never-authed bot token, both belong here so the host can dispatch the
- * Slack OAuth flow.
+ * — a refresh failure where Slack rejected the refresh token, a never-authed
+ * bot token, OR a rotating token that needs refreshing on a surface with no
+ * OAuth client credentials wired (REFRESH_NO_CLIENT_CREDENTIALS) — all belong
+ * here so the host can dispatch the Slack OAuth flow rather than surfacing a
+ * passive `{ ok: false }` the user can't act on.
  */
 const AUTH_REQUIRED_CODES: ReadonlyArray<string> = [
   TOKEN_EXPIRED_REFRESH_DISABLED,
   REFRESH_AUTH_REJECTED,
+  REFRESH_NO_CLIENT_CREDENTIALS,
   'NO_TOKEN',
 ];
 
