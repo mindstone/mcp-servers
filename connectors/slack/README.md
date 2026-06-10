@@ -9,7 +9,7 @@ Slack workspace MCP server — channels, messages, threads, reactions, users, fi
 
 ## Status
 
-- **Version:** [0.1.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-slack)
+- **Version:** [0.1.4](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-slack)
 - **Auth:** OAuth (host-orchestrated) ([`SLACK_CLIENT_SECRET`](./server.json))
 - **Tools:** [23](./src/tools/) (messages, channels, threads, users, files)
 - **Surface:** cloud-api
@@ -118,11 +118,11 @@ This server is designed to run alongside a host application that performs the Sl
 
 - `SLACK_CONFIG_PATH` — Path to the Slack config directory (host-managed). Contains `config.json` (workspace metadata) and `workspaces/{teamId}.json` (per-workspace tokens, mode 0600).
 - `SLACK_TEAM_ID` — Workspace team ID (per-workspace instance).
-- `SLACK_CLIENT_ID` — OAuth Connected App client ID.
-- `SLACK_CLIENT_SECRET` — OAuth Connected App client secret.
 
 ### Optional environment variables
 
+- `SLACK_CLIENT_ID` — OAuth Connected App client ID. Only needed to refresh a *rotating* token. Saved non-rotating tokens authorize the Slack API directly without it. When a refresh is required but this is absent, the server fails loud with `REFRESH_NO_CLIENT_CREDENTIALS` and directs the host to re-authenticate.
+- `SLACK_CLIENT_SECRET` — OAuth Connected App client secret. Same conditions as `SLACK_CLIENT_ID`.
 - `SLACK_DISABLE_REFRESH` — Set to `1` to disable token refresh on this surface. The server will fail-closed with a structured `auth_required` response on token expiry instead of attempting an `oauth.v2.access` refresh. Use this on the cloud surface so desktop remains the sole refresh authority and avoids racing for single-use refresh tokens.
 - `SLACK_REQUEST_TIMEOUT_MS` — Override the default 60s upstream timeout. Must be a positive integer ≤ 300000 (5 minutes).
 

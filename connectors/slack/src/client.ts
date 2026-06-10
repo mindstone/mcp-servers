@@ -21,22 +21,32 @@ const SLACK_CLIENT_ID = process.env.SLACK_CLIENT_ID;
 const SLACK_CLIENT_SECRET = process.env.SLACK_CLIENT_SECRET;
 
 /**
- * Construct the token provider only when ALL four env vars are set, AND the
- * team ID matches the Slack workspace pattern. An invalid team ID (e.g.
- * `../../etc/passwd`) throws from the provider constructor; we surface that
- * via `getLastBotTokenError()` rather than crashing the module load, so the
- * server still starts and reports the misconfiguration to the user.
+ * Construct the token provider whenever the host has wired a config path AND a
+ * team ID. OAuth client credentials (`SLACK_CLIENT_ID`/`SLACK_CLIENT_SECRET`)
+ * are intentionally NOT required here: they are only needed to REFRESH a
+ * rotating token (see `SlackTokenProvider.refreshToken`). Non-rotating saved
+ * tokens — the common host-injected case — authorize the Slack API directly,
+ * so requiring client creds up front wrongly rejected valid saved tokens with
+ * "Slack not connected" when the host had not injected them. When a
+ * refresh IS required but client creds are absent, the provider throws a
+ * structured `REFRESH_NO_CLIENT_CREDENTIALS` error so the host can dispatch
+ * reauth instead of failing silently.
+ *
+ * An invalid team ID (e.g. `../../etc/passwd`) throws from the provider
+ * constructor; we surface that via `getLastBotTokenError()` rather than
+ * crashing the module load, so the server still starts and reports the
+ * misconfiguration to the user.
  */
 const tokenProviderOrError: { provider: SlackTokenProvider | null; error: string | null } = (() => {
-  if (!SLACK_CONFIG_PATH || !SLACK_TEAM_ID || !SLACK_CLIENT_ID || !SLACK_CLIENT_SECRET) {
+  if (!SLACK_CONFIG_PATH || !SLACK_TEAM_ID) {
     return { provider: null, error: null };
   }
   try {
     const provider = new SlackTokenProvider(
       SLACK_CONFIG_PATH,
       SLACK_TEAM_ID,
-      SLACK_CLIENT_ID,
-      SLACK_CLIENT_SECRET,
+      SLACK_CLIENT_ID ?? '',
+      SLACK_CLIENT_SECRET ?? '',
     );
     return { provider, error: null };
   } catch (err) {
