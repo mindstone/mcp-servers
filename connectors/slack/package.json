@@ -22,8 +22,9 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc && shx chmod +x dist/index.js && bash scripts/check-no-bridge-strings.sh",
-    "prepare": "npm run build",
+    "compile": "tsc && shx chmod +x dist/index.js",
+    "build": "npm run compile && bash scripts/check-no-bridge-strings.sh",
+    "prepare": "npm run compile",
     "prepublishOnly": "npm run build && npm run test && bash scripts/check-no-bridge-strings.sh",
     "watch": "tsc --watch",
     "start": "node dist/index.js",
