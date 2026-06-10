@@ -65,13 +65,23 @@ Full workflow lives in `CONTRIBUTING.md`. Agent-relevant invariants:
 
 ## Version-sync invariant
 
-When bumping a connector, three fields change in lockstep:
+When bumping a connector, the version changes in lockstep across these files:
 
 - `connectors/<name>/package.json` — `version`.
 - `connectors/<name>/package-lock.json` — top-level `version` and `packages[""].version`.
 - `connectors/<name>/server.json` — top-level `version` and `packages[0].version`.
+- `connectors/<name>/STATUS.json` — `version` (only if the connector has a `STATUS.json`; not every connector does). **Easy to forget — it is not part of the `mcp-publisher`/release tooling, but `scripts/check-status.mjs` rejects it on CI.**
 
 CI rejects PRs where these drift. The git tag at release time must also match.
+
+Bumping a version (or adding/removing a connector) also changes **generated, committed artifacts** that are *not* updated by the release tooling. Regenerate and commit them in the same change, or CI on `main` goes red:
+
+```bash
+node scripts/build-catalogue.mjs      # docs/catalogue/<name>.md + docs/index.md
+node scripts/gen-install-links.mjs    # the INSTALL_LINKS block in each connector README
+```
+
+(`--check` is the read-only CI variant of each.) See `docs/plans/260609_catalogue_drift_prevention.md` for why these are committed today and the options for removing the drift surface entirely.
 
 ## CHANGELOG conventions
 

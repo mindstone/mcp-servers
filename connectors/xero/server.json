@@ -1,0 +1,55 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mindstone/mcp-server-xero",
+  "title": "Xero",
+  "description": "Xero MCP server for invoices, contacts, payments, quotes, and financial reports.",
+  "version": "0.0.17",
+  "repository": {
+    "url": "https://github.com/mindstone/mcp-servers",
+    "source": "github",
+    "subfolder": "connectors/xero"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@mindstone/mcp-server-xero",
+      "version": "0.0.17",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "XERO_CLIENT_ID",
+          "description": "Xero Custom Connection client ID.",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "XERO_CLIENT_SECRET",
+          "description": "Xero Custom Connection client secret.",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "XERO_CLIENT_BEARER_TOKEN",
+          "description": "Optional externally-managed Xero bearer token. When set, this takes precedence over the Custom Connection client credentials.",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "com.mindstone.rebel": {
+        "catalogId": "xero",
+        "provider": "rebel-oss"
+      }
+    }
+  }
+}

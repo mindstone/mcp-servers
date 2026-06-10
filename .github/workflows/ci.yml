@@ -62,7 +62,7 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          # Auto-discover every directory under connectors/. Three exclusions:
+          # Auto-discover every directory under connectors/. Four exclusions:
           #
           #   _template              starter scaffolding; placeholders fail validation by design.
           #   google-workspace       Tools register from a nested `definitions/` directory, which
@@ -74,12 +74,19 @@ jobs:
           #                          standalone auth-tool registration; the heuristic counts
           #                          two registerTool calls but the actual surface is 36 tools.
           #                          Remove once the heuristic learns this pattern.
+          #   xero                   Tools register via a `server.tool(...)` factory iterating a
+          #                          tool-list array (src/tools/tool-factory.ts); the heuristic
+          #                          recognises neither registerTool() nor the definitions/tools.ts
+          #                          `name:` pattern, so it counts 0 against ~40 real tools. A
+          #                          generated STATUS.json would have to claim 0 tools to pass —
+          #                          editorially false — so xero stays catalogue-"pending" (no
+          #                          STATUS.json) until the heuristic learns this pattern.
           all=()
           for d in connectors/*/; do
             name="${d#connectors/}"
             name="${name%/}"
             case "$name" in
-              _template|google-workspace|microsoft-sharepoint) continue ;;
+              _template|google-workspace|microsoft-sharepoint|xero) continue ;;
             esac
             # Hard slug allowlist. Bash regex (not `grep`) so the match is
             # whole-string anchored against the full literal name — a value

@@ -5,9 +5,9 @@ title: browser-automation — mcp-servers catalogue
 
 # browser-automation
 
-Headless browser control via accessibility snapshots — navigate pages, fill forms, click elements, take screenshots, and manage tabs using the &#91;agent-browser&#93;&#40;https://www.npmjs.com/package/agent-browser&#41; CLI.
+Browser control you can watch: open pages, sign in, click around, fill forms, take screenshots, and keep a reusable browser session.
 
-
+*Best for practical web tasks where the user needs to see, approve, or reuse browser state instead of running a full browser-testing stack.*
 
 ## Status
 

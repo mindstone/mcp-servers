@@ -24,6 +24,9 @@
       --success-bg: #ecfdf5;
       --success-border: #bbf7d0;
       --success-text: #166534;
+      --warning-bg: #fffbeb;
+      --warning-border: #fde68a;
+      --warning-text: #92400e;
     }
 
     @media (prefers-color-scheme: dark) {
@@ -46,6 +49,9 @@
         --success-bg: #052e1b;
         --success-border: #166534;
         --success-text: #86efac;
+        --warning-bg: #2a2106;
+        --warning-border: #854d0e;
+        --warning-text: #fcd34d;
       }
     }
 
@@ -73,6 +79,9 @@
       --success-bg: #052e1b;
       --success-border: #166534;
       --success-text: #86efac;
+      --warning-bg: #2a2106;
+      --warning-border: #854d0e;
+      --warning-text: #fcd34d;
     }
 
     * {
@@ -244,6 +253,22 @@
       color: var(--success-text);
     }
 
+    .warning {
+      background: var(--warning-bg);
+      border-color: var(--warning-border);
+      color: var(--warning-text);
+      display: block;
+    }
+
+    .warning strong {
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .warning .warning-detail {
+      opacity: 0.85;
+    }
+
     .collapsed {
       border: 1px solid var(--border);
       border-radius: 10px;
@@ -306,6 +331,11 @@
 
       <div id="successBox" class="status success hidden"></div>
 
+      <div id="unknownBox" class="status warning hidden" role="status" aria-live="polite">
+        <strong id="unknownTitle"></strong>
+        <span id="unknownText" class="warning-detail"></span>
+      </div>
+
       <div class="actions">
         <button id="cancelButton" type="button" class="button button-secondary">Cancel</button>
         <button id="sendButton" type="submit" class="button button-primary">
@@ -326,6 +356,12 @@
       var pendingPayload = null;
       var sending = false;
       var collapsed = false;
+      var outcomeUnknown = false;
+      var sendTimeoutId = null;
+      // Just beyond the host-side tool-call timeout (60s) so a legitimately slow
+      // send resolves to its real result first; this only fires when the reply
+      // is genuinely lost (REBEL-677), so the button can never stay stuck-silent.
+      var SEND_TIMEOUT_MS = 75000;
 
       var composeForm = document.getElementById('composeForm');
       var collapsedState = document.getElementById('collapsedState');
@@ -351,6 +387,9 @@
       var errorBox = document.getElementById('errorBox');
       var errorText = document.getElementById('errorText');
       var successBox = document.getElementById('successBox');
+      var unknownBox = document.getElementById('unknownBox');
+      var unknownTitle = document.getElementById('unknownTitle');
+      var unknownText = document.getElementById('unknownText');
 
       function applyThemeFromHostContext() {
         try {
@@ -472,6 +511,45 @@
         postResize();
       }
 
+      function clearSendTimeout() {
+        if (sendTimeoutId !== null) {
+          clearTimeout(sendTimeoutId);
+          sendTimeoutId = null;
+        }
+      }
+
+      function clearUnknown() {
+        outcomeUnknown = false;
+        unknownTitle.textContent = '';
+        unknownText.textContent = '';
+        unknownBox.classList.add('hidden');
+      }
+
+      // No reply ever came back for the send (e.g. the host's response was lost
+      // before reaching this iframe). We genuinely don't know whether the email
+      // went out, so we must NOT claim success or failure: re-enable the form and
+      // tell the user to verify before resending (the send is not idempotent, so
+      // a blind retry could send a duplicate). REBEL-677 / FOX-3484.
+      function showSendUnknown() {
+        outcomeUnknown = true;
+        clearError();
+        clearSuccess();
+        unknownTitle.textContent = 'Not sure if this sent.';
+        unknownText.textContent = "Rebel didn't hear back in time. Check your Sent folder before sending again, so it doesn't go out twice.";
+        unknownBox.classList.remove('hidden');
+        postResize();
+      }
+
+      function handleSendTimeout() {
+        sendTimeoutId = null;
+        if (!pendingRequestId) {
+          return;
+        }
+        pendingRequestId = null;
+        setSending(false);
+        showSendUnknown();
+      }
+
       function setCcVisible(visible) {
         ccRow.classList.toggle('hidden', !visible);
         toggleCcButton.textContent = visible ? 'Hide CC' : 'Add CC';
@@ -515,6 +593,9 @@
         setSending(true);
         clearError();
         clearSuccess();
+        clearUnknown();
+        clearSendTimeout();
+        sendTimeoutId = setTimeout(handleSendTimeout, SEND_TIMEOUT_MS);
 
         window.parent.postMessage(
           {
@@ -618,9 +699,15 @@
 
       cancelButton.addEventListener('click', function () {
         if (sending) return;
+        // After a lost-reply timeout we don't know if the email sent, so don't
+        // claim "Nothing sent." on collapse — point the user to verify instead.
+        var collapseMessage = outcomeUnknown
+          ? 'Collapsed. Check your Sent folder if you are not sure.'
+          : 'Draft collapsed. Nothing sent.';
         clearError();
         clearSuccess();
-        setCollapsed(true, 'Draft collapsed. Nothing sent.');
+        clearUnknown();
+        setCollapsed(true, collapseMessage);
       });
 
       reopenButton.addEventListener('click', function () {
@@ -641,6 +728,7 @@
         element.addEventListener('input', function () {
           clearError();
           clearSuccess();
+          clearUnknown();
           postResize();
         });
       });
@@ -664,6 +752,8 @@
         }
 
         pendingRequestId = null;
+        clearSendTimeout();
+        clearUnknown();
         setSending(false);
 
         if (data.error) {

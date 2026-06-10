@@ -7,7 +7,7 @@ title: retell-ai — mcp-servers catalogue
 
 Voice agent phone calls, call management, agent configuration, LLM prompt management, and voice discovery via &#91;Retell AI&#93;&#40;https://www.retellai.com/&#41; API.
 
-
+*Best for MCP hosts that want a local voice-operations connector for placing calls, checking call history, and adjusting agent prompts with user confirmation.*
 
 ## Status
 

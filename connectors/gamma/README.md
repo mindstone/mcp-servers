@@ -3,7 +3,9 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-gamma.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-gamma)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Gamma AI presentation generation MCP server for Model Context Protocol hosts. Create AI-powered presentations, documents, webpages, and social posts, manage themes and folders, and export content through a standardised MCP interface.
+Gamma MCP server for creating Gamma presentations, documents, webpages, and social posts, listing themes and folders, and polling async generation/export status.
+
+*Best for MCP hosts that want to create Gamma decks and exports from a local package using an API key they already manage.*
 
 ## Status
 
@@ -12,6 +14,33 @@ Gamma AI presentation generation MCP server for Model Context Protocol hosts. Cr
 - **Tools:** [6](./src/tools/) (themes, folders, generation)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
+
+## Why this exists
+
+Gamma's hosted MCP server is the easiest path for no-code and remote-connector flows. This package is for local MCP hosts that already manage npm packages and API keys.
+
+It gives an assistant the useful Gamma creation loop: pick a theme or folder, start a deck/document/webpage generation, wait for it to finish, and return the Gamma link or exported PDF/PPTX. The benefit is simple: turn a prompt into a usable Gamma asset without leaving the host.
+
+## Example interaction
+
+> "Create a 10-slide investor update about Q4 results using our corporate theme and export it as PPTX."
+
+Tools the host calls:
+1. `gamma_list_themes` — finds the custom theme ID.
+2. `gamma_generate` — starts a presentation generation with `export_as: "pptx"`.
+3. `gamma_get_status` — polls until Gamma completes the deck and export.
+
+Response (trimmed):
+
+```json
+{
+  "generation_id": "gen_123",
+  "status": "completed",
+  "gamma_url": "https://gamma.app/docs/...",
+  "pptx_url": "https://...",
+  "file_path": "/tmp/gamma_export_gen_123_abcd.pptx"
+}
+```
 
 ## Requirements
 
@@ -83,8 +112,8 @@ node dist/index.js
 - `GAMMA_EXPORT_POLL_INTERVAL_MS` — export poll interval in milliseconds (default: `5000`)
 - `GAMMA_EXPORT_POLL_MAX_ATTEMPTS` — maximum export poll attempts (default: `12`)
 - `GAMMA_REQUEST_TIMEOUT_MS` — optional override (positive integer ms, max 30 min) for the outbound HTTP request timeout applied to both Gamma API and host-bridge calls. Default: `60000` (60s). Raise this if you see `TIMEOUT` errors on slow submits; lower it if you want tighter bounds.
-- `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
-- `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
+- `MCP_HOST_BRIDGE_STATE` — host-managed bridge state file used for credential management when a host provides one; not needed for ordinary manual setup.
+- `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`.
 
 ## Host configuration examples
 
@@ -133,6 +162,14 @@ node dist/index.js
 - `gamma_generate` — Create AI-powered presentations, documents, webpages, or social posts
 - `gamma_create_from_template` — Clone and modify an existing Gamma document using AI
 - `gamma_get_status` — Poll the status of a Gamma generation
+
+## Security notes
+
+- Gamma API calls use `GAMMA_API_KEY` as an `x-api-key` header.
+- `configure_gamma_api_key` can store the key in memory, or hand it to a host bridge when `MCP_HOST_BRIDGE_STATE` is present.
+- Host bridge requests, when configured, go to `127.0.0.1` using the token from the bridge state file.
+- PDF/PPTX exports are downloaded from Gamma-provided URLs into the system temp directory with a sanitized generation ID in the filename.
+- Generation can create content in the user's Gamma workspace, may consume Gamma credits, and can set workspace/external sharing options.
 
 ## Licence
 
