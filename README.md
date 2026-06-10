@@ -93,6 +93,19 @@ For per-connector security notes, see each connector's README.
 
 To report a vulnerability, please see [SECURITY.md](SECURITY.md).
 
+## The Mindstone open-source family
+
+This repo is one of several open-source projects from Mindstone:
+
+- [Rebel](https://mindstone.com) — the AI workspace desktop app that ships these
+  connectors out of the box (source release in progress).
+- [Super-MCP](https://github.com/mindstone/Super-MCP) — a proxy MCP router that
+  loads only the tools you actually need, saving your context window.
+- [rebel-system](https://github.com/mindstone/rebel-system-oss) — the public
+  Rebel system: skills, prompts, operators, help docs, and templates.
+- [meeting-note-recorder](https://github.com/mindstone/meeting-note-recorder)
+  — meeting detection, recording, and live transcripts (the Rebel note-taker).
+
 ## Licence
 
 Each connector is licensed under [FSL-1.1-MIT](https://fsl.software/FSL-1.1-MIT.template.md) — see the LICENSE file in each connector directory for details.
