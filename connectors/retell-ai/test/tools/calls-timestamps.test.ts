@@ -97,12 +97,52 @@ describe('list_calls timestamp filters — epoch ms OR date string', () => {
     expect(typeof filter.before_start_timestamp).toBe('number');
   });
 
-  it('rejects an un-parseable date string before reaching the API', async () => {
-    let apiCalled = false;
+  // Strings that must fail validation BEFORE the API is reached:
+  // - 'not-a-date': un-parseable garbage.
+  // - '1735689600': epoch SECONDS — forwarding it as ms would be 1000x wrong;
+  //   digit-only strings outside the unambiguous epoch-ms window [1e12, 1e14)
+  //   are rejected, not coerced.
+  // - '1': tiny digit-only string — must never fall through to Date.parse
+  //   (V8 would read "1" as year 2001).
+  it.each(['not-a-date', '1735689600', '1'])(
+    'rejects %j before reaching the API',
+    async (badTimestamp) => {
+      let apiCalled = false;
+      mswServer.use(
+        // First in the list wins in MSW — must precede the default handlers.
+        http.post(`${RETELL_API_BASE}/v3/list-calls`, () => {
+          apiCalled = true;
+          return HttpResponse.json([]);
+        }),
+        ...createRetellHandlers(),
+      );
+      testClient = await createTestClient({
+        env: { RETELL_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      // Zod validation failure surfaces as a tool error result (or a protocol
+      // error, depending on SDK version) — either way the API must not be hit.
+      let isError = false;
+      try {
+        const result = await testClient.client.callTool({
+          name: 'list_calls',
+          arguments: { filter_criteria: { after_start_timestamp: badTimestamp } },
+        });
+        isError = result.isError === true;
+      } catch {
+        isError = true;
+      }
+      expect(isError).toBe(true);
+      expect(apiCalled).toBe(false);
+    },
+  );
+
+  it('accepts a 13-digit epoch-ms string and forwards it as a number', async () => {
+    let capturedBody: Record<string, unknown> | null = null;
     mswServer.use(
       // First in the list wins in MSW — must precede the default handlers.
-      http.post(`${RETELL_API_BASE}/v3/list-calls`, () => {
-        apiCalled = true;
+      http.post(`${RETELL_API_BASE}/v3/list-calls`, async ({ request }) => {
+        capturedBody = await request.json() as Record<string, unknown>;
         return HttpResponse.json([]);
       }),
       ...createRetellHandlers(),
@@ -111,20 +151,17 @@ describe('list_calls timestamp filters — epoch ms OR date string', () => {
       env: { RETELL_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
     });
 
-    // Zod validation failure surfaces as a tool error result (or a protocol
-    // error, depending on SDK version) — either way the API must not be hit.
-    let isError = false;
-    try {
-      const result = await testClient.client.callTool({
-        name: 'list_calls',
-        arguments: { filter_criteria: { after_start_timestamp: 'not-a-date' } },
-      });
-      isError = result.isError === true;
-    } catch {
-      isError = true;
-    }
-    expect(isError).toBe(true);
-    expect(apiCalled).toBe(false);
+    const result = await testClient.client.callTool({
+      name: 'list_calls',
+      arguments: { filter_criteria: { after_start_timestamp: '1735689600000' } },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(JSON.parse(text).ok).toBe(true);
+
+    expect(capturedBody).not.toBeNull();
+    const filter = capturedBody!.filter_criteria as Record<string, unknown>;
+    expect(filter.after_start_timestamp).toBe(1735689600000);
+    expect(typeof filter.after_start_timestamp).toBe('number');
   });
 
   it('passes plain epoch-ms numbers through unchanged', async () => {

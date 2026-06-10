@@ -19,16 +19,24 @@ import { checkDynamicVariableReferences } from '../precall-checks.js';
 const E164_REGEX = /^\+[1-9]\d{1,14}$/;
 
 /**
- * Coerce a parseable date string (ISO 8601, RFC 2822, or a numeric string) to
- * epoch milliseconds. Non-strings and un-parseable strings pass through
- * unchanged — the refine in epochMsField rejects the latter.
+ * Coerce a parseable date string (ISO 8601, RFC 2822, or a digit-only epoch-ms
+ * string) to epoch milliseconds. Non-strings and un-coercible strings pass
+ * through unchanged — the refine in epochMsField rejects the latter.
  */
 const coerceEpochMs = (val: unknown): unknown => {
   if (typeof val !== 'string') return val;
   const trimmed = val.trim();
   if (trimmed === '') return val;
-  const num = Number(trimmed);
-  if (Number.isFinite(num) && num > 0) return num;
+  if (/^\d+$/.test(trimmed)) {
+    // Digit-only strings are accepted ONLY in the unambiguous epoch-ms window
+    // [1e12, 1e14) (≈ Sep 2001 → year 5138). Anything else — Unix SECONDS
+    // ("1735689600" would silently be 1000x off), microseconds, tiny values —
+    // is returned unchanged so the refine rejects it with an actionable
+    // message. Never let digit-only strings fall through to Date.parse:
+    // V8 parses "5" as year 2005 and "0" as 2000.
+    const num = Number(trimmed);
+    return num >= 1e12 && num < 1e14 ? num : val;
+  }
   const ms = new Date(trimmed).getTime();
   return Number.isNaN(ms) ? val : ms;
 };
@@ -36,7 +44,8 @@ const coerceEpochMs = (val: unknown): unknown => {
 /**
  * Epoch-milliseconds field that advertises BOTH number and string in the
  * exported JSON schema (anyOf integer|string), while coercing date strings to
- * epoch ms and rejecting un-parseable strings at runtime.
+ * epoch ms and rejecting un-coercible strings (including ambiguous digit-only
+ * strings such as Unix seconds) at runtime.
  *
  * Why: strict MCP hosts validate a tool call against the exported schema
  * BEFORE the connector runs, and LLMs frequently send ISO date strings for
@@ -47,7 +56,7 @@ const coerceEpochMs = (val: unknown): unknown => {
 const epochMsField = () =>
   z.preprocess(coerceEpochMs, z.union([z.number().int(), z.string()]))
     .refine((v): v is number => typeof v === 'number', {
-      message: 'Expected epoch milliseconds (number) or a parseable date string (e.g. "2026-01-01").',
+      message: 'Expected epoch milliseconds (number), a 13-digit epoch-ms string, or a parseable date string (e.g. "2026-01-01").',
     });
 
 function validateE164(field: 'from_number' | 'to_number', value: string): void {

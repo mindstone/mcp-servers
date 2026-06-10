@@ -94,10 +94,15 @@ gets such calls rejected at the host boundary — your runtime coercion never
 runs. Rules:
 
 - **Epoch-ms fields MUST advertise `number | string` in the exported schema**,
-  coerce parseable date strings to epoch ms at runtime, and reject un-parseable
-  strings with an actionable message. Copy the `epochMsField()` helper from
-  `connectors/_template/src/server.ts` (verified to export
-  `anyOf: [integer, string]` under zod v3).
+  coerce parseable date strings to epoch ms at runtime, and reject un-coercible
+  strings with an actionable message. Digit-only strings are accepted only in
+  the unambiguous epoch-ms window `[1e12, 1e14)`; anything else — notably Unix
+  *seconds* like `"1735689600"`, which would silently be 1000x off — is
+  rejected, and digit-only strings must never fall through to `Date.parse`
+  (V8 reads `"5"` as the year 2005). Copy the `epochMsField()` helper from
+  `connectors/_template/src/server.ts` (export shape verified by connector
+  tools/list tests under the current SDK/zod v3 lockfile; keep a tools/list
+  export test when changing SDK/Zod versions).
 - **Plain date-string fields** (e.g. `YYYY-MM-DD` passed through to the API)
   use `z.string()` with the exact accepted format in the description.
 - **Every date/timestamp field's description states the accepted forms with an

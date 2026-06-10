@@ -5,7 +5,7 @@
 ## [0.2.3] - 2026-06-10
 
 ### Fixed
-- **`list_calls` timestamp filters reject ISO date strings at strict hosts**: `filter_criteria.after_start_timestamp` / `before_start_timestamp` now advertise both number and string in the exported tool schema and coerce parseable date strings (e.g. `"2026-01-01"`) to epoch milliseconds at runtime. Strict MCP hosts validate against the exported schema before the connector runs, so the previous bare-number schema rejected such calls before the connector could coerce. Un-parseable strings are still rejected with an actionable message.
+- **`list_calls` timestamp filters reject ISO date strings at strict hosts**: `filter_criteria.after_start_timestamp` / `before_start_timestamp` now advertise both number and string in the exported tool schema and coerce parseable date strings (e.g. `"2026-01-01"`) to epoch milliseconds at runtime. Strict MCP hosts validate against the exported schema before the connector runs, so the previous bare-number schema rejected such calls before the connector could coerce. Digit-only strings are accepted only in the unambiguous epoch-ms range (13-14 digits); Unix-seconds strings (e.g. `"1735689600"`), other ambiguous digit strings, and un-parseable strings are rejected with an actionable message.
 
 ### Changed
 - Reworked `README.md` to explain when to choose this local Retell connector, what voice-agent workflows it helps with, and why call-changing actions need clear user review.
