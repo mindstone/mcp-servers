@@ -1,9 +1,8 @@
 {
   "$schema": "../../docs/status.schema.json",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "vanta",
   "package": "@mindstone/mcp-server-vanta",
-  "version": "0.1.0",
   "auth": {
     "type": "oauth",
     "envVars": [

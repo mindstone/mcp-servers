@@ -1,9 +1,8 @@
 {
   "$schema": "../../docs/status.schema.json",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "quickbooks",
   "package": "@mindstone/mcp-server-quickbooks",
-  "version": "0.3.1",
   "auth": {
     "type": "oauth",
     "envVars": [

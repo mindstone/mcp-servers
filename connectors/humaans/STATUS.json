@@ -1,9 +1,8 @@
 {
   "$schema": "../../docs/status.schema.json",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "humaans",
   "package": "@mindstone/mcp-server-humaans",
-  "version": "0.2.2",
   "auth": {
     "type": "api-key",
     "envVars": [

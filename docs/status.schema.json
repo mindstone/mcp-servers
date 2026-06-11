@@ -9,7 +9,6 @@
     "schemaVersion",
     "name",
     "package",
-    "version",
     "auth",
     "tools",
     "surface",
@@ -19,8 +18,8 @@
     "$schema": { "type": "string" },
     "schemaVersion": {
       "type": "integer",
-      "const": 1,
-      "description": "STATUS.json schema version. Bumped when a required field is added or semantics change; see CONTRIBUTING.md for the migration story."
+      "const": 2,
+      "description": "STATUS.json schema version. Bumped when a required field is added or semantics change; see CONTRIBUTING.md for the migration story. v1 -> v2: the stored 'version' field was removed — the version is derived from package.json (docs/plans/260609_catalogue_drift_prevention.md, Option 4). additionalProperties:false makes a present 'version' schema-invalid, and scripts/check-status.mjs rejects it explicitly."
     },
     "name": {
       "type": "string",
@@ -31,11 +30,6 @@
       "type": "string",
       "description": "Published npm package name.",
       "pattern": "^@mindstone/mcp-server-[a-z0-9-]+$"
-    },
-    "version": {
-      "type": "string",
-      "description": "Current published version. Must match package.json and server.json.",
-      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$"
     },
     "auth": {
       "type": "object",

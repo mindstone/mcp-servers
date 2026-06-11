@@ -1,9 +1,8 @@
 {
   "$schema": "../../docs/status.schema.json",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "office",
   "package": "@mindstone/mcp-server-office",
-  "version": "0.2.0",
   "auth": {
     "type": "none",
     "envVars": []

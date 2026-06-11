@@ -19,7 +19,7 @@ A release reaches npm only by passing all of these, in order:
 Structural complements that keep the chain gate-complete:
 
 - **No version bumps in PRs.** A required PR check (`.github/workflows/version-bump-guard.yml`) fails any PR that changes an existing connector's version, so a PR merge can never be a surprise publish trigger. See `CONTRIBUTING.md` → Release process → The landing rule.
-- **Version-surface lockstep + artifact regeneration** are done by the release tooling itself (package.json, package-lock.json, server.json, STATUS.json, catalogue, install-links), with CI drift checks as backstop.
+- **Version-surface lockstep + artifact regeneration** are done by the release tooling itself (package.json, package-lock.json, server.json, catalogue, install-links — STATUS.json stores no version under schema v2), with CI drift checks as backstop.
 - **Post-publish verification** (npm version visible, `npm audit signatures`, MCP-registry entry, smoke run) is part of the release tooling's pipeline, not an optional manual step.
 
 ## Why no human gate?
@@ -44,7 +44,7 @@ What this model does **not** claim: the trailer gate does not stop a malicious a
    - [ ] Tarball clean: `npm pack --dry-run --ignore-scripts` shows no `.map`, no `.test.` / `__tests__/`, no nested `.tgz`, no `.env*`, no `.npmrc`, no raw `.ts` source.
    - [ ] `npm audit`: 0 critical / 0 high / 0 moderate on `--omit=dev`, or named risk owner per remaining moderate.
    - [ ] `CHANGELOG.md` has the `[<X.Y.Z>] - <date>` section with honest content.
-   - [ ] Version sync across `package.json`, `package-lock.json` (top-level + `packages[""]`), `server.json` (top-level + `packages[0]`), `STATUS.json` if present.
+   - [ ] Version sync across `package.json`, `package-lock.json` (top-level + `packages[""]`), `server.json` (top-level + `packages[0]`). (`STATUS.json` stores no version under schema v2 — `check-status.mjs` rejects one.)
    - [ ] `package.json.name` is exactly `@mindstone/mcp-server-<directory-slug>`.
 3. `npm publish --access=public` — interactive WebAuthn prompt on the publisher account (`mindstone-engineering`; WebAuthn-only 2FA, no automation tokens on the scope).
 4. Configure Trusted Publishing for the package at npmjs.com (binds it to `release.yml` on this repo) so every subsequent release flows through the standard gate chain.

@@ -1,9 +1,8 @@
 {
   "$schema": "../../docs/status.schema.json",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "microsoft-teams",
   "package": "@mindstone/mcp-server-microsoft-teams",
-  "version": "0.1.1",
   "auth": {
     "type": "oauth-host-orchestrated",
     "envVars": [
