@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/rogue.svg" alt="Rogue, the Rebel character for safe action and control" width="112" />
+</p>
+
 # mcp-servers
 
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/mindstone/mcp-servers/badge)](https://scorecard.dev/viewer/?uri=github.com/mindstone/mcp-servers)
