@@ -36,15 +36,15 @@
         },
         {
           "name": "SLACK_CLIENT_ID",
-          "description": "Slack OAuth Connected App client ID",
-          "isRequired": true,
+          "description": "Slack OAuth Connected App client ID. Only required to refresh a rotating token; saved non-rotating tokens authorize the Slack API without it.",
+          "isRequired": false,
           "isSecret": false,
           "format": "string"
         },
         {
           "name": "SLACK_CLIENT_SECRET",
-          "description": "Slack OAuth Connected App client secret",
-          "isRequired": true,
+          "description": "Slack OAuth Connected App client secret. Only required to refresh a rotating token; saved non-rotating tokens authorize the Slack API without it.",
+          "isRequired": false,
           "isSecret": true,
           "format": "string"
         },
