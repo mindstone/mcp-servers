@@ -26,3 +26,8 @@ export type { TempConfigOptions, TempConfigResult } from './temp-config.js';
 
 export { createStdioTestClient } from './stdio-client.js';
 export type { StdioTestClientOptions } from './stdio-client.js';
+
+// Shared `<untrusted-content>` envelope helper (AGENTS.md security invariant #6).
+// The single canonical home connectors should import from, so the
+// check-untrusted-coverage gate has one grep target.
+export { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';

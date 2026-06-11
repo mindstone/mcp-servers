@@ -138,6 +138,104 @@ jobs:
           CONNECTOR: ${{ matrix.connector }}
         run: node scripts/check-status.mjs "$CONNECTOR"
 
+  discover-connectors-untrusted:
+    name: Discover connectors for untrusted-coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      connectors: ${{ steps.list.outputs.connectors }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - id: list
+        name: List connector directories for the untrusted-content gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          # The untrusted-content coverage ratchet must run for EVERY connector
+          # so a baselined gap can never be fixed-but-still-baselined without CI
+          # nagging. We therefore exclude ONLY `_template` (starter scaffolding) —
+          # we intentionally do NOT inherit status-check's google-workspace /
+          # microsoft-sharepoint / xero exclusions, which exist purely for an
+          # unrelated STATUS.json tool-count heuristic. microsoft-sharepoint and
+          # xero are baselined gaps; if they were skipped here, the ratchet could
+          # never detect them being remediated.
+          all=()
+          for d in connectors/*/; do
+            name="${d#connectors/}"
+            name="${name%/}"
+            case "$name" in
+              _template) continue ;;
+            esac
+            # Hard slug allowlist — same anchored, length-capped guard as
+            # discover-connectors, so a hostile directory name cannot smuggle
+            # shell metacharacters into the matrix.
+            if [[ ! "$name" =~ ^[a-z0-9][a-z0-9-]{0,63}$ ]]; then
+              echo "::error::connector '$name' does not match slug pattern; refusing to include in matrix"
+              exit 1
+            fi
+            all+=("$name")
+          done
+
+          if [ "${#all[@]}" -eq 0 ]; then
+            echo "::error::no connectors discovered under connectors/"
+            exit 1
+          fi
+
+          json=$(printf '%s\n' "${all[@]}" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "connectors=$json" >> "$GITHUB_OUTPUT"
+          echo "Discovered ${#all[@]} connectors for untrusted-coverage: ${all[*]}"
+
+  untrusted-coverage-selftest:
+    name: Untrusted-coverage gate self-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+      - name: Prove the gate fails the "fetch + unused helper + raw result" shape
+        # Synthetic-fixture regression proof for the F1 false-pass (a vendored
+        # untrusted-content helper file must NOT self-satisfy the envelope scan).
+        run: node scripts/check-untrusted-coverage.mjs --self-test
+
+  untrusted-coverage-check:
+    name: Untrusted-content envelope coverage
+    needs: discover-connectors-untrusted
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        connector: ${{ fromJSON(needs.discover-connectors-untrusted.outputs.connectors) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+      - name: Verify external text reaches the untrusted-content envelope (AGENTS.md invariant #6)
+        # ATTENTION-FORCING gate, not proof: see scripts/check-untrusted-coverage.mjs
+        # header. CONNECTOR is sourced from the slug-validated discover-connectors
+        # list and passed as an env var (never interpolated into the shell command)
+        # so a hostile name cannot break out of argv quoting — same hardening as
+        # the status-check job.
+        env:
+          CONNECTOR: ${{ matrix.connector }}
+        run: node scripts/check-untrusted-coverage.mjs "$CONNECTOR"
+
   catalogue-check:
     name: Catalogue is up to date
     runs-on: ubuntu-latest
@@ -172,7 +270,7 @@ jobs:
 
   notify-failure:
     name: Slack CI Failure
-    needs: [build-and-test, discover-connectors, status-check, catalogue-check, install-links-check]
+    needs: [build-and-test, discover-connectors, status-check, discover-connectors-untrusted, untrusted-coverage-selftest, untrusted-coverage-check, catalogue-check, install-links-check]
     if: failure()
     runs-on: ubuntu-latest
     timeout-minutes: 5
