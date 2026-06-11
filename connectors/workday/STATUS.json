@@ -1,9 +1,8 @@
 {
   "$schema": "../../docs/status.schema.json",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "workday",
   "package": "@mindstone/mcp-server-workday",
-  "version": "0.2.2",
   "auth": {
     "type": "oauth",
     "envVars": [

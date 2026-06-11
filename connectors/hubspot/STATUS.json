@@ -1,9 +1,8 @@
 {
   "$schema": "../../docs/status.schema.json",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "hubspot",
   "package": "@mindstone/mcp-server-hubspot",
-  "version": "0.2.1",
   "auth": {
     "type": "oauth-host-orchestrated",
     "envVars": [

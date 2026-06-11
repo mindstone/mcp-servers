@@ -67,19 +67,29 @@ if (!existsSync(statusPath)) {
 }
 const status = readJson(statusPath);
 
-if (status.schemaVersion !== 1) {
+if (status.schemaVersion !== 2) {
   errors.push(
-    `status.schemaVersion is ${status.schemaVersion}; this checker only knows schemaVersion 1. ` +
-      `Regenerate via 'node scripts/init-status.mjs ${connector}' or migrate manually.`
+    `status.schemaVersion is ${status.schemaVersion}; this checker only knows schemaVersion 2. ` +
+      `Regenerate via 'node scripts/init-status.mjs ${connector}' or migrate manually ` +
+      `(v1 -> v2: delete the 'version' field and set schemaVersion to 2).`
+  );
+}
+
+// Schema v2 deliberately does NOT store a version: it is derived from
+// package.json everywhere (build-catalogue.mjs reads pkg.version directly).
+// A present field is rejected fail-closed — not merely ignored — so the
+// version-lag drift class this used to create cannot be reintroduced.
+// History: docs/plans/260609_catalogue_drift_prevention.md, Option 4.
+if ('version' in status) {
+  errors.push(
+    `STATUS.json must not contain a 'version' field (schemaVersion 2). The version is derived ` +
+      `from package.json; a stored copy only re-creates the version-lag drift class. Delete the field.`
   );
 }
 
 const pkg = readJson(join(dir, 'package.json'));
 if (status.package !== pkg.name) {
   errors.push(`status.package (${status.package}) != package.json name (${pkg.name})`);
-}
-if (status.version !== pkg.version) {
-  errors.push(`status.version (${status.version}) != package.json version (${pkg.version})`);
 }
 if (status.name !== connector) {
   errors.push(`status.name (${status.name}) != connector directory (${connector})`);
@@ -88,9 +98,6 @@ if (status.name !== connector) {
 const serverPath = join(dir, 'server.json');
 if (existsSync(serverPath)) {
   const server = readJson(serverPath);
-  if (status.version !== server.version) {
-    errors.push(`status.version (${status.version}) != server.json version (${server.version})`);
-  }
   // Convention: STATUS.json's `auth.envVars` lists every env var that
   // participates in authentication (secret + non-secret), so an OAuth
   // connector legitimately lists its CLIENT_ID alongside CLIENT_SECRET.

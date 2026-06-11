@@ -1,9 +1,8 @@
 {
   "$schema": "../../docs/status.schema.json",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "salesforce",
   "package": "@mindstone/mcp-server-salesforce",
-  "version": "0.1.2",
   "auth": {
     "type": "oauth-local-callback",
     "envVars": [

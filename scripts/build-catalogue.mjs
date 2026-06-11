@@ -123,7 +123,10 @@ function buildConnectorInfo(name) {
   return {
     name,
     package: status?.package ?? pkg?.name ?? null,
-    version: status?.version ?? pkg?.version ?? null,
+    // Version comes from package.json ONLY. STATUS.json schema v2 stores no
+    // version (check-status.mjs rejects a present field), so there is no
+    // stored copy to lag behind — see docs/plans/260609_catalogue_drift_prevention.md.
+    version: pkg?.version ?? null,
     description: pkg?.description ?? null,
     tagline,
     positioning,
@@ -182,7 +185,8 @@ const SURFACE_LABELS = {
 //   - auth.type                (when not in AUTH_LABELS)
 //   - auth.envVars[]           (server.json — typed by registry validator)
 //   - surface                  (when not in SURFACE_LABELS)
-//   - name, package, version   (package.json / STATUS.json identifiers)
+//   - name, package             (package.json / STATUS.json identifiers)
+//   - version                   (package.json only; STATUS.json stores none)
 //   - evidence.{changelog,tools,auth,tests} (STATUS.json paths)
 //
 // sanitise() HTML-entity-escapes every character that kramdown uses for
@@ -257,10 +261,10 @@ const CONNECTOR_SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 // the convention enforced by the MCP registry server.json validator.
 const ENV_VAR_RE = /^[A-Z][A-Z0-9_]*$/;
 
-// SemVer-ish — accept anything check-status.mjs would accept as a version
-// (which currently is strict equality across package.json, server.json,
-// and STATUS.json; we additionally reject anything with whitespace or
-// table-control characters). This is paranoia, not validation.
+// SemVer-ish — the rendered version comes straight from package.json
+// (STATUS.json stores no version under schema v2); reject anything with
+// whitespace or table-control characters before it reaches a Markdown
+// table cell. This is paranoia, not validation.
 const SEMVER_LIKE_RE = /^[A-Za-z0-9.+\-_]+$/;
 
 function formatAuth(auth) {

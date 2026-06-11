@@ -1,9 +1,8 @@
 {
   "$schema": "../../docs/status.schema.json",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "apple-shortcuts",
   "package": "@mindstone/mcp-server-apple-shortcuts",
-  "version": "0.1.2",
   "auth": {
     "type": "none",
     "envVars": []

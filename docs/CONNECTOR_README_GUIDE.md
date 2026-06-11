@@ -122,10 +122,9 @@ Shape (full spec in [`docs/status.schema.json`](./status.schema.json)):
 ```json
 {
   "$schema": "../../docs/status.schema.json",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "<connector-dir>",
   "package": "@mindstone/mcp-server-<name>",
-  "version": "0.2.3",
   "auth": {
     "type": "api-key | basic-auth | oauth-host-orchestrated | oauth-local-callback | oauth | none | hybrid",
     "envVars": ["UPPERCASE_NAMES_FROM_SERVER_JSON"]
@@ -149,8 +148,8 @@ Shape (full spec in [`docs/status.schema.json`](./status.schema.json)):
 Bootstrapping and maintenance:
 
 - Generate a draft for a single connector with `node scripts/init-status.mjs <connector-name>`. The script reads `package.json`, `server.json`, counts `registerTool()` calls in `src/` (with a fallback that handles the `definitions.ts`-array pattern used by hubspot), and writes a draft. It leaves `surface`, `tools.domains`, and `tools.count` (when the heuristics under-report — verify against the README) for the human author to confirm.
-- Verify it is in sync with the rest of the connector with `node scripts/check-status.mjs <connector-name>`. CI runs this for every connector via the `status-check` matrix in `.github/workflows/ci.yml` and fails the PR on drift: version mismatch, tool-count mismatch, missing/extra secret env vars, `surface: "TBD"`, `## (Available )?Tools (n)` heading drift in the README, or `schemaVersion ≠ 1`.
-- `schemaVersion` is `1` today. When a required field is added or semantics change, the schema version is bumped and `check-status.mjs` rejects older STATUS.json files until they're migrated.
+- Verify it is in sync with the rest of the connector with `node scripts/check-status.mjs <connector-name>`. CI runs this for every connector via the `status-check` matrix in `.github/workflows/ci.yml` and fails the PR on drift: tool-count mismatch, missing/extra secret env vars, `surface: "TBD"`, `## (Available )?Tools (n)` heading drift in the README, a present `version` field, or `schemaVersion ≠ 2`.
+- `schemaVersion` is `2` today (v1 → v2, 2026-06-11: the stored `version` field was removed — the version is derived from `package.json`, and `check-status.mjs` rejects a STATUS.json that still carries one; see `docs/plans/260609_catalogue_drift_prevention.md`, Option 4). When a required field is added or semantics change, the schema version is bumped and `check-status.mjs` rejects older STATUS.json files until they're migrated.
 - All scripts under `scripts/` operate on **one** connector at a time, per the repo-wide rule in `AGENTS.md`. The catalogue builder (`scripts/build-catalogue.mjs`) reads from all connectors but writes only into `docs/`; the committed catalogue is verified against the live generator output by the `catalogue-check` job on every PR.
 
 ### Example interaction

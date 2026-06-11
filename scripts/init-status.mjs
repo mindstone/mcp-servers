@@ -10,7 +10,9 @@
 //   connectors/<connector-name>/STATUS.json
 //
 // Fields populated automatically:
-//   - name, package, version, auth.envVars, tools.count, evidence.*
+//   - name, package, auth.envVars, tools.count, evidence.*
+//   (No version field: schema v2 derives the version from package.json —
+//   see docs/plans/260609_catalogue_drift_prevention.md, Option 4.)
 //
 // Fields left for the human to set:
 //   - auth.type (best-effort inferred; verify)
@@ -113,10 +115,9 @@ const toolCount = existsSync(srcDir) ? countRegisterToolCalls(srcDir) : 0;
 
 const status = {
   $schema: '../../docs/status.schema.json',
-  schemaVersion: 1,
+  schemaVersion: 2,
   name: connector,
   package: pkg.name,
-  version: pkg.version,
   auth: {
     type: authType,
     envVars: authEnvVars,

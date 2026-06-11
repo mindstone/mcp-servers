@@ -1,9 +1,8 @@
 {
   "$schema": "../../docs/status.schema.json",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "servicenow",
   "package": "@mindstone/mcp-server-servicenow",
-  "version": "0.2.2",
   "auth": {
     "type": "basic-auth",
     "envVars": [

@@ -17,17 +17,20 @@
 //   connectors/<name>/server.json         version + packages[0].version
 //   connectors/<name>/CHANGELOG.md        `## [<version>] - <date>` block inserted under
 //                                         `## [Unreleased]` (an empty Unreleased block is re-inserted)
-//   connectors/<name>/STATUS.json         version (when the file exists)
 //   docs/index.md, docs/catalogue/<name>.md, README install-links blocks
 //                                         regenerated via the existing generator scripts
+//
+// STATUS.json is deliberately NOT touched: schema v2 stores no version
+// (it is derived from package.json — scripts/check-status.mjs rejects a
+// present field; see docs/plans/260609_catalogue_drift_prevention.md).
 //
 // Idempotent sync mode (current version == --to): the bump writes are
 // skipped, but ONLY after validating that every other lockstep version
 // surface (package-lock.json, server.json, CHANGELOG.md) already sits at
 // --to — a partial state is a desynced externally-landed bump and fails
 // closed (route: manual runbook). When the validation passes, the
-// STATUS.json sync and the generators still run (write-on-drift), so a
-// resumed or fully-landed bump self-heals. A --to BEHIND the current
+// generators still run (write-on-drift), so a resumed or fully-landed
+// bump self-heals. A --to BEHIND the current
 // version also fails closed.
 //
 // Version-skew note: Rebel's mcp-release.ts executes whatever copy of this
@@ -48,12 +51,12 @@ const USAGE = `Usage:
   node scripts/bump-connector.mjs <connector> --to <version> --changelog-entry "<text>" [--date YYYY-MM-DD]
 
 Bumps every committed version surface for one connector in lockstep
-(package.json, package-lock.json, server.json, CHANGELOG.md, STATUS.json),
-then regenerates the committed catalogue + install-links artifacts.
-Mutates files only — never commits. If the connector is already at --to,
-validates that every other lockstep surface is also at --to (fail closed on
-any stale surface), then runs the idempotent sync (STATUS.json + generators)
-only.
+(package.json, package-lock.json, server.json, CHANGELOG.md), then
+regenerates the committed catalogue + install-links artifacts. STATUS.json
+carries no version (schema v2) and is not touched. Mutates files only —
+never commits. If the connector is already at --to, validates that every
+other lockstep surface is also at --to (fail closed on any stale surface),
+then runs the idempotent sync (generators) only.
 
 Flags:
   --to <x.y.z>             target version; must not be behind the current version
@@ -279,7 +282,7 @@ if (syncOnly) {
 
   console.log(
     `bump-connector: ${connector} already at ${toVersion}; running idempotent sync only ` +
-      `(STATUS.json + generated artifacts)`,
+      `(generated artifacts)`,
   );
   if (changelogEntry) {
     console.log('bump-connector: note — --changelog-entry is unused in sync mode (no new CHANGELOG block)');
@@ -330,22 +333,11 @@ if (syncOnly) {
   changed.push('CHANGELOG.md');
 }
 
-// 5. STATUS.json — repo metadata (never reaches the npm tarball) but CI
-//    enforces `status.version === package.json/server.json`. Runs
-//    unconditionally + idempotently (write only on drift) so it also
-//    self-heals in sync mode.
-const statusJsonPath = join(connectorDir, 'STATUS.json');
-if (existsSync(statusJsonPath)) {
-  const statusJson = readJson(statusJsonPath);
-  if (statusJson.version !== toVersion) {
-    statusJson.version = toVersion;
-    writeJson(statusJsonPath, statusJson);
-    console.log(`bump-connector: synced ${connector}/STATUS.json -> ${toVersion}`);
-    changed.push('STATUS.json');
-  }
-}
+// (STATUS.json: intentionally no step. Schema v2 stores no version — it is
+// derived from package.json, and scripts/check-status.mjs rejects a present
+// field — so there is nothing to sync. See the header note.)
 
-// 6+7. Generated artifacts — docs/index.md + docs/catalogue/<name>.md are
+// 5+6. Generated artifacts — docs/index.md + docs/catalogue/<name>.md are
 //    built from every connector's STATUS.json, and the README install-links
 //    block from server.json. Both generators are idempotent (write only on
 //    drift); regenerate so the bump is self-cleaning and CI's drift checks

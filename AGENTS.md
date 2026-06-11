@@ -72,7 +72,8 @@ When bumping a connector, the version changes in lockstep across these files:
 - `connectors/<name>/package.json` — `version`.
 - `connectors/<name>/package-lock.json` — top-level `version` and `packages[""].version`.
 - `connectors/<name>/server.json` — top-level `version` and `packages[0].version`.
-- `connectors/<name>/STATUS.json` — `version` (only if the connector has a `STATUS.json`; not every connector does). The release tooling syncs it; **easy to forget when setting versions by hand (bootstrap)** — `scripts/check-status.mjs` rejects the drift on CI.
+
+`connectors/<name>/STATUS.json` is deliberately **not** on this list: schema v2 (2026-06-11) stores no version — it is derived from `package.json`, and `scripts/check-status.mjs` rejects a STATUS.json that contains a `version` field. Do not add one back; that would re-create the version-lag drift class this removal killed (see `docs/plans/260609_catalogue_drift_prevention.md`, Option 4).
 
 CI rejects PRs where these drift. The git tag at release time must also match.
 

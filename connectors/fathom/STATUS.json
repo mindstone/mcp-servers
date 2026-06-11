@@ -1,9 +1,8 @@
 {
   "$schema": "../../docs/status.schema.json",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "fathom",
   "package": "@mindstone/mcp-server-fathom",
-  "version": "0.2.3",
   "auth": {
     "type": "api-key",
     "envVars": [

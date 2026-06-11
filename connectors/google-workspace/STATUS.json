@@ -1,9 +1,8 @@
 {
   "$schema": "../../docs/status.schema.json",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "google-workspace",
   "package": "@mindstone/mcp-server-google-workspace",
-  "version": "0.1.3",
   "auth": {
     "type": "oauth-host-orchestrated",
     "envVars": [
