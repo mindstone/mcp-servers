@@ -65,7 +65,7 @@ Full workflow lives in `CONTRIBUTING.md`. Agent-relevant invariants:
 
 ## Version-sync invariant
 
-**The landing rule first:** version bumps to existing connectors land **only** via the release tooling (`npm run mcp:release <connector>` in the Mindstone Rebel repo) — never in a PR (a required CI check, `.github/workflows/version-bump-guard.yml`, rejects them) and never as a hand-pushed bump (release.yml refuses to publish a bump whose release commit lacks the `Release-Gate` trailer the tooling stamps). The lockstep list below is what the tooling maintains; the only time it is done by hand is a brand-new connector's bootstrap first publish (see `CONTRIBUTING.md` > Release process).
+**The landing rule first:** version bumps to existing connectors land **only** via the release tooling (`npm run mcp:release <connector>` in the Mindstone Rebel repo) — never in a PR (the version-bump guard check, `.github/workflows/version-bump-guard.yml`, rejects them — see `docs/security/BRANCH_PROTECTION.md` for its branch-protection status) and never as a hand-pushed bump (release.yml refuses to publish a bump whose release commit lacks the `Release-Gate` trailer the tooling stamps). The lockstep list below is what the tooling maintains; the only time it is done by hand is a brand-new connector's bootstrap first publish (see `CONTRIBUTING.md` > Release process).
 
 When bumping a connector, the version changes in lockstep across these files:
 
