@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "name": "canary",
   "package": "@mindstone/mcp-server-canary",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "auth": {
     "type": "none",
     "envVars": []
