@@ -137,20 +137,15 @@ Why so strict: on this repo, a version bump reaching `main` *is* the publish tri
 
 ### First publish of a new connector (bootstrap — maintainers only)
 
-`release.yml` only publishes packages that already exist on npm under Trusted Publishing; a brand-new connector's first publish is manual (WebAuthn-gated `npm publish` per `docs/PUBLISH_APPROVAL_PROCESS.md`, then Trusted Publisher setup at npmjs.com). For that first publish only, the version surfaces are set by hand, in lockstep:
+`release.yml` only publishes packages that already exist on npm under Trusted Publishing; a brand-new connector's first publish is manual (WebAuthn-gated `npm publish` per `docs/PUBLISH_APPROVAL_PROCESS.md`, then Trusted Publisher setup at npmjs.com). For that first publish only, the version surfaces are set locally — via the shared bump script, never file-by-file:
 
-1. Set the version across these files:
-   - `connectors/<name>/package.json` — the `version` field
-   - `connectors/<name>/package-lock.json` — the top-level `version` and `packages[""].version`
-   - `connectors/<name>/server.json` — the top-level `version` and `packages[0].version`
-   - `connectors/<name>/STATUS.json` — the `version` field, **if the connector has a `STATUS.json`**. Easy to miss: `scripts/check-status.mjs` rejects the drift on CI. (This gap once left `main` red for 11+ days — see `docs/plans/260609_catalogue_drift_prevention.md`.)
-2. Regenerate the committed derived files and commit them in the same change:
+1. Set every version surface in one go with the shared bump script — the same implementation the release tooling uses:
    ```bash
-   node scripts/build-catalogue.mjs      # docs/catalogue/<name>.md + docs/index.md (version is shown there)
-   node scripts/gen-install-links.mjs    # README INSTALL_LINKS block (only changes if env vars changed)
+   node scripts/bump-connector.mjs <name> --to <version> --changelog-entry "Initial release"
    ```
-3. Make sure `CHANGELOG.md` has a `## [<version>] - YYYY-MM-DD` header with hand-written notes under the standard headings (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`), and an empty `## [Unreleased]` block above it.
-4. Land it (the new-connector PR typically includes this), then follow the manual publish runbook in `docs/PUBLISH_APPROVAL_PROCESS.md`.
+   It bumps `package.json`, `package-lock.json`, `server.json` (both `version` fields), and `STATUS.json` (when present) in lockstep, promotes `## [Unreleased]` to a `## [<version>] - YYYY-MM-DD` block, and regenerates the committed catalogue + install-links artifacts. Run it with no arguments for usage; it never commits. (Hand-editing these five files is exactly the drift class that once left `main` red for 11+ days — see `docs/plans/260609_catalogue_drift_prevention.md`.)
+2. Edit the new `CHANGELOG.md` block: replace the generated line with hand-written notes under the standard headings (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`) — release notes are human-written, never generated (see below). Keep the empty `## [Unreleased]` block above it.
+3. Land it (the new-connector PR typically includes this), then follow the manual publish runbook in `docs/PUBLISH_APPROVAL_PROCESS.md`.
 
 All *subsequent* releases of that connector go through `npm run mcp:release` like everything else.
 
