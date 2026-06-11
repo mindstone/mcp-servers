@@ -7,7 +7,7 @@ These settings live in GitHub UI / API, not in repo files. When you change a set
 
 ## 0. The posture in one paragraph
 
-`main` accepts **direct pushes from maintainers and the release tooling** — this is deliberate (decision 2026-06-09, reaffirmed 2026-06-11: the team is small and the release flow is script-driven from the Rebel repo). PRs are gated by **required status checks** (the version-bump guard workflow is live and live-tested, but its required-check registration is still pending — see §1; once registered, a PR can never become a publish trigger). Publishes are gated **by construction, not by humans**: `release.yml` refuses any version bump whose release commit lacks a `Release-Gate` trailer, the `npm-publish` environment has **no required reviewers by design** under the AI-only release policy, and every publish posts a Slack alert. The full gate chain is in [`docs/PUBLISH_APPROVAL_PROCESS.md`](../PUBLISH_APPROVAL_PROCESS.md).
+`main` accepts **direct pushes from maintainers and the release tooling** — this is deliberate (decision 2026-06-09, reaffirmed 2026-06-11: the team is small and the release flow is script-driven from the Rebel repo). PRs are gated by **required status checks** (the version-bump guard workflow is live, live-tested, and registered as a required check as of 2026-06-11 — a PR can never become a publish trigger). Publishes are gated **by construction, not by humans**: `release.yml` refuses any version bump whose release commit lacks a `Release-Gate` trailer, the `npm-publish` environment has **no required reviewers by design** under the AI-only release policy, and every publish posts a Slack alert. The full gate chain is in [`docs/PUBLISH_APPROVAL_PROCESS.md`](../PUBLISH_APPROVAL_PROCESS.md).
 
 ## 1. Branch protection — `main` (classic rule)
 
@@ -17,7 +17,7 @@ Configured under `Settings → Branches` (classic branch protection; ruleset mig
 |---|---|---|
 | Require a pull request before merging | **Off** | Direct push by maintainers + release tooling is the working model. PRs remain the preferred path for non-trivial and external changes, but are not forced. |
 | Required approving reviews | **None enforced** | Two-maintainer team; review happens via the AI-only review chain (cross-family adversarial review on releases; CHIEF_ENGINEER2-style review on Rebel-side work), not via GitHub review clicks. |
-| Require status checks to pass | **On** — currently registered: `build-and-test`, `validate` (server.json check), `connector version bumps require a CHANGELOG entry` (changelog-check), the STATUS/catalogue drift checks. **Version-bump guard (`connector version bumps land only via release tooling`): NOT yet registered as required — registration pending (intended: required).** The workflow itself is live and live-tested (it blocked verification PR #90, 2026-06-11). | Blocks PR merges on CI fail. The version-bump guard workflow runs and fails on any offending PR today; **until its context is added to the required list, a merge is not mechanically blocked by it** — register it to make a PR merge structurally unable to trigger `release.yml`. (Even unregistered, a merged bump cannot publish: `release.yml`'s trailer gate refuses it.) |
+| Require status checks to pass | **On** — currently registered: `build-and-test`, `validate` (server.json check), `connector version bumps require a CHANGELOG entry` (changelog-check), the STATUS/catalogue drift checks, `connector version bumps land only via release tooling` (the version-bump guard; live-tested — it blocked verification PR #90), and `server.json registry validation` (registry round-trip; given a distinct check-run name 2026-06-11 to disambiguate from CI's `validate` job). Both registered as required 2026-06-11. | Blocks PR merges on CI fail. A PR merge is mechanically blocked by the version-bump guard and the registry validation. (Defense in depth: even if a bump somehow merged, `release.yml`'s trailer gate refuses to publish it.) |
 | Require branches to be up to date before merging | **On** (strict checks) | Closes the merge-train substitution gap; re-runs the drift checks against current `main` before merge. |
 | Include administrators (enforce_admins) | **Off** | Consequence of the direct-push model. Admin pushes bypass the PR checks; the publish path is protected separately by the trailer gate, which direct pushes cannot bypass. |
 | Restrict who can push | **Not set** (org membership is the effective restriction) | Acceptable at current team size; revisit at OSS-launch review. |
@@ -58,7 +58,7 @@ The `npm-publish` environment **exists** and is required by `release.yml`'s `pub
 gh api repos/mindstone/mcp-servers/branches/main/protection \
   --jq '.required_status_checks.contexts'
 # expect: includes build-and-test, validate, the changelog check, and the
-# STATUS/catalogue drift checks. The version-bump guard context is PENDING
+# STATUS/catalogue drift checks + version-bump guard + server.json registry validation.
 # registration (see §1) — once added, expect it here too
 
 # PRs are NOT required (chosen posture) — direct push is allowed
