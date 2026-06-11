@@ -122,28 +122,41 @@ Add a tools/list test asserting the exported schema accepts both forms — see
 
 ## Release process
 
-Every connector ships its own `CHANGELOG.md` following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The release flow is intentionally manual and human-readable; no tool runs in CI translates commits into release notes (see the [Why no auto-generation in CI](#why-no-auto-generation-in-ci) note below).
+Every connector ships its own `CHANGELOG.md` following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Release notes are human-written, never generated from commit history (see [Why no changelog auto-generation](#why-no-changelog-auto-generation) below).
 
-### Bumping a connector
+### The landing rule
 
-1. Bump the version in lockstep across these files:
+There is exactly one rule for how changes reach `main` and npm:
+
+- **Code changes** land via PR (preferred for external contributions and anything non-trivial) or maintainer direct push — **without version changes**. Keep adding your release notes under `## [Unreleased]` in the connector's `CHANGELOG.md` as you go.
+- **Version bumps and releases** land **only** via the release tooling — `npm run mcp:release <connector>`, run from the Mindstone Rebel repo. The tooling bumps every version surface in lockstep (`package.json`, `package-lock.json`, `server.json`, `STATUS.json`), promotes `## [Unreleased]` to the new version header, regenerates the committed catalogue/install-links artifacts, runs the pre-release security-review gate, and stamps the release commit with the `Release-Gate` trailer that `.github/workflows/release.yml` requires before publishing to npm and the MCP registry.
+- **Never bundle a version bump into a PR.** A required PR check (`.github/workflows/version-bump-guard.yml`) fails any PR that changes the `version` of an existing connector. If your fix deserves a release, say so in the PR description — a maintainer runs the release tooling after your code lands.
+- **First publishes are the exception**: a brand-new connector's bootstrap publish is a manual maintainer task (see below). The PR guard and the publish workflow both exempt packages that did not exist at the base ref.
+
+Why so strict: on this repo, a version bump reaching `main` *is* the publish trigger (`release.yml` publishes via Trusted Publishing OIDC). Routing every bump through the release tooling keeps a single gate-complete path — security review, version-surface lockstep, artifact regeneration, and publish verification — instead of two paths that each skip the other's gates.
+
+### First publish of a new connector (bootstrap — maintainers only)
+
+`release.yml` only publishes packages that already exist on npm under Trusted Publishing; a brand-new connector's first publish is manual (WebAuthn-gated `npm publish` per `docs/PUBLISH_APPROVAL_PROCESS.md`, then Trusted Publisher setup at npmjs.com). For that first publish only, the version surfaces are set by hand, in lockstep:
+
+1. Set the version across these files:
    - `connectors/<name>/package.json` — the `version` field
    - `connectors/<name>/package-lock.json` — the top-level `version` and `packages[""].version`
    - `connectors/<name>/server.json` — the top-level `version` and `packages[0].version`
-   - `connectors/<name>/STATUS.json` — the `version` field, **if the connector has a `STATUS.json`**. This one is easy to miss: it is not touched by the release tooling, but `scripts/check-status.mjs` rejects the drift on CI. (This is exactly the gap that left `main` red for 11+ days — see `docs/plans/260609_catalogue_drift_prevention.md`.)
+   - `connectors/<name>/STATUS.json` — the `version` field, **if the connector has a `STATUS.json`**. Easy to miss: `scripts/check-status.mjs` rejects the drift on CI. (This gap once left `main` red for 11+ days — see `docs/plans/260609_catalogue_drift_prevention.md`.)
 2. Regenerate the committed derived files and commit them in the same change:
    ```bash
    node scripts/build-catalogue.mjs      # docs/catalogue/<name>.md + docs/index.md (version is shown there)
    node scripts/gen-install-links.mjs    # README INSTALL_LINKS block (only changes if env vars changed)
    ```
-   Skipping this is the single most common cause of a red `main`: the catalogue shows the version, so every bump drifts it.
-3. Promote `## [Unreleased]` to `## [<new-version>] - YYYY-MM-DD` in `connectors/<name>/CHANGELOG.md` and re-insert an empty `## [Unreleased]` block above it.
-4. Write the release notes yourself. Group entries under the standard headings (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`).
-5. Open a PR. The `CHANGELOG check` workflow (`.github/workflows/changelog-check.yml`) fails the PR if the new `package.json.version` does not have a corresponding `## [<new-version>] - <date>` header in `CHANGELOG.md`, or if that header was carried from `main` rather than introduced in the PR.
+3. Make sure `CHANGELOG.md` has a `## [<version>] - YYYY-MM-DD` header with hand-written notes under the standard headings (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`), and an empty `## [Unreleased]` block above it.
+4. Land it (the new-connector PR typically includes this), then follow the manual publish runbook in `docs/PUBLISH_APPROVAL_PROCESS.md`.
 
-### Why no auto-generation in CI
+All *subsequent* releases of that connector go through `npm run mcp:release` like everything else.
 
-The release procedure (manual `npm publish` from the wave-lead's dev machine, see `docs/PUBLISH_APPROVAL_PROCESS.md`) deliberately runs no auto-generation tooling. Any process that translates commit history into release-artifact text expands the attack surface a supply-chain compromise (see [docs/security/AUDIT_FOX-3319_tanstack_supply_chain.md](docs/security/AUDIT_FOX-3319_tanstack_supply_chain.md)) can reach: a malicious dependency that hooks the changelog renderer can rewrite the public-facing notes for every package on the maintainer's machine. The CHANGELOG content that gets shipped is whatever lives in `connectors/<name>/CHANGELOG.md` at the publish commit, period.
+### Why no changelog auto-generation
+
+No tool — in CI or in the release tooling — translates commit history into release-note text. Any process that does expands the attack surface a supply-chain compromise (see [docs/security/AUDIT_FOX-3319_tanstack_supply_chain.md](docs/security/AUDIT_FOX-3319_tanstack_supply_chain.md)) can reach: a malicious dependency that hooks the changelog renderer can rewrite the public-facing notes for every package. The CHANGELOG content that ships is whatever humans (and reviewed agents) wrote in `connectors/<name>/CHANGELOG.md` at the release commit, period. (CI *does* publish — `release.yml` via Trusted Publishing — but it publishes the reviewed, gate-trailed release commit verbatim; it generates no release-artifact text.)
 
 For a one-shot migration from a sparse history (or for prototyping while you draft entries yourself), `scripts/backfill-changelog.sh` runs [git-cliff](https://git-cliff.org/) at a SHA-pinned version against your local checkout. **It is local-only by design; never invoke it from a workflow.** Re-running on a connector that already has a `CHANGELOG.md` is a no-op unless you pass `FORCE=1`.
 

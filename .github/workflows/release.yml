@@ -1,19 +1,34 @@
 name: Release
 
-# Triggered when a version-bump commit lands on main (typically from
+# Triggered when a version-bump commit lands on main (from
 # `npm run mcp:release` in mindstone-rebel-1, which drives a script-based
 # version bump across package.json + package-lock.json + server.json +
 # CHANGELOG.md atomically). Detects which package(s) had their version
-# field bumped, then publishes each to npm via Trusted Publishing OIDC
-# (provenance attestations + Sigstore) and to the MCP registry via
-# mcp-publisher.
+# field bumped across the pushed range, verifies each bump carries the
+# Release-Gate trailer (see below), then publishes each to npm via Trusted
+# Publishing OIDC (provenance attestations + Sigstore) and to the MCP
+# registry via mcp-publisher, and posts a Slack alert per publish.
+#
+# Release-Gate trailer: the release tooling stamps every release commit with
+#   Release-Gate: docs-private/reports/security-reviews/<file>.md#<sha256>
+# pointing at the (private, Rebel-side) security-review artifact and its
+# content hash. This workflow validates the trailer's FORMAT ONLY — this is
+# a public repo: no secrets, no private-repo lookups, no network calls for
+# the gate. The path+hash are audited against the actual artifact on the
+# Rebel side. A bump whose attributed commit lacks a valid trailer is NOT
+# published and the detect job fails loudly. This is an accident/consistency
+# gate, not adversarial security — that layer remains Trusted Publishing +
+# Sigstore provenance + min-release-age.
 #
 # Publishes any existing connector whose package version is bumped. Brand-new
 # packages still require a manual first publish before this workflow can take
-# over with Trusted Publishing.
+# over with Trusted Publishing (first-adds are exempt from the trailer gate).
+# Version DOWNGRADES (reverts) are skipped with a log line, never published
+# and never failed — reverting a refused bump must not wedge main.
 #
 # Source of truth for the design: docs/plans/260525_oss_release_automation.md
-# (in mindstone-rebel-1).
+# (in mindstone-rebel-1); release runbook: docs/project/MCP_OSS_RELEASE_AGENT_DRIVEN.md
+# (also in mindstone-rebel-1).
 
 on:
   push:
@@ -40,17 +55,58 @@ jobs:
     outputs:
       packages: ${{ steps.diff.outputs.packages }}
       has_changes: ${{ steps.diff.outputs.has_changes }}
+      meta: ${{ steps.diff.outputs.meta }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          fetch-depth: 2
+          # Full history: the detect diff runs over the pushed range
+          # (event.before..sha), not HEAD~1, and per-package attribution
+          # walks the range to find the commit that changed the version.
+          fetch-depth: 0
 
-      - name: Detect packages with bumped version
+      - name: Detect bumped packages and verify Release-Gate trailers
         id: diff
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+
+          # --- Resolve the diff base for the pushed range -------------------
+          # `github.event.before` is all-zeros on a branch-create push and may
+          # be unknown locally after history rewrites. Fall back to the first
+          # parent of the pushed head; if that doesn't exist either
+          # (single-commit history), compare against the empty tree, which
+          # makes every package look first-add => exempt => no publish
+          # (fail-safe: never publish off a base we can't attribute).
+          EMPTY_TREE=4b825dc642cb6eb9a060e54bf8d69288fbee4904
+          if [[ "${BEFORE_SHA}" =~ ^0+$ ]] || ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            if git rev-parse --verify --quiet "${AFTER_SHA}~1" >/dev/null; then
+              BASE="$(git rev-parse "${AFTER_SHA}~1")"
+              echo "before SHA unusable (${BEFORE_SHA:-<empty>}); falling back to first parent ${BASE}"
+            else
+              BASE="${EMPTY_TREE}"
+              echo "before SHA unusable and head has no parent; treating all packages as first-add"
+            fi
+          else
+            BASE="${BEFORE_SHA}"
+          fi
+          echo "Detecting bumps over range: ${BASE}..${AFTER_SHA}"
+
+          # Trailer format (validated FORMAT-ONLY on this public repo; the
+          # path+hash are audited against the real artifact on the Rebel side).
+          # Each path segment must start with [A-Za-z0-9_-], which rejects
+          # '..' and empty segments — defense-in-depth parity with the
+          # Rebel-side parser (parseReleaseGateTrailer in mcp-release.ts).
+          TRAILER_RE='^Release-Gate: docs-private/reports/security-reviews/([A-Za-z0-9_-][A-Za-z0-9._-]*/)*[A-Za-z0-9_-][A-Za-z0-9._-]*\.md#[a-f0-9]{64}$'
+
           changed=()
+          meta_entries=()
+          FAILED=0
           touched_packages=""
+          # commit sha -> space-separated package names attributed to it.
+          # Used to enforce "one release commit per connector" (see below).
+          declare -A COMMIT_PKGS=()
 
           while IFS= read -r path; do
             case "${path}" in
@@ -62,11 +118,29 @@ jobs:
                 fi
                 ;;
             esac
-          done < <(git diff --name-only HEAD~1 HEAD)
+          done < <(git diff --name-only "${BASE}" "${AFTER_SHA}")
 
           package_touched() {
             local target="$1"
             grep -Fxq "${target}" <<< "${touched_packages}"
+          }
+
+          # Returns 0 and prints nothing on success; prints errors and returns
+          # 1 when the attributed commit's message lacks a valid trailer.
+          require_release_gate_trailer() {
+            local name="$1" version="$2" commit="$3" reason="$4"
+            if [ -z "${commit}" ]; then
+              echo "::error::Could not attribute ${reason} for ${name}@${version} to a commit in ${BASE}..${AFTER_SHA}"
+              return 1
+            fi
+            if git log -1 --format=%B "${commit}" | grep -Eq "${TRAILER_RE}"; then
+              echo "  Release-Gate trailer verified on ${commit} for ${name}@${version}"
+              return 0
+            fi
+            echo "::error::Refusing to publish ${name}@${version}: commit ${commit} (${reason}) has no valid Release-Gate trailer."
+            echo "::error::Releases land only via the release tooling (npm run mcp:release <connector> in mindstone-rebel-1), which stamps 'Release-Gate: docs-private/reports/security-reviews/<file>.md#<sha256>' on the release commit."
+            echo "::error::This bump landed outside that path. Recovery: revert the bump on main, then rerun the proper release path. (mcp:release --reconcile is for published-but-unreconciled states, not refused bumps.) See docs/project/MCP_OSS_RELEASE_AGENT_DRIVEN.md in mindstone-rebel-1."
+            return 1
           }
 
           for dir in connectors/*/; do
@@ -78,7 +152,7 @@ jobs:
             [ -f "${pkg}" ] || continue
 
             new_version=$(jq -r '.version // ""' "${pkg}")
-            old_version=$(git show HEAD~1:"${pkg}" 2>/dev/null | jq -r '.version // ""' 2>/dev/null || echo "")
+            old_version=$(git show "${BASE}:${pkg}" 2>/dev/null | jq -r '.version // ""' 2>/dev/null || echo "")
 
             if [ -z "${old_version}" ]; then
               echo "Skipping first-add package ${name}@${new_version}; bootstrap publishes are manual."
@@ -86,28 +160,98 @@ jobs:
             fi
 
             if [ -n "${new_version}" ] && [ "${new_version}" != "${old_version}" ]; then
-              echo "Detected version bump for ${name}: ${old_version:-(none)} -> ${new_version}"
-              changed+=("${name}")
+              # Downgrade/revert: skip without failing — reverting a refused
+              # or bad bump must not itself wedge main with publish failures.
+              highest=$(printf '%s\n%s\n' "${old_version}" "${new_version}" | sort -V | tail -1)
+              if [ "${highest}" = "${old_version}" ]; then
+                echo "Skipping ${name}: version decreased ${old_version} -> ${new_version} (revert/downgrade; nothing to publish)"
+                continue
+              fi
+
+              echo "Detected version bump for ${name}: ${old_version} -> ${new_version}"
+
+              # Attribute the bump to the commit in the range that actually
+              # changed this package.json's version to the final value
+              # (newest-first walk; first-parent comparison).
+              attributed=""
+              for sha in $(git rev-list "${BASE}..${AFTER_SHA}" -- "${pkg}"); do
+                commit_version=$(git show "${sha}:${pkg}" 2>/dev/null | jq -r '.version // ""' 2>/dev/null || echo "")
+                parent_version=$(git show "${sha}^:${pkg}" 2>/dev/null | jq -r '.version // ""' 2>/dev/null || echo "")
+                if [ "${commit_version}" = "${new_version}" ] && [ "${commit_version}" != "${parent_version}" ]; then
+                  attributed="${sha}"
+                  break
+                fi
+              done
+
+              if [ -n "${attributed}" ]; then
+                COMMIT_PKGS["${attributed}"]+="${name} "
+              fi
+
+              if require_release_gate_trailer "${name}" "${new_version}" "${attributed}" "version bump commit"; then
+                changed+=("${name}")
+                meta_entries+=("$(jq -nc --arg name "${name}" --arg version "${new_version}" --arg commit "${attributed}" '{name: $name, version: $version, commit: $commit}')")
+              else
+                FAILED=1
+              fi
             elif [ -n "${new_version}" ]; then
               package_name=$(jq -r '.name // ""' "${pkg}")
               if [ -n "${package_name}" ] && package_touched "${name}" && ! npm view "${package_name}@${new_version}" version >/dev/null 2>&1; then
                 echo "Detected unpublished current version for ${name}: ${package_name}@${new_version}"
-                changed+=("${name}")
+                # Same gate as the bump path: the newest commit in the range
+                # touching this connector is what re-triggers the publish, so
+                # it must carry the Release-Gate trailer.
+                attributed=$(git rev-list -1 "${BASE}..${AFTER_SHA}" -- "connectors/${name}/" || echo "")
+                if [ -n "${attributed}" ]; then
+                  COMMIT_PKGS["${attributed}"]+="${name} "
+                fi
+                if require_release_gate_trailer "${name}" "${new_version}" "${attributed}" "unpublished-current-version retry commit"; then
+                  changed+=("${name}")
+                  meta_entries+=("$(jq -nc --arg name "${name}" --arg version "${new_version}" --arg commit "${attributed}" '{name: $name, version: $version, commit: $commit}')")
+                else
+                  FAILED=1
+                fi
               elif [ -n "${package_name}" ] && ! package_touched "${name}"; then
                 echo "Skipping unpublished-version check for untouched package ${name}"
               fi
             fi
           done
 
+          # One release commit per connector: the Release-Gate trailer contract
+          # is per connector/version, and public CI cannot prove that a single
+          # private review artifact covers more than one package. If any
+          # attributed commit maps to multiple publishable packages, fail
+          # loudly — this applies to both the version-bump path and the
+          # unpublished-current-version fallback above.
+          if [ "${#COMMIT_PKGS[@]}" -gt 0 ]; then
+            for sha in "${!COMMIT_PKGS[@]}"; do
+              read -r -a pkgs <<< "${COMMIT_PKGS[${sha}]}"
+              if [ "${#pkgs[@]}" -gt 1 ]; then
+                echo "::error::Commit ${sha} is attributed to multiple publishable packages: ${pkgs[*]}"
+                echo "::error::Multi-package release commits are not supported. Release each connector separately via the release tooling (npm run mcp:release <connector> in mindstone-rebel-1). See docs/project/MCP_OSS_RELEASE_AGENT_DRIVEN.md (mindstone-rebel-1) and docs/PUBLISH_APPROVAL_PROCESS.md."
+                FAILED=1
+              fi
+            done
+          fi
+
           if [ ${#changed[@]} -eq 0 ]; then
-            echo "No version bumps detected; release will be skipped."
+            echo "No publishable version bumps detected."
             echo "has_changes=false" >> "${GITHUB_OUTPUT}"
             echo "packages=[]" >> "${GITHUB_OUTPUT}"
+            echo "meta=[]" >> "${GITHUB_OUTPUT}"
           else
             echo "has_changes=true" >> "${GITHUB_OUTPUT}"
             json=$(printf '%s\n' "${changed[@]}" | jq -R . | jq -sc .)
+            meta=$(printf '%s\n' "${meta_entries[@]}" | jq -sc .)
             echo "packages=${json}" >> "${GITHUB_OUTPUT}"
+            echo "meta=${meta}" >> "${GITHUB_OUTPUT}"
             echo "Will publish: ${json}"
+          fi
+
+          if [ "${FAILED}" -ne 0 ]; then
+            echo ""
+            echo "One or more release-gate checks failed (missing/invalid Release-Gate trailer, or a multi-package release commit); failing the run."
+            echo "NOTHING is published from this push (fail-closed), including any packages listed above that did pass."
+            exit 1
           fi
 
   build:
@@ -221,10 +365,13 @@ jobs:
     if: needs.detect.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # The npm-publish environment must be configured at the repository level
-    # with reviewers (e.g. @mindstone/oss-maintainers) and any required
-    # branch/wait-time protections. This is the human-approval gate
-    # documented in docs/PUBLISH_APPROVAL_PROCESS.md.
+    # The npm-publish environment is part of npm's Trusted Publishing trust
+    # configuration for this workflow. By design it has NO required reviewers
+    # (AI-only release policy, 2026-06-11): publish approval is the
+    # machine-validated gate chain — §13 security review, the Release-Gate
+    # trailer check in `detect`, the Rebel-side trailer audit, and per-publish
+    # Slack alerting. See docs/PUBLISH_APPROVAL_PROCESS.md and
+    # docs/security/BRANCH_PROTECTION.md § npm-publish environment.
     environment: npm-publish
     permissions:
       contents: read
@@ -263,6 +410,61 @@ jobs:
             --access public \
             --provenance \
             --ignore-scripts
+
+      - name: Post publish alert to Slack
+        # Every npm publish ATTEMPT that got as far as having a tarball gets a
+        # same-day-noticeable Slack ping — ":package: Published" on success, a
+        # ":warning: Publish attempted" line when the job failed after that
+        # point (deliberate: a failed attempt is as alert-worthy as a publish).
+        # Payload: connector@version, the attributed release commit, the
+        # actor, and the run URL. This is the publish-alerting leg of the AI-only
+        # release gate chain (see docs/PUBLISH_APPROVAL_PROCESS.md) — an
+        # unexpected publish should be visible to humans without anyone
+        # polling npm. Reuses SLACK_WEBHOOK_URL (same channel as
+        # commit-notify.yml / pr-notify.yml). Fail-soft if unconfigured;
+        # alert failure must not fail a publish that already happened, but
+        # it should be visible in the log.
+        # Security: all dynamic values pass through `env:` + `jq --arg`
+        # (JSON-escaped), never inline shell substitution.
+        if: ${{ always() && steps.tarball.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DETECT_META: ${{ needs.detect.outputs.meta }}
+          PACKAGE: ${{ matrix.package }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SLACK_WEBHOOK_URL}" ]; then
+            echo "SLACK_WEBHOOK_URL not configured — skipping publish alert"
+            exit 0
+          fi
+
+          version=$(jq -r --arg n "${PACKAGE}" '.[] | select(.name == $n) | .version' <<< "${DETECT_META}")
+          commit=$(jq -r --arg n "${PACKAGE}" '.[] | select(.name == $n) | .commit' <<< "${DETECT_META}")
+
+          if [ "${JOB_STATUS}" = "success" ]; then
+            headline=":package: Published"
+          else
+            headline=":warning: Publish attempted (job status: ${JOB_STATUS}) for"
+          fi
+
+          payload=$(jq -n \
+            --arg headline "${headline}" \
+            --arg pkg "@mindstone/mcp-server-${PACKAGE}" \
+            --arg version "${version:-unknown}" \
+            --arg commit "${commit:-unknown}" \
+            --arg actor "${ACTOR}" \
+            --arg repo "${REPO}" \
+            --arg run_url "${RUN_URL}" \
+            '{text: ($headline + " *" + $pkg + "@" + $version + "* to npm\nrelease commit: <https://github.com/" + $repo + "/commit/" + $commit + "|" + $commit + "> — actor: " + $actor + "\n<" + $run_url + "|workflow run>")}')
+
+          curl -sS -X POST "${SLACK_WEBHOOK_URL}" \
+            -H "Content-Type: application/json" \
+            -d "${payload}"
 
   publish-mcp-registry:
     name: Publish to MCP registry (${{ matrix.package }})

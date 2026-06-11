@@ -2,11 +2,14 @@ name: CHANGELOG check
 
 # Enforces that every PR which bumps a connector's `package.json.version` also
 # updates the corresponding `connectors/<c>/CHANGELOG.md` with a section header
-# for the new version. This is the human-facing complement to the local-only
-# git-cliff backfill at scripts/backfill-changelog.sh -- the manual `npm publish`
-# from the wave-lead's dev machine ships whatever lives in CHANGELOG.md at the
-# publish-commit, so the only way the file stays honest is if humans wrote it
-# themselves.
+# for the new version. The publish pipeline (release.yml) ships whatever lives
+# in CHANGELOG.md at the release commit — no tooling generates release-note
+# text — so the only way the file stays honest is if it was written by hand.
+#
+# Note: version bumps to EXISTING connectors are no longer allowed in PRs at
+# all (see version-bump-guard.yml); this check still matters for the cases
+# that remain PR-shaped — brand-new connectors (first-add, guard-exempt) —
+# and as a backstop should the guard ever be removed from required checks.
 
 on:
   # No `paths:` filter on purpose. Branch protection requires this check on
