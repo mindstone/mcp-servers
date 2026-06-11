@@ -28,6 +28,32 @@ describe('Smoke test — scaffold template verification', () => {
     ]);
   });
 
+  it('exports the epochMsField exemplar as number AND string (see CONTRIBUTING.md)', async () => {
+    if (!testClient) {
+      testClient = await createInMemoryTestClient({
+        createServer,
+        env: {
+          MCP_HOST_BRIDGE_STATE: '',
+        },
+      });
+    }
+
+    const toolsResult = await testClient.client.listTools();
+    const listTool = toolsResult.tools.find(t => t.name === 'list_CONNECTOR_NAME_resources');
+    const createdAfter = (listTool?.inputSchema as {
+      properties?: Record<string, { anyOf?: Array<{ type?: string }>; type?: string | string[] }>;
+    }).properties?.created_after;
+    expect(createdAfter).toBeDefined();
+
+    // Accepted JSON-schema types, tolerating both union export shapes
+    // (anyOf list or collapsed type array).
+    const types = Array.isArray(createdAfter!.anyOf)
+      ? createdAfter!.anyOf.map(o => o.type)
+      : [createdAfter!.type].flat();
+    expect(types.some(t => t === 'number' || t === 'integer')).toBe(true);
+    expect(types).toContain('string');
+  });
+
   it('should call a tool and receive a valid response', async () => {
     if (!testClient) {
       testClient = await createInMemoryTestClient({
