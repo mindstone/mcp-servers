@@ -1,3 +1,5 @@
+// vendored from upstream commit 4fcf6bcf2cc8170e656dc4e9a7f362116b9025c9
+// keep byte-equivalent (modulo import path); see check-atomic-helper-equivalence.ts
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,6 +10,8 @@ const CREDENTIAL_DIR_MODE = 0o700;
 const STALE_TEMP_MAX_AGE_MS = 5 * 60 * 1000;
 
 function getSafeTempOpenFlags(): string | number {
+  // Use exclusive create (`wx`) so pre-existing temp paths fail closed.
+  // When available, add O_NOFOLLOW to refuse symlink traversal outright.
   if (process.platform !== 'win32' && typeof fs.constants.O_NOFOLLOW === 'number') {
     return fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW;
   }
@@ -15,6 +19,14 @@ function getSafeTempOpenFlags(): string | number {
 }
 
 function assertTargetIsNotSymlink(filePath: string): void {
+  // Policy guard, NOT a race-free primitive: this lstat is TOCTOU-racy by design
+  // (an attacker who controls the parent directory can swap the entry between this
+  // check and the later rename). It exists to fail loud — and give a clear error —
+  // when a pre-existing credential path is already a symlink. The real write-through
+  // protection is the exclusive-create temp open (wx/O_EXCL + O_NOFOLLOW where
+  // available) plus rename(), which replaces the destination entry rather than
+  // following a symlink. See check-atomic-helper-equivalence.ts: this guard is part
+  // of the byte-equivalent contract across host + OSS copies.
   try {
     const stats = withSingleSyncRetryOnEmfile(() => fs.lstatSync(filePath));
     if (stats.isSymbolicLink()) {
@@ -32,6 +44,7 @@ function assertTargetIsNotSymlink(filePath: string): void {
 
 function fsyncParentDirectory(dirPath: string): void {
   if (process.platform === 'win32') {
+    // Windows does not support fsync on directory file descriptors in a portable way.
     return;
   }
 
@@ -56,7 +69,7 @@ function fsyncParentDirectory(dirPath: string): void {
 
 export async function atomicCredentialWrite(
   filePath: string,
-  data: string,
+  data: string | Buffer,
   opts?: { mode?: number },
 ): Promise<void> {
   const fileMode = opts?.mode ?? CREDENTIAL_FILE_MODE;
@@ -75,11 +88,16 @@ export async function atomicCredentialWrite(
       fs.openSync(tempPath, getSafeTempOpenFlags(), fileMode),
     );
     fileDescriptor = openedFileDescriptor;
-    withSingleSyncRetryOnEmfile(() => fs.writeFileSync(openedFileDescriptor, data, { encoding: 'utf8' }));
+    withSingleSyncRetryOnEmfile(() =>
+      typeof data === 'string'
+        ? fs.writeFileSync(openedFileDescriptor, data, { encoding: 'utf8' })
+        : fs.writeFileSync(openedFileDescriptor, data),
+    );
     withSingleSyncRetryOnEmfile(() => fs.fsyncSync(openedFileDescriptor));
     withSingleSyncRetryOnEmfile(() => fs.closeSync(openedFileDescriptor));
     fileDescriptor = undefined;
 
+    withSingleSyncRetryOnEmfile(() => fs.chmodSync(tempPath, CREDENTIAL_FILE_MODE));
     withSingleSyncRetryOnEmfile(() => fs.renameSync(tempPath, filePath));
     withSingleSyncRetryOnEmfile(() => fs.chmodSync(filePath, CREDENTIAL_FILE_MODE));
     fsyncParentDirectory(parentDir);

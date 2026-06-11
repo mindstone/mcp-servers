@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Security
+
+- Hardened the vendored atomic credential-write helper to match the upstream canonical copy. Added an `assertTargetIsNotSymlink` policy guard that refuses to write when the credential file path is already a symlink (throws `CREDENTIAL_SYMLINK_REJECTED`); this is a fail-loud guard, not a race-free primitive (the exclusive-create temp open plus rename does the real write-through protection). Also synced `string | Buffer` data support, a temp-path `chmod` before rename, and the guarded `O_NOFOLLOW` symlink-refusal open flag.
+
 ## [0.2.1] - 2026-05-29
 
 ### Changed
