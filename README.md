@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/rogue.svg" alt="Rogue, the Rebel character for safe action and control" width="112" />
+</p>
+
 # mcp-servers
 
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/mindstone/mcp-servers/badge)](https://scorecard.dev/viewer/?uri=github.com/mindstone/mcp-servers)
@@ -92,6 +96,19 @@ None of our published packages need `postinstall` to function, so disabling life
 For per-connector security notes, see each connector's README.
 
 To report a vulnerability, please see [SECURITY.md](SECURITY.md).
+
+## The Mindstone open-source family
+
+This repo is one of several open-source projects from Mindstone:
+
+- [Rebel](https://mindstone.com) — the AI workspace desktop app that ships these
+  connectors out of the box (source release in progress).
+- [Super-MCP](https://github.com/mindstone/Super-MCP) — a proxy MCP router that
+  loads only the tools you actually need, saving your context window.
+- [rebel-system](https://github.com/mindstone/rebel-system-oss) — the public
+  Rebel system: skills, prompts, operators, help docs, and templates.
+- [meeting-note-recorder](https://github.com/mindstone/meeting-note-recorder)
+  — meeting detection, recording, and live transcripts (the Rebel note-taker).
 
 ## Licence
 
