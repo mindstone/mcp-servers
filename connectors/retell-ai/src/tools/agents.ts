@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { retellFetch, requireApiKey } from '../client.js';
 import { withErrorHandling } from '../utils.js';
+import { sanitizeAgent, sanitizeAgentVersion, sanitizeList } from '../sanitize.js';
 
 export function registerAgentTools(server: McpServer): void {
   server.registerTool(
@@ -45,7 +46,10 @@ RETURNS: agent_id, agent_name, voice_id, response_engine.llm_id, language, versi
         `/get-agent/${encodeURIComponent(args.agent_id)}`,
         { method: 'GET' },
       );
-      return JSON.stringify({ ok: true, ...result });
+      return JSON.stringify({
+        ok: true,
+        ...(sanitizeAgent(result, 'retell:get_agent') as Record<string, unknown>),
+      });
     }),
   );
 
@@ -88,7 +92,7 @@ RETURNS: agents, count. Each agent usually includes agent_id, agent_name, voice_
       );
       return JSON.stringify({
         ok: true,
-        agents: result,
+        agents: sanitizeList(result, sanitizeAgent, 'retell:list_agents'),
         count: Array.isArray(result) ? result.length : 0,
         message: `Found ${Array.isArray(result) ? result.length : 0} agent(s).`,
       });
@@ -161,7 +165,7 @@ RETURNS: agent_id, agent_name, voice_id, response_engine, language, version fiel
 
       return JSON.stringify({
         ok: true,
-        ...result,
+        ...(sanitizeAgent(result, 'retell:create_agent') as Record<string, unknown>),
         message: `Agent created (agent_id: ${result.agent_id}). You can now assign it to a phone number or use create_web_call to test it.`,
       });
     }),
@@ -243,7 +247,7 @@ RETURNS: Updated agent object including agent_id, agent_name, voice_id, response
 
       return JSON.stringify({
         ok: true,
-        ...result,
+        ...(sanitizeAgent(result, 'retell:update_agent') as Record<string, unknown>),
         message: `Agent ${agentId} updated.`,
       });
     }),
@@ -352,9 +356,10 @@ RETURNS: versions, count. Each version includes version number, published/live s
         `/get-agent-versions/${encodeURIComponent(args.agent_id)}`,
         { method: 'GET' },
       );
+      const versions = sanitizeList(result, sanitizeAgentVersion, 'retell:get_agent_versions');
       return JSON.stringify({
         ok: true,
-        versions: result,
+        versions,
         count: Array.isArray(result) ? result.length : 0,
         message: `Found ${Array.isArray(result) ? result.length : 0} version(s).`,
       });

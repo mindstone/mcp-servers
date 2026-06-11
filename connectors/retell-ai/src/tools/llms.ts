@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { retellFetch, requireApiKey } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { internal as precallInternal } from '../precall-checks.js';
+import { sanitizeLlm, sanitizeList } from '../sanitize.js';
 
 const { extractReferencedTokens } = precallInternal;
 
@@ -82,7 +83,7 @@ RETURNS: llm_id, general_prompt, begin_message, model, model_temperature, genera
 
       return JSON.stringify({
         ok: true,
-        ...result,
+        ...(sanitizeLlm(result, 'retell:update_retell_llm') as Record<string, unknown>),
         message: `LLM config ${llmId} updated. Wait 2-3 seconds before creating a call to let the config propagate.`,
       });
     }),
@@ -152,7 +153,11 @@ RETURNS: llm_id, general_prompt, begin_message, model, model_temperature, genera
           'Any variable NOT in this list will be silently ignored.';
       }
 
-      return JSON.stringify({ ok: true, ...result, dynamic_variable_analysis: dynamicVariableAnalysis });
+      return JSON.stringify({
+        ok: true,
+        ...(sanitizeLlm(result, 'retell:get_retell_llm') as Record<string, unknown>),
+        dynamic_variable_analysis: dynamicVariableAnalysis,
+      });
     }),
   );
 
@@ -213,7 +218,7 @@ RETURNS: llm_id, general_prompt, begin_message, model, model_temperature, genera
 
       return JSON.stringify({
         ok: true,
-        ...result,
+        ...(sanitizeLlm(result, 'retell:create_retell_llm') as Record<string, unknown>),
         message: `LLM config created (llm_id: ${result.llm_id}). Use this llm_id when creating or updating an agent's response_engine.`,
       });
     }),
@@ -276,7 +281,7 @@ RETURNS: llms, count, pagination_key, has_more. Each LLM includes llm_id, prompt
 
       return JSON.stringify({
         ok: true,
-        llms: items,
+        llms: sanitizeList(items, sanitizeLlm, 'retell:list_retell_llms'),
         count: items.length,
         pagination_key: resultObj?.pagination_key,
         has_more: resultObj?.has_more,

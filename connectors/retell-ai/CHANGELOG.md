@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Security
+- **External call text is now wrapped in `<untrusted-content>` envelopes (FOX-3490)**: call transcripts, per-turn `transcript_object` content, and `call_analysis` text are dictated by the phone caller — the most attacker-controlled input this connector handles. These (plus agent names, Retell LLM prompts/opening messages, voice names, and phone-number nicknames) are now wrapped in `<untrusted-content source="…">…</untrusted-content>` envelopes before being returned to the model, with close-tag breakout escaping so a caller cannot terminate the envelope from inside their own speech. This closes a prompt-injection channel and brings the connector in line with the catalog-wide untrusted-content invariant. `recording_url` is left as-is (it is a URL surfaced for the user, not free text, and is never auto-followed).
+
 ## [0.2.3] - 2026-06-10
 
 ### Fixed
