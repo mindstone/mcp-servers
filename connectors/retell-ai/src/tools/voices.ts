@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { retellFetch, requireApiKey } from '../client.js';
 import { withErrorHandling } from '../utils.js';
+import { sanitizeVoice, sanitizePhoneNumber, sanitizeList } from '../sanitize.js';
 
 const phoneAgentBindingSchema = z.object({
   agent_id: z.string().describe('Agent ID to bind.'),
@@ -49,7 +50,7 @@ RETURNS: voices, count. Each voice includes voice_id, voice_name/name, provider,
       );
       return JSON.stringify({
         ok: true,
-        voices: result,
+        voices: sanitizeList(result, sanitizeVoice, 'retell:list_voices'),
         count: Array.isArray(result) ? result.length : 0,
         message: `Found ${Array.isArray(result) ? result.length : 0} voice(s). Use voice_id when creating or updating agents.`,
       });
@@ -116,7 +117,7 @@ RETURNS: phone_numbers, count, pagination_key, has_more. Each number includes ph
 
       return JSON.stringify({
         ok: true,
-        phone_numbers: items,
+        phone_numbers: sanitizeList(items, sanitizePhoneNumber, 'retell:list_phone_numbers'),
         count: items.length,
         pagination_key: resultObj?.pagination_key,
         has_more: resultObj?.has_more,
@@ -166,7 +167,10 @@ RETURNS: phone_number, nickname, inbound_agents, outbound_agents, phone number c
         `/get-phone-number/${encodeURIComponent(args.phone_number)}`,
         { method: 'GET' },
       );
-      return JSON.stringify({ ok: true, ...result });
+      return JSON.stringify({
+        ok: true,
+        ...(sanitizePhoneNumber(result, 'retell:get_phone_number') as Record<string, unknown>),
+      });
     }),
   );
 
@@ -233,7 +237,7 @@ RETURNS: phone_number, nickname, inbound_agents, outbound_agents, updated config
 
       return JSON.stringify({
         ok: true,
-        ...result,
+        ...(sanitizePhoneNumber(result, 'retell:update_phone_number') as Record<string, unknown>),
         message: `Phone number ${phoneNumber} updated successfully.`,
       });
     }),

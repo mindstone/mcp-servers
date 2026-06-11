@@ -88,6 +88,9 @@ describe('LLM tools — Retell AI', () => {
     const parsed = JSON.parse(text);
 
     expect(parsed.ok).toBe(true);
-    expect(parsed.general_prompt).toBe('Updated prompt');
+    // general_prompt is external text → wrapped per AGENTS.md invariant #6 (FOX-3490).
+    expect(parsed.general_prompt).toBe(
+      '<untrusted-content source="retell:update_retell_llm:general_prompt">Updated prompt</untrusted-content>',
+    );
   });
 });

@@ -45,7 +45,10 @@ describe('Agent tools — Retell AI', () => {
 
     expect(parsed.ok).toBe(true);
     expect(parsed.agent_id).toBe('agent_test_123');
-    expect(parsed.agent_name).toBe('Test Agent');
+    // agent_name is external text → wrapped per AGENTS.md invariant #6 (FOX-3490).
+    expect(parsed.agent_name).toBe(
+      '<untrusted-content source="retell:get_agent:agent_name">Test Agent</untrusted-content>',
+    );
   });
 
   it('create_agent sends correct payload and returns new agent', async () => {
@@ -67,7 +70,9 @@ describe('Agent tools — Retell AI', () => {
 
     expect(parsed.ok).toBe(true);
     expect(parsed.agent_id).toBe('agent_new_001');
-    expect(parsed.agent_name).toBe('New Test Agent');
+    expect(parsed.agent_name).toBe(
+      '<untrusted-content source="retell:create_agent:agent_name">New Test Agent</untrusted-content>',
+    );
   });
 
   it('update_agent sends correct payload', async () => {
@@ -87,6 +92,8 @@ describe('Agent tools — Retell AI', () => {
     const parsed = JSON.parse(text);
 
     expect(parsed.ok).toBe(true);
-    expect(parsed.agent_name).toBe('Updated Agent');
+    expect(parsed.agent_name).toBe(
+      '<untrusted-content source="retell:update_agent:agent_name">Updated Agent</untrusted-content>',
+    );
   });
 });

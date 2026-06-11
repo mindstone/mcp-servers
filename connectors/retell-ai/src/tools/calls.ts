@@ -4,6 +4,7 @@ import { retellFetch, requireApiKey } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { ConnectorError } from '../types.js';
 import { checkDynamicVariableReferences } from '../precall-checks.js';
+import { sanitizeCall, sanitizeList } from '../sanitize.js';
 
 /**
  * E.164 phone-number regex.
@@ -159,7 +160,7 @@ COST: Uses phone minutes from your Retell AI plan.`,
 
       const response: Record<string, unknown> = {
         ok: true,
-        ...result,
+        ...(sanitizeCall(result, 'retell:create_phone_call') as Record<string, unknown>),
         message: `Phone call initiated (call_id: ${result.call_id}). Use get_call to monitor status and retrieve the transcript when the call ends.`,
       };
 
@@ -238,7 +239,7 @@ RETURNS: call_id, web_call_link, status, agent_id, access_token. Share web_call_
 
       const response: Record<string, unknown> = {
         ok: true,
-        ...result,
+        ...(sanitizeCall(result, 'retell:create_web_call') as Record<string, unknown>),
         message: `Web call created (call_id: ${result.call_id}). Share the web_call_link with the user to start the call in their browser.`,
       };
 
@@ -288,7 +289,10 @@ RETURNS: call_id, status, transcript, transcript_object, recording_url, call_ana
         `/v2/get-call/${encodeURIComponent(args.call_id)}`,
         { method: 'GET' },
       );
-      return JSON.stringify({ ok: true, ...result });
+      return JSON.stringify({
+        ok: true,
+        ...(sanitizeCall(result, 'retell:get_call') as Record<string, unknown>),
+      });
     }),
   );
 
@@ -361,7 +365,7 @@ RETURNS: calls, count, pagination_key, has_more. Each call includes call_id, sta
 
       return JSON.stringify({
         ok: true,
-        calls: items,
+        calls: sanitizeList(items, sanitizeCall, 'retell:list_calls'),
         count: items.length,
         pagination_key: resultObj?.pagination_key,
         has_more: resultObj?.has_more,
