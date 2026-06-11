@@ -5,7 +5,7 @@ title: canary — mcp-servers catalogue
 
 # canary
 
-A synthetic MCP server used to validate the rebel-oss release pipeline end-to-end. Single &#96;ping&#96; tool; no external dependencies, no auth, no bridge.
+Mindstone's internal release-pipeline test connector — not for use. It exists only to validate the rebel-oss release pipeline end-to-end. Single &#96;ping&#96; tool; no external dependencies, no auth, no bridge.
 
 
 
