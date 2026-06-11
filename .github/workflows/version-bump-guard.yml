@@ -1,0 +1,142 @@
+name: Version bump guard
+
+# Enforces the landing rule: code changes land via PR; version bumps land
+# ONLY via the release tooling (`npm run mcp:release <connector>` in
+# mindstone-rebel-1), which drives the security-review gate, the lockstep
+# bump across every version surface, artifact regeneration, and the
+# Release-Gate trailer that release.yml requires before publishing.
+#
+# This check FAILS any PR that changes the `version` field of a connector
+# whose package.json already existed at the PR base. First-add packages
+# (brand-new connectors) are exempt — bootstrap first publishes remain a
+# manual maintainer path (see CONTRIBUTING.md > Release process), mirroring
+# the first-add exemption in release.yml's detect job. `_template` is exempt.
+#
+# Without this guard, merging a version-bump PR would trigger release.yml
+# on main and turn the merge click into an unreviewed npm publish trigger
+# (and, since the squash commit carries no Release-Gate trailer, a loud
+# publish refusal). Failing the PR early is the kinder failure mode.
+
+on:
+  # No `paths:` filter on purpose — same rationale as changelog-check.yml:
+  # branch protection requires this check on every PR, and a `paths:`-filtered
+  # workflow is silently skipped (never reports) when no path matches, leaving
+  # the PR BLOCKED forever. Run always; exit 0 when nothing relevant changed.
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  version-bump-guard:
+    name: connector version bumps land only via release tooling
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          # `pull_request` (not `pull_request_target`): PR head checkout with
+          # no elevated permissions, no secrets exposed.
+
+      - name: Resolve PR base SHA
+        id: base
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          BASE_SHA=$(git rev-parse "origin/${BASE_REF}")
+          echo "sha=${BASE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "Base: ${BASE_REF} @ ${BASE_SHA}"
+
+      - name: Refuse version bumps to pre-existing connectors
+        env:
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          # Enumerate every connector whose package.json changed in this PR.
+          mapfile -t CHANGED_PKG < <(
+            git diff --name-only "${BASE_SHA}" HEAD -- 'connectors/*/package.json' \
+              | grep -v '^connectors/_template/' || true
+          )
+
+          if [ "${#CHANGED_PKG[@]}" -eq 0 ]; then
+            echo "No connector package.json files modified. Nothing to check."
+            exit 0
+          fi
+
+          FAILED=0
+          for pkg in "${CHANGED_PKG[@]}"; do
+            connector=$(echo "$pkg" | awk -F/ '{print $2}')
+
+            # Slug whitelist (matches changelog-check / FOX-3319 audit R15);
+            # rejects path traversal or unexpected characters.
+            if ! echo "$connector" | grep -Eq '^[a-z0-9][a-z0-9-]*$'; then
+              echo "::error::Refusing to inspect connector with unexpected slug: $connector"
+              FAILED=1
+              continue
+            fi
+
+            # Removed/renamed at head: the path appears in the diff output but
+            # the file no longer exists in the PR checkout. That is not a
+            # version bump — connector removals/renames are governed by other
+            # checks, never by this guard's failure path. (A rename's new
+            # location shows up as a separate added path and falls under the
+            # first-add exemption below.)
+            if [ ! -f "$pkg" ]; then
+              echo "  ${connector}: package.json removed/renamed; no version bump to inspect"
+              continue
+            fi
+
+            # First-add exemption — mirrors release.yml's detect job exactly:
+            # a package.json absent at base (or with no version field there)
+            # is a bootstrap first publish, which stays on the manual path.
+            old_version=$(git show "${BASE_SHA}:${pkg}" 2>/dev/null \
+              | jq -r '.version // ""' 2>/dev/null || echo "")
+            if [ -z "${old_version}" ]; then
+              echo "  ${connector}: new package (no version at base) — exempt (bootstrap first publish)"
+              continue
+            fi
+
+            new_version=$(jq -r '.version // ""' "$pkg")
+            if [ -z "${new_version}" ]; then
+              echo "::error file=${pkg}::package.json has no version field"
+              FAILED=1
+              continue
+            fi
+
+            if [ "${old_version}" = "${new_version}" ]; then
+              echo "  ${connector}: version unchanged (${new_version}) — ok"
+              continue
+            fi
+
+            echo "::error file=${pkg}::Version bump detected for ${connector}: ${old_version} -> ${new_version}"
+            FAILED=1
+          done
+
+          if [ "$FAILED" -ne 0 ]; then
+            echo ""
+            echo "This PR changes the version of one or more existing connectors."
+            echo ""
+            echo "The landing rule for this repo:"
+            echo "  - Code changes land via PR (like this one) — WITHOUT version changes."
+            echo "  - Version bumps and releases land ONLY via the release tooling"
+            echo "    (npm run mcp:release <connector>, run from the Mindstone Rebel repo)."
+            echo "    It bumps every version surface in lockstep, runs the security-review"
+            echo "    gate, regenerates the committed artifacts, and stamps the Release-Gate"
+            echo "    trailer that the Release workflow requires before publishing to npm."
+            echo ""
+            echo "Code-only PRs are welcome: drop the version/CHANGELOG-promotion changes from"
+            echo "this PR and a maintainer will release your change through the tooling."
+            echo "First publishes of brand-new connectors are exempt and stay on the manual"
+            echo "bootstrap path."
+            echo ""
+            echo "See CONTRIBUTING.md > Release process."
+            exit 1
+          fi
+
+          echo ""
+          echo "No version bumps to pre-existing connectors. Guard satisfied."

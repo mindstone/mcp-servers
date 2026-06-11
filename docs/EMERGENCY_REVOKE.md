@@ -26,8 +26,10 @@ Defect discovered in published version
 │  └─ NO  → Skip credential rotation; proceed to deprecate + supersede.
 │
 └─ Is the defect a supply-chain compromise (signed-but-malicious release)?
-   └─ YES → Treat as P0. Page the named maintainer. Revoke the npm token
-            issued to GitHub Actions. Audit Sigstore attestations for the
+   └─ YES → Treat as P0. Page the named maintainer. Disable the package's
+            Trusted Publisher binding at npmjs.com (there is no npm token
+            to revoke — publishing is OIDC-only) and revoke any stray npm
+            automation tokens found. Audit Sigstore attestations for the
             affected package on https://search.sigstore.dev. Open an
             incident channel in #security and follow the standard incident
             playbook before any further publishes from this repo.
@@ -46,12 +48,10 @@ This adds a deprecation warning visible to every consumer running `npm install`.
 
 ### Supersede with a patch
 
-1. Land the fix in `connectors/<connector>/` on `main`.
-2. Bump the patch version in `package.json` and the matching `version: '...'` in `src/server.ts`.
-3. Add a `## [<new-version>] — <date>` section to `CHANGELOG.md` describing the fix as a `### Security` entry.
-4. Tag: `git tag <connector>-v<new-version>` then push the tag.
-5. The `Publish` workflow runs automatically and ships the patch with `--provenance`.
-6. Verify on npm: `npm view @mindstone/mcp-server-<connector>@<new-version>` shows the new version with the published Sigstore attestation.
+1. Land the fix in `connectors/<connector>/` on `main` (code-only — no version change; record the fix as a `### Security` entry under `## [Unreleased]` in `CHANGELOG.md`).
+2. Release it via the release tooling: `npm run mcp:release <connector>` from the Mindstone Rebel repo. This is the emergency path too — it bumps every version surface in lockstep, promotes the changelog, and stamps the `Release-Gate` trailer that `.github/workflows/release.yml` requires before publishing. A hand-pushed bump without the trailer will be **refused** by the release workflow and slow you down mid-incident.
+3. The Release workflow ships the patch with `--provenance` via Trusted Publishing and posts the publish alert to Slack.
+4. Verify on npm: `npm view @mindstone/mcp-server-<connector>@<new-version>` shows the new version with the published Sigstore attestation.
 
 ### Unpublish (last resort, ≤72h only)
 

@@ -1,73 +1,72 @@
 # Publish Approval Process
 
-Every connector publish to npm under `@mindstone/mcp-server-*` is gated on an explicit human approval. This document defines the gate.
+Every connector publish to npm under `@mindstone/mcp-server-*` is gated. This document defines the gate chain.
 
-> **Architecture mode (since FOX-3319 pivot, 2026-05-17):** Publishes happen manually from the wave-lead's dev machine using `npm publish`. There is **no CI publish workflow** — the previous `.github/workflows/publish.yml` was deleted. The OIDC / Trusted-Publisher / `npm-publish` GitHub environment model described in earlier revisions of this document is **superseded** for everyday connectors; commit history preserves it for reference.
+> **Architecture mode (since 2026-06-11, AI-only release policy):** Releases are driven end-to-end by the release tooling (`npm run mcp:release <connector>` in the Mindstone Rebel repo) and published by CI (`.github/workflows/release.yml`, Trusted Publishing OIDC). The approval model is a **machine-validated, AI-reviewed gate chain** — there is deliberately **no human-click approval step** on the publish path (the `npm-publish` GitHub environment has no required reviewers, by design). The previous models — manual WebAuthn `npm publish` from the wave-lead's machine (2026-05-17 pivot), then the allowlist-scoped Trusted Publishing carve-out (2026-05-29) — are superseded for everyday releases; the manual path survives only for first publishes (bootstrap). Commit history preserves the earlier revisions of this document.
 
-> **Trusted Publishing carve-out (updated 2026-05-29):** `.github/workflows/release.yml` was reintroduced with a hardcoded allowlist scoped to canary first. Canary `0.0.2` proved the OIDC Trusted Publishing path end-to-end. The workflow uses Trusted Publisher OIDC (no `NPM_TOKEN`), generates `--provenance` Sigstore attestations, splits build (no creds) from publish (only `npm publish --ignore-scripts --provenance` and `mcp-publisher publish`), and uses the `npm-publish` GitHub environment required by npm's trust configuration. Required reviewers on that GitHub environment are an optional extra control: if they are not configured, the push to `main` that triggers the workflow is the final human approval before publish. Adding a non-canary connector to the allowlist requires per-package Trusted Publisher setup at npmjs.com, the pre-publish security review artifact in the consuming Rebel repo, and explicit sign-off from `@mindstone/oss-maintainers` per the hygiene check below. Source of truth for the design: `docs/plans/260525_oss_release_automation.md` in `mindstone-rebel-1`.
+## The gate chain (per connector, per version)
 
-## Why a human gate?
+A release reaches npm only by passing all of these, in order:
 
-The publish credential is the npm session of the `mindstone-engineering` account on the wave-lead's local machine. That session is protected by:
+1. **Source-level security review (§13), AI-authored with a cross-family adversarial pass.** Before any bump lands, the release tooling requires a review artifact at `docs-private/reports/security-reviews/<yyMMdd>_<connector>_<version>.md` in the consuming Rebel repo, built from the template at `docs-private/security/MCP_RELEASE_SECURITY_REVIEW_TEMPLATE.md`. The artifact carries a machine-readable release-gate block (version, open critical/high findings = 0, authorship/authorization fields) that the tooling validates before proceeding. Policy requirements: the adversarial reviewer must be a **different model family** than the author/implementer, must read the diff and the full relevant source, and must record model ID, session ID, and confidence in the artifact.
+2. **The `Release-Gate` trailer on the release commit.** The release tooling stamps every release commit with
+   `Release-Gate: docs-private/reports/security-reviews/<file>.md#<sha256>`
+   — the path of the review artifact and the SHA-256 of its content. `.github/workflows/release.yml` refuses to publish any version bump whose attributed commit lacks a trailer in valid format (this repo is public, so CI validates **format only**: no secrets, no private-repo lookups). A bump that lands without the trailer fails the release run loudly and publishes nothing.
+3. **Rebel-side trailer audit.** The Rebel repo verifies that the trailer's `<path>#<sha256>` matches the actual private review artifact for the pinned release commit — closing, as far as possible without putting secrets on a public repo, the gap left by format-only validation in CI.
+4. **Trusted Publishing + provenance.** `release.yml` publishes with OIDC (no `NPM_TOKEN` anywhere), `--ignore-scripts`, and `--provenance` Sigstore attestations; consumers verify via `npm audit signatures`. The repo-root `.npmrc` `min-release-age=7` cool-down gives consumers a recall window. This — not the trailer — is the adversarial-security layer; the trailer is an accident/consistency gate.
+5. **Publish alerting.** After every npm publish, `release.yml` posts a Slack message (same channel as commit/PR notifications) with `connector@version`, the attributed release commit, the actor, and the run URL — an unexpected publish is human-visible same-day without anyone polling npm.
 
-1. **WebAuthn (security-key) 2FA** on the npm account. Every `npm publish` invocation triggers a system-browser challenge that requires physical presence with the registered hardware key. No automation token sits on disk; no long-lived `NPM_TOKEN` lives in a CI secret.
-2. **PR review on the version-bump commit.** The package.json/server.json/lockfile bump that defines what gets published lives in a PR on `main`, gated by branch protection + CODEOWNERS (`@mindstone/oss-maintainers`). A separate human reviewer must approve that PR before the wave-lead can `git pull` it locally and publish.
-3. **The wave-lead reading this checklist** before each `npm publish`. The checklist below is the equivalent of the old "Approve and deploy" environment-reviewer step — except it runs in the publisher's head, recorded in the tracking issue, instead of in GitHub's audit log.
+Structural complements that keep the chain gate-complete:
 
-This document is the policy layer on top of those structural mitigations: even if every PR check passes, the wave-lead must still confirm the release is intentional before invoking `npm publish`.
+- **No version bumps in PRs.** A required PR check (`.github/workflows/version-bump-guard.yml`) fails any PR that changes an existing connector's version, so a PR merge can never be a surprise publish trigger. See `CONTRIBUTING.md` → Release process → The landing rule.
+- **Version-surface lockstep + artifact regeneration** are done by the release tooling itself (package.json, package-lock.json, server.json, STATUS.json, catalogue, install-links), with CI drift checks as backstop.
+- **Post-publish verification** (npm version visible, `npm audit signatures`, MCP-registry entry, smoke run) is part of the release tooling's pipeline, not an optional manual step.
 
-## Pre-publish checklist (per connector, per version)
+## Why no human gate?
 
-Before running `npm publish` for `<connector>@<X.Y.Z>`, the wave-lead opens (or comments on) a tracking issue titled `Publish approval: <connector> v<X.Y.Z>` and confirms:
+Decision (2026-06-11): the team wants a careful, trustworthy, consistent **AI-only** process rather than a human-click bottleneck. The properties the old human gates provided are replaced by construction:
 
-- [ ] **Source-level security review:** at least two independent reviewers have signed off on the version-bump PR on `main`. All CRITICAL and HIGH findings either resolved or explicitly accepted with a named risk owner. For agent-driven releases, the consuming Rebel repo must contain `docs/reports/security-reviews/<yyMMdd>_<connector>_<version>.md` with the machine-readable release gate block from `docs/security/MCP_RELEASE_SECURITY_REVIEW_TEMPLATE.md`. (Branch protection enforces `>=2` approvals once team size allows; until then, an out-of-band review acknowledgement counts.)
-- [ ] **Live runtime probe (where defined):** `npm run probe:live:gate` PUBLISH-GATE OK against a real workspace, on the packed binary not just unit tests. Required for connectors that ship a live-probe script (currently: `slack`); for connectors without one, a smoke run of `npm pack --ignore-scripts` followed by `npx ./<connector>-<version>.tgz` against the documented `command` line in the connector README serves as the equivalent.
-- [ ] **Tarball clean:** `npm pack --dry-run --ignore-scripts` shows no `.map`, no `.test.` / `__tests__/`, no nested `.tgz`, no `.env*`, no `.npmrc`, and no raw `.ts` source files. The G6 procedure in `docs/plans/260517_PHASE_2_BOOTSTRAP_PLAN.md` includes a shell-based forbidden-file scan; copy it into your terminal session for each publish.
-- [ ] **`npm audit`:** 0 critical / 0 high / 0 moderate on `--omit=dev` (production closure). Remaining moderate findings must each have a named risk owner.
-- [ ] **CHANGELOG.md:** `[<X.Y.Z>] - <date>` section present (hyphen or em-dash both accepted) and describes user-facing changes + security-relevant changes. The PR check `.github/workflows/changelog-check.yml` already enforces the header on every version-bump PR; the manual step is reviewing that the content is honest.
-- [ ] **Version sync — five places:** `package.json#version`, `package-lock.json#version` (top-level + `packages[""].version`), `server.json#version` (top-level + `packages[0].version`) all match the version you are about to type into the `npm publish` invocation. (The `server-json-check.yml` workflow catches `package.json` vs `server.json` drift on every PR; the lockfile cross-check is the human's job.)
-- [ ] **Package-name binding intact:** `package.json.name` is exactly `@mindstone/mcp-server-${CONNECTOR}` where `${CONNECTOR}` is the directory slug. No PR has tried to rename the package since the last publish.
-- [ ] **Named maintainer on call:** A human takes ownership of the version for the next 7 days for security response. This human's name + GitHub handle are recorded in the issue. The 7-day window is calibrated to the `min-release-age=7` cool-down enforced at publish time — consumers with that setting will not install this version unattended until day 7, so the on-call window covers the period during which a recall would matter.
-- [ ] **Publisher set documented:** The npm package's `maintainers` list on npm matches the named maintainer + at least one backup. Verify with `npm view @mindstone/mcp-server-<connector> maintainers`. For bootstrap publishes (any connector not already on `@mindstone/`), this list will be empty until step 4 of the runbook below lands.
-- [ ] **Approval recorded:** A separate human (not the author of the release commit) leaves a `LGTM — approve publish` comment on the tracking issue. That comment is the policy artefact replacing the old `npm-publish` environment approval.
+- *"A human read the changes"* → the §13 review with a mandatory cross-family adversarial pass (two independent model families over the same diff + source), machine-validated for completeness.
+- *"A human chose to publish"* → only the release tooling can produce a publishable commit (trailer gate); the tooling's own invocation is the deliberate act, and it runs interactive push approvals on the Rebel side.
+- *"A human would notice a bad publish"* → publish alerting (gate 5) plus the `min-release-age=7` consumer cool-down, plus `EMERGENCY_REVOKE.md` for recall.
 
-## Per-publish runbook
+What this model does **not** claim: the trailer gate does not stop a malicious actor with push access to `main` — it is format-validated on a public repo. The adversarial layers remain Trusted Publishing (no stealable token), Sigstore provenance, `min-release-age`, and the Rebel-side audit; catalog pinning on the Rebel side means a forged npm publish alone never reaches Rebel users.
 
-The canonical procedure is in `docs/plans/260517_PHASE_2_BOOTSTRAP_PLAN.md` § "Per-publish runbook". Summary (rounded to wall-time per package):
+**Deferred hardening (with re-open signals):** signed release commits would add an out-of-band-credential property on top of the trailer. Deferred for now (key-management overhead vs a two-maintainer team). Re-open on: external-contributor volume growth, any credential-compromise scare, or the OSS-launch readiness review.
 
-1. Refresh `main`, confirm clean tree — 30 s
-2. Sanity-check the connector slice (name + version) — 10 s
-3. Build + test + audit + pack-scan locally — ~1-2 min depending on connector
-4. `npm publish --access=public` — interactive WebAuthn prompt
-5. Confirm publish landed (`npm view ... version`) — 5 s
-6. Fire catalog-sync dispatch to Rebel via `gh api` — 5 s
-7. Watch for Rebel workflow + catalog-sync PR — ~3 min
-8. Update the publish tracker
+## First publishes (bootstrap) — the manual path
 
-## What we get (and don't get) without OIDC provenance
+`release.yml` can only publish packages that already have Trusted Publishing configured on npm. A brand-new connector's **first** publish is a manual maintainer ceremony, and the old human-gated checklist applies to it:
 
-- **Don't get:** Sigstore-signed provenance attestations linking the tarball to a specific GitHub Actions run. `npm view @mindstone/mcp-server-<connector>@<X.Y.Z> --json | jq .dist.attestations` returns null. `npm audit signatures` reports `Verified registry signatures` for npm's own signing but `bundleUrl` is absent. Consumers who consult provenance to validate releases get a weaker guarantee than they did with the (planned-but-never-shipped) OIDC model.
-- **Do get:** A human chain of custody — the wave-lead's WebAuthn 2FA + their identity in the tracking issue. The wave-lead's `npm whoami` matches the npm publisher account on the released version (verifiable via `npm view ... maintainers`). The release commit on `mindstone/mcp-servers` matches the tarball contents (verifiable by re-running `npm pack` at the publish commit and comparing the shasum from the `npm publish` output).
-
-A future iteration can reintroduce OIDC publishing if the team decides the provenance attestations are worth the bootstrap cost (per-package Trusted Publisher setup + GitHub environment reviewer rule). That decision is deferred to the post-Phase-3 retrospective.
+1. Land the new connector (PR with version surfaces set in lockstep — see `CONTRIBUTING.md` → First publish of a new connector). The version-bump guard exempts packages that are new at the PR base.
+2. Pre-publish checklist (record in a tracking issue `Publish approval: <connector> v<X.Y.Z>`):
+   - [ ] Security review artifact exists in the Rebel repo for this exact `<connector>@<version>` (same §13 artifact as gate 1 above).
+   - [ ] Tarball clean: `npm pack --dry-run --ignore-scripts` shows no `.map`, no `.test.` / `__tests__/`, no nested `.tgz`, no `.env*`, no `.npmrc`, no raw `.ts` source.
+   - [ ] `npm audit`: 0 critical / 0 high / 0 moderate on `--omit=dev`, or named risk owner per remaining moderate.
+   - [ ] `CHANGELOG.md` has the `[<X.Y.Z>] - <date>` section with honest content.
+   - [ ] Version sync across `package.json`, `package-lock.json` (top-level + `packages[""]`), `server.json` (top-level + `packages[0]`), `STATUS.json` if present.
+   - [ ] `package.json.name` is exactly `@mindstone/mcp-server-<directory-slug>`.
+3. `npm publish --access=public` — interactive WebAuthn prompt on the publisher account (`mindstone-engineering`; WebAuthn-only 2FA, no automation tokens on the scope).
+4. Configure Trusted Publishing for the package at npmjs.com (binds it to `release.yml` on this repo) so every subsequent release flows through the standard gate chain.
+5. Smoke: `npm view @mindstone/mcp-server-<connector> version`, then `npx -y @mindstone/mcp-server-<connector>` initialize handshake.
 
 ## Hygiene (quarterly review)
 
-Owner: the wave-lead, with the second `@mindstone/oss-maintainers` member doing the cross-check.
+Owner: the maintainers (`@mindstone/oss-maintainers`).
 
-- Confirm `npm whoami` on the wave-lead's machine returns the expected publisher account.
-- Confirm `npm access list packages @mindstone` lists every connector that has been published so far. A missing entry indicates either a failed publish or an unintended unpublish.
-- Confirm npm org-level 2FA is still enforced (`npm org ls mindstone` — every member shows their authentication mode in the npm UI). At time of writing the publisher account is WebAuthn-only.
-- Confirm no orphan `NPM_TOKEN` lives in `Settings → Secrets and variables → Actions` on `mindstone/mcp-servers`. With manual-publish mode, there is no legitimate use for that secret in the repo. If a token shows up, revoke it and rotate the publisher account's password.
-- Confirm `.github/workflows/` contains no resurrected publish workflow. If one appears, get explicit sign-off from the wave-lead before merging.
-- Add a second `@mindstone/` npm member before any future single-publisher emergency. Tracked in `docs/plans/260517_PHASE_2_BOOTSTRAP_PLAN.md` open questions.
+- Confirm Trusted Publishing bindings: every published `@mindstone/mcp-server-*` package's publisher config points at `mindstone/mcp-servers` + `release.yml`. A binding pointing anywhere else is an incident.
+- Confirm no `NPM_TOKEN` (or other npm automation token) lives in `Settings → Secrets and variables → Actions`. Trusted Publishing needs none; the existence of one is a red flag — revoke and investigate.
+- Confirm npm org-level 2FA is still enforced and the publisher account is WebAuthn-only.
+- Confirm the `npm-publish` GitHub environment still has the expected (empty-by-design) reviewer configuration — and that this document still reflects the policy if that ever changes.
+- Spot-check the last few releases: each release commit on `main` carries a `Release-Gate` trailer whose artifact exists in the Rebel repo with a matching hash.
+- Confirm `.npmrc` still pins `min-release-age=7` (security invariant — see `AGENTS.md`).
 
 ## Cross-references
 
-- [Phase 2 bootstrap plan + publish tracker](plans/260517_PHASE_2_BOOTSTRAP_PLAN.md) — single source of truth for the active wave
-- [Threat model + audit findings (historical)](security/AUDIT_FOX-3319_tanstack_supply_chain.md) — recommendation table is partially superseded by the manual-publish pivot; the threat model itself remains valid
-- [Branch + tag protection settings](security/BRANCH_PROTECTION.md) — the repo-side preconditions that gate the version-bump PR
+- [Release process + the landing rule](../CONTRIBUTING.md#release-process) — what lands via PR vs via the release tooling
+- [Branch + tag protection posture](security/BRANCH_PROTECTION.md) — the repo-side settings, documented honestly
+- [Threat model + audit findings (historical)](security/AUDIT_FOX-3319_tanstack_supply_chain.md) — the threat model remains valid; its recommendation table predates the AI-only pivot
 - [Emergency revoke runbook](EMERGENCY_REVOKE.md) — what to do when a published version turns out to be compromised
-- [Migration runbook (legacy scope cutover)](../MIGRATION.md) — the post-wave deprecation procedure for `@mindstone-engineering/*`
+- [Migration runbook (legacy scope cutover)](../MIGRATION.md) — post-wave deprecation of `@mindstone-engineering/*`
 - [Repository security policy](../SECURITY.md)
-- [Release process for contributors](../CONTRIBUTING.md#release-process) — the bump-and-CHANGELOG workflow the PR check enforces
+- Release tooling SSOT: `docs/project/MCP_OSS_RELEASE_AGENT_DRIVEN.md` in the Mindstone Rebel repo (private)

@@ -65,16 +65,18 @@ Full workflow lives in `CONTRIBUTING.md`. Agent-relevant invariants:
 
 ## Version-sync invariant
 
+**The landing rule first:** version bumps to existing connectors land **only** via the release tooling (`npm run mcp:release <connector>` in the Mindstone Rebel repo) — never in a PR (a required CI check, `.github/workflows/version-bump-guard.yml`, rejects them) and never as a hand-pushed bump (release.yml refuses to publish a bump whose release commit lacks the `Release-Gate` trailer the tooling stamps). The lockstep list below is what the tooling maintains; the only time it is done by hand is a brand-new connector's bootstrap first publish (see `CONTRIBUTING.md` > Release process).
+
 When bumping a connector, the version changes in lockstep across these files:
 
 - `connectors/<name>/package.json` — `version`.
 - `connectors/<name>/package-lock.json` — top-level `version` and `packages[""].version`.
 - `connectors/<name>/server.json` — top-level `version` and `packages[0].version`.
-- `connectors/<name>/STATUS.json` — `version` (only if the connector has a `STATUS.json`; not every connector does). **Easy to forget — it is not part of the `mcp-publisher`/release tooling, but `scripts/check-status.mjs` rejects it on CI.**
+- `connectors/<name>/STATUS.json` — `version` (only if the connector has a `STATUS.json`; not every connector does). The release tooling syncs it; **easy to forget when setting versions by hand (bootstrap)** — `scripts/check-status.mjs` rejects the drift on CI.
 
 CI rejects PRs where these drift. The git tag at release time must also match.
 
-Bumping a version (or adding/removing a connector) also changes **generated, committed artifacts** that are *not* updated by the release tooling. Regenerate and commit them in the same change, or CI on `main` goes red:
+Bumping a version (or adding/removing a connector) also changes **generated, committed artifacts**. The release tooling regenerates them itself; for any other change that affects them (new connector, README tagline edit, etc.), regenerate and commit them in the same change, or CI on `main` goes red:
 
 ```bash
 node scripts/build-catalogue.mjs      # docs/catalogue/<name>.md + docs/index.md
@@ -86,17 +88,17 @@ node scripts/gen-install-links.mjs    # the INSTALL_LINKS block in each connecto
 ## CHANGELOG conventions
 
 - Each connector has its own `CHANGELOG.md` following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-- A `package.json` version bump requires a matching `## [<version>] - YYYY-MM-DD` header introduced in the same PR, not carried from `main`. CI enforces this.
+- A `package.json` version bump requires a matching `## [<version>] - YYYY-MM-DD` header introduced in the same change. The release tooling does this promotion automatically; for bootstrap first-add PRs (the only PRs allowed to carry a version), the changelog-check CI workflow enforces it.
 - Use only the standard headings: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`.
 - Re-insert an empty `## [Unreleased]` block above the new version header.
 - Never invoke `scripts/backfill-changelog.sh` from CI or a workflow — it is local-only by design.
 
 ## Commit and PR conventions
 
-- One logical change per PR. Refactors, version bumps, and behaviour changes go in separate commits and ideally separate PRs.
+- One logical change per PR. Refactors and behaviour changes go in separate commits and ideally separate PRs. **Version bumps never go in a PR at all** — they land only via the release tooling (see Version-sync invariant above); the `version-bump-guard` CI check rejects PRs that bump an existing connector.
 - Use Conventional Commits: `<type>(<scope>): <summary>`. `<scope>` is the connector name for connector-touching changes (e.g. `feat(zendesk): ...`, `fix(hubspot): ...`); use `chore(release): ...` for release-process work.
 - Commit messages describe what changed and why.
-- Do not name AI tools or models in commit messages, PR titles, PR bodies, branch names, or `Co-authored-by:` lines.
+- Do not name AI tools or models in commit messages, PR titles, PR bodies, branch names, or `Co-authored-by:` lines. This applies to code/PR commits. The `Release-Gate: <path>#<sha256>` trailer that the release tooling stamps on release commits is process metadata (it names no AI tool) and is required there — do not strip it, and do not hand-write it on ordinary commits.
 - Only commit changes from the current task. Selectively `git add` the files actually modified; do not use `git add -A` or `git add .` when unrelated changes exist in the working tree.
 - Stop before destructive git actions (discarding work, force-checkout, dropping stashes, hard resets, force-pushing shared branches) and confirm with the user.
 - If a PR changes a connector's behaviour, update that connector's `README.md` in the same PR.
