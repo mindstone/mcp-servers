@@ -33,6 +33,11 @@
 // bump self-heals. A --to BEHIND the current
 // version also fails closed.
 //
+// Precondition (both modes, before any write): server.json is validated via
+// scripts/check-server-json.mjs — the same pinned `mcp-publisher validate`
+// (registry round-trip) the "server.json check" CI workflow runs. Fails
+// closed offline; see that script's header for the policy.
+//
 // Version-skew note: Rebel's mcp-release.ts executes whatever copy of this
 // script its submodule pin has — a Rebel-side change that assumes a newer
 // flag here must land in mcp-servers (and the pin advance) first.
@@ -56,7 +61,9 @@ regenerates the committed catalogue + install-links artifacts. STATUS.json
 carries no version (schema v2) and is not touched. Mutates files only —
 never commits. If the connector is already at --to, validates that every
 other lockstep surface is also at --to (fail closed on any stale surface),
-then runs the idempotent sync (generators) only.
+then runs the idempotent sync (generators) only. In both modes, server.json
+is first validated against the MCP registry via scripts/check-server-json.mjs
+(fail closed, including when offline — registry rules are server-side only).
 
 Flags:
   --to <x.y.z>             target version; must not be behind the current version
@@ -217,6 +224,40 @@ if (!syncOnly) {
       `${changelogPath} already contains a "## [${toVersion}]" block but package.json is at ` +
         `${currentVersion} — the version surfaces are desynced. Reconcile the CHANGELOG by hand, then re-run.`,
     );
+  }
+}
+
+// --- server.json registry precondition (fail closed BEFORE any write) ---------
+//
+// The MCP registry enforces rules server-side that the static JSON schema
+// does not (e.g. description length <= 100 — the 260611 canary incident).
+// scripts/check-server-json.mjs runs the same pinned `mcp-publisher
+// validate` (schema + registry round-trip) as the "server.json check" CI
+// workflow, so a bump never commits to writes on top of a server.json the
+// registry would reject. It validates the CURRENT content — the bump itself
+// only rewrites the two version fields, and CI re-validates the final state.
+// No network => the check fails closed (exit 2), never skip-passes.
+
+{
+  const serverJsonPath = join(connectorDir, 'server.json');
+  if (existsSync(serverJsonPath)) {
+    console.log(`bump-connector: validating server.json against the MCP registry (scripts/check-server-json.mjs ${connector})`);
+    const r = spawnSync(
+      process.execPath,
+      [join(repoRoot, 'scripts', 'check-server-json.mjs'), connector],
+      { cwd: repoRoot, stdio: 'inherit' },
+    );
+    if (r.status !== 0) {
+      fail(
+        r.status === 2
+          ? `server.json registry validation could not run (offline or unsupported environment) — ` +
+              `failing closed before any write. Re-run with network access, or land the change via PR ` +
+              `so the "server.json check" CI gate validates it pre-merge (manual path: ` +
+              `MCP_OSS_PACKAGE_MANUAL_UPDATE.md in the Rebel repo's docs/project/).`
+          : `connectors/${connector}/server.json failed registry validation (see errors above) — ` +
+              `fix it before bumping. No version surfaces were written.`,
+      );
+    }
   }
 }
 
