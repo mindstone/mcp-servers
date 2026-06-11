@@ -77,6 +77,8 @@ When bumping a connector, the version changes in lockstep across these files:
 
 CI rejects PRs where these drift. The git tag at release time must also match.
 
+**server.json content edits land via PR** (the "server.json check" CI workflow gates pre-merge) **or only after `node scripts/check-server-json.mjs <connector>` passes locally** — the MCP registry enforces rules server-side (e.g. description length <= 100) that no local schema check catches, so a direct-pushed server.json edit without that round-trip turns `main` red (260611 canary incident). The script fails closed when offline; `bump-connector.mjs` runs it automatically as a precondition.
+
 Bumping a version (or adding/removing a connector) also changes **generated, committed artifacts**. The release tooling regenerates them itself; for any other change that affects them (new connector, README tagline edit, etc.), regenerate and commit them in the same change, or CI on `main` goes red:
 
 ```bash

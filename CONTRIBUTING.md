@@ -67,6 +67,8 @@ mcp-publisher validate server.json
 
 A passing validate is required before opening a PR. CI runs the same check on every PR — see `.github/workflows/server-json-check.yml`.
 
+The pinned, no-install equivalent is `node scripts/check-server-json.mjs <connector>` (same `mcp-publisher` version and registry round-trip as CI; fails closed when offline). Any server.json edit lands via PR — where the "server.json check" gate validates it pre-merge — or, if it must be pushed directly, only after this script passes locally: the registry enforces rules server-side (e.g. description length <= 100) that no local schema check catches.
+
 ### Publishing to the registry
 
 Maintainer task, not a contributor task. After a connector is tagged and the npm publish workflow ships a new version, the maintainer registers (or updates) the entry with:
