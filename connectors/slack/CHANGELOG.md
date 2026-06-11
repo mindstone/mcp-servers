@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-06-10
+
+### Changed
+
+- Use saved Slack tokens without OAuth client creds; fail loud when a rotating refresh needs absent creds; drop duplicate message field in post_slack_message (FOX-2595).
+
 ## [0.1.3] - 2026-05-20
 
 ### Security

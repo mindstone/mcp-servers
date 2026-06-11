@@ -21,6 +21,7 @@ import {
   ConnectorError,
   REFRESH_AUTH_REJECTED,
   REFRESH_MALFORMED_RESPONSE,
+  REFRESH_NO_CLIENT_CREDENTIALS,
   REFRESH_RATE_LIMITED,
   REFRESH_TRANSIENT,
   REQUEST_TIMEOUT_MS,
@@ -418,6 +419,19 @@ export class SlackTokenProvider {
     refreshToken: string,
     tokenType: 'bot' | 'user',
   ): Promise<{ accessToken: string; refreshToken: string; expiresAt: number }> {
+    // A rotating token needs refreshing but the host did not wire OAuth client
+    // credentials. We cannot complete the refresh, so fail loud with a
+    // re-auth-directing error rather than sending an empty client_id/secret to
+    // Slack (which returns an opaque invalid_client). Non-rotating tokens never
+    // reach this method (getBotToken/getUserToken return before refresh).
+    if (!this.clientId || !this.clientSecret) {
+      throw new ConnectorError(
+        'Slack token needs refreshing but no OAuth client credentials are configured on this surface.',
+        REFRESH_NO_CLIENT_CREDENTIALS,
+        'Re-authenticate the Slack workspace via your MCP host application to provision fresh tokens.',
+      );
+    }
+
     const params = new URLSearchParams({
       client_id: this.clientId,
       client_secret: this.clientSecret,

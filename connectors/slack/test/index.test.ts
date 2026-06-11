@@ -261,6 +261,20 @@ describe('Slack MCP — DM recipient verification', () => {
     expect((result.json as { warning?: string }).warning).toMatch(/intended_recipient/i);
     expect((result.json as { recipient?: { user_id?: string } }).recipient?.user_id).toBe('U123');
   });
+
+  it('returns posted text under `text` without a duplicate `message` field (FOX-2595)', async () => {
+    const result = await client.callTool('post_slack_message', {
+      channel: 'C123TEST',
+      text: 'normalize me',
+    });
+    const j = result.json as Record<string, unknown>;
+    expect(j.ok).toBe(true);
+    expect(j.text).toBe('normalize me');
+    // FOX-2595: the response must expose the posted text once. Historically it
+    // duplicated `text` into a `message` string, which collides with the
+    // enriched-message-object semantics `message` carries on read tools.
+    expect(j).not.toHaveProperty('message');
+  });
 });
 
 describe('Slack MCP — open_slack_dm validation', () => {
