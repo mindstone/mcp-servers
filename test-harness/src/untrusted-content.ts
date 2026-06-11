@@ -1,0 +1,98 @@
+/**
+ * Shared `<untrusted-content>` envelope helper.
+ *
+ * AGENTS.md security invariant #6: content fetched from external systems MUST
+ * be wrapped in `<untrusted-content source="…">…</untrusted-content>` envelopes
+ * — with close-tag breakout escaping — before it is returned to the LLM, so the
+ * model treats third-party / attacker-controllable text as DATA, not as
+ * instructions.
+ *
+ * This module is the single canonical home for the envelope helper. Historically
+ * each connector carried its own copy and they DRIFTED into two families:
+ *
+ *   - a weak `replaceAll('</untrusted-content>', …)` family (slack,
+ *     google-workspace, replit-ssh) that misses whitespace / case close-tag
+ *     variants such as `</untrusted-content >` or `</UNTRUSTED-CONTENT>`; and
+ *   - a stronger regex family (freshdesk, zendesk, email-imap) that is
+ *     idempotent and neutralises every case/whitespace variant of the close
+ *     tag.
+ *
+ * This helper adopts the STRONGER family. The weaker copies are a latent
+ * correctness bug, not just cosmetic drift. Migrating the existing enveloped
+ * connectors onto this shared helper is a deliberate follow-up (one connector
+ * per change, per the repo's one-connector-per-change rule) — this module is
+ * the home they migrate to.
+ *
+ * It also lives in `test-harness/` (already a `file:`-linked dependency of every
+ * connector) specifically so a grep / import audit — and the
+ * `scripts/check-untrusted-coverage.mjs` gate — can verify that every
+ * external-text boundary reaches it.
+ */
+
+const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content[ \t]*>/gi;
+const ESCAPED_UNTRUSTED_CLOSE_TAG = '<\\/untrusted-content>';
+
+function escapeAttr(s: string): string {
+  return s.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+/**
+ * Rewrite every `</untrusted-content>` variant (case-insensitive, optional
+ * space/tab before `>`) inside `s` to a benign textual form, so an attacker
+ * who controls the wrapped content cannot terminate the envelope early.
+ */
+function escapeCloseTagSentinels(s: string): string {
+  return s.replace(UNTRUSTED_CLOSE_TAG_VARIANT, ESCAPED_UNTRUSTED_CLOSE_TAG);
+}
+
+/**
+ * Wrap a single untrusted string in an `<untrusted-content source="…">`
+ * envelope, escaping any embedded close-tag variant so the envelope cannot be
+ * broken out of.
+ *
+ * `undefined` is passed through untouched so callers can apply the wrapper
+ * uniformly to optional fields without branching.
+ *
+ * Idempotent: when `text` is already a properly-shaped envelope for the SAME
+ * `source` (starts with the matching OPEN tag, ends with CLOSE, and contains no
+ * internal close-tag variants), the original string is returned unchanged so
+ * `wrapUntrusted(wrapUntrusted(s, src), src) === wrapUntrusted(s, src)`.
+ */
+export function wrapUntrusted(text: string | undefined, source: string): string | undefined {
+  if (text === undefined) return undefined;
+  const open = `<untrusted-content source="${escapeAttr(source)}">`;
+  const close = '</untrusted-content>';
+  if (text.startsWith(open) && text.endsWith(close) && text.length >= open.length + close.length) {
+    const inner = text.slice(open.length, text.length - close.length);
+    if (!UNTRUSTED_CLOSE_TAG_VARIANT.test(inner)) {
+      UNTRUSTED_CLOSE_TAG_VARIANT.lastIndex = 0; // reset stateful /g regex
+      return text;
+    }
+    UNTRUSTED_CLOSE_TAG_VARIANT.lastIndex = 0;
+  }
+  return `${open}${escapeCloseTagSentinels(text)}${close}`;
+}
+
+/**
+ * Recursively wrap every string value reachable inside `value` (strings,
+ * arrays, plain-object property values) in an `<untrusted-content>` envelope.
+ *
+ * Use this when a whole response blob is third-party data and you want to
+ * envelope it wholesale rather than enumerate fields. Object keys are NOT
+ * wrapped (they are structural), only the string values. Non-string leaves
+ * (numbers, booleans, null) pass through unchanged.
+ */
+export function wrapUntrustedJsonStrings<T>(value: T, source: string): T {
+  if (typeof value === 'string') {
+    return wrapUntrusted(value, source) as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => wrapUntrustedJsonStrings(item, source)) as T;
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, wrapUntrustedJsonStrings(item, source)]),
+    ) as T;
+  }
+  return value;
+}

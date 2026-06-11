@@ -2,6 +2,13 @@ import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { withErrorHandling } from './utils.js';
+// SECURITY (AGENTS.md invariant #6): any text authored in the external system
+// (names, descriptions, bodies, comments, titles, transcripts, …) is untrusted
+// and MUST be enveloped before it reaches the LLM. `wrapUntrusted` is the shared
+// helper; see ./untrusted-content.ts. New tools that return external text MUST
+// either reach this helper or carry a `// untrusted-content-exempt: <reason>`
+// marker (enforced by scripts/check-untrusted-coverage.mjs).
+import { wrapUntrusted } from './untrusted-content.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json') as { version: string };
@@ -89,11 +96,22 @@ export function createServer(): McpServer {
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      // TODO: Replace with real API call
+      // TODO: Replace with real API call. The shape below shows the REQUIRED
+      // pattern: every field whose value is authored in the external system
+      // (here `name` and `description`) is wrapped with `wrapUntrusted(...)`
+      // before being returned. Connector-controlled metadata (ids, counts,
+      // timestamps, URLs) is NOT wrapped. The `source` argument identifies the
+      // origin so the LLM (and audit logs) can see where the data came from.
+      const resourcesFromApi: Array<{ id: string; name: string; description?: string }> = [];
+      const resources = resourcesFromApi.map((r) => ({
+        id: r.id,
+        name: wrapUntrusted(r.name, 'CONNECTOR_NAME:resource.name'),
+        description: wrapUntrusted(r.description, 'CONNECTOR_NAME:resource.description'),
+      }));
       return JSON.stringify({
         ok: true,
-        resources: [],
-        total: 0,
+        resources,
+        total: resources.length,
       });
     }),
   );

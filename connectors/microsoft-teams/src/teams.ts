@@ -48,13 +48,23 @@ const HTML_ENTITIES: Record<string, string> = {
 const TAG_RE = /<[^>]*>/g;
 const ENTITY_RE = /&(?:nbsp|amp|lt|gt|quot);/g;
 
-// Strip HTML for plain-text display of Teams chat message bodies. The output
-// is always wrapped in an `<untrusted-content>` envelope by the host, so this
-// is a presentation helper, not a security sanitiser. Runs the tag-strip pass
-// in a fixed-point loop so a payload like `<scr<script>ipt>` cannot leave a
-// reconstructed `<script>` behind after a single pass; decodes the five named
-// entities in a single regex pass (lookup-map driven) so a doubly-encoded
-// `&amp;lt;` is not double-unescaped into `<`.
+// Strip HTML for plain-text display of Teams chat message bodies. This is a
+// presentation helper, not a security sanitiser.
+//
+// SECURITY (AGENTS.md invariant #6): GAPPED — chat body `content` and other
+// external-text fields here are returned WITHOUT an `<untrusted-content>`
+// envelope. The host does NOT wrap connector output (`processCallToolResult`
+// in the Rebel host just concatenates text parts), so any prior assumption to
+// that effect was false. This connector is a tracked known gap in
+// scripts/untrusted-coverage-baseline.json (FOX-3490 remediation program);
+// the proper fix is to envelope these fields with the shared `wrapUntrusted`
+// helper in a dedicated per-connector release.
+//
+// Runs the tag-strip pass in a fixed-point loop so a payload like
+// `<scr<script>ipt>` cannot leave a reconstructed `<script>` behind after a
+// single pass; decodes the five named entities in a single regex pass
+// (lookup-map driven) so a doubly-encoded `&amp;lt;` is not double-unescaped
+// into `<`.
 function stripHtml(html: string): string {
   let previous = '';
   let current = html;
