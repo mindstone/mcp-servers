@@ -22,9 +22,13 @@
 //                                         regenerated via the existing generator scripts
 //
 // Idempotent sync mode (current version == --to): the bump writes are
-// skipped, but the STATUS.json sync and the generators still run
-// (write-on-drift), so a resumed or externally-landed bump self-heals.
-// A --to BEHIND the current version fails closed.
+// skipped, but ONLY after validating that every other lockstep version
+// surface (package-lock.json, server.json, CHANGELOG.md) already sits at
+// --to — a partial state is a desynced externally-landed bump and fails
+// closed (route: manual runbook). When the validation passes, the
+// STATUS.json sync and the generators still run (write-on-drift), so a
+// resumed or fully-landed bump self-heals. A --to BEHIND the current
+// version also fails closed.
 //
 // Version-skew note: Rebel's mcp-release.ts executes whatever copy of this
 // script its submodule pin has — a Rebel-side change that assumes a newer
@@ -47,7 +51,9 @@ Bumps every committed version surface for one connector in lockstep
 (package.json, package-lock.json, server.json, CHANGELOG.md, STATUS.json),
 then regenerates the committed catalogue + install-links artifacts.
 Mutates files only — never commits. If the connector is already at --to,
-runs the idempotent sync (STATUS.json + generators) only.
+validates that every other lockstep surface is also at --to (fail closed on
+any stale surface), then runs the idempotent sync (STATUS.json + generators)
+only.
 
 Flags:
   --to <x.y.z>             target version; must not be behind the current version
@@ -216,6 +222,61 @@ if (!syncOnly) {
 const changed = [];
 
 if (syncOnly) {
+  // Sync mode is only legal when EVERY lockstep version surface already sits
+  // at --to. package.json alone matching is NOT proof the bump landed: an
+  // externally-landed bump can leave package-lock.json, server.json, or the
+  // CHANGELOG stale, and skipping the bump writes here would let that
+  // desynced state proceed as if it were lockstep. Validate every surface
+  // BEFORE any write (fail closed leaves the tree untouched) and route the
+  // stale states to the manual runbook — they need human reconciliation,
+  // not a resumed sync.
+  const staleSurfaces = [];
+
+  const lockPath = join(connectorDir, 'package-lock.json');
+  if (existsSync(lockPath)) {
+    const lock = readJson(lockPath);
+    if (lock.version !== toVersion) {
+      staleSurfaces.push(`package-lock.json version is "${lock.version}" (expected ${toVersion})`);
+    }
+    const lockRootPkg = lock.packages?.[''];
+    if (lockRootPkg && lockRootPkg.version !== toVersion) {
+      staleSurfaces.push(
+        `package-lock.json packages[""].version is "${lockRootPkg.version}" (expected ${toVersion})`,
+      );
+    }
+  }
+
+  const serverJsonPath = join(connectorDir, 'server.json');
+  if (existsSync(serverJsonPath)) {
+    const serverJson = readJson(serverJsonPath);
+    if (serverJson.version !== toVersion) {
+      staleSurfaces.push(`server.json version is "${serverJson.version}" (expected ${toVersion})`);
+    }
+    const firstPkg = Array.isArray(serverJson.packages) ? serverJson.packages[0] : undefined;
+    if (firstPkg && firstPkg.version !== toVersion) {
+      staleSurfaces.push(
+        `server.json packages[0].version is "${firstPkg.version}" (expected ${toVersion})`,
+      );
+    }
+  }
+
+  if (!existsSync(changelogPath)) {
+    staleSurfaces.push(`CHANGELOG.md is missing (expected a "## [${toVersion}]" block)`);
+  } else if (!readFileSync(changelogPath, 'utf8').includes(`## [${toVersion}]`)) {
+    staleSurfaces.push(`CHANGELOG.md has no "## [${toVersion}]" block`);
+  }
+
+  if (staleSurfaces.length > 0) {
+    fail(
+      `connector "${connector}" package.json is already at ${toVersion}, but other lockstep ` +
+        `version surfaces are stale:\n` +
+        staleSurfaces.map((s) => `  - ${s}`).join('\n') +
+        `\nThis is a desynced externally-landed bump, not a resumable sync — automated ` +
+        `reconciliation must refuse it. Reconcile the stale surface(s) by hand via the manual ` +
+        `runbook (MCP_OSS_PACKAGE_MANUAL_UPDATE.md in the Rebel repo's docs/project/), then re-run.`,
+    );
+  }
+
   console.log(
     `bump-connector: ${connector} already at ${toVersion}; running idempotent sync only ` +
       `(STATUS.json + generated artifacts)`,
