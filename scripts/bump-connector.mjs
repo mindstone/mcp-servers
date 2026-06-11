@@ -70,6 +70,9 @@ Flags:
   --changelog-entry "..."  one-line release note (<= 200 chars) for the new
                            CHANGELOG block; required when actually bumping
   --date YYYY-MM-DD        CHANGELOG release date (default: today, UTC)
+  --skip-server-json-check skip the registry validation precondition.
+                           HERMETIC-TEST ESCAPE ONLY — real bumps must not
+                           pass it (CI re-validates regardless)
   --help                   print this usage`;
 
 function fail(msg) {
@@ -117,6 +120,7 @@ try {
       to: { type: 'string' },
       'changelog-entry': { type: 'string' },
       date: { type: 'string' },
+      'skip-server-json-check': { type: 'boolean', default: false },
       help: { type: 'boolean', default: false },
     },
     allowPositionals: true,
@@ -240,7 +244,14 @@ if (!syncOnly) {
 
 {
   const serverJsonPath = join(connectorDir, 'server.json');
-  if (existsSync(serverJsonPath)) {
+  // --skip-server-json-check: HERMETIC-TEST ESCAPE ONLY (fixture skeletons have
+  // no registry access and no scripts/ tree). Every real path — mcp:release,
+  // the bootstrap recipe — runs the precondition; CI re-validates regardless.
+  const skipServerJsonCheck = values['skip-server-json-check'];
+  if (skipServerJsonCheck) {
+    console.warn('bump-connector: WARNING — server.json registry validation SKIPPED (--skip-server-json-check; hermetic-test escape, CI still validates)');
+  }
+  if (!skipServerJsonCheck && existsSync(serverJsonPath)) {
     console.log(`bump-connector: validating server.json against the MCP registry (scripts/check-server-json.mjs ${connector})`);
     const r = spawnSync(
       process.execPath,
