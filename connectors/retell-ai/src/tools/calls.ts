@@ -18,6 +18,47 @@ import { checkDynamicVariableReferences } from '../precall-checks.js';
  */
 const E164_REGEX = /^\+[1-9]\d{1,14}$/;
 
+/**
+ * Coerce a parseable date string (ISO 8601, RFC 2822, or a digit-only epoch-ms
+ * string) to epoch milliseconds. Non-strings and un-coercible strings pass
+ * through unchanged — the refine in epochMsField rejects the latter.
+ */
+const coerceEpochMs = (val: unknown): unknown => {
+  if (typeof val !== 'string') return val;
+  const trimmed = val.trim();
+  if (trimmed === '') return val;
+  if (/^\d+$/.test(trimmed)) {
+    // Digit-only strings are accepted ONLY in the unambiguous epoch-ms window
+    // [1e12, 1e14) (≈ Sep 2001 → year 5138). Anything else — Unix SECONDS
+    // ("1735689600" would silently be 1000x off), microseconds, tiny values —
+    // is returned unchanged so the refine rejects it with an actionable
+    // message. Never let digit-only strings fall through to Date.parse:
+    // V8 parses "5" as year 2005 and "0" as 2000.
+    const num = Number(trimmed);
+    return num >= 1e12 && num < 1e14 ? num : val;
+  }
+  const ms = new Date(trimmed).getTime();
+  return Number.isNaN(ms) ? val : ms;
+};
+
+/**
+ * Epoch-milliseconds field that advertises BOTH number and string in the
+ * exported JSON schema (anyOf integer|string), while coercing date strings to
+ * epoch ms and rejecting un-coercible strings (including ambiguous digit-only
+ * strings such as Unix seconds) at runtime.
+ *
+ * Why: strict MCP hosts validate a tool call against the exported schema
+ * BEFORE the connector runs, and LLMs frequently send ISO date strings for
+ * epoch-ms fields. A bare z.number() schema gets such calls rejected at the
+ * host boundary, where the connector never gets a chance to coerce.
+ * See CONTRIBUTING.md "Date & timestamp fields".
+ */
+const epochMsField = () =>
+  z.preprocess(coerceEpochMs, z.union([z.number().int(), z.string()]))
+    .refine((v): v is number => typeof v === 'number', {
+      message: 'Expected epoch milliseconds (number), a 13-digit epoch-ms string, or a parseable date string (e.g. "2026-01-01").',
+    });
+
 function validateE164(field: 'from_number' | 'to_number', value: string): void {
   if (!E164_REGEX.test(value)) {
     throw new ConnectorError(
@@ -263,16 +304,16 @@ WHEN TO USE:
 
 FILTERING:
 - agent_id accepts an array of one or more agent IDs
-- filter_criteria uses Unix timestamps in milliseconds
+- filter_criteria timestamps accept Unix milliseconds (number) or a parseable date string (e.g. "2026-01-01"); date strings are converted to milliseconds before the API call
 - Example: { "limit": 20, "agent_id": ["agent_xxx"], "filter_criteria": { "after_start_timestamp": 1735689600000 } }
 
 COMMON MISTAKES:
 - Passing one agent_id as a string instead of an array
-- Using seconds for timestamps; Retell expects milliseconds
+- Using seconds for numeric timestamps; Retell expects milliseconds
 
 ERROR RECOVERY:
 - 401: API key is missing or invalid → configure_retell_api_key
-- 422: invalid filter shape → check agent_id is an array and timestamps are milliseconds
+- 422: invalid filter shape → check agent_id is an array and numeric timestamps are milliseconds
 
 RELATED TOOLS:
 - get_call: Get transcript/recording/analysis for a returned call_id
@@ -286,8 +327,8 @@ RETURNS: calls, count, pagination_key, has_more. Each call includes call_id, sta
         sort_order: z.enum(['ascending', 'descending']).optional().describe('Sort by start time. Default: descending (newest first).'),
         pagination_key: z.string().optional().describe('Pagination key from previous response for the next page.'),
         filter_criteria: z.object({
-          after_start_timestamp: z.number().int().optional().describe('Only calls started after this Unix timestamp in milliseconds (e.g. 1735689600000).'),
-          before_start_timestamp: z.number().int().optional().describe('Only calls started before this Unix timestamp in milliseconds (e.g. 1738368000000).'),
+          after_start_timestamp: epochMsField().optional().describe('Only calls started after this time. Unix timestamp in milliseconds (number, e.g. 1735689600000) or a parseable date string (e.g. "2026-01-01").'),
+          before_start_timestamp: epochMsField().optional().describe('Only calls started before this time. Unix timestamp in milliseconds (number, e.g. 1738368000000) or a parseable date string (e.g. "2026-02-01").'),
         }).optional().describe('Time-based filters for narrowing call results.'),
       },
       annotations: {

@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "name": "retell-ai",
   "package": "@mindstone/mcp-server-retell-ai",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "auth": {
     "type": "api-key",
     "envVars": [
