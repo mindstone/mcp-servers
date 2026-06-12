@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- `get_slack_message_by_link` and `get_slack_thread_replies` now surface
+  `files[]` attachment metadata (`id`, `name`, `mimetype`, `size`) — the same
+  projection `get_slack_channel_history` already returned — so the agent can see
+  that a linked message or thread reply carries an attachment and download it
+  with `download_slack_file` using `files[].id`. Both tool descriptions are
+  updated accordingly. All three tools now share a single `mapSlackFiles()`
+  projection helper. (Previously, the two natural "look at this Slack link/thread"
+  tools dropped attachments entirely, so the agent could wrongly conclude a
+  message had none.)
+
+### Security
+
+- The attacker-controlled file `name` field is now wrapped in an
+  `<untrusted-content source="slack:file-name">…</untrusted-content>` envelope
+  (AGENTS.md invariant #6), including in `get_slack_channel_history` where it was
+  previously surfaced unwrapped. Routing all three tools through the shared
+  `mapSlackFiles()` chokepoint makes the envelope impossible to forget on any one
+  call site. The two `download_slack_file` error responses (file-too-large,
+  no-download-url) that echoed `file.name` unwrapped now wrap it too, matching
+  that tool's success path. Regression tests in `test/file-attachments.test.ts`.
+
 ## [0.1.4] - 2026-06-10
 
 ### Changed
