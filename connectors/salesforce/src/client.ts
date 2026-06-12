@@ -72,11 +72,19 @@ export async function getConnection(accountId?: string): Promise<jsforce.Connect
   const connectionConfig: any = {
     instanceUrl: tokenData.instance_url,
     accessToken: tokenData.access_token,
-    refreshToken: tokenData.refresh_token,
   };
 
+  // Only hand jsforce a refresh token when we can also give it a way to USE
+  // that token — i.e. the OAuth2 client info to build a refresh delegate.
+  // jsforce throws synchronously at construction otherwise:
+  // "Refresh token is specified without oauth2 client information or refresh function".
+  // This is the bridge-mode case: the host app owns OAuth and does not pass
+  // SALESFORCE_CLIENT_ID/SECRET into the connector, so we operate on the access
+  // token alone and surface SESSION_EXPIRED (-> reconnect) on expiry rather than
+  // crashing every tool call. (See docs/plans/260612_fix-salesforce-bridge-refresh-token/.)
   if (clientId && clientSecret && tokenData.refresh_token) {
     connectionConfig.oauth2 = { clientId, clientSecret, loginUrl };
+    connectionConfig.refreshToken = tokenData.refresh_token;
   }
 
   const conn = new jsforce.Connection(connectionConfig);

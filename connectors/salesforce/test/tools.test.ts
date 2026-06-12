@@ -1,3 +1,5 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
@@ -11,6 +13,24 @@ function createAuthEnv(configPath: string): Record<string, string> {
     SALESFORCE_CLIENT_SECRET: 'mcp-test-client-secret',
     SALESFORCE_CONFIG_DIR: configPath,
     MCP_HOST_BRIDGE_STATE: '',
+  };
+}
+
+/**
+ * Bridge-mode env: the host app owns OAuth and does NOT pass the OAuth client
+ * credentials (CLIENT_ID/SECRET) into the connector's environment. A token file
+ * with a refresh_token still exists. This is the production configuration that
+ * regressed — see docs/plans/260612_fix-salesforce-bridge-refresh-token/.
+ */
+function createBridgeEnv(configPath: string): Record<string, string> {
+  const bridgePath = path.join(configPath, 'bridge.json');
+  fs.writeFileSync(bridgePath, JSON.stringify({ port: 9999, token: 'test' }));
+  return {
+    MCP_HOST_BRIDGE_STATE: bridgePath,
+    SALESFORCE_CONFIG_DIR: configPath,
+    // Explicitly absent in bridge mode — override any ambient values.
+    SALESFORCE_CLIENT_ID: '',
+    SALESFORCE_CLIENT_SECRET: '',
   };
 }
 
@@ -128,6 +148,76 @@ describe('Tool tests — Salesforce MCP server', () => {
     const result = await testClient.callTool('salesforce_get_accounts', { limit: 10 });
     expect(result.json).toHaveProperty('ok', true);
     expect(result.json.records).toBeDefined();
+  });
+
+  // Regression: in bridge mode the host owns OAuth and does not pass
+  // SALESFORCE_CLIENT_ID/SECRET to the connector. A refresh_token is present in
+  // the token file. The connector must NOT hand jsforce a refresh token without
+  // OAuth2 client info — doing so throws at construction:
+  // "Refresh token is specified without oauth2 client information or refresh function".
+  // See docs/plans/260612_fix-salesforce-bridge-refresh-token/.
+  it('salesforce tool calls succeed in bridge mode without OAuth client credentials', async () => {
+    mswServer.use(...createSalesforceHandlers());
+    tempConfig = createConfigWithToken();
+    testClient = await createTestClient({ env: createBridgeEnv(tempConfig.configPath) });
+
+    const result = await testClient.callTool('salesforce_get_accounts', { limit: 10 });
+    expect(result.json).toHaveProperty('ok', true);
+    expect(result.json.records).toBeDefined();
+  });
+
+  // Guards the POSITIVE branch of the bridge fix: standalone_oauth mode (and
+  // bridge-with-creds) must STILL attach refreshToken so jsforce auto-refreshes.
+  // A stale access token forces a 401; jsforce refreshes against the mocked
+  // login.salesforce.com token endpoint and retries. If a future change dropped
+  // refreshToken from the credentialed path, jsforce couldn't refresh and this
+  // would surface SESSION_EXPIRED instead of ok:true. (non-sandbox instance_url
+  // so the refresh hits login.salesforce.com, which the mock serves.)
+  it('standalone OAuth mode still auto-refreshes an expired access token', async () => {
+    mswServer.use(...createSalesforceHandlers());
+    tempConfig = createTempConfig({
+      accounts: [{ id: 'test-user', username: 'test@example.com', connected_at: new Date().toISOString() }],
+      credentials: [{
+        filename: 'test-user.token.json',
+        data: {
+          access_token: 'stale-access-token',
+          refresh_token: 'mock-refresh',
+          instance_url: 'https://example.my.salesforce.com',
+          expires_at: Date.now() + 3600_000,
+          username: 'test@example.com',
+        },
+      }],
+    });
+    testClient = await createTestClient({ env: createAuthEnv(tempConfig.configPath) });
+
+    const result = await testClient.callTool('salesforce_get_accounts', { limit: 10 });
+    expect(result.json).toHaveProperty('ok', true);
+    expect(result.json.records).toBeDefined();
+  });
+
+  // Bridge mode with an expired access token and no way to refresh (host owns
+  // OAuth) must degrade GRACEFULLY to SESSION_EXPIRED (prompting reconnect),
+  // not crash. The 401 maps through withConnection() to a structured error.
+  it('bridge mode surfaces SESSION_EXPIRED on an expired token instead of crashing', async () => {
+    mswServer.use(...createSalesforceHandlers());
+    tempConfig = createTempConfig({
+      accounts: [{ id: 'test-user', username: 'test@example.com', connected_at: new Date().toISOString() }],
+      credentials: [{
+        filename: 'test-user.token.json',
+        data: {
+          access_token: 'expired-access-token',
+          refresh_token: 'mock-refresh',
+          instance_url: MOCK_INSTANCE_URL,
+          expires_at: Date.now() + 3600_000,
+          username: 'test@example.com',
+        },
+      }],
+    });
+    testClient = await createTestClient({ env: createBridgeEnv(tempConfig.configPath) });
+
+    const result = await testClient.callTool('salesforce_get_accounts', { limit: 10 });
+    expect(result.json).toHaveProperty('ok', false);
+    expect(result.json).toHaveProperty('code', 'SESSION_EXPIRED');
   });
 
   it('salesforce_create_account creates an account', async () => {
