@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-slack",
   "title": "Slack",
   "description": "Slack MCP server: channels, messages, threads, reactions, users, files, and scheduled messages",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-slack",
-      "version": "0.1.4",
+      "version": "0.1.5",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

@@ -5,6 +5,7 @@ import { getSlackClient, getSlackReaderClient, getSlackUserClient } from '../cli
 import {
   enrichMessageWithUserInfo,
   extractUserIdsFromMessages,
+  mapSlackFiles,
   resolveAuthedUserId,
   resolveChannelId,
   resolveDmRecipient,
@@ -214,6 +215,12 @@ Supports standard permalinks (workspace.slack.com/archives/...), thread permalin
 (?thread_ts=...), and app URLs (app.slack.com/client/...). For thread messages,
 returns the message and surrounding thread context (set include_thread=false to skip).
 
+Messages may include files[] (attachments — each with id, name, mimetype, size);
+use download_slack_file with files[].id to download an attachment.
+
+When the linked message is a thread parent, the response includes reply_count;
+call get_slack_thread_replies (with the parent ts) to read the replies.
+
 Prefers user token (broader read access to public channels).`,
       inputSchema: z.object({
         url: z.string().url().describe('Slack message permalink URL'),
@@ -254,6 +261,7 @@ Prefers user token (broader read access to public channels).`,
           text?: string;
           bot_id?: string;
           subtype?: string;
+          files?: Array<{ id?: string; name?: string; mimetype?: string; size?: number }>;
         }> = [];
         let found: (typeof threadContext)[number] | undefined;
         do {
@@ -270,6 +278,7 @@ Prefers user token (broader read access to public channels).`,
             text: wrapUntrusted(m.text, 'slack:get-message-by-permalink:thread'),
             bot_id: (m as unknown as { bot_id?: string }).bot_id,
             subtype: (m as unknown as { subtype?: string }).subtype,
+            files: mapSlackFiles(m),
           }));
           found = pageMessages.find((m) => m.ts_slack === parsed.messageTs);
           if (includeThread) threadContext.push(...pageMessages);
@@ -330,6 +339,7 @@ Prefers user token (broader read access to public channels).`,
         text: wrapUntrusted(message.text, 'slack:get-message-by-permalink'),
         bot_id: (message as unknown as { bot_id?: string }).bot_id,
         subtype: (message as unknown as { subtype?: string }).subtype,
+        files: mapSlackFiles(message),
       };
       const userIds = extractUserIdsFromMessages([msgForEnrich]);
       await resolveUserIdsToCache(userIds);
