@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-06-12
+
+### Changed
+
+- Surface files[] (id,name,mimetype,size) in get_slack_message_by_link and get_slack_thread_replies; wrap the attacker-controlled file name in an untrusted-content envelope across all file paths.
+
 ### Added
 
 - `get_slack_message_by_link` and `get_slack_thread_replies` now surface
