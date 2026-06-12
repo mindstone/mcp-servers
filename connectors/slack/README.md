@@ -192,7 +192,7 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 }
 ```
 
-## Tools (23)
+## Tools (24)
 
 ### Authentication
 - `authenticate_slack_workspace` — Returns structured auth_required response; the host drives OAuth.
