@@ -82,7 +82,7 @@ default (max 50MB via max_size_mb). Don't pass message permalinks or thread_ts.`
           next_step: 'retry_with_larger_max_size_mb',
           file_info: {
             id: file.id,
-            name: file.name,
+            name: wrapUntrusted(file.name, `slack:download-file:${file.id}:name`),
             size: fileSize,
             mimetype: file.mimetype,
             filetype: file.filetype,
@@ -97,7 +97,11 @@ default (max 50MB via max_size_mb). Don't pass message permalinks or thread_ts.`
           action_required:
             'This may be an external file (Google Drive, Dropbox) or require additional permissions.',
           next_step: 'list_slack_workspaces',
-          file_info: { id: file.id, name: file.name, filetype: file.filetype },
+          file_info: {
+            id: file.id,
+            name: wrapUntrusted(file.name, `slack:download-file:${file.id}:name`),
+            filetype: file.filetype,
+          },
         });
       }
       const tokenProvider = getTokenProvider();

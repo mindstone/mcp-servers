@@ -14,6 +14,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 - `post_slack_message` and `schedule_slack_message` now hard-error (message not sent) when the target resolves to the user's own self-DM, directing the caller to `send_myself_a_note`. Closes a silent failure where self-DMs sent via the user token never produced a notification. The existing recipient-mismatch guard still takes precedence when an `intended_recipient` is supplied and differs from the actual partner.
 
+## [0.1.5] - 2026-06-12
+
+### Changed
+
+- Surface files[] (id,name,mimetype,size) in get_slack_message_by_link and get_slack_thread_replies; wrap the attacker-controlled file name in an untrusted-content envelope across all file paths.
+
+### Added
+
+- `get_slack_message_by_link` and `get_slack_thread_replies` now surface
+  `files[]` attachment metadata (`id`, `name`, `mimetype`, `size`) — the same
+  projection `get_slack_channel_history` already returned — so the agent can see
+  that a linked message or thread reply carries an attachment and download it
+  with `download_slack_file` using `files[].id`. Both tool descriptions are
+  updated accordingly. All three tools now share a single `mapSlackFiles()`
+  projection helper. (Previously, the two natural "look at this Slack link/thread"
+  tools dropped attachments entirely, so the agent could wrongly conclude a
+  message had none.)
+
+### Security
+
+- The attacker-controlled file `name` field is now wrapped in an
+  `<untrusted-content source="slack:file-name">…</untrusted-content>` envelope
+  (AGENTS.md invariant #6), including in `get_slack_channel_history` where it was
+  previously surfaced unwrapped. Routing all three tools through the shared
+  `mapSlackFiles()` chokepoint makes the envelope impossible to forget on any one
+  call site. The two `download_slack_file` error responses (file-too-large,
+  no-download-url) that echoed `file.name` unwrapped now wrap it too, matching
+  that tool's success path. Regression tests in `test/file-attachments.test.ts`.
+
 ## [0.1.4] - 2026-06-10
 
 ### Changed

@@ -8,6 +8,39 @@ import type { WebClient } from '@slack/web-api';
 import { getSlackClient, getSlackReaderClient, getSlackUserClient, getTokenProvider } from './client.js';
 import { ConnectorError, type DmRecipient } from './types.js';
 import { sanitizeErrorMessage } from './utils.js';
+import { wrapUntrusted } from './untrusted-content.js';
+
+/** Shape of a projected Slack file attachment surfaced in tool responses. */
+export interface SlackFileProjection {
+  id?: string;
+  name?: string;
+  mimetype?: string;
+  size?: number;
+}
+
+/**
+ * Project a Slack message's `files[]` into the `{id, name, mimetype, size}`
+ * shape surfaced by the read tools. The file `name` is attacker-controlled,
+ * so it is routed through `wrapUntrusted` (AGENTS.md invariant #6) — this is
+ * the single chokepoint shared by every tool that emits attachments, so the
+ * envelope cannot be forgotten on one call site.
+ *
+ * Returns `undefined` when there are no files (matching the historical
+ * `... || undefined` behaviour in get_slack_channel_history, so an empty
+ * `files: []` collapses to `undefined`).
+ */
+export function mapSlackFiles(msg: {
+  files?: Array<{ id?: string; name?: string; mimetype?: string; size?: number }>;
+}): SlackFileProjection[] | undefined {
+  return (
+    msg.files?.map((f) => ({
+      id: f.id,
+      name: wrapUntrusted(f.name, 'slack:file-name'),
+      mimetype: f.mimetype,
+      size: f.size,
+    })) || undefined
+  );
+}
 
 interface CachedUser {
   name: string;
