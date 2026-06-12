@@ -29,7 +29,14 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
       - run: npm ci --ignore-scripts
-      - run: npm audit --audit-level=high --omit=dev
+      # NOTE: high-severity dependency-audit gate intentionally NOT run here.
+      # `npm audit` queries the live advisory DB at run time, so it fires on
+      # every push regardless of whether the commit changed anything — a newly
+      # published upstream advisory reddens `main` on the next unrelated push
+      # (misattributed to whoever pushed). The high-severity audit now runs
+      # weekly via MindstoneRebel docs/project/WEEKLY_AUTOMATED_REVIEW.md and at
+      # publish per docs/PUBLISH_APPROVAL_PROCESS.md. See docs/security/
+      # AUDIT_FOX-3319_tanstack_supply_chain.md F7 for the publish-time gap.
       - run: npm run build
       - run: npm test
       - name: Verify package contents
