@@ -11,6 +11,9 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Security
+- Pin `@grpc/grpc-js` to `^1.14.4` via `overrides` to clear high-severity advisories GHSA-5375-pq7m-f5r2 / GHSA-99f4-grh7-6pcq (malformed-request crash) in the transitive OpenTelemetry OTLP-gRPC exporter chain (was 1.14.3).
+
 ## [0.2.0] - 2026-05-19
 
 ### Added
