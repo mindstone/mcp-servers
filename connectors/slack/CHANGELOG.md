@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-06-12
+
+### Changed
+
+- send_myself_a_note (bot-token DM that notifies) + self-DM guards on post/schedule
+
 ### Added
 
 - `send_myself_a_note` — send yourself a Slack note that actually notifies you. Posts a direct message from the bot (bot token, `chat:write`) to the authenticated user, so Slack treats it as a real notification — unlike a user-token self-DM, which Slack marks as already-read and never notifies. No new OAuth scopes.
