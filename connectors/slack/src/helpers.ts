@@ -5,7 +5,7 @@
  */
 
 import type { WebClient } from '@slack/web-api';
-import { getSlackClient, getSlackReaderClient } from './client.js';
+import { getSlackClient, getSlackReaderClient, getSlackUserClient, getTokenProvider } from './client.js';
 import { ConnectorError, type DmRecipient } from './types.js';
 import { sanitizeErrorMessage } from './utils.js';
 
@@ -16,6 +16,34 @@ interface CachedUser {
 
 const userCache = new Map<string, CachedUser>();
 const userLookupInFlight = new Map<string, Promise<void>>();
+
+/**
+ * Resolve the authenticated Slack user ID from the persisted token metadata,
+ * falling back to a user-token `auth.test` for older token files written before
+ * the host captured `authedUserId`.
+ *
+ * The recovery result is intentionally NOT cached at module scope: caching it
+ * would go stale if the workspace re-authenticates as a different identity while
+ * the (legacy) token file still lacks `authedUserId`. The persisted path is the
+ * common case and already short-circuits before this network call; the recovery
+ * path is a rare, cold path where re-querying `auth.test` is cheap and always
+ * reflects the current user token.
+ */
+export async function resolveAuthedUserId(): Promise<string | undefined> {
+  const persisted = await getTokenProvider()?.getAuthedUserId();
+  if (persisted) return persisted;
+
+  try {
+    const userClient = await getSlackUserClient();
+    if (!userClient) return undefined;
+    const authResult = await userClient.auth.test();
+    if (authResult.user_id) return authResult.user_id;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[slack-mcp] resolveAuthedUserId recovery failed: ${sanitizeErrorMessage(msg)}`);
+  }
+  return undefined;
+}
 
 /**
  * Resolve user IDs into the in-memory cache. Uses parallel `users.info`

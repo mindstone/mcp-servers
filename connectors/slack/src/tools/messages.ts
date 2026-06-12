@@ -5,6 +5,7 @@ import { getSlackClient, getSlackReaderClient, getSlackUserClient } from '../cli
 import {
   enrichMessageWithUserInfo,
   extractUserIdsFromMessages,
+  resolveAuthedUserId,
   resolveChannelId,
   resolveDmRecipient,
   resolveUserIdsToCache,
@@ -13,6 +14,31 @@ import { notConnectedJson } from './auth.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 
 const RESPONSE_FORMAT_ENUM = z.enum(['concise', 'detailed']).optional();
+
+function normalizeSlackUserId(userId: string): string {
+  return userId.trim().toUpperCase();
+}
+
+function selfDmRedirectJson(channel: string, recipientUserId: string): string {
+  return errorJson({
+    error: 'Self-DM message NOT sent.',
+    action_required:
+      'Use send_myself_a_note instead. It notifies you with a direct message from the Slack app, and it is separate from your own Slack notes-to-self space.',
+    next_step: 'send_myself_a_note',
+    channel,
+    actual_recipient: recipientUserId,
+  });
+}
+
+function unknownAuthedUserJson(channel: string): string {
+  return errorJson({
+    error: 'Could not verify whether this DM is your own self-DM, so the message was NOT sent.',
+    action_required:
+      'Reconnect Slack via authenticate_slack_workspace so your Slack user identity can be verified before sending DMs.',
+    next_step: 'authenticate_slack_workspace',
+    channel,
+  });
+}
 
 export function registerMessageTools(server: McpServer): void {
   // ---------------------------------------------------------------------
@@ -321,6 +347,66 @@ Prefers user token (broader read access to public channels).`,
   );
 
   // ---------------------------------------------------------------------
+  // send_myself_a_note
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'send_myself_a_note',
+    {
+      description: `Send yourself a Slack note that actually notifies you.
+
+This sends a direct message from the Slack app to you, so Slack treats it as a real
+notification. It is separate from your own self-DM "notes to self" space — same idea,
+different conversation, fewer mysteriously silent messages.
+
+PARAMETER: text. Use text, not message, note, or channel.`,
+      inputSchema: z
+        .object({
+          text: z.string().min(1).describe('Note text to send to yourself. Use the text parameter, not message or note.'),
+        })
+        .strict(),
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: true,
+        destructiveHint: false,
+        idempotentHint: false,
+      },
+    },
+    withErrorHandling(async (args) => {
+      const botClient = await getSlackClient();
+      if (!botClient) {
+        return errorJson({
+          error: 'Sending yourself a note requires Slack bot authorization.',
+          action_required:
+            'Reconnect Slack via authenticate_slack_workspace so the Slack app can send the notified DM.',
+          next_step: 'authenticate_slack_workspace',
+        });
+      }
+
+      const authedUserId = await resolveAuthedUserId();
+      if (!authedUserId) {
+        return errorJson({
+          error: 'Could not determine your Slack user ID.',
+          action_required:
+            'Reconnect Slack via authenticate_slack_workspace so the Slack app knows where to send your notified note.',
+          next_step: 'authenticate_slack_workspace',
+        });
+      }
+
+      const result = await botClient.chat.postMessage({
+        channel: authedUserId,
+        text: args.text,
+      });
+      return JSON.stringify({
+        ok: true,
+        channel: result.channel,
+        ts_slack: result.ts,
+        ts_iso: result.ts ? slackTsToDatetime(result.ts) : undefined,
+        note: 'Sent to yourself as a notified direct message from the Slack app.',
+      });
+    }),
+  );
+
+  // ---------------------------------------------------------------------
   // post_slack_message
   // ---------------------------------------------------------------------
   server.registerTool(
@@ -387,8 +473,8 @@ Posted as the user — messages are editable in Slack.`,
           });
         }
         if (intendedRecipient) {
-          const normalizedIntended = intendedRecipient.toUpperCase();
-          const normalizedActual = dmRecipient.user_id.toUpperCase();
+          const normalizedIntended = normalizeSlackUserId(intendedRecipient);
+          const normalizedActual = normalizeSlackUserId(dmRecipient.user_id);
           if (normalizedIntended !== normalizedActual) {
             return errorJson({
               error: 'RECIPIENT MISMATCH — message NOT sent.',
@@ -405,6 +491,11 @@ Posted as the user — messages are editable in Slack.`,
               channel: channelId,
             });
           }
+        }
+        const authedUserId = await resolveAuthedUserId();
+        if (!authedUserId) return unknownAuthedUserJson(channelId);
+        if (normalizeSlackUserId(dmRecipient.user_id) === normalizeSlackUserId(authedUserId)) {
+          return selfDmRedirectJson(channelId, dmRecipient.user_id);
         }
       }
 
@@ -535,6 +626,30 @@ channel per 5 minutes. Max 120 days in advance.`,
         });
       }
       const channelId = await resolveChannelId(args.channel);
+      if (channelId.startsWith('D')) {
+        const dmRecipient = await resolveDmRecipient(userClient, channelId);
+        if (!dmRecipient) {
+          return errorJson({
+            error: 'Could not verify scheduled DM recipient.',
+            action_required:
+              'Use open_slack_dm with a verified User ID to get a valid DM channel, or schedule to a Slack channel.',
+            next_step: 'open_slack_dm',
+            channel: channelId,
+          });
+        }
+        const authedUserId = await resolveAuthedUserId();
+        if (!authedUserId) return unknownAuthedUserJson(channelId);
+        if (normalizeSlackUserId(dmRecipient.user_id) === normalizeSlackUserId(authedUserId)) {
+          return errorJson({
+            error: 'Scheduled self-note NOT created.',
+            action_required:
+              'Scheduled self-notes are not supported yet. Use send_myself_a_note for an immediate notified note, or schedule to a channel.',
+            next_step: 'send_myself_a_note',
+            channel: channelId,
+            actual_recipient: dmRecipient.user_id,
+          });
+        }
+      }
       const nowSeconds = Math.floor(Date.now() / 1000);
       if (args.post_at < nowSeconds) {
         return errorJson({

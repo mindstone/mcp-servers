@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- `send_myself_a_note` — send yourself a Slack note that actually notifies you. Posts a direct message from the bot (bot token, `chat:write`) to the authenticated user, so Slack treats it as a real notification — unlike a user-token self-DM, which Slack marks as already-read and never notifies. No new OAuth scopes.
+
+### Changed
+
+- `post_slack_message` and `schedule_slack_message` now hard-error (message not sent) when the target resolves to the user's own self-DM, directing the caller to `send_myself_a_note`. Closes a silent failure where self-DMs sent via the user token never produced a notification. The existing recipient-mismatch guard still takes precedence when an `intended_recipient` is supplied and differs from the actual partner.
+
 ## [0.1.4] - 2026-06-10
 
 ### Changed
