@@ -58,7 +58,8 @@
     "ip-address": "^10.2.0",
     "@opentelemetry/exporter-prometheus": "^0.217.0",
     "@opentelemetry/sdk-node": "^0.217.0",
-    "protobufjs": "^8.2.1"
+    "protobufjs": "^8.2.1",
+    "@grpc/grpc-js": "^1.14.4"
   },
   "engines": {
     "node": ">=20"
