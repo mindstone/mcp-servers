@@ -11,6 +11,9 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+- **salesforce**: bridge-mode tool calls no longer fail with `Refresh token is specified without oauth2 client information or refresh function`. The connector only hands jsforce a refresh token when it also has the OAuth2 client info to use it; in bridge mode (host owns OAuth, no `SALESFORCE_CLIENT_ID`/`SALESFORCE_CLIENT_SECRET` in the connector env) it now operates on the access token and surfaces a reconnect prompt on expiry instead of throwing on every call.
+
 ### Changed
 - Reworked `README.md` to explain when to choose this local Salesforce connector, what sales workflows it helps with, and the main setup and safety notes.
 
