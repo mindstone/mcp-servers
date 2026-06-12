@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-06-12
+
+### Changed
+
+- Bridge mode: attach the jsforce refresh token only when OAuth2 client info is present so the connection no longer throws at construction; degrade to SESSION_EXPIRED on token expiry.
+
 ### Fixed
 - **salesforce**: bridge-mode tool calls no longer fail with `Refresh token is specified without oauth2 client information or refresh function`. The connector only hands jsforce a refresh token when it also has the OAuth2 client info to use it; in bridge mode (host owns OAuth, no `SALESFORCE_CLIENT_ID`/`SALESFORCE_CLIENT_SECRET` in the connector env) it now operates on the access token and surfaces a reconnect prompt on expiry instead of throwing on every call.
 
