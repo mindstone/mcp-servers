@@ -202,9 +202,10 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 - `search_slack_messages` — Search across all channels (Slack search modifiers supported).
 - `get_slack_saved_messages` — Get messages saved for later (uses `is:saved`).
 - `get_slack_message_by_link` — Retrieve a message from its permalink URL.
-- `post_slack_message` — Post a message; DM recipient verification baked in.
+- `post_slack_message` — Post a message; DM recipient verification baked in. Self-DMs are blocked and redirected to `send_myself_a_note` (a user-token self-DM never notifies).
 - `reply_to_slack_thread` — Reply to an existing thread.
-- `schedule_slack_message` — Schedule a message for the future.
+- `schedule_slack_message` — Schedule a message for the future. Self-DMs are blocked (scheduled self-notes are not supported yet).
+- `send_myself_a_note` — Send yourself a note that actually notifies you (posts a DM from the bot to the authenticated user). Use this for "jot something down" / reminders instead of a user-token self-DM.
 
 ### Channels
 - `list_slack_channels` — List channels (filterable, paginated).
