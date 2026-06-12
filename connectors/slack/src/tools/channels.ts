@@ -5,6 +5,7 @@ import { getSlackReaderClient, getSlackUserClient } from '../client.js';
 import {
   enrichMessageWithUserInfo,
   extractUserIdsFromMessages,
+  mapSlackFiles,
   resolveChannelId,
   resolveUserIdsToCache,
 } from '../helpers.js';
@@ -148,17 +149,11 @@ envelopes per AGENTS.md invariant #6 — do not strip them.`,
           ...(isConcise
             ? {}
             : {
-                files:
-                  (
-                    msg as {
-                      files?: Array<{ id?: string; name?: string; mimetype?: string; size?: number }>;
-                    }
-                  ).files?.map((f) => ({
-                    id: f.id,
-                    name: f.name,
-                    mimetype: f.mimetype,
-                    size: f.size,
-                  })) || undefined,
+                files: mapSlackFiles(
+                  msg as {
+                    files?: Array<{ id?: string; name?: string; mimetype?: string; size?: number }>;
+                  },
+                ),
               }),
         }),
       );

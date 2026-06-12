@@ -5,6 +5,7 @@ import { getSlackReaderClient } from '../client.js';
 import {
   enrichMessageWithUserInfo,
   extractUserIdsFromMessages,
+  mapSlackFiles,
   resolveChannelId,
   resolveUserIdsToCache,
 } from '../helpers.js';
@@ -17,7 +18,10 @@ export function registerThreadTools(server: McpServer): void {
     {
       description: `Get all replies in a message thread.
 
-Get ts_slack from a message with reply_count > 0 (the thread parent).`,
+Get ts_slack from a message with reply_count > 0 (the thread parent).
+
+Replies may include files[] (attachments — each with id, name, mimetype, size);
+use download_slack_file with files[].id to download an attachment.`,
       inputSchema: z.object({
         channel: z.string().min(1).describe('Channel — channel ID or #channel-name'),
         ts: z
@@ -55,6 +59,7 @@ Get ts_slack from a message with reply_count > 0 (the thread parent).`,
           ts_iso: msg.ts ? slackTsToDatetime(msg.ts) : undefined,
           user: msg.user,
           text: wrapUntrusted(msg.text, 'slack:thread-replies'),
+          files: mapSlackFiles(msg),
         }),
       );
       const nextCursor = result.response_metadata?.next_cursor || null;
