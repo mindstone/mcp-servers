@@ -2,6 +2,8 @@
 
 A monorepo of independent, source-available MCP (Model Context Protocol) servers. Each subdirectory of `connectors/` is its own npm package with its own tests, CHANGELOG, and release cadence.
 
+**This is a public, source-available repo.** No secrets, internal URLs, ticket references, or real customer/company names belong in source, docs, or commit messages — use fictional placeholders (`Acme Corp`, `jane@example.com`) in examples and fixtures.
+
 See `README.md` for setup, `CONTRIBUTING.md` for the contribution workflow, and `SECURITY.md` for vulnerability reporting.
 
 ## Operating principles
