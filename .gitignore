@@ -26,3 +26,6 @@ id_rsa.*
 *.token.json
 credentials/
 .cache/
+
+# Live-probe capture artefacts may contain real account data — never commit
+**/reports/live-probe-*.json

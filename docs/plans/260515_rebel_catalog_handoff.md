@@ -262,7 +262,7 @@ Merge this PR within the same Rebel deploy window as the auto-sync PR so all thr
 If auto-sync diverges for any single connector, fall back to manual:
 
 ```sh
-cd /Users/harry/development/desktop/MindstoneRebel-1
+cd /path/to/MindstoneRebel
 git checkout dev
 git pull
 git checkout -b catalog-sync/<connector>-manual
@@ -295,7 +295,7 @@ gh pr create --base dev --title "fix(mcp): Manually flip <connector> to @mindsto
 ### P1. Audit catalog state after every sub-wave is merged
 
 ```sh
-cd /Users/harry/development/desktop/MindstoneRebel-1
+cd /path/to/MindstoneRebel
 python3 -c "
 import json
 with open('resources/connector-catalog.json') as f: d = json.load(f)

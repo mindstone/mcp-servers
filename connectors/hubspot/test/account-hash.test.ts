@@ -15,9 +15,9 @@ const HOST_REFERENCE_VECTORS = [
     digest: '31577483a2bf6d44cc8f31d6069d17e6a02b96bbe84c0e6c245ae7dfef66b2fe',
   },
   {
-    email: 'sales+eu@mindstone.ai',
+    email: 'jane+eu@example.com',
     saltHex: TEST_SALT_HEX,
-    digest: '9f45f9289abb17772ce780d32a903745eb99908e8f9741873049f3d443e7bd24',
+    digest: 'b1516314d3c55650f3a5b2bf6e809121418106296e30d915c08bcd5c94dd35d0',
   },
   {
     email: 'UPPER.lower-123@Example.Org',

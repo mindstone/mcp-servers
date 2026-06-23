@@ -41,7 +41,7 @@ export interface MicrosoftConfigOptions {
 export function createMicrosoftConfigDir(
   options: MicrosoftConfigOptions = {},
 ): MicrosoftTestConfig {
-  const accountEmail = options.accountEmail ?? 'harry@mindstone.ai';
+  const accountEmail = options.accountEmail ?? 'jane@example.com';
   const sanitisedEmail = accountEmail.replace(/[^a-zA-Z0-9]/g, '-');
   const accessToken = options.accessToken ?? 'test-access-token';
   const expiresAt = options.expiresAt ?? Date.now() + 60 * 60 * 1000;

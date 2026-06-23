@@ -281,7 +281,7 @@ describe('email sanitiser parity', () => {
   });
 
   it.each([
-    ['harry@mindstone.ai', 'harry-mindstone-ai'],
+    ['jane@example.com', 'jane-example-com'],
     ['First.Last+tag@example.com', 'First-Last-tag-example-com'],
     ['UPPER@EXAMPLE.COM', 'UPPER-EXAMPLE-COM'],
     ['déjà.vu@example.fr', 'd-j--vu-example-fr'],

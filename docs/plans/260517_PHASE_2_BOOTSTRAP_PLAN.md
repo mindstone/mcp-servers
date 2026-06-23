@@ -86,7 +86,7 @@ NEW_VERSION=0.2.3
 NEW_PACKAGE="@mindstone/mcp-server-$CONNECTOR"
 
 # 1. Refresh main, confirm clean tree:
-cd /Users/harry/development/mcp-servers
+cd /path/to/mcp-servers
 git checkout main && git pull --ff-only origin main
 test -z "$(git status --porcelain)" || { echo "ABORT: dirty tree"; exit 1; }
 
@@ -116,7 +116,7 @@ sleep 5
 npm view "$NEW_PACKAGE@$NEW_VERSION" version
 
 # 6. Fire the catalog-sync dispatch to Rebel:
-cd /Users/harry/development/mcp-servers
+cd /path/to/mcp-servers
 MAIN_SHA=$(git rev-parse origin/main)
 gh api repos/mindstone/MindstoneRebel/dispatches \
   --method POST \
