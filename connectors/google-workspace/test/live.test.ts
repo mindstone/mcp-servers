@@ -9,14 +9,18 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
 const LIVE_ENABLED = process.env.MCP_GOOGLE_WORKSPACE_LIVE_PROBE === '1';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const hostRoot = '/path/to/MindstoneRebel';
+// Live-probe configuration is driven entirely by env vars so no developer-specific
+// paths or account identities are committed. Defaults are neutral placeholders; a dev
+// running the probe (MCP_GOOGLE_WORKSPACE_LIVE_PROBE=1) sets these to their real values.
+const hostRoot = process.env.MCP_GW_LIVE_HOST_ROOT ?? path.join(os.homedir(), 'MindstoneRebel');
+const liveAccount = process.env.MCP_GW_LIVE_ACCOUNT ?? 'jane-example-com';
 const instanceRoot = path.join(
   os.homedir(),
-  'Library/Application Support/mindstone-rebel/google-workspace-mcp/GoogleWorkspace-jane-example-com',
+  `Library/Application Support/mindstone-rebel/google-workspace-mcp/GoogleWorkspace-${liveAccount}`,
 );
 const accountsPath = path.join(instanceRoot, 'accounts.json');
 const credentialsPath = path.join(instanceRoot, 'credentials');
-const tokenFileName = 'jane-example-com.token.json';
+const tokenFileName = `${liveAccount}.token.json`;
 const tokenPath = path.join(credentialsPath, tokenFileName);
 const reportPath = path.join(root, 'reports/live-probe-google-workspace.json');
 
