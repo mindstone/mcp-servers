@@ -1,6 +1,7 @@
 import { getHubSpotClientAsync, SearchFilter, SearchRequest, HubSpotApiError } from '../api/hubspot-client.js';
 import { injectHostMetadata } from '../utils/user-context.js';
 import {
+  buildHubSpotCapabilityDeniedError,
   parseHubSpotError as parseSharedHubSpotError,
   summariseHubSpotApiError,
   type ParsedHubSpotError,
@@ -128,10 +129,12 @@ function parseHubSpotError(
     
     // Permission error
     if (error.statusCode === 403) {
+      const capabilityDenied = buildHubSpotCapabilityDeniedError(context);
+
       return {
-        error: 'Insufficient HubSpot permissions for this operation',
+        error: capabilityDenied.error,
         errorCode: 'PERMISSION_DENIED',
-        suggestion: `The connected HubSpot account lacks permission for ${context.operation} on ${context.objectType}. Check HubSpot user permissions.`
+        suggestion: capabilityDenied.suggestion
       };
     }
     

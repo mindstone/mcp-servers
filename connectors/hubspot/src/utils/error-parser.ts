@@ -196,6 +196,48 @@ function buildAuthRequiredResponse(errorCode?: string): ParsedAuthRequiredRespon
   };
 }
 
+const HUBSPOT_CAPABILITY_LABELS: Record<string, string> = {
+  contacts: 'contacts',
+  companies: 'companies',
+  deals: 'deals',
+  tickets: 'support tickets (Service Hub)',
+  products: 'products',
+  line_items: 'line items',
+  leads: 'leads',
+  tasks: 'tasks',
+  files: 'files and attachments',
+  calls: 'calls',
+  emails: 'emails',
+  meetings: 'meetings',
+  notes: 'notes',
+  owners: 'owners',
+  associations: 'record associations',
+};
+
+export function describeHubSpotCapability(context: HubSpotErrorContext): string {
+  const objectType = context.objectType?.trim().toLowerCase();
+  if (objectType && HUBSPOT_CAPABILITY_LABELS[objectType]) {
+    return HUBSPOT_CAPABILITY_LABELS[objectType];
+  }
+
+  return 'this HubSpot capability';
+}
+
+// Other 403 copy sites can migrate here later: workflow, knowledge-base, marketing, and association-v4 handlers.
+export function buildHubSpotCapabilityDeniedError(
+  context: HubSpotErrorContext,
+): { error: string; suggestion: string } {
+  const label = describeHubSpotCapability(context);
+  const planExample = context.objectType?.toLowerCase() === 'tickets'
+    ? ' (support tickets require Service Hub, for example)'
+    : '';
+
+  return {
+    error: `Rebel can't access ${label} on this HubSpot connection.`,
+    suggestion: `This capability isn't available on the connected HubSpot account, and reconnecting won't add it. A HubSpot administrator may need to authorise ${label} for the app, or the account's plan may not include it${planExample}. Other HubSpot features are unaffected.`,
+  };
+}
+
 /**
  * Parse HubSpot API error into AI-friendly structured error payload.
  */
@@ -265,10 +307,12 @@ export function parseHubSpotError(error: unknown, context: HubSpotErrorContext):
     }
 
     if (error.statusCode === 403) {
+      const capabilityDenied = buildHubSpotCapabilityDeniedError(context);
+
       return {
-        error: `Insufficient HubSpot scopes or permissions for ${context.operation} on ${objectType}`,
+        error: capabilityDenied.error,
         errorCode: 'SCOPE_MISSING',
-        suggestion: 'Reconnect HubSpot and grant the required scopes. If this is a paid feature, verify your HubSpot plan includes it.'
+        suggestion: capabilityDenied.suggestion
       };
     }
 

@@ -2,6 +2,7 @@ import { readFile, stat, realpath } from 'node:fs/promises';
 import path, { basename } from 'node:path';
 import { getHubSpotClientAsync, HubSpotApiError } from '../api/hubspot-client.js';
 import {
+  buildHubSpotCapabilityDeniedError,
   parseHubSpotError as parseSharedHubSpotError,
   summariseHubSpotApiError,
   type ParsedHubSpotError,
@@ -78,7 +79,17 @@ function parseFileError(error: unknown, operation: string): ParsedHubSpotError {
       return { error: 'HubSpot authentication expired', errorCode: 'AUTH_EXPIRED', suggestion: 'Call list_hubspot_accounts then authenticate_hubspot_account.' };
     }
     if (error.statusCode === 403) {
-      return { error: 'Insufficient permissions for file operations', errorCode: 'PERMISSION_DENIED', suggestion: 'The HubSpot account needs "files" scope. Reconnect with full access.' };
+      const capabilityDenied = buildHubSpotCapabilityDeniedError({
+        objectType: 'files',
+        operation,
+        args: { operation },
+      });
+
+      return {
+        error: capabilityDenied.error,
+        errorCode: 'PERMISSION_DENIED',
+        suggestion: capabilityDenied.suggestion
+      };
     }
     if (error.statusCode === 404) {
       return { error: 'File not found', errorCode: 'NOT_FOUND', suggestion: 'Verify the file ID is correct.' };
