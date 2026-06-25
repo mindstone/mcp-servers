@@ -420,8 +420,7 @@ jobs:
         # actor, and the run URL. This is the publish-alerting leg of the AI-only
         # release gate chain (see docs/PUBLISH_APPROVAL_PROCESS.md) — an
         # unexpected publish should be visible to humans without anyone
-        # polling npm. Reuses SLACK_WEBHOOK_URL (same channel as
-        # commit-notify.yml / pr-notify.yml). Fail-soft if unconfigured;
+        # polling npm. Reuses the SLACK_WEBHOOK_URL secret. Fail-soft if unconfigured;
         # alert failure must not fail a publish that already happened, but
         # it should be visible in the log.
         # Security: all dynamic values pass through `env:` + `jq --arg`
