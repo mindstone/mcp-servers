@@ -11,6 +11,10 @@ import {
   assertAssociationFanOut,
   assertRecordStringBodySizes,
 } from './input-limits.js';
+import {
+  attachPropertyValidation,
+  validateRequestedProperties,
+} from './property-validation.js';
 
 interface SearchArgs {
   query?: string;
@@ -212,9 +216,15 @@ async function searchObjects(objectType: string, args: SearchArgs) {
       }
     }
 
-    const result = await client.searchObjects(objectType, searchRequest);
+    // Validate requested read-property names against the live schema in
+    // parallel with the search. Unknown names are surfaced as a structured,
+    // model-visible warning (silent-failure-is-a-bug) without failing the read.
+    const [result, validation] = await Promise.all([
+      client.searchObjects(objectType, searchRequest),
+      validateRequestedProperties(objectType, args.properties),
+    ]);
     logger.info(`Found ${result.results.length} ${objectType}`);
-    return result;
+    return attachPropertyValidation(result, validation);
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType, operation: 'search', args });
     logger.error(`Search ${objectType} failed:`, parsed);
@@ -228,7 +238,14 @@ async function getObject(objectType: string, objectId: string, args: GetArgs) {
   // related records (e.g. line_item -> deals) in a single request.
   try {
     const client = await getHubSpotClientAsync();
-    return await client.getObject(objectType, objectId, args.properties, args.associations);
+    // Validate requested read-property names against the live schema in
+    // parallel with the get. Unknown names ride along as a structured,
+    // model-visible warning without failing the read.
+    const [result, validation] = await Promise.all([
+      client.getObject(objectType, objectId, args.properties, args.associations),
+      validateRequestedProperties(objectType, args.properties),
+    ]);
+    return attachPropertyValidation(result, validation);
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType, operation: 'get', args: { objectId, ...args } });
     logger.error(`Get ${objectType} ${objectId} failed:`, parsed);
