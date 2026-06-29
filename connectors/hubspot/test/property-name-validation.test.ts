@@ -30,6 +30,7 @@ import {
   clearPropertySchemaCache,
   type PropertySuggestion,
 } from '../src/tools/property-validation.js';
+import { MAX_REQUESTED_PROPERTIES } from '../src/tools/input-limits.js';
 
 // HubSpot tickets carry `time_to_first_agent_reply` — NOT
 // `hs_time_to_first_agent_reply`. The latter is the canonical "bad name" bug.
@@ -248,6 +249,88 @@ describe('CRM read property-name validation', () => {
 
       // The second read shared the in-flight promise — only one network call.
       expect(listPropertiesMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('DoS bounds (F1/F2)', () => {
+    it('bounds an over-cap count of requested properties (no pathological work, still warns) (F1a)', async () => {
+      mockTicketSchema();
+      // Far more than the cap, all unknown.
+      const requested = Array.from({ length: MAX_REQUESTED_PROPERTIES * 3 }, (_, i) => `bogus_prop_${i}`);
+
+      const result = await handleSearchTickets({ properties: requested });
+
+      const validation = result.propertyValidation;
+      expect(validation).toBeDefined();
+      // Returned unknown list is capped well below what we sent.
+      expect((validation?.unknownProperties?.length ?? 0)).toBeLessThanOrEqual(MAX_REQUESTED_PROPERTIES);
+      // Read still succeeded.
+      expect(result.results).toBeDefined();
+    });
+
+    it('reports a pathologically long requested name as unknown with NO suggestion and no crash (F1b)', async () => {
+      mockTicketSchema();
+      // Long but within the per-name length cap (so it survives normalization),
+      // yet over the suggestion length bound — must not run editDistance.
+      const longName = 'x'.repeat(200);
+
+      const result = await handleSearchTickets({ properties: [longName] });
+
+      const validation = result.propertyValidation;
+      expect(validation?.unknownProperties).toEqual([longName]);
+      expect(findSuggestion(validation?.suggestions, longName)).toBeUndefined();
+    });
+
+    it('drops requested names longer than the per-name length cap before processing (F1b)', async () => {
+      mockTicketSchema();
+      const tooLong = 'y'.repeat(300); // > MAX_REQUESTED_PROPERTY_NAME_LENGTH (256)
+
+      const result = await handleSearchTickets({ properties: [tooLong] });
+
+      // Dropped entirely — nothing to validate, so no warning.
+      expect(result.propertyValidation).toBeUndefined();
+    });
+
+    it('truncates returned unknownProperties past the report cap with a truncation note (F1c)', async () => {
+      mockTicketSchema();
+      // 120 unknowns (under the processing cap of 200, over the report cap of 50).
+      const requested = Array.from({ length: 120 }, (_, i) => `bogus_prop_${i}`);
+
+      const result = await handleSearchTickets({ properties: requested });
+
+      const validation = result.propertyValidation;
+      expect(validation?.unknownProperties?.length).toBe(50);
+      expect(validation?.warnings.some((w) => w.includes('truncated'))).toBe(true);
+    });
+
+    it('drops a suggestion whose value is not a safe identifier (F2)', async () => {
+      // A schema property name containing unsafe characters: a mis-case of the
+      // request would otherwise be suggested verbatim — must be dropped.
+      listPropertiesMock.mockResolvedValue({
+        results: [{ name: 'weird-name!', label: 'Weird', type: 'string', fieldType: 'text' }],
+      });
+
+      // Request the mis-cased form so the mis-case shortcut would fire.
+      const result = await handleSearchTickets({ properties: ['Weird-Name!'] });
+
+      const validation = result.propertyValidation;
+      expect(validation?.unknownProperties).toEqual(['Weird-Name!']);
+      // Suggestion rejected by the identifier regex — none emitted.
+      expect(findSuggestion(validation?.suggestions, 'Weird-Name!')).toBeUndefined();
+    });
+
+    it('still warns + suggests for the real bug input (regression guard)', async () => {
+      mockTicketSchema();
+
+      const result = await handleSearchTickets({
+        properties: ['hs_time_to_first_agent_reply'],
+      });
+
+      const validation = result.propertyValidation;
+      expect(validation?.unknownProperties).toEqual(['hs_time_to_first_agent_reply']);
+      expect(findSuggestion(validation?.suggestions, 'hs_time_to_first_agent_reply')).toBe(
+        'time_to_first_agent_reply',
+      );
     });
   });
 });

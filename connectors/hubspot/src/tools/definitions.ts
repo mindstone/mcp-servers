@@ -1,4 +1,4 @@
-import { MAX_FAN_OUT, MAX_STRING_BODY_LENGTH } from './input-limits.js';
+import { MAX_FAN_OUT, MAX_STRING_BODY_LENGTH, PROPERTIES_ARRAY_SCHEMA } from './input-limits.js';
 
 export interface ToolMetadata {
   name: string;
@@ -182,7 +182,7 @@ COMMON PROPERTIES to request: email, firstname, lastname, phone, company, jobtit
           },
           description: 'Filter criteria for precise matching'
         },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return (default: basic info)' },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return (default: basic info)' },
         limit: { type: 'number', description: 'Max results (default 10, max 100)' },
         ...searchPaginationProperties
       }
@@ -207,7 +207,7 @@ PREREQUISITE: Get contactId from search_hubspot_contacts first`,
       type: 'object',
       properties: {
         contactId: { type: 'string', description: 'HubSpot contact ID (numeric string)' },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' }
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' }
       },
       required: ['contactId']
     }
@@ -332,7 +332,7 @@ COMMON PROPERTIES to request: name, domain, industry, numberofemployees, annualr
       properties: {
         query: { type: 'string', description: 'Free-text search by company name' },
         filters: { type: 'array', items: { type: 'object' }, description: 'Filter criteria' },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' },
         limit: { type: 'number', description: 'Max results (default 10, max 100)' },
         ...searchPaginationProperties
       }
@@ -354,7 +354,7 @@ PREREQUISITE: Get companyId from search_hubspot_companies or get_hubspot_associa
       type: 'object',
       properties: {
         companyId: { type: 'string', description: 'HubSpot company ID (numeric string)' },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' }
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' }
       },
       required: ['companyId']
     }
@@ -468,7 +468,7 @@ COMMON PROPERTIES: dealname, amount, dealstage, pipeline, closedate, hubspot_own
       properties: {
         query: { type: 'string', description: 'Free-text search by deal name' },
         filters: { type: 'array', items: { type: 'object' }, description: 'Filter criteria' },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' },
         limit: { type: 'number', description: 'Max results (default 10, max 100)' },
         ...searchPaginationProperties
       }
@@ -490,7 +490,7 @@ PREREQUISITE: Get dealId from search_hubspot_deals or get_hubspot_associations`,
       type: 'object',
       properties: {
         dealId: { type: 'string', description: 'HubSpot deal ID (numeric string)' },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' }
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' }
       },
       required: ['dealId']
     }
@@ -603,7 +603,7 @@ export const ticketTools: ToolMetadata[] = [
       properties: {
         query: { type: 'string', description: 'Search query text' },
         filters: { type: 'array', items: { type: 'object' }, description: 'Filter criteria' },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' },
         limit: { type: 'number', description: 'Max results (default 10)' },
         ...searchPaginationProperties
       }
@@ -618,7 +618,7 @@ export const ticketTools: ToolMetadata[] = [
       type: 'object',
       properties: {
         ticketId: { type: 'string', description: 'HubSpot ticket ID' },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' }
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' }
       },
       required: ['ticketId']
     }
@@ -714,7 +714,7 @@ COMMON PROPERTIES to request: hs_lead_name, hs_lead_status, hs_pipeline, hs_pipe
           },
           description: 'Filter criteria for precise matching'
         },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return (default: basic info)' },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return (default: basic info)' },
         limit: { type: 'number', description: 'Max results (default 10, max 100)' },
         ...searchPaginationProperties
       }
@@ -741,7 +741,7 @@ PREREQUISITE: Get leadId from search_hubspot_leads first`,
       type: 'object',
       properties: {
         leadId: { type: 'string', description: 'HubSpot lead ID (numeric string)' },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' }
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' }
       },
       required: ['leadId']
     }
@@ -857,7 +857,7 @@ export const taskTools: ToolMetadata[] = [
       type: 'object',
       properties: {
         filters: { type: 'array', items: { type: 'object' }, description: 'Filter criteria' },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' },
         limit: { type: 'number', description: 'Max results (default 10)' },
         ...searchPaginationProperties
       }
@@ -872,7 +872,7 @@ export const taskTools: ToolMetadata[] = [
       type: 'object',
       properties: {
         taskId: { type: 'string', description: 'HubSpot task ID' },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' }
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' }
       },
       required: ['taskId']
     }
@@ -1470,7 +1470,7 @@ PROPERTIES to request:
       type: 'object',
       properties: {
         filters: { type: 'array', items: { type: 'object' }, description: 'Filter criteria' },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' },
         limit: { type: 'number', description: 'Max results (default 10, max 100)' },
         ...searchPaginationProperties
       }
@@ -1504,7 +1504,7 @@ PROPERTIES to request:
       type: 'object',
       properties: {
         filters: { type: 'array', items: { type: 'object' }, description: 'Filter criteria' },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' },
         limit: { type: 'number', description: 'Max results (default 10, max 100)' },
         ...searchPaginationProperties
       }
@@ -1525,7 +1525,7 @@ PREREQUISITE: Get callId from search_hubspot_calls or get_contact_engagements`,
       type: 'object',
       properties: {
         callId: { type: 'string', description: 'HubSpot call ID (numeric string)' },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' }
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' }
       },
       required: ['callId']
     }
@@ -1545,7 +1545,7 @@ PREREQUISITE: Get meetingId from search_hubspot_meetings or get_contact_engageme
       type: 'object',
       properties: {
         meetingId: { type: 'string', description: 'HubSpot meeting ID (numeric string)' },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' }
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' }
       },
       required: ['meetingId']
     }
@@ -1730,7 +1730,7 @@ RETURNS: Array of products with id and properties`,
             required: ['propertyName', 'operator', 'value']
           }
         },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' },
         limit: { type: 'number', description: 'Max results (default 10)' },
         ...searchPaginationProperties
       }
@@ -1752,7 +1752,7 @@ RETURNS: Product object with all requested properties`,
       type: 'object',
       properties: {
         productId: { type: 'string', description: 'HubSpot product ID' },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' }
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' }
       },
       required: ['productId']
     }
@@ -1855,7 +1855,7 @@ RETURNS: Array of line items`,
             required: ['propertyName', 'operator', 'value']
           }
         },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' },
         limit: { type: 'number', description: 'Max results (default 10)' },
         ...searchPaginationProperties
       }
@@ -1878,7 +1878,7 @@ RETURNS: Line item object. Includes \`associations\` only when the
       type: 'object',
       properties: {
         lineItemId: { type: 'string', description: 'HubSpot line item ID' },
-        properties: { type: 'array', items: { type: 'string' }, description: 'Properties to return' },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' },
         associations: {
           type: 'array',
           items: { type: 'string' },
@@ -2247,10 +2247,9 @@ Common properties: email, firstname, lastname, phone, company, jobtitle, lifecyc
           maxItems: MAX_FAN_OUT,
           description: 'Contact IDs to fetch (max 100)' 
         },
-        properties: { 
-          type: 'array', 
-          items: { type: 'string' }, 
-          description: 'Properties to return (e.g., ["email", "firstname", "lastname"])' 
+        properties: {
+          ...PROPERTIES_ARRAY_SCHEMA,
+          description: 'Properties to return (e.g., ["email", "firstname", "lastname"])',
         }
       },
       required: ['ids']

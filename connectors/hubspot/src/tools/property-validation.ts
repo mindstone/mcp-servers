@@ -1,5 +1,9 @@
 import { getHubSpotClientAsync } from '../api/hubspot-client.js';
 import logger from '../utils/logger.js';
+import {
+  MAX_REQUESTED_PROPERTIES,
+  MAX_REQUESTED_PROPERTY_NAME_LENGTH,
+} from './input-limits.js';
 
 /**
  * Read-property validation for CRM reads (search + get).
@@ -143,6 +147,29 @@ const MIN_SUGGEST_LENGTH = 4;
 const MAX_EDIT_RATIO = 0.34;
 
 /**
+ * DoS bounds (Medium-severity hardening). The validation path runs an O(n*m)
+ * edit-distance over the property catalog, so unbounded model-supplied input
+ * could pin CPU/heap. These caps bound the work BY CONSTRUCTION while staying
+ * generous for legitimate use (a portal has ~50-150 properties). The same
+ * `properties` array caps are mirrored into the tool input schemas
+ * (`MAX_VALIDATED_PROPERTIES` -> `maxItems`, `MAX_PROPERTY_NAME_LENGTH` ->
+ * item `maxLength`) so they stay in lockstep — see PROPERTIES_SCHEMA_BOUNDS.
+ */
+/**
+ * Max number of requested names actually processed through validation, and the
+ * per-name length cap. Single source of truth lives in input-limits.ts (shared
+ * with the tool input schemas) so the schema cap and the runtime cap match.
+ */
+const MAX_VALIDATED_PROPERTIES = MAX_REQUESTED_PROPERTIES;
+const MAX_PROPERTY_NAME_LENGTH = MAX_REQUESTED_PROPERTY_NAME_LENGTH;
+/** Above this length we report the name as unknown but never run editDistance. */
+const MAX_SUGGEST_NAME_LENGTH = 64;
+/** Cap on how many unknown names we return/log, to bound payload + log size. */
+const MAX_REPORTED_UNKNOWN = 50;
+/** A safe property-identifier shape — suggestions must match (F2 defense-in-depth). */
+const SAFE_IDENTIFIER = /^[A-Za-z0-9_]+$/;
+
+/**
  * Conservative did-you-mean. Deliberately under-reaches:
  *
  * 1. A mis-case of an exact known name -> suggest the exact casing (F2 partner).
@@ -158,18 +185,22 @@ function suggestClosest(unknown: string, known: CacheEntry): string | undefined 
 
   // 1. Pure mis-case: the lower-cased form matches a known name exactly.
   const exactMisCase = known.lowerToOriginal.get(lower);
-  if (exactMisCase && exactMisCase !== unknown) {
-    return exactMisCase;
+  const candidate1 = exactMisCase && exactMisCase !== unknown ? exactMisCase : undefined;
+  if (candidate1) {
+    return SAFE_IDENTIFIER.test(candidate1) ? candidate1 : undefined;
   }
 
   // 2. Confident, unique close match by normalized edit distance.
-  if (unknown.length < MIN_SUGGEST_LENGTH) {
+  // DoS bound: never run the O(n*m) editDistance on pathologically long names —
+  // report them as unknown with no suggestion instead.
+  if (unknown.length < MIN_SUGGEST_LENGTH || unknown.length > MAX_SUGGEST_NAME_LENGTH) {
     return undefined;
   }
 
   let best: { name: string; distance: number } | undefined;
   let tie = false;
   for (const candidate of known.original) {
+    if (candidate.length > MAX_SUGGEST_NAME_LENGTH) continue;
     const distance = editDistance(candidate.toLowerCase(), lower);
     const ratio = distance / Math.max(candidate.length, unknown.length);
     if (ratio > MAX_EDIT_RATIO) continue;
@@ -182,17 +213,30 @@ function suggestClosest(unknown: string, known: CacheEntry): string | undefined 
   }
 
   // Don't guess when the closest match is ambiguous.
-  return best && !tie ? best.name : undefined;
+  if (!best || tie) return undefined;
+  // F2 defense-in-depth: never emit a suggestion that isn't a safe identifier,
+  // so the connector's safety doesn't rely on HubSpot's internal-name contract.
+  return SAFE_IDENTIFIER.test(best.name) ? best.name : undefined;
 }
 
 /**
- * Coerce a raw `requested` argument into a clean string[] without throwing.
- * server.ts casts raw tool args (`as unknown as ...`), so the runtime shape
- * isn't guaranteed — non-arrays / non-string entries must not break the read.
+ * Coerce a raw `requested` argument into a clean, BOUNDED string[] without
+ * throwing. server.ts casts raw tool args (`as unknown as ...`), so the runtime
+ * shape isn't guaranteed — non-arrays / non-string entries must not break the
+ * read. DoS bound (F1): drop entries longer than MAX_PROPERTY_NAME_LENGTH and
+ * cap the number of names processed at MAX_VALIDATED_PROPERTIES BEFORE any
+ * expensive (edit-distance) work runs.
  */
 function normalizeRequested(requested: unknown): string[] {
   if (!Array.isArray(requested)) return [];
-  return requested.filter((name): name is string => typeof name === 'string' && name.length > 0);
+  const cleaned: string[] = [];
+  for (const name of requested) {
+    if (typeof name !== 'string') continue;
+    if (name.length === 0 || name.length > MAX_PROPERTY_NAME_LENGTH) continue;
+    cleaned.push(name);
+    if (cleaned.length >= MAX_VALIDATED_PROPERTIES) break;
+  }
+  return cleaned;
 }
 
 /**
@@ -237,10 +281,15 @@ export async function validateRequestedProperties(
     // Case-SENSITIVE membership test (F2): HubSpot internal names are
     // case-sensitive, and a mis-cased name (e.g. `Subject` vs `subject`) is
     // silently omitted just like an unknown name — so it must be flagged.
-    const unknownProperties = names.filter((name) => !known.names.has(name));
-    if (unknownProperties.length === 0) {
+    const allUnknown = names.filter((name) => !known.names.has(name));
+    if (allUnknown.length === 0) {
       return undefined;
     }
+
+    // DoS bound (F1): cap what we return/log so the payload and log lines stay
+    // bounded regardless of input size.
+    const truncated = allUnknown.length > MAX_REPORTED_UNKNOWN;
+    const unknownProperties = truncated ? allUnknown.slice(0, MAX_REPORTED_UNKNOWN) : allUnknown;
 
     const suggestions: PropertySuggestion[] = [];
     for (const name of unknownProperties) {
@@ -254,9 +303,21 @@ export async function validateRequestedProperties(
     const warnings = [
       'Some requested properties were not found on this object type and were silently ignored by HubSpot. See unknownProperties for the names, suggestions for likely-intended matches, and list_hubspot_properties for the full set of valid property names.',
     ];
+    if (truncated) {
+      warnings.push(
+        `unknownProperties is truncated to the first ${MAX_REPORTED_UNKNOWN} of ${allUnknown.length} unknown names.`,
+      );
+    }
 
+    // Don't log unbounded raw names — log a count and the (bounded) sample only.
     logger.warn(
-      { objectType, unknownProperties, suggestions },
+      {
+        objectType,
+        unknownCount: allUnknown.length,
+        truncated,
+        reportedCount: unknownProperties.length,
+        suggestionCount: suggestions.length,
+      },
       'Requested unknown property names on CRM read',
     );
 

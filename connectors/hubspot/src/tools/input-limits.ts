@@ -1,6 +1,27 @@
 export const MAX_FAN_OUT = 100;
 export const MAX_STRING_BODY_LENGTH = 1_048_576;
 
+/**
+ * Bounds for a CRM read/search tool's `properties` array (DoS hardening).
+ * Single source of truth shared by the input-schema cap (definitions.ts) and
+ * the runtime property-name validation path (property-validation.ts) so the
+ * schema-level cap and what validation actually processes stay in lockstep.
+ * Generous enough not to break a legitimate "fetch all properties" request
+ * (a portal has ~50-150 properties).
+ */
+export const MAX_REQUESTED_PROPERTIES = 200;
+export const MAX_REQUESTED_PROPERTY_NAME_LENGTH = 256;
+
+/**
+ * Ready-to-spread JSON Schema fragment for a read/search `properties` array.
+ * Spread into each tool's schema so all CRM reads cap identically.
+ */
+export const PROPERTIES_ARRAY_SCHEMA = {
+  type: 'array' as const,
+  items: { type: 'string' as const, maxLength: MAX_REQUESTED_PROPERTY_NAME_LENGTH },
+  maxItems: MAX_REQUESTED_PROPERTIES,
+};
+
 export type InputTooLargePayload = {
   status: 'error';
   errorCode: 'INPUT_TOO_LARGE';
