@@ -15,6 +15,10 @@ are maintained manually as part of the PR review checklist.
 
 - CRM read and search tools now warn when requested properties don't exist on the object type, instead of silently omitting them. The response carries a structured `propertyValidation` field listing the unknown property names and likely-intended matches (a conservative did-you-mean), validated against the object's live property schema. This is a non-fatal warning — the requested data is still returned — and covers all CRM object types (contacts, companies, deals, tickets, leads, products, line items).
 
+### Fixed
+
+- 403 capability-denied errors (e.g. on tickets, properties, and file reads) now return honest, actionable copy instead of advising users to reconnect. The new message explains that reconnecting won't add a capability that isn't available and names who can fix it (a HubSpot administrator, or the account's plan), so users stop looping on ineffective reconnects.
+
 ### Security
 
 - Hardened the vendored atomic credential-write helper to match the upstream canonical copy. Added an `assertTargetIsNotSymlink` policy guard that refuses to write when the credential file path is already a symlink (throws `CREDENTIAL_SYMLINK_REJECTED`); this is a fail-loud guard, not a race-free primitive (the exclusive-create temp open plus rename does the real write-through protection). Also synced `string | Buffer` data support, a temp-path `chmod` before rename, and the guarded `O_NOFOLLOW` symlink-refusal open flag.
