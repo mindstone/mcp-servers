@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-29
+
+### Changed
+
+- Warn on unknown CRM property names with did-you-mean instead of silently dropping them; honest 403 capability-denied copy; hardened atomic credential-write helper.
+
 ### Added
 
 - CRM read and search tools now warn when requested properties don't exist on the object type, instead of silently omitting them. The response carries a structured `propertyValidation` field listing the unknown property names and likely-intended matches (a conservative did-you-mean), validated against the object's live property schema. This is a non-fatal warning — the requested data is still returned — and covers all CRM object types (contacts, companies, deals, tickets, leads, products, line items).
