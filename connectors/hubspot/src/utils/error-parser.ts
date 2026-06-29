@@ -233,7 +233,7 @@ export function buildHubSpotCapabilityDeniedError(
     : '';
 
   return {
-    error: `Rebel can't access ${label} on this HubSpot connection.`,
+    error: `Can't access ${label} on this HubSpot connection.`,
     suggestion: `This capability isn't available on the connected HubSpot account, and reconnecting won't add it. A HubSpot administrator may need to authorise ${label} for the app, or the account's plan may not include it${planExample}. Other HubSpot features are unaffected.`,
   };
 }

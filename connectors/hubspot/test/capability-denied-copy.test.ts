@@ -9,7 +9,10 @@ function expectHonestCapabilityDeniedCopy(parsed: {
   error: string;
   suggestion: string;
 }, capabilityLabel = 'support tickets (Service Hub)'): void {
-  expect(parsed.error).toContain(`Rebel can't access ${capabilityLabel}`);
+  // Host-neutral: the connector must not name the host app (no "Rebel"); the
+  // brand subject was dropped so the error reads "Can't access <label> ...".
+  expect(parsed.error).toContain(`Can't access ${capabilityLabel}`);
+  expect(parsed.error).not.toContain('Rebel');
   expect(parsed.suggestion).toContain(capabilityLabel);
   expect(parsed.suggestion).toContain("reconnecting won't add it");
   expect(parsed.suggestion).toContain('HubSpot administrator');
