@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-gamma",
   "title": "Gamma",
   "description": "Gamma AI presentation generation MCP server for Model Context Protocol hosts",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-gamma",
-      "version": "0.3.2",
+      "version": "0.3.3",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-07-01
+
+### Changed
+
+- Rework README to explain when to choose this local Gamma connector, what creation and export workflows it helps with, and the main setup and safety notes.
+
 ### Changed
 - Reworked `README.md` to explain when to choose this local Gamma connector, what creation/export workflows it helps with, and the main setup and safety notes.
 
