@@ -49,8 +49,9 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
+// Deterministic output: no generatedAt timestamp (see generate-tools-inventory.mjs).
+// A per-build timestamp dirtied this committed file and aborted the release sync.
 const inventory = {
-  generatedAt: new Date().toISOString(),
   tools: allTools.map(tool => ({
     name: tool.name,
     annotations: tool.annotations ?? {},
