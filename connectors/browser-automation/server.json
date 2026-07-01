@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-browser-automation",
   "title": "Browser Automation",
   "description": "Browser automation MCP server: navigate, fill forms, click, screenshot, and manage tabs",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-browser-automation",
-      "version": "0.1.7",
+      "version": "0.1.8",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
