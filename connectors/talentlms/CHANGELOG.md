@@ -10,6 +10,13 @@ The history below `[Unreleased]` was reconstructed from git history during the
 are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
+
+## [0.3.0] - 2026-07-01
+
+### Changed
+
+- Restrict create_talentlms_user user_type to a Learner/Trainer Zod enum, blocking prompt-injected creation of Administrator/SuperAdmin accounts (provision privileged roles in the TalentLMS UI).
+
 ### Security
 - **users**: `create_talentlms_user` now restricts the `user_type` parameter to a Zod enum of non-privileged roles (`Learner`, `Trainer`). Previously the field accepted any string and forwarded it to TalentLMS, so prompt-injected tool input could create accounts with `Administrator` or `SuperAdmin` role. Administrator/SuperAdmin accounts must now be provisioned directly in the TalentLMS UI.
 

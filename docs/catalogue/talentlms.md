@@ -13,7 +13,7 @@ TalentLMS MCP server for Model Context Protocol hosts. Manage users, courses, gr
 
 | Field | Value |
 |-------|-------|
-| Version | 0.2.2 |
+| Version | 0.3.0 |
 | Auth | API key (`TALENTLMS_API_KEY`) |
 | Tools | 24 (users, courses, groups, reporting, assessments) |
 | Surface | cloud API |
