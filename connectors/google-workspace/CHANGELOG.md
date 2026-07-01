@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-07-01
+
+### Changed
+
+- Harden vendored atomicCredentialWrite (Buffer + temp-path chmod). Bound compose send with a client-side timeout so a lost reply can't hang silently. Clarify Gmail draft routing (save-to-drafts).
+
 ### Security
 
 - Synced the vendored atomic credential-write helper to the upstream canonical copy: added `string | Buffer` data support and a temp-path `chmod` before rename. The existing `assertTargetIsNotSymlink` policy guard and guarded `O_NOFOLLOW` open flag are unchanged.

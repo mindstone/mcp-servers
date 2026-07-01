@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-google-workspace",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "mcpName": "io.github.mindstone/mcp-server-google-workspace",
   "description": "Google Workspace MCP server for Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Tasks, and Forms",
   "license": "FSL-1.1-MIT",
