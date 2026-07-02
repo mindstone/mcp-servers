@@ -274,3 +274,36 @@ jobs:
           node-version: '20'
       - name: Check connector READMEs match install-links generator output
         run: node scripts/gen-install-links.mjs --check
+
+  release-hygiene-selftest:
+    name: Release-hygiene gate self-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+      - name: Prove release-hygiene detections fire on synthetic fixtures
+        run: node scripts/check-release-hygiene.mjs --self-test
+
+  release-hygiene-check:
+    name: Release hygiene (shared packages + CHANGELOG)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+      - name: Verify shared-package src bumps and aging [Unreleased] debt
+        run: node scripts/check-release-hygiene.mjs

@@ -9,7 +9,7 @@ Salesforce CRM MCP server — accounts, contacts, opportunities, leads, tasks, u
 
 ## Status
 
-- **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-salesforce)
+- **Version:** [0.1.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-salesforce)
 - **Auth:** OAuth (local 127.0.0.1 callback) or static access token ([`SALESFORCE_CLIENT_SECRET`](./server.json), [`SALESFORCE_ACCESS_TOKEN`](./server.json))
 - **Tools:** [26](./src/tools/) (accounts, contacts, opportunities, leads, tasks, query)
 - **Surface:** cloud-api

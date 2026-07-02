@@ -155,6 +155,25 @@ if (existsSync(readmePath)) {
       );
     }
   }
+
+  // README ## Status block must match package.json version and STATUS.json tools.count
+  // (the ## Tools (N) heading check above is separate; this closes the Status drift gap).
+  const statusBlockMatch = readme.match(/^##\s+Status\s*$\n([\s\S]*?)(?=\n##\s|$)/m);
+  if (statusBlockMatch) {
+    const block = statusBlockMatch[1];
+    const readmeVersion = (block.match(/\*\*Version:\*\*\s*\[?(\d+\.\d+\.\d+)/) || [])[1];
+    if (readmeVersion && readmeVersion !== pkg.version) {
+      errors.push(
+        `README Status **Version:** ${readmeVersion} != package.json version (${pkg.version})`
+      );
+    }
+    const readmeTools = (block.match(/\*\*Tools:\*\*\s*\[?(\d+)/) || [])[1];
+    if (readmeTools && status.tools?.count != null && Number(readmeTools) !== status.tools.count) {
+      errors.push(
+        `README Status **Tools:** ${readmeTools} != STATUS.json tools.count (${status.tools.count})`
+      );
+    }
+  }
 }
 
 if (errors.length) {

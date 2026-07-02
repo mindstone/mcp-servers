@@ -1,0 +1,11 @@
+{
+  "$comment": "Baseline of KNOWN release-hygiene debt acknowledged by maintainers. Detection A downgrades FAIL to ACK only when every post-bump src commit SHA is listed in ackCommits; Detection B ACKs on package presence. Remove an entry when the debt is cleared (fan-out release, changelog promotion, etc.).",
+  "mcp-server-microsoft-shared": {
+    "reason": "FOX-3594: functional src (c9638c4, 22b2cec) pending fan-out release; tracked in Linear FOX-3594",
+    "date": "2026-07-02",
+    "ackCommits": [
+      "c9638c49f48454c3ecfefe892fdde3f86d76c241",
+      "22b2ceca34481c44e3c5f94bb7ffbad7c2471623"
+    ]
+  }
+}

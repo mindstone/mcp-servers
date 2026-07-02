@@ -9,9 +9,9 @@ Slack workspace MCP server — channels, messages, threads, reactions, users, fi
 
 ## Status
 
-- **Version:** [0.1.4](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-slack)
+- **Version:** [0.1.6](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-slack)
 - **Auth:** OAuth (host-orchestrated) ([`SLACK_CLIENT_SECRET`](./server.json))
-- **Tools:** [23](./src/tools/) (messages, channels, threads, users, files)
+- **Tools:** [24](./src/tools/) (messages, channels, threads, users, files)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 

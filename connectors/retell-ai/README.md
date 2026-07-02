@@ -9,7 +9,7 @@ Voice agent phone calls, call management, agent configuration, LLM prompt manage
 
 ## Status
 
-- **Version:** [0.2.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-retell-ai)
+- **Version:** [0.2.4](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-retell-ai)
 - **Auth:** API key ([`RETELL_API_KEY`](./server.json))
 - **Tools:** [20](./src/tools/) (calls, agents, llms, voices)
 - **Surface:** cloud-api

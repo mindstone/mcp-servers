@@ -88,6 +88,31 @@ function writeJson(path, value) {
   writeFileSync(path, JSON.stringify(value, null, 2) + '\n');
 }
 
+// Keep README ## Status **Version:** / **Tools:** in lockstep with package.json and
+// STATUS.json so the Status block cannot drift after a release bump.
+function updateReadmeStatusBlock(connectorDir, version, toolsCount) {
+  const readmePath = join(connectorDir, 'README.md');
+  if (!existsSync(readmePath)) return false;
+
+  const readme = readFileSync(readmePath, 'utf8');
+  const blockRe = /(^##\s+Status\s*$\n[\s\S]*?)(?=\n##\s|$)/m;
+  const match = readme.match(blockRe);
+  if (!match) return false;
+
+  let block = match[1];
+  const versionRe = /(\*\*Version:\*\*\s*)\[(\d+\.\d+\.\d+)\]/;
+  const toolsRe = /(\*\*Tools:\*\*\s*)\[(\d+)\]/;
+  if (!versionRe.test(block)) return false;
+
+  block = block.replace(versionRe, `$1[${version}]`);
+  if (toolsCount != null && toolsRe.test(block)) {
+    block = block.replace(toolsRe, `$1[${toolsCount}]`);
+  }
+
+  writeFileSync(readmePath, readme.replace(blockRe, () => block));
+  return true;
+}
+
 // Strict x.y.z only. Every committed version surface in this repo is plain
 // semver; a prerelease/build suffix would desync the Rebel catalog pins and
 // the release workflow's detect job, so reject it up front.
@@ -405,6 +430,17 @@ function regen(scriptName) {
 }
 regen('build-catalogue.mjs');
 regen('gen-install-links.mjs');
+
+// 7. README ## Status block — version + tools count (derived from STATUS.json).
+const statusJsonPath = join(connectorDir, 'STATUS.json');
+let toolsCount;
+if (existsSync(statusJsonPath)) {
+  const statusJson = readJson(statusJsonPath);
+  toolsCount = statusJson.tools?.count;
+}
+if (updateReadmeStatusBlock(connectorDir, toVersion, toolsCount)) {
+  changed.push('README.md (Status block)');
+}
 
 console.log(
   `bump-connector: done — ${connector}@${toVersion}` +
