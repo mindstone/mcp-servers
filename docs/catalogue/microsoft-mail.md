@@ -13,7 +13,7 @@ Microsoft 365 Outlook Mail MCP server — list, search, read, send, reply, forwa
 
 | Field | Value |
 |-------|-------|
-| Version | 0.1.1 |
+| Version | 0.1.2 |
 | Auth | OAuth (host-orchestrated) (`MS_CLIENT_ID`) |
 | Tools | 12 (messages, folders, drafts) |
 | Surface | cloud API |

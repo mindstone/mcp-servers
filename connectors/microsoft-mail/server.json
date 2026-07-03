@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-microsoft-mail",
   "title": "Microsoft 365 Mail",
   "description": "Microsoft 365 Outlook mail via Graph: read, search, send, reply, forward, draft, move, delete.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-microsoft-mail",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

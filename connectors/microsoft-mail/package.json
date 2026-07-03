@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-microsoft-mail",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "mcpName": "io.github.mindstone/mcp-server-microsoft-mail",
   "description": "Microsoft 365 Outlook mail via Graph: read, search, send, reply, forward, draft, move, delete.",
   "license": "FSL-1.1-MIT",
