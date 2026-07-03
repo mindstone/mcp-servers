@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-microsoft-shared",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shared Microsoft Graph client, token persistence, logging, and types for @mindstone/mcp-server-microsoft-* connectors",
   "license": "FSL-1.1-MIT",
   "type": "module",
