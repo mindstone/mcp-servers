@@ -9,7 +9,7 @@ Microsoft 365 Outlook Calendar MCP server — list, get, create, update, delete,
 
 ## Status
 
-- **Version:** [0.1.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-calendar)
+- **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-calendar)
 - **Auth:** OAuth (host-orchestrated, shared with [`mcp-server-microsoft-mail`](../microsoft-mail/)) ([`MS_CLIENT_ID`](./server.json))
 - **Tools:** [8](./src/tools.ts) (events, calendars, free-busy)
 - **Surface:** cloud-api

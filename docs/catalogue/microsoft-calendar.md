@@ -13,7 +13,7 @@ Microsoft 365 Outlook Calendar MCP server — list, get, create, update, delete,
 
 | Field | Value |
 |-------|-------|
-| Version | 0.1.1 |
+| Version | 0.1.2 |
 | Auth | OAuth (host-orchestrated) (`MS_CLIENT_ID`) |
 | Tools | 8 (events, calendars, free-busy) |
 | Surface | cloud API |
