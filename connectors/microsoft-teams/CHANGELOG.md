@@ -4,6 +4,12 @@ All notable changes to this connector will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-03
+
+### Changed
+
+- Envelope external Microsoft 365 content in <untrusted-content> before returning to the model (FOX-3490); float microsoft-shared to ^0.1.0 (0.1.1).
+
 ## [0.1.1] - 2026-05-19
 
 ### Documentation
