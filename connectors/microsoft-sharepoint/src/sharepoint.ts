@@ -1091,7 +1091,7 @@ export async function renameLibraryItem(
     id: response.id,
     name: wrapUntrusted(response.name, 'microsoft-sharepoint:rename_library_item:name'),
     webUrl: response.webUrl,
-    message: `Item renamed to "${response.name}"`,
+    message: 'Item renamed successfully',
   });
 }
 
