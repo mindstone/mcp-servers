@@ -13,7 +13,7 @@ Microsoft 365 OneDrive Files MCP server — list, search, get, download, upload,
 
 | Field | Value |
 |-------|-------|
-| Version | 0.1.1 |
+| Version | 0.1.2 |
 | Auth | OAuth (host-orchestrated) (`MS_CLIENT_ID`) |
 | Tools | 13 (files, folders, sharing) |
 | Surface | cloud API |
