@@ -1,14 +1,14 @@
 name: CHANGELOG check
 
-# Enforces that every PR which bumps a connector's `package.json.version` also
-# updates the corresponding `connectors/<c>/CHANGELOG.md` with a section header
-# for the new version. The publish pipeline (release.yml) ships whatever lives
-# in CHANGELOG.md at the release commit — no tooling generates release-note
+# Enforces that every PR which bumps a package's `package.json.version` also
+# updates the corresponding `CHANGELOG.md` with a section header for the new
+# version. The publish pipeline (release.yml) ships whatever lives in
+# CHANGELOG.md at the release commit — no tooling generates release-note
 # text — so the only way the file stays honest is if it was written by hand.
 #
-# Note: version bumps to EXISTING connectors are no longer allowed in PRs at
+# Note: version bumps to EXISTING packages are no longer allowed in PRs at
 # all (see version-bump-guard.yml); this check still matters for the cases
-# that remain PR-shaped — brand-new connectors (first-add, guard-exempt) —
+# that remain PR-shaped — brand-new packages (first-add, guard-exempt) —
 # and as a backstop should the guard ever be removed from required checks.
 
 on:
@@ -16,8 +16,8 @@ on:
   # every PR, but a `paths:`-filtered workflow is silently skipped when none
   # of its paths match — the check-run is never reported and the PR stays
   # `BLOCKED` forever for any docs-only or CI-only change. Running on every
-  # PR and exiting 0 in the script when no connector package.json changed
-  # makes the check always report a result.
+  # PR and exiting 0 in the script when no package.json changed under
+  # connectors/ or packages/ makes the check always report a result.
   pull_request:
     branches: [main]
 
@@ -26,7 +26,7 @@ permissions:
 
 jobs:
   changelog-check:
-    name: connector version bumps require a CHANGELOG entry
+    name: package version bumps require a CHANGELOG entry
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -52,25 +52,27 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Enumerate every connector whose package.json changed in this PR.
+          # Enumerate every package whose package.json changed in this PR.
           mapfile -t CHANGED_PKG < <(
-            git diff --name-only "${BASE_SHA}" HEAD -- 'connectors/*/package.json' \
+            git diff --name-only "${BASE_SHA}" HEAD -- \
+              'connectors/*/package.json' 'packages/*/package.json' \
               | grep -v '^connectors/_template/' || true
           )
 
           if [ "${#CHANGED_PKG[@]}" -eq 0 ]; then
-            echo "No connector package.json files modified. Nothing to check."
+            echo "No package.json files modified under connectors/ or packages/. Nothing to check."
             exit 0
           fi
 
           FAILED=0
           for pkg in "${CHANGED_PKG[@]}"; do
-            connector=$(echo "$pkg" | awk -F/ '{print $2}')
+            family=$(echo "$pkg" | awk -F/ '{print $1}')
+            slug=$(echo "$pkg" | awk -F/ '{print $2}')
 
             # Slug whitelist (matches the FOX-3319 audit R15 pattern); rejects
             # any path traversal or unexpected characters.
-            if ! echo "$connector" | grep -Eq '^[a-z0-9][a-z0-9-]*$'; then
-              echo "::error::Refusing to inspect connector with unexpected slug: $connector"
+            if ! echo "$slug" | grep -Eq '^[a-z0-9][a-z0-9-]*$'; then
+              echo "::error::Refusing to inspect package with unexpected slug: $slug"
               FAILED=1
               continue
             fi
@@ -86,13 +88,13 @@ jobs:
             fi
 
             if [ "$old_version" = "$new_version" ]; then
-              echo "  ${connector}: version unchanged (${new_version}) — skipping"
+              echo "  ${slug}: version unchanged (${new_version}) — skipping"
               continue
             fi
 
-            echo "  ${connector}: ${old_version:-<new>} -> ${new_version}"
+            echo "  ${slug}: ${old_version:-<new>} -> ${new_version}"
 
-            cl="connectors/${connector}/CHANGELOG.md"
+            cl="${family}/${slug}/CHANGELOG.md"
             if [ ! -f "$cl" ]; then
               echo "::error file=${cl}::version bumped to ${new_version} but CHANGELOG.md is missing"
               FAILED=1
@@ -124,10 +126,10 @@ jobs:
 
           if [ "$FAILED" -ne 0 ]; then
             echo ""
-            echo "One or more connector version bumps are missing CHANGELOG entries."
+            echo "One or more package version bumps are missing CHANGELOG entries."
             echo "See CONTRIBUTING.md > Release process for the required format."
             exit 1
           fi
 
           echo ""
-          echo "All connector version bumps have matching CHANGELOG.md entries."
+          echo "All package version bumps have matching CHANGELOG.md entries."

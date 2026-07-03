@@ -21,6 +21,7 @@ See `README.md` for setup, `CONTRIBUTING.md` for the contribution workflow, and 
 connectors/
   _template/         Starter template. Copy this when adding a new connector.
   <connector-name>/  One independent npm package per directory.
+packages/            Shared workspace libraries (e.g. mcp-server-microsoft-shared); release via mcp:release in Rebel.
 test-harness/        Shared test utilities, linked via `file:` dependency.
 scripts/             Repo-wide maintenance scripts. Local-only by design.
 docs/                Internal docs (security audits, branch protection, etc.).
@@ -68,7 +69,9 @@ Full workflow lives in `CONTRIBUTING.md`. Agent-relevant invariants:
 
 ## Version-sync invariant
 
-**The landing rule first:** version bumps to existing connectors land **only** via the release tooling (`npm run mcp:release <connector>` in the Mindstone Rebel repo) — never in a PR (the version-bump guard check, `.github/workflows/version-bump-guard.yml`, rejects them — see `docs/security/BRANCH_PROTECTION.md` for its branch-protection status) and never as a hand-pushed bump (release.yml refuses to publish a bump whose release commit lacks the `Release-Gate` trailer the tooling stamps). The lockstep list below is what the tooling maintains; the only time it is done by hand is a brand-new connector's bootstrap first publish (see `CONTRIBUTING.md` > Release process).
+**The landing rule first:** version bumps to existing connectors **and** `packages/*` shared libraries land **only** via the release tooling (`npm run mcp:release <name>` in the Mindstone Rebel repo) — never in a PR (the version-bump guard check, `.github/workflows/version-bump-guard.yml`, rejects them for both `connectors/*` and `packages/*` — see `docs/security/BRANCH_PROTECTION.md` for its branch-protection status) and never as a hand-pushed bump (release.yml refuses to publish a bump whose release commit lacks the `Release-Gate` trailer the tooling stamps). The lockstep list below is what the tooling maintains for connectors; the only time it is done by hand is a brand-new connector's bootstrap first publish (see `CONTRIBUTING.md` > Release process).
+
+**`packages/*` shared libraries** also release via `npm run mcp:release <shared-name>` (`bump-connector.mjs --base-dir packages`). They have no `server.json`, no MCP-registry publish, and no catalogue pin. Canonical runbook: `docs/project/MCP_OSS_RELEASE_AGENT_DRIVEN.md` in the Mindstone Rebel repo (private).
 
 When bumping a connector, the version changes in lockstep across these files:
 

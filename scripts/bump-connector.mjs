@@ -70,6 +70,8 @@ Flags:
   --changelog-entry "..."  one-line release note (<= 200 chars) for the new
                            CHANGELOG block; required when actually bumping
   --date YYYY-MM-DD        CHANGELOG release date (default: today, UTC)
+  --base-dir connectors|packages
+                           package family directory (default: connectors)
   --skip-server-json-check skip the registry validation precondition.
                            HERMETIC-TEST ESCAPE ONLY — real bumps must not
                            pass it (CI re-validates regardless)
@@ -145,6 +147,7 @@ try {
       to: { type: 'string' },
       'changelog-entry': { type: 'string' },
       date: { type: 'string' },
+      'base-dir': { type: 'string', default: 'connectors' },
       'skip-server-json-check': { type: 'boolean', default: false },
       help: { type: 'boolean', default: false },
     },
@@ -185,9 +188,14 @@ if (releaseDate !== undefined) {
   releaseDate = new Date().toISOString().slice(0, 10);
 }
 
+const baseDir = values['base-dir'];
+if (baseDir !== 'connectors' && baseDir !== 'packages') {
+  fail(`--base-dir must be "connectors" or "packages" (got "${baseDir}")\n\n${USAGE}`);
+}
+
 // --- Preconditions -----------------------------------------------------------
 
-const connectorDir = join(repoRoot, 'connectors', connector);
+const connectorDir = join(repoRoot, baseDir, connector);
 if (!existsSync(connectorDir)) {
   fail(`connector directory not found: ${connectorDir}`);
 }
@@ -428,8 +436,10 @@ function regen(scriptName) {
     fail(`scripts/${scriptName} failed; cannot regenerate committed artifacts`);
   }
 }
-regen('build-catalogue.mjs');
-regen('gen-install-links.mjs');
+if (baseDir !== 'packages') {
+  regen('build-catalogue.mjs');
+  regen('gen-install-links.mjs');
+}
 
 // 7. README ## Status block — version + tools count (derived from STATUS.json).
 const statusJsonPath = join(connectorDir, 'STATUS.json');
@@ -442,8 +452,10 @@ if (updateReadmeStatusBlock(connectorDir, toVersion, toolsCount)) {
   changed.push('README.md (Status block)');
 }
 
+const generatorNote =
+  baseDir === 'packages' ? '' : '; generators ran write-on-drift';
 console.log(
   `bump-connector: done — ${connector}@${toVersion}` +
     (changed.length > 0 ? ` (wrote: ${changed.join(', ')}` : ' (no bump surfaces written') +
-    '; generators ran write-on-drift)',
+    `${generatorNote})`,
 );

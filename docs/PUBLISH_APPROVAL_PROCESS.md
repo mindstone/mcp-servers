@@ -18,8 +18,8 @@ A release reaches npm only by passing all of these, in order:
 
 Structural complements that keep the chain gate-complete:
 
-- **No version bumps in PRs.** A required PR check (`.github/workflows/version-bump-guard.yml`) fails any PR that changes an existing connector's version, so a PR merge can never be a surprise publish trigger. See `CONTRIBUTING.md` → Release process → The landing rule.
-- **Version-surface lockstep + artifact regeneration** are done by the release tooling itself (package.json, package-lock.json, server.json, catalogue, install-links — STATUS.json stores no version under schema v2), with CI drift checks as backstop.
+- **No version bumps in PRs.** A required PR check (`.github/workflows/version-bump-guard.yml`) fails any PR that changes an existing connector's or `packages/*` package's version, so a PR merge can never be a surprise publish trigger. See `CONTRIBUTING.md` → Release process → The landing rule.
+- **Version-surface lockstep + artifact regeneration** are done by the release tooling itself (connectors: `package.json`, `package-lock.json`, `server.json`, catalogue, install-links — STATUS.json stores no version under schema v2; shared libraries: `package.json`, `package-lock.json`, `CHANGELOG.md`, `README.md` via `--base-dir packages`), with CI drift checks as backstop. Shared-library releases skip MCP-registry publish (no `server.json`). Canonical runbook: `docs/project/MCP_OSS_RELEASE_AGENT_DRIVEN.md` in the Mindstone Rebel repo.
 - **Post-publish verification** (npm version visible, `npm audit signatures`, MCP-registry entry, smoke run) is part of the release tooling's pipeline, not an optional manual step.
 
 ## Why no human gate?
@@ -36,7 +36,7 @@ What this model does **not** claim: the trailer gate does not stop a malicious a
 
 ## First publishes (bootstrap) — the manual path
 
-`release.yml` can only publish packages that already have Trusted Publishing configured on npm. A brand-new connector's **first** publish is a manual maintainer ceremony, and the old human-gated checklist applies to it:
+`release.yml` can only publish packages that already have Trusted Publishing configured on npm. A brand-new connector's **first** publish is a manual maintainer ceremony, and the old human-gated checklist applies to it. The same applies to the **first provenance-backed publish** of a `packages/*` shared library (bootstrap `0.x` may have been manual without Sigstore; bind Trusted Publishing before the first `mcp:release` publish). See the Rebel manual runbook (`docs/project/MCP_OSS_PACKAGE_MANUAL_UPDATE.md` § Shared libraries).
 
 1. Land the new connector (PR with version surfaces set in lockstep — see `CONTRIBUTING.md` → First publish of a new connector). The version-bump guard exempts packages that are new at the PR base.
 2. Pre-publish checklist (record in a tracking issue `Publish approval: <connector> v<X.Y.Z>`):

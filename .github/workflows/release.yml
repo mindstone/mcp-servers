@@ -36,6 +36,7 @@ on:
     paths:
       - 'connectors/**/package.json'
       - 'connectors/**/scripts/**'
+      - 'packages/**/package.json'
       - '.github/workflows/release.yml'
 
 permissions:
@@ -56,6 +57,8 @@ jobs:
       packages: ${{ steps.diff.outputs.packages }}
       has_changes: ${{ steps.diff.outputs.has_changes }}
       meta: ${{ steps.diff.outputs.meta }}
+      registry_packages: ${{ steps.diff.outputs.registry_packages }}
+      has_registry_changes: ${{ steps.diff.outputs.has_registry_changes }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -117,6 +120,13 @@ jobs:
                   touched_packages="${touched_packages}${name}"$'\n'
                 fi
                 ;;
+              packages/*/*)
+                name="${path#packages/}"
+                name="${name%%/*}"
+                if [ "${name}" != "_template" ]; then
+                  touched_packages="${touched_packages}${name}"$'\n'
+                fi
+                ;;
             esac
           done < <(git diff --name-only "${BASE}" "${AFTER_SHA}")
 
@@ -143,78 +153,98 @@ jobs:
             return 1
           }
 
+          # Fail loudly if the same basename exists in both families — a matrix
+          # entry is a basename only, so ambiguity would pick the wrong dir.
           for dir in connectors/*/; do
             name=$(basename "${dir}")
             if [ "${name}" = "_template" ]; then
               continue
             fi
-            pkg="${dir}package.json"
-            [ -f "${pkg}" ] || continue
-
-            new_version=$(jq -r '.version // ""' "${pkg}")
-            old_version=$(git show "${BASE}:${pkg}" 2>/dev/null | jq -r '.version // ""' 2>/dev/null || echo "")
-
-            if [ -z "${old_version}" ]; then
-              echo "Skipping first-add package ${name}@${new_version}; bootstrap publishes are manual."
-              continue
+            if [ -d "packages/${name}" ]; then
+              echo "::error::Ambiguous package basename ${name}: exists in both connectors/ and packages/"
+              exit 1
             fi
+          done
 
-            if [ -n "${new_version}" ] && [ "${new_version}" != "${old_version}" ]; then
-              # Downgrade/revert: skip without failing — reverting a refused
-              # or bad bump must not itself wedge main with publish failures.
-              highest=$(printf '%s\n%s\n' "${old_version}" "${new_version}" | sort -V | tail -1)
-              if [ "${highest}" = "${old_version}" ]; then
-                echo "Skipping ${name}: version decreased ${old_version} -> ${new_version} (revert/downgrade; nothing to publish)"
+          # Scan one package family (connectors/ or packages/) for publishable bumps.
+          scan_publishable_family() {
+            local family="$1"
+            for dir in ${family}/*/; do
+              name=$(basename "${dir}")
+              if [ "${name}" = "_template" ]; then
+                continue
+              fi
+              pkg="${dir}package.json"
+              [ -f "${pkg}" ] || continue
+
+              new_version=$(jq -r '.version // ""' "${pkg}")
+              old_version=$(git show "${BASE}:${pkg}" 2>/dev/null | jq -r '.version // ""' 2>/dev/null || echo "")
+              package_name=$(jq -r '.name // ""' "${pkg}")
+
+              if [ -z "${old_version}" ]; then
+                echo "Skipping first-add package ${name}@${new_version} (${family}); bootstrap publishes are manual."
                 continue
               fi
 
-              echo "Detected version bump for ${name}: ${old_version} -> ${new_version}"
-
-              # Attribute the bump to the commit in the range that actually
-              # changed this package.json's version to the final value
-              # (newest-first walk; first-parent comparison).
-              attributed=""
-              for sha in $(git rev-list "${BASE}..${AFTER_SHA}" -- "${pkg}"); do
-                commit_version=$(git show "${sha}:${pkg}" 2>/dev/null | jq -r '.version // ""' 2>/dev/null || echo "")
-                parent_version=$(git show "${sha}^:${pkg}" 2>/dev/null | jq -r '.version // ""' 2>/dev/null || echo "")
-                if [ "${commit_version}" = "${new_version}" ] && [ "${commit_version}" != "${parent_version}" ]; then
-                  attributed="${sha}"
-                  break
+              if [ -n "${new_version}" ] && [ "${new_version}" != "${old_version}" ]; then
+                # Downgrade/revert: skip without failing — reverting a refused
+                # or bad bump must not itself wedge main with publish failures.
+                highest=$(printf '%s\n%s\n' "${old_version}" "${new_version}" | sort -V | tail -1)
+                if [ "${highest}" = "${old_version}" ]; then
+                  echo "Skipping ${name}: version decreased ${old_version} -> ${new_version} (revert/downgrade; nothing to publish)"
+                  continue
                 fi
-              done
 
-              if [ -n "${attributed}" ]; then
-                COMMIT_PKGS["${attributed}"]+="${name} "
-              fi
+                echo "Detected version bump for ${name} (${family}): ${old_version} -> ${new_version}"
 
-              if require_release_gate_trailer "${name}" "${new_version}" "${attributed}" "version bump commit"; then
-                changed+=("${name}")
-                meta_entries+=("$(jq -nc --arg name "${name}" --arg version "${new_version}" --arg commit "${attributed}" '{name: $name, version: $version, commit: $commit}')")
-              else
-                FAILED=1
-              fi
-            elif [ -n "${new_version}" ]; then
-              package_name=$(jq -r '.name // ""' "${pkg}")
-              if [ -n "${package_name}" ] && package_touched "${name}" && ! npm view "${package_name}@${new_version}" version >/dev/null 2>&1; then
-                echo "Detected unpublished current version for ${name}: ${package_name}@${new_version}"
-                # Same gate as the bump path: the newest commit in the range
-                # touching this connector is what re-triggers the publish, so
-                # it must carry the Release-Gate trailer.
-                attributed=$(git rev-list -1 "${BASE}..${AFTER_SHA}" -- "connectors/${name}/" || echo "")
+                # Attribute the bump to the commit in the range that actually
+                # changed this package.json's version to the final value
+                # (newest-first walk; first-parent comparison).
+                attributed=""
+                for sha in $(git rev-list "${BASE}..${AFTER_SHA}" -- "${pkg}"); do
+                  commit_version=$(git show "${sha}:${pkg}" 2>/dev/null | jq -r '.version // ""' 2>/dev/null || echo "")
+                  parent_version=$(git show "${sha}^:${pkg}" 2>/dev/null | jq -r '.version // ""' 2>/dev/null || echo "")
+                  if [ "${commit_version}" = "${new_version}" ] && [ "${commit_version}" != "${parent_version}" ]; then
+                    attributed="${sha}"
+                    break
+                  fi
+                done
+
                 if [ -n "${attributed}" ]; then
                   COMMIT_PKGS["${attributed}"]+="${name} "
                 fi
-                if require_release_gate_trailer "${name}" "${new_version}" "${attributed}" "unpublished-current-version retry commit"; then
+
+                if require_release_gate_trailer "${name}" "${new_version}" "${attributed}" "version bump commit"; then
                   changed+=("${name}")
-                  meta_entries+=("$(jq -nc --arg name "${name}" --arg version "${new_version}" --arg commit "${attributed}" '{name: $name, version: $version, commit: $commit}')")
+                  meta_entries+=("$(jq -nc --arg name "${name}" --arg version "${new_version}" --arg commit "${attributed}" --arg family "${family}" --arg npmName "${package_name}" '{name: $name, version: $version, commit: $commit, family: $family, npmName: $npmName}')")
                 else
                   FAILED=1
                 fi
-              elif [ -n "${package_name}" ] && ! package_touched "${name}"; then
-                echo "Skipping unpublished-version check for untouched package ${name}"
+              elif [ -n "${new_version}" ]; then
+                if [ -n "${package_name}" ] && package_touched "${name}" && ! npm view "${package_name}@${new_version}" version >/dev/null 2>&1; then
+                  echo "Detected unpublished current version for ${name} (${family}): ${package_name}@${new_version}"
+                  # Same gate as the bump path: the newest commit in the range
+                  # touching this package is what re-triggers the publish, so
+                  # it must carry the Release-Gate trailer.
+                  attributed=$(git rev-list -1 "${BASE}..${AFTER_SHA}" -- "${family}/${name}/" || echo "")
+                  if [ -n "${attributed}" ]; then
+                    COMMIT_PKGS["${attributed}"]+="${name} "
+                  fi
+                  if require_release_gate_trailer "${name}" "${new_version}" "${attributed}" "unpublished-current-version retry commit"; then
+                    changed+=("${name}")
+                    meta_entries+=("$(jq -nc --arg name "${name}" --arg version "${new_version}" --arg commit "${attributed}" --arg family "${family}" --arg npmName "${package_name}" '{name: $name, version: $version, commit: $commit, family: $family, npmName: $npmName}')")
+                  else
+                    FAILED=1
+                  fi
+                elif [ -n "${package_name}" ] && ! package_touched "${name}"; then
+                  echo "Skipping unpublished-version check for untouched package ${name}"
+                fi
               fi
-            fi
-          done
+            done
+          }
+
+          scan_publishable_family connectors
+          scan_publishable_family packages
 
           # One release commit per connector: the Release-Gate trailer contract
           # is per connector/version, and public CI cannot prove that a single
@@ -238,13 +268,20 @@ jobs:
             echo "has_changes=false" >> "${GITHUB_OUTPUT}"
             echo "packages=[]" >> "${GITHUB_OUTPUT}"
             echo "meta=[]" >> "${GITHUB_OUTPUT}"
+            echo "registry_packages=[]" >> "${GITHUB_OUTPUT}"
+            echo "has_registry_changes=false" >> "${GITHUB_OUTPUT}"
           else
             echo "has_changes=true" >> "${GITHUB_OUTPUT}"
             json=$(printf '%s\n' "${changed[@]}" | jq -R . | jq -sc .)
             meta=$(printf '%s\n' "${meta_entries[@]}" | jq -sc .)
+            registry_json=$(printf '%s\n' "${meta_entries[@]}" | jq -sc '[.[] | select(.family == "connectors") | .name]')
+            has_registry=$(printf '%s\n' "${meta_entries[@]}" | jq -sc 'if ([.[] | select(.family == "connectors")] | length) > 0 then true else false end')
             echo "packages=${json}" >> "${GITHUB_OUTPUT}"
             echo "meta=${meta}" >> "${GITHUB_OUTPUT}"
+            echo "registry_packages=${registry_json}" >> "${GITHUB_OUTPUT}"
+            echo "has_registry_changes=${has_registry}" >> "${GITHUB_OUTPUT}"
             echo "Will publish: ${json}"
+            echo "Registry publish (connectors only): ${registry_json}"
           fi
 
           if [ "${FAILED}" -ne 0 ]; then
@@ -266,11 +303,34 @@ jobs:
       fail-fast: false
       matrix:
         package: ${{ fromJSON(needs.detect.outputs.packages) }}
-    defaults:
-      run:
-        working-directory: connectors/${{ matrix.package }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Resolve package dir
+        id: resolve
+        run: |
+          set -euo pipefail
+          name="${{ matrix.package }}"
+          if [ -d "connectors/${name}" ]; then
+            if [ -d "packages/${name}" ]; then
+              echo "::error::Ambiguous package basename ${name}: exists in both connectors/ and packages/"
+              exit 1
+            fi
+            dir="connectors/${name}"
+            family="connectors"
+            expected_name="@mindstone/mcp-server-${name}"
+          elif [ -d "packages/${name}" ]; then
+            dir="packages/${name}"
+            family="packages"
+            expected_name="@mindstone/${name}"
+          else
+            echo "::error::Package ${name} not found in connectors/ or packages/"
+            exit 1
+          fi
+          echo "dir=${dir}" >> "${GITHUB_OUTPUT}"
+          echo "family=${family}" >> "${GITHUB_OUTPUT}"
+          echo "expected_name=${expected_name}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved ${name} -> ${dir} (family=${family}, expected_name=${expected_name})"
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -279,13 +339,14 @@ jobs:
 
       - name: Verify package.json identity
         # Belt-and-braces against publishing the wrong package from the
-        # right directory: assert the connector's package.json.name matches
-        # the matrix label exactly. Catches typos, copy-paste errors, and
-        # malicious overlays where a release commit changed only the body
-        # of a package.json without changing the directory name.
+        # right directory: assert the package.json.name matches the
+        # family-derived expected name exactly. Catches typos, copy-paste
+        # errors, and malicious overlays where a release commit changed only
+        # the body of a package.json without changing the directory name.
+        working-directory: ${{ steps.resolve.outputs.dir }}
         run: |
           set -euo pipefail
-          expected="@mindstone/mcp-server-${{ matrix.package }}"
+          expected="${{ steps.resolve.outputs.expected_name }}"
           actual=$(jq -r '.name' package.json)
           if [ "${actual}" != "${expected}" ]; then
             echo "::error::package.json name mismatch"
@@ -296,15 +357,19 @@ jobs:
           echo "package.json name verified: ${actual}"
 
       - name: Install dependencies
+        working-directory: ${{ steps.resolve.outputs.dir }}
         run: npm ci --ignore-scripts
 
       - name: Build
+        working-directory: ${{ steps.resolve.outputs.dir }}
         run: npm run build --if-present
 
       - name: Test
+        working-directory: ${{ steps.resolve.outputs.dir }}
         run: npm test --if-present
 
       - name: Pack tarball
+        working-directory: ${{ steps.resolve.outputs.dir }}
         run: npm pack --ignore-scripts
 
       - name: Verify tarball contents match expected package
@@ -313,12 +378,13 @@ jobs:
         # the tarball got assembled from somewhere other than the working
         # tree (e.g. a `prepack` script — which we disable via --ignore-scripts
         # — or a future tooling change).
+        working-directory: ${{ steps.resolve.outputs.dir }}
         run: |
           set -euo pipefail
           tgz=$(ls *.tgz | head -1)
           [ -n "${tgz}" ] || { echo "::error::npm pack produced no tarball"; exit 1; }
           tar -xzOf "${tgz}" package/package.json > /tmp/tarball-pkg.json
-          expected_name="@mindstone/mcp-server-${{ matrix.package }}"
+          expected_name="${{ steps.resolve.outputs.expected_name }}"
           tar_name=$(jq -r '.name' /tmp/tarball-pkg.json)
           tar_version=$(jq -r '.version' /tmp/tarball-pkg.json)
           src_version=$(jq -r '.version' package.json)
@@ -337,6 +403,7 @@ jobs:
           echo "Tarball identity verified: ${tar_name}@${tar_version}"
 
       - name: Pack hygiene scan
+        working-directory: ${{ steps.resolve.outputs.dir }}
         run: |
           set -euo pipefail
           tgz=$(ls *.tgz | head -1)
@@ -355,7 +422,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: tarball-${{ matrix.package }}
-          path: connectors/${{ matrix.package }}/*.tgz
+          path: ${{ steps.resolve.outputs.dir }}/*.tgz
           if-no-files-found: error
           retention-days: 7
 
@@ -444,6 +511,7 @@ jobs:
 
           version=$(jq -r --arg n "${PACKAGE}" '.[] | select(.name == $n) | .version' <<< "${DETECT_META}")
           commit=$(jq -r --arg n "${PACKAGE}" '.[] | select(.name == $n) | .commit' <<< "${DETECT_META}")
+          npmName=$(jq -r --arg n "${PACKAGE}" '.[] | select(.name == $n) | .npmName' <<< "${DETECT_META}")
 
           if [ "${JOB_STATUS}" = "success" ]; then
             headline=":package: Published"
@@ -453,7 +521,7 @@ jobs:
 
           payload=$(jq -n \
             --arg headline "${headline}" \
-            --arg pkg "@mindstone/mcp-server-${PACKAGE}" \
+            --arg pkg "${npmName}" \
             --arg version "${version:-unknown}" \
             --arg commit "${commit:-unknown}" \
             --arg actor "${ACTOR}" \
@@ -468,7 +536,7 @@ jobs:
   publish-mcp-registry:
     name: Publish to MCP registry (${{ matrix.package }})
     needs: [detect, publish-npm]
-    if: needs.detect.outputs.has_changes == 'true'
+    if: needs.detect.outputs.has_registry_changes == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -478,7 +546,7 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        package: ${{ fromJSON(needs.detect.outputs.packages) }}
+        package: ${{ fromJSON(needs.detect.outputs.registry_packages) }}
     defaults:
       run:
         working-directory: connectors/${{ matrix.package }}
