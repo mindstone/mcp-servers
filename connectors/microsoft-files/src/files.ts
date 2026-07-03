@@ -1,4 +1,5 @@
 import type { Client, DriveItem } from '@mindstone/mcp-server-microsoft-shared';
+import { wrapUntrusted } from './untrusted-content.js';
 
 /**
  * Thrown by files tool functions when a request is rejected by business
@@ -31,10 +32,10 @@ function formatSize(bytes?: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-function formatItem(item: DriveItem) {
+function formatItem(item: DriveItem, sourceTool: string) {
   return {
     id: item.id,
-    name: item.name,
+    name: wrapUntrusted(item.name, `microsoft-files:${sourceTool}:name`),
     type: item.folder ? 'folder' : 'file',
     size: formatSize(item.size),
     mimeType: item.file?.mimeType,
@@ -42,7 +43,7 @@ function formatItem(item: DriveItem) {
     modifiedAt: item.lastModifiedDateTime,
     webUrl: item.webUrl,
     childCount: item.folder?.childCount,
-    path: item.parentReference?.path,
+    path: wrapUntrusted(item.parentReference?.path, `microsoft-files:${sourceTool}:path`),
   };
 }
 
@@ -155,7 +156,7 @@ export async function listFiles(
   return {
     count: items.length,
     path: args.path ?? '/',
-    items: items.map(formatItem),
+    items: items.map((item) => formatItem(item, 'list_files')),
   };
 }
 
@@ -171,7 +172,7 @@ export async function getFile(
     .select('id,name,size,createdDateTime,lastModifiedDateTime,webUrl,folder,file,parentReference')
     .get();
 
-  return formatItem(item);
+  return formatItem(item, 'get_file');
 }
 
 export async function downloadFile(
@@ -194,7 +195,7 @@ export async function downloadFile(
   }
 
   return {
-    name: item.name,
+    name: wrapUntrusted(item.name, 'microsoft-files:download_file:name'),
     downloadUrl: item['@microsoft.graph.downloadUrl'],
     note: 'Download URL is valid for a short period',
   };
@@ -219,7 +220,7 @@ export async function searchFiles(
   return {
     query: args.query,
     count: items.length,
-    items: items.map(formatItem),
+    items: items.map((item) => formatItem(item, 'search_files')),
   };
 }
 
@@ -246,7 +247,7 @@ export async function uploadFile(
   return {
     success: true,
     id: response.id,
-    name: response.name,
+    name: wrapUntrusted(response.name, 'microsoft-files:upload_file:name'),
     size: formatSize(response.size),
     webUrl: response.webUrl,
     message: 'File uploaded successfully',
@@ -282,7 +283,7 @@ export async function createFolder(
   return {
     success: true,
     id: response.id,
-    name: response.name,
+    name: wrapUntrusted(response.name, 'microsoft-files:create_folder:name'),
     webUrl: response.webUrl,
     message: 'Folder created successfully',
   };
@@ -326,7 +327,7 @@ export async function moveFile(
   return {
     success: true,
     id: response.id,
-    name: response.name,
+    name: wrapUntrusted(response.name, 'microsoft-files:move_file:name'),
     webUrl: response.webUrl,
     message: 'Item moved successfully',
   };
@@ -378,7 +379,7 @@ export async function getRecent(
 
   return {
     count: items.length,
-    items: items.map(formatItem),
+    items: items.map((item) => formatItem(item, 'get_recent')),
   };
 }
 
@@ -400,7 +401,7 @@ export async function getShared(
 
   return {
     count: items.length,
-    items: items.map(formatItem),
+    items: items.map((item) => formatItem(item, 'get_shared')),
   };
 }
 
@@ -469,9 +470,12 @@ export async function readTextFile(
   const content = await client.api(contentEndpoint).options({ signal }).get();
 
   return {
-    name: metadata.name,
+    name: wrapUntrusted(metadata.name, 'microsoft-files:read_text_file:name'),
     size: formatSize(metadata.size),
     mimeType,
-    content: typeof content === 'string' ? content : content.toString(),
+    content: wrapUntrusted(
+      typeof content === 'string' ? content : content.toString(),
+      'microsoft-files:read_text_file:content',
+    ),
   };
 }

@@ -4,6 +4,7 @@ import {
   type CalendarEvent,
   type Client,
 } from '@mindstone/mcp-server-microsoft-shared';
+import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
 
 /**
  * Thrown by calendar tool functions when a request is rejected by business
@@ -315,12 +316,15 @@ export async function listEvents(
   const events: CalendarEvent[] = response.value ?? [];
 
   if (args.returnText) {
-    return { kind: 'text', text: formatEventsAsText(events, tzInfo) };
+    return {
+      kind: 'text',
+      text: wrapUntrusted(formatEventsAsText(events, tzInfo), 'microsoft-calendar:list_events') ?? '',
+    };
   }
 
   const formatted = events.map((event) => ({
     id: event.id,
-    subject: event.subject,
+    subject: wrapUntrusted(event.subject, 'microsoft-calendar:list_events:subject'),
     start: {
       dateTime: event.start.dateTime,
       timeZone: windowsToIanaTimezone(event.start.timeZone),
@@ -329,8 +333,11 @@ export async function listEvents(
       dateTime: event.end.dateTime,
       timeZone: windowsToIanaTimezone(event.end.timeZone),
     },
-    location: event.location?.displayName,
-    organizer: event.organizer?.emailAddress,
+    location: wrapUntrusted(event.location?.displayName, 'microsoft-calendar:list_events:location'),
+    organizer: wrapUntrustedJsonStrings(
+      event.organizer?.emailAddress,
+      'microsoft-calendar:list_events:organizer',
+    ),
     attendeeCount: event.attendees?.length ?? 0,
     isAllDay: event.isAllDay,
     webLink: event.webLink,
@@ -368,17 +375,20 @@ export async function getEvent(
 
   return {
     id: event.id,
-    subject: event.subject,
+    subject: wrapUntrusted(event.subject, 'microsoft-calendar:get_event:subject'),
     start: event.start,
     end: event.end,
-    location: event.location?.displayName,
-    body: event.body?.content,
+    location: wrapUntrusted(event.location?.displayName, 'microsoft-calendar:get_event:location'),
+    body: wrapUntrusted(event.body?.content, 'microsoft-calendar:get_event:body'),
     bodyType: event.body?.contentType,
-    organizer: event.organizer?.emailAddress,
+    organizer: wrapUntrustedJsonStrings(
+      event.organizer?.emailAddress,
+      'microsoft-calendar:get_event:organizer',
+    ),
     attendees: event.attendees?.map(
       (a: { emailAddress?: { address?: string; name?: string }; status?: { response?: string } }) => ({
-        email: a.emailAddress?.address,
-        name: a.emailAddress?.name,
+        email: wrapUntrusted(a.emailAddress?.address, 'microsoft-calendar:get_event:attendees.email'),
+        name: wrapUntrusted(a.emailAddress?.name, 'microsoft-calendar:get_event:attendees.name'),
         status: a.status?.response,
       }),
     ),
@@ -580,7 +590,7 @@ export async function getFreeBusy(
         status: item.status,
         start: item.start?.dateTime,
         end: item.end?.dateTime,
-        subject: item.subject,
+        subject: wrapUntrusted(item.subject, 'microsoft-calendar:get_free_busy:scheduleItems.subject'),
       })),
     }),
   );
@@ -603,11 +613,11 @@ export async function listCalendars(client: Client, signal: AbortSignal): Promis
 
   const formatted = calendars.map((cal) => ({
     id: cal.id,
-    name: cal.name,
+    name: wrapUntrusted(cal.name, 'microsoft-calendar:list_calendars:name'),
     color: cal.color,
     isDefault: cal.isDefaultCalendar,
     canEdit: cal.canEdit,
-    owner: cal.owner,
+    owner: wrapUntrustedJsonStrings(cal.owner, 'microsoft-calendar:list_calendars:owner'),
   }));
 
   return {

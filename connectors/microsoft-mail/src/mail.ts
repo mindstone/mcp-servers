@@ -1,4 +1,5 @@
 import type { Client, EmailMessage, MailFolder } from '@mindstone/mcp-server-microsoft-shared';
+import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
 
 const WELL_KNOWN_FOLDERS: Record<string, string> = {
   inbox: 'inbox',
@@ -56,11 +57,11 @@ export async function listEmails(
 
   const formatted = emails.map((email) => ({
     id: email.id,
-    subject: email.subject,
-    from: email.from?.emailAddress?.address,
-    fromName: email.from?.emailAddress?.name,
+    subject: wrapUntrusted(email.subject, 'microsoft-mail:list_emails:subject'),
+    from: wrapUntrusted(email.from?.emailAddress?.address, 'microsoft-mail:list_emails:from'),
+    fromName: wrapUntrusted(email.from?.emailAddress?.name, 'microsoft-mail:list_emails:fromName'),
     receivedAt: email.receivedDateTime,
-    preview: email.bodyPreview?.substring(0, 200),
+    preview: wrapUntrusted(email.bodyPreview?.substring(0, 200), 'microsoft-mail:list_emails:preview'),
     isRead: email.isRead,
     hasAttachments: email.hasAttachments,
     importance: email.importance,
@@ -90,12 +91,18 @@ export async function getEmail(
 
   return {
     id: email.id,
-    subject: email.subject,
-    from: email.from?.emailAddress,
-    to: email.toRecipients?.map((r: { emailAddress?: unknown }) => r.emailAddress),
-    cc: email.ccRecipients?.map((r: { emailAddress?: unknown }) => r.emailAddress),
+    subject: wrapUntrusted(email.subject, 'microsoft-mail:get_email:subject'),
+    from: wrapUntrustedJsonStrings(email.from?.emailAddress, 'microsoft-mail:get_email:from'),
+    to: wrapUntrustedJsonStrings(
+      email.toRecipients?.map((r: { emailAddress?: unknown }) => r.emailAddress),
+      'microsoft-mail:get_email:to',
+    ),
+    cc: wrapUntrustedJsonStrings(
+      email.ccRecipients?.map((r: { emailAddress?: unknown }) => r.emailAddress),
+      'microsoft-mail:get_email:cc',
+    ),
     receivedAt: email.receivedDateTime,
-    body: email.body?.content,
+    body: wrapUntrusted(email.body?.content, 'microsoft-mail:get_email:body'),
     bodyType: email.body?.contentType,
     isRead: email.isRead,
     hasAttachments: email.hasAttachments,
@@ -168,10 +175,10 @@ export async function searchEmails(
 
   const formatted = emails.map((email) => ({
     id: email.id,
-    subject: email.subject,
-    from: email.from?.emailAddress?.address,
+    subject: wrapUntrusted(email.subject, 'microsoft-mail:search_emails:subject'),
+    from: wrapUntrusted(email.from?.emailAddress?.address, 'microsoft-mail:search_emails:from'),
     receivedAt: email.receivedDateTime,
-    preview: email.bodyPreview?.substring(0, 200),
+    preview: wrapUntrusted(email.bodyPreview?.substring(0, 200), 'microsoft-mail:search_emails:preview'),
     isRead: email.isRead,
   }));
 
@@ -274,7 +281,7 @@ export async function listFolders(
 
   const formatted = folders.map((folder) => ({
     id: folder.id,
-    name: folder.displayName,
+    name: wrapUntrusted(folder.displayName, 'microsoft-mail:list_folders:name'),
     totalItems: folder.totalItemCount,
     unreadItems: folder.unreadItemCount,
     childFolders: folder.childFolderCount,
@@ -339,7 +346,7 @@ export async function createReplyDraft(
     success: true,
     draftId: response.id,
     conversationId: response.conversationId,
-    subject: response.subject,
+    subject: wrapUntrusted(response.subject, 'microsoft-mail:create_reply_draft:subject'),
     message: `Reply draft created${args.replyAll ? ' (reply-all)' : ''}. Open Outlook to review and send.`,
   };
 }

@@ -1,4 +1,5 @@
 import type { Chat, ChatMessage, Client } from '@mindstone/mcp-server-microsoft-shared';
+import { wrapUntrusted } from './untrusted-content.js';
 
 export class TeamsBusinessError extends Error {
   readonly nextStep: string;
@@ -48,18 +49,7 @@ const HTML_ENTITIES: Record<string, string> = {
 const TAG_RE = /<[^>]*>/g;
 const ENTITY_RE = /&(?:nbsp|amp|lt|gt|quot);/g;
 
-// Strip HTML for plain-text display of Teams chat message bodies. This is a
-// presentation helper, not a security sanitiser.
-//
-// SECURITY (AGENTS.md invariant #6): GAPPED — chat body `content` and other
-// external-text fields here are returned WITHOUT an `<untrusted-content>`
-// envelope. The host does NOT wrap connector output (`processCallToolResult`
-// in the Rebel host just concatenates text parts), so any prior assumption to
-// that effect was false. This connector is a tracked known gap in
-// scripts/untrusted-coverage-baseline.json (FOX-3490 remediation program);
-// the proper fix is to envelope these fields with the shared `wrapUntrusted`
-// helper in a dedicated per-connector release.
-//
+// Strip HTML for plain-text display; returned external content is enveloped via wrapUntrusted.
 // Runs the tag-strip pass in a fixed-point loop so a payload like
 // `<scr<script>ipt>` cannot leave a reconstructed `<script>` behind after a
 // single pass; decodes the five named entities in a single regex pass
@@ -87,8 +77,13 @@ function requireStringArg(args: ArgBag, name: string, label: string, nextStep: s
 function formatMessage(msg: ChatMessage): Record<string, unknown> {
   return {
     id: msg.id,
-    from: msg.from?.user?.displayName ?? 'Unknown',
-    content: stripHtml(msg.body?.content ?? ''),
+    from: msg.from?.user?.displayName
+      ? wrapUntrusted(msg.from.user.displayName, 'microsoft-teams:list_chat_messages:from')
+      : 'Unknown',
+    content: wrapUntrusted(
+      stripHtml(msg.body?.content ?? ''),
+      'microsoft-teams:list_chat_messages:content',
+    ),
     contentType: msg.body?.contentType,
     createdAt: msg.createdDateTime,
   };
@@ -126,7 +121,9 @@ export async function listChats(
     count: chats.length,
     chats: chats.map((chat) => ({
       id: chat.id,
-      topic: chat.topic ?? '(No topic)',
+      topic: chat.topic
+        ? wrapUntrusted(chat.topic, 'microsoft-teams:list_chats:topic')
+        : '(No topic)',
       type: chat.chatType,
       createdAt: chat.createdDateTime,
       lastUpdated: chat.lastUpdatedDateTime,
@@ -148,13 +145,15 @@ export async function getChat(
 
   return {
     id: chat.id,
-    topic: chat.topic ?? '(No topic)',
+    topic: chat.topic
+      ? wrapUntrusted(chat.topic, 'microsoft-teams:get_chat:topic')
+      : '(No topic)',
     type: chat.chatType,
     createdAt: chat.createdDateTime,
     lastUpdated: chat.lastUpdatedDateTime,
     members: chat.members?.map((member) => ({
-      displayName: member.displayName,
-      email: member.email,
+      displayName: wrapUntrusted(member.displayName, 'microsoft-teams:get_chat:members.displayName'),
+      email: wrapUntrusted(member.email, 'microsoft-teams:get_chat:members.email'),
       roles: member.roles,
     })),
   };
@@ -219,8 +218,8 @@ interface Channel {
 function formatChannel(channel: Channel): Record<string, unknown> {
   return {
     id: channel.id,
-    name: channel.displayName,
-    description: channel.description,
+    name: wrapUntrusted(channel.displayName, 'microsoft-teams:list_channels:name'),
+    description: wrapUntrusted(channel.description, 'microsoft-teams:list_channels:description'),
     membershipType: channel.membershipType,
   };
 }
@@ -241,8 +240,8 @@ export async function listTeams(
     count: teams.length,
     teams: teams.map((team) => ({
       id: team.id,
-      name: team.displayName,
-      description: team.description,
+      name: wrapUntrusted(team.displayName, 'microsoft-teams:list_teams:name'),
+      description: wrapUntrusted(team.description, 'microsoft-teams:list_teams:description'),
     })),
   };
 }
@@ -285,6 +284,9 @@ export async function getPresence(
   return {
     availability: presence.availability,
     activity: presence.activity,
-    statusMessage: presence.statusMessage?.message?.content,
+    statusMessage: wrapUntrusted(
+      presence.statusMessage?.message?.content ?? undefined,
+      'microsoft-teams:get_presence:statusMessage',
+    ),
   };
 }

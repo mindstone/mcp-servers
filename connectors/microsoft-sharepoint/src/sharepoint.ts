@@ -7,6 +7,7 @@ import {
   type SharePointDrive,
   type Client,
 } from '@mindstone/mcp-server-microsoft-shared';
+import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
 
 // -- Helpers --
 
@@ -18,10 +19,10 @@ function formatSize(bytes?: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-function formatItem(item: DriveItem) {
+function formatItem(item: DriveItem, sourceTool: string) {
   return {
     id: item.id,
-    name: item.name,
+    name: wrapUntrusted(item.name, `microsoft-sharepoint:${sourceTool}:name`),
     type: item.folder ? 'folder' : 'file',
     size: formatSize(item.size),
     mimeType: item.file?.mimeType,
@@ -29,29 +30,29 @@ function formatItem(item: DriveItem) {
     modifiedAt: item.lastModifiedDateTime,
     webUrl: item.webUrl,
     childCount: item.folder?.childCount,
-    path: item.parentReference?.path,
+    path: wrapUntrusted(item.parentReference?.path, `microsoft-sharepoint:${sourceTool}:path`),
   };
 }
 
-function formatSite(site: SharePointSite) {
+function formatSite(site: SharePointSite, sourceTool: string) {
   return {
     id: site.id,
-    displayName: site.displayName,
-    name: site.name,
+    displayName: wrapUntrusted(site.displayName, `microsoft-sharepoint:${sourceTool}:displayName`),
+    name: wrapUntrusted(site.name, `microsoft-sharepoint:${sourceTool}:name`),
     webUrl: site.webUrl,
-    description: site.description,
+    description: wrapUntrusted(site.description, `microsoft-sharepoint:${sourceTool}:description`),
     createdAt: site.createdDateTime,
     modifiedAt: site.lastModifiedDateTime,
-    hostname: site.siteCollection?.hostname,
+    hostname: wrapUntrusted(site.siteCollection?.hostname, `microsoft-sharepoint:${sourceTool}:hostname`),
     isRoot: !!site.root,
   };
 }
 
-function formatDrive(drive: SharePointDrive) {
+function formatDrive(drive: SharePointDrive, sourceTool: string) {
   return {
     id: drive.id,
-    name: drive.name,
-    description: drive.description,
+    name: wrapUntrusted(drive.name, `microsoft-sharepoint:${sourceTool}:name`),
+    description: wrapUntrusted(drive.description, `microsoft-sharepoint:${sourceTool}:description`),
     driveType: drive.driveType,
     webUrl: drive.webUrl,
     createdAt: drive.createdDateTime,
@@ -107,7 +108,7 @@ export async function listSharePointSites(
   return successResult({
     query: args.query || '(all sites)',
     count: sites.length,
-    sites: sites.map(formatSite),
+    sites: sites.map((site) => formatSite(site, 'list_sharepoint_sites')),
   });
 }
 
@@ -134,7 +135,7 @@ export async function getSharePointSite(
     .select('id,displayName,name,webUrl,description,createdDateTime,lastModifiedDateTime,root,siteCollection')
     .get();
 
-  return successResult(formatSite(site));
+  return successResult(formatSite(site, 'get_sharepoint_site'));
 }
 
 interface ListSiteDocumentLibrariesArgs {
@@ -169,7 +170,7 @@ export async function listSiteDocumentLibraries(
   return successResult({
     siteId: args.siteId,
     count: drives.length,
-    documentLibraries: drives.map(formatDrive),
+    documentLibraries: drives.map((drive) => formatDrive(drive, 'list_site_document_libraries')),
   });
 }
 
@@ -218,7 +219,7 @@ export async function listLibraryFiles(
     driveId: args.driveId,
     path: args.path ?? '/',
     count: items.length,
-    items: items.map(formatItem),
+    items: items.map((item) => formatItem(item, 'list_library_files')),
   });
 }
 
@@ -247,7 +248,7 @@ export async function getLibraryFile(
     .select('id,name,size,createdDateTime,lastModifiedDateTime,webUrl,folder,file,parentReference')
     .get();
 
-  return successResult(formatItem(item));
+  return successResult(formatItem(item, 'get_library_file'));
 }
 
 interface DownloadLibraryFileArgs {
@@ -276,7 +277,7 @@ export async function downloadLibraryFile(
   }
 
   return successResult({
-    name: item.name,
+    name: wrapUntrusted(item.name, 'microsoft-sharepoint:download_library_file:name'),
     downloadUrl: item['@microsoft.graph.downloadUrl'],
     note: 'Download URL is valid for a short period',
   });
@@ -317,7 +318,7 @@ export async function searchLibraryFiles(
     driveId: args.driveId,
     query: args.query,
     count: items.length,
-    items: items.map(formatItem),
+    items: items.map((item) => formatItem(item, 'search_library_files')),
   });
 }
 
@@ -381,10 +382,10 @@ export async function readLibraryTextFile(
   }
 
   return successResult({
-    name: metadata.name,
+    name: wrapUntrusted(metadata.name, 'microsoft-sharepoint:read_library_text_file:name'),
     size: formatSize(metadata.size),
     mimeType,
-    content,
+    content: wrapUntrusted(content, 'microsoft-sharepoint:read_library_text_file:content'),
   });
 }
 
@@ -424,7 +425,7 @@ export async function uploadLibraryFile(
   return successResult({
     success: true,
     id: response.id,
-    name: response.name,
+    name: wrapUntrusted(response.name, 'microsoft-sharepoint:upload_library_file:name'),
     size: formatSize(response.size),
     webUrl: response.webUrl,
     message: 'File uploaded successfully',
@@ -473,7 +474,7 @@ export async function createLibraryFolder(
   return successResult({
     success: true,
     id: response.id,
-    name: response.name,
+    name: wrapUntrusted(response.name, 'microsoft-sharepoint:create_library_folder:name'),
     webUrl: response.webUrl,
     message: 'Folder created successfully',
   });
@@ -549,7 +550,7 @@ export async function moveLibraryItem(
   return successResult({
     success: true,
     id: response.id,
-    name: response.name,
+    name: wrapUntrusted(response.name, 'microsoft-sharepoint:move_library_item:name'),
     webUrl: response.webUrl,
     message: 'Item moved successfully',
   });
@@ -624,17 +625,32 @@ export async function listSitePages(
 
   const pages = (response.value ?? []).map((page: Record<string, unknown>) => ({
     id: page.id,
-    title: page.title,
-    name: page.name,
+    title: wrapUntrusted(
+      typeof page.title === 'string' ? page.title : undefined,
+      'microsoft-sharepoint:list_site_pages:title',
+    ),
+    name: wrapUntrusted(
+      typeof page.name === 'string' ? page.name : undefined,
+      'microsoft-sharepoint:list_site_pages:name',
+    ),
     webUrl: page.webUrl,
-    description: page.description,
+    description: wrapUntrusted(
+      typeof page.description === 'string' ? page.description : undefined,
+      'microsoft-sharepoint:list_site_pages:description',
+    ),
     createdAt: page.createdDateTime,
     modifiedAt: page.lastModifiedDateTime,
     createdBy: (page.createdBy as Record<string, unknown>)?.user
-      ? ((page.createdBy as Record<string, Record<string, string>>).user.displayName)
+      ? wrapUntrusted(
+        (page.createdBy as Record<string, Record<string, string>>).user.displayName,
+        'microsoft-sharepoint:list_site_pages:createdBy',
+      )
       : undefined,
     lastModifiedBy: (page.lastModifiedBy as Record<string, unknown>)?.user
-      ? ((page.lastModifiedBy as Record<string, Record<string, string>>).user.displayName)
+      ? wrapUntrusted(
+        (page.lastModifiedBy as Record<string, Record<string, string>>).user.displayName,
+        'microsoft-sharepoint:list_site_pages:lastModifiedBy',
+      )
       : undefined,
   }));
 
@@ -711,14 +727,16 @@ export async function readSitePage(
 
   return successResult({
     id: page.id,
-    title: page.title,
-    name: page.name,
+    title: wrapUntrusted(page.title, 'microsoft-sharepoint:read_site_page:title'),
+    name: wrapUntrusted(page.name, 'microsoft-sharepoint:read_site_page:name'),
     webUrl: page.webUrl,
-    description: page.description,
+    description: wrapUntrusted(page.description, 'microsoft-sharepoint:read_site_page:description'),
     pageLayout: page.pageLayout,
     createdAt: page.createdDateTime,
     modifiedAt: page.lastModifiedDateTime,
-    contentHtml: contentParts.length > 0 ? contentParts.join('\n\n') : '(no text content found — page may be empty or use non-text web parts)',
+    contentHtml: contentParts.length > 0
+      ? wrapUntrusted(contentParts.join('\n\n'), 'microsoft-sharepoint:read_site_page:contentHtml')
+      : '(no text content found — page may be empty or use non-text web parts)',
     ...(contentWarning ? { contentWarning } : {}),
   });
 }
@@ -754,8 +772,14 @@ export async function listSiteLists(
 
   const lists = (response.value ?? []).map((list: Record<string, unknown>) => ({
     id: list.id,
-    displayName: list.displayName,
-    description: list.description,
+    displayName: wrapUntrusted(
+      typeof list.displayName === 'string' ? list.displayName : undefined,
+      'microsoft-sharepoint:list_site_lists:displayName',
+    ),
+    description: wrapUntrusted(
+      typeof list.description === 'string' ? list.description : undefined,
+      'microsoft-sharepoint:list_site_lists:description',
+    ),
     webUrl: list.webUrl,
     createdAt: list.createdDateTime,
     modifiedAt: list.lastModifiedDateTime,
@@ -809,7 +833,7 @@ export async function listListItems(
     createdAt: item.createdDateTime,
     modifiedAt: item.lastModifiedDateTime,
     webUrl: item.webUrl,
-    fields: item.fields,
+    fields: wrapUntrustedJsonStrings(item.fields, 'microsoft-sharepoint:list_list_items:fields'),
   }));
 
   return successResult({
@@ -849,7 +873,7 @@ export async function getListItem(
     createdAt: item.createdDateTime,
     modifiedAt: item.lastModifiedDateTime,
     webUrl: item.webUrl,
-    fields: item.fields,
+    fields: wrapUntrustedJsonStrings(item.fields, 'microsoft-sharepoint:get_list_item:fields'),
   });
 }
 
@@ -881,7 +905,10 @@ export async function createListItem(
       success: true,
       id: response.id,
       webUrl: response.webUrl,
-      fields: response.fields,
+      fields: wrapUntrustedJsonStrings(
+        response.fields,
+        'microsoft-sharepoint:create_list_item:fields',
+      ),
       message: 'List item created successfully',
     });
   } catch (err) {
@@ -996,19 +1023,31 @@ export async function searchSharePoint(
       for (const hit of hitContainer.hits ?? []) {
         results.push({
           rank: hit.rank,
-          summary: hit.summary,
+          summary: wrapUntrusted(hit.summary, 'microsoft-sharepoint:search_sharepoint:summary'),
           resource: {
             id: hit.resource?.id,
-            name: hit.resource?.name ?? hit.resource?.displayName,
+            name: wrapUntrusted(
+              hit.resource?.name ?? hit.resource?.displayName,
+              'microsoft-sharepoint:search_sharepoint:resource.name',
+            ),
             webUrl: hit.resource?.webUrl,
             type: hit.resource?.['@odata.type'],
             lastModifiedDateTime: hit.resource?.lastModifiedDateTime,
-            createdBy: hit.resource?.createdBy?.user?.displayName,
-            lastModifiedBy: hit.resource?.lastModifiedBy?.user?.displayName,
+            createdBy: wrapUntrusted(
+              hit.resource?.createdBy?.user?.displayName,
+              'microsoft-sharepoint:search_sharepoint:createdBy',
+            ),
+            lastModifiedBy: wrapUntrusted(
+              hit.resource?.lastModifiedBy?.user?.displayName,
+              'microsoft-sharepoint:search_sharepoint:lastModifiedBy',
+            ),
             parentReference: hit.resource?.parentReference ? {
               siteId: hit.resource.parentReference.siteId,
               driveId: hit.resource.parentReference.driveId,
-              path: hit.resource.parentReference.path,
+              path: wrapUntrusted(
+                hit.resource.parentReference.path,
+                'microsoft-sharepoint:search_sharepoint:path',
+              ),
             } : undefined,
           },
         });
@@ -1050,7 +1089,7 @@ export async function renameLibraryItem(
   return successResult({
     success: true,
     id: response.id,
-    name: response.name,
+    name: wrapUntrusted(response.name, 'microsoft-sharepoint:rename_library_item:name'),
     webUrl: response.webUrl,
     message: `Item renamed to "${response.name}"`,
   });
@@ -1123,10 +1162,19 @@ export async function listSubsites(
 
   const sites = (response.value ?? []).map((site: Record<string, unknown>) => ({
     id: site.id,
-    displayName: site.displayName,
-    name: site.name,
+    displayName: wrapUntrusted(
+      typeof site.displayName === 'string' ? site.displayName : undefined,
+      'microsoft-sharepoint:list_subsites:displayName',
+    ),
+    name: wrapUntrusted(
+      typeof site.name === 'string' ? site.name : undefined,
+      'microsoft-sharepoint:list_subsites:name',
+    ),
     webUrl: site.webUrl,
-    description: site.description,
+    description: wrapUntrusted(
+      typeof site.description === 'string' ? site.description : undefined,
+      'microsoft-sharepoint:list_subsites:description',
+    ),
     createdAt: site.createdDateTime,
     modifiedAt: site.lastModifiedDateTime,
   }));
@@ -1159,7 +1207,7 @@ export async function getRecentFiles(
 
   const items = (response.value ?? []).map((item: DriveItem) => ({
     id: item.id,
-    name: item.name,
+    name: wrapUntrusted(item.name, 'microsoft-sharepoint:get_recent_files:name'),
     type: item.folder ? 'folder' : 'file',
     size: formatSize(item.size),
     mimeType: item.file?.mimeType,
@@ -1200,7 +1248,7 @@ export async function getSiteDrive(
     .select('id,name,driveType,owner,quota,webUrl,createdDateTime,lastModifiedDateTime')
     .get();
 
-  return successResult(formatDrive(drive));
+  return successResult(formatDrive(drive, 'get_site_drive'));
 }
 
 interface ListSiteItemsArgs {
@@ -1231,9 +1279,17 @@ export async function listSiteItems(
 
     const items = (response.value ?? []).map((item: Record<string, unknown>) => ({
       id: item.id,
-      name: item.name,
+      name: wrapUntrusted(
+        typeof item.name === 'string' ? item.name : undefined,
+        'microsoft-sharepoint:list_site_items:name',
+      ),
       webUrl: item.webUrl,
-      contentType: (item.contentType as Record<string, unknown>)?.name,
+      contentType: wrapUntrusted(
+        typeof (item.contentType as Record<string, unknown>)?.name === 'string'
+          ? ((item.contentType as Record<string, string>).name)
+          : undefined,
+        'microsoft-sharepoint:list_site_items:contentType.name',
+      ),
       createdAt: item.createdDateTime,
       modifiedAt: item.lastModifiedDateTime,
     }));
@@ -1280,12 +1336,15 @@ export async function getSiteItem(
 
     return successResult({
       id: item.id,
-      name: item.name,
+      name: wrapUntrusted(item.name, 'microsoft-sharepoint:get_site_item:name'),
       webUrl: item.webUrl,
-      contentType: item.contentType?.name,
+      contentType: wrapUntrusted(
+        item.contentType?.name,
+        'microsoft-sharepoint:get_site_item:contentType.name',
+      ),
       createdAt: item.createdDateTime,
       modifiedAt: item.lastModifiedDateTime,
-      fields: item.fields,
+      fields: wrapUntrustedJsonStrings(item.fields, 'microsoft-sharepoint:get_site_item:fields'),
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -1324,9 +1383,9 @@ export async function getSiteList(
 
   return successResult({
     id: list.id,
-    displayName: list.displayName,
-    name: list.name,
-    description: list.description,
+    displayName: wrapUntrusted(list.displayName, 'microsoft-sharepoint:get_site_list:displayName'),
+    name: wrapUntrusted(list.name, 'microsoft-sharepoint:get_site_list:name'),
+    description: wrapUntrusted(list.description, 'microsoft-sharepoint:get_site_list:description'),
     webUrl: list.webUrl,
     template: list.list?.template,
     hidden: list.list?.hidden,
@@ -1360,7 +1419,7 @@ export async function getSiteByPath(
     .select('id,displayName,name,webUrl,description,createdDateTime,lastModifiedDateTime,root,siteCollection')
     .get();
 
-  return successResult(formatSite(site));
+  return successResult(formatSite(site, 'get_site_by_path'));
 }
 
 interface GetSitesDeltaArgs {
@@ -1379,8 +1438,14 @@ export async function getSitesDelta(
 
     const sites = (response.value ?? []).map((site: Record<string, unknown>) => ({
       id: site.id,
-      displayName: site.displayName,
-      name: site.name,
+      displayName: wrapUntrusted(
+        typeof site.displayName === 'string' ? site.displayName : undefined,
+        'microsoft-sharepoint:get_sites_delta:displayName',
+      ),
+      name: wrapUntrusted(
+        typeof site.name === 'string' ? site.name : undefined,
+        'microsoft-sharepoint:get_sites_delta:name',
+      ),
       webUrl: site.webUrl,
       isDeleted: !!(site as Record<string, unknown>)['@removed'],
     }));
@@ -1445,7 +1510,7 @@ async function buildTree(
   for (const item of response.value ?? []) {
     const isFolder = !!item.folder;
     const node: TreeNode = {
-      name: item.name,
+      name: wrapUntrusted(item.name, 'microsoft-sharepoint:get_library_tree:name') ?? '',
       type: isFolder ? 'folder' : 'file',
       ...(isFolder ? { childCount: item.folder.childCount } : { size: formatSize(item.size) }),
     };
@@ -1518,7 +1583,7 @@ export async function getFileMetadata(
   return successResult({
     driveId: args.driveId,
     itemId: args.itemId,
-    fields,
+    fields: wrapUntrustedJsonStrings(fields, 'microsoft-sharepoint:get_file_metadata:fields'),
   });
 }
 
@@ -1558,7 +1623,10 @@ export async function updateFileMetadata(
     success: true,
     driveId: args.driveId,
     itemId: args.itemId,
-    updatedFields,
+    updatedFields: wrapUntrustedJsonStrings(
+      updatedFields,
+      'microsoft-sharepoint:update_file_metadata:updatedFields',
+    ),
     message: `Updated ${Object.keys(args.fields).length} field(s)`,
   });
 }

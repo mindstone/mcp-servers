@@ -58,12 +58,10 @@ describe('microsoft-teams mock-API integration', () => {
       members: Array<{ displayName: string; email: string; roles: string[] }>;
     };
     expect(json.id).toBe('chat-1');
-    expect(json.topic).toBe('Project Alpha');
-    expect(json.members[0]).toMatchObject({
-      displayName: 'Alice',
-      email: 'alice@example.com',
-      roles: ['owner'],
-    });
+    expect(json.topic).toContain('Project Alpha');
+    expect(json.members[0]?.displayName).toContain('Alice');
+    expect(json.members[0]?.email).toContain('alice@example.com');
+    expect(json.members[0]?.roles).toEqual(['owner']);
   });
 
   it('list_chat_messages returns chat messages with html stripped', async () => {
@@ -75,8 +73,8 @@ describe('microsoft-teams mock-API integration', () => {
     };
     expect(json.count).toBe(2);
     expect(json.messages[0]?.id).toBe('msg-1');
-    expect(json.messages[0]?.content).toBe('Hello & welcome!');
-    expect(json.messages[0]?.from).toBe('Alice');
+    expect(json.messages[0]?.content).toContain('Hello & welcome!');
+    expect(json.messages[0]?.from).toContain('Alice');
   });
 
   it('list_teams returns joined teams', async () => {
@@ -87,11 +85,9 @@ describe('microsoft-teams mock-API integration', () => {
       teams: Array<{ id: string; name: string; description: string }>;
     };
     expect(json.count).toBe(1);
-    expect(json.teams[0]).toMatchObject({
-      id: 'team-1',
-      name: 'Engineering',
-      description: 'Engineering team',
-    });
+    expect(json.teams[0]?.id).toBe('team-1');
+    expect(json.teams[0]?.name).toContain('Engineering');
+    expect(json.teams[0]?.description).toContain('Engineering team');
   });
 
   it('list_channels returns channels for a team', async () => {
@@ -104,7 +100,7 @@ describe('microsoft-teams mock-API integration', () => {
     };
     expect(json.teamId).toBe('team-1');
     expect(json.count).toBe(2);
-    expect(json.channels[0]?.name).toBe('General');
+    expect(json.channels[0]?.name).toContain('General');
   });
 
   it('get_presence returns current presence details', async () => {
@@ -113,8 +109,8 @@ describe('microsoft-teams mock-API integration', () => {
     expect(result.json).toMatchObject({
       availability: 'Available',
       activity: 'Available',
-      statusMessage: 'Heads down',
     });
+    expect((result.json as { statusMessage?: string }).statusMessage).toContain('Heads down');
   });
 
   it('send_chat_message sends to chat scope', async () => {

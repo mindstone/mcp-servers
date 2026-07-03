@@ -62,7 +62,7 @@ describe('microsoft-sharepoint mock-API integration', () => {
     const json = result.json as { ok?: unknown; id: string; displayName: string };
     expect(json.ok).toBeUndefined();
     expect(json.id).toBe('site-1');
-    expect(json.displayName).toBe('Marketing');
+    expect(json.displayName).toContain('Marketing');
   });
 
   it('list_site_document_libraries returns drive metadata', async () => {
@@ -233,7 +233,7 @@ describe('microsoft-sharepoint mock-API integration', () => {
     });
     expect(getResult.isError).not.toBe(true);
     const getJson = getResult.json as { fields: { Department: string } };
-    expect(getJson.fields.Department).toBe('Marketing');
+    expect(getJson.fields.Department).toContain('Marketing');
 
     const updateResult = await client.callTool('update_file_metadata', {
       driveId: 'drive-1',
@@ -242,7 +242,7 @@ describe('microsoft-sharepoint mock-API integration', () => {
     });
     expect(updateResult.isError).not.toBe(true);
     const updateJson = updateResult.json as { updatedFields: { Status: string } };
-    expect(updateJson.updatedFields.Status).toBe('Updated');
+    expect(updateJson.updatedFields.Status).toContain('Updated');
   });
 
   it('get_site_by_path and get_sites_delta return site discovery payloads', async () => {
