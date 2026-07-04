@@ -129,6 +129,19 @@ export const COMPOSE_EMAIL_HTML = `
       letter-spacing: 0.04em;
     }
 
+    .from-value {
+      color: var(--text);
+      font-size: 14px;
+      padding: 2px 0;
+      word-break: break-word;
+    }
+
+    .from-helper {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
     .input,
     .textarea {
       width: 100%;
@@ -296,6 +309,12 @@ export const COMPOSE_EMAIL_HTML = `
     </div>
 
     <form id="composeForm" class="card" novalidate>
+      <div class="field from-field">
+        <label>From</label>
+        <span id="fromValue" class="from-value"></span>
+        <span id="fromHelper" class="from-helper hidden"></span>
+      </div>
+
       <div class="field">
         <label for="toInput">To</label>
         <input id="toInput" class="input" type="text" autocomplete="off" placeholder="name@example.com, team@example.com">
@@ -375,6 +394,8 @@ export const COMPOSE_EMAIL_HTML = `
       var bccInput = document.getElementById('bccInput');
       var subjectInput = document.getElementById('subjectInput');
       var bodyInput = document.getElementById('bodyInput');
+      var fromValue = document.getElementById('fromValue');
+      var fromHelper = document.getElementById('fromHelper');
       var ccRow = document.getElementById('ccRow');
       var bccRow = document.getElementById('bccRow');
       var toggleCcButton = document.getElementById('toggleCcButton');
@@ -407,6 +428,21 @@ export const COMPOSE_EMAIL_HTML = `
 
       function trimString(value) {
         return String(value || '').trim();
+      }
+
+      function applyFromValue(email) {
+        var trimmed = trimString(email);
+        if (trimmed) {
+          fromValue.textContent = trimmed;
+          fromValue.style.color = '';
+          fromHelper.textContent = '';
+          fromHelper.classList.add('hidden');
+        } else {
+          fromValue.textContent = 'Account not shown';
+          fromValue.style.color = 'var(--muted)';
+          fromHelper.textContent = 'Rebel could not confirm the sending account. Cancel and ask Rebel to recreate the draft before sending.';
+          fromHelper.classList.remove('hidden');
+        }
       }
 
       function formatAddressItem(item) {
@@ -621,6 +657,7 @@ export const COMPOSE_EMAIL_HTML = `
         subjectInput.value = typeof draft.subject === 'string' ? draft.subject : '';
         bodyInput.value = typeof draft.body === 'string' ? draft.body : '';
         currentEmail = typeof draft.email === 'string' ? draft.email : '';
+        applyFromValue(currentEmail);
         setCcVisible(normalizeAddressList(draft.cc).length > 0);
         setBccVisible(normalizeAddressList(draft.bcc).length > 0);
         clearError();

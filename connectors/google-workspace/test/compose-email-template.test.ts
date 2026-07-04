@@ -39,6 +39,18 @@ function isHidden(window: Window, id: string): boolean {
   return (element as unknown as HTMLElement).classList.contains('hidden');
 }
 
+function getFromValue(window: Window): string {
+  const element = window.document.getElementById('fromValue');
+  expect(element).toBeTruthy();
+  return (element as unknown as HTMLElement).textContent ?? '';
+}
+
+function getFromHelper(window: Window): string {
+  const element = window.document.getElementById('fromHelper');
+  expect(element).toBeTruthy();
+  return (element as unknown as HTMLElement).textContent ?? '';
+}
+
 /**
  * Fill the form's required fields and submit, capturing the send-timeout
  * callback so the test can fire it deterministically (happy-dom window timers
@@ -196,6 +208,41 @@ describe('compose email iframe template', () => {
     expectNoConsoleWarnings(composeWindow);
   });
 
+  it('renders the From row populated from canonical structuredContent email', () => {
+    composeWindow = loadComposeEmailWindow();
+
+    dispatchToolResult(composeWindow, {
+      structuredContent: {
+        to: ['a@example.com'],
+        subject: 'Hello',
+        body: 'Body text',
+        email: 'greg@mindstone.com',
+      },
+    });
+
+    expect(getFromValue(composeWindow)).toBe('greg@mindstone.com');
+    expect(isHidden(composeWindow, 'fromHelper')).toBe(true);
+    expect(getFromHelper(composeWindow)).toBe('');
+    expectNoConsoleWarnings(composeWindow);
+  });
+
+  it('renders the From row empty-state when structuredContent has no email', () => {
+    composeWindow = loadComposeEmailWindow();
+
+    dispatchToolResult(composeWindow, {
+      structuredContent: {
+        to: ['a@example.com'],
+        subject: 'Hello',
+        body: 'Body text',
+      },
+    });
+
+    expect(getFromValue(composeWindow)).toBe('Account not shown');
+    expect(isHidden(composeWindow, 'fromHelper')).toBe(false);
+    expect(getFromHelper(composeWindow)).toContain('Rebel could not confirm the sending account');
+    expectNoConsoleWarnings(composeWindow);
+  });
+
   it('pre-fills fields from migration envelope text when structuredContent is absent', () => {
     composeWindow = loadComposeEmailWindow();
     const envelopeText = createUseToolEnvelopeText({
@@ -232,6 +279,8 @@ describe('compose email iframe template', () => {
     expect(getFieldValue(composeWindow, 'bccInput')).toBe('blind@example.com');
     expect(getFieldValue(composeWindow, 'subjectInput')).toBe('Legacy replay');
     expect(getFieldValue(composeWindow, 'bodyInput')).toBe('Recovered from inner envelope');
+    expect(getFromValue(composeWindow)).toBe('sender@example.com');
+    expect(isHidden(composeWindow, 'fromHelper')).toBe(true);
     expectNoConsoleWarnings(composeWindow);
   });
 
