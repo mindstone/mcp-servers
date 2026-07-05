@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-07-05
+
+### Changed
+
+- Compose email now shows a read-only From row with the sending account, or a clear notice when it can't be confirmed, so you can see which account will send before sending.
+
 ### Fixed
 
 - The compose-email "Send email" button now works in hosts that sandbox the view without `allow-forms`. It was a form submit button, so native submission was blocked by the browser before the submit handler ran — clicking Send silently did nothing (no request, no error). It is now a plain button with a click handler, matching Cancel and Retry.
