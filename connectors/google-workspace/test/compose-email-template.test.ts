@@ -70,8 +70,13 @@ function submitAndCaptureTimeout(window: Window): { fireTimeout: () => void; req
     return 1 as unknown as ReturnType<typeof setTimeout>;
   }) as typeof setTimeout;
 
-  const form = window.document.getElementById('composeForm') as unknown as HTMLFormElement;
-  form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }) as unknown as Event);
+  // Click the Send button — the real user path. The button is type="button"
+  // with a click handler because the Rebel host sandboxes this iframe without
+  // "allow-forms", so native form submission is blocked before the submit event
+  // fires (REBEL send-button silent no-op). Driving the click here keeps the
+  // test honest against the sandbox the connector actually runs in.
+  const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
+  sendButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
 
   const postMessage = window.parent.postMessage as unknown as { mock: { calls: Array<[{ method?: string; id?: unknown }]> } };
   const toolCall = postMessage.mock.calls.map((call) => call[0]).find((msg) => msg?.method === 'tools/call');
@@ -168,6 +173,62 @@ describe('compose email iframe template', () => {
   afterEach(() => {
     composeWindow?.close();
     composeWindow = undefined;
+  });
+
+  it('renders Send as a type="button" (not a form submit) so the allow-forms-less sandbox cannot block it', () => {
+    composeWindow = loadComposeEmailWindow();
+
+    const sendButton = composeWindow.document.getElementById('sendButton');
+    expect(sendButton).toBeTruthy();
+    // A submit button would trigger native form submission, which the Rebel host
+    // sandbox ("allow-scripts" only, no "allow-forms") blocks BEFORE the submit
+    // event fires — the send then silently no-ops. Must stay a plain button.
+    expect((sendButton as unknown as HTMLButtonElement).getAttribute('type')).toBe('button');
+  });
+
+  it('sends via a click on the Send button (the path that survives the sandbox)', () => {
+    composeWindow = loadComposeEmailWindow();
+
+    setFieldValue(composeWindow, 'toInput', 'user@example.com');
+    setFieldValue(composeWindow, 'subjectInput', 'Subject');
+    setFieldValue(composeWindow, 'bodyInput', 'Hello there');
+
+    const sendButton = composeWindow.document.getElementById('sendButton') as unknown as HTMLButtonElement;
+    sendButton.dispatchEvent(new composeWindow.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+
+    const postMessage = composeWindow.parent.postMessage as unknown as {
+      mock: { calls: Array<[{ method?: string; params?: { name?: string } }]> };
+    };
+    const toolCall = postMessage.mock.calls
+      .map((call) => call[0])
+      .find((msg) => msg?.method === 'tools/call');
+    expect(toolCall).toBeTruthy();
+    expect(toolCall?.params?.name).toBe('send_workspace_email');
+    expectNoConsoleWarnings(composeWindow);
+  });
+
+  it('does not double-send if both click and submit fire (allow-forms host); the sending guard holds', () => {
+    composeWindow = loadComposeEmailWindow();
+
+    setFieldValue(composeWindow, 'toInput', 'user@example.com');
+    setFieldValue(composeWindow, 'subjectInput', 'Subject');
+    setFieldValue(composeWindow, 'bodyInput', 'Hello there');
+
+    // Simulate a host that DOES grant allow-forms: the click handler fires, then
+    // native submission also dispatches submit. sendPayload sets `sending`
+    // synchronously, so the second path must return at `if (sending) return`.
+    const sendButton = composeWindow.document.getElementById('sendButton') as unknown as HTMLButtonElement;
+    const form = composeWindow.document.getElementById('composeForm') as unknown as HTMLFormElement;
+    sendButton.dispatchEvent(new composeWindow.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    form.dispatchEvent(new composeWindow.Event('submit', { bubbles: true, cancelable: true }) as unknown as Event);
+
+    const postMessage = composeWindow.parent.postMessage as unknown as {
+      mock: { calls: Array<[{ method?: string }]> };
+    };
+    const toolCalls = postMessage.mock.calls
+      .map((call) => call[0])
+      .filter((msg) => msg?.method === 'tools/call');
+    expect(toolCalls).toHaveLength(1);
   });
 
   it('pre-fills fields from production-shaped ui/notifications/tool-result structuredContent', () => {

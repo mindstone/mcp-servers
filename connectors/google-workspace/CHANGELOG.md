@@ -7,6 +7,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- The compose-email "Send email" button now works in hosts that sandbox the view without `allow-forms`. It was a form submit button, so native submission was blocked by the browser before the submit handler ran — clicking Send silently did nothing (no request, no error). It is now a plain button with a click handler, matching Cancel and Retry.
+
 ## [0.1.4] - 2026-07-01
 
 ### Changed

@@ -359,7 +359,7 @@ export const COMPOSE_EMAIL_HTML = `
 
       <div class="actions">
         <button id="cancelButton" type="button" class="button button-secondary">Cancel</button>
-        <button id="sendButton" type="submit" class="button button-primary">
+        <button id="sendButton" type="button" class="button button-primary">
           <span id="sendSpinner" class="spinner hidden" aria-hidden="true"></span>
           <span id="sendLabel">Send email</span>
         </button>
@@ -711,8 +711,7 @@ export const COMPOSE_EMAIL_HTML = `
         return null;
       }
 
-      composeForm.addEventListener('submit', function (event) {
-        event.preventDefault();
+      function handleSendRequest() {
         if (sending) return;
 
         var payload = readFormPayload();
@@ -723,6 +722,27 @@ export const COMPOSE_EMAIL_HTML = `
         }
 
         sendPayload(payload);
+      }
+
+      // The Send button is type="button" with an explicit click handler rather
+      // than a form submit button. The Rebel host renders this iframe with a
+      // sandbox of "allow-scripts" only — no "allow-forms" — so native form
+      // submission is blocked by the browser BEFORE the submit event fires
+      // ("Blocked form submission ... the form's frame is sandboxed and the
+      // allow-forms permission is not set"). A submit-driven Send therefore
+      // silently did nothing: no postMessage, no spinner, no telemetry.
+      // A click handler needs no sandbox permission and is the same path
+      // Cancel/Retry already use. The submit listener below stays only as a
+      // defensive fallback for hosts that DO grant allow-forms; in this sandbox
+      // it never fires (neither the button click nor Enter routes through it).
+      // The sending guard keeps any double-fire (in an allow-forms host) a no-op.
+      sendButton.addEventListener('click', function () {
+        handleSendRequest();
+      });
+
+      composeForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        handleSendRequest();
       });
 
       retryButton.addEventListener('click', function () {
