@@ -304,6 +304,28 @@ describe('compose email iframe template', () => {
     expectNoConsoleWarnings(composeWindow);
   });
 
+  it('renders a hostile From value as inert text (no markup injection)', () => {
+    composeWindow = loadComposeEmailWindow();
+
+    const hostile = '<img src=x onerror="alert(1)">';
+    dispatchToolResult(composeWindow, {
+      structuredContent: {
+        to: ['a@example.com'],
+        subject: 'Hello',
+        body: 'Body text',
+        email: hostile,
+      },
+    });
+
+    const fromEl = composeWindow.document.getElementById('fromValue');
+    // The raw string survives verbatim as text — proving it went through textContent, not innerHTML.
+    expect(getFromValue(composeWindow)).toBe(hostile);
+    // No element was parsed out of the payload (an innerHTML sink would have created an <img>).
+    expect(fromEl?.querySelector('img')).toBeNull();
+    expect((fromEl as unknown as HTMLElement).children.length).toBe(0);
+    expectNoConsoleWarnings(composeWindow);
+  });
+
   it('pre-fills fields from migration envelope text when structuredContent is absent', () => {
     composeWindow = loadComposeEmailWindow();
     const envelopeText = createUseToolEnvelopeText({
