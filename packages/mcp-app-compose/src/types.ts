@@ -27,6 +27,21 @@ export interface ComposeFieldSpec {
  */
 export type ComposeDeepLink = { kind: 'gmail' } | { kind: 'none' };
 
+/**
+ * Escape hatch shown when the send tool is blocked (super-mcp TOOL_BLOCKED /
+ * -33008 — user-disabled, admin-disabled, or security-policy). A closed
+ * discriminator, not a config URL template: like {@link ComposeDeepLink}, the
+ * target and URL construction stay code-reviewed in this package.
+ * `'gmail-compose'` offers an "Open in Gmail" button that opens a prefilled
+ * Gmail compose window (via the host `ui/open-external-link` bridge, which
+ * re-validates against its own `mail.google.com` allowlist) — no tool call, so
+ * it works even when every send/draft tool is disabled. `'none'` omits the
+ * whole subsystem (default; the committed output is byte-identical to a config
+ * without the field). Only meaningful for Gmail-backed connectors — other
+ * providers whose compose host is not host-allowlisted must leave it `'none'`.
+ */
+export type ComposeBlockedSendFallback = { kind: 'gmail-compose' } | { kind: 'none' };
+
 export interface ComposeAppConfig {
   /** `ui://` resource URI the connector serves this HTML under. */
   resourceUri: string;
@@ -39,4 +54,9 @@ export interface ComposeAppConfig {
   fromMissingHelperText: string;
   fields: ComposeFieldSpec;
   deepLink: ComposeDeepLink;
+  /**
+   * Optional. Omit (or set `{ kind: 'none' }`) to keep the historical output
+   * byte-for-byte. See {@link ComposeBlockedSendFallback}.
+   */
+  blockedSendFallback?: ComposeBlockedSendFallback;
 }

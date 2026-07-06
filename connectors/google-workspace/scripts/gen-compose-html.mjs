@@ -25,6 +25,10 @@ export const GMAIL_COMPOSE_APP_CONFIG = Object.freeze({
     'Rebel could not confirm the sending account. Cancel and ask Rebel to recreate the draft before sending.',
   fields: Object.freeze({ cc: true, bcc: true }),
   deepLink: Object.freeze({ kind: 'gmail' }),
+  // When the user has disabled send_workspace_email, offer a prefilled Gmail
+  // compose window instead of a dead-end error — no tool call, so it works even
+  // if every Gmail tool is off. See ComposeBlockedSendFallback.
+  blockedSendFallback: Object.freeze({ kind: 'gmail-compose' }),
 });
 
 const HEADER = [

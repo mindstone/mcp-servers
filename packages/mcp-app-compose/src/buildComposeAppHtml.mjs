@@ -53,6 +53,12 @@ function assertComposeAppConfig(config) {
   if (kind !== 'gmail' && kind !== 'none') {
     throw new Error("[mcp-app-compose] deepLink.kind must be 'gmail' or 'none'");
   }
+  if (config.blockedSendFallback !== undefined) {
+    const fallbackKind = config.blockedSendFallback && config.blockedSendFallback.kind;
+    if (fallbackKind !== 'gmail-compose' && fallbackKind !== 'none') {
+      throw new Error("[mcp-app-compose] blockedSendFallback.kind must be 'gmail-compose' or 'none'");
+    }
+  }
 }
 
 /**
@@ -67,6 +73,7 @@ export function buildComposeAppHtml(config) {
   assertComposeAppConfig(config);
   const f = config.fields;
   const gmail = config.deepLink.kind === 'gmail';
+  const blockedSend = !!(config.blockedSendFallback && config.blockedSendFallback.kind === 'gmail-compose');
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -352,7 +359,11 @@ export function buildComposeAppHtml(config) {
       opacity: 0.85;
     }
 
-    .collapsed {
+${blockedSend ? `    .blocked-actions {
+      margin-top: 8px;
+    }
+
+` : ''}    .collapsed {
       border: 1px solid var(--border);
       border-radius: 10px;
       background: var(--panel);
@@ -461,7 +472,14 @@ ${f.cc ? `        <button id="toggleCcButton" type="button" class="link-button">
         <button id="retryButton" type="button" class="link-button">Retry</button>
       </div>
 
-      <div id="successBox" class="status success hidden"></div>
+${blockedSend ? `      <div id="blockedBox" class="status warning hidden" role="status" aria-live="polite">
+        <span id="blockedText"></span>
+        <div class="blocked-actions">
+          <button id="openComposeButton" type="button" class="button button-secondary">Open in Gmail</button>
+        </div>
+      </div>
+
+` : ''}      <div id="successBox" class="status success hidden"></div>
 
       <div id="unknownBox" class="status warning hidden" role="status" aria-live="polite">
         <strong id="unknownTitle"></strong>
@@ -532,7 +550,8 @@ ${gmail ? `        <button id="openGmailButton" type="button" class="button butt
       var collapsed = false;
       var outcomeUnknown = false;
       var sent = false;
-${gmail ? `      var gmailUrl = null;
+${blockedSend ? `      var sendBlocked = false;
+` : ''}${gmail ? `      var gmailUrl = null;
 ` : ''}      var sendTimeoutId = null;
       // Just beyond the host-side tool-call timeout (60s) so a legitimately slow
       // send resolves to its real result first; this only fires when the reply
@@ -581,7 +600,10 @@ ${f.cc ? `      var ccRow = document.getElementById('ccRow');
       var unknownBox = document.getElementById('unknownBox');
       var unknownTitle = document.getElementById('unknownTitle');
       var unknownText = document.getElementById('unknownText');
-
+${blockedSend ? `      var blockedBox = document.getElementById('blockedBox');
+      var blockedText = document.getElementById('blockedText');
+      var openComposeButton = document.getElementById('openComposeButton');
+` : ''}
       function applyThemeFromHostContext() {
         try {
           var context = window.__MCP_HOST_CONTEXT__;
@@ -693,7 +715,7 @@ ${f.cc ? `      var ccRow = document.getElementById('ccRow');
 
       function setSending(nextSending) {
         sending = nextSending;
-        sendButton.disabled = nextSending;
+        sendButton.disabled = nextSending${blockedSend ? ' || sendBlocked' : ''};
         cancelButton.disabled = nextSending;
         toInput.disabled = nextSending;
 ${f.cc ? `        ccInput.disabled = nextSending;
@@ -931,7 +953,98 @@ ${f.cc ? `        setCcVisible(normalizeAddressList(draft.cc).length > 0);
         }
       }
 
-${gmail ? `      function looksLikeEmail(value) {
+${blockedSend ? `      // ---- Blocked-send Gmail escape hatch ----
+      // Shown ONLY when the user's own send preference blocks the tool
+      // (super-mcp TOOL_BLOCKED / -33008 + "disabled by user preference"). We
+      // never call the disabled tool; instead we open a prefilled Gmail compose
+      // window so the user finishes the send in Gmail (no copy-paste). This is
+      // deliberately narrow: admin-disabled ("disabled by your organization…")
+      // and generic security-policy blocks fall through to the normal retryable
+      // error, because offering a Gmail bypass there would route around a control
+      // the user did not set.
+      //
+      // Gmail compose URLs that get too long can silently fail to open, so we cap
+      // the length and degrade visibly (recipients + subject only, paste the body)
+      // rather than truncating without telling the user.
+      var GMAIL_COMPOSE_MAX_URL = 8000;
+      var BLOCKED_SEND_MESSAGE =
+        'Sending from here is turned off in your settings. You can finish and send this email in Gmail, or turn sending back on in Settings.';
+
+      function isUserDisabledSendError(message) {
+        var m = String(message || '').toLowerCase();
+        // Anchor the code so it can't match inside a longer number (-330080),
+        // and require the user-preference phrase so admin-disabled / generic
+        // security blocks fall through to the ordinary retryable error.
+        return /-33008\\b/.test(m) && m.indexOf('disabled by user preference') !== -1;
+      }
+
+      // Base URL + path are constant (code-reviewed here, never config-provided);
+      // only the field VALUES vary and go through URLSearchParams, so query
+      // delimiters, newlines, and reserved characters become encoded data — no
+      // query injection or header splitting. The host ui/open-external-link
+      // bridge re-validates the mail.google.com host before opening.
+      function buildGmailComposeUrl(payload, includeBody) {
+        var url = new URL('https://mail.google.com/mail/');
+        var params = new URLSearchParams();
+        params.set('view', 'cm');
+        params.set('fs', '1');
+        var to = normalizeAddressList(payload.to).join(',');
+        if (to) params.set('to', to);
+${f.cc ? `        var cc = normalizeAddressList(payload.cc).join(',');
+        if (cc) params.set('cc', cc);
+` : ''}${f.bcc ? `        var bcc = normalizeAddressList(payload.bcc).join(',');
+        if (bcc) params.set('bcc', bcc);
+` : ''}        var subject = trimString(payload.subject);
+        if (subject) params.set('su', subject);
+        if (includeBody) {
+          var body = String(payload.body || '');
+          if (body) params.set('body', body);
+        }
+        url.search = params.toString();
+        return url.toString();
+      }
+
+      function showBlockedSend() {
+        sendBlocked = true;
+        clearError();
+        clearSuccess();
+        clearUnknown();
+        sendButton.disabled = true;
+        sendButton.title =
+          'Sending from here is turned off in your settings. Turn it back on in Settings, or open this draft in Gmail to send.';
+        blockedText.textContent = BLOCKED_SEND_MESSAGE;
+        blockedBox.classList.remove('hidden');
+        postResize();
+      }
+
+      openComposeButton.addEventListener('click', function () {
+        // Reset any prior "too long" note, then rebuild from the live form so
+        // edits made after the block are reflected.
+        blockedText.textContent = BLOCKED_SEND_MESSAGE;
+        var payload = readFormPayload();
+        var composeUrl = buildGmailComposeUrl(payload, true);
+        if (composeUrl.length > GMAIL_COMPOSE_MAX_URL) {
+          composeUrl = buildGmailComposeUrl(payload, false);
+          if (composeUrl.length > GMAIL_COMPOSE_MAX_URL) {
+            // Even without the body the link is too long (many recipients, or a
+            // very long subject). Gmail would silently refuse to open it, so
+            // don't pretend — tell the user and post nothing.
+            blockedText.textContent =
+              'This draft is too large to open in Gmail. Shorten the recipients or subject, or turn sending back on in Settings.';
+            postResize();
+            return;
+          }
+          blockedText.textContent =
+            'This email is long, so Gmail will open with just the recipients and subject. Copy the message text above into Gmail before sending.';
+          postResize();
+        }
+        window.parent.postMessage(
+          { jsonrpc: '2.0', method: 'ui/open-external-link', params: { url: composeUrl } },
+          '*'
+        );
+      });
+
+` : ''}${gmail ? `      function looksLikeEmail(value) {
         var at = value.indexOf('@');
         return at > 0 && at === value.lastIndexOf('@') && value.indexOf(' ') === -1;
       }
@@ -977,7 +1090,12 @@ ${gmail ? `        gmailUrl = buildGmailUrl(meta, payload.email);
 
       function handleSendRequest() {
         if (sending) return;
-
+${blockedSend ? `        // Once the user's own send preference has blocked this tool, never
+        // re-invoke it — the escape hatch is the only path out. The Send button
+        // is already disabled, but this also fends off a future host that grants
+        // allow-forms (a submit could otherwise re-fire the disabled tool).
+        if (sendBlocked) return;
+` : ''}
         var payload = readFormPayload();
         var validationError = validatePayload(payload);
         if (validationError) {
@@ -1099,7 +1217,11 @@ ${gmail ? `      // The iframe sandbox is "allow-scripts" only (no allow-popups 
           var errorMessage = data.error && typeof data.error.message === 'string'
             ? data.error.message
             : 'Failed to send email.';
-          showError(errorMessage);
+${blockedSend ? `          if (isUserDisabledSendError(errorMessage)) {
+            showBlockedSend();
+            return;
+          }
+` : ''}          showError(errorMessage);
           return;
         }
 

@@ -26,8 +26,17 @@ const ACME_CONFIG: ComposeAppConfig = {
   deepLink: { kind: 'none' },
 };
 
+// Gmail plus the blocked-send Gmail escape hatch. Only Gmail-backed connectors
+// enable this (the host allowlists mail.google.com); the assertions below pin
+// its gated markup, the conservative detector, and the URL-length degradation.
+const BLOCKED_CONFIG: ComposeAppConfig = {
+  ...GMAIL_CONFIG,
+  blockedSendFallback: { kind: 'gmail-compose' },
+};
+
 const gmailHtml = buildComposeAppHtml(GMAIL_CONFIG);
 const acmeHtml = buildComposeAppHtml(ACME_CONFIG);
+const blockedHtml = buildComposeAppHtml(BLOCKED_CONFIG);
 
 let composeWindow: Window | undefined;
 
@@ -64,6 +73,40 @@ function postedMessages(window: Window): Array<Record<string, any>> {
   const postMessage = window.parent.postMessage as unknown as { mock: { calls: Array<[Record<string, any>]> } };
   return postMessage.mock.calls.map((call) => call[0]);
 }
+
+// Fill the form, click Send, then reply from the "host" with a JSON-RPC error
+// carrying `message`. Returns the window so callers can assert the resulting UI.
+function sendThenReplyError(
+  html: string,
+  message: string,
+  fields?: { to?: string; subject?: string; body?: string },
+): Window {
+  const window = loadWindow(html);
+  setFieldValue(window, 'toInput', fields?.to ?? 'jane@example.com');
+  setFieldValue(window, 'subjectInput', fields?.subject ?? 'Quarterly update');
+  setFieldValue(window, 'bodyInput', fields?.body ?? 'Numbers attached.');
+  const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
+  sendButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+  const toolCall = postedMessages(window).find((msg) => msg.method === 'tools/call');
+  expect(toolCall).toBeTruthy();
+  window.dispatchEvent(
+    new window.MessageEvent('message', {
+      data: { jsonrpc: '2.0', id: toolCall?.id, error: { code: -32000, message } },
+    }),
+  );
+  return window;
+}
+
+// The two error strings we care about, as the host actually relays them: the
+// numeric -33008 survives in the message text even though the host flattens the
+// JSON-RPC code to -32000.
+const USER_DISABLED_ERROR =
+  "MCP error -33008: Tool 'send_workspace_email' is disabled by user preference. Re-enable it in Settings to use.. This tool has been blocked by the security policy.";
+// Same shape, but admin-disabled / generic security — must NOT trigger the fallback.
+const ADMIN_DISABLED_ERROR =
+  "MCP error -33008: Tool 'send_workspace_email' is disabled by your organization. This tool has been blocked by the security policy.";
+const NETWORK_ERROR = 'Network request failed. Please try again.';
+const GENERIC_SECURITY_ERROR = 'This tool has been blocked by the security policy.';
 
 describe('buildComposeAppHtml — shared invariants (Gmail-shaped config)', () => {
   it('is a complete HTML document with the historical leading newline', () => {
@@ -221,6 +264,141 @@ describe('buildComposeAppHtml — config validation', () => {
     expect(() =>
       buildComposeAppHtml({ ...GMAIL_CONFIG, deepLink: { kind: 'outlook' } as unknown as ComposeAppConfig['deepLink'] }),
     ).toThrow(/deepLink/);
+  });
+});
+
+describe('buildComposeAppHtml — blocked-send Gmail escape hatch (gating)', () => {
+  it('inlines the escape hatch only when blockedSendFallback is gmail-compose', () => {
+    for (const marker of [
+      'id="blockedBox"',
+      'id="openComposeButton"',
+      'function isUserDisabledSendError',
+      'function buildGmailComposeUrl',
+      'function showBlockedSend',
+      'var GMAIL_COMPOSE_MAX_URL = 8000;',
+    ]) {
+      expect(blockedHtml).toContain(marker);
+      // Absent from the historical output (byte-parity for connectors that omit it).
+      expect(gmailHtml).not.toContain(marker);
+    }
+  });
+
+  it('is omitted when the field is absent or explicitly none', () => {
+    expect(buildComposeAppHtml({ ...GMAIL_CONFIG, blockedSendFallback: { kind: 'none' } })).toBe(gmailHtml);
+    // Absence and { kind: 'none' } are indistinguishable in the output.
+    expect(buildComposeAppHtml(GMAIL_CONFIG)).toBe(gmailHtml);
+  });
+
+  it('rejects a malformed blockedSendFallback discriminator', () => {
+    expect(() =>
+      buildComposeAppHtml({
+        ...GMAIL_CONFIG,
+        blockedSendFallback: { kind: 'outlook-compose' } as unknown as ComposeAppConfig['blockedSendFallback'],
+      }),
+    ).toThrow(/blockedSendFallback/);
+  });
+});
+
+describe('buildComposeAppHtml — blocked-send detector and Gmail URL (happy-dom)', () => {
+  it('shows the escape hatch (not a retryable error) when the user disabled the send tool', () => {
+    const window = sendThenReplyError(blockedHtml, USER_DISABLED_ERROR);
+
+    expect(isHidden(window, 'blockedBox')).toBe(false);
+    expect(isHidden(window, 'errorBox')).toBe(true);
+    const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
+    expect(sendButton.disabled).toBe(true);
+    expect(sendButton.title).toContain('turned off in your settings');
+  });
+
+  it('treats admin-disabled, generic-security, and transport failures as ordinary errors', () => {
+    for (const message of [ADMIN_DISABLED_ERROR, GENERIC_SECURITY_ERROR, NETWORK_ERROR]) {
+      const window = sendThenReplyError(blockedHtml, message);
+      expect(isHidden(window, 'blockedBox')).toBe(true);
+      expect(isHidden(window, 'errorBox')).toBe(false);
+      // Send stays available so the user can retry.
+      const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
+      expect(sendButton.disabled).toBe(false);
+    }
+  });
+
+  it('opens a prefilled mail.google.com compose window via the host bridge', () => {
+    const window = sendThenReplyError(blockedHtml, USER_DISABLED_ERROR, {
+      to: 'jane@example.com',
+      subject: 'Q3 numbers',
+      body: 'Attached.',
+    });
+    const openComposeButton = window.document.getElementById('openComposeButton') as unknown as HTMLButtonElement;
+    openComposeButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+
+    const link = postedMessages(window).find((msg) => msg.method === 'ui/open-external-link');
+    expect(link).toBeTruthy();
+    const url = new URL(link?.params?.url as string);
+    expect(url.origin + url.pathname).toBe('https://mail.google.com/mail/');
+    expect(url.searchParams.get('view')).toBe('cm');
+    expect(url.searchParams.get('to')).toBe('jane@example.com');
+    expect(url.searchParams.get('su')).toBe('Q3 numbers');
+    expect(url.searchParams.get('body')).toBe('Attached.');
+  });
+
+  it('carries edits made after the block into the Gmail compose URL', () => {
+    const window = sendThenReplyError(blockedHtml, USER_DISABLED_ERROR);
+    // User edits the draft after seeing the escape hatch.
+    setFieldValue(window, 'toInput', 'edited@example.com');
+    setFieldValue(window, 'bodyInput', 'Rewritten body.');
+    const openComposeButton = window.document.getElementById('openComposeButton') as unknown as HTMLButtonElement;
+    openComposeButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+
+    const link = postedMessages(window)
+      .reverse()
+      .find((msg) => msg.method === 'ui/open-external-link');
+    const url = new URL(link?.params?.url as string);
+    expect(url.searchParams.get('to')).toBe('edited@example.com');
+    expect(url.searchParams.get('body')).toBe('Rewritten body.');
+  });
+
+  it('round-trips multiple comma-separated recipients through the URL', () => {
+    const window = sendThenReplyError(blockedHtml, USER_DISABLED_ERROR, {
+      to: 'ann@example.com, ben@example.com',
+    });
+    const openComposeButton = window.document.getElementById('openComposeButton') as unknown as HTMLButtonElement;
+    openComposeButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+
+    const link = postedMessages(window).find((msg) => msg.method === 'ui/open-external-link');
+    const url = new URL(link?.params?.url as string);
+    // URLSearchParams encodes the joining comma as %2C; the decoded value must
+    // be the comma-separated list Gmail expects.
+    expect(url.searchParams.get('to')).toBe('ann@example.com,ben@example.com');
+  });
+
+  it('refuses to open (and says so) when even the no-body URL is too long', () => {
+    // Far more recipients than a Gmail compose URL can carry, so dropping the
+    // body still leaves it over the cap.
+    const manyRecipients = Array.from({ length: 300 }, (_, i) => `recipient.number.${i}@example.com`).join(', ');
+    const window = sendThenReplyError(blockedHtml, USER_DISABLED_ERROR, { to: manyRecipients });
+    const openComposeButton = window.document.getElementById('openComposeButton') as unknown as HTMLButtonElement;
+    openComposeButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+
+    // No link is posted — we don't hand Gmail a URL it will silently reject.
+    expect(postedMessages(window).some((msg) => msg.method === 'ui/open-external-link')).toBe(false);
+    const blockedText = window.document.getElementById('blockedText');
+    // Copy is cause-agnostic (recipients OR an oversized subject can overflow).
+    expect((blockedText as unknown as HTMLElement).textContent).toContain('too large to open in Gmail');
+  });
+
+  it('degrades to recipients + subject only (no body) when the compose URL would be too long', () => {
+    const window = sendThenReplyError(blockedHtml, USER_DISABLED_ERROR, {
+      body: 'x'.repeat(9000),
+    });
+    const openComposeButton = window.document.getElementById('openComposeButton') as unknown as HTMLButtonElement;
+    openComposeButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+
+    const link = postedMessages(window).find((msg) => msg.method === 'ui/open-external-link');
+    const url = new URL(link?.params?.url as string);
+    expect(url.searchParams.has('body')).toBe(false);
+    expect(url.searchParams.get('su')).toBe('Quarterly update');
+    // The user is told the body was dropped, not silently truncated.
+    const blockedText = window.document.getElementById('blockedText');
+    expect((blockedText as unknown as HTMLElement).textContent).toContain('Copy the message text');
   });
 });
 
