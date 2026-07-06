@@ -791,7 +791,15 @@ export async function handleSendWorkspaceEmail(params: SendEmailRequestParams & 
         attachments: processOutgoingAttachments(attachments)
       };
 
-      return await gmailService.sendEmail(emailParams);
+      const sendResult = await gmailService.sendEmail(emailParams);
+      // Return an McpToolResponse-shaped result so the identifiers survive as
+      // structuredContent (hoisted by super-mcp) — the compose-email UI reads
+      // { messageId, threadId } from it to build an "Open in Gmail" deep link.
+      // The text block preserves the same JSON the model saw before this change.
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(sendResult) }],
+        structuredContent: sendResult,
+      };
     } catch (error) {
       const details = error instanceof GmailError && error.details
         ? `${error.message}: ${error.details}`

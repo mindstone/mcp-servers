@@ -299,6 +299,49 @@ export const COMPOSE_EMAIL_HTML = `
     .hidden {
       display: none !important;
     }
+
+    .sent-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .sent-badge {
+      display: inline-flex;
+      align-items: center;
+      background: var(--success-bg);
+      color: var(--success-text);
+      border: 1px solid var(--success-border);
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .sent-timestamp {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .sent-value {
+      color: var(--text);
+      font-size: 14px;
+      word-break: break-word;
+    }
+
+    .sent-body {
+      color: var(--text);
+      font-size: 14px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 260px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: var(--input-bg);
+    }
   </style>
 </head>
 <body>
@@ -365,6 +408,48 @@ export const COMPOSE_EMAIL_HTML = `
         </button>
       </div>
     </form>
+
+    <div id="sentView" class="card hidden" role="status" aria-live="polite">
+      <div class="sent-header">
+        <span class="sent-badge">Sent</span>
+        <span id="sentTimestamp" class="sent-timestamp"></span>
+      </div>
+
+      <div class="field">
+        <label>From</label>
+        <span id="sentFrom" class="sent-value"></span>
+      </div>
+
+      <div class="field">
+        <label>To</label>
+        <span id="sentTo" class="sent-value"></span>
+      </div>
+
+      <div id="sentCcField" class="field hidden">
+        <label>CC</label>
+        <span id="sentCc" class="sent-value"></span>
+      </div>
+
+      <div id="sentBccField" class="field hidden">
+        <label>BCC</label>
+        <span id="sentBcc" class="sent-value"></span>
+      </div>
+
+      <div class="field">
+        <label>Subject</label>
+        <span id="sentSubject" class="sent-value"></span>
+      </div>
+
+      <div class="field">
+        <label>Message</label>
+        <div id="sentBody" class="sent-body"></div>
+      </div>
+
+      <div class="actions">
+        <button id="openGmailButton" type="button" class="button button-secondary hidden">Open in Gmail</button>
+        <button id="sentCollapseButton" type="button" class="button button-secondary">Collapse</button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -378,6 +463,8 @@ export const COMPOSE_EMAIL_HTML = `
       var sending = false;
       var collapsed = false;
       var outcomeUnknown = false;
+      var sent = false;
+      var gmailUrl = null;
       var sendTimeoutId = null;
       // Just beyond the host-side tool-call timeout (60s) so a legitimately slow
       // send resolves to its real result first; this only fires when the reply
@@ -388,6 +475,19 @@ export const COMPOSE_EMAIL_HTML = `
       var collapsedState = document.getElementById('collapsedState');
       var collapsedMessage = document.getElementById('collapsedMessage');
       var reopenButton = document.getElementById('reopenButton');
+
+      var sentView = document.getElementById('sentView');
+      var sentTimestamp = document.getElementById('sentTimestamp');
+      var sentFrom = document.getElementById('sentFrom');
+      var sentTo = document.getElementById('sentTo');
+      var sentCcField = document.getElementById('sentCcField');
+      var sentCc = document.getElementById('sentCc');
+      var sentBccField = document.getElementById('sentBccField');
+      var sentBcc = document.getElementById('sentBcc');
+      var sentSubject = document.getElementById('sentSubject');
+      var sentBody = document.getElementById('sentBody');
+      var openGmailButton = document.getElementById('openGmailButton');
+      var sentCollapseButton = document.getElementById('sentCollapseButton');
 
       var toInput = document.getElementById('toInput');
       var ccInput = document.getElementById('ccInput');
@@ -501,16 +601,26 @@ export const COMPOSE_EMAIL_HTML = `
         );
       }
 
+      // Exactly one of the three panels is visible at a time: the editable form,
+      // the read-only sent view, or the collapsed summary bar.
+      function showView(view) {
+        composeForm.classList.toggle('hidden', view !== 'form');
+        sentView.classList.toggle('hidden', view !== 'sent');
+        collapsedState.classList.toggle('hidden', view !== 'collapsed');
+        postResize();
+      }
+
       function setCollapsed(nextCollapsed, message) {
         collapsed = nextCollapsed;
-        composeForm.classList.toggle('hidden', collapsed);
-        collapsedState.classList.toggle('hidden', !collapsed);
-        if (message) {
-          collapsedMessage.textContent = message;
+        if (nextCollapsed) {
+          collapsedMessage.textContent = message || 'Draft collapsed.';
+          showView('collapsed');
         } else {
-          collapsedMessage.textContent = collapsed ? 'Draft collapsed.' : '';
+          // Expanding after a send restores the read-only sent view (never the
+          // editable form) so the user can re-read what went out without any risk
+          // of a duplicate send; before sending, it restores the editable form.
+          showView(sent ? 'sent' : 'form');
         }
-        postResize();
       }
 
       function setSending(nextSending) {
@@ -711,6 +821,92 @@ export const COMPOSE_EMAIL_HTML = `
         return null;
       }
 
+      function findTextBlock(blocks) {
+        if (!Array.isArray(blocks)) return null;
+        var block = blocks.find(function (c) {
+          return c && c.type === 'text' && typeof c.text === 'string';
+        });
+        return block ? block.text : null;
+      }
+
+      // Extract the send result identifiers ({ messageId, threadId, labelIds })
+      // from the tool-call reply. The connector attaches structuredContent, which
+      // super-mcp hoists onto the outer block, so the fast path is a single read.
+      // The envelope-unwrapping fallback keeps this robust for hosts (or replayed
+      // sessions) that forward only the serialized super-mcp text envelope.
+      function getSendMetaFromResult(result) {
+        if (!result || typeof result !== 'object') return null;
+        if (result.structuredContent && typeof result.structuredContent === 'object') {
+          return result.structuredContent;
+        }
+        try {
+          var outerText = findTextBlock(result.content);
+          if (typeof outerText !== 'string' && typeof result.text === 'string') {
+            outerText = result.text;
+          }
+          if (typeof outerText !== 'string') return null;
+          var envelope = JSON.parse(outerText);
+          if (!envelope || typeof envelope !== 'object') return null;
+          // outerText was the connector payload directly (no super-mcp envelope).
+          if (envelope.messageId || envelope.threadId) return envelope;
+          var inner = envelope.result;
+          if (!inner || typeof inner !== 'object') return null;
+          if (inner.structuredContent && typeof inner.structuredContent === 'object') {
+            return inner.structuredContent;
+          }
+          var innerText = findTextBlock(inner.content);
+          if (typeof innerText !== 'string') return null;
+          var payload = JSON.parse(innerText);
+          return (payload && typeof payload === 'object') ? payload : null;
+        } catch (_) {
+          return null;
+        }
+      }
+
+      function looksLikeEmail(value) {
+        var at = value.indexOf('@');
+        return at > 0 && at === value.lastIndexOf('@') && value.indexOf(' ') === -1;
+      }
+
+      // Build a Gmail deep link to the just-sent message. The /u/<account> segment
+      // targets the right inbox when the user is signed into several Google
+      // accounts; #all/<id> opens the thread (falling back to the message id).
+      function buildGmailUrl(meta, email) {
+        if (!meta || typeof meta !== 'object') return null;
+        var id = trimString(meta.threadId) || trimString(meta.messageId);
+        if (!id || !/^[A-Za-z0-9_-]+$/.test(id)) return null;
+        var account = trimString(email);
+        var userPart = looksLikeEmail(account) ? encodeURIComponent(account) : '0';
+        return 'https://mail.google.com/mail/u/' + userPart + '/#all/' + encodeURIComponent(id);
+      }
+
+      function formatSentTime() {
+        try {
+          return new Date().toLocaleString(undefined, {
+            month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+          });
+        } catch (_) {
+          return '';
+        }
+      }
+
+      function renderSentView(payload, meta, stamp) {
+        payload = payload && typeof payload === 'object' ? payload : {};
+        sentTimestamp.textContent = stamp ? 'Sent ' + stamp : 'Sent';
+        sentFrom.textContent = trimString(payload.email) || 'Account not shown';
+        sentTo.textContent = normalizeAddressList(payload.to).join(', ');
+        var ccList = normalizeAddressList(payload.cc);
+        sentCc.textContent = ccList.join(', ');
+        sentCcField.classList.toggle('hidden', ccList.length === 0);
+        var bccList = normalizeAddressList(payload.bcc);
+        sentBcc.textContent = bccList.join(', ');
+        sentBccField.classList.toggle('hidden', bccList.length === 0);
+        sentSubject.textContent = String(payload.subject || '');
+        sentBody.textContent = String(payload.body || '');
+        gmailUrl = buildGmailUrl(meta, payload.email);
+        openGmailButton.classList.toggle('hidden', !gmailUrl);
+      }
+
       function handleSendRequest() {
         if (sending) return;
 
@@ -773,6 +969,22 @@ export const COMPOSE_EMAIL_HTML = `
         setCollapsed(false);
       });
 
+      sentCollapseButton.addEventListener('click', function () {
+        setCollapsed(true, collapsedMessage.textContent || 'Email sent.');
+      });
+
+      // The iframe sandbox is "allow-scripts" only (no allow-popups / allow-forms),
+      // so it cannot open a URL itself. Ask the host to open the Gmail link in the
+      // user's browser via the ui/open-external-link bridge, which re-validates the
+      // URL against its own allowlist before handing it to the OS.
+      openGmailButton.addEventListener('click', function () {
+        if (!gmailUrl) return;
+        window.parent.postMessage(
+          { jsonrpc: '2.0', method: 'ui/open-external-link', params: { url: gmailUrl } },
+          '*'
+        );
+      });
+
       toggleCcButton.addEventListener('click', function () {
         setCcVisible(ccRow.classList.contains('hidden'));
         postResize();
@@ -824,9 +1036,16 @@ export const COMPOSE_EMAIL_HTML = `
         }
 
         clearError();
-        showSuccess('Email sent successfully.');
-        setCollapsed(true, 'Email sent.');
-        reopenButton.classList.add('hidden');
+        clearSuccess();
+        // Preserve what was sent (and how to reach it) instead of discarding the
+        // draft. pendingPayload is the exact payload we posted; the reply carries
+        // the Gmail message/thread ids. We default to the collapsed summary, but
+        // Reopen now restores a read-only view of the sent message.
+        var sentPayload = pendingPayload || readFormPayload();
+        var stamp = formatSentTime();
+        renderSentView(sentPayload, getSendMetaFromResult(data.result), stamp);
+        sent = true;
+        setCollapsed(true, stamp ? 'Email sent · ' + stamp : 'Email sent.');
       });
 
       if (typeof ResizeObserver === 'function' && document.body) {

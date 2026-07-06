@@ -7,6 +7,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- Compose email now keeps your message after it sends, instead of clearing it. Sending collapses to a "Email sent" summary with the time; Reopen shows a read-only copy of exactly what went out (From, To, CC/BCC, subject, and body) so there's no risk of resending. When the reply includes the message identifiers, an "Open in Gmail" button deep-links straight to the sent thread.
+
 ## [0.1.5] - 2026-07-05
 
 ### Changed

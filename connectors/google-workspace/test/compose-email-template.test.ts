@@ -51,6 +51,26 @@ function getFromHelper(window: Window): string {
   return (element as unknown as HTMLElement).textContent ?? '';
 }
 
+function getText(window: Window, id: string): string {
+  const element = window.document.getElementById(id);
+  expect(element).toBeTruthy();
+  return (element as unknown as HTMLElement).textContent ?? '';
+}
+
+/**
+ * The most recent `ui/open-external-link` request the iframe posted to its host
+ * parent (the sandbox can't open URLs itself), or undefined if none was posted.
+ */
+function lastOpenExternalLink(window: Window): { url?: unknown } | undefined {
+  const postMessage = window.parent.postMessage as unknown as {
+    mock: { calls: Array<[{ method?: string; params?: { url?: unknown } }]> };
+  };
+  const calls = postMessage.mock.calls
+    .map((call) => call[0])
+    .filter((msg) => msg?.method === 'ui/open-external-link');
+  return calls.length > 0 ? (calls[calls.length - 1].params as { url?: unknown }) : undefined;
+}
+
 /**
  * Fill the form's required fields and submit, capturing the send-timeout
  * callback so the test can fire it deterministically (happy-dom window timers
@@ -512,21 +532,97 @@ describe('compose email iframe template', () => {
     expectNoConsoleWarnings(composeWindow);
   });
 
-  it('a matching reply before the timeout shows success and neutralizes the timeout', () => {
+  it('a matching reply before the timeout collapses to a sent summary and neutralizes the timeout', () => {
     composeWindow = loadComposeEmailWindow();
     const { fireTimeout, requestId } = submitAndCaptureTimeout(composeWindow);
 
     dispatchToolReply(composeWindow, requestId, { result: { ok: true } });
 
-    expect(isHidden(composeWindow, 'successBox')).toBe(false);
+    // After a send we default to the collapsed summary bar (not the old
+    // success banner). The composed message is preserved, not discarded.
+    expect(isHidden(composeWindow, 'collapsedState')).toBe(false);
+    expect(isHidden(composeWindow, 'sentView')).toBe(true);
+    expect(isHidden(composeWindow, 'composeForm')).toBe(true);
+    expect(getText(composeWindow, 'collapsedMessage')).toContain('Email sent');
     expect(isHidden(composeWindow, 'unknownBox')).toBe(true);
 
     // A late timeout callback (e.g. a stale timer that wasn't cancelled) must be
-    // a no-op now that the request resolved — it must not overwrite success with
-    // the unknown state.
+    // a no-op now that the request resolved — it must not overwrite the sent
+    // state with the unknown state.
     fireTimeout();
     expect(isHidden(composeWindow, 'unknownBox')).toBe(true);
-    expect(isHidden(composeWindow, 'successBox')).toBe(false);
+    expect(isHidden(composeWindow, 'collapsedState')).toBe(false);
+    expectNoConsoleWarnings(composeWindow);
+  });
+
+  it('preserves the composed message in a read-only sent view that Reopen restores (never the editable form)', () => {
+    composeWindow = loadComposeEmailWindow();
+    const { requestId } = submitAndCaptureTimeout(composeWindow);
+
+    dispatchToolReply(composeWindow, requestId, { result: { ok: true } });
+
+    // Reopen after a send restores the read-only sent view — NOT the editable
+    // form — so the user can re-read what went out with zero risk of a
+    // duplicate send.
+    const reopenButton = composeWindow.document.getElementById('reopenButton') as unknown as HTMLButtonElement;
+    reopenButton.dispatchEvent(new composeWindow.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+
+    expect(isHidden(composeWindow, 'sentView')).toBe(false);
+    expect(isHidden(composeWindow, 'composeForm')).toBe(true);
+    expect(isHidden(composeWindow, 'collapsedState')).toBe(true);
+
+    // The message the user sent is intact in the read-only view.
+    expect(getText(composeWindow, 'sentTo')).toBe('user@example.com');
+    expect(getText(composeWindow, 'sentSubject')).toBe('Subject');
+    expect(getText(composeWindow, 'sentBody')).toBe('Hello there');
+    // A "when sent" timestamp is shown.
+    expect(getText(composeWindow, 'sentTimestamp')).toContain('Sent');
+
+    // Collapse from the sent view returns to the summary bar (still not the form).
+    const sentCollapseButton = composeWindow.document.getElementById('sentCollapseButton') as unknown as HTMLButtonElement;
+    sentCollapseButton.dispatchEvent(new composeWindow.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    expect(isHidden(composeWindow, 'collapsedState')).toBe(false);
+    expect(isHidden(composeWindow, 'composeForm')).toBe(true);
+    expectNoConsoleWarnings(composeWindow);
+  });
+
+  it('builds an Open-in-Gmail link from the send reply and asks the host to open it (the sandbox cannot)', () => {
+    composeWindow = loadComposeEmailWindow();
+    const { requestId } = submitAndCaptureTimeout(composeWindow);
+
+    // super-mcp hoists the connector's structuredContent onto the outer result
+    // block, so the ids arrive as result.structuredContent.
+    dispatchToolReply(composeWindow, requestId, {
+      result: { structuredContent: { messageId: 'msg-123', threadId: 'thread-abc' } },
+    });
+
+    const reopenButton = composeWindow.document.getElementById('reopenButton') as unknown as HTMLButtonElement;
+    reopenButton.dispatchEvent(new composeWindow.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+
+    expect(isHidden(composeWindow, 'openGmailButton')).toBe(false);
+
+    const openGmailButton = composeWindow.document.getElementById('openGmailButton') as unknown as HTMLButtonElement;
+    openGmailButton.dispatchEvent(new composeWindow.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+
+    const request = lastOpenExternalLink(composeWindow);
+    expect(request).toBeTruthy();
+    // threadId wins over messageId; the account defaults to /u/0 when unknown.
+    expect(request?.url).toBe('https://mail.google.com/mail/u/0/#all/thread-abc');
+    expectNoConsoleWarnings(composeWindow);
+  });
+
+  it('hides the Open-in-Gmail button when the send reply carries no message identifiers', () => {
+    composeWindow = loadComposeEmailWindow();
+    const { requestId } = submitAndCaptureTimeout(composeWindow);
+
+    dispatchToolReply(composeWindow, requestId, { result: { ok: true } });
+
+    const reopenButton = composeWindow.document.getElementById('reopenButton') as unknown as HTMLButtonElement;
+    reopenButton.dispatchEvent(new composeWindow.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+
+    expect(isHidden(composeWindow, 'sentView')).toBe(false);
+    expect(isHidden(composeWindow, 'openGmailButton')).toBe(true);
+    expect(lastOpenExternalLink(composeWindow)).toBeUndefined();
     expectNoConsoleWarnings(composeWindow);
   });
 
