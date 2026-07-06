@@ -31,9 +31,12 @@
     "prepublishOnly": "npm run build && npm test",
     "watch": "tsc --watch",
     "start": "node dist/index.js",
+    "pretest": "npm run compose:template:check",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "compose:template": "node scripts/gen-compose-html.mjs",
+    "compose:template:check": "node scripts/gen-compose-html.mjs --check",
     "security:internal-refs": "node scripts/check-internal-refs.mjs"
   },
   "dependencies": {
@@ -42,6 +45,7 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@mindstone/mcp-app-compose": "file:../../packages/mcp-app-compose",
     "@mindstone/mcp-test-harness": "file:../../test-harness",
     "@types/node": "^22",
     "@vitest/coverage-v8": "^4.1.3",

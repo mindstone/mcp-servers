@@ -11,7 +11,7 @@ Microsoft 365 Outlook Mail MCP server — list, search, read, send, reply, forwa
 
 - **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-mail)
 - **Auth:** OAuth (host-orchestrated) ([`MS_CLIENT_ID`](./server.json))
-- **Tools:** [12](./src/tools.ts) (messages, folders, drafts)
+- **Tools:** [13](./src/tools.ts) (messages, folders, drafts)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 - **Shared library:** [`@mindstone/mcp-server-microsoft-shared`](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-shared)
@@ -168,7 +168,7 @@ Until the host has written `${MS_CONFIG_DIR}/credentials/<account>.token.json` a
 }
 ```
 
-## Tools (12)
+## Tools (13)
 
 | Tool | Description |
 | ---- | ----------- |
@@ -176,6 +176,7 @@ Until the host has written `${MS_CONFIG_DIR}/credentials/<account>.token.json` a
 | `list_emails` | List emails in a folder, ordered by most recent. |
 | `get_email` | Read a single email by message ID. |
 | `send_email` | Send a new email message. |
+| `compose_email` | Open an editable draft in an interactive compose view; nothing is sent until the user clicks Send. |
 | `search_emails` | Search emails using Microsoft Search syntax. |
 | `reply_to_email` | Reply (or reply-all) to an existing email. |
 | `forward_email` | Forward an email to additional recipients. |

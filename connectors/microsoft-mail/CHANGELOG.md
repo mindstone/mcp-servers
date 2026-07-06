@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- `compose_email` tool: opens an editable draft in an interactive compose view (MCP App served at `ui://microsoft-mail/compose-email`) so the user reviews and edits before the form itself calls `send_email`. The view HTML is generated at build time from the shared `@mindstone/mcp-app-compose` package (CC but no BCC — `send_email` has no BCC parameter — and no provider deep link), with a `--check` drift gate wired into `pretest`.
+
 ## [0.1.2] - 2026-07-03
 
 ### Changed

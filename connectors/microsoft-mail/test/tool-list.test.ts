@@ -6,6 +6,7 @@ const EXPECTED_TOOLS = [
   'list_emails',
   'get_email',
   'send_email',
+  'compose_email',
   'search_emails',
   'reply_to_email',
   'forward_email',
@@ -25,6 +26,7 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
   list_emails: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   get_email: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   send_email: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  compose_email: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
   search_emails: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   reply_to_email: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
   forward_email: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
@@ -59,7 +61,7 @@ describe('microsoft-mail tools/list', () => {
     if (cfg) cfg.cleanup();
   });
 
-  it('registers exactly the 12 mail tools in the locked surface', async () => {
+  it('registers exactly the 13 mail tools in the locked surface', async () => {
     const response = await client.client.listTools();
     const names = response.tools.map((tool) => tool.name).sort();
     expect(names).toEqual([...EXPECTED_TOOLS].sort());

@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { callGraph } from './client.js';
+import { handleComposeEmail } from './compose.js';
 import {
   authRequiredJson,
   errorResponse,
@@ -186,6 +187,32 @@ sign-in, Microsoft 365 tools become available.`,
       );
       return successJson(result);
     }),
+  );
+
+  // ---------------------------------------------------------------------
+  // compose_email
+  // ---------------------------------------------------------------------
+  // Registered without withErrorHandling: the handler does no Graph I/O, and
+  // its McpError(InvalidParams) validation failure must surface as-is rather
+  // than as an auth-flavoured retry envelope.
+  server.registerTool(
+    'compose_email',
+    {
+      description:
+        'Open an inline editable email compose form before sending. Use this when the user wants to write or send an email, so they can review and edit the draft first. Do NOT use when the user asks to save a draft (use create_draft). This tool does not send the email directly.',
+      inputSchema: z.object({
+        to: z.array(z.string()).describe('Recipient email address(es), e.g. ["alice@example.com"]'),
+        cc: z.array(z.string()).optional().describe('CC recipient(s)'),
+        subject: z.string().describe('Email subject'),
+        body: z.string().describe('Email body'),
+      }).shape,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args) => handleComposeEmail(args),
   );
 
   // ---------------------------------------------------------------------
