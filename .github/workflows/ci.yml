@@ -307,3 +307,111 @@ jobs:
           node-version: '20'
       - name: Verify shared-package src bumps and aging [Unreleased] debt
         run: node scripts/check-release-hygiene.mjs
+
+  compose-app-package-check:
+    name: Compose-app shared generator (build + tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: packages/mcp-app-compose
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+      - run: npm ci --ignore-scripts
+      - name: Type-check the shared compose-app generator
+        run: npm run build
+      - name: Run the shared compose-app generator invariant/variant tests
+        run: npm test
+
+  discover-compose-consumers:
+    name: Discover compose-template consumers
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      connectors: ${{ steps.list.outputs.connectors }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - id: list
+        name: List connectors that consume @mindstone/mcp-app-compose
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          # A connector is a compose-template consumer iff its package.json
+          # declares the `compose:template:check` script — the drift gate that
+          # regenerates the committed template from the shared
+          # @mindstone/mcp-app-compose builder and byte-compares. We AUTO-DISCOVER
+          # rather than hard-code the list on purpose: the whole reason this job
+          # exists is that build-and-test's hand-maintained matrix silently
+          # omitted google-workspace and microsoft-mail, so a generator change (or
+          # a security fix) could merge without proving every committed consumer
+          # template had been regenerated. Discovery means a new consumer can
+          # never be added to the repo without CI enforcing its drift gate.
+          all=()
+          for d in connectors/*/; do
+            name="${d#connectors/}"
+            name="${name%/}"
+            pkg="connectors/$name/package.json"
+            [ -f "$pkg" ] || continue
+            if ! jq -e '.scripts["compose:template:check"]' "$pkg" >/dev/null 2>&1; then
+              continue
+            fi
+            # Hard slug allowlist — same anchored, length-capped guard as the
+            # other discover jobs, so a hostile directory name cannot smuggle
+            # shell metacharacters into the matrix.
+            if [[ ! "$name" =~ ^[a-z0-9][a-z0-9-]{0,63}$ ]]; then
+              echo "::error::connector '$name' does not match slug pattern; refusing to include in matrix"
+              exit 1
+            fi
+            all+=("$name")
+          done
+
+          if [ "${#all[@]}" -eq 0 ]; then
+            echo "::error::no compose-template consumers discovered (expected at least google-workspace + microsoft-mail)"
+            exit 1
+          fi
+
+          json=$(printf '%s\n' "${all[@]}" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "connectors=$json" >> "$GITHUB_OUTPUT"
+          echo "Discovered ${#all[@]} compose consumers: ${all[*]}"
+
+  compose-template-drift-check:
+    name: Compose-template drift (generator ↔ committed template)
+    needs: discover-compose-consumers
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        connector: ${{ fromJSON(needs.discover-compose-consumers.outputs.connectors) }}
+    defaults:
+      run:
+        working-directory: connectors/${{ matrix.connector }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+      # --ignore-scripts is safe: the shared @mindstone/mcp-app-compose builder
+      # is a file: devDependency of pure ESM source (no build step), so the
+      # drift check can import it straight after install.
+      - run: npm ci --ignore-scripts
+      - name: Regenerate committed compose template and byte-compare
+        run: npm run compose:template:check
+      - name: Reject internal ticket references in the generated template
+        run: npm run security:internal-refs

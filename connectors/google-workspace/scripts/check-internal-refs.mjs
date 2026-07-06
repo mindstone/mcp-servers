@@ -3,7 +3,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const pattern = /@nspr|REBEL_HOST_CONTEXT|rebel\.local|MINDSTONE_REBEL_BRIDGE_STATE|MCP_HOST_BRIDGE_STATE|\.rebel-icon/;
+// REBEL-\d+ / FOX-\d+ catch internal issue-tracker references: this is a
+// public, source-available repo, so ticket IDs must never ship in source or in
+// the generated compose-app HTML (see AGENTS.md). A pair of these leaked in via
+// the shared @mindstone/mcp-app-compose builder and were scrubbed 2026-07.
+const pattern = /@nspr|REBEL_HOST_CONTEXT|rebel\.local|MINDSTONE_REBEL_BRIDGE_STATE|MCP_HOST_BRIDGE_STATE|\.rebel-icon|REBEL-\d+|FOX-\d+/;
 const roots = ['src', 'dist'];
 const matches = [];
 
