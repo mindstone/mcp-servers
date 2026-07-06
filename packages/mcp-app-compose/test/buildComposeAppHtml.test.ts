@@ -442,3 +442,115 @@ describe('buildComposeAppHtml — variant template runs end-to-end (happy-dom)',
     expect(isHidden(window, 'composeForm')).toBe(true);
   });
 });
+
+describe('buildComposeAppHtml — R7 a11y hardening', () => {
+  it('marks the error box as an assertive alert and the success box as a polite status', () => {
+    expect(gmailHtml).toContain('<div id="errorBox" class="status error hidden" role="alert">');
+    expect(gmailHtml).toContain(
+      '<div id="successBox" class="status success hidden" role="status" aria-live="polite"></div>',
+    );
+  });
+
+  it('gives the compose form an accessible name', () => {
+    expect(gmailHtml).toContain('<form id="composeForm" class="card" novalidate aria-label="Compose email">');
+  });
+
+  it('exposes CC/BCC toggles as collapsed disclosure controls', () => {
+    expect(gmailHtml).toContain('id="toggleCcButton"');
+    expect(gmailHtml).toContain('aria-expanded="false"');
+    expect(gmailHtml).toContain('aria-controls="ccRow"');
+    expect(gmailHtml).toContain('aria-controls="bccRow"');
+  });
+
+  it('toggles aria-busy on Send across the send lifecycle', () => {
+    const window = loadWindow(gmailHtml);
+    const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
+    // Not busy before a send is in flight (attribute absent === not busy).
+    expect(sendButton.getAttribute('aria-busy')).not.toBe('true');
+
+    setFieldValue(window, 'toInput', 'jane@example.com');
+    setFieldValue(window, 'subjectInput', 'Quarterly update');
+    setFieldValue(window, 'bodyInput', 'Numbers attached.');
+    sendButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    expect(sendButton.getAttribute('aria-busy')).toBe('true');
+
+    const toolCall = postedMessages(window).find((msg) => msg.method === 'tools/call');
+    window.dispatchEvent(new window.MessageEvent('message', { data: { jsonrpc: '2.0', id: toolCall?.id, result: {} } }));
+    expect(sendButton.getAttribute('aria-busy')).toBe('false');
+  });
+
+  it('syncs aria-expanded when a disclosure toggle is clicked', () => {
+    const window = loadWindow(gmailHtml);
+    const toggle = window.document.getElementById('toggleCcButton') as unknown as HTMLButtonElement;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    toggle.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    toggle.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+  });
+});
+
+describe('buildComposeAppHtml — R7 postMessage honest scope', () => {
+  function getFieldValue(window: Window, id: string): string {
+    const el = window.document.getElementById(id) as unknown as HTMLInputElement | HTMLTextAreaElement;
+    return el.value;
+  }
+
+  function dispatchToolResult(window: Window, structuredContent: Record<string, unknown>, source?: unknown): void {
+    window.dispatchEvent(
+      new window.MessageEvent('message', {
+        data: { method: 'ui/notifications/tool-result', params: { structuredContent } },
+        // happy-dom honours the source init; a real cross-frame postMessage always
+        // stamps it, so this simulates a foreign sender when set.
+        ...(source !== undefined ? { source: source as Window } : {}),
+      }),
+    );
+  }
+
+  it('applies only the first tool-result prefill and ignores later re-posts', () => {
+    const window = loadWindow(gmailHtml);
+    dispatchToolResult(window, { to: ['first@example.com'], subject: 'First', body: 'First body' });
+    expect(getFieldValue(window, 'toInput')).toBe('first@example.com');
+    expect(getFieldValue(window, 'subjectInput')).toBe('First');
+
+    // A second, well-formed prefill (e.g. a stray or hostile re-post) must NOT
+    // silently overwrite what the user has already reviewed.
+    dispatchToolResult(window, { to: ['second@example.com'], subject: 'Second', body: 'Second body' });
+    expect(getFieldValue(window, 'toInput')).toBe('first@example.com');
+    expect(getFieldValue(window, 'subjectInput')).toBe('First');
+  });
+
+  it('rejects a prefill from an identified non-parent sender', () => {
+    const window = loadWindow(gmailHtml);
+    const foreign = new Window({ url: 'https://attacker.example/' });
+    // A message stamped with a source that is not our host frame is dropped...
+    dispatchToolResult(window, { to: ['evil@example.com'], subject: 'Injected', body: 'x' }, foreign);
+    expect(getFieldValue(window, 'toInput')).toBe('');
+    expect(getFieldValue(window, 'subjectInput')).toBe('');
+    foreign.close();
+
+    // ...while a same-context (null-source) dispatch — which cannot be forged
+    // from outside the iframe — is still accepted.
+    dispatchToolResult(window, { to: ['ok@example.com'], subject: 'Legit', body: 'y' });
+    expect(getFieldValue(window, 'toInput')).toBe('ok@example.com');
+  });
+
+  it('accepts a prefill stamped with the host parent as source', () => {
+    // The exact production acceptance path: the host reposts the tool-result via
+    // iframe.contentWindow.postMessage(...), so the listener sees event.source ===
+    // window.parent. The script runs in its own eval realm, so we capture THAT
+    // realm's window.parent (the object the guard actually compares against) and
+    // stamp the message with it — the null-source test above only covers the
+    // short-circuit branch, this covers the identity-match branch.
+    const window = loadWindow(gmailHtml);
+    window.eval('globalThis.__composeHostParent = window.parent;');
+    const hostParent = (window as unknown as { __composeHostParent: Window }).__composeHostParent;
+    dispatchToolResult(
+      window,
+      { to: ['host@example.com'], subject: 'From host', body: 'Reposted on ready' },
+      hostParent,
+    );
+    expect(getFieldValue(window, 'toInput')).toBe('host@example.com');
+    expect(getFieldValue(window, 'subjectInput')).toBe('From host');
+  });
+});

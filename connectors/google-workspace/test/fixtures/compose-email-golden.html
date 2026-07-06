@@ -354,7 +354,7 @@
       <button id="reopenButton" type="button" class="button button-secondary">Reopen</button>
     </div>
 
-    <form id="composeForm" class="card" novalidate>
+    <form id="composeForm" class="card" novalidate aria-label="Compose email">
       <div class="field from-field">
         <label>From</label>
         <span id="fromValue" class="from-value"></span>
@@ -367,8 +367,8 @@
       </div>
 
       <div class="toggles">
-        <button id="toggleCcButton" type="button" class="link-button">Add CC</button>
-        <button id="toggleBccButton" type="button" class="link-button">Add BCC</button>
+        <button id="toggleCcButton" type="button" class="link-button" aria-expanded="false" aria-controls="ccRow">Add CC</button>
+        <button id="toggleBccButton" type="button" class="link-button" aria-expanded="false" aria-controls="bccRow">Add BCC</button>
       </div>
 
       <div id="ccRow" class="field hidden">
@@ -391,7 +391,7 @@
         <textarea id="bodyInput" class="textarea" placeholder="Write your email"></textarea>
       </div>
 
-      <div id="errorBox" class="status error hidden">
+      <div id="errorBox" class="status error hidden" role="alert">
         <span id="errorText"></span>
         <button id="retryButton" type="button" class="link-button">Retry</button>
       </div>
@@ -403,7 +403,7 @@
         </div>
       </div>
 
-      <div id="successBox" class="status success hidden"></div>
+      <div id="successBox" class="status success hidden" role="status" aria-live="polite"></div>
 
       <div id="unknownBox" class="status warning hidden" role="status" aria-live="polite">
         <strong id="unknownTitle"></strong>
@@ -468,6 +468,11 @@
 
       var RESOURCE_URI = 'ui://google-workspace/compose-email';
       var currentEmail = '';
+      // The host prefills the draft exactly once via ui/notifications/tool-result
+      // on ready. We apply only the FIRST prefill and ignore any later ones, so a
+      // stray or hostile re-post can't silently rewrite a draft the user has
+      // already reviewed before clicking Send.
+      var draftApplied = false;
       var pendingRequestId = null;
       var pendingPayload = null;
       var sending = false;
@@ -648,6 +653,7 @@
         bodyInput.disabled = nextSending;
         sendSpinner.classList.toggle('hidden', !nextSending);
         sendLabel.textContent = nextSending ? 'Sending…' : 'Send email';
+        sendButton.setAttribute('aria-busy', nextSending ? 'true' : 'false');
         postResize();
       }
 
@@ -715,11 +721,13 @@
       function setCcVisible(visible) {
         ccRow.classList.toggle('hidden', !visible);
         toggleCcButton.textContent = visible ? 'Hide CC' : 'Add CC';
+        toggleCcButton.setAttribute('aria-expanded', visible ? 'true' : 'false');
       }
 
       function setBccVisible(visible) {
         bccRow.classList.toggle('hidden', !visible);
         toggleBccButton.textContent = visible ? 'Hide BCC' : 'Add BCC';
+        toggleBccButton.setAttribute('aria-expanded', visible ? 'true' : 'false');
       }
 
       function readFormPayload() {
@@ -1115,14 +1123,32 @@
       });
 
       window.addEventListener('message', function (event) {
+        // Honest scope (origin-independent): the iframe sandbox origin is 'null',
+        // so validating event.origin is unreliable across dev/prod/custom-scheme
+        // hosts. Instead reject any *identified* sender that isn't our host frame
+        // (window.parent). A real cross-frame postMessage always stamps
+        // event.source with the sending window, so a hostile sibling frame is
+        // rejected here; a null source only occurs for same-context synthetic
+        // dispatch (our own code) and cannot be forged from outside, so we
+        // tolerate it. This does not authenticate the host's identity — the host
+        // separately authenticates this iframe by origin+source.
+        if (event.source && event.source !== window.parent) {
+          return;
+        }
+
         var data = event.data;
         if (!data || typeof data !== 'object') {
           return;
         }
 
         if (data.method === 'ui/notifications/tool-result') {
+          // Always parse (so the migration-shim's malformed-envelope warning
+          // still fires), but apply only the first successful prefill: a stray
+          // or hostile re-post can't silently rewrite a draft the user has
+          // already reviewed.
           var draft = getDraftFromToolResult(data.params);
-          if (draft) {
+          if (draft && !draftApplied) {
+            draftApplied = true;
             applyDraftData(draft);
           }
           return;
