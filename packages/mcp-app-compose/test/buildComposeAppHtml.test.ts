@@ -75,11 +75,14 @@ function postedMessages(window: Window): Array<Record<string, any>> {
 }
 
 // Fill the form, click Send, then reply from the "host" with a JSON-RPC error
-// carrying `message`. Returns the window so callers can assert the resulting UI.
+// carrying `message` (and, when `errorData` is given, a structured `error.data`
+// object as newer hosts forward it). Returns the window so callers can assert
+// the resulting UI.
 function sendThenReplyError(
   html: string,
   message: string,
   fields?: { to?: string; subject?: string; body?: string },
+  errorData?: Record<string, unknown>,
 ): Window {
   const window = loadWindow(html);
   setFieldValue(window, 'toInput', fields?.to ?? 'jane@example.com');
@@ -91,7 +94,14 @@ function sendThenReplyError(
   expect(toolCall).toBeTruthy();
   window.dispatchEvent(
     new window.MessageEvent('message', {
-      data: { jsonrpc: '2.0', id: toolCall?.id, error: { code: -32000, message } },
+      data: {
+        jsonrpc: '2.0',
+        id: toolCall?.id,
+        error:
+          errorData === undefined
+            ? { code: -32000, message }
+            : { code: -32000, message, data: errorData },
+      },
     }),
   );
   return window;
@@ -276,6 +286,7 @@ describe('buildComposeAppHtml — blocked-send Gmail escape hatch (gating)', () 
       'function buildGmailComposeUrl',
       'function showBlockedSend',
       'var GMAIL_COMPOSE_MAX_URL = 8000;',
+      'var blockedReason = data.error.data && data.error.data.reason;',
     ]) {
       expect(blockedHtml).toContain(marker);
       // Absent from the historical output (byte-parity for connectors that omit it).
@@ -319,6 +330,46 @@ describe('buildComposeAppHtml — blocked-send detector and Gmail URL (happy-dom
       const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
       expect(sendButton.disabled).toBe(false);
     }
+  });
+
+  it("shows the escape hatch on structured reason 'user-disabled' even when the message would not text-match", () => {
+    // A newer host forwards the closed discriminator but flattens the message
+    // to something the legacy detector cannot recognise.
+    const window = sendThenReplyError(blockedHtml, 'Tool call failed', undefined, {
+      reason: 'user-disabled',
+    });
+
+    expect(isHidden(window, 'blockedBox')).toBe(false);
+    expect(isHidden(window, 'errorBox')).toBe(true);
+    const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
+    expect(sendButton.disabled).toBe(true);
+  });
+
+  it('keeps admin-disabled and security-policy structured reasons as ordinary errors', () => {
+    for (const reason of ['admin-disabled', 'security-policy']) {
+      const window = sendThenReplyError(blockedHtml, 'Tool call failed', undefined, { reason });
+      expect(isHidden(window, 'blockedBox')).toBe(true);
+      expect(isHidden(window, 'errorBox')).toBe(false);
+      const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
+      expect(sendButton.disabled).toBe(false);
+    }
+  });
+
+  it('ignores unrecognised or malformed error.data shapes and falls back to text-matching', () => {
+    // Unknown reason with a non-matching message → ordinary error.
+    const unknownReason = sendThenReplyError(blockedHtml, 'Tool call failed', undefined, {
+      reason: 'totally-new-kind',
+    });
+    expect(isHidden(unknownReason, 'blockedBox')).toBe(true);
+    expect(isHidden(unknownReason, 'errorBox')).toBe(false);
+
+    // Malformed data alongside a legacy user-disabled message → the text
+    // fallback still opens the escape hatch.
+    const malformedData = sendThenReplyError(blockedHtml, USER_DISABLED_ERROR, undefined, {
+      unrelated: true,
+    });
+    expect(isHidden(malformedData, 'blockedBox')).toBe(false);
+    expect(isHidden(malformedData, 'errorBox')).toBe(true);
   });
 
   it('opens a prefilled mail.google.com compose window via the host bridge', () => {

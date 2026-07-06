@@ -7,6 +7,16 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- The blocked-send Gmail escape hatch now prefers the structured block reason
+  newer hosts forward on the JSON-RPC error (`error.data.reason ===
+  'user-disabled'`, a closed enum the host derives from the tool-block error)
+  and falls back to text-matching the flattened message for hosts that don't
+  forward it yet. Admin-disabled and security-policy blocks still surface as
+  ordinary retryable errors. Templates built without `blockedSendFallback`
+  are byte-identical to before.
+
 ## [0.1.0] - 2026-07-06
 
 ### Added
