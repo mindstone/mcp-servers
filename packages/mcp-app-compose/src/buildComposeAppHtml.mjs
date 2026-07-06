@@ -430,7 +430,7 @@ ${blockedSend ? `    .blocked-actions {
       <button id="reopenButton" type="button" class="button button-secondary">Reopen</button>
     </div>
 
-    <form id="composeForm" class="card" novalidate>
+    <form id="composeForm" class="card" novalidate aria-label="Compose email">
       <div class="field from-field">
         <label>From</label>
         <span id="fromValue" class="from-value"></span>
@@ -443,8 +443,8 @@ ${blockedSend ? `    .blocked-actions {
       </div>
 
 ${f.cc || f.bcc ? `      <div class="toggles">
-${f.cc ? `        <button id="toggleCcButton" type="button" class="link-button">Add CC</button>
-` : ''}${f.bcc ? `        <button id="toggleBccButton" type="button" class="link-button">Add BCC</button>
+${f.cc ? `        <button id="toggleCcButton" type="button" class="link-button" aria-expanded="false" aria-controls="ccRow">Add CC</button>
+` : ''}${f.bcc ? `        <button id="toggleBccButton" type="button" class="link-button" aria-expanded="false" aria-controls="bccRow">Add BCC</button>
 ` : ''}      </div>
 
 ` : ''}${f.cc ? `      <div id="ccRow" class="field hidden">
@@ -467,7 +467,7 @@ ${f.cc ? `        <button id="toggleCcButton" type="button" class="link-button">
         <textarea id="bodyInput" class="textarea" placeholder="Write your email"></textarea>
       </div>
 
-      <div id="errorBox" class="status error hidden">
+      <div id="errorBox" class="status error hidden" role="alert">
         <span id="errorText"></span>
         <button id="retryButton" type="button" class="link-button">Retry</button>
       </div>
@@ -479,7 +479,7 @@ ${blockedSend ? `      <div id="blockedBox" class="status warning hidden" role="
         </div>
       </div>
 
-` : ''}      <div id="successBox" class="status success hidden"></div>
+` : ''}      <div id="successBox" class="status success hidden" role="status" aria-live="polite"></div>
 
       <div id="unknownBox" class="status warning hidden" role="status" aria-live="polite">
         <strong id="unknownTitle"></strong>
@@ -544,6 +544,11 @@ ${gmail ? `        <button id="openGmailButton" type="button" class="button butt
 
       var RESOURCE_URI = ${quoteJsString(config.resourceUri)};
       var currentEmail = '';
+      // The host prefills the draft exactly once via ui/notifications/tool-result
+      // on ready. We apply only the FIRST prefill and ignore any later ones, so a
+      // stray or hostile re-post can't silently rewrite a draft the user has
+      // already reviewed before clicking Send.
+      var draftApplied = false;
       var pendingRequestId = null;
       var pendingPayload = null;
       var sending = false;
@@ -724,6 +729,7 @@ ${f.cc ? `        ccInput.disabled = nextSending;
         bodyInput.disabled = nextSending;
         sendSpinner.classList.toggle('hidden', !nextSending);
         sendLabel.textContent = nextSending ? 'Sending…' : 'Send email';
+        sendButton.setAttribute('aria-busy', nextSending ? 'true' : 'false');
         postResize();
       }
 
@@ -791,11 +797,13 @@ ${f.cc ? `        ccInput.disabled = nextSending;
 ${f.cc ? `      function setCcVisible(visible) {
         ccRow.classList.toggle('hidden', !visible);
         toggleCcButton.textContent = visible ? 'Hide CC' : 'Add CC';
+        toggleCcButton.setAttribute('aria-expanded', visible ? 'true' : 'false');
       }
 
 ` : ''}${f.bcc ? `      function setBccVisible(visible) {
         bccRow.classList.toggle('hidden', !visible);
         toggleBccButton.textContent = visible ? 'Hide BCC' : 'Add BCC';
+        toggleBccButton.setAttribute('aria-expanded', visible ? 'true' : 'false');
       }
 
 ` : ''}      function readFormPayload() {
@@ -1191,14 +1199,32 @@ ${gmail ? `      // The iframe sandbox is "allow-scripts" only (no allow-popups 
       });
 
       window.addEventListener('message', function (event) {
+        // Honest scope (origin-independent): the iframe sandbox origin is 'null',
+        // so validating event.origin is unreliable across dev/prod/custom-scheme
+        // hosts. Instead reject any *identified* sender that isn't our host frame
+        // (window.parent). A real cross-frame postMessage always stamps
+        // event.source with the sending window, so a hostile sibling frame is
+        // rejected here; a null source only occurs for same-context synthetic
+        // dispatch (our own code) and cannot be forged from outside, so we
+        // tolerate it. This does not authenticate the host's identity — the host
+        // separately authenticates this iframe by origin+source.
+        if (event.source && event.source !== window.parent) {
+          return;
+        }
+
         var data = event.data;
         if (!data || typeof data !== 'object') {
           return;
         }
 
         if (data.method === 'ui/notifications/tool-result') {
+          // Always parse (so the migration-shim's malformed-envelope warning
+          // still fires), but apply only the first successful prefill: a stray
+          // or hostile re-post can't silently rewrite a draft the user has
+          // already reviewed.
           var draft = getDraftFromToolResult(data.params);
-          if (draft) {
+          if (draft && !draftApplied) {
+            draftApplied = true;
             applyDraftData(draft);
           }
           return;
