@@ -1,16 +1,27 @@
 // Byte-parity guards for the compose app extraction (shared
 // @mindstone/mcp-app-compose builder -> committed template):
 //
-// 1. The committed COMPOSE_EMAIL_HTML matches the golden fixture captured from
-//    the pre-extraction, hand-maintained template. This pins the exact bytes
-//    the connector shipped before the builder existed.
+// 1. The committed COMPOSE_EMAIL_HTML matches the golden fixture. The golden was
+//    originally captured from the pre-extraction, hand-maintained template to
+//    pin the exact bytes the connector shipped before the builder existed. It
+//    has since been deliberately rebaselined once (2026-07) to strip internal
+//    ticket references out of the shared builder per the public-repo policy, so
+//    it now pins the intended current output rather than the original bytes.
 // 2. Building with the connector's real config (the same object the generator
 //    script uses) reproduces the committed template. This proves the generator
 //    pipeline is lossless end-to-end, not just that someone committed the
 //    right bytes once.
 //
-// If a deliberate change to the shared builder lands, regenerate via
-// `npm run compose:template` and update the golden fixture in the same change.
+// REBASELINE CONTROL: assertions 1+2 only stay honest if the golden is NOT
+// updated casually. A change that touches the builder AND regenerates the
+// template AND updates the golden in a single commit collapses "byte parity"
+// into "all three files moved together" and loses its regression value. So any
+// golden update MUST be a conscious, reviewer-acknowledged behavioural
+// rebaseline: state the byte delta and the reason in the commit/PR (exactly as
+// the 2026-07 ticket-ref scrub did). For a change you believe is
+// non-behavioural, expect this test to FAIL first and treat that failure as the
+// prompt to justify the rebaseline — never silently `cp` the new bytes over the
+// golden to make it green.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';

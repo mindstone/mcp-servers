@@ -536,7 +536,7 @@ ${gmail ? `      var gmailUrl = null;
 ` : ''}      var sendTimeoutId = null;
       // Just beyond the host-side tool-call timeout (60s) so a legitimately slow
       // send resolves to its real result first; this only fires when the reply
-      // is genuinely lost (REBEL-677), so the button can never stay stuck-silent.
+      // is genuinely lost, so the button can never stay stuck-silent.
       var SEND_TIMEOUT_MS = 75000;
 
       var composeForm = document.getElementById('composeForm');
@@ -745,7 +745,7 @@ ${f.cc ? `        ccInput.disabled = nextSending;
       // before reaching this iframe). We genuinely don't know whether the email
       // went out, so we must NOT claim success or failure: re-enable the form and
       // tell the user to verify before resending (the send is not idempotent, so
-      // a blind retry could send a duplicate). REBEL-677 / FOX-3484.
+      // a blind retry could send a duplicate).
       function showSendUnknown() {
         outcomeUnknown = true;
         clearError();

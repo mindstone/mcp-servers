@@ -4,7 +4,10 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const pattern = /@nspr|REBEL_HOST_CONTEXT|rebel\.local|MINDSTONE_REBEL_BRIDGE_STATE|MCP_HOST_BRIDGE_STATE|\.rebel-icon/;
+// REBEL-\d+ / FOX-\d+ catch internal issue-tracker references (public repo:
+// ticket IDs must not ship in source or generated HTML). Mirrors the pattern in
+// scripts/check-internal-refs.mjs.
+const pattern = /@nspr|REBEL_HOST_CONTEXT|rebel\.local|MINDSTONE_REBEL_BRIDGE_STATE|MCP_HOST_BRIDGE_STATE|\.rebel-icon|REBEL-\d+|FOX-\d+/;
 
 function collectFiles(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
