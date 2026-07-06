@@ -30,9 +30,12 @@
     "prepublishOnly": "npm run build && npm test",
     "watch": "tsc --watch",
     "start": "node dist/index.js",
+    "pretest": "npm run compose:template:check",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "compose:template": "node scripts/gen-compose-html.mjs",
+    "compose:template:check": "node scripts/gen-compose-html.mjs --check",
     "tools:inventory": "node scripts/generate-tools-inventory.mjs",
     "tools:annotations": "node scripts/check-tool-annotations.mjs",
     "request:manifest": "node scripts/generate-request-manifest.mjs",
@@ -46,6 +49,7 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
+    "@mindstone/mcp-app-compose": "file:../../packages/mcp-app-compose",
     "@types/node": "^22",
     "@types/uuid": "^10.0.0",
     "@vitest/coverage-v8": "^4.1.3",
