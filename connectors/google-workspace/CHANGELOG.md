@@ -11,6 +11,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 - Compose email now keeps your message after it sends, instead of clearing it. Sending collapses to a "Email sent" summary with the time; Reopen shows a read-only copy of exactly what went out (From, To, CC/BCC, subject, and body) so there's no risk of resending. When the reply includes the message identifiers, an "Open in Gmail" button deep-links straight to the sent thread.
 
+### Changed
+
+- The compose email "finish in Gmail" fallback (shown when sending from Rebel is turned off in your settings) now recognises the block from structured error data forwarded by newer hosts, instead of relying only on the wording of the error message — so it keeps working even when the host shortens or rewords the error text.
+
 ## [0.1.5] - 2026-07-05
 
 ### Changed

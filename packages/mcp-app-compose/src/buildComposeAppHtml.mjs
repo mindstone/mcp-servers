@@ -1454,7 +1454,14 @@ ${gmail ? `      // The iframe sandbox is "allow-scripts" only (no allow-popups 
           var errorMessage = data.error && typeof data.error.message === 'string'
             ? data.error.message
             : ${quoteJsString(m.sendFailedText)};
-${blockedSend ? `          if (isUserDisabledSendError(errorMessage)) {
+${blockedSend ? `          // Prefer the host-vetted structured reason (a closed enum the host
+          // derives from the tool-block error data) and fall back to
+          // text-matching the flattened message for hosts that don't forward it
+          // yet. Only 'user-disabled' opens the Gmail escape hatch —
+          // admin-disabled and security-policy blocks stay ordinary errors (see
+          // the detector comment above for why).
+          var blockedReason = data.error.data && data.error.data.reason;
+          if (blockedReason === 'user-disabled' || isUserDisabledSendError(errorMessage)) {
             showBlockedSend();
             return;
           }
