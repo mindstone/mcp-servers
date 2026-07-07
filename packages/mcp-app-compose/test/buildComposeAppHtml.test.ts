@@ -34,9 +34,30 @@ const BLOCKED_CONFIG: ComposeAppConfig = {
   blockedSendFallback: { kind: 'gmail-compose' },
 };
 
+// Chat-shaped configs (Slack + Teams). Single To target + message body, no
+// subject/cc/bcc/From/deep-link. Slack carries a locked intended-recipient for
+// DM sends; Teams routes by chatId and has neither.
+const SLACK_CONFIG: ComposeAppConfig = {
+  resourceUri: 'ui://slack/compose-message',
+  sendToolName: 'post_slack_message',
+  mode: 'slack',
+  fields: { cc: false, bcc: false },
+  deepLink: { kind: 'none' },
+};
+
+const TEAMS_CONFIG: ComposeAppConfig = {
+  resourceUri: 'ui://microsoft-teams/compose-message',
+  sendToolName: 'send_chat_message',
+  mode: 'teams',
+  fields: { cc: false, bcc: false },
+  deepLink: { kind: 'none' },
+};
+
 const gmailHtml = buildComposeAppHtml(GMAIL_CONFIG);
 const acmeHtml = buildComposeAppHtml(ACME_CONFIG);
 const blockedHtml = buildComposeAppHtml(BLOCKED_CONFIG);
+const slackHtml = buildComposeAppHtml(SLACK_CONFIG);
+const teamsHtml = buildComposeAppHtml(TEAMS_CONFIG);
 
 let composeWindow: Window | undefined;
 
@@ -552,5 +573,161 @@ describe('buildComposeAppHtml — R7 postMessage honest scope', () => {
     );
     expect(getFieldValue(window, 'toInput')).toBe('host@example.com');
     expect(getFieldValue(window, 'subjectInput')).toBe('From host');
+  });
+});
+
+describe('buildComposeAppHtml — chat mode structure (slack/teams)', () => {
+  it('keeps mode:email (and the absent default) byte-identical to the shipped email output', () => {
+    expect(buildComposeAppHtml({ ...GMAIL_CONFIG, mode: 'email' })).toBe(gmailHtml);
+    expect(buildComposeAppHtml(GMAIL_CONFIG)).toBe(gmailHtml);
+  });
+
+  it('drops the email-only chrome markup: subject, cc/bcc, From account, deep link', () => {
+    for (const html of [slackHtml, teamsHtml]) {
+      for (const marker of [
+        'id="subjectInput"',
+        'id="ccRow"',
+        'id="bccRow"',
+        'from-field',
+        'id="fromValue"',
+        'id="sentFrom"',
+        'id="sentSubject"',
+        'openGmailButton',
+        'buildGmailUrl',
+        'mail.google.com',
+      ]) {
+        expect(html).not.toContain(marker);
+      }
+      // The shared skeleton survives.
+      expect(html).toContain('id="composeForm"');
+      expect(html).toContain('id="sentView"');
+      expect(html).toContain('id="toInput"');
+      expect(html).toContain('id="bodyInput"');
+    }
+  });
+
+  it('uses chat copy: title, labels, placeholders, send button', () => {
+    expect(slackHtml).toContain('<title>Compose message</title>');
+    expect(slackHtml).toContain('aria-label="Compose message"');
+    // Target placeholder is mode-specific and honest about what each send tool
+    // accepts: Slack takes a channel/DM (not @user), Teams takes a chat ID.
+    expect(slackHtml).toContain('placeholder="#general or a channel ID"');
+    expect(slackHtml).toContain('>Message<');
+    expect(slackHtml).toContain('placeholder="Write your message"');
+    expect(slackHtml).toContain('Send message');
+    expect(teamsHtml).toContain('<title>Compose message</title>');
+    expect(teamsHtml).toContain('placeholder="Chat ID"');
+  });
+
+  it('splices the connector-specific resource URI and send tool name', () => {
+    expect(slackHtml).toContain("var RESOURCE_URI = 'ui://slack/compose-message';");
+    expect(slackHtml).toContain("name: 'post_slack_message'");
+    expect(teamsHtml).toContain("var RESOURCE_URI = 'ui://microsoft-teams/compose-message';");
+    expect(teamsHtml).toContain("name: 'send_chat_message'");
+  });
+
+  it('renders the intended-recipient notice and state for slack only', () => {
+    expect(slackHtml).toContain('id="recipientNotice"');
+    expect(slackHtml).toContain('var intendedRecipient');
+    expect(teamsHtml).not.toContain('id="recipientNotice"');
+    expect(teamsHtml).not.toContain('intendedRecipient');
+  });
+});
+
+describe('buildComposeAppHtml — chat mode behaviour (happy-dom)', () => {
+  it('slack sends { channel, text } and carries a locked intended_recipient for DM prefills', () => {
+    const window = loadWindow(slackHtml);
+    window.dispatchEvent(
+      new window.MessageEvent('message', {
+        data: {
+          method: 'ui/notifications/tool-result',
+          params: { structuredContent: { target: 'D123', text: 'Ping', intended_recipient: 'U999' } },
+        },
+      }) as unknown as MessageEvent,
+    );
+    expect(isHidden(window, 'recipientNotice')).toBe(false);
+    const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
+    sendButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    const toolCall = postedMessages(window).find((msg) => msg.method === 'tools/call');
+    expect(toolCall?.params?.name).toBe('post_slack_message');
+    expect(toolCall?.params?.arguments).toEqual({ channel: 'D123', text: 'Ping', intended_recipient: 'U999' });
+  });
+
+  it('slack omits intended_recipient when the prefill carries none', () => {
+    const window = loadWindow(slackHtml);
+    setFieldValue(window, 'toInput', '#general');
+    setFieldValue(window, 'bodyInput', 'Hello team');
+    const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
+    sendButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    const toolCall = postedMessages(window).find((msg) => msg.method === 'tools/call');
+    expect(toolCall?.params?.arguments).toEqual({ channel: '#general', text: 'Hello team' });
+    expect(Object.prototype.hasOwnProperty.call(toolCall?.params?.arguments, 'intended_recipient')).toBe(false);
+    expect(isHidden(window, 'recipientNotice')).toBe(true);
+  });
+
+  it('teams sends { chatId, content }', () => {
+    const window = loadWindow(teamsHtml);
+    setFieldValue(window, 'toInput', '19:meeting@thread.v2');
+    setFieldValue(window, 'bodyInput', 'On my way');
+    const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
+    sendButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    const toolCall = postedMessages(window).find((msg) => msg.method === 'tools/call');
+    expect(toolCall?.params?.name).toBe('send_chat_message');
+    expect(toolCall?.params?.arguments).toEqual({ chatId: '19:meeting@thread.v2', content: 'On my way' });
+  });
+
+  it('blocks a send with an empty target or message and surfaces the reason', () => {
+    const window = loadWindow(slackHtml);
+    const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
+    sendButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    expect(postedMessages(window).some((msg) => msg.method === 'tools/call')).toBe(false);
+    expect(isHidden(window, 'errorBox')).toBe(false);
+  });
+
+  it('reaches the read-only sent view after a successful chat send', () => {
+    const window = loadWindow(teamsHtml);
+    setFieldValue(window, 'toInput', '19:abc@thread.v2');
+    setFieldValue(window, 'bodyInput', 'Done');
+    const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
+    sendButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    const toolCall = postedMessages(window).find((msg) => msg.method === 'tools/call');
+    window.dispatchEvent(
+      new window.MessageEvent('message', { data: { jsonrpc: '2.0', id: toolCall?.id, result: {} } }) as unknown as MessageEvent,
+    );
+    const reopenButton = window.document.getElementById('reopenButton') as unknown as HTMLButtonElement;
+    reopenButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    expect(isHidden(window, 'sentView')).toBe(false);
+    expect((window.document.getElementById('sentTo') as unknown as HTMLElement).textContent).toBe('19:abc@thread.v2');
+    expect((window.document.getElementById('sentBody') as unknown as HTMLElement).textContent).toBe('Done');
+  });
+});
+
+describe('assertComposeAppConfig — chat mode validation', () => {
+  it('rejects an unknown mode', () => {
+    expect(() =>
+      buildComposeAppHtml({ ...SLACK_CONFIG, mode: 'discord' as unknown as ComposeAppConfig['mode'] }),
+    ).toThrow(/mode/);
+  });
+
+  it('rejects cc/bcc enabled in a chat mode', () => {
+    expect(() => buildComposeAppHtml({ ...SLACK_CONFIG, fields: { cc: true, bcc: false } })).toThrow(/cc.*bcc|fields/i);
+    expect(() => buildComposeAppHtml({ ...TEAMS_CONFIG, fields: { cc: false, bcc: true } })).toThrow(/cc.*bcc|fields/i);
+  });
+
+  it('rejects a gmail deep link in a chat mode', () => {
+    expect(() => buildComposeAppHtml({ ...SLACK_CONFIG, deepLink: { kind: 'gmail' } })).toThrow(/deepLink|gmail/i);
+  });
+
+  it('rejects a gmail-compose blocked-send fallback in a chat mode', () => {
+    expect(() =>
+      buildComposeAppHtml({ ...SLACK_CONFIG, blockedSendFallback: { kind: 'gmail-compose' } }),
+    ).toThrow(/blockedSendFallback|gmail/i);
+  });
+
+  it('tolerates an optional From helper but still guards its content', () => {
+    expect(() => buildComposeAppHtml({ ...SLACK_CONFIG, fromMissingHelperText: 'unused but safe' })).not.toThrow();
+    expect(() => buildComposeAppHtml({ ...SLACK_CONFIG, fromMissingHelperText: 'has <markup>' })).toThrow(
+      /fromMissingHelperText/,
+    );
   });
 });

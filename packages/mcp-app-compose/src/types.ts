@@ -42,16 +42,32 @@ export type ComposeDeepLink = { kind: 'gmail' } | { kind: 'none' };
  */
 export type ComposeBlockedSendFallback = { kind: 'gmail-compose' } | { kind: 'none' };
 
+/**
+ * Closed shape discriminator. `'email'` (the default when absent) is the
+ * historical email-shaped compose/send form; the two shipped email configs omit
+ * this field and stay byte-identical. `'slack'`/`'teams'` select the chat shape:
+ * a single To target + message body, no subject/cc/bcc/From/deep-link. Slack
+ * additionally carries a locked intended-recipient for DM sends. Chat modes must
+ * set `fields.cc`/`fields.bcc` to `false` and `deepLink.kind` to `'none'`.
+ */
+export type ComposeMode = 'email' | 'slack' | 'teams';
+
 export interface ComposeAppConfig {
   /** `ui://` resource URI the connector serves this HTML under. */
   resourceUri: string;
   /** Tool the iframe invokes via `tools/call` when Send is clicked. */
   sendToolName: string;
   /**
-   * Helper copy shown under From when the draft carries no confirmed sending
-   * account (plain text; markup is rejected).
+   * Shape of the compose form. Defaults to `'email'` when absent. See
+   * {@link ComposeMode}.
    */
-  fromMissingHelperText: string;
+  mode?: ComposeMode;
+  /**
+   * Helper copy shown under From when the draft carries no confirmed sending
+   * account (plain text; markup is rejected). Email-only — chat modes have no
+   * sending account, so it is optional and ignored there.
+   */
+  fromMissingHelperText?: string;
   fields: ComposeFieldSpec;
   deepLink: ComposeDeepLink;
   /**

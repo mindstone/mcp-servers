@@ -129,4 +129,24 @@ describe('microsoft-teams mock-API integration', () => {
       body: { contentType: 'text', content: 'Hello team' },
     });
   });
+
+  it('send_chat_message rejects unknown keys (strict schema)', async () => {
+    // F8: the input schema is `.strict()`, so an unexpected argument is refused
+    // at the protocol boundary rather than silently forwarded to Graph. The SDK
+    // surfaces the schema failure as an isError tool result (-32602).
+    const result = await client.client.callTool({
+      name: 'send_chat_message',
+      arguments: { chatId: 'chat-1', content: 'Hello team', extra: 'not-allowed' },
+    });
+
+    expect(result.isError).toBe(true);
+    const text = (result.content as Array<{ type: string; text: string }>)[0]?.text ?? '';
+    expect(text).toMatch(/unrecognized key/i);
+
+    // Nothing should have been POSTed to Graph.
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.endsWith('/me/chats/chat-1/messages'),
+    );
+    expect(call).toBeUndefined();
+  });
 });

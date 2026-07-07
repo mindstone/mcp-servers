@@ -36,6 +36,7 @@ const ALL_TOOLS = [
   'add_slack_reaction',
   'add_slack_reminder',
   'authenticate_slack_workspace',
+  'compose_slack_message',
   'create_slack_channel',
   'download_slack_file',
   'get_slack_channel_history',
@@ -143,7 +144,7 @@ describe('Slack MCP — smoke & registration', () => {
     if (cfg) cfg.cleanup();
   });
 
-  it('registers all 24 tools', async () => {
+  it('registers all 25 tools', async () => {
     const result = await client.client.listTools();
     const names = result.tools.map((t) => t.name).sort();
     expect(names).toEqual(ALL_TOOLS);
@@ -304,14 +305,17 @@ describe('Slack MCP — DM recipient verification', () => {
     expect((result.json as { recipient?: { user_id?: string } }).recipient?.user_id).toBe('U123');
   });
 
-  it('warns and verifies when intended_recipient missing on a DM', async () => {
+  it('fails closed when intended_recipient is missing on a DM (message NOT sent)', async () => {
     const result = await client.callTool('post_slack_message', {
       channel: 'D999TEST',
       text: 'no intent',
     });
-    expect(result.json).toMatchObject({ ok: true });
-    expect((result.json as { warning?: string }).warning).toMatch(/intended_recipient/i);
-    expect((result.json as { recipient?: { user_id?: string } }).recipient?.user_id).toBe('U123');
+    expect(result.json).toMatchObject({ ok: false });
+    const j = result.json as { error?: string; next_step?: string };
+    expect(j.error).toMatch(/intended_recipient is required/i);
+    expect(j.next_step).toBe('lookup_user_by_email');
+    // The refusal happens BEFORE chat.postMessage, so nothing is posted.
+    expect(result.json).not.toHaveProperty('recipient');
   });
 
   it('returns posted text under `text` without a duplicate `message` field (FOX-2595)', async () => {
@@ -624,7 +628,11 @@ describe('Slack MCP — self-DM send guards', () => {
     expect(postCalls).toBe(0);
   });
 
-  it('blocks post_slack_message self-DMs even with no intended_recipient (the common silent trigger)', async () => {
+  it('blocks any DM with no intended_recipient before chat.postMessage (fail-closed, incl. the self-DM silent trigger)', async () => {
+    // A DM without intended_recipient is now refused up front (fail-closed),
+    // so it never reaches chat.postMessage — this also covers the common
+    // self-DM silent trigger, which previously slipped through to the
+    // self-DM-specific redirect. The safety-critical guarantee (NOT sent) holds.
     let postCalls = 0;
     mswServer.use(
       http.post(`${SLACK_API_BASE}/chat.postMessage`, () => {
@@ -652,9 +660,9 @@ describe('Slack MCP — self-DM send guards', () => {
 
     expect(result.json).toMatchObject({
       ok: false,
-      next_step: 'send_myself_a_note',
-      actual_recipient: 'U123',
+      next_step: 'lookup_user_by_email',
     });
+    expect(((result.json as { error?: string }).error || '')).toMatch(/intended_recipient is required/i);
     expect(postCalls).toBe(0);
   });
 

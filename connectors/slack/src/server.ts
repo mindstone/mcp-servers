@@ -10,6 +10,8 @@ import {
   registerUserTools,
   registerWorkspaceTools,
 } from './tools/index.js';
+import { COMPOSE_MESSAGE_RESOURCE_URI } from './tools/messages.js';
+import { COMPOSE_MESSAGE_HTML } from './resources/compose-message-template.js';
 
 export function createServer(): McpServer {
   const server = new McpServer({
@@ -25,6 +27,15 @@ export function createServer(): McpServer {
   registerUserTools(server);
   registerFileTools(server);
   registerWorkspaceTools(server);
+
+  server.registerResource(
+    'compose-message',
+    COMPOSE_MESSAGE_RESOURCE_URI,
+    { mimeType: 'text/html' },
+    async (uri) => ({
+      contents: [{ uri: uri.href, mimeType: 'text/html', text: COMPOSE_MESSAGE_HTML }],
+    }),
+  );
 
   return server;
 }

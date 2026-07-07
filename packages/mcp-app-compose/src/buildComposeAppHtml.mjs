@@ -31,13 +31,35 @@ function assertComposeAppConfig(config) {
   if (!config || typeof config !== 'object') {
     throw new Error('[mcp-app-compose] config must be an object');
   }
+  // Closed mode discriminator. `email` (the default when absent) keeps the two
+  // existing email configs byte-identical; `slack`/`teams` select the chat
+  // shape. Everything the modes share stays baked into the template.
+  const mode = config.mode === undefined ? 'email' : config.mode;
+  if (mode !== 'email' && mode !== 'slack' && mode !== 'teams') {
+    throw new Error("[mcp-app-compose] mode must be 'email', 'slack', or 'teams'");
+  }
+  const isChat = mode !== 'email';
   if (typeof config.resourceUri !== 'string' || !RESOURCE_URI_PATTERN.test(config.resourceUri)) {
     throw new Error('[mcp-app-compose] resourceUri must be a ui:// URI matching ' + String(RESOURCE_URI_PATTERN));
   }
   if (typeof config.sendToolName !== 'string' || !TOOL_NAME_PATTERN.test(config.sendToolName)) {
     throw new Error('[mcp-app-compose] sendToolName must match ' + String(TOOL_NAME_PATTERN));
   }
-  if (
+  if (isChat) {
+    // From is email-only (chat has no sending account), so the helper copy is
+    // optional here. If a chat config still supplies it, it must clear the same
+    // splice-safety guard before it can be spliced into the inline <script>.
+    if (
+      config.fromMissingHelperText !== undefined &&
+      (typeof config.fromMissingHelperText !== 'string' ||
+        config.fromMissingHelperText.length === 0 ||
+        HELPER_TEXT_FORBIDDEN.test(config.fromMissingHelperText))
+    ) {
+      throw new Error(
+        '[mcp-app-compose] fromMissingHelperText must be non-empty plain text without <, >, backticks, backslashes, or newlines'
+      );
+    }
+  } else if (
     typeof config.fromMissingHelperText !== 'string' ||
     config.fromMissingHelperText.length === 0 ||
     HELPER_TEXT_FORBIDDEN.test(config.fromMissingHelperText)
@@ -49,16 +71,270 @@ function assertComposeAppConfig(config) {
   if (!config.fields || typeof config.fields.cc !== 'boolean' || typeof config.fields.bcc !== 'boolean') {
     throw new Error('[mcp-app-compose] fields.cc and fields.bcc must be booleans');
   }
+  if (isChat && (config.fields.cc || config.fields.bcc)) {
+    throw new Error('[mcp-app-compose] chat modes (slack/teams) must set fields.cc and fields.bcc to false');
+  }
   const kind = config.deepLink && config.deepLink.kind;
   if (kind !== 'gmail' && kind !== 'none') {
     throw new Error("[mcp-app-compose] deepLink.kind must be 'gmail' or 'none'");
+  }
+  if (isChat && kind === 'gmail') {
+    throw new Error("[mcp-app-compose] chat modes (slack/teams) must set deepLink.kind to 'none'");
   }
   if (config.blockedSendFallback !== undefined) {
     const fallbackKind = config.blockedSendFallback && config.blockedSendFallback.kind;
     if (fallbackKind !== 'gmail-compose' && fallbackKind !== 'none') {
       throw new Error("[mcp-app-compose] blockedSendFallback.kind must be 'gmail-compose' or 'none'");
     }
+    if (isChat && fallbackKind === 'gmail-compose') {
+      throw new Error('[mcp-app-compose] chat modes (slack/teams) must not set a gmail-compose blockedSendFallback');
+    }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Mode adapter. The single shared template literal below carries the whole
+// skeleton (head/CSS, 3-view state machine, send lifecycle, theme, resize, host
+// protocol). Its mode-specific regions are descriptor holes filled by
+// resolveMode(config): the email descriptor is the historical verbatim text
+// (so mode:'email' reproduces the shipped bytes), and slack/teams supply their
+// chat equivalents. cc/bcc/gmail/blocked holes are still driven by the existing
+// field/deepLink flags — chat configs set those all off, collapsing them — so
+// this descriptor only carries what those flags cannot express.
+
+/** @param {import('./types.js').ComposeFieldSpec} f */
+function buildEmailReadFormPayloadBody(f) {
+  return (
+    '        var payload = {\n' +
+    '          to: normalizeAddressList(toInput.value),\n' +
+    (f.cc ? '          cc: normalizeAddressList(ccInput.value),\n' : '') +
+    (f.bcc ? '          bcc: normalizeAddressList(bccInput.value),\n' : '') +
+    "          subject: String(subjectInput.value || ''),\n" +
+    "          body: String(bodyInput.value || '')\n" +
+    '        };\n' +
+    '        if (currentEmail) {\n' +
+    '          payload.email = currentEmail;\n' +
+    '        }\n' +
+    '        return payload;\n'
+  );
+}
+
+/** @param {import('./types.js').ComposeFieldSpec} f */
+function buildEmailApplyDraftDataBody(f) {
+  return (
+    "        var draft = rawDraft && typeof rawDraft === 'object' ? rawDraft : {};\n" +
+    '        toInput.value = listToInputValue(draft.to);\n' +
+    (f.cc ? '        ccInput.value = listToInputValue(draft.cc);\n' : '') +
+    (f.bcc ? '        bccInput.value = listToInputValue(draft.bcc);\n' : '') +
+    "        subjectInput.value = typeof draft.subject === 'string' ? draft.subject : '';\n" +
+    "        bodyInput.value = typeof draft.body === 'string' ? draft.body : '';\n" +
+    "        currentEmail = typeof draft.email === 'string' ? draft.email : '';\n" +
+    '        applyFromValue(currentEmail);\n' +
+    (f.cc ? '        setCcVisible(normalizeAddressList(draft.cc).length > 0);\n' : '') +
+    (f.bcc ? '        setBccVisible(normalizeAddressList(draft.bcc).length > 0);\n' : '') +
+    '        clearError();\n' +
+    '        clearSuccess();\n' +
+    '        postResize();\n'
+  );
+}
+
+/**
+ * @param {import('./types.js').ComposeFieldSpec} f
+ * @param {boolean} gmail
+ */
+function buildEmailRenderSentViewBody(f, gmail) {
+  return (
+    "        sentFrom.textContent = trimString(payload.email) || 'Account not shown';\n" +
+    "        sentTo.textContent = normalizeAddressList(payload.to).join(', ');\n" +
+    (f.cc
+      ? '        var ccList = normalizeAddressList(payload.cc);\n' +
+        "        sentCc.textContent = ccList.join(', ');\n" +
+        "        sentCcField.classList.toggle('hidden', ccList.length === 0);\n"
+      : '') +
+    (f.bcc
+      ? '        var bccList = normalizeAddressList(payload.bcc);\n' +
+        "        sentBcc.textContent = bccList.join(', ');\n" +
+        "        sentBccField.classList.toggle('hidden', bccList.length === 0);\n"
+      : '') +
+    "        sentSubject.textContent = String(payload.subject || '');\n" +
+    "        sentBody.textContent = String(payload.body || '');\n" +
+    (gmail
+      ? '        gmailUrl = buildGmailUrl(meta, payload.email);\n' +
+        "        openGmailButton.classList.toggle('hidden', !gmailUrl);\n"
+      : '')
+  );
+}
+
+const SLACK_READ_FORM_PAYLOAD_BODY =
+  "        var channel = String(toInput.value || '').trim();\n" +
+  '        var payload = {\n' +
+  '          channel: channel,\n' +
+  "          text: String(bodyInput.value || '')\n" +
+  '        };\n' +
+  '        if (intendedRecipient) {\n' +
+  '          payload.intended_recipient = intendedRecipient;\n' +
+  '        }\n' +
+  '        return payload;\n';
+
+const TEAMS_READ_FORM_PAYLOAD_BODY =
+  "        var chatId = String(toInput.value || '').trim();\n" +
+  '        var payload = {\n' +
+  '          chatId: chatId,\n' +
+  "          content: String(bodyInput.value || '')\n" +
+  '        };\n' +
+  '        return payload;\n';
+
+const SLACK_VALIDATE_BODY =
+  '        if (!trimString(payload.channel)) {\n' +
+  "          return 'Add a channel or person in To.';\n" +
+  '        }\n' +
+  '        if (!trimString(payload.text)) {\n' +
+  "          return 'Add a message before sending.';\n" +
+  '        }\n' +
+  '        return null;\n';
+
+const TEAMS_VALIDATE_BODY =
+  '        if (!trimString(payload.chatId)) {\n' +
+  "          return 'Add a chat in To.';\n" +
+  '        }\n' +
+  '        if (!trimString(payload.content)) {\n' +
+  "          return 'Add a message before sending.';\n" +
+  '        }\n' +
+  '        return null;\n';
+
+const SLACK_APPLY_DRAFT_BODY =
+  "        var draft = rawDraft && typeof rawDraft === 'object' ? rawDraft : {};\n" +
+  "        toInput.value = String(draft.target || '');\n" +
+  "        bodyInput.value = String(draft.text || '');\n" +
+  "        intendedRecipient = typeof draft.intended_recipient === 'string' ? draft.intended_recipient : '';\n" +
+  '        if (intendedRecipient) {\n' +
+  "          recipientNotice.textContent = 'Rebel will send this as a direct message to the person from your request.';\n" +
+  "          recipientNotice.classList.remove('hidden');\n" +
+  '        } else {\n' +
+  "          recipientNotice.textContent = '';\n" +
+  "          recipientNotice.classList.add('hidden');\n" +
+  '        }\n' +
+  '        clearError();\n' +
+  '        clearSuccess();\n' +
+  '        postResize();\n';
+
+const TEAMS_APPLY_DRAFT_BODY =
+  "        var draft = rawDraft && typeof rawDraft === 'object' ? rawDraft : {};\n" +
+  "        toInput.value = String(draft.target || '');\n" +
+  "        bodyInput.value = String(draft.text || '');\n" +
+  '        clearError();\n' +
+  '        clearSuccess();\n' +
+  '        postResize();\n';
+
+const CHAT_RENDER_SENT_VIEW_BODY =
+  "        sentTo.textContent = String(payload.channel || payload.chatId || '');\n" +
+  "        sentBody.textContent = String(payload.text || payload.content || '');\n";
+
+/**
+ * Resolve the mode-specific descriptor spliced into the shared template.
+ * @param {ComposeAppConfig} config
+ */
+function resolveMode(config) {
+  const mode = config.mode === undefined ? 'email' : config.mode;
+  const f = config.fields;
+  const gmail = config.deepLink.kind === 'gmail';
+
+  if (mode === 'email') {
+    return {
+      title: 'Compose Email',
+      formAriaLabel: 'Compose email',
+      identityFieldHtml:
+        '      <div class="field from-field">\n' +
+        '        <label>From</label>\n' +
+        '        <span id="fromValue" class="from-value"></span>\n' +
+        '        <span id="fromHelper" class="from-helper hidden"></span>\n' +
+        '      </div>',
+      toPlaceholder: 'name@example.com, team@example.com',
+      subjectFieldHtml:
+        '      <div class="field">\n' +
+        '        <label for="subjectInput">Subject</label>\n' +
+        '        <input id="subjectInput" class="input" type="text" autocomplete="off" placeholder="Email subject">\n' +
+        '      </div>\n\n',
+      bodyLabel: 'Body',
+      bodyPlaceholder: 'Write your email',
+      recipientNoticeHtml: '',
+      sendLabelText: 'Send email',
+      sentIdentityFieldHtml:
+        '      <div class="field">\n' +
+        '        <label>From</label>\n' +
+        '        <span id="sentFrom" class="sent-value"></span>\n' +
+        '      </div>\n\n',
+      sentSubjectFieldHtml:
+        '      <div class="field">\n' +
+        '        <label>Subject</label>\n' +
+        '        <span id="sentSubject" class="sent-value"></span>\n' +
+        '      </div>\n\n',
+      extraStateVars: '',
+      extraDomVars: '',
+      fromMissingHelperTextLiteral: quoteJsString(config.fromMissingHelperText),
+      setSendingFields: '        subjectInput.disabled = nextSending;\n',
+      readFormPayloadBody: buildEmailReadFormPayloadBody(f),
+      validatePayloadBody:
+        '        if (!payload.to || payload.to.length === 0) {\n' +
+        "          return 'Add at least one recipient in To.';\n" +
+        '        }\n' +
+        '        if (!trimString(payload.subject)) {\n' +
+        "          return 'Add a subject before sending.';\n" +
+        '        }\n' +
+        '        if (!trimString(payload.body)) {\n' +
+        "          return 'Add an email body before sending.';\n" +
+        '        }\n' +
+        '        return null;\n',
+      applyDraftDataBody: buildEmailApplyDraftDataBody(f),
+      renderSentViewBody: buildEmailRenderSentViewBody(f, gmail),
+      inputListenerElements:
+        '[toInput, ' + (f.cc ? 'ccInput, ' : '') + (f.bcc ? 'bccInput, ' : '') + 'subjectInput, bodyInput]',
+      sendFailedText: 'Failed to send email.',
+      sentCollapseDefault: 'Email sent.',
+      sentCollapseStamped: 'Email sent · ',
+      unknownDetailTextLiteral:
+        '"Rebel didn\'t hear back in time. Check your Sent folder before sending again, so it doesn\'t go out twice."',
+      cancelCollapseUnknownText: 'Collapsed. Check your Sent folder if you are not sure.',
+    };
+  }
+
+  // Chat: slack / teams. Single target + message, no subject/cc/bcc/From/deep
+  // link. Slack additionally carries a locked intended-recipient (for DM sends)
+  // and its notice; Teams routes by chatId and has neither.
+  const isSlack = mode === 'slack';
+  return {
+    title: 'Compose message',
+    formAriaLabel: 'Compose message',
+    identityFieldHtml:
+      '      <div class="field">\n' +
+      '        <span id="workspaceLine" class="from-helper hidden"></span>\n' +
+      '      </div>',
+    toPlaceholder: isSlack ? '#general or a channel ID' : 'Chat ID',
+    subjectFieldHtml: '',
+    bodyLabel: 'Message',
+    bodyPlaceholder: 'Write your message',
+    recipientNoticeHtml: isSlack
+      ? '      <div id="recipientNotice" class="status warning hidden" role="status" aria-live="polite"></div>\n\n'
+      : '',
+    sendLabelText: 'Send message',
+    sentIdentityFieldHtml: '',
+    sentSubjectFieldHtml: '',
+    extraStateVars: isSlack ? "      var intendedRecipient = '';\n" : '',
+    extraDomVars: isSlack ? "      var recipientNotice = document.getElementById('recipientNotice');\n" : '',
+    fromMissingHelperTextLiteral: "''",
+    setSendingFields: '',
+    readFormPayloadBody: isSlack ? SLACK_READ_FORM_PAYLOAD_BODY : TEAMS_READ_FORM_PAYLOAD_BODY,
+    validatePayloadBody: isSlack ? SLACK_VALIDATE_BODY : TEAMS_VALIDATE_BODY,
+    applyDraftDataBody: isSlack ? SLACK_APPLY_DRAFT_BODY : TEAMS_APPLY_DRAFT_BODY,
+    renderSentViewBody: CHAT_RENDER_SENT_VIEW_BODY,
+    inputListenerElements: '[toInput, bodyInput]',
+    sendFailedText: 'Failed to send message.',
+    sentCollapseDefault: 'Message sent.',
+    sentCollapseStamped: 'Message sent · ',
+    unknownDetailTextLiteral:
+      '"Rebel didn\'t hear back in time. Check whether it sent before sending again, so it doesn\'t go out twice."',
+    cancelCollapseUnknownText: 'Collapsed. Check whether it sent if you are not sure.',
+  };
 }
 
 /**
@@ -74,13 +350,14 @@ export function buildComposeAppHtml(config) {
   const f = config.fields;
   const gmail = config.deepLink.kind === 'gmail';
   const blockedSend = !!(config.blockedSendFallback && config.blockedSendFallback.kind === 'gmail-compose');
+  const m = resolveMode(config);
   return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Compose Email</title>
+  <title>${m.title}</title>
   <style>
     :root {
       --bg: #ffffff;
@@ -430,16 +707,12 @@ ${blockedSend ? `    .blocked-actions {
       <button id="reopenButton" type="button" class="button button-secondary">Reopen</button>
     </div>
 
-    <form id="composeForm" class="card" novalidate aria-label="Compose email">
-      <div class="field from-field">
-        <label>From</label>
-        <span id="fromValue" class="from-value"></span>
-        <span id="fromHelper" class="from-helper hidden"></span>
-      </div>
+    <form id="composeForm" class="card" novalidate aria-label="${m.formAriaLabel}">
+${m.identityFieldHtml}
 
       <div class="field">
         <label for="toInput">To</label>
-        <input id="toInput" class="input" type="text" autocomplete="off" placeholder="name@example.com, team@example.com">
+        <input id="toInput" class="input" type="text" autocomplete="off" placeholder="${m.toPlaceholder}">
       </div>
 
 ${f.cc || f.bcc ? `      <div class="toggles">
@@ -457,14 +730,9 @@ ${f.cc ? `        <button id="toggleCcButton" type="button" class="link-button" 
         <input id="bccInput" class="input" type="text" autocomplete="off" placeholder="bcc@example.com">
       </div>
 
-` : ''}      <div class="field">
-        <label for="subjectInput">Subject</label>
-        <input id="subjectInput" class="input" type="text" autocomplete="off" placeholder="Email subject">
-      </div>
-
-      <div class="field">
-        <label for="bodyInput">Body</label>
-        <textarea id="bodyInput" class="textarea" placeholder="Write your email"></textarea>
+` : ''}${m.subjectFieldHtml}      <div class="field">
+        <label for="bodyInput">${m.bodyLabel}</label>
+        <textarea id="bodyInput" class="textarea" placeholder="${m.bodyPlaceholder}"></textarea>
       </div>
 
       <div id="errorBox" class="status error hidden" role="alert">
@@ -479,7 +747,7 @@ ${blockedSend ? `      <div id="blockedBox" class="status warning hidden" role="
         </div>
       </div>
 
-` : ''}      <div id="successBox" class="status success hidden" role="status" aria-live="polite"></div>
+` : ''}${m.recipientNoticeHtml}      <div id="successBox" class="status success hidden" role="status" aria-live="polite"></div>
 
       <div id="unknownBox" class="status warning hidden" role="status" aria-live="polite">
         <strong id="unknownTitle"></strong>
@@ -490,7 +758,7 @@ ${blockedSend ? `      <div id="blockedBox" class="status warning hidden" role="
         <button id="cancelButton" type="button" class="button button-secondary">Cancel</button>
         <button id="sendButton" type="button" class="button button-primary">
           <span id="sendSpinner" class="spinner hidden" aria-hidden="true"></span>
-          <span id="sendLabel">Send email</span>
+          <span id="sendLabel">${m.sendLabelText}</span>
         </button>
       </div>
     </form>
@@ -501,12 +769,7 @@ ${blockedSend ? `      <div id="blockedBox" class="status warning hidden" role="
         <span id="sentTimestamp" class="sent-timestamp"></span>
       </div>
 
-      <div class="field">
-        <label>From</label>
-        <span id="sentFrom" class="sent-value"></span>
-      </div>
-
-      <div class="field">
+${m.sentIdentityFieldHtml}      <div class="field">
         <label>To</label>
         <span id="sentTo" class="sent-value"></span>
       </div>
@@ -521,12 +784,7 @@ ${f.cc ? `      <div id="sentCcField" class="field hidden">
         <span id="sentBcc" class="sent-value"></span>
       </div>
 
-` : ''}      <div class="field">
-        <label>Subject</label>
-        <span id="sentSubject" class="sent-value"></span>
-      </div>
-
-      <div class="field">
+` : ''}${m.sentSubjectFieldHtml}      <div class="field">
         <label>Message</label>
         <div id="sentBody" class="sent-body"></div>
       </div>
@@ -555,7 +813,7 @@ ${gmail ? `        <button id="openGmailButton" type="button" class="button butt
       var collapsed = false;
       var outcomeUnknown = false;
       var sent = false;
-${blockedSend ? `      var sendBlocked = false;
+${m.extraStateVars}${blockedSend ? `      var sendBlocked = false;
 ` : ''}${gmail ? `      var gmailUrl = null;
 ` : ''}      var sendTimeoutId = null;
       // Just beyond the host-side tool-call timeout (60s) so a legitimately slow
@@ -608,7 +866,7 @@ ${f.cc ? `      var ccRow = document.getElementById('ccRow');
 ${blockedSend ? `      var blockedBox = document.getElementById('blockedBox');
       var blockedText = document.getElementById('blockedText');
       var openComposeButton = document.getElementById('openComposeButton');
-` : ''}
+` : ''}${m.extraDomVars}
       function applyThemeFromHostContext() {
         try {
           var context = window.__MCP_HOST_CONTEXT__;
@@ -635,7 +893,7 @@ ${blockedSend ? `      var blockedBox = document.getElementById('blockedBox');
         } else {
           fromValue.textContent = 'Account not shown';
           fromValue.style.color = 'var(--muted)';
-          fromHelper.textContent = ${quoteJsString(config.fromMissingHelperText)};
+          fromHelper.textContent = ${m.fromMissingHelperTextLiteral};
           fromHelper.classList.remove('hidden');
         }
       }
@@ -725,10 +983,9 @@ ${blockedSend ? `      var blockedBox = document.getElementById('blockedBox');
         toInput.disabled = nextSending;
 ${f.cc ? `        ccInput.disabled = nextSending;
 ` : ''}${f.bcc ? `        bccInput.disabled = nextSending;
-` : ''}        subjectInput.disabled = nextSending;
-        bodyInput.disabled = nextSending;
+` : ''}${m.setSendingFields}        bodyInput.disabled = nextSending;
         sendSpinner.classList.toggle('hidden', !nextSending);
-        sendLabel.textContent = nextSending ? 'Sending…' : 'Send email';
+        sendLabel.textContent = nextSending ? 'Sending…' : ${quoteJsString(m.sendLabelText)};
         sendButton.setAttribute('aria-busy', nextSending ? 'true' : 'false');
         postResize();
       }
@@ -739,7 +996,7 @@ ${f.cc ? `        ccInput.disabled = nextSending;
       }
 
       function showError(message) {
-        errorText.textContent = message || 'Failed to send email.';
+        errorText.textContent = message || ${quoteJsString(m.sendFailedText)};
         errorBox.classList.remove('hidden');
         postResize();
       }
@@ -779,7 +1036,7 @@ ${f.cc ? `        ccInput.disabled = nextSending;
         clearError();
         clearSuccess();
         unknownTitle.textContent = 'Not sure if this sent.';
-        unknownText.textContent = "Rebel didn't hear back in time. Check your Sent folder before sending again, so it doesn't go out twice.";
+        unknownText.textContent = ${m.unknownDetailTextLiteral};
         unknownBox.classList.remove('hidden');
         postResize();
       }
@@ -807,31 +1064,10 @@ ${f.cc ? `      function setCcVisible(visible) {
       }
 
 ` : ''}      function readFormPayload() {
-        var payload = {
-          to: normalizeAddressList(toInput.value),
-${f.cc ? `          cc: normalizeAddressList(ccInput.value),
-` : ''}${f.bcc ? `          bcc: normalizeAddressList(bccInput.value),
-` : ''}          subject: String(subjectInput.value || ''),
-          body: String(bodyInput.value || '')
-        };
-        if (currentEmail) {
-          payload.email = currentEmail;
-        }
-        return payload;
-      }
+${m.readFormPayloadBody}      }
 
       function validatePayload(payload) {
-        if (!payload.to || payload.to.length === 0) {
-          return 'Add at least one recipient in To.';
-        }
-        if (!trimString(payload.subject)) {
-          return 'Add a subject before sending.';
-        }
-        if (!trimString(payload.body)) {
-          return 'Add an email body before sending.';
-        }
-        return null;
-      }
+${m.validatePayloadBody}      }
 
       function sendPayload(payload) {
         pendingPayload = payload;
@@ -858,20 +1094,7 @@ ${f.cc ? `          cc: normalizeAddressList(ccInput.value),
       }
 
       function applyDraftData(rawDraft) {
-        var draft = rawDraft && typeof rawDraft === 'object' ? rawDraft : {};
-        toInput.value = listToInputValue(draft.to);
-${f.cc ? `        ccInput.value = listToInputValue(draft.cc);
-` : ''}${f.bcc ? `        bccInput.value = listToInputValue(draft.bcc);
-` : ''}        subjectInput.value = typeof draft.subject === 'string' ? draft.subject : '';
-        bodyInput.value = typeof draft.body === 'string' ? draft.body : '';
-        currentEmail = typeof draft.email === 'string' ? draft.email : '';
-        applyFromValue(currentEmail);
-${f.cc ? `        setCcVisible(normalizeAddressList(draft.cc).length > 0);
-` : ''}${f.bcc ? `        setBccVisible(normalizeAddressList(draft.bcc).length > 0);
-` : ''}        clearError();
-        clearSuccess();
-        postResize();
-      }
+${m.applyDraftDataBody}      }
 
       function getDraftFromToolResult(payload) {
         if (!payload || typeof payload !== 'object') {
@@ -1082,19 +1305,7 @@ ${f.cc ? `        var cc = normalizeAddressList(payload.cc).join(',');
       function renderSentView(payload, meta, stamp) {
         payload = payload && typeof payload === 'object' ? payload : {};
         sentTimestamp.textContent = stamp ? 'Sent ' + stamp : 'Sent';
-        sentFrom.textContent = trimString(payload.email) || 'Account not shown';
-        sentTo.textContent = normalizeAddressList(payload.to).join(', ');
-${f.cc ? `        var ccList = normalizeAddressList(payload.cc);
-        sentCc.textContent = ccList.join(', ');
-        sentCcField.classList.toggle('hidden', ccList.length === 0);
-` : ''}${f.bcc ? `        var bccList = normalizeAddressList(payload.bcc);
-        sentBcc.textContent = bccList.join(', ');
-        sentBccField.classList.toggle('hidden', bccList.length === 0);
-` : ''}        sentSubject.textContent = String(payload.subject || '');
-        sentBody.textContent = String(payload.body || '');
-${gmail ? `        gmailUrl = buildGmailUrl(meta, payload.email);
-        openGmailButton.classList.toggle('hidden', !gmailUrl);
-` : ''}      }
+${m.renderSentViewBody}      }
 
       function handleSendRequest() {
         if (sending) return;
@@ -1151,7 +1362,7 @@ ${blockedSend ? `        // Once the user's own send preference has blocked this
         // After a lost-reply timeout we don't know if the email sent, so don't
         // claim "Nothing sent." on collapse — point the user to verify instead.
         var collapseMessage = outcomeUnknown
-          ? 'Collapsed. Check your Sent folder if you are not sure.'
+          ? ${quoteJsString(m.cancelCollapseUnknownText)}
           : 'Draft collapsed. Nothing sent.';
         clearError();
         clearSuccess();
@@ -1164,7 +1375,7 @@ ${blockedSend ? `        // Once the user's own send preference has blocked this
       });
 
       sentCollapseButton.addEventListener('click', function () {
-        setCollapsed(true, collapsedMessage.textContent || 'Email sent.');
+        setCollapsed(true, collapsedMessage.textContent || ${quoteJsString(m.sentCollapseDefault)});
       });
 
 ${gmail ? `      // The iframe sandbox is "allow-scripts" only (no allow-popups / allow-forms),
@@ -1189,7 +1400,7 @@ ${gmail ? `      // The iframe sandbox is "allow-scripts" only (no allow-popups 
         postResize();
       });
 
-` : ''}      [toInput, ${f.cc ? 'ccInput, ' : ''}${f.bcc ? 'bccInput, ' : ''}subjectInput, bodyInput].forEach(function (element) {
+` : ''}      ${m.inputListenerElements}.forEach(function (element) {
         element.addEventListener('input', function () {
           clearError();
           clearSuccess();
@@ -1242,7 +1453,7 @@ ${gmail ? `      // The iframe sandbox is "allow-scripts" only (no allow-popups 
         if (data.error) {
           var errorMessage = data.error && typeof data.error.message === 'string'
             ? data.error.message
-            : 'Failed to send email.';
+            : ${quoteJsString(m.sendFailedText)};
 ${blockedSend ? `          if (isUserDisabledSendError(errorMessage)) {
             showBlockedSend();
             return;
@@ -1264,7 +1475,7 @@ ${gmail ? `        // Preserve what was sent (and how to reach it) instead of di
         var stamp = formatSentTime();
         renderSentView(sentPayload, getSendMetaFromResult(data.result), stamp);
         sent = true;
-        setCollapsed(true, stamp ? 'Email sent · ' + stamp : 'Email sent.');
+        setCollapsed(true, stamp ? ${quoteJsString(m.sentCollapseStamped)} + stamp : ${quoteJsString(m.sentCollapseDefault)});
       });
 
       if (typeof ResizeObserver === 'function' && document.body) {

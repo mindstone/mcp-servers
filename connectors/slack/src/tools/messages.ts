@@ -1,4 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { errorJson, parseSlackPermalink, slackTsToDatetime, withErrorHandling } from '../utils.js';
 import { getSlackClient, getSlackReaderClient, getSlackUserClient } from '../client.js';
@@ -15,6 +17,26 @@ import { notConnectedJson } from './auth.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 
 const RESPONSE_FORMAT_ENUM = z.enum(['concise', 'detailed']).optional();
+
+/**
+ * `ui://` resource URI the compose_slack_message iframe is served under. The
+ * shared compose-app template posts `post_slack_message` when the user clicks
+ * Send; the HTML twin lives in src/resources/compose-message-template.ts
+ * (generated from the shared compose-app package, drift-gated).
+ */
+export const COMPOSE_MESSAGE_RESOURCE_URI = 'ui://slack/compose-message';
+
+const ANSI_ESCAPE_SEQUENCE_PATTERN = /\x1b\[[0-?]*[ -/]*[@-~]/g;
+const HTML_TAG_PATTERN = /<[^>]*>/g;
+
+function truncateText(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, Math.max(0, maxChars - 1))}…`;
+}
+
+function sanitizeViewSummaryPart(value: string): string {
+  return value.replace(ANSI_ESCAPE_SEQUENCE_PATTERN, '').replace(HTML_TAG_PATTERN, '').trim();
+}
 
 function normalizeSlackUserId(userId: string): string {
   return userId.trim().toUpperCase();
@@ -417,6 +439,107 @@ PARAMETER: text. Use text, not message, note, or channel.`,
   );
 
   // ---------------------------------------------------------------------
+  // compose_slack_message
+  // ---------------------------------------------------------------------
+  // Returns an editable draft the host renders as an interactive compose view
+  // (the compose-message iframe). Performs no chat.postMessage itself — the
+  // iframe invokes post_slack_message when the user clicks Send. Registered
+  // WITHOUT withErrorHandling: it does no send I/O, and its InvalidParams
+  // validation must surface as-is rather than as an auth-flavoured retry
+  // envelope. For a DM target (D…) it resolves the recipient User ID and rides
+  // it hidden+locked into the draft so the send passes DM verification.
+  server.registerTool(
+    'compose_slack_message',
+    {
+      description: `Open an inline editable message compose form before sending to Slack. Use this when the user wants to write or send a Slack message so they can review and edit it first. Does NOT send directly — the form posts the message (via post_slack_message) when the user clicks Send.
+
+PARAMETERS: target (channel ID, #channel-name, or a DM channel), text. For a DM target the recipient identity is resolved and locked into the draft so the send is verified.`,
+      inputSchema: z
+        .object({
+          target: z
+            .string()
+            .min(1)
+            .describe('Where to send — channel ID (e.g., C1234567890), #channel-name (e.g., #general), or a DM channel (D…)'),
+          text: z.string().min(1).describe('Message text (supports Slack markdown)'),
+        })
+        .strict(),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+    },
+    async (args): Promise<CallToolResult> => {
+      const target = typeof args.target === 'string' ? args.target.trim() : '';
+      const text = typeof args.text === 'string' ? args.text : '';
+      if (target.length === 0 || text.trim().length === 0) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          'compose_slack_message requires a non-empty "target" (channel or person) and "text". Provide both so the editable draft has content for the user to review.',
+        );
+      }
+
+      // For a DM target, resolve the recipient User ID so it can ride hidden +
+      // locked into the send and pass post_slack_message's DM verification.
+      // Best-effort: if resolution fails the draft still opens, but the send
+      // will be refused (fail-closed) until a recipient is confirmed.
+      let intendedRecipient: string | undefined;
+      if (target.startsWith('D')) {
+        try {
+          const verifyClient = (await getSlackUserClient()) || (await getSlackClient());
+          if (verifyClient) {
+            const dmRecipient = await resolveDmRecipient(verifyClient, target);
+            if (dmRecipient?.user_id) intendedRecipient = dmRecipient.user_id;
+          }
+          if (!intendedRecipient) {
+            console.warn(
+              `[slack-mcp] compose_slack_message could not resolve DM recipient for ${target}; the send will require confirmation.`,
+            );
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(`[slack-mcp] compose_slack_message DM recipient resolution failed: ${msg}`);
+        }
+      }
+
+      const structuredContent = {
+        target,
+        text,
+        ...(intendedRecipient ? { intended_recipient: intendedRecipient } : {}),
+      };
+
+      const viewSummaryTarget = truncateText(sanitizeViewSummaryPart(target), 120);
+      const viewSummary = truncateText(`Slack message draft to ${viewSummaryTarget || '(no target)'}.`, 280);
+      const fallbackTarget = truncateText(target, 256);
+      const fallbackText = truncateText(text, 5_000);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Drafting a Slack message to ${target}\n\n${JSON.stringify(structuredContent)}\n\n[View: ${COMPOSE_MESSAGE_RESOURCE_URI}]`,
+          },
+        ],
+        _meta: {
+          ui: {
+            resourceUri: COMPOSE_MESSAGE_RESOURCE_URI,
+            presentation: 'primary',
+            viewSummary,
+            viewRoleLabel: 'Slack message',
+            structuredFallback: {
+              kind: 'plain',
+              payload: {
+                markdown: `Message to ${fallbackTarget}:\n\n${fallbackText}`,
+              },
+            },
+          },
+        },
+        structuredContent,
+      };
+    },
+  );
+
+  // ---------------------------------------------------------------------
   // post_slack_message
   // ---------------------------------------------------------------------
   server.registerTool(
@@ -424,10 +547,11 @@ PARAMETER: text. Use text, not message, note, or channel.`,
     {
       description: `Post a message to a Slack channel as yourself.
 
-DM SAFETY: For direct messages (D... channels), this tool verifies the recipient
-identity before sending. Always provide intended_recipient (User ID) for DMs to
-enable mismatch detection. The message is NOT sent if intended_recipient does not
-match the actual DM recipient.
+DM SAFETY: For direct messages (D... channels), intended_recipient (the recipient
+User ID) is REQUIRED. Without it the message is NOT sent — a DM has no visible
+recipient name, so sending unverified risks reaching the wrong person. The tool
+also refuses to send if intended_recipient does not match the actual DM recipient.
+To get a User ID use lookup_user_by_email, then open_slack_dm for their DM channel.
 
 PARAMETERS: channel, text, intended_recipient. Do not use channel_id or message —
 these are not the parameter names.
@@ -470,6 +594,18 @@ Posted as the user — messages are editable in Slack.`,
       const isDmChannel = channelId.startsWith('D');
       let dmRecipient = null;
       if (isDmChannel) {
+        // Fail-closed: a DM has no visible recipient name, so we refuse to send
+        // without an intended_recipient to verify against rather than trusting
+        // the channel ID resolved to the right person.
+        if (!intendedRecipient) {
+          return errorJson({
+            error: 'DM NOT sent — intended_recipient is required for direct messages.',
+            action_required:
+              'Provide intended_recipient (the recipient User ID) so the DM can be verified. Use lookup_user_by_email to find the User ID, then open_slack_dm to get their DM channel.',
+            next_step: 'lookup_user_by_email',
+            channel: channelId,
+          });
+        }
         const verifyClient = userClient || (await getSlackClient());
         if (!verifyClient) return notConnectedJson();
         dmRecipient = await resolveDmRecipient(verifyClient, channelId);
@@ -527,12 +663,6 @@ Posted as the user — messages are editable in Slack.`,
                 display_name: dmRecipient.display_name,
                 ...(dmRecipient.email ? { email: dmRecipient.email } : {}),
               },
-            }
-          : {}),
-        ...(isDmChannel && !intendedRecipient
-          ? {
-              warning:
-                'DM sent without intended_recipient verification. For safety, always provide intended_recipient (User ID) when sending DMs.',
             }
           : {}),
         note: isDmChannel

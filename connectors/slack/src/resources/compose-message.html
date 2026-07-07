@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Compose message</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --panel: #ffffff;
+      --border: #d9dde5;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --input-bg: #ffffff;
+      --button-bg: #1f6feb;
+      --button-text: #ffffff;
+      --button-bg-hover: #1b63d3;
+      --secondary-bg: #f3f4f6;
+      --secondary-text: #1f2937;
+      --secondary-border: #d1d5db;
+      --error-bg: #fef2f2;
+      --error-border: #fecaca;
+      --error-text: #991b1b;
+      --success-bg: #ecfdf5;
+      --success-border: #bbf7d0;
+      --success-text: #166534;
+      --warning-bg: #fffbeb;
+      --warning-border: #fde68a;
+      --warning-text: #92400e;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f172a;
+        --panel: #111827;
+        --border: #334155;
+        --text: #e5e7eb;
+        --muted: #9ca3af;
+        --input-bg: #0b1220;
+        --button-bg: #3b82f6;
+        --button-text: #eff6ff;
+        --button-bg-hover: #2563eb;
+        --secondary-bg: #1f2937;
+        --secondary-text: #e5e7eb;
+        --secondary-border: #374151;
+        --error-bg: #2b1011;
+        --error-border: #7f1d1d;
+        --error-text: #fca5a5;
+        --success-bg: #052e1b;
+        --success-border: #166534;
+        --success-text: #86efac;
+        --warning-bg: #2a2106;
+        --warning-border: #854d0e;
+        --warning-text: #fcd34d;
+      }
+    }
+
+    html[data-theme="light"] {
+      color-scheme: light;
+    }
+
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0f172a;
+      --panel: #111827;
+      --border: #334155;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --input-bg: #0b1220;
+      --button-bg: #3b82f6;
+      --button-text: #eff6ff;
+      --button-bg-hover: #2563eb;
+      --secondary-bg: #1f2937;
+      --secondary-text: #e5e7eb;
+      --secondary-border: #374151;
+      --error-bg: #2b1011;
+      --error-border: #7f1d1d;
+      --error-text: #fca5a5;
+      --success-bg: #052e1b;
+      --success-border: #166534;
+      --success-text: #86efac;
+      --warning-bg: #2a2106;
+      --warning-border: #854d0e;
+      --warning-text: #fcd34d;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 16px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.4;
+    }
+
+    .wrapper {
+      width: 100%;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .from-value {
+      color: var(--text);
+      font-size: 14px;
+      padding: 2px 0;
+      word-break: break-word;
+    }
+
+    .from-helper {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .input,
+    .textarea {
+      width: 100%;
+      background: var(--input-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    .input:focus,
+    .textarea:focus {
+      outline: 2px solid rgba(59, 130, 246, 0.35);
+      outline-offset: 1px;
+    }
+
+    .textarea {
+      min-height: 180px;
+      resize: vertical;
+      white-space: pre-wrap;
+    }
+
+    .toggles {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .link-button {
+      border: none;
+      padding: 0;
+      background: none;
+      color: var(--muted);
+      text-decoration: underline;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .link-button:hover {
+      color: var(--text);
+    }
+
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 2px;
+    }
+
+    .button {
+      border-radius: 8px;
+      border: 1px solid transparent;
+      min-height: 36px;
+      padding: 0 14px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background 120ms ease, opacity 120ms ease, border-color 120ms ease;
+    }
+
+    .button:disabled {
+      cursor: not-allowed;
+      opacity: 0.75;
+    }
+
+    .button-primary {
+      background: var(--button-bg);
+      color: var(--button-text);
+    }
+
+    .button-primary:hover:enabled {
+      background: var(--button-bg-hover);
+    }
+
+    .button-secondary {
+      background: var(--secondary-bg);
+      color: var(--secondary-text);
+      border-color: var(--secondary-border);
+    }
+
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      display: inline-block;
+      animation: spin 700ms linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .status {
+      border-radius: 8px;
+      border: 1px solid transparent;
+      padding: 8px 10px;
+      font-size: 13px;
+    }
+
+    .error {
+      background: var(--error-bg);
+      border-color: var(--error-border);
+      color: var(--error-text);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .success {
+      background: var(--success-bg);
+      border-color: var(--success-border);
+      color: var(--success-text);
+    }
+
+    .warning {
+      background: var(--warning-bg);
+      border-color: var(--warning-border);
+      color: var(--warning-text);
+      display: block;
+    }
+
+    .warning strong {
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .warning .warning-detail {
+      opacity: 0.85;
+    }
+
+    .collapsed {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .sent-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .sent-badge {
+      display: inline-flex;
+      align-items: center;
+      background: var(--success-bg);
+      color: var(--success-text);
+      border: 1px solid var(--success-border);
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .sent-timestamp {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .sent-value {
+      color: var(--text);
+      font-size: 14px;
+      word-break: break-word;
+    }
+
+    .sent-body {
+      color: var(--text);
+      font-size: 14px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 260px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: var(--input-bg);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div id="collapsedState" class="collapsed hidden">
+      <span id="collapsedMessage">Draft collapsed.</span>
+      <button id="reopenButton" type="button" class="button button-secondary">Reopen</button>
+    </div>
+
+    <form id="composeForm" class="card" novalidate aria-label="Compose message">
+      <div class="field">
+        <span id="workspaceLine" class="from-helper hidden"></span>
+      </div>
+
+      <div class="field">
+        <label for="toInput">To</label>
+        <input id="toInput" class="input" type="text" autocomplete="off" placeholder="#general or a channel ID">
+      </div>
+
+      <div class="field">
+        <label for="bodyInput">Message</label>
+        <textarea id="bodyInput" class="textarea" placeholder="Write your message"></textarea>
+      </div>
+
+      <div id="errorBox" class="status error hidden" role="alert">
+        <span id="errorText"></span>
+        <button id="retryButton" type="button" class="link-button">Retry</button>
+      </div>
+
+      <div id="recipientNotice" class="status warning hidden" role="status" aria-live="polite"></div>
+
+      <div id="successBox" class="status success hidden" role="status" aria-live="polite"></div>
+
+      <div id="unknownBox" class="status warning hidden" role="status" aria-live="polite">
+        <strong id="unknownTitle"></strong>
+        <span id="unknownText" class="warning-detail"></span>
+      </div>
+
+      <div class="actions">
+        <button id="cancelButton" type="button" class="button button-secondary">Cancel</button>
+        <button id="sendButton" type="button" class="button button-primary">
+          <span id="sendSpinner" class="spinner hidden" aria-hidden="true"></span>
+          <span id="sendLabel">Send message</span>
+        </button>
+      </div>
+    </form>
+
+    <div id="sentView" class="card hidden" role="status" aria-live="polite">
+      <div class="sent-header">
+        <span class="sent-badge">Sent</span>
+        <span id="sentTimestamp" class="sent-timestamp"></span>
+      </div>
+
+      <div class="field">
+        <label>To</label>
+        <span id="sentTo" class="sent-value"></span>
+      </div>
+
+      <div class="field">
+        <label>Message</label>
+        <div id="sentBody" class="sent-body"></div>
+      </div>
+
+      <div class="actions">
+        <button id="sentCollapseButton" type="button" class="button button-secondary">Collapse</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var RESOURCE_URI = 'ui://slack/compose-message';
+      var currentEmail = '';
+      // The host prefills the draft exactly once via ui/notifications/tool-result
+      // on ready. We apply only the FIRST prefill and ignore any later ones, so a
+      // stray or hostile re-post can't silently rewrite a draft the user has
+      // already reviewed before clicking Send.
+      var draftApplied = false;
+      var pendingRequestId = null;
+      var pendingPayload = null;
+      var sending = false;
+      var collapsed = false;
+      var outcomeUnknown = false;
+      var sent = false;
+      var intendedRecipient = '';
+      var sendTimeoutId = null;
+      // Just beyond the host-side tool-call timeout (60s) so a legitimately slow
+      // send resolves to its real result first; this only fires when the reply
+      // is genuinely lost, so the button can never stay stuck-silent.
+      var SEND_TIMEOUT_MS = 75000;
+
+      var composeForm = document.getElementById('composeForm');
+      var collapsedState = document.getElementById('collapsedState');
+      var collapsedMessage = document.getElementById('collapsedMessage');
+      var reopenButton = document.getElementById('reopenButton');
+
+      var sentView = document.getElementById('sentView');
+      var sentTimestamp = document.getElementById('sentTimestamp');
+      var sentFrom = document.getElementById('sentFrom');
+      var sentTo = document.getElementById('sentTo');
+      var sentSubject = document.getElementById('sentSubject');
+      var sentBody = document.getElementById('sentBody');
+      var sentCollapseButton = document.getElementById('sentCollapseButton');
+
+      var toInput = document.getElementById('toInput');
+      var subjectInput = document.getElementById('subjectInput');
+      var bodyInput = document.getElementById('bodyInput');
+      var fromValue = document.getElementById('fromValue');
+      var fromHelper = document.getElementById('fromHelper');
+
+      var sendButton = document.getElementById('sendButton');
+      var sendLabel = document.getElementById('sendLabel');
+      var sendSpinner = document.getElementById('sendSpinner');
+      var cancelButton = document.getElementById('cancelButton');
+      var retryButton = document.getElementById('retryButton');
+
+      var errorBox = document.getElementById('errorBox');
+      var errorText = document.getElementById('errorText');
+      var successBox = document.getElementById('successBox');
+      var unknownBox = document.getElementById('unknownBox');
+      var unknownTitle = document.getElementById('unknownTitle');
+      var unknownText = document.getElementById('unknownText');
+      var recipientNotice = document.getElementById('recipientNotice');
+
+      function applyThemeFromHostContext() {
+        try {
+          var context = window.__MCP_HOST_CONTEXT__;
+          if (!context || (context.theme !== 'light' && context.theme !== 'dark')) {
+            return;
+          }
+          document.documentElement.setAttribute('data-theme', context.theme);
+        } catch (_) {
+          // Ignore theme extraction errors
+        }
+      }
+
+      function trimString(value) {
+        return String(value || '').trim();
+      }
+
+      function applyFromValue(email) {
+        var trimmed = trimString(email);
+        if (trimmed) {
+          fromValue.textContent = trimmed;
+          fromValue.style.color = '';
+          fromHelper.textContent = '';
+          fromHelper.classList.add('hidden');
+        } else {
+          fromValue.textContent = 'Account not shown';
+          fromValue.style.color = 'var(--muted)';
+          fromHelper.textContent = '';
+          fromHelper.classList.remove('hidden');
+        }
+      }
+
+      function formatAddressItem(item) {
+        if (item && typeof item === 'object') {
+          var email = trimString(item.email || item.address || item.value);
+          var name = trimString(item.name || item.displayName);
+          if (email && name) {
+            return name + ' <' + email + '>';
+          }
+          return email;
+        }
+        return trimString(item);
+      }
+
+      function normalizeAddressList(value) {
+        if (Array.isArray(value)) {
+          return value.map(formatAddressItem).filter(Boolean);
+        }
+        if (typeof value === 'string') {
+          return value
+            .split(',')
+            .map(function (item) { return trimString(item); })
+            .filter(Boolean);
+        }
+        return [];
+      }
+
+      function listToInputValue(list) {
+        return normalizeAddressList(list).join(', ');
+      }
+
+      var resizeQueued = false;
+      function postResize() {
+        if (resizeQueued) return;
+        resizeQueued = true;
+        requestAnimationFrame(function () {
+          resizeQueued = false;
+          var height = Math.max(
+            document.documentElement.scrollHeight,
+            document.body ? document.body.scrollHeight : 0
+          );
+          window.parent.postMessage(
+            { jsonrpc: '2.0', method: 'ui/resize', params: { height: height } },
+            '*'
+          );
+        });
+      }
+
+      function postReady() {
+        window.parent.postMessage(
+          {
+            method: 'mcp-app:ready',
+            params: { resourceUri: RESOURCE_URI }
+          },
+          '*'
+        );
+      }
+
+      // Exactly one of the three panels is visible at a time: the editable form,
+      // the read-only sent view, or the collapsed summary bar.
+      function showView(view) {
+        composeForm.classList.toggle('hidden', view !== 'form');
+        sentView.classList.toggle('hidden', view !== 'sent');
+        collapsedState.classList.toggle('hidden', view !== 'collapsed');
+        postResize();
+      }
+
+      function setCollapsed(nextCollapsed, message) {
+        collapsed = nextCollapsed;
+        if (nextCollapsed) {
+          collapsedMessage.textContent = message || 'Draft collapsed.';
+          showView('collapsed');
+        } else {
+          // Expanding after a send restores the read-only sent view (never the
+          // editable form) so the user can re-read what went out without any risk
+          // of a duplicate send; before sending, it restores the editable form.
+          showView(sent ? 'sent' : 'form');
+        }
+      }
+
+      function setSending(nextSending) {
+        sending = nextSending;
+        sendButton.disabled = nextSending;
+        cancelButton.disabled = nextSending;
+        toInput.disabled = nextSending;
+        bodyInput.disabled = nextSending;
+        sendSpinner.classList.toggle('hidden', !nextSending);
+        sendLabel.textContent = nextSending ? 'Sending…' : 'Send message';
+        sendButton.setAttribute('aria-busy', nextSending ? 'true' : 'false');
+        postResize();
+      }
+
+      function clearError() {
+        errorText.textContent = '';
+        errorBox.classList.add('hidden');
+      }
+
+      function showError(message) {
+        errorText.textContent = message || 'Failed to send message.';
+        errorBox.classList.remove('hidden');
+        postResize();
+      }
+
+      function clearSuccess() {
+        successBox.textContent = '';
+        successBox.classList.add('hidden');
+      }
+
+      function showSuccess(message) {
+        successBox.textContent = message;
+        successBox.classList.remove('hidden');
+        postResize();
+      }
+
+      function clearSendTimeout() {
+        if (sendTimeoutId !== null) {
+          clearTimeout(sendTimeoutId);
+          sendTimeoutId = null;
+        }
+      }
+
+      function clearUnknown() {
+        outcomeUnknown = false;
+        unknownTitle.textContent = '';
+        unknownText.textContent = '';
+        unknownBox.classList.add('hidden');
+      }
+
+      // No reply ever came back for the send (e.g. the host's response was lost
+      // before reaching this iframe). We genuinely don't know whether the email
+      // went out, so we must NOT claim success or failure: re-enable the form and
+      // tell the user to verify before resending (the send is not idempotent, so
+      // a blind retry could send a duplicate).
+      function showSendUnknown() {
+        outcomeUnknown = true;
+        clearError();
+        clearSuccess();
+        unknownTitle.textContent = 'Not sure if this sent.';
+        unknownText.textContent = "Rebel didn't hear back in time. Check whether it sent before sending again, so it doesn't go out twice.";
+        unknownBox.classList.remove('hidden');
+        postResize();
+      }
+
+      function handleSendTimeout() {
+        sendTimeoutId = null;
+        if (!pendingRequestId) {
+          return;
+        }
+        pendingRequestId = null;
+        setSending(false);
+        showSendUnknown();
+      }
+
+      function readFormPayload() {
+        var channel = String(toInput.value || '').trim();
+        var payload = {
+          channel: channel,
+          text: String(bodyInput.value || '')
+        };
+        if (intendedRecipient) {
+          payload.intended_recipient = intendedRecipient;
+        }
+        return payload;
+      }
+
+      function validatePayload(payload) {
+        if (!trimString(payload.channel)) {
+          return 'Add a channel or person in To.';
+        }
+        if (!trimString(payload.text)) {
+          return 'Add a message before sending.';
+        }
+        return null;
+      }
+
+      function sendPayload(payload) {
+        pendingPayload = payload;
+        pendingRequestId = 'send-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+        setSending(true);
+        clearError();
+        clearSuccess();
+        clearUnknown();
+        clearSendTimeout();
+        sendTimeoutId = setTimeout(handleSendTimeout, SEND_TIMEOUT_MS);
+
+        window.parent.postMessage(
+          {
+            jsonrpc: '2.0',
+            method: 'tools/call',
+            params: {
+              name: 'post_slack_message',
+              arguments: payload
+            },
+            id: pendingRequestId
+          },
+          '*'
+        );
+      }
+
+      function applyDraftData(rawDraft) {
+        var draft = rawDraft && typeof rawDraft === 'object' ? rawDraft : {};
+        toInput.value = String(draft.target || '');
+        bodyInput.value = String(draft.text || '');
+        intendedRecipient = typeof draft.intended_recipient === 'string' ? draft.intended_recipient : '';
+        if (intendedRecipient) {
+          recipientNotice.textContent = 'Rebel will send this as a direct message to the person from your request.';
+          recipientNotice.classList.remove('hidden');
+        } else {
+          recipientNotice.textContent = '';
+          recipientNotice.classList.add('hidden');
+        }
+        clearError();
+        clearSuccess();
+        postResize();
+      }
+
+      function getDraftFromToolResult(payload) {
+        if (!payload || typeof payload !== 'object') {
+          return null;
+        }
+        // CANONICAL: post-A0 super-mcp hoists structuredContent onto the
+        // outer block; the host posts it through `params.structuredContent`.
+        if (payload.structuredContent && typeof payload.structuredContent === 'object') {
+          return payload.structuredContent;
+        }
+        // MIGRATION SHIM: pre-A0 stored sessions replayed through the
+        // current iframe lack `params.structuredContent` because the outer
+        // block had no hoist at capture time. Read inner envelope text →
+        // JSON.parse → result.structuredContent. NOT regex-based.
+        //
+        // Lifetime: PERMANENT defensive read-side helper. Pre-A0 sessions
+        // are persisted on disk and may be replayed indefinitely; there is
+        // no time-based sunset. Removing this fallback would silently break
+        // pre-A0 conversation replay.
+        var text = typeof payload.text === 'string' ? payload.text :
+          (Array.isArray(payload.content)
+            ? (payload.content.find(function (c) { return c && c.type === 'text' && typeof c.text === 'string'; }) || {}).text
+            : null);
+        if (typeof text !== 'string') return null;
+        try {
+          var parsed = JSON.parse(text);
+          if (parsed && typeof parsed === 'object' && parsed.result && typeof parsed.result === 'object') {
+            var inner = parsed.result;
+            if (inner.structuredContent && typeof inner.structuredContent === 'object') {
+              return inner.structuredContent;
+            }
+          }
+        } catch (_) {
+          // Likely-envelope heuristic: text starts with `{` and contains
+          // `"package_id"` in the first 64 chars. If JSON.parse failed on a
+          // likely-envelope, surface a warning so the developer chasing
+          // "compose form is empty on replay" sees a signal. For non-envelope
+          // text (the dominant case), no log fires.
+          var prefix = text.length > 64 ? text.slice(0, 64) : text;
+          var likelyEnvelope = prefix.charAt(0) === '{' && prefix.indexOf('"package_id"') !== -1;
+          if (likelyEnvelope && typeof console !== 'undefined' && typeof console.warn === 'function') {
+            console.warn('[compose-email] Migration shim: JSON.parse failed on likely super-mcp envelope; pre-fill skipped');
+          }
+        }
+        return null;
+      }
+
+      function findTextBlock(blocks) {
+        if (!Array.isArray(blocks)) return null;
+        var block = blocks.find(function (c) {
+          return c && c.type === 'text' && typeof c.text === 'string';
+        });
+        return block ? block.text : null;
+      }
+
+      // Extract the send result identifiers ({ messageId, threadId, labelIds })
+      // from the tool-call reply. The connector attaches structuredContent, which
+      // super-mcp hoists onto the outer block, so the fast path is a single read.
+      // The envelope-unwrapping fallback keeps this robust for hosts (or replayed
+      // sessions) that forward only the serialized super-mcp text envelope.
+      function getSendMetaFromResult(result) {
+        if (!result || typeof result !== 'object') return null;
+        if (result.structuredContent && typeof result.structuredContent === 'object') {
+          return result.structuredContent;
+        }
+        try {
+          var outerText = findTextBlock(result.content);
+          if (typeof outerText !== 'string' && typeof result.text === 'string') {
+            outerText = result.text;
+          }
+          if (typeof outerText !== 'string') return null;
+          var envelope = JSON.parse(outerText);
+          if (!envelope || typeof envelope !== 'object') return null;
+          // outerText was the connector payload directly (no super-mcp envelope).
+          if (envelope.messageId || envelope.threadId) return envelope;
+          var inner = envelope.result;
+          if (!inner || typeof inner !== 'object') return null;
+          if (inner.structuredContent && typeof inner.structuredContent === 'object') {
+            return inner.structuredContent;
+          }
+          var innerText = findTextBlock(inner.content);
+          if (typeof innerText !== 'string') return null;
+          var payload = JSON.parse(innerText);
+          return (payload && typeof payload === 'object') ? payload : null;
+        } catch (_) {
+          return null;
+        }
+      }
+
+      function formatSentTime() {
+        try {
+          return new Date().toLocaleString(undefined, {
+            month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+          });
+        } catch (_) {
+          return '';
+        }
+      }
+
+      function renderSentView(payload, meta, stamp) {
+        payload = payload && typeof payload === 'object' ? payload : {};
+        sentTimestamp.textContent = stamp ? 'Sent ' + stamp : 'Sent';
+        sentTo.textContent = String(payload.channel || payload.chatId || '');
+        sentBody.textContent = String(payload.text || payload.content || '');
+      }
+
+      function handleSendRequest() {
+        if (sending) return;
+
+        var payload = readFormPayload();
+        var validationError = validatePayload(payload);
+        if (validationError) {
+          showError(validationError);
+          return;
+        }
+
+        sendPayload(payload);
+      }
+
+      // The Send button is type="button" with an explicit click handler rather
+      // than a form submit button. The Rebel host renders this iframe with a
+      // sandbox of "allow-scripts" only — no "allow-forms" — so native form
+      // submission is blocked by the browser BEFORE the submit event fires
+      // ("Blocked form submission ... the form's frame is sandboxed and the
+      // allow-forms permission is not set"). A submit-driven Send therefore
+      // silently did nothing: no postMessage, no spinner, no telemetry.
+      // A click handler needs no sandbox permission and is the same path
+      // Cancel/Retry already use. The submit listener below stays only as a
+      // defensive fallback for hosts that DO grant allow-forms; in this sandbox
+      // it never fires (neither the button click nor Enter routes through it).
+      // The sending guard keeps any double-fire (in an allow-forms host) a no-op.
+      sendButton.addEventListener('click', function () {
+        handleSendRequest();
+      });
+
+      composeForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        handleSendRequest();
+      });
+
+      retryButton.addEventListener('click', function () {
+        if (sending) return;
+        var payload = readFormPayload();
+        var validationError = validatePayload(payload);
+        if (validationError) {
+          showError(validationError);
+          return;
+        }
+        sendPayload(payload);
+      });
+
+      cancelButton.addEventListener('click', function () {
+        if (sending) return;
+        // After a lost-reply timeout we don't know if the email sent, so don't
+        // claim "Nothing sent." on collapse — point the user to verify instead.
+        var collapseMessage = outcomeUnknown
+          ? 'Collapsed. Check whether it sent if you are not sure.'
+          : 'Draft collapsed. Nothing sent.';
+        clearError();
+        clearSuccess();
+        clearUnknown();
+        setCollapsed(true, collapseMessage);
+      });
+
+      reopenButton.addEventListener('click', function () {
+        setCollapsed(false);
+      });
+
+      sentCollapseButton.addEventListener('click', function () {
+        setCollapsed(true, collapsedMessage.textContent || 'Message sent.');
+      });
+
+      [toInput, bodyInput].forEach(function (element) {
+        element.addEventListener('input', function () {
+          clearError();
+          clearSuccess();
+          clearUnknown();
+          postResize();
+        });
+      });
+
+      window.addEventListener('message', function (event) {
+        // Honest scope (origin-independent): the iframe sandbox origin is 'null',
+        // so validating event.origin is unreliable across dev/prod/custom-scheme
+        // hosts. Instead reject any *identified* sender that isn't our host frame
+        // (window.parent). A real cross-frame postMessage always stamps
+        // event.source with the sending window, so a hostile sibling frame is
+        // rejected here; a null source only occurs for same-context synthetic
+        // dispatch (our own code) and cannot be forged from outside, so we
+        // tolerate it. This does not authenticate the host's identity — the host
+        // separately authenticates this iframe by origin+source.
+        if (event.source && event.source !== window.parent) {
+          return;
+        }
+
+        var data = event.data;
+        if (!data || typeof data !== 'object') {
+          return;
+        }
+
+        if (data.method === 'ui/notifications/tool-result') {
+          // Always parse (so the migration-shim's malformed-envelope warning
+          // still fires), but apply only the first successful prefill: a stray
+          // or hostile re-post can't silently rewrite a draft the user has
+          // already reviewed.
+          var draft = getDraftFromToolResult(data.params);
+          if (draft && !draftApplied) {
+            draftApplied = true;
+            applyDraftData(draft);
+          }
+          return;
+        }
+
+        if (data.jsonrpc !== '2.0' || !pendingRequestId || data.id !== pendingRequestId) {
+          return;
+        }
+
+        pendingRequestId = null;
+        clearSendTimeout();
+        clearUnknown();
+        setSending(false);
+
+        if (data.error) {
+          var errorMessage = data.error && typeof data.error.message === 'string'
+            ? data.error.message
+            : 'Failed to send message.';
+          showError(errorMessage);
+          return;
+        }
+
+        clearError();
+        clearSuccess();
+        // Preserve what was sent instead of discarding the draft. pendingPayload
+        // is the exact payload we posted. We default to the collapsed summary, but
+        // Reopen now restores a read-only view of the sent message.
+        var sentPayload = pendingPayload || readFormPayload();
+        var stamp = formatSentTime();
+        renderSentView(sentPayload, getSendMetaFromResult(data.result), stamp);
+        sent = true;
+        setCollapsed(true, stamp ? 'Message sent · ' + stamp : 'Message sent.');
+      });
+
+      if (typeof ResizeObserver === 'function' && document.body) {
+        var observer = new ResizeObserver(postResize);
+        observer.observe(document.body);
+      }
+
+      applyThemeFromHostContext();
+      setCollapsed(false);
+      postResize();
+      postReady();
+
+      window.parent.postMessage(
+        {
+          jsonrpc: '2.0',
+          method: 'ui/initialize',
+          params: { resourceUri: RESOURCE_URI },
+          id: 'compose-email-init'
+        },
+        '*'
+      );
+    })();
+  </script>
+</body>
+</html>
