@@ -26,7 +26,7 @@ const loadBridgeState = (): BridgeState | null => {
 export const bridgeRequest = async (
   urlPath: string,
   body: Record<string, unknown>,
-): Promise<{ success: boolean; warning?: string; error?: string }> => {
+): Promise<{ success: boolean; warning?: string; error?: string; message?: string }> => {
   const bridge = loadBridgeState();
   if (!bridge) {
     return { success: false, error: 'Bridge not available' };
@@ -45,5 +45,5 @@ export const bridgeRequest = async (
     return { success: false, error: `Bridge returned ${response.status}: unauthorized. Check host app authentication.` };
   }
 
-  return response.json() as Promise<{ success: boolean; warning?: string; error?: string }>;
+  return response.json() as Promise<{ success: boolean; warning?: string; error?: string; message?: string }>;
 };

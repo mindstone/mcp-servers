@@ -33,6 +33,18 @@ const NESTED_TEXT_KEYS = new Set([
   'value',
 ]);
 
+const STRUCTURAL_LITERAL_STRING_KEYS = new Set([
+  'role',
+  'type',
+  'status',
+  'timestamp',
+]);
+
+const STRUCTURAL_LITERAL_STRING_COLLECTION_KEYS = new Set([
+  'ids',
+  'numbers',
+]);
+
 function isObj(value: unknown): value is Obj {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -44,11 +56,6 @@ function wrapStr(value: unknown, source: string): unknown {
 // Keep only structural string fields literal; everything else in transcript turns
 // is attacker-controlled phone-call content and must be enveloped recursively.
 const TRANSCRIPT_TURN_LITERAL_STRING_KEYS = new Set([
-  'role',
-  'id',
-  'type',
-  'status',
-  'timestamp',
   'agent_id',
   'branch_id',
   'workflow_node_id',
@@ -69,36 +76,90 @@ const SIMULATION_ANALYSIS_LITERAL_STRING_KEYS = new Set([
   'result',
 ]);
 
-function sanitizeTranscriptTurnValue(value: unknown, source: string, key?: string): unknown {
+const CONVERSATION_JSON_STRING_KEYS = new Set([
+  'analysis',
+  'metadata',
+  'dynamic_variables',
+]);
+
+const CONVERSATION_TRANSCRIPT_ARRAY_KEYS = new Set([
+  'transcript_turns',
+  'transcript_messages',
+  'messages',
+  'turns',
+]);
+
+const CONVERSATION_LITERAL_STRING_KEYS = new Set<string>();
+
+function isStructuralLiteralStringKey(key?: string): boolean {
+  if (!key) return false;
+  return (
+    STRUCTURAL_LITERAL_STRING_KEYS.has(key) ||
+    key === 'id' ||
+    key.endsWith('_id') ||
+    key === 'phone_number' ||
+    key.endsWith('_phone_number') ||
+    key === 'to_number' ||
+    key === 'from_number'
+  );
+}
+
+function isStructuralLiteralStringCollectionKey(key?: string): boolean {
+  if (!key) return false;
+  return (
+    STRUCTURAL_LITERAL_STRING_COLLECTION_KEYS.has(key) ||
+    key.endsWith('_ids') ||
+    key.endsWith('_numbers') ||
+    key.endsWith('_phone_numbers')
+  );
+}
+
+function sanitizeStringsByDefault(
+  value: unknown,
+  source: string,
+  key: string | undefined,
+  literalStringKeys: ReadonlySet<string>,
+): unknown {
   if (typeof value === 'string') {
-    return key && TRANSCRIPT_TURN_LITERAL_STRING_KEYS.has(key) ? value : wrapUntrusted(value, source);
+    return (isStructuralLiteralStringKey(key) || (key ? literalStringKeys.has(key) : false))
+      ? value
+      : wrapUntrusted(value, source);
   }
   if (Array.isArray(value)) {
-    return value.map((item, index) => sanitizeTranscriptTurnValue(item, `${source}[${index}]`));
+    if (isStructuralLiteralStringCollectionKey(key) && value.every((item) => typeof item === 'string')) {
+      return [...value];
+    }
+    return value.map((item, index) => sanitizeStringsByDefault(item, `${source}[${index}]`, undefined, literalStringKeys));
   }
   if (!isObj(value)) return value;
 
   const out: Obj = {};
   for (const [childKey, childValue] of Object.entries(value)) {
-    out[childKey] = sanitizeTranscriptTurnValue(childValue, `${source}:${childKey}`, childKey);
+    out[childKey] = sanitizeStringsByDefault(childValue, `${source}:${childKey}`, childKey, literalStringKeys);
   }
   return out;
 }
 
-function sanitizeSimulationAnalysisValue(value: unknown, source: string, key?: string): unknown {
-  if (typeof value === 'string') {
-    return key && SIMULATION_ANALYSIS_LITERAL_STRING_KEYS.has(key) ? value : wrapUntrusted(value, source);
-  }
-  if (Array.isArray(value)) {
-    return value.map((item, index) => sanitizeSimulationAnalysisValue(item, `${source}[${index}]`));
-  }
-  if (!isObj(value)) return value;
+function sanitizeTranscriptTurnValue(value: unknown, source: string, key?: string): unknown {
+  return sanitizeStringsByDefault(value, source, key, TRANSCRIPT_TURN_LITERAL_STRING_KEYS);
+}
 
-  const out: Obj = {};
-  for (const [childKey, childValue] of Object.entries(value)) {
-    out[childKey] = sanitizeSimulationAnalysisValue(childValue, `${source}:${childKey}`, childKey);
+function sanitizeSimulationAnalysisValue(value: unknown, source: string, key?: string): unknown {
+  return sanitizeStringsByDefault(value, source, key, SIMULATION_ANALYSIS_LITERAL_STRING_KEYS);
+}
+
+function sanitizeConversationValue(value: unknown, source: string, key?: string): unknown {
+  if (key && CONVERSATION_TRANSCRIPT_ARRAY_KEYS.has(key)) {
+    return sanitizeTranscriptTurns(value, source);
   }
-  return out;
+  if (key && CONVERSATION_JSON_STRING_KEYS.has(key)) {
+    return wrapUntrustedJsonStrings(value, source);
+  }
+  // Conversation and phone-number payloads are fail-safe by default: every
+  // string is enveloped unless it is a narrow structural literal
+  // (IDs/enums/status/timestamps/phone numbers) or a transcript-turn field
+  // handled by the stricter transcript walker above.
+  return sanitizeStringsByDefault(value, source, key, CONVERSATION_LITERAL_STRING_KEYS);
 }
 
 function sanitizeNestedText(value: unknown, source: string): unknown {
@@ -173,29 +234,7 @@ export function sanitizeAgent(agent: unknown, source: string): unknown {
 }
 
 export function sanitizeConversation(conversation: unknown, source: string): unknown {
-  if (!isObj(conversation)) return conversation;
-  const out: Obj = { ...conversation };
-
-  out.summary = wrapStr(out.summary, `${source}:summary`);
-  out.transcript = wrapStr(out.transcript, `${source}:transcript`);
-  out.analysis = wrapUntrustedJsonStrings(out.analysis, `${source}:analysis`);
-  out.metadata = wrapUntrustedJsonStrings(out.metadata, `${source}:metadata`);
-  out.dynamic_variables = wrapUntrustedJsonStrings(out.dynamic_variables, `${source}:dynamic_variables`);
-  out.transcript_turns = sanitizeTranscriptTurns(out.transcript_turns, `${source}:transcript_turns`);
-  out.transcript_messages = sanitizeTranscriptTurns(out.transcript_messages, `${source}:transcript_messages`);
-  out.messages = sanitizeTranscriptTurns(out.messages, `${source}:messages`);
-  out.turns = sanitizeTranscriptTurns(out.turns, `${source}:turns`);
-
-  if (isObj(out.conversation_initiation_client_data)) {
-    const clientData = { ...out.conversation_initiation_client_data };
-    clientData.dynamic_variables = wrapUntrustedJsonStrings(
-      clientData.dynamic_variables,
-      `${source}:conversation_initiation_client_data.dynamic_variables`,
-    );
-    out.conversation_initiation_client_data = clientData;
-  }
-
-  return out;
+  return sanitizeConversationValue(conversation, source);
 }
 
 export function sanitizeSimulation(result: unknown, source: string): unknown {
@@ -215,10 +254,7 @@ export function sanitizeSimulation(result: unknown, source: string): unknown {
 }
 
 export function sanitizePhoneNumber(phoneNumber: unknown, source: string): unknown {
-  if (!isObj(phoneNumber)) return phoneNumber;
-  const out: Obj = { ...phoneNumber };
-  out.label = wrapStr(out.label, `${source}:label`);
-  return out;
+  return sanitizeConversationValue(phoneNumber, source);
 }
 
 export function sanitizeOutboundCall(call: unknown, source: string): unknown {

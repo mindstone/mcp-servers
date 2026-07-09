@@ -55,7 +55,13 @@ export const mockAgent = {
 export const mockConversation = {
   conversation_id: 'conv_test_123',
   agent_id: 'agent_test_123',
+  // Real conversation-list prose fields returned by the API; keep these hostile
+  // so the sentinel walker proves they are enveloped by default.
+  agent_name: CLOSE_TAG_AGENT_NAME,
   summary: ATTACK_PAYLOAD,
+  transcript_summary: ATTACK_PAYLOAD,
+  call_summary_title: ATTACK_PAYLOAD,
+  follow_up_note: ATTACK_PAYLOAD,
   transcript: ATTACK_PAYLOAD,
   analysis: {
     call_summary: ATTACK_PAYLOAD,
@@ -90,6 +96,11 @@ export const mockPhoneNumber = {
   label: ATTACK_PAYLOAD,
   provider: 'twilio',
   assigned_agent_id: 'agent_test_123',
+  assigned_agent: {
+    agent_id: 'agent_test_123',
+    agent_name: CLOSE_TAG_AGENT_NAME,
+    assignment_note: ATTACK_PAYLOAD,
+  },
 };
 
 export const BATCH_SCHEDULED_TIME_UNIX = 1_893_456_000;

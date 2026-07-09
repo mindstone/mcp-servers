@@ -344,11 +344,28 @@ describe('Configure tool — ElevenLabs Agents', () => {
       api_key: MOCK_API_KEY,
     });
     expect(configured.isError).toBeFalsy();
-    expect(configured.json).toMatchObject({ ok: true });
+    expect(configured.json).toMatchObject({
+      ok: true,
+      message: expect.stringContaining('Conversational AI access verified'),
+    });
 
     const after = await testClient.callTool('list_agents', { page_size: 1 });
     expect(after.isError).toBeFalsy();
     expect(after.json).toMatchObject({ ok: true, count: 1 });
+  });
+
+  it('rejects configure when the key lacks Conversational AI permission', async () => {
+    mswServer.use(...createElevenLabsAgentsMissingPermissionHandlers());
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: '', MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('configure_elevenlabs_agents_api_key', {
+      api_key: MOCK_API_KEY,
+    });
+    expectStructuredError(result, 'MISSING_PERMISSION');
+    const parsed = parseErrorBody(result);
+    expect(parsed.resolution).toContain('Conversational AI permission enabled');
   });
 
   it('rejects empty api_key via Zod before any network call', async () => {

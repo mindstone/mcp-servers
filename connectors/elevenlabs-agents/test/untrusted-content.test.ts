@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
+import { sanitizeConversation, sanitizePhoneNumber } from '../src/sanitize.js';
 import { wrapUntrusted } from '../src/untrusted-content.js';
 import { mswServer } from './helpers/setup.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
@@ -150,7 +151,22 @@ describe('Stage 5 external-text envelope coverage', () => {
     const listed = await testClient.callTool('list_conversations', { page_size: 1 });
     const listedJson = listed.json as Record<string, unknown>;
     const conversations = listedJson.conversations as Array<Record<string, unknown>>;
+    expectEnvelopedAndDefanged(
+      conversations[0].agent_name,
+      'elevenlabs-agents:list_conversations:agent_name',
+      CLOSE_TAG_AGENT_NAME,
+    );
     expectEnvelopedAndDefanged(conversations[0].summary, 'elevenlabs-agents:list_conversations:summary', ATTACK_PAYLOAD);
+    expectEnvelopedAndDefanged(
+      conversations[0].transcript_summary,
+      'elevenlabs-agents:list_conversations:transcript_summary',
+      ATTACK_PAYLOAD,
+    );
+    expectEnvelopedAndDefanged(
+      conversations[0].call_summary_title,
+      'elevenlabs-agents:list_conversations:call_summary_title',
+      ATTACK_PAYLOAD,
+    );
     const turns = conversations[0].transcript_turns as Array<Record<string, unknown>>;
     expect(turns[0].role).toBe('user');
     expectEnvelopedAndDefanged(turns[0].text, 'elevenlabs-agents:list_conversations:transcript_turns[0]:text', TOOL_CALL_TRANSCRIPT_JSON);
@@ -167,20 +183,35 @@ describe('Stage 5 external-text envelope coverage', () => {
     const single = await testClient.callTool('get_conversation', { conversation_id: 'conv_test_123' });
     const singleJson = single.json as Record<string, unknown>;
     const conversation = singleJson.conversation as Record<string, unknown>;
+    expectEnvelopedAndDefanged(
+      conversation.agent_name,
+      'elevenlabs-agents:get_conversation:agent_name',
+      CLOSE_TAG_AGENT_NAME,
+    );
     expectEnvelopedAndDefanged(conversation.transcript, 'elevenlabs-agents:get_conversation:transcript', ATTACK_PAYLOAD);
     expectEnvelopedAndDefanged(
+      conversation.transcript_summary,
+      'elevenlabs-agents:get_conversation:transcript_summary',
+      ATTACK_PAYLOAD,
+    );
+    expectEnvelopedAndDefanged(
+      conversation.call_summary_title,
+      'elevenlabs-agents:get_conversation:call_summary_title',
+      ATTACK_PAYLOAD,
+    );
+    expectEnvelopedAndDefanged(
       (conversation.analysis as Record<string, unknown>).call_summary,
-      'elevenlabs-agents:get_conversation:analysis',
+      'elevenlabs-agents:get_conversation:analysis:call_summary',
       ATTACK_PAYLOAD,
     );
     expectEnvelopedAndDefanged(
       (conversation.dynamic_variables as Record<string, unknown>).caller_name,
-      'elevenlabs-agents:get_conversation:dynamic_variables',
+      'elevenlabs-agents:get_conversation:dynamic_variables:caller_name',
       ATTACK_PAYLOAD,
     );
     expectEnvelopedAndDefanged(
       (conversation.dynamic_variables as Record<string, unknown>).account_note,
-      'elevenlabs-agents:get_conversation:dynamic_variables',
+      'elevenlabs-agents:get_conversation:dynamic_variables:account_note',
       ATTACK_PAYLOAD,
     );
     const singleTurns = conversation.transcript_turns as Array<Record<string, unknown>>;
@@ -193,6 +224,51 @@ describe('Stage 5 external-text envelope coverage', () => {
     assertSentinelOnlyInsideEnvelopes(singleJson);
   });
 
+  it('fails safe for future prose fields without field-specific assertions', () => {
+    const conversation = sanitizeConversation(
+      {
+        conversation_id: 'conv_future_123',
+        status: 'completed',
+        future_summary: ATTACK_PAYLOAD,
+        nested: {
+          future_note: ATTACK_PAYLOAD,
+        },
+        transcript_turns: [
+          {
+            role: 'user',
+            text: TOOL_CALL_TRANSCRIPT_JSON,
+          },
+        ],
+      },
+      'elevenlabs-agents:future_conversation',
+    ) as Record<string, unknown>;
+
+    const phoneNumber = sanitizePhoneNumber(
+      {
+        phone_number_id: 'pn_future_123',
+        status: 'active',
+        assigned_agent: {
+          agent_id: 'agent_test_123',
+          future_summary: ATTACK_PAYLOAD,
+        },
+      },
+      'elevenlabs-agents:future_phone_number',
+    ) as Record<string, unknown>;
+
+    expect(conversation.conversation_id).toBe('conv_future_123');
+    expect(conversation.status).toBe('completed');
+    expect(((conversation.transcript_turns as Array<Record<string, unknown>>)[0]).role).toBe('user');
+    expect(phoneNumber.phone_number_id).toBe('pn_future_123');
+    expect(phoneNumber.status).toBe('active');
+    expect(((phoneNumber.assigned_agent as Record<string, unknown>).agent_id)).toBe('agent_test_123');
+
+    // This is the guard against widening the literal allowlist: these future
+    // prose fields are not asserted one-by-one, so any raw passthrough trips the
+    // sentinel walker immediately.
+    assertSentinelOnlyInsideEnvelopes(conversation);
+    assertSentinelOnlyInsideEnvelopes(phoneNumber);
+  });
+
   it('envelopes phone labels and KB names/content with ~50KB truncation metadata', async () => {
     mswServer.use(...createElevenLabsAgentsHandlers());
     testClient = await createTestClient({
@@ -203,6 +279,11 @@ describe('Stage 5 external-text envelope coverage', () => {
     const listedPhoneJson = listedPhones.json as Record<string, unknown>;
     const phoneNumbers = listedPhoneJson.phone_numbers as Array<Record<string, unknown>>;
     expectEnvelopedAndDefanged(phoneNumbers[0].label, 'elevenlabs-agents:list_phone_numbers:label', ATTACK_PAYLOAD);
+    expectEnvelopedAndDefanged(
+      ((phoneNumbers[0].assigned_agent as Record<string, unknown>).agent_name),
+      'elevenlabs-agents:list_phone_numbers:assigned_agent:agent_name',
+      CLOSE_TAG_AGENT_NAME,
+    );
     assertSentinelOnlyInsideEnvelopes(listedPhoneJson);
 
     const phone = await testClient.callTool('get_phone_number', { phone_number_id: 'pn_test_123' });
@@ -211,6 +292,11 @@ describe('Stage 5 external-text envelope coverage', () => {
       (phoneJson.phone_number as Record<string, unknown>).label,
       'elevenlabs-agents:get_phone_number:label',
       ATTACK_PAYLOAD,
+    );
+    expectEnvelopedAndDefanged(
+      (((phoneJson.phone_number as Record<string, unknown>).assigned_agent as Record<string, unknown>).agent_name),
+      'elevenlabs-agents:get_phone_number:assigned_agent:agent_name',
+      CLOSE_TAG_AGENT_NAME,
     );
     assertSentinelOnlyInsideEnvelopes(phoneJson);
 

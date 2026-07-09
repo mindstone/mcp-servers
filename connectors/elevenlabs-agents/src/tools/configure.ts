@@ -2,8 +2,17 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { setApiKey } from '../auth.js';
 import { bridgeRequest, BRIDGE_STATE_PATH } from '../bridge.js';
+import { ENDPOINTS } from '../endpoints.js';
+import { elevenLabsJson } from '../client.js';
 import { ElevenLabsError } from '../types.js';
 import { withErrorHandling } from '../utils.js';
+
+const CONFIGURED_MESSAGE =
+  'ElevenLabs Agents API key configured successfully. Conversational AI access verified; you can now inspect agents, conversations, phone numbers, and knowledge-base documents.';
+
+async function validateConvAiAccess(apiKey: string): Promise<void> {
+  await elevenLabsJson<Record<string, unknown>>(apiKey, `${ENDPOINTS.AGENTS}?page_size=1`);
+}
 
 export function registerConfigureTools(server: McpServer): void {
   server.registerTool(
@@ -18,7 +27,7 @@ WHEN TO USE:
 EXAMPLE: {"api_key": "sk_..."}
 
 RELATED TOOLS:
-- list_agents: verify the key by listing one agent after configuring
+- list_agents: inspect agents after configuring
 
 RETURNS: ok, message.
 
@@ -37,8 +46,8 @@ COST: FREE.`,
           if (result.success) {
             setApiKey(key);
             const message = result.warning
-              ? `ElevenLabs Agents API key configured successfully. Note: ${result.warning}`
-              : 'ElevenLabs Agents API key configured successfully. You can now inspect agents, conversations, phone numbers, and knowledge-base documents.';
+              ? `${CONFIGURED_MESSAGE} Note: ${result.warning}`
+              : (result.message ?? CONFIGURED_MESSAGE);
             return JSON.stringify({ ok: true, message });
           }
           throw new ElevenLabsError(
@@ -56,10 +65,11 @@ COST: FREE.`,
         }
       }
 
+      await validateConvAiAccess(key);
       setApiKey(key);
       return JSON.stringify({
         ok: true,
-        message: 'ElevenLabs Agents API key configured successfully. You can now inspect agents, conversations, phone numbers, and knowledge-base documents.',
+        message: CONFIGURED_MESSAGE,
       });
     }),
   );
