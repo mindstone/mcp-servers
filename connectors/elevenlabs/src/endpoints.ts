@@ -21,7 +21,14 @@ export const ENDPOINTS = {
   AUDIO_ISOLATION: '/audio-isolation',
   FORCED_ALIGNMENT: '/forced-alignment',
   VOICES_ADD: '/voices/add',
+  TEXT_TO_DIALOGUE: '/text-to-dialogue',
+  TEXT_TO_VOICE_DESIGN: '/text-to-voice/design',
+  TEXT_TO_VOICE: '/text-to-voice',
+  DUBBING: '/dubbing',
   voice: (voiceId: string) => `/voices/${encodeURIComponent(voiceId)}`,
+  dubbing: (dubbingId: string) => `/dubbing/${encodeURIComponent(dubbingId)}`,
+  dubbingAudio: (dubbingId: string, languageCode: string) =>
+    `/dubbing/${encodeURIComponent(dubbingId)}/audio/${encodeURIComponent(languageCode)}`,
   speechToSpeech: (voiceId: string) =>
     `/speech-to-speech/${encodeURIComponent(voiceId)}`,
   textToSpeech: (voiceId: string, outputFormat: string) =>

@@ -247,6 +247,7 @@ describe('Speech tools', () => {
         expect(result.isError).toBeFalsy();
         expect(captured.hasFile).toBe(true);
         expect(captured.hasAudio).toBe(false);
+        expect(captured.fileMimeType).toBe('audio/mpeg');
         expect(captured.modelId).toBe('scribe_v1');
         expect(captured.tagAudioEvents).toBe('false');
       } finally {

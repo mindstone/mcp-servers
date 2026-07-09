@@ -11,6 +11,9 @@ import {
   registerAudioIsolationTools,
   registerAlignmentTools,
   registerVoiceCloneTools,
+  registerDialogueTools,
+  registerVoiceDesignTools,
+  registerDubbingTools,
 } from './tools/index.js';
 
 const require = createRequire(import.meta.url);
@@ -32,6 +35,9 @@ export function createServer(): McpServer {
   registerAudioIsolationTools(server);
   registerAlignmentTools(server);
   registerVoiceCloneTools(server);
+  registerDialogueTools(server);
+  registerVoiceDesignTools(server);
+  registerDubbingTools(server);
 
   return server;
 }

@@ -10,6 +10,12 @@ import {
   mockVoiceDetail,
   mockForcedAlignment,
   mockCloneVoice,
+  mockVoiceDesignPreviews,
+  mockCreateVoiceFromPreview,
+  mockDubbingCreate,
+  mockDubbingStatusProcessing,
+  mockDubbingStatusDubbed,
+  mockDubbingStatusFailed,
   makeFakeAudioBuffer,
 } from '../fixtures/elevenlabs-data.js';
 
@@ -191,7 +197,108 @@ export function createElevenLabsHandlers(expectedApiKey = MOCK_API_KEY) {
       }
       return new HttpResponse(null, { status: 200 });
     }),
+
+    // POST /text-to-dialogue — multi-voice dialogue (binary audio)
+    http.post(`${BASE_V1}/text-to-dialogue`, async ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      const audioBuffer = makeFakeAudioBuffer(3072);
+      return new HttpResponse(audioBuffer, {
+        headers: { 'Content-Type': 'audio/mpeg' },
+      });
+    }),
+
+    // POST /text-to-voice/design — voice design previews (JSON)
+    http.post(`${BASE_V1}/text-to-voice/design`, async ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      return HttpResponse.json(mockVoiceDesignPreviews);
+    }),
+
+    // POST /text-to-voice — create voice from preview (JSON)
+    http.post(`${BASE_V1}/text-to-voice`, async ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      return HttpResponse.json(mockCreateVoiceFromPreview);
+    }),
+
+    // POST /dubbing — submit dubbing job (JSON)
+    http.post(`${BASE_V1}/dubbing`, async ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      return HttpResponse.json(mockDubbingCreate);
+    }),
+
+    // GET /dubbing/:id — dubbing status (JSON; default dubbed)
+    http.get(`${BASE_V1}/dubbing/:dubbingId`, ({ request, params }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      const dubbingId = params.dubbingId as string;
+      if (dubbingId === 'missing-dub-id') {
+        return HttpResponse.json({ detail: 'Dubbing not found' }, { status: 404 });
+      }
+      if (dubbingId === 'dub-failed-001') {
+        return HttpResponse.json(mockDubbingStatusFailed);
+      }
+      return HttpResponse.json(mockDubbingStatusDubbed);
+    }),
+
+    // GET /dubbing/:id/audio/:lang — dubbed audio download (binary)
+    http.get(`${BASE_V1}/dubbing/:dubbingId/audio/:lang`, ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      const audioBuffer = makeFakeAudioBuffer(2048);
+      return new HttpResponse(audioBuffer, {
+        headers: { 'Content-Type': 'audio/mpeg' },
+      });
+    }),
+
+    // DELETE /dubbing/:id
+    http.delete(`${BASE_V1}/dubbing/:dubbingId`, ({ request, params }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      if (params.dubbingId === 'missing-dub-id') {
+        return HttpResponse.json({ detail: 'Dubbing not found' }, { status: 404 });
+      }
+      return new HttpResponse(null, { status: 200 });
+    }),
   ];
+}
+
+/**
+ * Create-voice-from-preview handler that captures the JSON body sent by
+ * `create_voice_from_preview`. Used to assert required voice_description forwarding.
+ */
+export function createVoiceFromPreviewCapturingHandler(expectedApiKey = MOCK_API_KEY) {
+  const captured: {
+    body?: Record<string, unknown>;
+  } = {};
+
+  const handler = http.post(`${BASE_V1}/text-to-voice`, async ({ request }) => {
+    const authError = checkAuth(request, expectedApiKey);
+    if (authError) return authError;
+    captured.body = (await request.json()) as Record<string, unknown>;
+    return HttpResponse.json(mockCreateVoiceFromPreview);
+  });
+  return { handler, captured };
+}
+
+/**
+ * Voice-design handler that captures the JSON body sent by `design_voice`.
+ * Used to assert auto_generate_text / text omission behavior.
+ */
+export function createVoiceDesignCapturingHandler(expectedApiKey = MOCK_API_KEY) {
+  const captured: {
+    body?: Record<string, unknown>;
+  } = {};
+
+  const handler = http.post(`${BASE_V1}/text-to-voice/design`, async ({ request }) => {
+    const authError = checkAuth(request, expectedApiKey);
+    if (authError) return authError;
+    captured.body = (await request.json()) as Record<string, unknown>;
+    return HttpResponse.json(mockVoiceDesignPreviews);
+  });
+  return { handler, captured };
 }
 
 /**
@@ -207,6 +314,7 @@ export function createStthCapturingHandler(expectedApiKey = MOCK_API_KEY) {
     languageCode?: string;
     hasFile: boolean;
     hasAudio: boolean;
+    fileMimeType?: string;
   } = { fieldNames: [], hasFile: false, hasAudio: false };
 
   const handler = http.post(`${BASE_V1}/speech-to-text`, async ({ request }) => {
@@ -216,6 +324,8 @@ export function createStthCapturingHandler(expectedApiKey = MOCK_API_KEY) {
     for (const [k] of form) captured.fieldNames.push(k);
     captured.hasFile = form.has('file');
     captured.hasAudio = form.has('audio');
+    const filePart = form.get('file');
+    if (filePart instanceof Blob) captured.fileMimeType = filePart.type;
     const m = form.get('model_id');
     if (typeof m === 'string') captured.modelId = m;
     const t = form.get('tag_audio_events');
@@ -223,6 +333,29 @@ export function createStthCapturingHandler(expectedApiKey = MOCK_API_KEY) {
     const l = form.get('language_code');
     if (typeof l === 'string') captured.languageCode = l;
     return HttpResponse.json(mockTranscription);
+  });
+  return { handler, captured };
+}
+
+/**
+ * Dubbing handler that captures the multipart file MIME type sent by
+ * `create_dubbing`. Used to assert typed Blob uploads (not octet-stream).
+ */
+export function createDubbingCapturingHandler(expectedApiKey = MOCK_API_KEY) {
+  const captured: {
+    fileMimeType?: string;
+    targetLang?: string;
+  } = {};
+
+  const handler = http.post(`${BASE_V1}/dubbing`, async ({ request }) => {
+    const authError = checkAuth(request, expectedApiKey);
+    if (authError) return authError;
+    const form = await request.formData();
+    const filePart = form.get('file');
+    if (filePart instanceof Blob) captured.fileMimeType = filePart.type;
+    const lang = form.get('target_lang');
+    if (typeof lang === 'string') captured.targetLang = lang;
+    return HttpResponse.json(mockDubbingCreate);
   });
   return { handler, captured };
 }
@@ -247,6 +380,37 @@ export function createElevenLabsUnauthorizedHandlers() {
     http.post(`${BASE_V2}/*`, () =>
       HttpResponse.json({ detail: { message: 'Invalid API key' } }, { status: 401 }),
     ),
+  ];
+}
+
+/**
+ * Stateful dubbing status handler for status-transition tests.
+ * First GET returns processing; subsequent GETs return dubbed.
+ */
+export function createDubbingStatusTransitionHandlers(expectedApiKey = MOCK_API_KEY) {
+  const pollCounts = new Map<string, number>();
+
+  return [
+    http.get(`${BASE_V1}/dubbing/:dubbingId`, ({ request, params }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      const dubbingId = params.dubbingId as string;
+      if (dubbingId !== 'dub-transition-001') {
+        return HttpResponse.json(mockDubbingStatusDubbed);
+      }
+      const count = (pollCounts.get(dubbingId) ?? 0) + 1;
+      pollCounts.set(dubbingId, count);
+      if (count < 2) {
+        return HttpResponse.json({
+          ...mockDubbingStatusProcessing,
+          dubbing_id: dubbingId,
+        });
+      }
+      return HttpResponse.json({
+        ...mockDubbingStatusDubbed,
+        dubbing_id: dubbingId,
+      });
+    }),
   ];
 }
 

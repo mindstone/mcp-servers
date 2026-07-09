@@ -5,7 +5,7 @@ import { elevenLabsAudio } from '../client.js';
 import { ENDPOINTS } from '../endpoints.js';
 import { ElevenLabsError } from '../types.js';
 import { withErrorHandling } from '../utils.js';
-import { readSandboxedFile } from './file-input.js';
+import { readSandboxedFile, sandboxedFileToBlob } from './file-input.js';
 
 export function registerVoiceChangerTools(server: McpServer): void {
   server.registerTool(
@@ -49,10 +49,10 @@ COST: Credits based on source audio duration.`,
         );
       }
 
-      const { buffer, fileName } = readSandboxedFile(args.audio_path);
+      const fileInput = readSandboxedFile(args.audio_path);
 
       const formData = new FormData();
-      formData.append('audio', new Blob([new Uint8Array(buffer)]), fileName);
+      formData.append('audio', sandboxedFileToBlob(fileInput), fileInput.fileName);
       if (args.model_id) {
         formData.append('model_id', args.model_id);
       }

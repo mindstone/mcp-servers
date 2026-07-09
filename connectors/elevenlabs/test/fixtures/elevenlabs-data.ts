@@ -129,6 +129,50 @@ export const mockCloneVoice = {
   requires_verification: false,
 };
 
+export const mockDialogueAudioSize = 3072;
+
+export const mockVoiceDesignPreviews = {
+  previews: [
+    {
+      generated_voice_id: 'gen-voice-preview-001',
+      audio_base_64: Buffer.from(makeFakeAudioBuffer(512)).toString('base64'),
+      text: 'Hello preview.',
+      media_type: 'audio/mpeg',
+    },
+  ],
+};
+
+export const mockCreateVoiceFromPreview = {
+  voice_id: 'designed-voice-001',
+};
+
+export const mockDubbingCreate = {
+  dubbing_id: 'dub-test-001',
+  expected_duration_sec: 30,
+};
+
+export const mockDubbingStatusProcessing = {
+  dubbing_id: 'dub-test-001',
+  name: 'rebel-test-dub',
+  status: 'dubbing',
+  target_languages: ['es'],
+};
+
+export const mockDubbingStatusDubbed = {
+  dubbing_id: 'dub-test-001',
+  name: 'rebel-test-dub',
+  status: 'dubbed',
+  target_languages: ['es'],
+};
+
+export const mockDubbingStatusFailed = {
+  dubbing_id: 'dub-failed-001',
+  name: 'rebel-test-fail',
+  status: 'failed',
+  target_languages: ['es'],
+  error_message: 'Source audio too short for dubbing',
+};
+
 /**
  * Generate a fake audio buffer for testing binary output.
  */

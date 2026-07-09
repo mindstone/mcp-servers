@@ -6,7 +6,7 @@ import { ENDPOINTS } from '../endpoints.js';
 import { ElevenLabsError, type ForcedAlignmentResponse } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
-import { readSandboxedFile } from './file-input.js';
+import { readSandboxedFile, sandboxedFileToBlob } from './file-input.js';
 
 export function registerAlignmentTools(server: McpServer): void {
   server.registerTool(
@@ -43,10 +43,10 @@ COST: Credits based on audio duration.`,
         );
       }
 
-      const { buffer, fileName } = readSandboxedFile(args.file_path);
+      const fileInput = readSandboxedFile(args.file_path);
 
       const formData = new FormData();
-      formData.append('file', new Blob([new Uint8Array(buffer)]), fileName);
+      formData.append('file', sandboxedFileToBlob(fileInput), fileInput.fileName);
       formData.append('text', args.text);
 
       const data = await elevenLabsJson<ForcedAlignmentResponse>(

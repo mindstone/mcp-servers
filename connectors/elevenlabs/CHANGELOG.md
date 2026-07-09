@@ -12,6 +12,7 @@ are maintained manually as part of the PR review checklist.
 ## [Unreleased]
 
 ### Added
+- **elevenlabs**: Stage 4 slow/async audio tools — `text_to_dialogue` (multi-voice dialogue, 120s timeout), `design_voice` + `create_voice_from_preview` (voice design; base64 previews decoded to tmp files, never returned in output), and dubbing suite `create_dubbing` / `get_dubbing` / `download_dubbed_audio` / `delete_dubbing` (v1 async submit→poll→download; Content-Type-sniffed downloads; `delete_dubbing` `destructiveHint: true`). `client.ts` gains optional per-call `timeoutMs` (R2; default unchanged).
 - **elevenlabs**: Five multipart file-input tools — `speech_to_speech` (voice conversion, multipart field `audio`), `isolate_audio` (background noise removal), `forced_alignment` (audio+transcript alignment with enveloped `words[].text`), `clone_voice` (instant voice clone from sandboxed local files), `delete_voice` (permanent voice removal, `destructiveHint: true`). Shared `src/tools/file-input.ts` extracts the path-sandbox invariants from transcription (R1).
 - **elevenlabs**: `search_shared_voices` gains verified `accent` filter param.
 - **elevenlabs**: Four FREE discovery/account tools — `check_subscription` (tier + character credits + reset), `list_models` (model capabilities and languages), `get_voice` (single-voice detail), `search_shared_voices` (public library with search/filters). All external-text fields enveloped; shared-voice names/descriptions treated as highest-care third-party content.

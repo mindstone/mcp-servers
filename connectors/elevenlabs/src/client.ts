@@ -22,6 +22,11 @@ import {
 import { ELEVENLABS_API_V1_BASE } from './endpoints.js';
 import { envelopeApiErrorDetail, formatApiErrorMessage } from './error-detail.js';
 
+export interface ElevenLabsFetchOptions extends RequestInit {
+  /** Per-call timeout override (default REQUEST_TIMEOUT_MS). Explicit `signal` wins. */
+  timeoutMs?: number;
+}
+
 /**
  * Make an authenticated request to the ElevenLabs API.
  * Returns a raw Response object.
@@ -29,7 +34,7 @@ import { envelopeApiErrorDetail, formatApiErrorMessage } from './error-detail.js
 export async function elevenLabsFetch(
   apiKey: string,
   urlPath: string,
-  options: RequestInit = {},
+  options: ElevenLabsFetchOptions = {},
 ): Promise<Response> {
   if (!apiKey || apiKey.trim().length === 0) {
     throw new ElevenLabsError(
@@ -43,24 +48,26 @@ export async function elevenLabsFetch(
     ? urlPath
     : `${ELEVENLABS_API_V1_BASE}${urlPath}`;
 
+  const { timeoutMs, ...fetchOptions } = options;
+
   const headers: Record<string, string> = {
     'xi-api-key': apiKey,
-    ...(options.headers as Record<string, string> || {}),
+    ...(fetchOptions.headers as Record<string, string> || {}),
   };
 
   // Only set Content-Type for JSON bodies (not FormData)
-  if (!(options.body instanceof FormData) && !headers['Content-Type']) {
+  if (!(fetchOptions.body instanceof FormData) && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json';
   }
 
-  console.error(`[ElevenLabs API] ${options.method || 'GET'} ${url}`);
+  console.error(`[ElevenLabs API] ${fetchOptions.method || 'GET'} ${url}`);
 
   let response: Response;
 
   try {
     response = await fetch(url, {
-      ...options,
-      signal: options.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      ...fetchOptions,
+      signal: fetchOptions.signal ?? AbortSignal.timeout(timeoutMs ?? REQUEST_TIMEOUT_MS),
       headers,
     });
   } catch (error) {
@@ -197,10 +204,29 @@ export async function extractErrorDetail(response: Response): Promise<string> {
 export async function elevenLabsJson<T>(
   apiKey: string,
   urlPath: string,
-  options: RequestInit = {},
+  options: ElevenLabsFetchOptions = {},
 ): Promise<T> {
   const response = await elevenLabsFetch(apiKey, urlPath, options);
   return (await response.json()) as T;
+}
+
+/** Map response Content-Type to a file extension (OpenAPI drift — don't trust empty schemas). */
+export function extensionFromContentType(contentType: string | null | undefined): string {
+  if (!contentType) return 'mp3';
+  const ct = contentType.split(';')[0]?.trim().toLowerCase() ?? '';
+  const map: Record<string, string> = {
+    'audio/mpeg': 'mp3',
+    'audio/mp3': 'mp3',
+    'audio/wav': 'wav',
+    'audio/x-wav': 'wav',
+    'audio/wave': 'wav',
+    'audio/ogg': 'ogg',
+    'audio/flac': 'flac',
+    'audio/mp4': 'm4a',
+    'audio/aac': 'aac',
+    'audio/webm': 'webm',
+  };
+  return map[ct] ?? 'mp3';
 }
 
 /**
@@ -209,13 +235,47 @@ export async function elevenLabsJson<T>(
 export async function elevenLabsAudio(
   apiKey: string,
   urlPath: string,
-  options: RequestInit = {},
-  fileExtension = 'mp3',
+  options: ElevenLabsFetchOptions = {},
+  fileExtension?: string,
 ): Promise<AudioResult> {
   const response = await elevenLabsFetch(apiKey, urlPath, options);
+  const contentType = response.headers.get('content-type');
+  const ext = fileExtension ?? extensionFromContentType(contentType);
 
   const buffer = Buffer.from(await response.arrayBuffer());
-  const fileName = `elevenlabs_${crypto.randomUUID()}.${fileExtension}`;
+  const fileName = `elevenlabs_${crypto.randomUUID()}.${ext}`;
+  const filePath = path.join(os.tmpdir(), fileName);
+  fs.writeFileSync(filePath, buffer);
+
+  return { filePath, sizeBytes: buffer.length };
+}
+
+/**
+ * Download binary audio with content-type sniffing.
+ * When the API returns JSON (error body despite 200 drift), surfaces the flattened error.
+ */
+export async function elevenLabsBinaryDownload(
+  apiKey: string,
+  urlPath: string,
+  options: ElevenLabsFetchOptions = {},
+): Promise<AudioResult> {
+  const response = await elevenLabsFetch(apiKey, urlPath, options);
+  const contentType = response.headers.get('content-type') ?? '';
+
+  if (contentType.includes('application/json')) {
+    const detail = await extractErrorDetail(response);
+    throw new ElevenLabsError(
+      detail
+        ? formatApiErrorMessage('Download failed', detail)
+        : 'Download failed: API returned JSON instead of audio',
+      'DOWNLOAD_FAILED',
+      detail ? getErrorResolution(422, detail) : 'Verify dubbing status with get_dubbing before downloading.',
+    );
+  }
+
+  const ext = extensionFromContentType(contentType);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const fileName = `elevenlabs_${crypto.randomUUID()}.${ext}`;
   const filePath = path.join(os.tmpdir(), fileName);
   fs.writeFileSync(filePath, buffer);
 

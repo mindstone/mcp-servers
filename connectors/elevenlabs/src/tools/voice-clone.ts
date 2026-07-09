@@ -9,7 +9,7 @@ import {
   type CloneVoiceResponse,
 } from '../types.js';
 import { withErrorHandling } from '../utils.js';
-import { readSandboxedFile } from './file-input.js';
+import { readSandboxedFile, sandboxedFileToBlob } from './file-input.js';
 
 export function registerVoiceCloneTools(server: McpServer): void {
   server.registerTool(
@@ -53,8 +53,8 @@ COST: Uses a voice slot; may consume credits depending on plan.`,
       const formData = new FormData();
       formData.append('name', args.name);
       for (const filePath of args.files) {
-        const { buffer, fileName } = readSandboxedFile(filePath);
-        formData.append('files', new Blob([new Uint8Array(buffer)]), fileName);
+        const fileInput = readSandboxedFile(filePath);
+        formData.append('files', sandboxedFileToBlob(fileInput), fileInput.fileName);
       }
       if (args.description) {
         formData.append('description', args.description);

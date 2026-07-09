@@ -59,3 +59,29 @@ export function readSandboxedFile(rawFilePath: string): SandboxedFileInput {
 
   return { buffer, fileName, verifiedPath };
 }
+
+/** Extension → MIME for multipart uploads (ElevenLabs rejects application/octet-stream). */
+const EXTENSION_TO_MIME: Record<string, string> = {
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  m4a: 'audio/mp4',
+  ogg: 'audio/ogg',
+  flac: 'audio/flac',
+  webm: 'video/webm',
+  mp4: 'video/mp4',
+  mov: 'video/quicktime',
+};
+
+/**
+ * Resolve a MIME type from a file name extension for multipart uploads.
+ * Defaults to audio/mpeg when the extension is unknown (most uploads are audio).
+ */
+export function mimeTypeForFileName(fileName: string): string {
+  const ext = path.extname(fileName).slice(1).toLowerCase();
+  return EXTENSION_TO_MIME[ext] ?? 'audio/mpeg';
+}
+
+/** Build a typed Blob from sandboxed file bytes for FormData multipart parts. */
+export function sandboxedFileToBlob({ buffer, fileName }: SandboxedFileInput): Blob {
+  return new Blob([new Uint8Array(buffer)], { type: mimeTypeForFileName(fileName) });
+}

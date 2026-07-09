@@ -9,7 +9,7 @@ ElevenLabs MCP server for Model Context Protocol hosts. Generate speech, music, 
 
 - **Version:** [0.3.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs)
 - **Auth:** API key ([`ELEVENLABS_API_KEY`](./server.json))
-- **Tools:** [17](./src/tools/) (account, voices, speech, music, transcription, voice conversion, isolation, alignment, cloning)
+- **Tools:** [24](./src/tools/) (account, voices, speech, music, transcription, voice conversion, isolation, alignment, cloning, dialogue, voice design, dubbing)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -114,7 +114,7 @@ node dist/index.js
 }
 ```
 
-## Tools (17)
+## Tools (24)
 
 ### Configuration
 - `configure_elevenlabs_api_key` — Save your ElevenLabs API key
@@ -129,15 +129,24 @@ node dist/index.js
 - `search_shared_voices` — Search the public shared voice library (filters include accent)
 - `clone_voice` — Create an instant voice clone from local audio samples (`destructiveHint`)
 - `delete_voice` — Permanently delete a voice (`destructiveHint`)
+- `design_voice` — Generate voice-design previews from a text description (slow; previews saved to tmp files)
+- `create_voice_from_preview` — Save a design preview as a permanent voice (`destructiveHint`)
 
 ### Speech & conversion
 - `generate_speech` — Generate spoken audio from text using text-to-speech
 - `generate_sound_effect` — Generate sound effects from a text description
 - `speech_to_speech` — Convert source audio to a different voice
+- `text_to_dialogue` — Multi-voice dialogue from a script (one voice per line)
 
 ### Audio processing
 - `isolate_audio` — Remove background noise from an audio file (source must be ≥ ~4.6s; shorter clips fail upstream)
 - `forced_alignment` — Align transcript text to audio with per-word timestamps
+
+### Dubbing (v1 API — async submit → poll → download)
+- `create_dubbing` — Submit a dubbing job (local `file` via sandbox or `source_url` for ElevenLabs-side fetch)
+- `get_dubbing` — Poll job status until `dubbed` or `failed`
+- `download_dubbed_audio` — Download dubbed audio (Content-Type sniffed)
+- `delete_dubbing` — Permanently delete a dubbing job (`destructiveHint`)
 
 ### Music
 - `generate_music` — Generate music from a text prompt

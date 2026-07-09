@@ -1,5 +1,8 @@
 export const REQUEST_TIMEOUT_MS = 30_000;
 
+/** Per-call override for slow synchronous endpoints (dialogue, voice design). */
+export const LONG_REQUEST_TIMEOUT_MS = 120_000;
+
 export interface BridgeState {
   port: number;
   token: string;
@@ -142,6 +145,40 @@ export interface CloneVoiceResponse {
   requires_verification?: boolean;
 }
 
+export interface DialogueInput {
+  text: string;
+  voice_id: string;
+}
+
+export interface VoiceDesignPreview {
+  generated_voice_id: string;
+  audio_base_64?: string;
+  text?: string;
+  media_type?: string;
+}
+
+export interface VoiceDesignResponse {
+  previews: VoiceDesignPreview[];
+}
+
+export interface CreateVoiceFromPreviewResponse {
+  voice_id: string;
+}
+
+export interface DubbingCreateResponse {
+  dubbing_id: string;
+  expected_duration_sec?: number;
+}
+
+export interface DubbingStatusResponse {
+  dubbing_id: string;
+  name?: string;
+  status: string;
+  target_languages?: string[];
+  error?: string;
+  error_message?: string;
+}
+
 import { envelopeApiErrorDetail } from './error-detail.js';
 
 /** Actionable resolution when a voice_id or voice_name cannot be resolved. */
@@ -172,7 +209,15 @@ export function getErrorResolution(status: number, detail?: string): string {
   if (status === 429) {
     return 'Rate limited. Wait a moment and try again.';
   }
-  if (msg.includes('content') || msg.includes('policy') || msg.includes('moderation')) {
+  if (msg.includes('unsupported_content_type')) {
+    return "The uploaded file type isn't supported for this operation. Provide a supported audio/video format (mp3, wav, mp4, …).";
+  }
+  if (
+    msg.includes('content policy') ||
+    msg.includes('moderation') ||
+    msg.includes('flagged') ||
+    msg.includes('policy violation')
+  ) {
     return 'Content policy violation. Try a different prompt.';
   }
   return 'Please try again. If the issue persists, call check_subscription for credit status or check your API key at https://elevenlabs.io/app/settings/api-keys';

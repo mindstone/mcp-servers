@@ -6,7 +6,7 @@ import { ENDPOINTS } from '../endpoints.js';
 import { ElevenLabsError, type TranscriptionResponse } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
-import { readSandboxedFile } from './file-input.js';
+import { readSandboxedFile, sandboxedFileToBlob } from './file-input.js';
 
 export function registerTranscriptionTools(server: McpServer): void {
   server.registerTool(
@@ -46,14 +46,14 @@ COST: Credits based on audio duration.`,
 
       // Sandbox local reads via shared file-input helper (MCP_WORKSPACE_PATH +
       // realpathSync TOCTOU guard — see file-input.ts).
-      const { buffer, fileName } = readSandboxedFile(args.file_path);
+      const fileInput = readSandboxedFile(args.file_path);
 
       // Multipart upload. ElevenLabs Speech-to-Text v1 requires:
       //   - field name `file` (NOT `audio`)
       //   - `model_id` is mandatory (only `scribe_v1` is currently supported)
       //   - `tag_audio_events=false` to avoid `(mouse click)` style noise
       const formData = new FormData();
-      formData.append('file', new Blob([new Uint8Array(buffer)]), fileName);
+      formData.append('file', sandboxedFileToBlob(fileInput), fileInput.fileName);
       formData.append('model_id', args.model_id ?? 'scribe_v1');
       formData.append('tag_audio_events', String(args.tag_audio_events ?? false));
       if (args.language_code) {
