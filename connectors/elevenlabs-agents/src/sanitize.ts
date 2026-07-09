@@ -11,6 +11,9 @@ import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js'
 type Obj = Record<string, unknown>;
 
 const KB_CONTENT_LIMIT_BYTES = 50_000;
+
+/** Body-bearing string fields on GET /knowledge-base/{id} metadata (not the /content body). */
+const KB_METADATA_BODY_FIELDS = ['extracted_inner_html'] as const;
 const NESTED_TEXT_KEYS = new Set([
   'name',
   'call_name',
@@ -46,6 +49,24 @@ const TRANSCRIPT_TURN_LITERAL_STRING_KEYS = new Set([
   'type',
   'status',
   'timestamp',
+  'agent_id',
+  'branch_id',
+  'workflow_node_id',
+  'version_id',
+  'request_id',
+  'tool_name',
+  'scope',
+  'source_agent_id',
+  'source_branch_id',
+  'successful',
+]);
+
+// Simulation analysis mixes structural IDs/enums with freeform model-authored prose.
+// Wrap by default so newly added prose fields are safe unless explicitly allowlisted.
+const SIMULATION_ANALYSIS_LITERAL_STRING_KEYS = new Set([
+  'criteria_id',
+  'data_collection_id',
+  'result',
 ]);
 
 function sanitizeTranscriptTurnValue(value: unknown, source: string, key?: string): unknown {
@@ -60,6 +81,22 @@ function sanitizeTranscriptTurnValue(value: unknown, source: string, key?: strin
   const out: Obj = {};
   for (const [childKey, childValue] of Object.entries(value)) {
     out[childKey] = sanitizeTranscriptTurnValue(childValue, `${source}:${childKey}`, childKey);
+  }
+  return out;
+}
+
+function sanitizeSimulationAnalysisValue(value: unknown, source: string, key?: string): unknown {
+  if (typeof value === 'string') {
+    return key && SIMULATION_ANALYSIS_LITERAL_STRING_KEYS.has(key) ? value : wrapUntrusted(value, source);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item, index) => sanitizeSimulationAnalysisValue(item, `${source}[${index}]`));
+  }
+  if (!isObj(value)) return value;
+
+  const out: Obj = {};
+  for (const [childKey, childValue] of Object.entries(value)) {
+    out[childKey] = sanitizeSimulationAnalysisValue(childValue, `${source}:${childKey}`, childKey);
   }
   return out;
 }
@@ -161,6 +198,22 @@ export function sanitizeConversation(conversation: unknown, source: string): unk
   return out;
 }
 
+export function sanitizeSimulation(result: unknown, source: string): unknown {
+  if (!isObj(result)) return result;
+  const out: Obj = { ...result };
+
+  out.simulated_conversation = sanitizeTranscriptTurns(
+    out.simulated_conversation,
+    `${source}:simulated_conversation`,
+  );
+
+  if (out.analysis !== undefined) {
+    out.analysis = sanitizeSimulationAnalysisValue(out.analysis, `${source}:analysis`);
+  }
+
+  return out;
+}
+
 export function sanitizePhoneNumber(phoneNumber: unknown, source: string): unknown {
   if (!isObj(phoneNumber)) return phoneNumber;
   const out: Obj = { ...phoneNumber };
@@ -195,6 +248,21 @@ export function sanitizeBatchCall(batchCall: unknown, source: string): unknown {
   return out;
 }
 
+function wrapKbBodyString(
+  out: Obj,
+  field: string,
+  source: string,
+  metadataPrefix: string,
+): void {
+  const raw = out[field];
+  if (typeof raw !== 'string') return;
+  const { text, truncated, originalBytes } = truncateUtf8(raw, KB_CONTENT_LIMIT_BYTES);
+  out[field] = wrapUntrusted(text, `${source}:${field}`);
+  out[`${metadataPrefix}_truncated`] = truncated;
+  out[`${metadataPrefix}_original_bytes`] = originalBytes;
+  out[`${metadataPrefix}_returned_bytes`] = Buffer.byteLength(text, 'utf8');
+}
+
 export function sanitizeKbDoc(doc: unknown, source: string): unknown {
   if (!isObj(doc)) return doc;
   const out: Obj = { ...doc };
@@ -218,13 +286,11 @@ export function sanitizeKbDoc(doc: unknown, source: string): unknown {
     out.metadata = wrapUntrustedJsonStrings(out.metadata, `${source}:metadata`);
   }
 
-  if (typeof out.content === 'string') {
-    const { text, truncated, originalBytes } = truncateUtf8(out.content, KB_CONTENT_LIMIT_BYTES);
-    out.content = wrapUntrusted(text, `${source}:content`);
-    out.content_truncated = truncated;
-    out.content_original_bytes = originalBytes;
-    out.content_returned_bytes = Buffer.byteLength(text, 'utf8');
+  for (const field of KB_METADATA_BODY_FIELDS) {
+    wrapKbBodyString(out, field, source, field);
   }
+
+  wrapKbBodyString(out, 'content', source, 'content');
 
   return out;
 }

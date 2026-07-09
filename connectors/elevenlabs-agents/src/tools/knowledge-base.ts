@@ -1,9 +1,19 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { requireApiKey, elevenLabsJson } from '../client.js';
+import {
+  requireApiKey,
+  elevenLabsFetch,
+  elevenLabsJson,
+} from '../client.js';
 import { ENDPOINTS } from '../endpoints.js';
 import { sanitizeKbDoc, sanitizeList } from '../sanitize.js';
+import { ElevenLabsError } from '../types.js';
 import { withErrorHandling } from '../utils.js';
+import { readSandboxedFile, sandboxedFileToBlob } from './file-input.js';
+
+function isObj(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 function extractItems(result: unknown): unknown[] {
   if (Array.isArray(result)) return result;
@@ -26,6 +36,62 @@ function extractNextCursor(result: unknown): string | undefined {
       : typeof obj.last_doc === 'string'
         ? obj.last_doc
         : undefined;
+}
+
+const kbSharedFields = {
+  name: z.string().min(1).optional().describe('Optional human-readable name for the document.'),
+  parent_folder_id: z.string().min(1).optional()
+    .describe('Optional folder ID to place the document under.'),
+} satisfies Record<string, z.ZodTypeAny>;
+
+const addKnowledgeBaseDocumentSchema = z.discriminatedUnion('mode', [
+  z.object({
+    mode: z.literal('text'),
+    text: z.string().min(1).describe('Text content to add to the knowledge base.'),
+    ...kbSharedFields,
+  }),
+  z.object({
+    mode: z.literal('file'),
+    file_path: z.string().min(1)
+      .describe('Absolute path to a local file inside MCP_WORKSPACE_PATH (or os.tmpdir() when unset).'),
+    ...kbSharedFields,
+  }),
+  z.object({
+    mode: z.literal('url'),
+    url: z.string().url().describe('Public URL that ElevenLabs should fetch server-side.'),
+    enable_auto_sync: z.boolean().optional()
+      .describe('When true, keep the URL document in sync. Default: false.'),
+    auto_remove: z.boolean().optional()
+      .describe('When true, auto-remove the URL document if it becomes unavailable.'),
+    ...kbSharedFields,
+  }),
+]);
+
+function buildKnowledgeBaseBody(args: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  for (const key of keys) {
+    const value = args[key];
+    if (value !== undefined) {
+      body[key] = value;
+    }
+  }
+  return body;
+}
+
+/** GET /knowledge-base/{id}/content returns raw document text (not JSON). */
+async function fetchKbDocContent(apiKey: string, documentationId: string): Promise<string | undefined> {
+  try {
+    const response = await elevenLabsFetch(
+      apiKey,
+      ENDPOINTS.knowledgeBaseDocContent(documentationId),
+      { method: 'GET' },
+    );
+    const text = await response.text();
+    return text.trim().length > 0 ? text : undefined;
+  } catch {
+    // Non-200 or transport failure: metadata-only result, no throw.
+    return undefined;
+  }
 }
 
 export function registerKnowledgeBaseTools(server: McpServer): void {
@@ -84,11 +150,11 @@ FREE.`,
   server.registerTool(
     'get_knowledge_base_doc',
     {
-      description: `Get one knowledge-base document, including text content when the API returns it.
+      description: `Get one knowledge-base document: metadata from GET /knowledge-base/{id}, plus body text from GET /knowledge-base/{id}/content when available.
 
 WHEN TO USE:
 - Inspect a specific document before later add/delete work
-- Review the exact source text available to agents
+- Review metadata (type, URL sync flags) and the text agents can retrieve
 
 EXAMPLE: {"documentation_id": "doc_123"}
 
@@ -96,7 +162,7 @@ RELATED TOOLS:
 - list_knowledge_base_docs: discover valid documentation_id values
 - get_agent: inspect which agents reference this knowledge base
 
-RETURNS: document. Large content is capped to about 50KB with truncation metadata.
+RETURNS: document metadata. Body text is fetched from the separate /content endpoint, enveloped, and capped to about 50KB with truncation metadata. URL documents may also include enveloped extracted_inner_html on the metadata response.
 
 FREE.`,
       inputSchema: z.object({
@@ -111,14 +177,173 @@ FREE.`,
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
-      const result = await elevenLabsJson<unknown>(
+      const metadata = await elevenLabsJson<unknown>(
         apiKey,
         ENDPOINTS.knowledgeBaseDoc(args.documentation_id),
         { method: 'GET' },
       );
+      const contentText = await fetchKbDocContent(apiKey, args.documentation_id);
+      const merged = isObj(metadata)
+        ? {
+            ...metadata,
+            ...(contentText !== undefined ? { content: contentText } : {}),
+          }
+        : metadata;
       return JSON.stringify({
         ok: true,
-        document: sanitizeKbDoc(result, 'elevenlabs-agents:get_knowledge_base_doc'),
+        document: sanitizeKbDoc(merged, 'elevenlabs-agents:get_knowledge_base_doc'),
+      });
+    }),
+  );
+
+  server.registerTool(
+    'add_knowledge_base_document',
+    {
+      description: `Add one knowledge-base document in text, file, or URL mode.
+
+WHEN TO USE:
+- Add a short text snippet directly
+- Upload a local file from MCP_WORKSPACE_PATH
+- Register a stable public URL that ElevenLabs fetches server-side
+
+EXAMPLE: {"mode": "text", "text": "Refunds are processed within 3 business days.", "name": "Refund policy"}
+EXAMPLE: {"mode": "file", "file_path": "/tmp/rebel-live-test-kb.txt", "name": "Release checklist"}
+EXAMPLE: {"mode": "url", "url": "https://example.com", "enable_auto_sync": false}
+
+RELATED TOOLS:
+- get_knowledge_base_doc: inspect the created document
+- delete_knowledge_base_document: remove the document when it is no longer needed
+- update_agent: attach returned knowledge-base IDs through first-class fields or advanced_config
+
+RETURNS: document.
+
+COST: FREE for the write itself; URL fetches and downstream agent usage may consume workspace resources.
+
+COMMON MISTAKES:
+- file mode only accepts local paths inside MCP_WORKSPACE_PATH (or os.tmpdir() when unset).
+- url mode expects a stable public URL that ElevenLabs can reach server-side.`,
+      inputSchema: addKnowledgeBaseDocumentSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args) => {
+      const apiKey = requireApiKey();
+      let result: unknown;
+
+      if (args.mode === 'text') {
+        result = await elevenLabsJson<unknown>(
+          apiKey,
+          ENDPOINTS.KNOWLEDGE_BASE_TEXT,
+          {
+            method: 'POST',
+            body: JSON.stringify(buildKnowledgeBaseBody(args, ['text', 'name', 'parent_folder_id'])),
+          },
+        );
+      } else if (args.mode === 'file') {
+        const fileInput = readSandboxedFile(args.file_path);
+        const formData = new FormData();
+        formData.append('file', sandboxedFileToBlob(fileInput), fileInput.fileName);
+        if (args.name) {
+          formData.append('name', args.name);
+        }
+        if (args.parent_folder_id) {
+          formData.append('parent_folder_id', args.parent_folder_id);
+        }
+
+        result = await elevenLabsJson<unknown>(
+          apiKey,
+          ENDPOINTS.KNOWLEDGE_BASE_FILE,
+          {
+            method: 'POST',
+            body: formData,
+          },
+        );
+      } else {
+        result = await elevenLabsJson<unknown>(
+          apiKey,
+          ENDPOINTS.KNOWLEDGE_BASE_URL,
+          {
+            method: 'POST',
+            body: JSON.stringify(
+              buildKnowledgeBaseBody(
+                args,
+                ['url', 'name', 'parent_folder_id', 'enable_auto_sync', 'auto_remove'],
+              ),
+            ),
+          },
+        );
+      }
+
+      return JSON.stringify({
+        ok: true,
+        document: sanitizeKbDoc(result, 'elevenlabs-agents:add_knowledge_base_document'),
+        message: `Added knowledge-base document via ${args.mode} mode.`,
+      });
+    }),
+  );
+
+  server.registerTool(
+    'delete_knowledge_base_document',
+    {
+      description: `Delete one knowledge-base document or folder from ElevenLabs.
+
+WHEN TO USE:
+- Remove a temporary rebel-live-test-* document after validation
+- Clean up a stale or incorrect document before re-adding it
+
+EXAMPLE: {"documentation_id": "doc_123", "force": true}
+
+RELATED TOOLS:
+- get_knowledge_base_doc: confirm the exact document before deleting it
+- add_knowledge_base_document: re-create the document after fixing source content
+
+RETURNS: ok confirmation.
+
+COST: FREE — no generation credits, but this is destructive.`,
+      inputSchema: z.object({
+        documentation_id: z.string().min(1).describe('Knowledge-base document ID to delete.'),
+        force: z.boolean().optional()
+          .describe('When true, delete even if the document is attached to agents.'),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args) => {
+      const apiKey = requireApiKey();
+      const params = new URLSearchParams();
+      if (args.force !== undefined) {
+        params.set('force', String(args.force));
+      }
+      const endpoint = params.size > 0
+        ? `${ENDPOINTS.knowledgeBaseDoc(args.documentation_id)}?${params.toString()}`
+        : ENDPOINTS.knowledgeBaseDoc(args.documentation_id);
+
+      try {
+        await elevenLabsFetch(apiKey, endpoint, { method: 'DELETE' });
+      } catch (error) {
+        if (error instanceof ElevenLabsError && error.code === 'HTTP_404') {
+          throw new ElevenLabsError(
+            `Knowledge-base document not found: ${args.documentation_id}`,
+            'KNOWLEDGE_BASE_DOCUMENT_NOT_FOUND',
+            'Re-list knowledge-base documents and retry with the exact returned documentation_id.',
+          );
+        }
+        throw error;
+      }
+
+      return JSON.stringify({
+        ok: true,
+        documentation_id: args.documentation_id,
+        force: args.force ?? false,
+        message: `Deleted knowledge-base document ${args.documentation_id}.`,
       });
     }),
   );

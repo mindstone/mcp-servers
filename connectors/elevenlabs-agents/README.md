@@ -2,13 +2,13 @@
 
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-ElevenLabs Conversational AI MCP server for Model Context Protocol hosts. Inspect voice agents, review conversation transcripts and recordings, manage phone-number assignments, place outbound calls, and submit or monitor scheduled batch calls through the ElevenLabs ConvAI API.
+ElevenLabs Conversational AI MCP server for Model Context Protocol hosts. Inspect and author voice agents, review conversation transcripts and recordings, manage phone-number assignments, place outbound calls, submit or monitor scheduled batch calls, and write to the knowledge base through the ElevenLabs ConvAI API.
 
 ## Status
 
 - **Version:** bootstrap placeholder `0.0.0` until the first publish stage
 - **Auth:** API key ([`ELEVENLABS_API_KEY`](./server.json))
-- **Tools:** [17](./src/tools/) (configure, agents, conversations, phone numbers, outbound calls, batch calls, knowledge base)
+- **Tools:** [24](./src/tools/) (configure, agents, conversations, phone numbers, outbound calls, batch calls, knowledge base)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -39,7 +39,7 @@ node dist/index.js
 ### Environment variables
 
 - `ELEVENLABS_API_KEY` — ElevenLabs API key (starts with `sk_`)
-- `MCP_WORKSPACE_PATH` — optional sandbox root for future knowledge-base file uploads
+- `MCP_WORKSPACE_PATH` — optional sandbox root for knowledge-base file uploads
 - `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
 - `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
 
@@ -59,7 +59,7 @@ node dist/index.js
 }
 ```
 
-## Tools (17)
+## Tools (24)
 
 ### Configuration
 - `configure_elevenlabs_agents_api_key` — Save your ElevenLabs API key
@@ -67,6 +67,11 @@ node dist/index.js
 ### Agents
 - `list_agents` — List voice agents in the workspace
 - `get_agent` — Get one agent, including prompts and nested conversation config
+- `create_agent` — Create a new agent from a user-friendly authoring surface
+- `update_agent` — Partially update one agent via PATCH deep-merge semantics
+- `duplicate_agent` — Duplicate an existing agent before experimenting
+- `delete_agent` — Permanently remove an agent
+- `simulate_conversation` — Test an agent with a simulated user message before telephony work
 
 ### Conversations
 - `list_conversations` — List conversations, optionally filtered by agent/date/success
@@ -90,7 +95,9 @@ node dist/index.js
 
 ### Knowledge base
 - `list_knowledge_base_docs` — List knowledge-base documents
-- `get_knowledge_base_doc` — Get one knowledge-base document, with content capped to about 50KB
+- `get_knowledge_base_doc` — Get one knowledge-base document (metadata + /content body, capped ~50KB)
+- `add_knowledge_base_document` — Add a KB document in text, file, or URL mode
+- `delete_knowledge_base_document` — Delete a KB document, optionally with force
 
 ## Security notes
 

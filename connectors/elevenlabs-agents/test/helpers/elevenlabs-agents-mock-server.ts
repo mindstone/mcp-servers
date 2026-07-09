@@ -7,11 +7,14 @@ import {
   MOCK_API_KEY,
   makeFakeAudioBuffer,
   mockAgent,
-  mockOutboundCall,
   mockConversation,
   mockKbDoc,
+  mockKbDocContent,
   mockKbDocListItem,
+  mockKbDocUrlMetadata,
+  mockOutboundCall,
   mockPhoneNumber,
+  mockSimulation,
 } from '../fixtures/elevenlabs-agents-data.js';
 
 const BASE_V1 = 'https://api.elevenlabs.io/v1';
@@ -23,6 +26,8 @@ export {
 } from '../fixtures/elevenlabs-agents-data.js';
 
 export { makeFakeAudioBuffer };
+
+type JsonBody = Record<string, unknown>;
 
 function requireAuth(header: string | null): HttpResponse | null {
   if (header !== MOCK_API_KEY) {
@@ -51,13 +56,51 @@ function triggerResponse(trigger: string | null): HttpResponse | null {
 }
 
 function listTriggerFromUrl(url: URL): string | null {
-  return url.searchParams.get('cursor');
+  return url.searchParams.get('cursor') ?? url.searchParams.get('last_doc');
 }
 
 function idTrigger(id: string | readonly string[] | undefined): string | null {
   if (typeof id !== 'string') return null;
   if (id.startsWith('trigger-')) return id;
   return null;
+}
+
+function isObj(value: unknown): value is JsonBody {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function deepMerge(base: unknown, patch: unknown): unknown {
+  if (!isObj(base) || !isObj(patch)) {
+    return patch;
+  }
+
+  const out: JsonBody = { ...base };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) continue;
+    out[key] = key in out ? deepMerge(out[key], value) : value;
+  }
+  return out;
+}
+
+function materializeAgent(agentId: string, patch: JsonBody = {}): JsonBody {
+  return deepMerge(
+    {
+      ...mockAgent,
+      agent_id: agentId,
+    },
+    patch,
+  ) as JsonBody;
+}
+
+function createdKnowledgeBaseResponse(
+  documentationId: string,
+  name = 'Created KB document',
+): JsonBody {
+  return {
+    id: documentationId,
+    name,
+    folder_path: [{ id: 'folder_root' }],
+  };
 }
 
 export function createElevenLabsAgentsHandlers() {
@@ -74,12 +117,51 @@ export function createElevenLabsAgentsHandlers() {
       });
     }),
 
+    http.post(`${BASE_V1}/convai/agents/create`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      return HttpResponse.json({ agent_id: 'agent_created_123' });
+    }),
+
     http.get(`${BASE_V1}/convai/agents/:agentId`, ({ request, params }) => {
       const authErr = requireAuth(request.headers.get('xi-api-key'));
       if (authErr) return authErr;
       const triggered = triggerResponse(idTrigger(params.agentId));
       if (triggered) return triggered;
-      return HttpResponse.json({ ...mockAgent, agent_id: params.agentId });
+      return HttpResponse.json(materializeAgent(String(params.agentId)));
+    }),
+
+    http.patch(`${BASE_V1}/convai/agents/:agentId`, async ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      const triggered = triggerResponse(idTrigger(params.agentId));
+      if (triggered) return triggered;
+      const body = await request.json() as JsonBody;
+      return HttpResponse.json(materializeAgent(String(params.agentId), body));
+    }),
+
+    http.post(`${BASE_V1}/convai/agents/:agentId/duplicate`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      const triggered = triggerResponse(idTrigger(params.agentId));
+      if (triggered) return triggered;
+      return HttpResponse.json({ agent_id: 'agent_duplicate_123' });
+    }),
+
+    http.delete(`${BASE_V1}/convai/agents/:agentId`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      const triggered = triggerResponse(idTrigger(params.agentId));
+      if (triggered) return triggered;
+      return new HttpResponse(null, { status: 204 });
+    }),
+
+    http.post(`${BASE_V1}/convai/agents/:agentId/simulate-conversation`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      const triggered = triggerResponse(idTrigger(params.agentId));
+      if (triggered) return triggered;
+      return HttpResponse.json(mockSimulation);
     }),
 
     http.get(`${BASE_V1}/convai/conversations`, ({ request }) => {
@@ -137,7 +219,7 @@ export function createElevenLabsAgentsHandlers() {
       if (authErr) return authErr;
       const triggered = triggerResponse(idTrigger(params.phoneNumberId));
       if (triggered) return triggered;
-      const body = await request.json() as Record<string, unknown>;
+      const body = await request.json() as JsonBody;
       return HttpResponse.json({
         ...mockPhoneNumber,
         phone_number_id: params.phoneNumberId,
@@ -213,12 +295,73 @@ export function createElevenLabsAgentsHandlers() {
       });
     }),
 
+    http.post(`${BASE_V1}/convai/knowledge-base/text`, async ({ request }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      const body = await request.json() as JsonBody;
+      return HttpResponse.json(
+        createdKnowledgeBaseResponse(
+          'doc_created_text_123',
+          typeof body.name === 'string' ? body.name : 'Created text document',
+        ),
+      );
+    }),
+
+    http.post(`${BASE_V1}/convai/knowledge-base/file`, async ({ request }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      const formData = await request.formData();
+      const name = formData.get('name');
+      return HttpResponse.json(
+        createdKnowledgeBaseResponse(
+          'doc_created_file_123',
+          typeof name === 'string' && name.length > 0 ? name : 'Created file document',
+        ),
+      );
+    }),
+
+    http.post(`${BASE_V1}/convai/knowledge-base/url`, async ({ request }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      const body = await request.json() as JsonBody;
+      return HttpResponse.json(
+        createdKnowledgeBaseResponse(
+          'doc_created_url_123',
+          typeof body.name === 'string' ? body.name : 'Created URL document',
+        ),
+      );
+    }),
+
     http.get(`${BASE_V1}/convai/knowledge-base/:documentationId`, ({ request, params }) => {
       const authErr = requireAuth(request.headers.get('xi-api-key'));
       if (authErr) return authErr;
       const triggered = triggerResponse(idTrigger(params.documentationId));
       if (triggered) return triggered;
+      if (params.documentationId === 'doc_url_test_123') {
+        return HttpResponse.json({ ...mockKbDocUrlMetadata, id: params.documentationId });
+      }
       return HttpResponse.json({ ...mockKbDoc, id: params.documentationId });
+    }),
+
+    http.get(`${BASE_V1}/convai/knowledge-base/:documentationId/content`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      const triggered = triggerResponse(idTrigger(params.documentationId));
+      if (triggered) return triggered;
+      if (params.documentationId === 'trigger-404') {
+        return HttpResponse.json({ detail: { message: 'Resource not found' } }, { status: 404 });
+      }
+      return HttpResponse.text(mockKbDocContent, {
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      });
+    }),
+
+    http.delete(`${BASE_V1}/convai/knowledge-base/:documentationId`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      const triggered = triggerResponse(idTrigger(params.documentationId));
+      if (triggered) return triggered;
+      return new HttpResponse(null, { status: 204 });
     }),
   ];
 }
@@ -262,13 +405,13 @@ export function createElevenLabsAgents422Handlers() {
   ];
 }
 
-export function createUpdatePhoneNumberCapturingHandler(expectedApiKey = MOCK_API_KEY) {
-  const captured: { body?: Record<string, unknown> } = {};
+export function createUpdatePhoneNumberCapturingHandler() {
+  const captured: { body?: JsonBody } = {};
 
   const handler = http.patch(`${BASE_V1}/convai/phone-numbers/:phoneNumberId`, async ({ request, params }) => {
     const authErr = requireAuth(request.headers.get('xi-api-key'));
     if (authErr) return authErr;
-    captured.body = (await request.json()) as Record<string, unknown>;
+    captured.body = (await request.json()) as JsonBody;
     return HttpResponse.json({
       ...mockPhoneNumber,
       phone_number_id: params.phoneNumberId,
@@ -280,27 +423,27 @@ export function createUpdatePhoneNumberCapturingHandler(expectedApiKey = MOCK_AP
   return { handler, captured };
 }
 
-export function createOutboundCallCapturingHandler(expectedApiKey = MOCK_API_KEY) {
-  const captured: { body?: Record<string, unknown> } = {};
+export function createOutboundCallCapturingHandler() {
+  const captured: { body?: JsonBody } = {};
 
   const handler = http.post(`${BASE_V1}/convai/twilio/outbound-call`, async ({ request }) => {
     const authErr = requireAuth(request.headers.get('xi-api-key'));
     if (authErr) return authErr;
-    captured.body = (await request.json()) as Record<string, unknown>;
+    captured.body = (await request.json()) as JsonBody;
     return HttpResponse.json(mockOutboundCall);
   });
 
   return { handler, captured };
 }
 
-export function createSipTrunkOutboundCallCapturingHandler(expectedApiKey = MOCK_API_KEY) {
-  const captured: { body?: Record<string, unknown>; endpointHit?: boolean } = {};
+export function createSipTrunkOutboundCallCapturingHandler() {
+  const captured: { body?: JsonBody; endpointHit?: boolean } = {};
 
   const handler = http.post(`${BASE_V1}/convai/sip-trunk/outbound-call`, async ({ request }) => {
     const authErr = requireAuth(request.headers.get('xi-api-key'));
     if (authErr) return authErr;
     captured.endpointHit = true;
-    captured.body = (await request.json()) as Record<string, unknown>;
+    captured.body = (await request.json()) as JsonBody;
     return HttpResponse.json({ ...mockOutboundCall, provider: 'sip_trunk' });
   });
 
@@ -309,7 +452,6 @@ export function createSipTrunkOutboundCallCapturingHandler(expectedApiKey = MOCK
 
 export function createPhoneNumberProviderHandler(
   provider: string | undefined,
-  expectedApiKey = MOCK_API_KEY,
 ) {
   return http.get(`${BASE_V1}/convai/phone-numbers/:phoneNumberId`, ({ request, params }) => {
     const authErr = requireAuth(request.headers.get('xi-api-key'));
@@ -323,14 +465,153 @@ export function createPhoneNumberProviderHandler(
   });
 }
 
-export function createSubmitBatchCallCapturingHandler(expectedApiKey = MOCK_API_KEY) {
-  const captured: { body?: Record<string, unknown> } = {};
+export function createSubmitBatchCallCapturingHandler() {
+  const captured: { body?: JsonBody } = {};
 
   const handler = http.post(`${BASE_V1}/convai/batch-calling/submit`, async ({ request }) => {
     const authErr = requireAuth(request.headers.get('xi-api-key'));
     if (authErr) return authErr;
-    captured.body = (await request.json()) as Record<string, unknown>;
+    captured.body = (await request.json()) as JsonBody;
     return HttpResponse.json({ batch_call: mockBatchCall });
+  });
+
+  return { handler, captured };
+}
+
+export function createCreateAgentCapturingHandler() {
+  const captured: { body?: JsonBody } = {};
+
+  const handler = http.post(`${BASE_V1}/convai/agents/create`, async ({ request }) => {
+    const authErr = requireAuth(request.headers.get('xi-api-key'));
+    if (authErr) return authErr;
+    captured.body = (await request.json()) as JsonBody;
+    return HttpResponse.json({ agent_id: 'agent_created_123' });
+  });
+
+  return { handler, captured };
+}
+
+export function createUpdateAgentCapturingHandler() {
+  const captured: { body?: JsonBody } = {};
+
+  const handler = http.patch(`${BASE_V1}/convai/agents/:agentId`, async ({ request, params }) => {
+    const authErr = requireAuth(request.headers.get('xi-api-key'));
+    if (authErr) return authErr;
+    captured.body = (await request.json()) as JsonBody;
+    return HttpResponse.json(materializeAgent(String(params.agentId), captured.body));
+  });
+
+  return { handler, captured };
+}
+
+export function createDuplicateAgentCapturingHandler() {
+  const captured: { body?: JsonBody } = {};
+
+  const handler = http.post(`${BASE_V1}/convai/agents/:agentId/duplicate`, async ({ request }) => {
+    const authErr = requireAuth(request.headers.get('xi-api-key'));
+    if (authErr) return authErr;
+    captured.body = (await request.json()) as JsonBody;
+    return HttpResponse.json({ agent_id: 'agent_duplicate_123' });
+  });
+
+  return { handler, captured };
+}
+
+export function createSimulateConversationCapturingHandler() {
+  const captured: { body?: JsonBody } = {};
+
+  const handler = http.post(`${BASE_V1}/convai/agents/:agentId/simulate-conversation`, async ({ request }) => {
+    const authErr = requireAuth(request.headers.get('xi-api-key'));
+    if (authErr) return authErr;
+    captured.body = (await request.json()) as JsonBody;
+    return HttpResponse.json(mockSimulation);
+  });
+
+  return { handler, captured };
+}
+
+export function createKnowledgeBaseTextCapturingHandler() {
+  const captured: { body?: JsonBody } = {};
+
+  const handler = http.post(`${BASE_V1}/convai/knowledge-base/text`, async ({ request }) => {
+    const authErr = requireAuth(request.headers.get('xi-api-key'));
+    if (authErr) return authErr;
+    captured.body = (await request.json()) as JsonBody;
+    return HttpResponse.json(
+      createdKnowledgeBaseResponse(
+        'doc_created_text_123',
+        typeof captured.body.name === 'string' ? captured.body.name : 'Created text document',
+      ),
+    );
+  });
+
+  return { handler, captured };
+}
+
+export function createKnowledgeBaseUrlCapturingHandler() {
+  const captured: { body?: JsonBody } = {};
+
+  const handler = http.post(`${BASE_V1}/convai/knowledge-base/url`, async ({ request }) => {
+    const authErr = requireAuth(request.headers.get('xi-api-key'));
+    if (authErr) return authErr;
+    captured.body = (await request.json()) as JsonBody;
+    return HttpResponse.json(
+      createdKnowledgeBaseResponse(
+        'doc_created_url_123',
+        typeof captured.body.name === 'string' ? captured.body.name : 'Created URL document',
+      ),
+    );
+  });
+
+  return { handler, captured };
+}
+
+export function createKnowledgeBaseFileCapturingHandler() {
+  const captured: {
+    name?: string;
+    parent_folder_id?: string;
+    file_name?: string;
+    file_text?: string;
+  } = {};
+
+  const handler = http.post(`${BASE_V1}/convai/knowledge-base/file`, async ({ request }) => {
+    const authErr = requireAuth(request.headers.get('xi-api-key'));
+    if (authErr) return authErr;
+    const formData = await request.formData();
+    const file = formData.get('file');
+    const name = formData.get('name');
+    const parentFolderId = formData.get('parent_folder_id');
+
+    if (file instanceof File) {
+      captured.file_name = file.name;
+      captured.file_text = await file.text();
+    }
+    if (typeof name === 'string') {
+      captured.name = name;
+    }
+    if (typeof parentFolderId === 'string') {
+      captured.parent_folder_id = parentFolderId;
+    }
+
+    return HttpResponse.json(
+      createdKnowledgeBaseResponse(
+        'doc_created_file_123',
+        captured.name ?? 'Created file document',
+      ),
+    );
+  });
+
+  return { handler, captured };
+}
+
+export function createDeleteKnowledgeBaseCapturingHandler() {
+  const captured: { force?: string | null } = {};
+
+  const handler = http.delete(`${BASE_V1}/convai/knowledge-base/:documentationId`, ({ request }) => {
+    const authErr = requireAuth(request.headers.get('xi-api-key'));
+    if (authErr) return authErr;
+    captured.force = new URL(request.url).searchParams.get('force');
+    return new HttpResponse(null, { status: 204 });
   });
 
   return { handler, captured };

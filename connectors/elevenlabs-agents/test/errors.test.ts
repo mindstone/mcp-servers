@@ -90,6 +90,31 @@ const READ_TOOL_CASES: ToolCase[] = [
 
 const WRITE_TOOL_CASES: ToolCase[] = [
   {
+    tool: 'create_agent',
+    args: {
+      name: 'Support triage',
+      system_prompt: 'Help calmly.',
+      first_message: 'How can I help?',
+      voice_id: 'voice_123',
+    },
+  },
+  {
+    tool: 'update_agent',
+    args: { agent_id: 'agent_test_123', first_message: 'How can I help now?' },
+  },
+  {
+    tool: 'duplicate_agent',
+    args: { agent_id: 'agent_test_123' },
+  },
+  {
+    tool: 'delete_agent',
+    args: { agent_id: 'agent_test_123' },
+  },
+  {
+    tool: 'simulate_conversation',
+    args: { agent_id: 'agent_test_123', user_message: 'I need help.' },
+  },
+  {
     tool: 'update_phone_number',
     args: { phone_number_id: 'pn_test_123', label: 'Sales desk' },
   },
@@ -112,6 +137,14 @@ const WRITE_TOOL_CASES: ToolCase[] = [
   {
     tool: 'retry_batch_call',
     args: { batch_id: 'batch_test_123' },
+  },
+  {
+    tool: 'add_knowledge_base_document',
+    args: { mode: 'text', text: 'Refunds take 3 business days.' },
+  },
+  {
+    tool: 'delete_knowledge_base_document',
+    args: { documentation_id: 'doc_test_123' },
   },
 ];
 
@@ -222,6 +255,19 @@ describe('Error handling — ElevenLabs Agents', () => {
       const parsed = parseErrorBody(result);
       expect(parsed.error).toContain('query.page_size');
       expect(parsed.error).toContain('greater than or equal to 1');
+    });
+
+    it.each(WRITE_TOOL_CASES)('$tool surfaces flattened 422 detail from the global handler', async ({ tool, args }) => {
+      mswServer.use(...createElevenLabsAgents422Handlers());
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool(tool, args);
+      expectStructuredError(result, 'HTTP_422');
+      const parsed = parseErrorBody(result);
+      expect(parsed.error).toContain('page_size');
+      expect(parsed.error).toContain('<untrusted-content source="elevenlabs-agents:api:error_detail">');
     });
   });
 

@@ -36,6 +36,8 @@ export const ENDPOINTS = {
   phoneNumber: (phoneNumberId: string) => `/convai/phone-numbers/${encodeURIComponent(phoneNumberId)}`,
   knowledgeBaseDoc: (documentationId: string) =>
     `/convai/knowledge-base/${encodeURIComponent(documentationId)}`,
+  knowledgeBaseDocContent: (documentationId: string) =>
+    `/convai/knowledge-base/${encodeURIComponent(documentationId)}/content`,
   knowledgeBaseRagIndex: (documentationId: string) =>
     `/convai/knowledge-base/${encodeURIComponent(documentationId)}/rag-index`,
   batchCall: (batchId: string) => `/convai/batch-calling/${encodeURIComponent(batchId)}`,

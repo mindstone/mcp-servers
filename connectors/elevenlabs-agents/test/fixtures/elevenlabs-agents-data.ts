@@ -36,8 +36,17 @@ export const mockAgent = {
   system_prompt: ATTACK_PAYLOAD,
   first_message: ATTACK_PAYLOAD,
   conversation_config: {
+    tts: {
+      voice_id: 'voice_test_123',
+    },
     agent: {
-      prompt: { prompt: ATTACK_PAYLOAD },
+      language: 'en',
+      prompt: {
+        prompt: ATTACK_PAYLOAD,
+        llm_model: 'gpt-realtime',
+        temperature: 0.4,
+        knowledge_base_document_ids: ['doc_test_123'],
+      },
       first_message: ATTACK_PAYLOAD,
     },
   },
@@ -152,10 +161,85 @@ export const mockKbDocListItem = {
   },
 };
 
-/** Full document shape returned by GET (also uses `id`). */
+/** Metadata-only shape returned by GET /knowledge-base/{id} (body text is on /content). */
 export const mockKbDoc = {
   ...mockKbDocListItem,
-  content: `${ATTACK_PAYLOAD}\n${OVERSIZED_KB_PADDING}`,
+};
+
+/** Raw body text returned by GET /knowledge-base/{id}/content (text/plain, not JSON). */
+export const mockKbDocContent = `${ATTACK_PAYLOAD}\n${OVERSIZED_KB_PADDING}`;
+
+/** URL document metadata may include an HTML snapshot on the base GET. */
+export const mockKbDocUrlMetadata = {
+  id: 'doc_url_test_123',
+  name: ATTACK_PAYLOAD,
+  type: 'url',
+  url: 'https://example.com/docs',
+  extracted_inner_html: `<html><body>${ATTACK_PAYLOAD}</body></html>`,
+  metadata: {
+    source: ATTACK_PAYLOAD,
+  },
+};
+
+export const mockSimulation = {
+  simulated_conversation: [
+    {
+      role: 'user',
+      time_in_call_secs: 1,
+      agent_metadata: {
+        agent_id: 'agent_test_123',
+        branch_id: 'branch_test_123',
+        workflow_node_id: 'node_test_123',
+        version_id: 'version_test_123',
+      },
+      message: ATTACK_PAYLOAD,
+      multivoice_message: {
+        parts: [
+          {
+            text: ATTACK_PAYLOAD,
+            voice_label: 'narrator',
+            time_in_call_secs: 1,
+          },
+        ],
+      },
+      tool_calls: [
+        {
+          request_id: 'tool_request_123',
+          tool_name: 'lookup_customer',
+          params_as_json: NESTED_TOOL_CALL_ARGUMENTS_ATTACK,
+          type: 'system',
+        },
+      ],
+      original_message: ATTACK_PAYLOAD,
+      reasoning: [
+        {
+          summary: ATTACK_PAYLOAD,
+          provider_redact: false,
+        },
+      ],
+      rag_retrieval_info: {
+        retrieval_query: ATTACK_PAYLOAD,
+      },
+    },
+  ],
+  analysis: {
+    transcript_summary: ATTACK_PAYLOAD,
+    call_summary_title: ATTACK_PAYLOAD,
+    evaluation_criteria_results_list: [
+      {
+        criteria_id: 'criteria_test_123',
+        rationale: ATTACK_PAYLOAD,
+        result: 'success',
+      },
+    ],
+    data_collection_results_list: [
+      {
+        data_collection_id: 'data_collection_test_123',
+        rationale: ATTACK_PAYLOAD,
+        value: ATTACK_PAYLOAD,
+      },
+    ],
+  },
 };
 
 /** FastAPI-style 422 detail array used across error tests. */
