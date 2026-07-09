@@ -161,6 +161,18 @@ export function createElevenLabsAgentsUnauthorizedHandlers() {
   ];
 }
 
+/** Returns 401 for every ConvAI endpoint with a missing ConvAI permission payload. */
+export function createElevenLabsAgentsMissingPermissionHandlers() {
+  return [
+    http.get(`${BASE_V1}/convai/*`, () =>
+      HttpResponse.json(
+        { detail: { status: 'missing_permissions', message: 'Missing permissions: convai' } },
+        { status: 401 },
+      ),
+    ),
+  ];
+}
+
 /** Returns 429 for every ConvAI endpoint. */
 export function createElevenLabsAgentsRateLimitHandlers() {
   return [

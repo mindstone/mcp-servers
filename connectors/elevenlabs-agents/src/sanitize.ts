@@ -36,6 +36,32 @@ function wrapStr(value: unknown, source: string): unknown {
   return typeof value === 'string' ? wrapUntrusted(value, source) : value;
 }
 
+// Keep only structural string fields literal; everything else in transcript turns
+// is attacker-controlled phone-call content and must be enveloped recursively.
+const TRANSCRIPT_TURN_LITERAL_STRING_KEYS = new Set([
+  'role',
+  'id',
+  'type',
+  'status',
+  'timestamp',
+]);
+
+function sanitizeTranscriptTurnValue(value: unknown, source: string, key?: string): unknown {
+  if (typeof value === 'string') {
+    return key && TRANSCRIPT_TURN_LITERAL_STRING_KEYS.has(key) ? value : wrapUntrusted(value, source);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item, index) => sanitizeTranscriptTurnValue(item, `${source}[${index}]`));
+  }
+  if (!isObj(value)) return value;
+
+  const out: Obj = {};
+  for (const [childKey, childValue] of Object.entries(value)) {
+    out[childKey] = sanitizeTranscriptTurnValue(childValue, `${source}:${childKey}`, childKey);
+  }
+  return out;
+}
+
 function sanitizeNestedText(value: unknown, source: string): unknown {
   if (Array.isArray(value)) {
     return value.map((item, index) => sanitizeNestedText(item, `${source}[${index}]`));
@@ -61,18 +87,7 @@ function sanitizeNestedText(value: unknown, source: string): unknown {
 
 function sanitizeTranscriptTurns(turns: unknown, source: string): unknown {
   if (!Array.isArray(turns)) return turns;
-  return turns.map((turn, index) => {
-    if (!isObj(turn)) return turn;
-    const out: Obj = { ...turn };
-    out.message = wrapStr(out.message, `${source}[${index}]:message`);
-    out.text = wrapStr(out.text, `${source}[${index}]:text`);
-    out.content = wrapStr(out.content, `${source}[${index}]:content`);
-    out.tool_response = wrapStr(out.tool_response, `${source}[${index}]:tool_response`);
-    if (isObj(out.metadata)) {
-      out.metadata = wrapUntrustedJsonStrings(out.metadata, `${source}[${index}]:metadata`);
-    }
-    return out;
-  });
+  return turns.map((turn, index) => sanitizeTranscriptTurnValue(turn, `${source}[${index}]`));
 }
 
 function truncateUtf8(text: string, maxBytes: number): { text: string; truncated: boolean; originalBytes: number } {

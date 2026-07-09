@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mswServer } from './helpers/setup.js';
 import {
   createElevenLabsAgentsHandlers,
+  createElevenLabsAgentsMissingPermissionHandlers,
   createElevenLabsAgentsUnauthorizedHandlers,
   createElevenLabsAgents422Handlers,
   createElevenLabsAgentsRateLimitHandlers,
@@ -115,6 +116,21 @@ describe('Error handling — ElevenLabs Agents', () => {
       const parsed = parseErrorBody(result);
       expect(result.text).not.toContain(SECRET_KEY);
       expect(parsed.error).toContain('<untrusted-content source="elevenlabs-agents:api:error_detail">');
+    });
+
+    it('returns MISSING_PERMISSION on ConvAI 401 missing_permissions payloads', async () => {
+      mswServer.use(...createElevenLabsAgentsMissingPermissionHandlers());
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: SECRET_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('list_conversations', { page_size: 1 });
+      expectStructuredError(result, 'MISSING_PERMISSION');
+      const parsed = parseErrorBody(result);
+      expect(result.text).not.toContain(SECRET_KEY);
+      expect(parsed.error).toContain('missing required permission');
+      expect(parsed.error).toContain('<untrusted-content source="elevenlabs-agents:api:error_detail">');
+      expect(parsed.resolution).toContain('Conversational AI permission enabled');
     });
   });
 

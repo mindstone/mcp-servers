@@ -120,9 +120,14 @@ describe('Stage 5 external-text envelope coverage', () => {
     const conversations = listedJson.conversations as Array<Record<string, unknown>>;
     expectEnvelopedAndDefanged(conversations[0].summary, 'elevenlabs-agents:list_conversations:summary');
     const turns = conversations[0].transcript_turns as Array<Record<string, unknown>>;
+    expect(turns[0].role).toBe('user');
     expectEnvelopedAndDefanged(turns[0].text, 'elevenlabs-agents:list_conversations:transcript_turns[0]:text');
     expect(String(turns[0].text)).toContain('tool_calls');
     expect(String(turns[0].text)).toContain(`${ESCAPED_CLOSE_TAG}inject`);
+    expectEnvelopedAndDefanged(
+      (((turns[0].tool_calls as Array<Record<string, unknown>>)[0].function as Record<string, unknown>).arguments),
+      'elevenlabs-agents:list_conversations:transcript_turns[0]:tool_calls[0]:function:arguments',
+    );
     expectEnvelopedAndDefanged(turns[1].message, 'elevenlabs-agents:list_conversations:transcript_turns[1]:message');
     assertSentinelOnlyInsideEnvelopes(listedJson);
 
@@ -141,6 +146,12 @@ describe('Stage 5 external-text envelope coverage', () => {
     expectEnvelopedAndDefanged(
       (conversation.dynamic_variables as Record<string, unknown>).account_note,
       'elevenlabs-agents:get_conversation:dynamic_variables',
+    );
+    const singleTurns = conversation.transcript_turns as Array<Record<string, unknown>>;
+    expect(singleTurns[0].role).toBe('user');
+    expectEnvelopedAndDefanged(
+      (((singleTurns[0].tool_calls as Array<Record<string, unknown>>)[0].function as Record<string, unknown>).arguments),
+      'elevenlabs-agents:get_conversation:transcript_turns[0]:tool_calls[0]:function:arguments',
     );
     assertSentinelOnlyInsideEnvelopes(singleJson);
   });
