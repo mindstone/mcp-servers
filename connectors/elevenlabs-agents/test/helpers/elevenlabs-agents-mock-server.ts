@@ -1,10 +1,13 @@
 import { http, HttpResponse } from 'msw';
 import {
   ATTACK_PAYLOAD,
+  mockBatchCall,
+  mockBatchCallListItem,
   FASTAPI_422_DETAIL,
   MOCK_API_KEY,
   makeFakeAudioBuffer,
   mockAgent,
+  mockOutboundCall,
   mockConversation,
   mockKbDoc,
   mockKbDocListItem,
@@ -129,6 +132,74 @@ export function createElevenLabsAgentsHandlers() {
       return HttpResponse.json({ ...mockPhoneNumber, phone_number_id: params.phoneNumberId });
     }),
 
+    http.patch(`${BASE_V1}/convai/phone-numbers/:phoneNumberId`, async ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      const triggered = triggerResponse(idTrigger(params.phoneNumberId));
+      if (triggered) return triggered;
+      const body = await request.json() as Record<string, unknown>;
+      return HttpResponse.json({
+        ...mockPhoneNumber,
+        phone_number_id: params.phoneNumberId,
+        ...(typeof body.label === 'string' ? { label: body.label } : {}),
+        ...(typeof body.agent_id === 'string' ? { assigned_agent_id: body.agent_id } : {}),
+      });
+    }),
+
+    http.post(`${BASE_V1}/convai/twilio/outbound-call`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      return HttpResponse.json(mockOutboundCall);
+    }),
+
+    http.post(`${BASE_V1}/convai/sip-trunk/outbound-call`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      return HttpResponse.json({ ...mockOutboundCall, provider: 'sip_trunk' });
+    }),
+
+    http.post(`${BASE_V1}/convai/batch-calling/submit`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      return HttpResponse.json({ batch_call: mockBatchCall });
+    }),
+
+    http.get(`${BASE_V1}/convai/batch-calling/workspace`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      const trigger = new URL(request.url).searchParams.get('last_doc');
+      const triggered = triggerResponse(trigger);
+      if (triggered) return triggered;
+      return HttpResponse.json({
+        batch_calls: [mockBatchCallListItem],
+        last_doc: 'batch_cursor_2',
+      });
+    }),
+
+    http.get(`${BASE_V1}/convai/batch-calling/:batchId`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      const triggered = triggerResponse(idTrigger(params.batchId));
+      if (triggered) return triggered;
+      return HttpResponse.json({ ...mockBatchCall, id: params.batchId });
+    }),
+
+    http.post(`${BASE_V1}/convai/batch-calling/:batchId/cancel`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      const triggered = triggerResponse(idTrigger(params.batchId));
+      if (triggered) return triggered;
+      return HttpResponse.json({ ...mockBatchCall, id: params.batchId, status: 'cancelled' });
+    }),
+
+    http.post(`${BASE_V1}/convai/batch-calling/:batchId/retry`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      const triggered = triggerResponse(idTrigger(params.batchId));
+      if (triggered) return triggered;
+      return HttpResponse.json({ ...mockBatchCall, id: params.batchId, status: 'queued' });
+    }),
+
     http.get(`${BASE_V1}/convai/knowledge-base`, ({ request }) => {
       const authErr = requireAuth(request.headers.get('xi-api-key'));
       if (authErr) return authErr;
@@ -155,7 +226,7 @@ export function createElevenLabsAgentsHandlers() {
 /** Returns 401 for every ConvAI endpoint (wrong-key tests). */
 export function createElevenLabsAgentsUnauthorizedHandlers() {
   return [
-    http.get(`${BASE_V1}/convai/*`, () =>
+    http.all(`${BASE_V1}/convai/*`, () =>
       HttpResponse.json({ detail: { message: 'Invalid API key' } }, { status: 401 }),
     ),
   ];
@@ -164,7 +235,7 @@ export function createElevenLabsAgentsUnauthorizedHandlers() {
 /** Returns 401 for every ConvAI endpoint with a missing ConvAI permission payload. */
 export function createElevenLabsAgentsMissingPermissionHandlers() {
   return [
-    http.get(`${BASE_V1}/convai/*`, () =>
+    http.all(`${BASE_V1}/convai/*`, () =>
       HttpResponse.json(
         { detail: { status: 'missing_permissions', message: 'Missing permissions: convai' } },
         { status: 401 },
@@ -176,7 +247,7 @@ export function createElevenLabsAgentsMissingPermissionHandlers() {
 /** Returns 429 for every ConvAI endpoint. */
 export function createElevenLabsAgentsRateLimitHandlers() {
   return [
-    http.get(`${BASE_V1}/convai/*`, () =>
+    http.all(`${BASE_V1}/convai/*`, () =>
       HttpResponse.json({ detail: { message: 'Rate limit exceeded' } }, { status: 429 }),
     ),
   ];
@@ -185,8 +256,52 @@ export function createElevenLabsAgentsRateLimitHandlers() {
 /** Returns FastAPI-style 422 detail arrays for every ConvAI endpoint. */
 export function createElevenLabsAgents422Handlers() {
   return [
-    http.get(`${BASE_V1}/convai/*`, () =>
+    http.all(`${BASE_V1}/convai/*`, () =>
       HttpResponse.json({ detail: FASTAPI_422_DETAIL }, { status: 422 }),
     ),
   ];
+}
+
+export function createUpdatePhoneNumberCapturingHandler(expectedApiKey = MOCK_API_KEY) {
+  const captured: { body?: Record<string, unknown> } = {};
+
+  const handler = http.patch(`${BASE_V1}/convai/phone-numbers/:phoneNumberId`, async ({ request, params }) => {
+    const authErr = requireAuth(request.headers.get('xi-api-key'));
+    if (authErr) return authErr;
+    captured.body = (await request.json()) as Record<string, unknown>;
+    return HttpResponse.json({
+      ...mockPhoneNumber,
+      phone_number_id: params.phoneNumberId,
+      ...(typeof captured.body.label === 'string' ? { label: captured.body.label } : {}),
+      ...(typeof captured.body.agent_id === 'string' ? { assigned_agent_id: captured.body.agent_id } : {}),
+    });
+  });
+
+  return { handler, captured };
+}
+
+export function createOutboundCallCapturingHandler(expectedApiKey = MOCK_API_KEY) {
+  const captured: { body?: Record<string, unknown> } = {};
+
+  const handler = http.post(`${BASE_V1}/convai/twilio/outbound-call`, async ({ request }) => {
+    const authErr = requireAuth(request.headers.get('xi-api-key'));
+    if (authErr) return authErr;
+    captured.body = (await request.json()) as Record<string, unknown>;
+    return HttpResponse.json(mockOutboundCall);
+  });
+
+  return { handler, captured };
+}
+
+export function createSubmitBatchCallCapturingHandler(expectedApiKey = MOCK_API_KEY) {
+  const captured: { body?: Record<string, unknown> } = {};
+
+  const handler = http.post(`${BASE_V1}/convai/batch-calling/submit`, async ({ request }) => {
+    const authErr = requireAuth(request.headers.get('xi-api-key'));
+    if (authErr) return authErr;
+    captured.body = (await request.json()) as Record<string, unknown>;
+    return HttpResponse.json({ batch_call: mockBatchCall });
+  });
+
+  return { handler, captured };
 }

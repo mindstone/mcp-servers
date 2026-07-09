@@ -29,3 +29,6 @@ credentials/
 
 # Live-probe capture artefacts may contain real account data — never commit
 **/reports/live-probe-*.json
+
+# Test coverage output
+coverage/

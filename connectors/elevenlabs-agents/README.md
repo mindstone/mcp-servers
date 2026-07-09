@@ -2,13 +2,13 @@
 
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-ElevenLabs Conversational AI MCP server for Model Context Protocol hosts. Inspect voice agents, review conversation transcripts and recordings, check phone-number assignments, and browse knowledge-base documents through the ElevenLabs ConvAI API.
+ElevenLabs Conversational AI MCP server for Model Context Protocol hosts. Inspect voice agents, review conversation transcripts and recordings, manage phone-number assignments, place outbound calls, and submit or monitor scheduled batch calls through the ElevenLabs ConvAI API.
 
 ## Status
 
 - **Version:** bootstrap placeholder `0.0.0` until the first publish stage
 - **Auth:** API key ([`ELEVENLABS_API_KEY`](./server.json))
-- **Tools:** [10](./src/tools/) (configure, agents, conversations, phone numbers, knowledge base)
+- **Tools:** [17](./src/tools/) (configure, agents, conversations, phone numbers, outbound calls, batch calls, knowledge base)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -59,7 +59,7 @@ node dist/index.js
 }
 ```
 
-## Tools (10)
+## Tools (17)
 
 ### Configuration
 - `configure_elevenlabs_agents_api_key` — Save your ElevenLabs API key
@@ -76,6 +76,17 @@ node dist/index.js
 ### Phone numbers
 - `list_phone_numbers` — List configured phone numbers
 - `get_phone_number` — Get one phone number and its label/assignment
+- `update_phone_number` — Update one phone number label and/or assigned agent
+
+### Outbound calls
+- `make_outbound_call` — Place one outbound call after resolving the phone-number provider automatically
+
+### Batch calls
+- `submit_batch_call` — Submit a multi-recipient batch, optionally scheduled for the future
+- `list_batch_calls` — List recent batch-call jobs in the workspace
+- `get_batch_call` — Inspect one batch job, including per-recipient statuses
+- `cancel_batch_call` — Cancel a queued or scheduled batch job
+- `retry_batch_call` — Retry a previously submitted batch job
 
 ### Knowledge base
 - `list_knowledge_base_docs` — List knowledge-base documents
@@ -84,6 +95,8 @@ node dist/index.js
 ## Security notes
 
 All external text returned by the ElevenLabs API is wrapped in `<untrusted-content>` envelopes before it reaches the model. This is especially important for conversation transcripts, which can contain attacker-controlled caller speech.
+
+Outbound numbers are validated in E.164 format before any billing-surface call is sent upstream. Scheduled batches run on ElevenLabs' servers even if the client app is closed, so they should be monitored with `list_batch_calls` / `get_batch_call` and stopped with `cancel_batch_call` when needed.
 
 ## Licence
 

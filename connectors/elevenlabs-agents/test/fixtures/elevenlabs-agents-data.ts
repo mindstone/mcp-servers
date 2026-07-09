@@ -79,7 +79,66 @@ export const mockPhoneNumber = {
   phone_number_id: 'pn_test_123',
   phone_number: '+14155551234',
   label: ATTACK_PAYLOAD,
+  provider: 'twilio',
   assigned_agent_id: 'agent_test_123',
+};
+
+export const BATCH_SCHEDULED_TIME_UNIX = 1_893_456_000;
+
+export const mockOutboundCall = {
+  call_id: 'outbound_call_test_123',
+  status: 'queued',
+  phone_number_id: 'pn_test_123',
+  to_number: '+14155559876',
+  conversation_initiation_client_data: {
+    dynamic_variables: {
+      customer_name: ATTACK_PAYLOAD,
+      account_note: ATTACK_PAYLOAD,
+    },
+  },
+};
+
+export const mockBatchCall = {
+  id: 'batch_test_123',
+  call_name: ATTACK_PAYLOAD,
+  status: 'queued',
+  agent_id: 'agent_test_123',
+  agent_phone_number_id: 'pn_test_123',
+  scheduled_time_unix: BATCH_SCHEDULED_TIME_UNIX,
+  recipients: [
+    {
+      id: 'recipient_test_1',
+      phone_number: '+14155551234',
+      status: 'queued',
+      conversation_initiation_client_data: {
+        dynamic_variables: {
+          customer_name: ATTACK_PAYLOAD,
+          account_note: ATTACK_PAYLOAD,
+        },
+      },
+    },
+    {
+      id: 'recipient_test_2',
+      phone_number: '+14155557654',
+      status: 'failed',
+      error_message: ATTACK_PAYLOAD,
+      conversation_initiation_client_data: {
+        dynamic_variables: {
+          customer_name: ATTACK_PAYLOAD,
+        },
+      },
+    },
+  ],
+};
+
+/** List-item shape: real workspace API uses `id`, not `batch_id`. */
+export const mockBatchCallListItem = {
+  id: mockBatchCall.id,
+  call_name: mockBatchCall.call_name,
+  status: mockBatchCall.status,
+  agent_id: mockBatchCall.agent_id,
+  scheduled_time_unix: mockBatchCall.scheduled_time_unix,
+  recipients: mockBatchCall.recipients,
 };
 
 /** List-item shape: real API uses `id`, not `documentation_id`. */

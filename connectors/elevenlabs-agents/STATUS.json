@@ -10,11 +10,13 @@
     ]
   },
   "tools": {
-    "count": 10,
+    "count": 17,
     "domains": [
       "agents",
       "conversations",
       "phone-numbers",
+      "outbound-calls",
+      "batch-calls",
       "knowledge-base"
     ]
   },

@@ -13,6 +13,7 @@ type Obj = Record<string, unknown>;
 const KB_CONTENT_LIMIT_BYTES = 50_000;
 const NESTED_TEXT_KEYS = new Set([
   'name',
+  'call_name',
   'label',
   'prompt',
   'system_prompt',
@@ -21,6 +22,7 @@ const NESTED_TEXT_KEYS = new Set([
   'summary',
   'text',
   'message',
+  'error_message',
   'content',
   'title',
   'instructions',
@@ -163,6 +165,33 @@ export function sanitizePhoneNumber(phoneNumber: unknown, source: string): unkno
   if (!isObj(phoneNumber)) return phoneNumber;
   const out: Obj = { ...phoneNumber };
   out.label = wrapStr(out.label, `${source}:label`);
+  return out;
+}
+
+export function sanitizeOutboundCall(call: unknown, source: string): unknown {
+  if (!isObj(call)) return call;
+  return sanitizeNestedText(call, source);
+}
+
+export function sanitizeBatchCall(batchCall: unknown, source: string): unknown {
+  if (!isObj(batchCall)) return batchCall;
+  const sanitized = sanitizeNestedText(batchCall, source);
+  const out = isObj(sanitized) ? { ...sanitized } : { ...batchCall };
+
+  // List/get/submit responses use `id`; get/cancel/retry tools expect `batch_id`.
+  const batchId =
+    typeof out.batch_id === 'string'
+      ? out.batch_id
+      : typeof out.id === 'string'
+        ? out.id
+        : undefined;
+  if (batchId !== undefined) {
+    out.batch_id = batchId;
+  }
+  if ('id' in out) {
+    delete out.id;
+  }
+
   return out;
 }
 

@@ -121,4 +121,57 @@ FREE.`,
       });
     }),
   );
+
+  server.registerTool(
+    'update_phone_number',
+    {
+      description: `Update the label and/or assigned agent on one ElevenLabs phone number.
+
+WHEN TO USE:
+- Assign a different agent before outbound or batch calling
+- Rename a phone number label so future telephony work is easier to identify
+
+EXAMPLE: {"phone_number_id": "pn_123", "label": "Sales line", "agent_id": "agent_123"}
+
+RELATED TOOLS:
+- get_phone_number: inspect the current label and assignment first
+- make_outbound_call: place one outbound call after the assignment is correct
+- submit_batch_call: schedule or submit a batch once the number is ready
+
+RETURNS: phone_number.
+
+FREE.`,
+      inputSchema: z.object({
+        phone_number_id: z.string().min(1).describe('Phone number ID to update.'),
+        label: z.string().optional().describe('Optional human-readable label for this number.'),
+        agent_id: z.string().min(1).optional()
+          .describe('Optional agent ID to assign to this phone number for telephony use.'),
+      }).refine((value) => value.label !== undefined || value.agent_id !== undefined, {
+        message: 'Provide at least one field to update: label or agent_id.',
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args) => {
+      const apiKey = requireApiKey();
+      const body: Record<string, unknown> = {};
+      if (args.label !== undefined) body.label = args.label;
+      if (args.agent_id !== undefined) body.agent_id = args.agent_id;
+
+      const result = await elevenLabsJson<unknown>(
+        apiKey,
+        ENDPOINTS.phoneNumber(args.phone_number_id),
+        { method: 'PATCH', body: JSON.stringify(body) },
+      );
+      return JSON.stringify({
+        ok: true,
+        phone_number: sanitizePhoneNumber(result, 'elevenlabs-agents:update_phone_number'),
+        message: `Phone number ${args.phone_number_id} updated successfully.`,
+      });
+    }),
+  );
 }

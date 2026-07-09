@@ -194,6 +194,52 @@ describe('Stage 5 external-text envelope coverage', () => {
     assertSentinelOnlyInsideEnvelopes(kbJson);
   });
 
+  it('envelopes batch call names, per-recipient failure text, and dynamic variables', async () => {
+    mswServer.use(...createElevenLabsAgentsHandlers());
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const listed = await testClient.callTool('list_batch_calls', { limit: 1 });
+    const listedJson = listed.json as Record<string, unknown>;
+    const batchCalls = listedJson.batch_calls as Array<Record<string, unknown>>;
+    expectEnvelopedAndDefanged(batchCalls[0].call_name, 'elevenlabs-agents:list_batch_calls:call_name');
+    expectEnvelopedAndDefanged(
+      (((batchCalls[0].recipients as Array<Record<string, unknown>>)[0]
+        .conversation_initiation_client_data as Record<string, unknown>).dynamic_variables as Record<string, unknown>)
+        .customer_name,
+      'elevenlabs-agents:list_batch_calls:recipients[0]:conversation_initiation_client_data:dynamic_variables',
+    );
+    assertSentinelOnlyInsideEnvelopes(listedJson);
+
+    const single = await testClient.callTool('get_batch_call', { batch_id: 'batch_test_123' });
+    const singleJson = single.json as Record<string, unknown>;
+    const batchCall = singleJson.batch_call as Record<string, unknown>;
+    expectEnvelopedAndDefanged(batchCall.call_name, 'elevenlabs-agents:get_batch_call:call_name');
+    const recipients = batchCall.recipients as Array<Record<string, unknown>>;
+    expectEnvelopedAndDefanged(
+      recipients[1].error_message,
+      'elevenlabs-agents:get_batch_call:recipients[1]:error_message',
+    );
+    expectEnvelopedAndDefanged(
+      (((recipients[0].conversation_initiation_client_data as Record<string, unknown>).dynamic_variables as Record<string, unknown>).customer_name),
+      'elevenlabs-agents:get_batch_call:recipients[0]:conversation_initiation_client_data:dynamic_variables',
+    );
+    assertSentinelOnlyInsideEnvelopes(singleJson);
+
+    const submitted = await testClient.callTool('submit_batch_call', {
+      call_name: 'Renewals wave 1',
+      agent_id: 'agent_test_123',
+      recipients: [{ phone_number: '+14155559876', dynamic_variables: { customer_name: 'Jane' } }],
+    });
+    const submittedJson = submitted.json as Record<string, unknown>;
+    expectEnvelopedAndDefanged(
+      ((submittedJson.batch_call as Record<string, unknown>).call_name),
+      'elevenlabs-agents:submit_batch_call:call_name',
+    );
+    assertSentinelOnlyInsideEnvelopes(submittedJson);
+  });
+
   it('downloads conversation audio to a tmp file without leaking hostile transcript text', async () => {
     mswServer.use(...createElevenLabsAgentsHandlers());
     testClient = await createTestClient({
@@ -217,7 +263,7 @@ describe('tool sources reach the envelope helper', () => {
     const nodePath = await import('node:path');
     const nodeUrl = await import('node:url');
     const dir = nodePath.dirname(nodeUrl.fileURLToPath(import.meta.url));
-    const TOOLS = ['agents.ts', 'conversations.ts', 'phone-numbers.ts', 'knowledge-base.ts'];
+    const TOOLS = ['agents.ts', 'batch-calls.ts', 'calls.ts', 'conversations.ts', 'knowledge-base.ts', 'phone-numbers.ts'];
 
     for (const file of TOOLS) {
       const contents = nodeFs.readFileSync(nodePath.join(dir, '..', 'src', 'tools', file), 'utf8');

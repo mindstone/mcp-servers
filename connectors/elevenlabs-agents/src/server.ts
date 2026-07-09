@@ -6,6 +6,8 @@ import {
   registerConversationTools,
   registerPhoneNumberTools,
   registerKnowledgeBaseTools,
+  registerCallTools,
+  registerBatchCallTools,
 } from './tools/index.js';
 
 const require = createRequire(import.meta.url);
@@ -22,6 +24,8 @@ export function createServer(): McpServer {
   registerConversationTools(server);
   registerPhoneNumberTools(server);
   registerKnowledgeBaseTools(server);
+  registerCallTools(server);
+  registerBatchCallTools(server);
 
   return server;
 }

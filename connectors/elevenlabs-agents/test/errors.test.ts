@@ -63,6 +63,18 @@ const READ_TOOL_CASES: ToolCase[] = [
     trigger429: { phone_number_id: 'trigger-429' },
   },
   {
+    tool: 'list_batch_calls',
+    args: { limit: 1 },
+    trigger422: { limit: 1, last_doc: 'trigger-422' },
+    trigger429: { limit: 1, last_doc: 'trigger-429' },
+  },
+  {
+    tool: 'get_batch_call',
+    args: { batch_id: 'batch_test_123' },
+    trigger422: { batch_id: 'trigger-422' },
+    trigger429: { batch_id: 'trigger-429' },
+  },
+  {
     tool: 'list_knowledge_base_docs',
     args: { page_size: 1 },
     trigger422: { page_size: 1, cursor: 'trigger-422' },
@@ -73,6 +85,33 @@ const READ_TOOL_CASES: ToolCase[] = [
     args: { documentation_id: 'doc_test_123' },
     trigger422: { documentation_id: 'trigger-422' },
     trigger429: { documentation_id: 'trigger-429' },
+  },
+];
+
+const WRITE_TOOL_CASES: ToolCase[] = [
+  {
+    tool: 'update_phone_number',
+    args: { phone_number_id: 'pn_test_123', label: 'Sales desk' },
+  },
+  {
+    tool: 'make_outbound_call',
+    args: { phone_number_id: 'pn_test_123', to_number: '+14155559876' },
+  },
+  {
+    tool: 'submit_batch_call',
+    args: {
+      call_name: 'Renewals wave 1',
+      agent_id: 'agent_test_123',
+      recipients: [{ phone_number: '+14155559876' }],
+    },
+  },
+  {
+    tool: 'cancel_batch_call',
+    args: { batch_id: 'batch_test_123' },
+  },
+  {
+    tool: 'retry_batch_call',
+    args: { batch_id: 'batch_test_123' },
   },
 ];
 
@@ -105,7 +144,30 @@ describe('Error handling — ElevenLabs Agents', () => {
       expect(parseErrorBody(result).error).toContain('API key not configured');
     });
 
+    it.each(WRITE_TOOL_CASES)('$tool returns AUTH_REQUIRED when API key is missing', async ({ tool, args }) => {
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: '', MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool(tool, args);
+      expectStructuredError(result, 'AUTH_REQUIRED');
+      expect(parseErrorBody(result).error).toContain('API key not configured');
+    });
+
     it.each(READ_TOOL_CASES)('$tool returns AUTH_FAILED on 401 without leaking the key', async ({ tool, args }) => {
+      mswServer.use(...createElevenLabsAgentsUnauthorizedHandlers());
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: SECRET_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool(tool, args);
+      expectStructuredError(result, 'AUTH_FAILED');
+      const parsed = parseErrorBody(result);
+      expect(result.text).not.toContain(SECRET_KEY);
+      expect(parsed.error).toContain('<untrusted-content source="elevenlabs-agents:api:error_detail">');
+    });
+
+    it.each(WRITE_TOOL_CASES)('$tool returns AUTH_FAILED on 401 without leaking the key', async ({ tool, args }) => {
       mswServer.use(...createElevenLabsAgentsUnauthorizedHandlers());
       testClient = await createTestClient({
         env: { ELEVENLABS_API_KEY: SECRET_KEY, MCP_HOST_BRIDGE_STATE: '' },
@@ -175,6 +237,16 @@ describe('Error handling — ElevenLabs Agents', () => {
       expect(result.json).toMatchObject({
         resolution: expect.stringContaining('Rate limited'),
       });
+    });
+
+    it.each(WRITE_TOOL_CASES)('$tool returns RATE_LIMITED on global HTTP 429', async ({ tool, args }) => {
+      mswServer.use(...createElevenLabsAgentsRateLimitHandlers());
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool(tool, args);
+      expectStructuredError(result, 'RATE_LIMITED');
     });
 
     it('global 429 handler returns actionable resolution', async () => {
