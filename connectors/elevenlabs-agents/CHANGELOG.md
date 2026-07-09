@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-09
+
+### Changed
+
+- Initial release: ElevenLabs Conversational-AI agents — authoring, conversations & transcripts, knowledge base, phone numbers, and batch/scheduled outbound calling.
+
 ### Added
 - **elevenlabs-agents**: Stage 5 scaffold from `connectors/_template/`, renamed and cleaned of placeholders, with `server.json.name` aligned to `package.json.mcpName` and `STATUS.json` schema v2.
 - **elevenlabs-agents**: read-side Stage 5 tools — `configure_elevenlabs_agents_api_key`, `list_agents`, `get_agent`, `list_conversations`, `get_conversation`, `get_conversation_audio`, `list_phone_numbers`, `get_phone_number`, `list_knowledge_base_docs`, `get_knowledge_base_doc`.
