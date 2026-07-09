@@ -136,7 +136,7 @@ node dist/index.js
 - `speech_to_speech` — Convert source audio to a different voice
 
 ### Audio processing
-- `isolate_audio` — Remove background noise from an audio file
+- `isolate_audio` — Remove background noise from an audio file (source must be ≥ ~4.6s; shorter clips fail upstream)
 - `forced_alignment` — Align transcript text to audio with per-word timestamps
 
 ### Music

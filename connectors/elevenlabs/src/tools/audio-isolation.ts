@@ -16,6 +16,10 @@ export function registerAudioIsolationTools(server: McpServer): void {
 WHEN TO USE:
 - Clean up meeting recordings or voice memos with background noise
 - Prepare a cleaner clip before transcription or voice cloning
+- Source audio is at least ~4.6 seconds long (shorter clips fail upstream)
+
+COMMON MISTAKES:
+- Clips under ~4.6 seconds — the API rejects them; trim/merge or pick a longer sample first
 
 EXAMPLE: {"audio_path": "/path/to/noisy.mp3"}
 

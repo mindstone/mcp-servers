@@ -320,7 +320,7 @@ describe('tool sources reach the envelope helper (mechanical guard on the source
     const dir = nodePath.dirname(nodeUrl.fileURLToPath(import.meta.url));
     // voices (name/description/labels), account (model names), transcription
     // (transcript text), speech (API-resolved voice name) all return external text.
-    const TOOLS = ['voices.ts', 'account.ts', 'transcription.ts', 'speech.ts'];
+    const TOOLS = ['voices.ts', 'account.ts', 'transcription.ts', 'speech.ts', 'alignment.ts'];
 
     for (const f of TOOLS) {
       const contents = nodeFs.readFileSync(nodePath.join(dir, '..', 'src', 'tools', f), 'utf-8');
