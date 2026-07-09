@@ -1,0 +1,48 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mindstone/mcp-server-elevenlabs-agents",
+  "title": "ElevenLabs Agents",
+  "description": "ElevenLabs Conversational AI MCP server for Model Context Protocol hosts — agents, conversations, phone numbers, and knowledge base",
+  "version": "0.0.0",
+  "repository": {
+    "url": "https://github.com/mindstone/mcp-servers",
+    "source": "github",
+    "subfolder": "connectors/elevenlabs-agents"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@mindstone/mcp-server-elevenlabs-agents",
+      "version": "0.0.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "ELEVENLABS_API_KEY",
+          "description": "ElevenLabs API key (starts with sk_)",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "MCP_WORKSPACE_PATH",
+          "description": "Optional workspace root for sandboxed knowledge-base file uploads",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "com.mindstone.rebel": {
+        "catalogId": "bundled-elevenlabs-agents",
+        "provider": "rebel-oss"
+      }
+    }
+  }
+}

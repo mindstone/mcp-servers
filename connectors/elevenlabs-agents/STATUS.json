@@ -1,0 +1,30 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 2,
+  "name": "elevenlabs-agents",
+  "package": "@mindstone/mcp-server-elevenlabs-agents",
+  "auth": {
+    "type": "api-key",
+    "envVars": [
+      "ELEVENLABS_API_KEY"
+    ]
+  },
+  "tools": {
+    "count": 10,
+    "domains": [
+      "agents",
+      "conversations",
+      "phone-numbers",
+      "knowledge-base"
+    ]
+  },
+  "surface": "cloud-api",
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/tools/",
+    "auth": "./src/",
+    "tests": "./test/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs-agents",
+    "serverJson": "./server.json"
+  }
+}

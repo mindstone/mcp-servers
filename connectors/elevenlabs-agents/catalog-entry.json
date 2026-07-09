@@ -1,0 +1,10 @@
+{
+  "id": "bundled-elevenlabs-agents",
+  "name": "ElevenLabs Agents",
+  "description": "ElevenLabs Conversational AI for browsing agents, reviewing conversation transcripts and recordings, checking phone-number assignments, and inspecting knowledge-base documents. 'List recent conversations for our support agent' or 'Download the audio for this call' or 'Open the knowledge-base document the agent is using'.",
+  "category": "communication",
+  "icon": "phone",
+  "maturity": "beta",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}
