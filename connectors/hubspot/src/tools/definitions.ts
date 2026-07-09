@@ -2277,7 +2277,7 @@ RETURNS:
 - Total count and pagination support via limit/offset
 
 SCOPES REQUIRED: cms.knowledge_base.articles.read and collector.graphql_query.execute
-(user may need to reconnect HubSpot to grant these scopes)
+(a 403 usually means the account's plan or the signed-in user's permissions don't include the knowledge base — reconnecting alone won't add it)
 
 COMMON MISTAKES:
 - Expecting write operations — KB tools are read-only (no create/update/delete API exists)
@@ -2310,7 +2310,7 @@ WORKFLOW:
 2. Call get_hubspot_kb_article for complete details
 
 SCOPES REQUIRED: cms.knowledge_base.articles.read and collector.graphql_query.execute
-(user may need to reconnect HubSpot to grant these scopes)
+(a 403 usually means the account's plan or the signed-in user's permissions don't include the knowledge base — reconnecting alone won't add it)
 
 COMMON MISTAKES:
 - Using a knowledgeBaseId/contentGroupId instead of an articleId
@@ -2787,8 +2787,9 @@ Typical workflow:
 3. list_hubspot_thread_messages(threadId) to read the message history
 4. (optional) get_hubspot_thread_message_original_content if a message is truncated
 
-REQUIRES: \`conversations.read\` OAuth scope. If a 403 is returned, reconnect the
-HubSpot account to grant the scope.
+REQUIRES: \`conversations.read\` OAuth scope (added May 2026). On a 403: accounts
+connected before then must reconnect to grant it; otherwise reconnecting won't
+help — the account's plan or the signed-in user's permissions are the likely cause.
 
 RETURNS: { results: [{ id, status, latestMessageTimestamp, ... }], paging? }`,
     aliases: ['get_ticket_threads', 'list_ticket_conversations'],
@@ -2816,7 +2817,9 @@ If \`truncationStatus\` indicates the body was truncated, call
 get_hubspot_thread_message_original_content with the same threadId/messageId to fetch
 the full body.
 
-REQUIRES: \`conversations.read\` OAuth scope.
+REQUIRES: \`conversations.read\` OAuth scope (added May 2026). On a 403: accounts
+connected before then must reconnect to grant it; otherwise reconnecting won't
+help — the account's plan or the signed-in user's permissions are the likely cause.
 
 RETURNS: { results: [...messages], paging? }`,
     aliases: ['get_thread_messages', 'read_thread'],
@@ -2840,7 +2843,9 @@ Use this only when the message returned from list_hubspot_thread_messages has a
 \`truncationStatus\` indicating its body was truncated. For untruncated messages, the
 body is already present in list_hubspot_thread_messages and this call is unnecessary.
 
-REQUIRES: \`conversations.read\` OAuth scope.`,
+REQUIRES: \`conversations.read\` OAuth scope (added May 2026). On a 403: accounts
+connected before then must reconnect to grant it; otherwise reconnecting won't
+help — the account's plan or the signed-in user's permissions are the likely cause.`,
     aliases: ['get_thread_message_full_content'],
     annotations: { readOnlyHint: true },
     inputSchema: {

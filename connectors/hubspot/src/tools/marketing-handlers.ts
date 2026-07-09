@@ -32,27 +32,22 @@ function parseHubSpotError(
   }
 
   if (error instanceof HubSpotApiError) {
-    const details = error.details as Record<string, unknown> | undefined;
-    const message = details?.message as string || error.message;
-    
     // Permission error - likely tier restriction or missing scope
     if (error.statusCode === 403) {
-      // Check if error mentions missing scopes (HubSpot returns this in the message)
-      const errorStr = JSON.stringify(details || message || '').toLowerCase();
-      const isMissingScope = errorStr.includes('scope') || errorStr.includes('permission');
-      
-      if (context.feature === 'lists') {
-        return {
-          error: 'Lists API access denied - likely missing crm.lists.read scope',
-          errorCode: 'SCOPE_MISSING',
-          suggestion: 'If you connected HubSpot before Jan 2026, you need to reconnect to grant the new Lists scope. Go to Settings → Connectors → HubSpot → Disconnect, then reconnect.'
-        };
-      }
+      // Note: the Lists feature (crm.lists.read, a recently-added scope) is handled
+      // by the generic branch below via the shared builder's recently-added-scope
+      // hybrid — no bespoke branch needed.
       if (context.feature === 'contacts' && context.operation === 'batch_read') {
+        const capabilityDenied = buildHubSpotCapabilityDeniedError({
+          objectType: 'contacts',
+          operation: context.operation,
+          args: context.args,
+        });
         return {
-          error: 'Contacts batch read access denied',
-          errorCode: 'PERMISSION_DENIED',
-          suggestion: 'Ensure crm.objects.contacts.read scope is granted. If using with Lists, you may need to reconnect HubSpot.'
+          error: capabilityDenied.error,
+          errorCode: 'SCOPE_MISSING',
+          suggestion: capabilityDenied.suggestion,
+          details: summariseHubSpotApiError(error, { operation: context.operation }),
         };
       }
       if (
@@ -61,8 +56,8 @@ function parseHubSpotError(
         context.feature === 'marketing_email'
       ) {
         // Honest multi-cause copy (scope registration / plan / user permission),
-        // not the old single-cause "requires Marketing Hub" — the message Arthur
-        // hit that sent him in circles reconnecting. See error-parser helper.
+        // not the old single-cause "requires Marketing Hub" that sent users in
+        // circles reconnecting (FOX-3631). See error-parser helper.
         const capabilityDenied = buildHubSpotCapabilityDeniedError({
           objectType: context.feature,
           operation: context.operation,
@@ -75,18 +70,19 @@ function parseHubSpotError(
           details: summariseHubSpotApiError(error, { operation: context.operation }),
         };
       }
-      // Generic 403 with scope hint
-      if (isMissingScope) {
-        return {
-          error: 'HubSpot API scope or permission denied',
-          errorCode: 'SCOPE_OR_PERMISSION_DENIED',
-          suggestion: 'This may require reconnecting HubSpot to grant additional scopes, or upgrading your HubSpot subscription.'
-        };
-      }
+      // Generic 403 capability gap: honest multi-cause copy rather than
+      // reconnect-first. Falls back to a neutral capability label for features
+      // without a specific one.
+      const capabilityDenied = buildHubSpotCapabilityDeniedError({
+        objectType: context.feature,
+        operation: context.operation,
+        args: context.args,
+      });
       return {
-        error: 'Insufficient HubSpot permissions for this operation',
-        errorCode: 'PERMISSION_DENIED',
-        suggestion: 'Check your HubSpot account permissions or subscription tier.'
+        error: capabilityDenied.error,
+        errorCode: 'SCOPE_MISSING',
+        suggestion: capabilityDenied.suggestion,
+        details: summariseHubSpotApiError(error, { operation: context.operation }),
       };
     }
     

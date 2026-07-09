@@ -1,5 +1,6 @@
 import { getHubSpotClientAsync, HubSpotApiError } from '../api/hubspot-client.js';
 import {
+  buildHubSpotCapabilityDeniedError,
   parseHubSpotError as parseSharedHubSpotError,
   summariseHubSpotApiError,
   type ParsedHubSpotError,
@@ -30,8 +31,6 @@ function parseHubSpotError(
   }
 
   if (error instanceof HubSpotApiError) {
-    const details = error.details as Record<string, unknown> | undefined;
-
     if (error.statusCode === 401) {
       return {
         error: 'HubSpot authentication expired or invalid',
@@ -40,10 +39,19 @@ function parseHubSpotError(
       };
     }
     if (error.statusCode === 403) {
+      // Honest multi-cause copy: an absent association/CRM scope isn't fixed by
+      // reconnecting alone — the account's plan or the user's permission are the
+      // likelier causes. Use the 'associations' label (feature is 'associations_v4').
+      const capabilityDenied = buildHubSpotCapabilityDeniedError({
+        objectType: 'associations',
+        operation: context.operation,
+        args: context.args,
+      });
       return {
-        error: 'Association labels API access denied',
-        errorCode: 'PERMISSION_DENIED',
-        suggestion: 'Ensure your HubSpot account has CRM write scopes. Reconnect HubSpot if needed.'
+        error: capabilityDenied.error,
+        errorCode: 'SCOPE_MISSING',
+        suggestion: capabilityDenied.suggestion,
+        details: summariseHubSpotApiError(error, { operation: context.operation }),
       };
     }
     if (error.statusCode === 404) {

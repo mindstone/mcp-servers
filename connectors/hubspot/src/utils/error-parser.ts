@@ -208,6 +208,7 @@ const HUBSPOT_CAPABILITY_LABELS: Record<string, string> = {
   contacts: 'contacts',
   companies: 'companies',
   deals: 'deals',
+  lists: 'lists',
   tickets: 'support tickets (Service Hub)',
   products: 'products',
   line_items: 'line items',
@@ -225,6 +226,8 @@ const HUBSPOT_CAPABILITY_LABELS: Record<string, string> = {
   analytics: 'marketing analytics (Marketing Hub)',
   workflows: 'workflows and automation',
   automation: 'workflows and automation',
+  knowledge_base_articles: 'the knowledge base (Service Hub)',
+  conversations: 'the conversations inbox',
 };
 
 // Capabilities that map to a HubSpot *plan* (paid hub) rather than a per-object
@@ -236,6 +239,18 @@ const HUBSPOT_PLAN_HINTS: Record<string, string> = {
   analytics: 'marketing analytics requires a paid Marketing Hub plan, for example',
   workflows: 'workflows require Operations Hub or Marketing/Sales Hub Professional, for example',
   automation: 'workflows require Operations Hub or Marketing/Sales Hub Professional, for example',
+  knowledge_base_articles: 'the knowledge base requires Service Hub Professional or Enterprise, for example',
+};
+
+// Capabilities whose OAuth scope was genuinely ADDED to the app at a known date.
+// An account connected before then really does need to reconnect to grant the
+// scope — so for these, reconnect legitimately leads. But we still name the
+// plan/permission fallback so an already-reconnected account doesn't loop on an
+// ineffective reconnect (the FOX-3631 failure mode, which the honest copy exists
+// to prevent). Keyed by objectType; the value is the month the scope was added.
+const HUBSPOT_RECENTLY_ADDED_SCOPE_HINTS: Record<string, string> = {
+  lists: 'January 2026',
+  conversations: 'May 2026',
 };
 
 /**
@@ -292,9 +307,20 @@ export function describeHubSpotCapability(context: HubSpotErrorContext): string 
 export function buildHubSpotCapabilityDeniedError(
   context: HubSpotErrorContext,
 ): { error: string; suggestion: string } {
+  const key = context.objectType?.trim().toLowerCase() ?? '';
   const label = describeHubSpotCapability(context);
-  const planHint = HUBSPOT_PLAN_HINTS[context.objectType?.trim().toLowerCase() ?? ''];
+  const planHint = HUBSPOT_PLAN_HINTS[key];
   const planExample = planHint ? ` (${planHint})` : '';
+
+  // Recently-added scope: reconnect legitimately leads for the pre-add cohort,
+  // then the honest plan/permission fallback so a reconnected account doesn't loop.
+  const scopeAddedMonth = HUBSPOT_RECENTLY_ADDED_SCOPE_HINTS[key];
+  if (scopeAddedMonth) {
+    return {
+      error: `Can't access ${label} on this HubSpot connection.`,
+      suggestion: `If you connected HubSpot before ${scopeAddedMonth}, reconnect to grant this — the scope for ${label} was added to the app then, so older connections don't have it yet. If you have reconnected since, reconnecting again won't add ${label} on its own: the account's plan may not include it${planExample}, the signed-in HubSpot user may not have permission for it, or (less commonly) a HubSpot administrator may need to authorise ${label} for the app. Other HubSpot features are unaffected.`,
+    };
+  }
 
   return {
     error: `Can't access ${label} on this HubSpot connection.`,
