@@ -5,6 +5,7 @@ import { elevenLabsBinaryDownload, elevenLabsFetch, elevenLabsJson } from '../cl
 import { ENDPOINTS } from '../endpoints.js';
 import {
   ElevenLabsError,
+  LONG_REQUEST_TIMEOUT_MS,
   type DubbingCreateResponse,
   type DubbingStatusResponse,
 } from '../types.js';
@@ -13,6 +14,20 @@ import { withErrorHandling } from '../utils.js';
 import { readSandboxedFile, sandboxedFileToBlob } from './file-input.js';
 
 const TERMINAL_DUBBING_STATUSES = new Set(['dubbed', 'failed', 'cancelled']);
+const TERMINAL_STATUS_PHRASE = 'dubbed, failed, or cancelled';
+
+function dubbingNextStep(status: string): string {
+  if (status === 'dubbed') {
+    return 'Call download_dubbed_audio with dubbing_id and language_code.';
+  }
+  if (status === 'failed') {
+    return 'Inspect error_detail; fix source media or retry create_dubbing.';
+  }
+  if (status === 'cancelled') {
+    return 'Job was cancelled — do not poll further; submit a new create_dubbing if needed.';
+  }
+  return 'Poll get_dubbing again in ~10 seconds.';
+}
 
 function envelopDubbingStatusField(value: string | undefined, field: string): string | undefined {
   if (!value) return undefined;
@@ -23,7 +38,7 @@ export function registerDubbingTools(server: McpServer): void {
   server.registerTool(
     'create_dubbing',
     {
-      description: `Submit an async dubbing job (v1 API). You MUST poll get_dubbing until status is dubbed or failed.
+      description: `Submit an async dubbing job (v1 API). You MUST poll get_dubbing until status is ${TERMINAL_STATUS_PHRASE}.
 
 WHEN TO USE:
 - Translate/dub existing audio or video into another language
@@ -89,11 +104,23 @@ COST: Dubbing credits per minute of source media.`,
         formData.append('source_url', args.source_url);
       }
 
-      const data = await elevenLabsJson<DubbingCreateResponse>(
-        apiKey,
-        ENDPOINTS.DUBBING,
-        { method: 'POST', body: formData },
-      );
+      let data: DubbingCreateResponse;
+      try {
+        data = await elevenLabsJson<DubbingCreateResponse>(
+          apiKey,
+          ENDPOINTS.DUBBING,
+          { method: 'POST', body: formData, timeoutMs: LONG_REQUEST_TIMEOUT_MS },
+        );
+      } catch (error) {
+        if (error instanceof ElevenLabsError && error.code === 'TIMEOUT') {
+          throw new ElevenLabsError(
+            error.message,
+            'TIMEOUT',
+            'The submit may have timed out after uploading, but the job might still be processing. Call get_dubbing with the dubbing_id if you have one, or check recent jobs in the ElevenLabs dashboard before resubmitting to avoid duplicate jobs.',
+          );
+        }
+        throw error;
+      }
 
       const expectedSec = data.expected_duration_sec;
       return JSON.stringify({
@@ -101,8 +128,8 @@ COST: Dubbing credits per minute of source media.`,
         dubbing_id: data.dubbing_id,
         expected_duration_sec: expectedSec,
         target_lang: args.target_lang,
-        message: `Dubbing job ${data.dubbing_id} submitted. You MUST poll get_dubbing every ~10 seconds until status is dubbed or failed${expectedSec != null ? ` (expected ~${expectedSec}s)` : ''}.`,
-        poll_hint: 'Call get_dubbing with this dubbing_id; when status is dubbed, call download_dubbed_audio.',
+        message: `Dubbing job ${data.dubbing_id} submitted. You MUST poll get_dubbing every ~10 seconds until status is ${TERMINAL_STATUS_PHRASE}${expectedSec != null ? ` (expected ~${expectedSec}s)` : ''}.`,
+        poll_hint: `Call get_dubbing with this dubbing_id until status is ${TERMINAL_STATUS_PHRASE}; when dubbed, call download_dubbed_audio.`,
       });
     }),
   );
@@ -110,7 +137,7 @@ COST: Dubbing credits per minute of source media.`,
   server.registerTool(
     'get_dubbing',
     {
-      description: `Poll dubbing job status. Call repeatedly after create_dubbing until status is dubbed or failed.
+      description: `Poll dubbing job status. Call repeatedly after create_dubbing until status is ${TERMINAL_STATUS_PHRASE}.
 
 WHEN TO USE:
 - After create_dubbing — poll every ~10s (respect expected_duration_sec)
@@ -172,12 +199,8 @@ COST: FREE — status read only.`,
         is_terminal: isTerminal,
         message: isTerminal
           ? `Dubbing ${args.dubbing_id} reached terminal status: ${status}.`
-          : `Dubbing ${args.dubbing_id} status: ${status}. Keep polling get_dubbing until dubbed or failed.`,
-        next_step: status === 'dubbed'
-          ? 'Call download_dubbed_audio with dubbing_id and language_code.'
-          : status === 'failed'
-            ? 'Inspect error_detail; fix source media or retry create_dubbing.'
-            : 'Poll get_dubbing again in ~10 seconds.',
+          : `Dubbing ${args.dubbing_id} status: ${status}. Keep polling get_dubbing until ${TERMINAL_STATUS_PHRASE}.`,
+        next_step: dubbingNextStep(status),
       });
     }),
   );

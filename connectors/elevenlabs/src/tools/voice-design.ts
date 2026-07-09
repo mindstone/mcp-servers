@@ -185,6 +185,7 @@ COST: Uses a voice slot; may consume credits depending on plan.`,
         {
           method: 'POST',
           body: JSON.stringify(body),
+          timeoutMs: LONG_REQUEST_TIMEOUT_MS,
         },
       );
 

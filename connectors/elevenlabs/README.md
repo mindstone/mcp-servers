@@ -144,7 +144,7 @@ node dist/index.js
 
 ### Dubbing (v1 API — async submit → poll → download)
 - `create_dubbing` — Submit a dubbing job (local `file` via sandbox or `source_url` for ElevenLabs-side fetch)
-- `get_dubbing` — Poll job status until `dubbed` or `failed`
+- `get_dubbing` — Poll job status until `dubbed`, `failed`, or `cancelled`
 - `download_dubbed_audio` — Download dubbed audio (Content-Type sniffed)
 - `delete_dubbing` — Permanently delete a dubbing job (`destructiveHint`)
 
