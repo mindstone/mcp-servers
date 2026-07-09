@@ -4,6 +4,7 @@ import * as path from 'path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
 import { elevenLabsJson } from '../client.js';
+import { ENDPOINTS } from '../endpoints.js';
 import { ElevenLabsError, type TranscriptionResponse } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
@@ -13,11 +14,20 @@ export function registerTranscriptionTools(server: McpServer): void {
   server.registerTool(
     'transcribe_audio',
     {
-      description:
-        'Transcribe speech from an audio file to text using ElevenLabs Speech-to-Text. ' +
-        'INPUT: Local audio file path (.mp3, .wav, .m4a, .ogg, .flac, .webm, .mp4). ' +
-        'Auto-detects language by default. Specify language_code for better accuracy. ' +
-        'COST: Credits based on audio duration.',
+      description: `Transcribe speech from a local audio file to text.
+
+WHEN TO USE:
+- Convert meeting recordings or voice memos to text
+- Extract quotes from audio the user provides as a file path
+
+EXAMPLE: {"file_path": "/path/to/recording.mp3", "language_code": "en"}
+
+RELATED TOOLS:
+- generate_speech: the inverse operation (text to audio)
+
+RETURNS: enveloped text, word_count, language. File path must be inside MCP_WORKSPACE_PATH (or os.tmpdir()).
+
+COST: Credits based on audio duration.`,
       inputSchema: z.object({
         file_path: z.string().min(1).describe('Absolute path to local audio file to transcribe.'),
         language_code: z.string().optional().describe('Language code (e.g., "en", "es", "fr"). Auto-detected if omitted.'),
@@ -111,7 +121,7 @@ export function registerTranscriptionTools(server: McpServer): void {
 
       const data = await elevenLabsJson<TranscriptionResponse>(
         apiKey,
-        '/speech-to-text',
+        ENDPOINTS.SPEECH_TO_TEXT,
         {
           method: 'POST',
           body: formData,

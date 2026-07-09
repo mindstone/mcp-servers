@@ -9,7 +9,7 @@ ElevenLabs MCP server for Model Context Protocol hosts. Generate speech, music, 
 
 - **Version:** [0.3.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs)
 - **Auth:** API key ([`ELEVENLABS_API_KEY`](./server.json))
-- **Tools:** [8](./src/tools/) (voices, speech, music, transcription)
+- **Tools:** [12](./src/tools/) (account, voices, speech, music, transcription)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -114,13 +114,19 @@ node dist/index.js
 }
 ```
 
-## Tools (8)
+## Tools (12)
 
 ### Configuration
 - `configure_elevenlabs_api_key` — Save your ElevenLabs API key
 
+### Account & discovery (FREE)
+- `check_subscription` — Check subscription tier and character credit usage
+- `list_models` — List TTS models with languages and capabilities
+
 ### Voices
-- `list_voices` — Search and browse available ElevenLabs voices
+- `list_voices` — Search and browse voices on your account
+- `get_voice` — Get full details for one voice by voice_id
+- `search_shared_voices` — Search the public shared voice library
 
 ### Speech
 - `generate_speech` — Generate spoken audio from text using text-to-speech

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
 import { elevenLabsJson, elevenLabsAudio } from '../client.js';
+import { ENDPOINTS } from '../endpoints.js';
 import { ElevenLabsError, type MusicPlanResponse, type CompositionPlan } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 
@@ -75,17 +76,21 @@ export function registerMusicTools(server: McpServer): void {
   server.registerTool(
     'generate_music',
     {
-      description:
-        'Generate music from a text prompt using ElevenLabs Music API. ' +
-        'Returns a saved audio file path. DURATION: 3-600 seconds (default 30). ' +
-        'COST: Consumes credits based on duration.\n\n' +
-        'PROMPT TIPS — to get a song WITH VOCALS:\n' +
-        '  1. Do NOT set force_instrumental: true (it silently drops all vocals).\n' +
-        '  2. Embed lyrics in the prompt using ElevenLabs section markers: ' +
-        '`[Verse 1] ... [Chorus] ... [Bridge] ...`. Each marker is on its own ' +
-        'line followed by the lines for that section.\n' +
-        'For fine-grained control (per-section style + lyrics), use create_music_plan ' +
-        'then generate_music_from_plan instead.',
+      description: `Generate music from a text prompt using ElevenLabs Music API.
+
+WHEN TO USE:
+- Quick music bed from a genre/mood description
+- Vocal songs when the prompt includes [Verse]/[Chorus] lyric markers (do not set force_instrumental: true)
+
+EXAMPLE: {"prompt": "Upbeat jazz piano, 30 seconds", "duration_seconds": 30}
+
+RELATED TOOLS:
+- create_music_plan / generate_music_from_plan: per-section lyrics and styles
+- check_subscription: confirm credits before long tracks
+
+RETURNS: file_path, size_bytes, duration_seconds, format; warnings[] when force_instrumental conflicts with lyric markers.
+
+COST: Credits based on duration (3–600 seconds).`,
       inputSchema: z.object({
         prompt: z.string().min(1).describe('Describe the music: genre, mood, instruments, style. Include `[Verse]`/`[Chorus]`/`[Bridge]` blocks with lyrics if you want a vocal song.'),
         duration_seconds: z.number().min(3).max(600).optional().describe('Duration in seconds (3-600). Default: 30.'),
@@ -132,7 +137,7 @@ export function registerMusicTools(server: McpServer): void {
       const ext = outputFormat.startsWith('mp3') ? 'mp3' : 'wav';
       const result = await elevenLabsAudio(
         apiKey,
-        `/music?output_format=${outputFormat}`,
+        `${ENDPOINTS.MUSIC}?output_format=${outputFormat}`,
         { method: 'POST', body: JSON.stringify(body) },
         ext,
       );
@@ -153,10 +158,21 @@ export function registerMusicTools(server: McpServer): void {
   server.registerTool(
     'create_music_plan',
     {
-      description:
-        'Create a composition plan for music generation — FREE, no credits consumed. ' +
-        'Returns a structured plan with sections, styles, and lyrics. ' +
-        'Review the plan and pass it to generate_music_from_plan when ready.',
+      description: `Create a composition plan for music generation.
+
+WHEN TO USE:
+- Structure a song with per-section lyrics and styles before paying for generation
+- Review or edit sections before calling generate_music_from_plan
+
+EXAMPLE: {"prompt": "Acoustic folk ballad about the sea", "duration_seconds": 45}
+
+RELATED TOOLS:
+- generate_music_from_plan: generate audio from the returned composition_plan
+- generate_music: faster one-shot generation without a plan
+
+RETURNS: composition_plan (sections with section_name, duration_ms, styles, lines), total_duration_seconds.
+
+COST: FREE — no credits consumed.`,
       inputSchema: z.object({
         prompt: z.string().min(1).describe('Describe the music you want.'),
         duration_seconds: z.number().min(3).max(600).optional().describe('Target duration in seconds (3-600). Default: 30.'),
@@ -176,7 +192,7 @@ export function registerMusicTools(server: McpServer): void {
       const durationSeconds = args.duration_seconds ?? 30;
       const durationMs = Math.max(3000, Math.min(600000, durationSeconds * 1000));
 
-      const plan = await elevenLabsJson<MusicPlanResponse>(apiKey, '/music/plan', {
+      const plan = await elevenLabsJson<MusicPlanResponse>(apiKey, ENDPOINTS.MUSIC_PLAN, {
         method: 'POST',
         body: JSON.stringify({
           prompt: args.prompt,
@@ -209,13 +225,21 @@ export function registerMusicTools(server: McpServer): void {
   server.registerTool(
     'generate_music_from_plan',
     {
-      description:
-        'Generate music from a composition plan (created by create_music_plan or manually crafted). ' +
-        'The plan must have at least one section. Each section requires section_name, duration_ms, ' +
-        'positive_local_styles, negative_local_styles, and lines. Pass plans from create_music_plan ' +
-        'through verbatim — the field names are enforced by the ElevenLabs API.\n\n' +
-        'COST: Consumes credits based on duration. ' +
-        'Total duration: 3s-10min. Each section: 3-120s.',
+      description: `Generate music from a composition plan.
+
+WHEN TO USE:
+- After create_music_plan when you want per-section control over lyrics and styles
+- When generate_music's single prompt is not precise enough
+
+EXAMPLE: pass the composition_plan object from create_music_plan verbatim
+
+RELATED TOOLS:
+- create_music_plan: produces the plan shape this tool expects
+- check_subscription: confirm credits before generation
+
+RETURNS: file_path, size_bytes, duration_seconds, format.
+
+COST: Credits based on total plan duration (3s–10min).`,
       inputSchema: z.object({
         composition_plan: COMPOSITION_PLAN_SCHEMA,
         seed: z.number().int().optional().describe('Random seed for reproducibility.'),
@@ -245,7 +269,7 @@ export function registerMusicTools(server: McpServer): void {
       const ext = outputFormat.startsWith('mp3') ? 'mp3' : 'wav';
       const result = await elevenLabsAudio(
         apiKey,
-        `/music?output_format=${outputFormat}`,
+        `${ENDPOINTS.MUSIC}?output_format=${outputFormat}`,
         { method: 'POST', body: JSON.stringify(body) },
         ext,
       );

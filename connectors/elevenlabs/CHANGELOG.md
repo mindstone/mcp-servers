@@ -11,6 +11,15 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+- **elevenlabs**: Four FREE discovery/account tools — `check_subscription` (tier + character credits + reset), `list_models` (model capabilities and languages), `get_voice` (single-voice detail), `search_shared_voices` (public library with search/filters). All external-text fields enveloped; shared-voice names/descriptions treated as highest-care third-party content.
+- **elevenlabs**: `src/endpoints.ts` centralises every API path (v1 + v2 voices) for one-line fixes.
+- **elevenlabs**: Retell-style tool descriptions across all 12 tools (WHEN TO USE / EXAMPLE / RELATED TOOLS / RETURNS / COST-or-FREE) within the description-budget soft cap; mechanical smoke assertion for annotations (D-ANNOTATIONS) and description structure.
+
+### Changed
+- **elevenlabs**: Error resolutions for quota/credits now cross-reference `check_subscription`; `VOICE_NOT_FOUND` resolutions point at `list_voices` and `search_shared_voices`.
+- **elevenlabs**: API error `detail` strings from 401/403/422 bodies are enveloped in model-visible error messages via shared `error-detail.ts` (FastAPI field-path flattening preserved inside the envelope).
+
 ### Security
 - **elevenlabs**: Wrap all API-authored text in `<untrusted-content>` envelopes with close-tag breakout escaping (AGENTS.md security invariant #6, FOX-3490 remediation): `list_voices` voice names/descriptions/label values, `transcribe_audio` transcript text, and the API-resolved voice name returned by `generate_speech`. Human-readable `message` strings no longer echo any API-authored substrings (the `generate_speech` message now reports only the saved file path). Composition plans from `create_music_plan` remain unwrapped as a considered exclusion — they are model-generated from the user's own prompt and must round-trip verbatim into `generate_music_from_plan`. Ships a vendored `src/untrusted-content.ts` (byte-identical to the shared template helper) plus envelope-presence, close-tag-breakout, and mechanical envelope-reachability tests; the connector is removed from the repo untrusted-coverage baseline (ratchet-down).
 

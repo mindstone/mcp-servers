@@ -9,10 +9,20 @@ export function registerConfigureTools(server: McpServer): void {
   server.registerTool(
     'configure_elevenlabs_api_key',
     {
-      description:
-        'Save your ElevenLabs API key. Call this when the user provides their key. ' +
-        'WHERE TO GET A KEY: Go to https://elevenlabs.io/app/settings/api-keys → Create new API key → Copy the key (starts with "sk_"). ' +
-        'FREE TIER: 10,000 characters/month for TTS. Music generation requires a paid plan.',
+      description: `Save the user's ElevenLabs API key for this session.
+
+WHEN TO USE:
+- When the user provides their API key in chat
+- After AUTH_REQUIRED errors from any other tool
+
+EXAMPLE: {"api_key": "sk_..."}
+
+RELATED TOOLS:
+- check_subscription: verify the key and see credits after configuring
+
+RETURNS: ok, message.
+
+COST: FREE.`,
       inputSchema: z.object({
         api_key: z.string().min(1).describe('ElevenLabs API key (starts with "sk_").'),
       }),

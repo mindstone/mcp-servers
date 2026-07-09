@@ -4,6 +4,10 @@ import {
   mockVoices,
   mockMusicPlan,
   mockTranscription,
+  mockSubscription,
+  mockModels,
+  mockSharedVoices,
+  mockVoiceDetail,
   makeFakeAudioBuffer,
 } from '../fixtures/elevenlabs-data.js';
 
@@ -64,6 +68,53 @@ export function createElevenLabsHandlers(expectedApiKey = MOCK_API_KEY) {
       const audioBuffer = makeFakeAudioBuffer(1024);
       return new HttpResponse(audioBuffer, {
         headers: { 'Content-Type': 'audio/mpeg' },
+      });
+    }),
+
+    // GET /v1/user/subscription
+    http.get(`${BASE_V1}/user/subscription`, ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      return HttpResponse.json(mockSubscription);
+    }),
+
+    // GET /v1/models
+    http.get(`${BASE_V1}/models`, ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      return HttpResponse.json(mockModels);
+    }),
+
+    // GET /v1/voices/:voiceId
+    http.get(`${BASE_V1}/voices/:voiceId`, ({ request, params }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      const voiceId = params.voiceId as string;
+      const voice = mockVoices.find((v) => v.voice_id === voiceId) ?? mockVoiceDetail;
+      if (voiceId === 'missing-voice-id') {
+        return HttpResponse.json({ detail: 'Voice not found' }, { status: 404 });
+      }
+      return HttpResponse.json(voice);
+    }),
+
+    // GET /v1/shared-voices
+    http.get(`${BASE_V1}/shared-voices`, ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+
+      const url = new URL(request.url);
+      const search = url.searchParams.get('search');
+      let voices = mockSharedVoices;
+      if (search) {
+        voices = mockSharedVoices.filter((v) =>
+          v.name.toLowerCase().includes(search.toLowerCase()) ||
+          (v.description ?? '').toLowerCase().includes(search.toLowerCase()),
+        );
+      }
+
+      return HttpResponse.json({
+        voices,
+        has_more: false,
       });
     }),
 

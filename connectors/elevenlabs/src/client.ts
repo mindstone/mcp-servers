@@ -19,8 +19,8 @@ import {
   getErrorResolution,
   type AudioResult,
 } from './types.js';
-
-const ELEVENLABS_API_BASE = 'https://api.elevenlabs.io/v1';
+import { ELEVENLABS_API_V1_BASE } from './endpoints.js';
+import { envelopeApiErrorDetail, formatApiErrorMessage } from './error-detail.js';
 
 /**
  * Make an authenticated request to the ElevenLabs API.
@@ -41,7 +41,7 @@ export async function elevenLabsFetch(
 
   const url = urlPath.startsWith('https://')
     ? urlPath
-    : `${ELEVENLABS_API_BASE}${urlPath}`;
+    : `${ELEVENLABS_API_V1_BASE}${urlPath}`;
 
   const headers: Record<string, string> = {
     'xi-api-key': apiKey,
@@ -91,11 +91,12 @@ export async function elevenLabsFetch(
   if (response.status === 401) {
     const detail = await extractErrorDetail(response);
     const isMissingPermission = detail.includes('missing_permissions');
+    const envelopedDetail = detail ? envelopeApiErrorDetail(detail) : '';
     throw new ElevenLabsError(
       isMissingPermission
-        ? `API key missing required permission: ${detail}`
+        ? `API key missing required permission: ${envelopedDetail}`
         : detail
-          ? `Authentication failed: ${detail}`
+          ? formatApiErrorMessage('Authentication failed', detail)
           : 'Authentication failed',
       isMissingPermission ? 'MISSING_PERMISSION' : 'AUTH_FAILED',
       isMissingPermission
@@ -107,7 +108,9 @@ export async function elevenLabsFetch(
   if (response.status === 403) {
     const detail = await extractErrorDetail(response);
     throw new ElevenLabsError(
-      `Access forbidden: ${detail || 'insufficient permissions or quota'}`,
+      detail
+        ? formatApiErrorMessage('Access forbidden', detail)
+        : 'Access forbidden: insufficient permissions or quota',
       'AUTH_FAILED',
       getErrorResolution(403, detail),
     );
@@ -116,8 +119,13 @@ export async function elevenLabsFetch(
   // Handle other errors
   if (!response.ok) {
     const detail = await extractErrorDetail(response);
+    const statusText = response.statusText
+      ? envelopeApiErrorDetail(response.statusText)
+      : '';
     throw new ElevenLabsError(
-      `ElevenLabs API error (HTTP ${response.status}): ${detail || response.statusText}`,
+      detail
+        ? `ElevenLabs API error (HTTP ${response.status}): ${envelopeApiErrorDetail(detail)}`
+        : `ElevenLabs API error (HTTP ${response.status})${statusText ? `: ${statusText}` : ''}`,
       `HTTP_${response.status}`,
       getErrorResolution(response.status, detail),
     );
@@ -141,8 +149,11 @@ export async function elevenLabsFetch(
  *   `body.composition_plan.sections.0.section_name: Field required;
  *    body.composition_plan.sections.0.lines: Field required`
  * which is what an LLM agent actually needs to self-correct.
+ *
+ * Raw detail is third-party-authored — callers must envelope before exposing
+ * to model-visible output (see `envelopeApiErrorDetail`).
  */
-async function extractErrorDetail(response: Response): Promise<string> {
+export async function extractErrorDetail(response: Response): Promise<string> {
   try {
     const errBody = (await response.clone().json()) as unknown;
     const d = (errBody as { detail?: unknown } | null)?.detail;

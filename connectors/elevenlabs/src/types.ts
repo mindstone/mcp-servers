@@ -79,6 +79,56 @@ export interface AudioResult {
   sizeBytes: number;
 }
 
+export interface SubscriptionResponse {
+  tier?: string;
+  status?: string;
+  character_count?: number;
+  character_limit?: number;
+  next_character_count_reset_unix?: number;
+  voice_slots_used?: number;
+  voice_limit?: number;
+}
+
+export interface ModelLanguage {
+  language_id: string;
+  name: string;
+}
+
+export interface ModelInfo {
+  model_id: string;
+  name: string;
+  can_do_text_to_speech?: boolean;
+  can_do_voice_conversion?: boolean;
+  can_be_finetuned?: boolean;
+  token_cost_factor?: number;
+  languages?: ModelLanguage[];
+}
+
+export interface SharedVoiceResult {
+  voice_id: string;
+  name: string;
+  description?: string;
+  category?: string;
+  gender?: string;
+  age?: string;
+  accent?: string;
+  language?: string;
+  locale?: string;
+  descriptive?: string;
+  use_case?: string;
+  preview_url?: string;
+  labels?: Record<string, string>;
+}
+
+export interface SharedVoicesResponse {
+  voices: SharedVoiceResult[];
+  has_more?: boolean;
+}
+
+/** Actionable resolution when a voice_id or voice_name cannot be resolved. */
+export const VOICE_NOT_FOUND_RESOLUTION =
+  'Use list_voices to browse voices on this account, or search_shared_voices to find voices in the public library. Pass the exact voice_id to generate_speech.';
+
 /**
  * Resolve an error status code to an actionable resolution string.
  */
@@ -88,7 +138,10 @@ export function getErrorResolution(status: number, detail?: string): string {
     return 'Authentication failed. Check your ElevenLabs API key in Settings. Get one at https://elevenlabs.io/app/settings/api-keys';
   }
   if (status === 403 || msg.includes('quota') || msg.includes('limit') || msg.includes('credits')) {
-    return 'Insufficient credits or quota exceeded. Check usage at https://elevenlabs.io/app/usage';
+    return (
+      'Insufficient credits or quota exceeded. Call check_subscription to see remaining characters and the next reset date, ' +
+      'or check usage at https://elevenlabs.io/app/usage'
+    );
   }
   if (status === 422 || msg.includes('validation')) {
     return 'Invalid request parameters. Check the input values and try again.';
@@ -99,5 +152,5 @@ export function getErrorResolution(status: number, detail?: string): string {
   if (msg.includes('content') || msg.includes('policy') || msg.includes('moderation')) {
     return 'Content policy violation. Try a different prompt.';
   }
-  return 'Please try again. If the issue persists, check your API key and credits at https://elevenlabs.io/app/settings/api-keys';
+  return 'Please try again. If the issue persists, call check_subscription for credit status or check your API key at https://elevenlabs.io/app/settings/api-keys';
 }

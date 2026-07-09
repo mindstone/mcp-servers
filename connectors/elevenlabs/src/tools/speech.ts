@@ -2,7 +2,8 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
 import { elevenLabsJson, elevenLabsAudio } from '../client.js';
-import { ElevenLabsError, type VoicesResponse } from '../types.js';
+import { ENDPOINTS, voicesV2Url } from '../endpoints.js';
+import { ElevenLabsError, VOICE_NOT_FOUND_RESOLUTION, type VoicesResponse } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
@@ -10,15 +11,16 @@ import { withErrorHandling } from '../utils.js';
  * Look up a voice by name via the ElevenLabs v2 voices API.
  */
 async function lookupVoiceByName(apiKey: string, name: string) {
-  const data = await elevenLabsJson<VoicesResponse>(
-    apiKey,
-    `https://api.elevenlabs.io/v2/voices?search=${encodeURIComponent(name)}&page_size=5`,
-  );
+  const params = new URLSearchParams({
+    search: name,
+    page_size: '5',
+  });
+  const data = await elevenLabsJson<VoicesResponse>(apiKey, voicesV2Url(params));
   if (!data.voices || data.voices.length === 0) {
     throw new ElevenLabsError(
       `No voice found matching "${name}"`,
       'VOICE_NOT_FOUND',
-      `No voice matched "${name}". Use list_voices to browse available voices and get the exact voice_id.`,
+      VOICE_NOT_FOUND_RESOLUTION,
     );
   }
   return data.voices[0];
@@ -36,15 +38,13 @@ async function lookupVoiceByName(apiKey: string, name: string) {
  * resolution that tells the agent to call list_voices first.
  */
 async function pickDefaultVoice(apiKey: string) {
-  const data = await elevenLabsJson<VoicesResponse>(
-    apiKey,
-    'https://api.elevenlabs.io/v2/voices?page_size=20',
-  );
+  const params = new URLSearchParams({ page_size: '20' });
+  const data = await elevenLabsJson<VoicesResponse>(apiKey, voicesV2Url(params));
   if (!data.voices || data.voices.length === 0) {
     throw new ElevenLabsError(
       'No voice specified and the account has no voices.',
       'VOICE_NOT_FOUND',
-      'Add a voice in https://elevenlabs.io/app/voice-library or pass a voice_id / voice_name explicitly.',
+      VOICE_NOT_FOUND_RESOLUTION,
     );
   }
   // Prefer premade voices (curated, generally suitable as defaults).
@@ -57,17 +57,22 @@ export function registerSpeechTools(server: McpServer): void {
   server.registerTool(
     'generate_speech',
     {
-      description:
-        'Generate spoken audio from text using ElevenLabs text-to-speech. ' +
-        'Use voice_id (direct) or voice_name (fuzzy search). If neither is provided, ' +
-        'a premade voice from the account is used.\n\n' +
-        'MODELS:\n' +
-        '  - eleven_v3 (default) — most expressive, 70+ languages\n' +
-        '  - eleven_multilingual_v2 — proven multilingual, 29 languages\n' +
-        '  - eleven_flash_v2_5 — low latency\n' +
-        '  - eleven_turbo_v2_5 — low latency variant\n' +
-        '  - eleven_monolingual_v1 — English-only legacy model (kept for backwards compatibility)\n\n' +
-        'COST: ~1 credit per 100 characters.',
+      description: `Generate spoken audio from text using ElevenLabs text-to-speech.
+
+WHEN TO USE:
+- Turn user text into a playable speech file
+- Narration, voiceovers, or reading content aloud
+
+EXAMPLE: {"text": "Hello world.", "voice_id": "21m00Tcm4TlvDq8ikWAM", "model_id": "eleven_v3"}
+
+RELATED TOOLS:
+- list_voices / search_shared_voices / get_voice: find voice_id
+- list_models: pick model_id (default eleven_v3)
+- check_subscription: confirm credits before long text
+
+RETURNS: file_path, size_bytes, voice_id, model, format. API-resolved voice names are enveloped.
+
+COST: ~1 credit per 100 characters.`,
       inputSchema: z.object({
         text: z.string().min(1).describe('Text to speak. Maximum ~5000 characters per request.'),
         voice_id: z.string().optional().describe('Direct voice ID (from list_voices). Takes priority over voice_name.'),
@@ -137,7 +142,7 @@ export function registerSpeechTools(server: McpServer): void {
       const ext = outputFormat.startsWith('mp3') ? 'mp3' : 'wav';
       const result = await elevenLabsAudio(
         apiKey,
-        `/text-to-speech/${voiceId}?output_format=${outputFormat}`,
+        ENDPOINTS.textToSpeech(voiceId, outputFormat),
         { method: 'POST', body: JSON.stringify(body) },
         ext,
       );
@@ -163,11 +168,20 @@ export function registerSpeechTools(server: McpServer): void {
   server.registerTool(
     'generate_sound_effect',
     {
-      description:
-        'Generate sound effects from a text description. ' +
-        'DURATION: 0.5-22 seconds (auto if omitted). ' +
-        'PROMPT INFLUENCE (0-1): How closely to follow the text prompt. Default: 0.3. ' +
-        'COST: Credits based on duration.',
+      description: `Generate sound effects from a text description.
+
+WHEN TO USE:
+- Short ambient or UI sounds from a natural-language prompt
+- Effects for video, games, or presentations
+
+EXAMPLE: {"prompt": "Soft rain on a tin roof", "duration_seconds": 3}
+
+RELATED TOOLS:
+- check_subscription: confirm credits before generation
+
+RETURNS: file_path, size_bytes, duration_seconds.
+
+COST: Credits based on duration (0.5–22 seconds).`,
       inputSchema: z.object({
         prompt: z.string().min(1).describe('Describe the sound effect. Be specific about characteristics.'),
         duration_seconds: z.number().min(0.5).max(22).optional().describe('Duration in seconds (0.5-22). Auto if omitted.'),
@@ -197,7 +211,7 @@ export function registerSpeechTools(server: McpServer): void {
 
       const result = await elevenLabsAudio(
         apiKey,
-        '/sound-generation',
+        ENDPOINTS.SOUND_GENERATION,
         { method: 'POST', body: JSON.stringify(body) },
         'mp3',
       );

@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
   registerConfigureTools,
+  registerAccountTools,
   registerMusicTools,
   registerSpeechTools,
   registerVoiceTools,
@@ -18,6 +19,7 @@ export function createServer(): McpServer {
   });
 
   registerConfigureTools(server);
+  registerAccountTools(server);
   registerMusicTools(server);
   registerSpeechTools(server);
   registerVoiceTools(server);

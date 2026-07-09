@@ -23,6 +23,67 @@ export const mockVoices = [
   },
 ];
 
+export const mockSubscription = {
+  tier: 'starter',
+  status: 'active',
+  character_count: 12_500,
+  character_limit: 30_000,
+  next_character_count_reset_unix: 1_735_689_600,
+  voice_slots_used: 2,
+  voice_limit: 10,
+};
+
+export const mockModels = [
+  {
+    model_id: 'eleven_v3',
+    name: 'Eleven v3',
+    can_do_text_to_speech: true,
+    can_do_voice_conversion: false,
+    can_be_finetuned: false,
+    token_cost_factor: 1,
+    languages: [
+      { language_id: 'en', name: 'English' },
+      { language_id: 'es', name: 'Spanish' },
+    ],
+  },
+  {
+    model_id: 'eleven_multilingual_v2',
+    name: 'Eleven Multilingual v2',
+    can_do_text_to_speech: true,
+    can_do_voice_conversion: true,
+    can_be_finetuned: false,
+    token_cost_factor: 1,
+    languages: [{ language_id: 'en', name: 'English' }],
+  },
+];
+
+export const mockSharedVoices = [
+  {
+    voice_id: 'shared-narrator-001',
+    name: 'British Narrator',
+    description: 'Warm British male narrator for documentaries',
+    category: 'professional',
+    gender: 'male',
+    age: 'middle_aged',
+    accent: 'british',
+    language: 'en',
+    locale: 'en-GB',
+    descriptive: 'calm',
+    use_case: 'narration',
+    preview_url: 'https://api.elevenlabs.io/v1/voices/shared-narrator-001/preview',
+    labels: { style: 'documentary' },
+  },
+];
+
+export const mockVoiceDetail = {
+  voice_id: 'voice-rachel-001',
+  name: 'Rachel',
+  category: 'premade',
+  description: 'A calm and clear voice with American accent',
+  labels: { accent: 'american', gender: 'female', use_case: 'narration' },
+  preview_url: 'https://api.elevenlabs.io/v1/voices/voice-rachel-001/preview',
+};
+
 export const mockMusicPlan = {
   positive_global_styles: ['upbeat', 'jazz'],
   negative_global_styles: ['aggressive'],
