@@ -37,7 +37,10 @@ describe('Speech tools', () => {
       expect(parsed.ok).toBe(true);
       expect(parsed.file_path).toBeTruthy();
       expect(parsed.size_bytes).toBeGreaterThan(0);
-      expect(parsed.voice).toBe('Rachel');
+      // API-resolved voice names arrive wrapped per AGENTS.md invariant #6.
+      expect(parsed.voice).toBe(
+        '<untrusted-content source="elevenlabs:generate_speech:voice_name">Rachel</untrusted-content>',
+      );
       expect(parsed.voice_id).toBe('voice-rachel-001');
 
       // Cleanup
@@ -86,7 +89,9 @@ describe('Speech tools', () => {
       expect(parsed.ok).toBe(true);
       // mockVoices[0] is Rachel (premade) so this still picks her, but the
       // logic now generalises to any premade voice on the account.
-      expect(parsed.voice).toBe('Rachel');
+      expect(parsed.voice).toBe(
+        '<untrusted-content source="elevenlabs:generate_speech:voice_name">Rachel</untrusted-content>',
+      );
 
       // Cleanup
       if (fs.existsSync(parsed.file_path)) {
@@ -188,7 +193,9 @@ describe('Speech tools', () => {
       const result = await testClient.callTool('generate_speech', { text: 'hi' });
       expect(result.isError).toBeFalsy();
       const parsed = JSON.parse(result.text);
-      expect(parsed.voice).toBe('Premade A');
+      expect(parsed.voice).toBe(
+        '<untrusted-content source="elevenlabs:generate_speech:voice_name">Premade A</untrusted-content>',
+      );
       if (fs.existsSync(parsed.file_path)) fs.unlinkSync(parsed.file_path);
     });
 
@@ -202,7 +209,9 @@ describe('Speech tools', () => {
       const result = await testClient.callTool('generate_speech', { text: 'hi' });
       expect(result.isError).toBeFalsy();
       const parsed = JSON.parse(result.text);
-      expect(parsed.voice).toBe('Cloned Only');
+      expect(parsed.voice).toBe(
+        '<untrusted-content source="elevenlabs:generate_speech:voice_name">Cloned Only</untrusted-content>',
+      );
       if (fs.existsSync(parsed.file_path)) fs.unlinkSync(parsed.file_path);
     });
 
@@ -216,7 +225,9 @@ describe('Speech tools', () => {
       const result = await testClient.callTool('generate_speech', { text: 'hi' });
       expect(result.isError).toBeFalsy();
       const parsed = JSON.parse(result.text);
-      expect(parsed.voice).toBe('Generated Only');
+      expect(parsed.voice).toBe(
+        '<untrusted-content source="elevenlabs:generate_speech:voice_name">Generated Only</untrusted-content>',
+      );
       if (fs.existsSync(parsed.file_path)) fs.unlinkSync(parsed.file_path);
     });
   });
@@ -261,7 +272,10 @@ describe('Speech tools', () => {
         expect(result.isError).toBeFalsy();
         const parsed = JSON.parse(result.text);
         expect(parsed.ok).toBe(true);
-        expect(parsed.text).toBe('Hello, this is a test transcription.');
+        // Transcript text arrives wrapped per AGENTS.md invariant #6.
+        expect(parsed.text).toBe(
+          '<untrusted-content source="elevenlabs:transcribe_audio:text">Hello, this is a test transcription.</untrusted-content>',
+        );
         expect(parsed.word_count).toBe(6);
       } finally {
         fs.unlinkSync(tmpFile);

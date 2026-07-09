@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
 import { elevenLabsJson } from '../client.js';
 import { ElevenLabsError, type VoicesResponse } from '../types.js';
+import { wrapUntrusted, wrapUntrustedJsonStrings } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
 export function registerVoiceTools(server: McpServer): void {
@@ -41,12 +42,16 @@ export function registerVoiceTools(server: McpServer): void {
         `https://api.elevenlabs.io/v2/voices?${params.toString()}`,
       );
 
+      // AGENTS.md invariant #6: name/description/labels are authored in the
+      // external system (voice creators / voice library), so they are wrapped
+      // in <untrusted-content> envelopes. voice_id, category (fixed enum),
+      // and preview_url are structural and stay raw.
       const voices = data.voices.map((v) => ({
         voice_id: v.voice_id,
-        name: v.name,
+        name: wrapUntrusted(v.name, 'elevenlabs:list_voices:name'),
         category: v.category,
-        description: v.description,
-        labels: v.labels,
+        description: wrapUntrusted(v.description ?? undefined, 'elevenlabs:list_voices:description'),
+        labels: v.labels ? wrapUntrustedJsonStrings(v.labels, 'elevenlabs:list_voices:labels') : v.labels,
         preview_url: v.preview_url,
       }));
 

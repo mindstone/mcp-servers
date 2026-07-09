@@ -11,6 +11,9 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Security
+- **elevenlabs**: Wrap all API-authored text in `<untrusted-content>` envelopes with close-tag breakout escaping (AGENTS.md security invariant #6, FOX-3490 remediation): `list_voices` voice names/descriptions/label values, `transcribe_audio` transcript text, and the API-resolved voice name returned by `generate_speech`. Human-readable `message` strings no longer echo any API-authored substrings (the `generate_speech` message now reports only the saved file path). Composition plans from `create_music_plan` remain unwrapped as a considered exclusion — they are model-generated from the user's own prompt and must round-trip verbatim into `generate_music_from_plan`. Ships a vendored `src/untrusted-content.ts` (byte-identical to the shared template helper) plus envelope-presence, close-tag-breakout, and mechanical envelope-reachability tests; the connector is removed from the repo untrusted-coverage baseline (ratchet-down).
+
 ## [0.3.0] - 2026-05-20
 
 Triggered by a real conversation where `generate_music_from_plan` returned

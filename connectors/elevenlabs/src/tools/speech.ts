@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
 import { elevenLabsJson, elevenLabsAudio } from '../client.js';
 import { ElevenLabsError, type VoicesResponse } from '../types.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
 /**
@@ -103,8 +104,13 @@ export function registerSpeechTools(server: McpServer): void {
       const similarityBoost = args.similarity_boost ?? 0.75;
       const outputFormat = args.output_format ?? 'mp3_44100_128';
 
-      // Voice lookup
+      // Voice lookup. When the name comes back from the API it is external,
+      // possibly attacker-authored text (e.g. a shared/cloned voice named to
+      // carry a prompt injection) and must be enveloped before being returned
+      // (AGENTS.md invariant #6). When voice_id is passed directly, the name
+      // is just the caller's own input echoed back — no envelope needed.
       let resolvedVoiceName = voiceName || 'default';
+      let voiceNameFromApi = false;
       if (!voiceId) {
         if (voiceName) {
           const voice = await lookupVoiceByName(apiKey, voiceName);
@@ -116,6 +122,7 @@ export function registerSpeechTools(server: McpServer): void {
           voiceId = voice.voice_id;
           resolvedVoiceName = voice.name;
         }
+        voiceNameFromApi = true;
       }
 
       const body = {
@@ -135,15 +142,19 @@ export function registerSpeechTools(server: McpServer): void {
         ext,
       );
 
+      // The voice name lives ONLY in the (enveloped) `voice` field — never in
+      // `message`, so no unwrapped API-authored substring can reach the model.
       return JSON.stringify({
         ok: true,
         file_path: result.filePath,
         size_bytes: result.sizeBytes,
-        voice: resolvedVoiceName,
+        voice: voiceNameFromApi
+          ? wrapUntrusted(resolvedVoiceName, 'elevenlabs:generate_speech:voice_name')
+          : resolvedVoiceName,
         voice_id: voiceId,
         model: modelId,
         format: outputFormat,
-        message: `Speech generated with voice "${resolvedVoiceName}" and saved to ${result.filePath} (${(result.sizeBytes / 1024).toFixed(1)} KB).`,
+        message: `Speech generated and saved to ${result.filePath} (${(result.sizeBytes / 1024).toFixed(1)} KB).`,
       });
     }),
   );

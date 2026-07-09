@@ -5,7 +5,6 @@
   "gappedConnectors": [
     "apple-shortcuts",
     "browser-automation",
-    "elevenlabs",
     "fathom",
     "hubspot",
     "mixmax",
@@ -42,7 +41,6 @@
     "mixmax": "P1 — message subject/recipients, meeting/sequence/snippet names + bodies raw.",
     "servicenow": "P1 — short_description/description + raw incident/KB objects.",
     "pandadoc": "P1 — recipients/fields/tokens/metadata/tags + template names raw.",
-    "elevenlabs": "P1 — voice names/descriptions + transcribed audio text (transcription.ts:122).",
     "quickbooks": "P2 — DisplayName, CustomerMemo, invoice line descriptions.",
     "xero": "P2 — item descriptions, contact names, raw Invoice/Contact SDK objects.",
     "talentlms": "P2 — course descriptions, full user profile objects.",

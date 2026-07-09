@@ -5,6 +5,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
 import { elevenLabsJson } from '../client.js';
 import { ElevenLabsError, type TranscriptionResponse } from '../types.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 import { isRemoteUrl, resolveAudioPath } from './path-safety.js';
 
@@ -117,9 +118,13 @@ export function registerTranscriptionTools(server: McpServer): void {
         },
       );
 
+      // AGENTS.md invariant #6: the transcript is whatever was SPOKEN in the
+      // audio — the most attacker-controllable text this connector returns
+      // (anyone recorded can dictate a prompt-injection payload). `message`
+      // stays numeric-only; never echo transcript substrings into it.
       return JSON.stringify({
         ok: true,
-        text: data.text,
+        text: wrapUntrusted(data.text, 'elevenlabs:transcribe_audio:text'),
         word_count: data.words?.length || 0,
         language: args.language_code || 'auto-detected',
         message: `Transcription complete: ${data.text.length} characters, ${data.words?.length || 0} words.`,

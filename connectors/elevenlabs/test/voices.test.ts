@@ -26,7 +26,10 @@ describe('Voice tools', () => {
       expect(parsed.ok).toBe(true);
       expect(parsed.voices).toHaveLength(2);
       expect(parsed.voices[0].voice_id).toBe('voice-rachel-001');
-      expect(parsed.voices[0].name).toBe('Rachel');
+      // External-authored name arrives wrapped per AGENTS.md invariant #6.
+      expect(parsed.voices[0].name).toBe(
+        '<untrusted-content source="elevenlabs:list_voices:name">Rachel</untrusted-content>',
+      );
       expect(parsed.cost).toContain('FREE');
     });
 
@@ -44,7 +47,9 @@ describe('Voice tools', () => {
       const parsed = JSON.parse(result.text);
       expect(parsed.ok).toBe(true);
       expect(parsed.voices).toHaveLength(1);
-      expect(parsed.voices[0].name).toBe('Adam');
+      expect(parsed.voices[0].name).toBe(
+        '<untrusted-content source="elevenlabs:list_voices:name">Adam</untrusted-content>',
+      );
     });
   });
 });

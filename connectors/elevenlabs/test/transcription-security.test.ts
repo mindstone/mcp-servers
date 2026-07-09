@@ -90,7 +90,10 @@ describe('transcribe_audio — path sandbox (M3.9)', () => {
     expect(result.isError).toBeFalsy();
     const parsed = JSON.parse(result.text);
     expect(parsed.ok).toBe(true);
-    expect(parsed.text).toBe('hello');
+    // Transcript text arrives wrapped per AGENTS.md invariant #6.
+    expect(parsed.text).toBe(
+      '<untrusted-content source="elevenlabs:transcribe_audio:text">hello</untrusted-content>',
+    );
     expect(getCalls()).toBe(1);
   });
 
