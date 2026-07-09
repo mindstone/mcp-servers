@@ -8,6 +8,8 @@ import {
   mockModels,
   mockSharedVoices,
   mockVoiceDetail,
+  mockForcedAlignment,
+  mockCloneVoice,
   makeFakeAudioBuffer,
 } from '../fixtures/elevenlabs-data.js';
 
@@ -145,6 +147,50 @@ export function createElevenLabsHandlers(expectedApiKey = MOCK_API_KEY) {
       if (authError) return authError;
       return HttpResponse.json(mockTranscription);
     }),
+
+    // POST /speech-to-speech/:voiceId — voice conversion (binary audio)
+    http.post(`${BASE_V1}/speech-to-speech/:voiceId`, async ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      const audioBuffer = makeFakeAudioBuffer(2048);
+      return new HttpResponse(audioBuffer, {
+        headers: { 'Content-Type': 'audio/mpeg' },
+      });
+    }),
+
+    // POST /audio-isolation — noise removal (binary audio)
+    http.post(`${BASE_V1}/audio-isolation`, async ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      const audioBuffer = makeFakeAudioBuffer(1536);
+      return new HttpResponse(audioBuffer, {
+        headers: { 'Content-Type': 'audio/mpeg' },
+      });
+    }),
+
+    // POST /forced-alignment — align transcript to audio (JSON)
+    http.post(`${BASE_V1}/forced-alignment`, async ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      return HttpResponse.json(mockForcedAlignment);
+    }),
+
+    // POST /voices/add — instant voice clone (JSON)
+    http.post(`${BASE_V1}/voices/add`, async ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      return HttpResponse.json(mockCloneVoice);
+    }),
+
+    // DELETE /voices/:voiceId
+    http.delete(`${BASE_V1}/voices/:voiceId`, ({ request, params }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      if (params.voiceId === 'missing-voice-id') {
+        return HttpResponse.json({ detail: 'Voice not found' }, { status: 404 });
+      }
+      return new HttpResponse(null, { status: 200 });
+    }),
   ];
 }
 
@@ -190,6 +236,9 @@ export function createElevenLabsUnauthorizedHandlers() {
       HttpResponse.json({ detail: { message: 'Invalid API key' } }, { status: 401 }),
     ),
     http.post(`${BASE_V1}/*`, () =>
+      HttpResponse.json({ detail: { message: 'Invalid API key' } }, { status: 401 }),
+    ),
+    http.delete(`${BASE_V1}/*`, () =>
       HttpResponse.json({ detail: { message: 'Invalid API key' } }, { status: 401 }),
     ),
     http.get(`${BASE_V2}/*`, () =>

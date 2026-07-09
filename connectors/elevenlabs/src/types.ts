@@ -125,6 +125,25 @@ export interface SharedVoicesResponse {
   has_more?: boolean;
 }
 
+export interface ForcedAlignmentWord {
+  text: string;
+  start: number;
+  end: number;
+}
+
+export interface ForcedAlignmentResponse {
+  characters?: Array<{ text: string; start: number; end: number }>;
+  words?: ForcedAlignmentWord[];
+  loss?: number;
+}
+
+export interface CloneVoiceResponse {
+  voice_id: string;
+  requires_verification?: boolean;
+}
+
+import { envelopeApiErrorDetail } from './error-detail.js';
+
 /** Actionable resolution when a voice_id or voice_name cannot be resolved. */
 export const VOICE_NOT_FOUND_RESOLUTION =
   'Use list_voices to browse voices on this account, or search_shared_voices to find voices in the public library. Pass the exact voice_id to generate_speech.';
@@ -144,7 +163,11 @@ export function getErrorResolution(status: number, detail?: string): string {
     );
   }
   if (status === 422 || msg.includes('validation')) {
-    return 'Invalid request parameters. Check the input values and try again.';
+    const base = 'Invalid request parameters. Check the input values and try again.';
+    if (detail) {
+      return `${base} Field issues: ${envelopeApiErrorDetail(detail)}`;
+    }
+    return base;
   }
   if (status === 429) {
     return 'Rate limited. Wait a moment and try again.';

@@ -6,30 +6,44 @@ import { MOCK_API_KEY } from './fixtures/elevenlabs-data.js';
 
 const EXPECTED_TOOL_NAMES = [
   'check_subscription',
+  'clone_voice',
   'configure_elevenlabs_api_key',
   'create_music_plan',
+  'delete_voice',
+  'forced_alignment',
   'generate_music',
   'generate_music_from_plan',
   'generate_sound_effect',
   'generate_speech',
   'get_voice',
+  'isolate_audio',
   'list_models',
   'list_voices',
   'search_shared_voices',
+  'speech_to_speech',
   'transcribe_audio',
 ].sort();
 
-const READ_ONLY_TOOLS = [
-  'check_subscription',
-  'create_music_plan',
-  'get_voice',
-  'list_models',
-  'list_voices',
-  'search_shared_voices',
-  'transcribe_audio',
-];
-
-const DESTRUCTIVE_TOOLS = ['configure_elevenlabs_api_key'];
+/** Complete D-ANNOTATIONS table for all 17 tools (post-Stage 3). */
+const EXPECTED_ANNOTATIONS: Record<string, { readOnlyHint: boolean; destructiveHint: boolean }> = {
+  check_subscription: { readOnlyHint: true, destructiveHint: false },
+  clone_voice: { readOnlyHint: false, destructiveHint: true },
+  configure_elevenlabs_api_key: { readOnlyHint: false, destructiveHint: true },
+  create_music_plan: { readOnlyHint: true, destructiveHint: false },
+  delete_voice: { readOnlyHint: false, destructiveHint: true },
+  forced_alignment: { readOnlyHint: true, destructiveHint: false },
+  generate_music: { readOnlyHint: false, destructiveHint: false },
+  generate_music_from_plan: { readOnlyHint: false, destructiveHint: false },
+  generate_sound_effect: { readOnlyHint: false, destructiveHint: false },
+  generate_speech: { readOnlyHint: false, destructiveHint: false },
+  get_voice: { readOnlyHint: true, destructiveHint: false },
+  isolate_audio: { readOnlyHint: false, destructiveHint: false },
+  list_models: { readOnlyHint: true, destructiveHint: false },
+  list_voices: { readOnlyHint: true, destructiveHint: false },
+  search_shared_voices: { readOnlyHint: true, destructiveHint: false },
+  speech_to_speech: { readOnlyHint: false, destructiveHint: false },
+  transcribe_audio: { readOnlyHint: true, destructiveHint: false },
+};
 
 describe('Smoke test — tool registration', () => {
   let testClient: McpTestClient;
@@ -42,7 +56,7 @@ describe('Smoke test — tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 12 tools with correct names', async () => {
+  it('registers exactly 17 tools with correct names', async () => {
     mswServer.use(...createElevenLabsHandlers());
 
     testClient = await createTestClient({
@@ -55,7 +69,7 @@ describe('Smoke test — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(12);
+    expect(toolsResult.tools).toHaveLength(17);
     expect(toolNames).toEqual(EXPECTED_TOOL_NAMES);
   });
 
@@ -71,20 +85,17 @@ describe('Smoke test — tool registration', () => {
 
     const toolsResult = await testClient.client.listTools();
 
+    expect(Object.keys(EXPECTED_ANNOTATIONS).sort()).toEqual(EXPECTED_TOOL_NAMES);
+
     for (const tool of toolsResult.tools) {
       expect(tool.annotations, `Tool ${tool.name} should have annotations`).toBeDefined();
       expect(typeof tool.annotations!.readOnlyHint).toBe('boolean');
       expect(typeof tool.annotations!.destructiveHint).toBe('boolean');
 
-      if (READ_ONLY_TOOLS.includes(tool.name)) {
-        expect(tool.annotations!.readOnlyHint, `${tool.name} should be readOnly`).toBe(true);
-        expect(tool.annotations!.destructiveHint, `${tool.name} should not be destructive`).toBe(false);
-      }
-
-      if (DESTRUCTIVE_TOOLS.includes(tool.name)) {
-        expect(tool.annotations!.destructiveHint, `${tool.name} should be destructive`).toBe(true);
-        expect(tool.annotations!.readOnlyHint, `${tool.name} should not be readOnly`).toBe(false);
-      }
+      const expected = EXPECTED_ANNOTATIONS[tool.name];
+      expect(expected, `Missing EXPECTED_ANNOTATIONS entry for ${tool.name}`).toBeDefined();
+      expect(tool.annotations!.readOnlyHint, `${tool.name} readOnlyHint`).toBe(expected.readOnlyHint);
+      expect(tool.annotations!.destructiveHint, `${tool.name} destructiveHint`).toBe(expected.destructiveHint);
     }
   });
 
@@ -110,7 +121,7 @@ describe('Smoke test — tool registration', () => {
 });
 
 describe('Spawned stdio smoke test', () => {
-  it('lists 12 tools from built dist/index.js', async () => {
+  it('lists 17 tools from built dist/index.js', async () => {
     const { createStdioTestClient } = await import('@mindstone/mcp-test-harness');
     const { join } = await import('path');
 
@@ -126,7 +137,7 @@ describe('Spawned stdio smoke test', () => {
 
     try {
       const toolsResult = await client.client.listTools();
-      expect(toolsResult.tools).toHaveLength(12);
+      expect(toolsResult.tools).toHaveLength(17);
     } finally {
       await client.close();
     }

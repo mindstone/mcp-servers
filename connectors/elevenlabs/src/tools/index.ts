@@ -4,3 +4,7 @@ export { registerMusicTools } from './music.js';
 export { registerSpeechTools } from './speech.js';
 export { registerVoiceTools } from './voices.js';
 export { registerTranscriptionTools } from './transcription.js';
+export { registerVoiceChangerTools } from './voice-changer.js';
+export { registerAudioIsolationTools } from './audio-isolation.js';
+export { registerAlignmentTools } from './alignment.js';
+export { registerVoiceCloneTools } from './voice-clone.js';

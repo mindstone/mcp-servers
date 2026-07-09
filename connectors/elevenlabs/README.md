@@ -9,7 +9,7 @@ ElevenLabs MCP server for Model Context Protocol hosts. Generate speech, music, 
 
 - **Version:** [0.3.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs)
 - **Auth:** API key ([`ELEVENLABS_API_KEY`](./server.json))
-- **Tools:** [12](./src/tools/) (account, voices, speech, music, transcription)
+- **Tools:** [17](./src/tools/) (account, voices, speech, music, transcription, voice conversion, isolation, alignment, cloning)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -114,7 +114,7 @@ node dist/index.js
 }
 ```
 
-## Tools (12)
+## Tools (17)
 
 ### Configuration
 - `configure_elevenlabs_api_key` — Save your ElevenLabs API key
@@ -126,11 +126,18 @@ node dist/index.js
 ### Voices
 - `list_voices` — Search and browse voices on your account
 - `get_voice` — Get full details for one voice by voice_id
-- `search_shared_voices` — Search the public shared voice library
+- `search_shared_voices` — Search the public shared voice library (filters include accent)
+- `clone_voice` — Create an instant voice clone from local audio samples (`destructiveHint`)
+- `delete_voice` — Permanently delete a voice (`destructiveHint`)
 
-### Speech
+### Speech & conversion
 - `generate_speech` — Generate spoken audio from text using text-to-speech
 - `generate_sound_effect` — Generate sound effects from a text description
+- `speech_to_speech` — Convert source audio to a different voice
+
+### Audio processing
+- `isolate_audio` — Remove background noise from an audio file
+- `forced_alignment` — Align transcript text to audio with per-word timestamps
 
 ### Music
 - `generate_music` — Generate music from a text prompt
@@ -139,6 +146,8 @@ node dist/index.js
 
 ### Transcription
 - `transcribe_audio` — Transcribe speech from an audio file to text
+
+Local file paths for upload tools must be inside `MCP_WORKSPACE_PATH` (or `os.tmpdir()` when unset). See `src/tools/file-input.ts`.
 
 ## Licence
 

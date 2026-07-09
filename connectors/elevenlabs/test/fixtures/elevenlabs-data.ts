@@ -117,6 +117,18 @@ export const mockTranscription = {
   ],
 };
 
+export const mockForcedAlignment = {
+  words: [
+    { text: 'Hi.', start: 0.0, end: 0.4 },
+  ],
+  loss: 0.01,
+};
+
+export const mockCloneVoice = {
+  voice_id: 'cloned-voice-001',
+  requires_verification: false,
+};
+
 /**
  * Generate a fake audio buffer for testing binary output.
  */

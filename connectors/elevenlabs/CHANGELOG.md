@@ -12,12 +12,14 @@ are maintained manually as part of the PR review checklist.
 ## [Unreleased]
 
 ### Added
+- **elevenlabs**: Five multipart file-input tools — `speech_to_speech` (voice conversion, multipart field `audio`), `isolate_audio` (background noise removal), `forced_alignment` (audio+transcript alignment with enveloped `words[].text`), `clone_voice` (instant voice clone from sandboxed local files), `delete_voice` (permanent voice removal, `destructiveHint: true`). Shared `src/tools/file-input.ts` extracts the path-sandbox invariants from transcription (R1).
+- **elevenlabs**: `search_shared_voices` gains verified `accent` filter param.
 - **elevenlabs**: Four FREE discovery/account tools — `check_subscription` (tier + character credits + reset), `list_models` (model capabilities and languages), `get_voice` (single-voice detail), `search_shared_voices` (public library with search/filters). All external-text fields enveloped; shared-voice names/descriptions treated as highest-care third-party content.
 - **elevenlabs**: `src/endpoints.ts` centralises every API path (v1 + v2 voices) for one-line fixes.
-- **elevenlabs**: Retell-style tool descriptions across all 12 tools (WHEN TO USE / EXAMPLE / RELATED TOOLS / RETURNS / COST-or-FREE) within the description-budget soft cap; mechanical smoke assertion for annotations (D-ANNOTATIONS) and description structure.
+- **elevenlabs**: Retell-style tool descriptions across all 17 tools (WHEN TO USE / EXAMPLE / RELATED TOOLS / RETURNS / COST-or-FREE) within the description-budget soft cap; mechanical smoke assertion for the complete D-ANNOTATIONS per-tool table.
 
 ### Changed
-- **elevenlabs**: Error resolutions for quota/credits now cross-reference `check_subscription`; `VOICE_NOT_FOUND` resolutions point at `list_voices` and `search_shared_voices`.
+- **elevenlabs**: Error resolutions for quota/credits now cross-reference `check_subscription`; `VOICE_NOT_FOUND` resolutions point at `list_voices` and `search_shared_voices`. HTTP 422 resolutions now include enveloped flattened field paths for self-correction (F3).
 - **elevenlabs**: API error `detail` strings from 401/403/422 bodies are enveloped in model-visible error messages via shared `error-detail.ts` (FastAPI field-path flattening preserved inside the envelope).
 
 ### Security

@@ -56,8 +56,8 @@ COST: FREE — no credits consumed.`,
 
       return JSON.stringify({
         ok: true,
-        tier: wrapUntrusted(data.tier, 'elevenlabs:check_subscription:tier'),
-        status: wrapUntrusted(data.status, 'elevenlabs:check_subscription:status'),
+        tier: wrapUntrusted(data.tier ?? undefined, 'elevenlabs:check_subscription:tier'),
+        status: wrapUntrusted(data.status ?? undefined, 'elevenlabs:check_subscription:status'),
         character_count: characterCount,
         character_limit: characterLimit,
         characters_remaining: remaining,

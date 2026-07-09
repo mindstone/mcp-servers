@@ -199,6 +199,7 @@ COST: FREE — no credits consumed.`,
           .describe('Filter by shared-voice category.'),
         gender: z.string().optional().describe('Filter by gender (e.g. male, female).'),
         age: z.string().optional().describe('Filter by age bracket (e.g. young, middle_aged).'),
+        accent: z.string().optional().describe('Filter by accent (e.g. british, american).'),
         language: z.string().optional().describe('Filter by language code (e.g. en, es).'),
         page_size: z.number().int().min(1).max(100).optional().describe('Results per page (1-100). Default: 20.'),
       }),
@@ -219,6 +220,7 @@ COST: FREE — no credits consumed.`,
       if (args.category) params.set('category', args.category);
       if (args.gender) params.set('gender', args.gender);
       if (args.age) params.set('age', args.age);
+      if (args.accent) params.set('accent', args.accent);
       if (args.language) params.set('language', args.language);
       params.set('page_size', String(Math.min(100, args.page_size ?? 20)));
 

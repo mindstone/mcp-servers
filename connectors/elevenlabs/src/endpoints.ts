@@ -18,7 +18,12 @@ export const ENDPOINTS = {
   MUSIC: '/music',
   MUSIC_PLAN: '/music/plan',
   SPEECH_TO_TEXT: '/speech-to-text',
+  AUDIO_ISOLATION: '/audio-isolation',
+  FORCED_ALIGNMENT: '/forced-alignment',
+  VOICES_ADD: '/voices/add',
   voice: (voiceId: string) => `/voices/${encodeURIComponent(voiceId)}`,
+  speechToSpeech: (voiceId: string) =>
+    `/speech-to-speech/${encodeURIComponent(voiceId)}`,
   textToSpeech: (voiceId: string, outputFormat: string) =>
     `/text-to-speech/${encodeURIComponent(voiceId)}?output_format=${encodeURIComponent(outputFormat)}`,
 } as const;
