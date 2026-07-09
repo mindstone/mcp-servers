@@ -5,6 +5,9 @@ import { bridgeRequest, BRIDGE_STATE_PATH } from '../bridge.js';
 import { ElevenLabsError } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 
+const CONFIGURED_MESSAGE =
+  'ElevenLabs API key configured successfully. Feature-specific permissions are checked on first use; call check_subscription to verify the account and credits now.';
+
 export function registerConfigureTools(server: McpServer): void {
   server.registerTool(
     'configure_elevenlabs_api_key',
@@ -38,8 +41,8 @@ COST: FREE.`,
           if (result.success) {
             setApiKey(key);
             const message = result.warning
-              ? `ElevenLabs API key configured successfully. Note: ${result.warning}`
-              : 'ElevenLabs API key configured successfully! You can now generate music, speech, sound effects, and more.';
+              ? `${CONFIGURED_MESSAGE} Note: ${result.warning}`
+              : (result.message ?? CONFIGURED_MESSAGE);
             return JSON.stringify({ ok: true, message });
           }
           // Bridge returned failure — surface as error, do NOT fall through
@@ -63,7 +66,7 @@ COST: FREE.`,
       setApiKey(key);
       return JSON.stringify({
         ok: true,
-        message: 'ElevenLabs API key configured successfully! You can now generate music, speech, sound effects, and more.',
+        message: CONFIGURED_MESSAGE,
       });
     }),
   );
