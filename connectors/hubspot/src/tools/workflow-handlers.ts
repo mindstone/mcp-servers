@@ -192,11 +192,14 @@ export async function handleEnrolInWorkflow(args: EnrolInWorkflowArgs): Promise<
     const client = await getHubSpotClientAsync();
     return await client.enrollInWorkflow(args.flowId, args.objectIds, args.objectType || 'contacts');
   } catch (error) {
-    if (error instanceof HubSpotApiError && (error.statusCode === 403 || error.statusCode === 404)) {
+    // 404 keeps its endpoint-specific hint (portal may need v3 not v4). A 403 is
+    // a scope/plan/permission gap — route it through the shared honest, multi-cause
+    // copy instead of the old single-cause "reconnect to refresh scopes".
+    if (error instanceof HubSpotApiError && error.statusCode === 404) {
       const parsed = {
-        error: `Workflow enrollment via v4 Automation API failed (${error.statusCode})`,
-        errorCode: error.statusCode === 403 ? 'SCOPE_MISSING' : 'NOT_FOUND',
-        suggestion: 'Reconnect HubSpot to refresh automation scopes. If this persists, your portal may require the v3 workflow enrollment endpoint instead of v4.',
+        error: 'Workflow enrollment via v4 Automation API failed (404)',
+        errorCode: 'NOT_FOUND',
+        suggestion: 'The workflow could not be found, or your portal may require the v3 workflow enrollment endpoint instead of v4. Verify the workflow ID and try again.',
         details: summariseHubSpotApiError(error, { operation: 'enrol' })
       };
       logger.error('Failed to enrol in workflow', parsed);

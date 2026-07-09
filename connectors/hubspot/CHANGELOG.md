@@ -11,6 +11,15 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Changed
+
+- Extended the honest 403 capability-denied copy to marketing emails, marketing analytics, and workflows/automation (previously a single-cause "requires Marketing Hub" / "reconnect to refresh scopes" message that sent users in circles). The message now names all three reasons a capability can be unavailable — the account's plan doesn't include it, the signed-in HubSpot user lacks permission, or (less commonly, since an unauthorised optional scope usually fails the OAuth connect loudly) the app isn't authorised for it — leading with the likelier causes and presenting reconnecting only as the final step once the underlying cause is resolved.
+- Aligned the workflow tool descriptions (`list_hubspot_workflows`, `get_hubspot_workflow`, `enrol_in_hubspot_workflow`) with the same multi-cause wording, so the model-visible tool contract no longer primes reconnect-first behaviour on a 403.
+
+### Fixed
+
+- Scope-denied 403s now capture the scope(s) HubSpot names in the error body (`requiredScopes`) into structured error details, so a missing-scope problem is diagnosable from logs instead of guessed. Never fabricates a scope when HubSpot names none.
+
 ## [0.3.0] - 2026-06-29
 
 ### Changed

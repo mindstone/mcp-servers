@@ -138,7 +138,9 @@ function parseHubSpotError(
       return {
         error: capabilityDenied.error,
         errorCode: 'PERMISSION_DENIED',
-        suggestion: capabilityDenied.suggestion
+        suggestion: capabilityDenied.suggestion,
+        // Carries any scope(s) HubSpot named (requiredScopes) for log-based diagnosis.
+        details: summariseHubSpotApiError(error, { operation: context.operation })
       };
     }
     

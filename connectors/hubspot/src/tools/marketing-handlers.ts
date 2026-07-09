@@ -1,5 +1,6 @@
 import { getHubSpotClientAsync, HubSpotApiError } from '../api/hubspot-client.js';
 import {
+  buildHubSpotCapabilityDeniedError,
   parseHubSpotError as parseSharedHubSpotError,
   summariseHubSpotApiError,
   type ParsedHubSpotError,
@@ -54,18 +55,24 @@ function parseHubSpotError(
           suggestion: 'Ensure crm.objects.contacts.read scope is granted. If using with Lists, you may need to reconnect HubSpot.'
         };
       }
-      if (context.feature === 'analytics') {
+      if (
+        context.feature === 'analytics' ||
+        context.feature === 'marketing_emails' ||
+        context.feature === 'marketing_email'
+      ) {
+        // Honest multi-cause copy (scope registration / plan / user permission),
+        // not the old single-cause "requires Marketing Hub" — the message Arthur
+        // hit that sent him in circles reconnecting. See error-parser helper.
+        const capabilityDenied = buildHubSpotCapabilityDeniedError({
+          objectType: context.feature,
+          operation: context.operation,
+          args: context.args,
+        });
         return {
-          error: 'Analytics API requires Marketing Hub Professional or Enterprise',
-          errorCode: 'MARKETING_HUB_REQUIRED',
-          suggestion: 'This feature is only available on paid Marketing Hub plans. Check your HubSpot subscription.'
-        };
-      }
-      if (context.feature === 'marketing_emails') {
-        return {
-          error: 'Marketing Emails API requires Marketing Hub',
-          errorCode: 'MARKETING_HUB_REQUIRED',
-          suggestion: 'This feature requires a Marketing Hub subscription.'
+          error: capabilityDenied.error,
+          errorCode: 'SCOPE_MISSING',
+          suggestion: capabilityDenied.suggestion,
+          details: summariseHubSpotApiError(error, { operation: context.operation }),
         };
       }
       // Generic 403 with scope hint

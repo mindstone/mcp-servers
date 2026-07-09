@@ -2546,9 +2546,11 @@ RELATED TOOLS:
 - delete_hubspot_workflow (permanently delete)
 - enrol_in_hubspot_workflow (enrol specific records)
 
-REQUIRES: automation scope. If you get a 403 error, the user needs to reconnect HubSpot
-(Settings → Connectors → HubSpot → Disconnect, then reconnect) to grant this scope.
-Also requires Marketing Hub Professional or Enterprise.
+REQUIRES: automation scope, plus a plan that includes workflows (Operations Hub, or
+Marketing/Sales Hub Professional or Enterprise). A 403 means the connection can't access
+workflows — most often the account's plan or the signed-in user's permissions, less
+commonly the scope isn't authorised for the app. Reconnecting alone won't add it; resolve
+the underlying cause first, then reconnect HubSpot to pick up the change.
 
 NOTE: This uses the v4 Automation API which is in BETA — response shape may change.`,
     aliases: ['get_hubspot_workflows', 'hubspot_workflows'],
@@ -2580,7 +2582,7 @@ RELATED TOOLS:
 - enrol_in_hubspot_workflow (manually enrol records)
 - delete_hubspot_workflow (permanently delete workflow)
 
-REQUIRES: automation scope (see list_hubspot_workflows for reconnection instructions).
+REQUIRES: automation scope and a plan that includes workflows (see list_hubspot_workflows for what a 403 means).
 
 NOTE: This is a BETA API — treat unknown fields cautiously as the response shape may change.`,
     aliases: ['get_workflow', 'get_workflow_details'],
@@ -2743,8 +2745,10 @@ Set confirm=true to acknowledge permanent deletion.`,
     category: 'Workflows',
     description: `Enrol specific records into a workflow.
 
-Uses the v4 BETA enrollment endpoint. If you receive a 403/404, reconnect to refresh
-automation scopes; if it still fails, your portal may require the v3 enrollment endpoint.`,
+Uses the v4 BETA enrollment endpoint. A 403 means the connection can't access workflows
+(most often plan or user permissions, less commonly app authorisation) — reconnecting alone
+won't fix it; resolve the cause, then reconnect. A 404 may mean your portal requires the v3
+enrollment endpoint.`,
     annotations: { readOnlyHint: false, destructiveHint: false },
     inputSchema: {
       type: 'object',

@@ -43,6 +43,8 @@ export interface HubSpotApiErrorSummary {
   category?: string;
   requestId?: string;
   retryAfterSeconds?: number;
+  /** Scope(s) HubSpot named as missing on a 403 — surfaced for diagnosis/telemetry. */
+  requiredScopes?: string[];
 }
 
 function compactSummary(summary: HubSpotApiErrorSummary): HubSpotApiErrorSummary {
@@ -136,6 +138,11 @@ export function summariseHubSpotApiError(
     ? safeRetryAfterSeconds(error.retryAfterSeconds)
     : safeRetryAfterSeconds(record?.retryAfterSeconds);
 
+  // Required scopes are a 403 (MISSING_SCOPES) concept. Only extract them there,
+  // so identifier-shaped values in other bodies (e.g. validation errors) can't
+  // land in the scope field.
+  const requiredScopes = statusCode === 403 ? extractRequiredScopes(details) : [];
+
   return compactSummary({
     operation: context?.operation,
     statusCode,
@@ -143,6 +150,7 @@ export function summariseHubSpotApiError(
     category: safeIdentifier(details?.category),
     requestId,
     retryAfterSeconds,
+    requiredScopes: requiredScopes.length > 0 ? requiredScopes : undefined,
   });
 }
 
@@ -212,7 +220,61 @@ const HUBSPOT_CAPABILITY_LABELS: Record<string, string> = {
   notes: 'notes',
   owners: 'owners',
   associations: 'record associations',
+  marketing_emails: 'marketing emails (Marketing Hub)',
+  marketing_email: 'marketing emails (Marketing Hub)',
+  analytics: 'marketing analytics (Marketing Hub)',
+  workflows: 'workflows and automation',
+  automation: 'workflows and automation',
 };
+
+// Capabilities that map to a HubSpot *plan* (paid hub) rather than a per-object
+// scope. Used to give the plan-specific hint in the capability-denied copy.
+const HUBSPOT_PLAN_HINTS: Record<string, string> = {
+  tickets: 'support tickets require Service Hub, for example',
+  marketing_emails: 'marketing emails require a paid Marketing Hub plan, for example',
+  marketing_email: 'marketing emails require a paid Marketing Hub plan, for example',
+  analytics: 'marketing analytics requires a paid Marketing Hub plan, for example',
+  workflows: 'workflows require Operations Hub or Marketing/Sales Hub Professional, for example',
+  automation: 'workflows require Operations Hub or Marketing/Sales Hub Professional, for example',
+};
+
+/**
+ * HubSpot returns the scope(s) it wanted on a 403 in the error body, under a few
+ * shapes depending on API version. Pull whatever is present (validated), so the
+ * missing scope is captured in structured error details / logs and a future
+ * scope-gap is self-diagnosing rather than a guess. Never fabricates a scope.
+ */
+function extractRequiredScopes(details: Record<string, unknown> | undefined): string[] {
+  const scopes = new Set<string>();
+  const collect = (value: unknown): void => {
+    // HubSpot usually returns an array, but tolerate a single scope string too.
+    const items = Array.isArray(value) ? value : typeof value === 'string' ? [value] : [];
+    for (const item of items) {
+      const safe = safeIdentifier(item);
+      if (safe) scopes.add(safe);
+    }
+  };
+
+  // A scope may sit under `context` or directly on a record, at the top level
+  // or inside each `errors[]` item — HubSpot varies by API version.
+  const collectFrom = (record: Record<string, unknown> | undefined): void => {
+    const context = getNestedRecord(record, 'context');
+    collect(context?.requiredGranularScopes);
+    collect(context?.requiredScopes);
+    collect(record?.requiredGranularScopes);
+    collect(record?.requiredScopes);
+  };
+
+  collectFrom(details);
+  // HubSpot also nests contextual fields under errors[].context — the same shape
+  // this connector already reads for validation propertyName (extractInvalidProperties).
+  const errors = Array.isArray(details?.errors) ? details.errors : [];
+  for (const item of errors) {
+    collectFrom(asRecord(item));
+  }
+
+  return [...scopes];
+}
 
 export function describeHubSpotCapability(context: HubSpotErrorContext): string {
   const objectType = context.objectType?.trim().toLowerCase();
@@ -223,18 +285,20 @@ export function describeHubSpotCapability(context: HubSpotErrorContext): string 
   return 'this HubSpot capability';
 }
 
-// Other 403 copy sites can migrate here later: workflow, knowledge-base, marketing, and association-v4 handlers.
+// Honest, multi-cause 403 copy shared by every capability-denied site (CRM,
+// files, marketing, workflow). A HubSpot optional scope can be absent for three
+// reasons, and none is fixed by reconnecting *alone* — so we name all three and
+// present reconnect only as the final step once the real cause is resolved.
 export function buildHubSpotCapabilityDeniedError(
   context: HubSpotErrorContext,
 ): { error: string; suggestion: string } {
   const label = describeHubSpotCapability(context);
-  const planExample = context.objectType?.toLowerCase() === 'tickets'
-    ? ' (support tickets require Service Hub, for example)'
-    : '';
+  const planHint = HUBSPOT_PLAN_HINTS[context.objectType?.trim().toLowerCase() ?? ''];
+  const planExample = planHint ? ` (${planHint})` : '';
 
   return {
     error: `Can't access ${label} on this HubSpot connection.`,
-    suggestion: `This capability isn't available on the connected HubSpot account, and reconnecting won't add it. A HubSpot administrator may need to authorise ${label} for the app, or the account's plan may not include it${planExample}. Other HubSpot features are unaffected.`,
+    suggestion: `This capability isn't available on the connected HubSpot account, and reconnecting won't add it on its own. Most often the account's plan may not include it${planExample}, or the signed-in HubSpot user may not have permission for it; less commonly, a HubSpot administrator may need to authorise ${label} for the app. Once the underlying cause is resolved, reconnect HubSpot to pick up the change. Other HubSpot features are unaffected.`,
   };
 }
 
@@ -312,7 +376,10 @@ export function parseHubSpotError(error: unknown, context: HubSpotErrorContext):
       return {
         error: capabilityDenied.error,
         errorCode: 'SCOPE_MISSING',
-        suggestion: capabilityDenied.suggestion
+        suggestion: capabilityDenied.suggestion,
+        // Carries category (e.g. MISSING_SCOPES), requestId, and any scope(s)
+        // HubSpot named — so a scope-gap is diagnosable from logs, not a guess.
+        details: apiErrorSummary
       };
     }
 
