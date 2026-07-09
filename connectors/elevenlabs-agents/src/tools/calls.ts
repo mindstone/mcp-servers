@@ -5,7 +5,22 @@ import { ENDPOINTS } from '../endpoints.js';
 import { sanitizeOutboundCall } from '../sanitize.js';
 import { validateE164 } from '../schema-helpers.js';
 import { ElevenLabsError } from '../types.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
+
+const SUPPORTED_OUTBOUND_PROVIDERS = ['twilio', 'sip_trunk'] as const;
+const SUPPORTED_OUTBOUND_PROVIDERS_LABEL = SUPPORTED_OUTBOUND_PROVIDERS.map((p) => `"${p}"`).join(' or ');
+const UNSUPPORTED_PROVIDER_RESOLUTION =
+  'Use get_phone_number to confirm the number is imported as provider "twilio" or "sip_trunk", then retry.';
+const UNSUPPORTED_PROVIDER_SOURCE = 'elevenlabs-agents:make_outbound_call:phone_number_provider';
+
+function unsupportedProviderMessage(receivedProvider?: string): string {
+  if (!receivedProvider) {
+    return `Phone number provider is missing; outbound calling supports provider ${SUPPORTED_OUTBOUND_PROVIDERS_LABEL} only.`;
+  }
+  const envelopedProvider = wrapUntrusted(receivedProvider, UNSUPPORTED_PROVIDER_SOURCE)!;
+  return `Phone number provider is not supported for outbound calling by this tool. Supported providers are ${SUPPORTED_OUTBOUND_PROVIDERS_LABEL}; received ${envelopedProvider}.`;
+}
 
 function resolveOutboundEndpoint(phoneNumber: unknown): string {
   if (!phoneNumber || typeof phoneNumber !== 'object') {
@@ -24,11 +39,9 @@ function resolveOutboundEndpoint(phoneNumber: unknown): string {
   if (provider === 'sip_trunk') return ENDPOINTS.SIP_TRUNK_OUTBOUND_CALL;
 
   throw new ElevenLabsError(
-    provider
-      ? `Phone number provider ${provider} is not supported for outbound calling by this tool.`
-      : 'Phone number provider is missing; cannot decide whether to use the Twilio or SIP outbound endpoint.',
+    unsupportedProviderMessage(provider),
     'INVALID_PHONE_NUMBER_PROVIDER',
-    'Use get_phone_number to confirm the number is imported as provider "twilio" or "sip_trunk", then retry.',
+    UNSUPPORTED_PROVIDER_RESOLUTION,
   );
 }
 

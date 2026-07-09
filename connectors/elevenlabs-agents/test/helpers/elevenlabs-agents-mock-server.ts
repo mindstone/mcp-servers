@@ -293,6 +293,36 @@ export function createOutboundCallCapturingHandler(expectedApiKey = MOCK_API_KEY
   return { handler, captured };
 }
 
+export function createSipTrunkOutboundCallCapturingHandler(expectedApiKey = MOCK_API_KEY) {
+  const captured: { body?: Record<string, unknown>; endpointHit?: boolean } = {};
+
+  const handler = http.post(`${BASE_V1}/convai/sip-trunk/outbound-call`, async ({ request }) => {
+    const authErr = requireAuth(request.headers.get('xi-api-key'));
+    if (authErr) return authErr;
+    captured.endpointHit = true;
+    captured.body = (await request.json()) as Record<string, unknown>;
+    return HttpResponse.json({ ...mockOutboundCall, provider: 'sip_trunk' });
+  });
+
+  return { handler, captured };
+}
+
+export function createPhoneNumberProviderHandler(
+  provider: string | undefined,
+  expectedApiKey = MOCK_API_KEY,
+) {
+  return http.get(`${BASE_V1}/convai/phone-numbers/:phoneNumberId`, ({ request, params }) => {
+    const authErr = requireAuth(request.headers.get('xi-api-key'));
+    if (authErr) return authErr;
+    const payload = {
+      ...mockPhoneNumber,
+      phone_number_id: params.phoneNumberId,
+      ...(provider === undefined ? { provider: undefined } : { provider }),
+    };
+    return HttpResponse.json(payload);
+  });
+}
+
 export function createSubmitBatchCallCapturingHandler(expectedApiKey = MOCK_API_KEY) {
   const captured: { body?: Record<string, unknown> } = {};
 
