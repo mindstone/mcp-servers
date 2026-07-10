@@ -56,6 +56,7 @@
   "list_file_revisions": true,
   "list_form_responses": true,
   "list_forms": true,
+  "list_shared_drives": true,
   "list_task_lists": true,
   "list_tasks": true,
   "list_workspace_accounts": false,

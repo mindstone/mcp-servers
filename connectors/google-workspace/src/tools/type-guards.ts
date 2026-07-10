@@ -9,6 +9,7 @@ BaseToolArguments,
   ManageDraftParams,
   DriveFileListArgs,
   DriveSearchArgs,
+  ListSharedDrivesArgs,
   DriveUploadArgs,
   DriveDownloadArgs,
   DriveFolderArgs,
@@ -147,10 +148,16 @@ export function assertSendEmailArgs(args: Record<string, unknown>): asserts args
 }
 
 // Drive Type Guards
+const DRIVE_CORPORA_VALUES = ['user', 'drive', 'allDrives'];
+
+function isValidCorpora(value: unknown): boolean {
+  return value === undefined || (typeof value === 'string' && DRIVE_CORPORA_VALUES.includes(value));
+}
+
 export function isDriveFileListArgs(args: unknown): args is DriveFileListArgs {
   if (typeof args !== 'object' || args === null) return false;
   const params = args as Partial<DriveFileListArgs>;
-  
+
   return (params.email === undefined || typeof params.email === 'string') &&
     (params.options === undefined || (() => {
       const opts = params.options as any;
@@ -158,7 +165,9 @@ export function isDriveFileListArgs(args: unknown): args is DriveFileListArgs {
         (opts.query === undefined || typeof opts.query === 'string') &&
         (opts.pageSize === undefined || typeof opts.pageSize === 'number') &&
         (opts.orderBy === undefined || (Array.isArray(opts.orderBy) && opts.orderBy.every((o: unknown) => typeof o === 'string'))) &&
-        (opts.fields === undefined || (Array.isArray(opts.fields) && opts.fields.every((f: unknown) => typeof f === 'string')));
+        (opts.fields === undefined || (Array.isArray(opts.fields) && opts.fields.every((f: unknown) => typeof f === 'string'))) &&
+        (opts.driveId === undefined || typeof opts.driveId === 'string') &&
+        isValidCorpora(opts.corpora);
     })());
 }
 
@@ -179,12 +188,29 @@ export function isDriveSearchArgs(args: unknown): args is DriveSearchArgs {
     (params.options.folderId === undefined || typeof params.options.folderId === 'string') &&
     (params.options.trashed === undefined || typeof params.options.trashed === 'boolean') &&
     (params.options.query === undefined || typeof params.options.query === 'string') &&
-    (params.options.pageSize === undefined || typeof params.options.pageSize === 'number');
+    (params.options.pageSize === undefined || typeof params.options.pageSize === 'number') &&
+    (params.options.driveId === undefined || typeof params.options.driveId === 'string') &&
+    isValidCorpora(params.options.corpora);
 }
 
 export function assertDriveSearchArgs(args: unknown): asserts args is DriveSearchArgs {
   if (!isDriveSearchArgs(args)) {
     throw new Error('Invalid search parameters. Required: email, options');
+  }
+}
+
+export function isListSharedDrivesArgs(args: Record<string, unknown>): args is ListSharedDrivesArgs {
+  const pageSize = readAliasedArg<number>(args, 'page_size', 'pageSize');
+  const pageToken = readAliasedArg<string>(args, 'page_token', 'pageToken');
+
+  return (args.email === undefined || typeof args.email === 'string') &&
+    (pageSize === undefined || typeof pageSize === 'number') &&
+    (pageToken === undefined || typeof pageToken === 'string');
+}
+
+export function assertListSharedDrivesArgs(args: Record<string, unknown>): asserts args is ListSharedDrivesArgs {
+  if (!isListSharedDrivesArgs(args)) {
+    throw new Error('Invalid list shared drives parameters - page_size must be a number and page_token a string when provided');
   }
 }
 

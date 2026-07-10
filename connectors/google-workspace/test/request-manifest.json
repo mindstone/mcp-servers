@@ -456,6 +456,14 @@
     "handlerModule": "src/tools/forms-handlers.ts"
   },
   {
+    "tool": "list_shared_drives",
+    "service": "drive",
+    "method": "GET",
+    "path": "https://www.googleapis.com/drive/v3/drives",
+    "handlerId": "handleListSharedDrives",
+    "handlerModule": "src/tools/drive-handlers.ts"
+  },
+  {
     "tool": "list_task_lists",
     "service": "tasks",
     "method": "GET",

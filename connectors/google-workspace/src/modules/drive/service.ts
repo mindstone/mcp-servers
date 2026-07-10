@@ -1,6 +1,6 @@
 import { google } from 'googleapis';
 import { BaseGoogleService } from '../../services/base/BaseGoogleService.js';
-import { DriveOperationResult, FileDownloadOptions, FileListOptions, FileSearchOptions, FileUploadOptions, PermissionOptions } from './types.js';
+import { DriveOperationResult, FileDownloadOptions, FileListOptions, FileSearchOptions, FileUploadOptions, PermissionOptions, SharedDriveListOptions } from './types.js';
 import { Readable } from 'stream';
 import { DRIVE_SCOPES } from './scopes.js';
 import { GaxiosResponse } from 'gaxios';
@@ -110,6 +110,9 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
         pageToken: options.pageToken,
         orderBy: options.orderBy?.join(','),
         fields: options.fields?.join(',') || 'files(id, name, mimeType, modifiedTime, size)',
+        // Google rejects driveId unless corpora is 'drive', so force the pairing.
+        driveId: options.driveId || undefined,
+        corpora: options.driveId ? 'drive' : options.corpora,
         supportsAllDrives: true,
         includeItemsFromAllDrives: true,
       });
@@ -120,6 +123,31 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
       };
     } catch (error) {
       throw this.handleError(error, 'Failed to list Drive files');
+    }
+  }
+
+  async listSharedDrives(email: string, options: SharedDriveListOptions = {}): Promise<DriveOperationResult> {
+    try {
+      await this.ensureInitialized();
+      this.checkInitialized();
+      await this.validateScopes(email, [DRIVE_SCOPES.READONLY]);
+      const client = await this.getAuthenticatedClient(
+        email,
+        (auth) => google.drive({ version: 'v3', auth })
+      );
+
+      const response = await client.drives.list({
+        pageSize: options.pageSize,
+        pageToken: options.pageToken,
+        fields: 'drives(id, name, createdTime), nextPageToken',
+      });
+
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error) {
+      throw this.handleError(error, 'Failed to list shared drives');
     }
   }
 
@@ -313,6 +341,9 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
         pageToken: options.pageToken,
         orderBy: options.orderBy?.join(','),
         fields: options.fields?.join(',') || 'files(id, name, mimeType, modifiedTime, size)',
+        // Google rejects driveId unless corpora is 'drive', so force the pairing.
+        driveId: options.driveId || undefined,
+        corpora: options.driveId ? 'drive' : options.corpora,
         supportsAllDrives: true,
         includeItemsFromAllDrives: true,
       });
@@ -497,6 +528,9 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
     }
   }
 
+  // The Drive Revisions API does not accept supportsAllDrives and does not
+  // surface revisions for shared-drive files, so revisions.* calls here and in
+  // downloadRevision intentionally omit the flag (see CHANGELOG 0.1.3).
   async listRevisions(email: string, fileId: string): Promise<DriveOperationResult> {
     try {
       await this.ensureInitialized();

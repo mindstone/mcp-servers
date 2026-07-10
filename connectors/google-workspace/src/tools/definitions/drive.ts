@@ -20,14 +20,19 @@ export const driveTools: ToolMetadata[] = [
     3. Filter by query:
        { "email": "user@example.com", "options": { "query": "mimeType='application/pdf'", "pageSize": 20 } }
     
-    4. Get JSON output:
+    4. List files in one shared drive (get the ID from list_shared_drives):
+       { "email": "user@example.com", "options": { "driveId": "0ABCdef123" } }
+
+    5. Get JSON output:
        { "email": "user@example.com", "return_json": true }
-    
+
     Parameters (all inside "options"):
     - folderId: List contents of specific folder
     - query: Drive API query string
     - pageSize: Number of files to return
-    - orderBy: Sort order fields`,
+    - orderBy: Sort order fields
+    - driveId: Limit results to one shared drive (corpora is forced to 'drive')
+    - corpora: 'user' (default), 'drive', or 'allDrives' (My Drive + every shared drive)`,
     aliases: ['list_files', 'get_files', 'show_files'],
     annotations: { readOnlyHint: true },
     inputSchema: {
@@ -61,6 +66,15 @@ export const driveTools: ToolMetadata[] = [
               type: 'array',
               items: { type: 'string' },
               description: 'Fields to include in response'
+            },
+            driveId: {
+              type: 'string',
+              description: 'Shared drive ID to list from (see list_shared_drives); corpora is forced to "drive"'
+            },
+            corpora: {
+              type: 'string',
+              enum: ['user', 'drive', 'allDrives'],
+              description: 'Scope of the listing: "user" (default), "drive" (one shared drive), or "allDrives"'
             }
           }
         },
@@ -93,14 +107,22 @@ export const driveTools: ToolMetadata[] = [
     4. Combined search:
        { "email": "user@example.com", "options": { "fullText": "meeting notes", "mimeType": "application/vnd.google-apps.document" } }
     
-    5. Get JSON output:
+    5. Search everywhere, including every shared drive:
+       { "email": "user@example.com", "options": { "fullText": "budget", "corpora": "allDrives" } }
+
+    6. Search one shared drive (get the ID from list_shared_drives):
+       { "email": "user@example.com", "options": { "fullText": "budget", "driveId": "0ABCdef123" } }
+
+    7. Get JSON output:
        { "email": "user@example.com", "options": { "fullText": "report" }, "return_json": true }
-    
+
     Parameters (all inside "options"):
     - fullText: Text to search in file content
     - mimeType: Filter by file type
     - folderId: Search within folder
-    - trashed: Include trashed files (default: false)`,
+    - trashed: Include trashed files (default: false)
+    - driveId: Limit results to one shared drive (corpora is forced to 'drive')
+    - corpora: 'user' (default), 'drive', or 'allDrives' (My Drive + every shared drive)`,
     aliases: ['search_files', 'find_files', 'query_files'],
     annotations: { readOnlyHint: true },
     inputSchema: {
@@ -136,6 +158,15 @@ export const driveTools: ToolMetadata[] = [
             pageSize: {
               type: 'number',
               description: 'Maximum number of files to return'
+            },
+            driveId: {
+              type: 'string',
+              description: 'Shared drive ID to search in (see list_shared_drives); corpora is forced to "drive"'
+            },
+            corpora: {
+              type: 'string',
+              enum: ['user', 'drive', 'allDrives'],
+              description: 'Scope of the search: "user" (default), "drive" (one shared drive), or "allDrives"'
             }
           }
         },
@@ -145,6 +176,53 @@ export const driveTools: ToolMetadata[] = [
         }
       },
       required: ['options']
+    }
+  },
+  {
+    name: 'list_shared_drives',
+    category: 'Drive/Files',
+    description: `List the shared drives (Team Drives) the account can access.
+
+    Returns human-readable text by default. Use return_json: true for structured output.
+
+    Usage examples:
+
+    1. List shared drives:
+       { "email": "user@example.com" }
+
+    2. Page through results:
+       { "email": "user@example.com", "page_size": 50, "page_token": "..." }
+
+    WORKFLOW: Use a returned drive ID as "options.driveId" in list_drive_files or
+    search_drive_files to target that shared drive, or set "options.corpora" to
+    "allDrives" there to search My Drive and every shared drive at once.
+
+    NOTE: Files that live in a shared drive have no per-file owner (the drive owns
+    them; use lastModifyingUser/createdTime as proxies), and the revision tools do
+    not return revisions for shared-drive files. These are Google API limitations.`,
+    aliases: ['list_team_drives', 'get_shared_drives', 'show_shared_drives'],
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email: {
+          type: 'string',
+          description: 'Email address of the Drive account'
+        },
+        page_size: {
+          type: 'number',
+          description: 'Maximum number of shared drives to return (Google caps at 100)'
+        },
+        page_token: {
+          type: 'string',
+          description: 'Page token from a previous list_shared_drives response'
+        },
+        return_json: {
+          type: 'boolean',
+          description: 'Return structured JSON instead of formatted text (default: false)'
+        }
+      },
+      required: []
     }
   },
   {

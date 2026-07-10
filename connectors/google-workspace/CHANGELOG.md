@@ -9,6 +9,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+- New `list_shared_drives` tool: discover the shared drives an account can access (id, name, creation time), so agents can find shared-drive content instead of guessing. `list_drive_files` and `search_drive_files` gained optional `options.driveId` and `options.corpora` parameters for targeting a specific shared drive or searching across all drives (`corpora: 'allDrives'`). When `driveId` is set the connector forces `corpora: 'drive'` (the Drive API rejects any other pairing), overriding a caller-supplied value. The README now documents shared-drive behaviour, including the two Drive API limitations that can't be fixed connector-side (no `owners[]` on shared-drive-native files; Revisions API unsupported for shared-drive files).
 - Compose email now keeps your message after it sends, instead of clearing it. Sending collapses to a "Email sent" summary with the time; Reopen shows a read-only copy of exactly what went out (From, To, CC/BCC, subject, and body) so there's no risk of resending. When the reply includes the message identifiers, an "Open in Gmail" button deep-links straight to the sent thread.
 
 ### Changed

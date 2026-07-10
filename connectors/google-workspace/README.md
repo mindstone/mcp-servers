@@ -10,7 +10,7 @@ Google Workspace MCP server — Gmail, Calendar, Drive, Docs, Sheets, Slides, Co
 
 - **Version:** [0.1.5](./CHANGELOG.md) · npm: not yet published
 - **Auth:** OAuth (host-orchestrated) ([`GOOGLE_CLIENT_SECRET`](./server.json))
-- **Tools:** [94](./src/tools/definitions/) (Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Comments, Account; +10 gated Tasks/Forms behind `ENABLE_GOOGLE_TASKS_FORMS=true`)
+- **Tools:** [95](./src/tools/definitions/) (Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Comments, Account; +10 gated Tasks/Forms behind `ENABLE_GOOGLE_TASKS_FORMS=true`)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -153,7 +153,7 @@ Until the host has written `${ACCOUNTS_PATH}` and the matching per-account token
 }
 ```
 
-## Tools (94)
+## Tools (95)
 
 The full list lives under [`src/tools/definitions/`](./src/tools/definitions/) and is also surfaced in [`tools-inventory.json`](./tools-inventory.json). Grouped by domain:
 
@@ -161,7 +161,7 @@ The full list lives under [`src/tools/definitions/`](./src/tools/definitions/) a
 | --- | --- | --- |
 | Gmail | 21 | Email search/thread/send/compose, drafts, labels, label filters, attachments, archive/trash/read-state helpers. |
 | Calendar | 9 | Current time, free-slot lookup, calendar/event listing, event creation, updates, responses, and deletion. |
-| Drive | 13 | List/search/upload/download/copy/move/trash/untrash files, folders, permissions, and revisions. |
+| Drive | 14 | List/search/upload/download/copy/move/trash/untrash files, folders, permissions, revisions, and shared-drive discovery. |
 | Docs | 8 | Read, create, append, replace, find/replace, tab listing, and batch updates. |
 | Sheets | 14 | Read/write ranges, create spreadsheets, sheet management, batch operations, find/replace, and formatting. |
 | Slides | 7 | Read, create, list/get slides, batch update, thumbnails, and ID extraction. |
@@ -172,7 +172,20 @@ The full list lives under [`src/tools/definitions/`](./src/tools/definitions/) a
 | Tasks (gated) | 6 | Registered only when `ENABLE_GOOGLE_TASKS_FORMS=true`. |
 | Forms (gated) | 4 | Registered only when `ENABLE_GOOGLE_TASKS_FORMS=true`. |
 
-The `## Status` block counts the 94 default-enabled tools; the additional 10 Tasks + Forms tools register when the feature flag is set.
+The `## Status` block counts the 95 default-enabled tools; the additional 10 Tasks + Forms tools register when the feature flag is set.
+
+### Shared drives
+
+All Drive file, permission, and comment tools work on shared-drive files (the `files.*` and `permissions.*` calls pass `supportsAllDrives`; the Comments API addresses files by ID and defines no such flag). Listing and search default to the user's own corpus plus files shared with them, so shared-drive content the user has access to but has never opened may not surface by default. To work with shared drives explicitly:
+
+- **Discover drives:** `list_shared_drives` returns the shared drives the account can access (id, name, creation time).
+- **Target one drive:** pass `options.driveId` to `list_drive_files` / `search_drive_files`. The connector forces `corpora: 'drive'` whenever `driveId` is set (the Drive API rejects any other pairing), overriding a caller-supplied `corpora`.
+- **Search everything:** pass `options.corpora: 'allDrives'` (no `driveId`) to search across My Drive and all shared drives in one query. Google recommends this only for targeted searches; prefer a specific `driveId` for browsing.
+
+Known Drive API limitations for shared-drive files (not fixable in this connector):
+
+- Files native to a shared drive have no `owners[]` — ownership belongs to the drive itself. Use `lastModifyingUser` and `createdTime` as proxies when attributing files.
+- The Revisions API does not support shared-drive files, so `list_file_revisions` / `download_file_revision` only work for My Drive files.
 
 ## Security notes
 

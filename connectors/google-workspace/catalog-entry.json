@@ -1,7 +1,7 @@
 {
   "id": "bundled-google",
   "name": "Google Workspace",
-  "description": "Google Workspace (94 tools, 104 with Tasks/Forms enabled). Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Comments, account diagnostics, and optional Tasks/Forms.",
+  "description": "Google Workspace (95 tools, 105 with Tasks/Forms enabled). Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Comments, account diagnostics, and optional Tasks/Forms.",
   "category": "productivity",
   "icon": "mail",
   "maturity": "beta",

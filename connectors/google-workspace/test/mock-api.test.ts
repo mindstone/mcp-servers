@@ -37,6 +37,7 @@ const mockedEndpoints = [
   endpoint('GET', 'https://www.googleapis.com/calendar/v3/calendars/{calendarId}/events'),
   endpoint('POST', 'https://www.googleapis.com/calendar/v3/calendars/{calendarId}/events'),
   endpoint('GET', 'https://www.googleapis.com/drive/v3/files'),
+  endpoint('GET', 'https://www.googleapis.com/drive/v3/drives'),
   endpoint('POST', 'https://www.googleapis.com/upload/drive/v3/files'),
   endpoint('GET', 'https://docs.googleapis.com/v1/documents/{documentId}'),
   endpoint('POST', 'https://docs.googleapis.com/v1/documents/{documentId}:batchUpdate'),
@@ -486,6 +487,73 @@ describe('Google Workspace mock API happy paths', () => {
     const createdComment = await handlers.handleCreateComment({ file_id: 'file-1', content: 'Created comment' });
     expect(JSON.stringify(createdComment)).toContain('comment-created-1');
   });
+});
+
+describe('Google Workspace mock API shared-drive support', () => {
+  it('lists shared drives and paginates via drives.list', async () => {
+    mswServer.use(
+      http.get('https://www.googleapis.com/drive/v3/drives', ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.get('pageToken') === 'drives-page-2') {
+          return HttpResponse.json({
+            drives: [{ id: 'shared-drive-2', name: 'Second Shared Drive', createdTime: '2026-02-01T00:00:00Z' }],
+          });
+        }
+        return HttpResponse.json({
+          drives: [{ id: 'shared-drive-1', name: 'Mock Shared Drive', createdTime: '2026-01-01T00:00:00Z' }],
+          nextPageToken: 'drives-page-2',
+        });
+      }),
+    );
+    const handlers = await loadHandlers();
+
+    const drives = await handlers.handleListSharedDrives({});
+    expect(String(drives)).toContain('Mock Shared Drive');
+    expect(String(drives)).toContain('shared-drive-1');
+
+    const secondPage = await handlers.handleListSharedDrives({ page_token: 'drives-page-2', return_json: true });
+    expect(JSON.stringify(secondPage)).toContain('shared-drive-2');
+  });
+
+  it('forces corpora=drive when driveId is set and passes corpora=allDrives through untouched', async () => {
+    const capturedQueries: Array<Record<string, string | null>> = [];
+    mswServer.use(
+      http.get('https://www.googleapis.com/drive/v3/files', ({ request }) => {
+        const url = new URL(request.url);
+        capturedQueries.push({
+          corpora: url.searchParams.get('corpora'),
+          driveId: url.searchParams.get('driveId'),
+          supportsAllDrives: url.searchParams.get('supportsAllDrives'),
+        });
+        return HttpResponse.json({
+          files: [{ id: 'drive-file-1', name: 'Mock Doc', mimeType: 'text/plain' }],
+        });
+      }),
+    );
+    const handlers = await loadHandlers();
+
+    // Caller-supplied corpora is deliberately overridden: Google 400s on driveId without corpora='drive'.
+    await handlers.handleListDriveFiles({
+      options: { driveId: 'shared-drive-1', corpora: 'user' },
+      return_json: true,
+    });
+    expect(capturedQueries[0]).toEqual({
+      corpora: 'drive',
+      driveId: 'shared-drive-1',
+      supportsAllDrives: 'true',
+    });
+
+    await handlers.handleSearchDriveFiles({
+      options: { fullText: 'mock', corpora: 'allDrives' },
+      return_json: true,
+    });
+    expect(capturedQueries[1]).toEqual({
+      corpora: 'allDrives',
+      driveId: null,
+      supportsAllDrives: 'true',
+    });
+  });
+
 });
 
 describe('Google Workspace mock API pagination', () => {
