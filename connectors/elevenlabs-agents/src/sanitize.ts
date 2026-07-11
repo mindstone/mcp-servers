@@ -135,6 +135,10 @@ function sanitizeStringsByDefault(
 
   const out: Obj = {};
   for (const [childKey, childValue] of Object.entries(value)) {
+    if (CONVERSATION_JSON_STRING_KEYS.has(childKey)) {
+      out[childKey] = wrapUntrustedJsonStrings(childValue, `${source}:${childKey}`);
+      continue;
+    }
     out[childKey] = sanitizeStringsByDefault(childValue, `${source}:${childKey}`, childKey, literalStringKeys);
   }
   return out;

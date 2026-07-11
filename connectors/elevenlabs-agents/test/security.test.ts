@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import * as fs from 'node:fs';
 import { mimeTypeForFileName } from '../src/tools/file-input.js';
 import { getAudioWorkspaceRoot, resolveAudioPath } from '../src/tools/path-safety.js';
 
@@ -12,6 +13,11 @@ describe('file-input scaffold', () => {
 });
 
 describe('path-safety scaffold', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
   it('uses os.tmpdir() when MCP_WORKSPACE_PATH is unset', async () => {
     const os = await import('node:os');
     expect(getAudioWorkspaceRoot()).toContain(os.tmpdir().split('/').filter(Boolean).pop() ?? 'tmp');
@@ -26,5 +32,16 @@ describe('path-safety scaffold', () => {
       ok: false,
       error: expect.stringContaining('workspace sandbox root'),
     });
+  });
+
+  it('re-checks final realpath containment before readFileSync', () => {
+    const source = fs.readFileSync(new URL('../src/tools/file-input.ts', import.meta.url), 'utf8');
+    const finalRealpath = source.indexOf('const verifiedPath = isRemoteUrl(rawFilePath) ? filePath : fs.realpathSync(filePath);');
+    const finalCheck = source.indexOf('isInsideAudioWorkspaceRoot(verifiedPath, root)');
+    const read = source.indexOf('fs.readFileSync(verifiedPath)');
+    expect(finalRealpath).toBeGreaterThanOrEqual(0);
+    expect(finalCheck).toBeGreaterThan(finalRealpath);
+    expect(finalCheck).toBeLessThan(read);
+    expect(source).toContain("'PATH_SANDBOX_VIOLATION'");
   });
 });
