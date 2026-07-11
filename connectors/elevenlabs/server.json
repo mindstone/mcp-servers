@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-elevenlabs",
   "title": "ElevenLabs",
   "description": "ElevenLabs MCP server: TTS, music, sound effects, voices, and audio transcription",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-elevenlabs",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-11
+
+### Changed
+
+- Expand to 24 tools: voice discovery, subscription/credits, speech-to-speech, isolation, forced alignment, cloning, voice design, text-to-dialogue, dubbing; untrusted-content + sandbox hardening.
+
 ### Added
 - **elevenlabs**: Stage 4 slow/async audio tools — `text_to_dialogue` (multi-voice dialogue, 120s timeout), `design_voice` + `create_voice_from_preview` (voice design; base64 previews decoded to tmp files, never returned in output), and dubbing suite `create_dubbing` / `get_dubbing` / `download_dubbed_audio` / `delete_dubbing` (v1 async submit→poll→download; Content-Type-sniffed downloads; `delete_dubbing` `destructiveHint: true`). `client.ts` gains optional per-call `timeoutMs` (R2; default unchanged).
 - **elevenlabs**: Five multipart file-input tools — `speech_to_speech` (voice conversion, multipart field `audio`), `isolate_audio` (background noise removal), `forced_alignment` (audio+transcript alignment with enveloped `words[].text`), `clone_voice` (instant voice clone from sandboxed local files), `delete_voice` (permanent voice removal, `destructiveHint: true`). Shared `src/tools/file-input.ts` extracts the path-sandbox invariants from transcription (R1).
