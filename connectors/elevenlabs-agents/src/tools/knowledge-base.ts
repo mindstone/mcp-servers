@@ -44,28 +44,20 @@ const kbSharedFields = {
     .describe('Optional folder ID to place the document under.'),
 } satisfies Record<string, z.ZodTypeAny>;
 
-const addKnowledgeBaseDocumentSchema = z.discriminatedUnion('mode', [
-  z.object({
-    mode: z.literal('text'),
-    text: z.string().min(1).describe('Text content to add to the knowledge base.'),
-    ...kbSharedFields,
-  }),
-  z.object({
-    mode: z.literal('file'),
-    file_path: z.string().min(1)
-      .describe('Absolute path to a local file inside MCP_WORKSPACE_PATH (or os.tmpdir() when unset).'),
-    ...kbSharedFields,
-  }),
-  z.object({
-    mode: z.literal('url'),
-    url: z.string().url().describe('Public URL that ElevenLabs should fetch server-side.'),
-    enable_auto_sync: z.boolean().optional()
-      .describe('When true, keep the URL document in sync. Default: false.'),
-    auto_remove: z.boolean().optional()
-      .describe('When true, auto-remove the URL document if it becomes unavailable.'),
-    ...kbSharedFields,
-  }),
-]);
+const KB_SOURCE_FIELDS = ['text', 'file_path', 'url'] as const;
+type KnowledgeBaseDocumentMode = 'text' | 'file' | 'url';
+
+const addKnowledgeBaseDocumentSchema = z.object({
+  text: z.string().min(1).optional().describe('Text content to add to the knowledge base.'),
+  file_path: z.string().min(1).optional()
+    .describe('Absolute path to a local file inside MCP_WORKSPACE_PATH (or os.tmpdir() when unset).'),
+  url: z.string().url().optional().describe('Public URL that ElevenLabs should fetch server-side.'),
+  enable_auto_sync: z.boolean().optional()
+    .describe('When true, keep the URL document in sync. Default: false.'),
+  auto_remove: z.boolean().optional()
+    .describe('When true, auto-remove the URL document if it becomes unavailable.'),
+  ...kbSharedFields,
+});
 
 function buildKnowledgeBaseBody(args: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
   const body: Record<string, unknown> = {};
@@ -76,6 +68,35 @@ function buildKnowledgeBaseBody(args: Record<string, unknown>, keys: readonly st
     }
   }
   return body;
+}
+
+function resolveKnowledgeBaseDocumentMode(args: Record<string, unknown>): KnowledgeBaseDocumentMode {
+  const providedFields = KB_SOURCE_FIELDS.filter((field) => args[field] !== undefined);
+
+  if (providedFields.length !== 1) {
+    const received = providedFields.length > 0 ? providedFields.join(', ') : 'none';
+    throw new ElevenLabsError(
+      `Provide exactly one content source: text, file_path, or url. Received: ${received}.`,
+      'INVALID_ARGUMENTS',
+      'Send exactly one of text, file_path, or url, then retry.',
+    );
+  }
+
+  const [modeField] = providedFields;
+  switch (modeField) {
+    case 'text':
+      return 'text';
+    case 'file_path':
+      return 'file';
+    case 'url':
+      return 'url';
+    default:
+      throw new ElevenLabsError(
+        `Unsupported content source field: ${String(modeField)}`,
+        'INVALID_ARGUMENTS',
+        'Send exactly one of text, file_path, or url, then retry.',
+      );
+  }
 }
 
 /** GET /knowledge-base/{id}/content returns raw document text (not JSON). */
@@ -206,9 +227,9 @@ WHEN TO USE:
 - Upload a local file from MCP_WORKSPACE_PATH
 - Register a stable public URL that ElevenLabs fetches server-side
 
-EXAMPLE: {"mode": "text", "text": "Refunds are processed within 3 business days.", "name": "Refund policy"}
-EXAMPLE: {"mode": "file", "file_path": "/tmp/rebel-live-test-kb.txt", "name": "Release checklist"}
-EXAMPLE: {"mode": "url", "url": "https://example.com", "enable_auto_sync": false}
+EXAMPLE: {"text": "Refunds are processed within 3 business days.", "name": "Refund policy"}
+EXAMPLE: {"file_path": "/tmp/rebel-live-test-kb.txt", "name": "Release checklist"}
+EXAMPLE: {"url": "https://example.com", "enable_auto_sync": false}
 
 RELATED TOOLS:
 - get_knowledge_base_doc: inspect the created document
@@ -221,6 +242,7 @@ COST: FREE for the write itself; URL fetches and downstream agent usage may cons
 
 COMMON MISTAKES:
 - file mode only accepts local paths inside MCP_WORKSPACE_PATH (or os.tmpdir() when unset).
+- Provide exactly one content source field: text, file_path, or url.
 - url mode expects a stable public URL that ElevenLabs can reach server-side.`,
       inputSchema: addKnowledgeBaseDocumentSchema,
       annotations: {
@@ -232,9 +254,10 @@ COMMON MISTAKES:
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
+      const mode = resolveKnowledgeBaseDocumentMode(args as Record<string, unknown>);
       let result: unknown;
 
-      if (args.mode === 'text') {
+      if (mode === 'text') {
         result = await elevenLabsJson<unknown>(
           apiKey,
           ENDPOINTS.KNOWLEDGE_BASE_TEXT,
@@ -243,7 +266,14 @@ COMMON MISTAKES:
             body: JSON.stringify(buildKnowledgeBaseBody(args, ['text', 'name', 'parent_folder_id'])),
           },
         );
-      } else if (args.mode === 'file') {
+      } else if (mode === 'file') {
+        if (typeof args.file_path !== 'string') {
+          throw new ElevenLabsError(
+            'file_path is required when uploading a knowledge-base file.',
+            'INVALID_ARGUMENTS',
+            'Provide file_path and retry the upload.',
+          );
+        }
         const fileInput = readSandboxedFile(args.file_path);
         const formData = new FormData();
         formData.append('file', sandboxedFileToBlob(fileInput), fileInput.fileName);
@@ -281,7 +311,7 @@ COMMON MISTAKES:
       return JSON.stringify({
         ok: true,
         document: sanitizeKbDoc(result, 'elevenlabs-agents:add_knowledge_base_document'),
-        message: `Added knowledge-base document via ${args.mode} mode.`,
+        message: `Added knowledge-base document via ${mode} mode.`,
       });
     }),
   );

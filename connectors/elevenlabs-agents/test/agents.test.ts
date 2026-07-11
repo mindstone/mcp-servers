@@ -146,6 +146,23 @@ describe('agents tools', () => {
     });
   });
 
+  it('update_agent rejects requests that only provide agent_id', async () => {
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('update_agent', {
+      agent_id: 'agent_test_123',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.json).toMatchObject({
+      ok: false,
+      code: 'INVALID_ARGUMENTS',
+    });
+    expect(result.json.error).toContain('Provide at least one field to update: name/system_prompt/first_message/voice_id/language/llm_model/temperature/knowledge_base_document_ids or advanced_config.');
+  });
+
   it('duplicate_agent forwards the optional name and returns the duplicate id', async () => {
     const { handler, captured } = createDuplicateAgentCapturingHandler();
     mswServer.use(handler, ...createElevenLabsAgentsHandlers());

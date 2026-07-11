@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { requireApiKey, elevenLabsJson } from '../client.js';
 import { ENDPOINTS } from '../endpoints.js';
 import { sanitizeList, sanitizePhoneNumber } from '../sanitize.js';
+import { ElevenLabsError } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 
 function extractItems(result: unknown): unknown[] {
@@ -146,8 +147,6 @@ FREE.`,
         label: z.string().optional().describe('Optional human-readable label for this number.'),
         agent_id: z.string().min(1).optional()
           .describe('Optional agent ID to assign to this phone number for telephony use.'),
-      }).refine((value) => value.label !== undefined || value.agent_id !== undefined, {
-        message: 'Provide at least one field to update: label or agent_id.',
       }),
       annotations: {
         readOnlyHint: false,
@@ -157,6 +156,14 @@ FREE.`,
       },
     },
     withErrorHandling(async (args) => {
+      if (args.label === undefined && args.agent_id === undefined) {
+        throw new ElevenLabsError(
+          'Provide at least one field to update: label or agent_id.',
+          'INVALID_ARGUMENTS',
+          'Send label, agent_id, or both, then retry.',
+        );
+      }
+
       const apiKey = requireApiKey();
       const body: Record<string, unknown> = {};
       if (args.label !== undefined) body.label = args.label;

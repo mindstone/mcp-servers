@@ -73,7 +73,6 @@ describe('knowledge-base tools', () => {
     });
 
     const result = await testClient.callTool('add_knowledge_base_document', {
-      mode: 'text',
       text: 'Refunds are processed within 3 business days.',
       name: 'Refund policy',
       parent_folder_id: 'folder_support',
@@ -105,7 +104,6 @@ describe('knowledge-base tools', () => {
 
     try {
       const result = await testClient.callTool('add_knowledge_base_document', {
-        mode: 'file',
         file_path: filePath,
         name: 'Release checklist',
         parent_folder_id: 'folder_ops',
@@ -132,7 +130,6 @@ describe('knowledge-base tools', () => {
     });
 
     const result = await testClient.callTool('add_knowledge_base_document', {
-      mode: 'url',
       url: 'https://example.com',
       name: 'Public docs',
       enable_auto_sync: true,
@@ -147,6 +144,32 @@ describe('knowledge-base tools', () => {
       auto_remove: true,
     });
     expect(result.json.document.documentation_id).toBe('doc_created_url_123');
+  });
+
+  it.each([
+    {
+      title: 'when no content source is provided',
+      args: { name: 'Missing source' },
+      expectedMessage: 'Provide exactly one content source: text, file_path, or url. Received: none.',
+    },
+    {
+      title: 'when multiple content sources are provided',
+      args: { text: 'Hello', url: 'https://example.com' },
+      expectedMessage: 'Provide exactly one content source: text, file_path, or url. Received: text, url.',
+    },
+  ])('rejects add_knowledge_base_document $title', async ({ args, expectedMessage }) => {
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('add_knowledge_base_document', args);
+
+    expect(result.isError).toBe(true);
+    expect(result.json).toMatchObject({
+      ok: false,
+      code: 'INVALID_ARGUMENTS',
+    });
+    expect(result.json.error).toBe(expectedMessage);
   });
 
   it('deletes a knowledge-base document with the optional force flag', async () => {

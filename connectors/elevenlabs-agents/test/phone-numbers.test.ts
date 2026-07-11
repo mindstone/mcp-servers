@@ -51,4 +51,21 @@ describe('phone number tools', () => {
     expect(result.json.phone_number.label).toContain('<untrusted-content');
     expect(result.json.phone_number.assigned_agent_id).toBe('agent_updated_456');
   });
+
+  it('update_phone_number rejects requests without label or agent_id', async () => {
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('update_phone_number', {
+      phone_number_id: 'pn_test_123',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.json).toMatchObject({
+      ok: false,
+      code: 'INVALID_ARGUMENTS',
+    });
+    expect(result.json.error).toBe('Provide at least one field to update: label or agent_id.');
+  });
 });

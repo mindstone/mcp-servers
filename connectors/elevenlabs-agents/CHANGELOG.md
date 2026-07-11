@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-11
+
+### Fixed
+
+- Fix empty/incorrect tool input schemas: expose editable fields on `update_agent`, `update_phone_number`, and `add_knowledge_base_document`; add required `agent_id` to `make_outbound_call`; add a schema-contract test that asserts the SDK-exposed JSON schemas for write tools.
+
 ## [0.1.0] - 2026-07-09
 
 ### Changed

@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-elevenlabs-agents",
   "title": "ElevenLabs Agents",
   "description": "ElevenLabs Conversational AI: agents, calls, conversations, and knowledge base for MCP hosts",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-elevenlabs-agents",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
