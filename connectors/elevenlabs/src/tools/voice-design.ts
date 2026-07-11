@@ -116,8 +116,8 @@ COST: Uses voice-design credits per preview.`,
           );
         }
         const audio = writePreviewAudioToTmp(preview.audio_base_64, preview.media_type);
-        // Considered exclusion: preview.text is the caller's own input echoed by the API —
-        // same precedent as music-plan content; omitted from output to avoid duplication.
+        // preview.text is omitted from output. If it is ever returned, wrap it:
+        // auto-generated preview text is API-authored, not trusted caller input.
         return {
           generated_voice_id: generatedVoiceId,
           preview_file_path: audio.filePath,

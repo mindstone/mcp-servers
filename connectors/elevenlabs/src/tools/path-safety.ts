@@ -42,6 +42,10 @@ export function getAudioWorkspaceRoot(): string {
   }
 }
 
+export function isInsideAudioWorkspaceRoot(resolvedPath: string, root = getAudioWorkspaceRoot()): boolean {
+  return resolvedPath === root || resolvedPath.startsWith(root + path.sep);
+}
+
 /**
  * Canonicalise the deepest existing ancestor of an absolute path and
  * re-append the missing tail (M3-fix-C). This lets the lexical-prefix
@@ -98,8 +102,7 @@ export function resolveAudioPath(filePath: string): ResolveResult {
   const denyMessage =
     `file_path is outside the workspace sandbox root (${root}). Got: ${filePath}`;
 
-  const isInsideRoot = (p: string): boolean =>
-    p === root || p.startsWith(root + path.sep);
+  const isInsideRoot = (p: string): boolean => isInsideAudioWorkspaceRoot(p, root);
 
   // Step 1: lexical normalisation — expand `~`, collapse `..`, absolutise.
   const expanded = filePath.startsWith('~')

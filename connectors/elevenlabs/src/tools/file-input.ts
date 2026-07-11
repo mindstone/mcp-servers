@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ElevenLabsError } from '../types.js';
-import { isRemoteUrl, resolveAudioPath } from './path-safety.js';
+import { getAudioWorkspaceRoot, isInsideAudioWorkspaceRoot, isRemoteUrl, resolveAudioPath } from './path-safety.js';
 
 export interface SandboxedFileInput {
   buffer: Buffer;
@@ -54,6 +54,17 @@ export function readSandboxedFile(rawFilePath: string): SandboxedFileInput {
   // Defence-in-depth: re-canonicalise via realpathSync at the very last moment
   // to close the TOCTOU window between sandbox validation and readFileSync.
   const verifiedPath = isRemoteUrl(rawFilePath) ? filePath : fs.realpathSync(filePath);
+  if (!isRemoteUrl(rawFilePath)) {
+    const root = getAudioWorkspaceRoot();
+    if (!isInsideAudioWorkspaceRoot(verifiedPath, root)) {
+      throw new ElevenLabsError(
+        `file_path resolves outside the workspace sandbox root (${root}); ` +
+          `symlinks may not escape the workspace. Got: ${rawFilePath}`,
+        'PATH_SANDBOX_VIOLATION',
+        FILE_INPUT_RESOLUTION,
+      );
+    }
+  }
   const buffer = fs.readFileSync(verifiedPath);
   const fileName = path.basename(verifiedPath);
 
