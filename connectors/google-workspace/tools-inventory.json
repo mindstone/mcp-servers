@@ -383,6 +383,14 @@
       }
     },
     {
+      "name": "list_shared_drives",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": true
+      }
+    },
+    {
       "name": "upload_drive_file",
       "annotations": {
         "readOnlyHint": false,

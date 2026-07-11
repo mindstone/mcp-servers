@@ -5,6 +5,8 @@ export type DriveFileList = drive_v3.Schema$FileList;
 export type DrivePermission = drive_v3.Schema$Permission;
 export type DriveRevision = drive_v3.Schema$Revision;
 export type DriveRevisionList = drive_v3.Schema$RevisionList;
+export type SharedDrive = drive_v3.Schema$Drive;
+export type SharedDriveList = drive_v3.Schema$DriveList;
 
 export interface FileUploadOptions {
   name: string;
@@ -25,6 +27,13 @@ export interface FileListOptions {
   pageToken?: string;
   orderBy?: string[];
   fields?: string[];
+  driveId?: string;
+  corpora?: 'user' | 'drive' | 'allDrives';
+}
+
+export interface SharedDriveListOptions {
+  pageSize?: number;
+  pageToken?: string;
 }
 
 export interface FileSearchOptions extends FileListOptions {

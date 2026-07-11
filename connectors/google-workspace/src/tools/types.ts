@@ -150,6 +150,8 @@ export interface DriveFileListArgs extends BaseToolArguments {
     pageSize?: number;
     orderBy?: string[];
     fields?: string[];
+    driveId?: string;
+    corpora?: 'user' | 'drive' | 'allDrives';
   };
 }
 
@@ -164,7 +166,19 @@ export interface DriveSearchArgs extends BaseToolArguments {
     trashed?: boolean;
     query?: string;
     pageSize?: number;
+    driveId?: string;
+    corpora?: 'user' | 'drive' | 'allDrives';
   };
+}
+
+/**
+ * Parameters for listing shared drives
+ */
+export interface ListSharedDrivesArgs extends BaseToolArguments {
+  page_size?: number;
+  pageSize?: number;
+  page_token?: string;
+  pageToken?: string;
 }
 
 /**

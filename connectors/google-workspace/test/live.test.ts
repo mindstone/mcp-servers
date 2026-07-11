@@ -264,7 +264,7 @@ afterEach(async () => {
     const report: LiveReport = {
       generatedAt: new Date().toISOString(),
       initialize: { ok: false },
-      toolList: { ok: false, expected: 104 },
+      toolList: { ok: false, expected: 105 },
       readOnly: [],
       writes: [],
       scratchResources: {
@@ -309,7 +309,7 @@ afterEach(async () => {
         expect(tool?.annotations?.openWorldHint).toBe(openWorldOverrides.default[name]);
         return { tool: name, annotations: tool?.annotations };
       });
-      expect(tools.tools).toHaveLength(104);
+      expect(tools.tools).toHaveLength(105);
 
       await callTool(probe, report, 'local', 'list_workspace_accounts', {});
       await callTool(probe, report, 'gmail', 'search_workspace_emails', { query: 'rebel-oss-live-probe', max_results: 5, return_json: true });
@@ -510,7 +510,7 @@ afterEach(async () => {
       const nonSkippedFailures = [...report.readOnly, ...report.writes].filter(result => !result.ok && !result.skipped);
       report.finalExitStatus = nonSkippedFailures.length === 0 && report.errors.length === 0 ? 'pass' : 'partial';
       expect(report.initialize.ok).toBe(true);
-      expect(report.toolList.count).toBe(104);
+      expect(report.toolList.count).toBe(105);
     } catch (error) {
       report.errors.push(error instanceof Error ? error.message : String(error));
       report.finalExitStatus = 'fail';

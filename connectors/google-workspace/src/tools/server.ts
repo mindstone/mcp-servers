@@ -77,6 +77,7 @@ import {
 import {
   handleListDriveFiles,
   handleSearchDriveFiles,
+  handleListSharedDrives,
   handleUploadDriveFile,
   handleDownloadDriveFile,
   handleCreateDriveFolder,
@@ -198,6 +199,7 @@ import {
   assertManageLabelFilterParams,
   assertDriveFileListArgs,
   assertDriveSearchArgs,
+  assertListSharedDrivesArgs,
   assertDriveUploadArgs,
   assertDriveDownloadArgs,
   assertDriveFolderArgs,
@@ -609,6 +611,10 @@ export class GSuiteServer {
           case 'search_drive_files':
             assertDriveSearchArgs(args);
             result = await handleSearchDriveFiles(args);
+            break;
+          case 'list_shared_drives':
+            assertListSharedDrivesArgs(args);
+            result = await handleListSharedDrives(args);
             break;
           case 'upload_drive_file':
             assertDriveUploadArgs(args);

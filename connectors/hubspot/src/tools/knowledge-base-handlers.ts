@@ -3,8 +3,27 @@ import {
   HubSpotApiError,
   getHubSpotClientAsync
 } from '../api/hubspot-client.js';
-import { parseHubSpotError } from '../utils/error-parser.js';
+import {
+  buildHubSpotCapabilityDeniedError,
+  parseHubSpotError,
+  summariseHubSpotApiError,
+} from '../utils/error-parser.js';
 import logger from '../utils/logger.js';
+
+/**
+ * Internal classification for a KB GraphQL error. GraphQL returns HTTP 200 even
+ * on failure, so `handleGraphQLErrors` throws this to carry the cause across to
+ * `parseKnowledgeBaseError`, which owns the user-facing copy. The message is
+ * internal/log-only — these are always re-parsed, never surfaced directly.
+ */
+type KbGraphQLErrorKind = 'scope' | 'tier';
+
+class KbGraphQLError extends Error {
+  constructor(public readonly kind: KbGraphQLErrorKind, message: string) {
+    super(message);
+    this.name = 'KbGraphQLError';
+  }
+}
 
 interface ListKbArticlesArgs {
   limit?: number;
@@ -74,7 +93,8 @@ function handleGraphQLErrors(response: GraphQLResponse<unknown>, operation: stri
   const errorMessages = response.errors.map(e => e.message).join('; ');
   const lowerErrors = errorMessages.toLowerCase();
 
-  // Scope-related errors
+  // Scope-related errors. Classification only — parseKnowledgeBaseError owns the
+  // user-facing copy (honest multi-cause, not reconnect-first).
   if (
     lowerErrors.includes('scope') ||
     lowerErrors.includes('permission') ||
@@ -82,10 +102,7 @@ function handleGraphQLErrors(response: GraphQLResponse<unknown>, operation: stri
     lowerErrors.includes('unauthorized') ||
     lowerErrors.includes('oauth')
   ) {
-    throw new Error(
-      'Knowledge Base access requires reconnecting HubSpot with updated permissions. ' +
-      'Required scopes: cms.knowledge_base.articles.read and collector.graphql_query.execute.'
-    );
+    throw new KbGraphQLError('scope', `Knowledge Base access denied (scope) during ${operation}`);
   }
 
   // Schema/type not found errors — likely missing Service Hub tier
@@ -94,9 +111,7 @@ function handleGraphQLErrors(response: GraphQLResponse<unknown>, operation: stri
     lowerErrors.includes('field') && (lowerErrors.includes('not found') || lowerErrors.includes('unknown')) ||
     lowerErrors.includes('cannot query')
   ) {
-    throw new Error(
-      'Knowledge Base GraphQL types not available — this may require Service Hub Professional or higher.'
-    );
+    throw new KbGraphQLError('tier', `Knowledge Base GraphQL types unavailable (tier) during ${operation}`);
   }
 
   // Generic GraphQL error. Do not echo HubSpot's raw GraphQL error text:
@@ -109,23 +124,27 @@ function parseKnowledgeBaseError(
   operation: string,
   args?: unknown
 ): ReturnType<typeof parseHubSpotError> {
-  // Handle GraphQL errors that were re-thrown as plain Error
-  if (error instanceof Error && !(error instanceof HubSpotApiError)) {
-    const msg = error.message.toLowerCase();
-    if (msg.includes('reconnecting hubspot') || msg.includes('required scopes')) {
-      return {
-        error: 'HubSpot Knowledge Base access requires updated permissions',
-        errorCode: 'SCOPE_MISSING',
-        suggestion: 'Reconnect HubSpot to grant Knowledge Base scopes (cms.knowledge_base.articles.read + collector.graphql_query.execute).'
-      };
-    }
-    if (msg.includes('graphql types not available') || msg.includes('service hub professional')) {
+  // Handle GraphQL errors (HTTP 200) that were re-thrown as a classified KbGraphQLError.
+  if (error instanceof KbGraphQLError) {
+    if (error.kind === 'tier') {
       return {
         error: 'Knowledge Base feature is not available for this HubSpot account',
         errorCode: 'SERVICE_HUB_REQUIRED',
         suggestion: 'Knowledge Base requires Service Hub Professional or Enterprise.'
       };
     }
+    // Scope case: honest multi-cause copy, not reconnect-first. A KB scope that is
+    // absent on a healthy connection is usually a plan/permission gap, not a stale token.
+    const kbDenied = buildHubSpotCapabilityDeniedError({
+      objectType: 'knowledge_base_articles',
+      operation,
+      args,
+    });
+    return {
+      error: kbDenied.error,
+      errorCode: 'SCOPE_MISSING',
+      suggestion: kbDenied.suggestion,
+    };
   }
 
   if (error instanceof HubSpotApiError && error.statusCode === 403) {
@@ -150,19 +169,18 @@ function parseKnowledgeBaseError(
       };
     }
 
-    if (hasScopeKeyword) {
-      return {
-        error: 'HubSpot CMS access is missing for Knowledge Base operations',
-        errorCode: 'SCOPE_MISSING',
-        suggestion: 'Reconnect HubSpot to grant Knowledge Base access (cms.knowledge_base.articles.read and collector.graphql_query.execute scopes).'
-      };
-    }
-
-    // Generic 403 fallback for KB operations
+    // Scope keyword, or a generic KB 403: honest multi-cause copy rather than
+    // reconnect-first. The plan hint already names the Service Hub tier requirement.
+    const kbDenied = buildHubSpotCapabilityDeniedError({
+      objectType: 'knowledge_base_articles',
+      operation,
+      args,
+    });
     return {
-      error: 'Access denied for Knowledge Base operations',
-      errorCode: 'KB_ACCESS_DENIED',
-      suggestion: 'Knowledge Base requires Service Hub Professional or Enterprise. If you have the right plan, try reconnecting HubSpot to grant Knowledge Base access.'
+      error: kbDenied.error,
+      errorCode: hasScopeKeyword ? 'SCOPE_MISSING' : 'KB_ACCESS_DENIED',
+      suggestion: kbDenied.suggestion,
+      details: summariseHubSpotApiError(error, { operation }),
     };
   }
 

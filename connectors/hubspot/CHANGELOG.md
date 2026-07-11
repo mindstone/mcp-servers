@@ -11,6 +11,16 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Changed
+
+- Extended the honest 403 capability-denied copy across the whole connector — marketing emails, marketing analytics, workflows/automation, the knowledge base, record associations, contacts batch-read, and any generic marketing 403 (previously single-cause "requires Marketing Hub" / "reconnect to refresh scopes" messages that sent users in circles). The message now names all three reasons a capability can be unavailable — the account's plan doesn't include it, the signed-in HubSpot user lacks permission, or (less commonly, since an unauthorised optional scope usually fails the OAuth connect loudly) the app isn't authorised for it — leading with the likelier causes and presenting reconnecting only as the final step once the underlying cause is resolved. Two paths keep a legitimate reconnect-first hybrid because the scope was genuinely added to the app at a known date, so accounts connected earlier really do need to reconnect: HubSpot Lists (`crm.lists.read`) and the conversations tools (`conversations.read`).
+- Aligned the model-visible tool descriptions with the same multi-cause wording so the tool contract no longer primes reconnect-first behaviour on a 403: the workflow tools (`list_hubspot_workflows`, `get_hubspot_workflow`, `enrol_in_hubspot_workflow`), the knowledge-base tools (`list_hubspot_kb_articles`, `get_hubspot_kb_article`), and the conversations tools.
+
+### Fixed
+
+- Scope-denied 403s now capture the scope(s) HubSpot names in the error body (`requiredScopes`) into structured error details, so a missing-scope problem is diagnosable from logs instead of guessed. Never fabricates a scope when HubSpot names none. This now covers the association and knowledge-base API-error paths in addition to CRM/files/marketing/workflows.
+- Knowledge-base GraphQL failures (which return HTTP 200 with an `errors` array) now classify the cause internally — a missing Service Hub tier versus a missing scope — instead of matching on error-message substrings, so the tier-vs-scope distinction is robust and the scope case gets the honest multi-cause copy rather than reconnect-first advice.
+
 ## [0.3.0] - 2026-06-29
 
 ### Changed

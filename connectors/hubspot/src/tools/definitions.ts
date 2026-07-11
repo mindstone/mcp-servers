@@ -2277,7 +2277,7 @@ RETURNS:
 - Total count and pagination support via limit/offset
 
 SCOPES REQUIRED: cms.knowledge_base.articles.read and collector.graphql_query.execute
-(user may need to reconnect HubSpot to grant these scopes)
+(a 403 usually means the account's plan or the signed-in user's permissions don't include the knowledge base — reconnecting alone won't add it)
 
 COMMON MISTAKES:
 - Expecting write operations — KB tools are read-only (no create/update/delete API exists)
@@ -2310,7 +2310,7 @@ WORKFLOW:
 2. Call get_hubspot_kb_article for complete details
 
 SCOPES REQUIRED: cms.knowledge_base.articles.read and collector.graphql_query.execute
-(user may need to reconnect HubSpot to grant these scopes)
+(a 403 usually means the account's plan or the signed-in user's permissions don't include the knowledge base — reconnecting alone won't add it)
 
 COMMON MISTAKES:
 - Using a knowledgeBaseId/contentGroupId instead of an articleId
@@ -2546,9 +2546,11 @@ RELATED TOOLS:
 - delete_hubspot_workflow (permanently delete)
 - enrol_in_hubspot_workflow (enrol specific records)
 
-REQUIRES: automation scope. If you get a 403 error, the user needs to reconnect HubSpot
-(Settings → Connectors → HubSpot → Disconnect, then reconnect) to grant this scope.
-Also requires Marketing Hub Professional or Enterprise.
+REQUIRES: automation scope, plus a plan that includes workflows (Operations Hub, or
+Marketing/Sales Hub Professional or Enterprise). A 403 means the connection can't access
+workflows — most often the account's plan or the signed-in user's permissions, less
+commonly the scope isn't authorised for the app. Reconnecting alone won't add it; resolve
+the underlying cause first, then reconnect HubSpot to pick up the change.
 
 NOTE: This uses the v4 Automation API which is in BETA — response shape may change.`,
     aliases: ['get_hubspot_workflows', 'hubspot_workflows'],
@@ -2580,7 +2582,7 @@ RELATED TOOLS:
 - enrol_in_hubspot_workflow (manually enrol records)
 - delete_hubspot_workflow (permanently delete workflow)
 
-REQUIRES: automation scope (see list_hubspot_workflows for reconnection instructions).
+REQUIRES: automation scope and a plan that includes workflows (see list_hubspot_workflows for what a 403 means).
 
 NOTE: This is a BETA API — treat unknown fields cautiously as the response shape may change.`,
     aliases: ['get_workflow', 'get_workflow_details'],
@@ -2743,8 +2745,10 @@ Set confirm=true to acknowledge permanent deletion.`,
     category: 'Workflows',
     description: `Enrol specific records into a workflow.
 
-Uses the v4 BETA enrollment endpoint. If you receive a 403/404, reconnect to refresh
-automation scopes; if it still fails, your portal may require the v3 enrollment endpoint.`,
+Uses the v4 BETA enrollment endpoint. A 403 means the connection can't access workflows
+(most often plan or user permissions, less commonly app authorisation) — reconnecting alone
+won't fix it; resolve the cause, then reconnect. A 404 may mean your portal requires the v3
+enrollment endpoint.`,
     annotations: { readOnlyHint: false, destructiveHint: false },
     inputSchema: {
       type: 'object',
@@ -2783,8 +2787,9 @@ Typical workflow:
 3. list_hubspot_thread_messages(threadId) to read the message history
 4. (optional) get_hubspot_thread_message_original_content if a message is truncated
 
-REQUIRES: \`conversations.read\` OAuth scope. If a 403 is returned, reconnect the
-HubSpot account to grant the scope.
+REQUIRES: \`conversations.read\` OAuth scope (added May 2026). On a 403: accounts
+connected before then must reconnect to grant it; otherwise reconnecting won't
+help — the account's plan or the signed-in user's permissions are the likely cause.
 
 RETURNS: { results: [{ id, status, latestMessageTimestamp, ... }], paging? }`,
     aliases: ['get_ticket_threads', 'list_ticket_conversations'],
@@ -2812,7 +2817,9 @@ If \`truncationStatus\` indicates the body was truncated, call
 get_hubspot_thread_message_original_content with the same threadId/messageId to fetch
 the full body.
 
-REQUIRES: \`conversations.read\` OAuth scope.
+REQUIRES: \`conversations.read\` OAuth scope (added May 2026). On a 403: accounts
+connected before then must reconnect to grant it; otherwise reconnecting won't
+help — the account's plan or the signed-in user's permissions are the likely cause.
 
 RETURNS: { results: [...messages], paging? }`,
     aliases: ['get_thread_messages', 'read_thread'],
@@ -2836,7 +2843,9 @@ Use this only when the message returned from list_hubspot_thread_messages has a
 \`truncationStatus\` indicating its body was truncated. For untruncated messages, the
 body is already present in list_hubspot_thread_messages and this call is unnecessary.
 
-REQUIRES: \`conversations.read\` OAuth scope.`,
+REQUIRES: \`conversations.read\` OAuth scope (added May 2026). On a 403: accounts
+connected before then must reconnect to grant it; otherwise reconnecting won't
+help — the account's plan or the signed-in user's permissions are the likely cause.`,
     aliases: ['get_thread_message_full_content'],
     annotations: { readOnlyHint: true },
     inputSchema: {

@@ -88,7 +88,9 @@ function parseFileError(error: unknown, operation: string): ParsedHubSpotError {
       return {
         error: capabilityDenied.error,
         errorCode: 'PERMISSION_DENIED',
-        suggestion: capabilityDenied.suggestion
+        suggestion: capabilityDenied.suggestion,
+        // Carries any scope(s) HubSpot named (requiredScopes) for log-based diagnosis.
+        details: summariseHubSpotApiError(error, { operation })
       };
     }
     if (error.statusCode === 404) {

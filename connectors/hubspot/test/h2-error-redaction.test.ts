@@ -14,7 +14,7 @@ const RAW_PII_MARKERS = [
   'raw-validation-message',
 ];
 
-const SUMMARY_KEYS = ['operation', 'statusCode', 'errorCode', 'category', 'requestId', 'retryAfterSeconds'];
+const SUMMARY_KEYS = ['operation', 'statusCode', 'errorCode', 'category', 'requestId', 'retryAfterSeconds', 'requiredScopes'];
 
 function expectNoRawPii(value: unknown): void {
   const serialized = JSON.stringify(value);
@@ -229,6 +229,69 @@ describe('H2 HubSpot API error redaction', () => {
       requestId: 'safe-request-id',
     });
     expectNoRawPii(summary);
+  });
+
+  it('surfaces safe required scopes but drops hostile scope-shaped values', () => {
+    const summary = summariseHubSpotApiError({
+      statusCode: 403,
+      details: {
+        category: 'MISSING_SCOPES',
+        requestId: 'safe-request-id',
+        context: {
+          requiredGranularScopes: [
+            'content',
+            'crm.objects.contacts.read',
+            'jane.customer@example.com', // has '@' — rejected by safeIdentifier
+            'Customer note: please call my private mobile', // spaces — rejected
+          ],
+        },
+      },
+    }, { operation: 'get' });
+
+    expect(summary.requiredScopes).toEqual(['content', 'crm.objects.contacts.read']);
+    expectOnlySummaryKeys(summary);
+    expectNoRawPii(summary);
+  });
+
+  it('omits requiredScopes entirely when HubSpot names none', () => {
+    const summary = summariseHubSpotApiError({
+      statusCode: 403,
+      details: { category: 'MISSING_SCOPES', requestId: 'safe-request-id' },
+    }, { operation: 'get' });
+
+    expect(summary.requiredScopes).toBeUndefined();
+    expectOnlySummaryKeys(summary);
+  });
+
+  it('extracts scopes nested under errors[].context (HubSpot\'s per-error shape)', () => {
+    const summary = summariseHubSpotApiError({
+      statusCode: 403,
+      details: {
+        category: 'MISSING_SCOPES',
+        requestId: 'safe-request-id',
+        errors: [{ context: { requiredScopes: ['automation'] } }],
+      },
+    }, { operation: 'list' });
+
+    expect(summary.requiredScopes).toEqual(['automation']);
+    expectOnlySummaryKeys(summary);
+    expectNoRawPii(summary);
+  });
+
+  it('does not populate requiredScopes on non-403 bodies', () => {
+    const summary = summariseHubSpotApiError({
+      statusCode: 400,
+      details: {
+        category: 'VALIDATION_ERROR',
+        requestId: 'safe-request-id',
+        // An identifier-shaped value must not leak through the scope field on a
+        // non-403 error, even if a body carried a requiredScopes key.
+        context: { requiredScopes: ['jane.doe'] },
+      },
+    }, { operation: 'create' });
+
+    expect(summary.requiredScopes).toBeUndefined();
+    expectOnlySummaryKeys(summary);
   });
 
   it('maps AbortError to REQUEST_TIMEOUT', () => {

@@ -5,6 +5,7 @@ import { FileListOptions, FileSearchOptions, FileUploadOptions, PermissionOption
 import { McpToolResponse } from './types.js';
 import {
   readAliasedBoolean,
+  readAliasedNumber,
   readAliasedString
 } from './arg-aliases.js';
 import { wrapUntrustedContent, wrapUntrustedJsonStrings } from '../utils/untrusted-content.js';
@@ -71,6 +72,25 @@ function formatFilesAsText(files: any[]): string {
   }
 
   return wrapUntrustedContent(lines.join('\n'), 'google-workspace:drive:file-list');
+}
+
+/**
+ * Format shared-drives list as human-readable text
+ */
+function formatSharedDrivesAsText(drives: any[]): string {
+  if (!drives || drives.length === 0) {
+    return 'No shared drives found.';
+  }
+
+  const lines: string[] = [];
+  lines.push(`Shared drives: ${drives.length} result${drives.length !== 1 ? 's' : ''}\n`);
+
+  for (const drive of drives) {
+    lines.push(`${drive.name}`);
+    lines.push(`  [id: ${drive.id}]`);
+  }
+
+  return wrapUntrustedContent(lines.join('\n'), 'google-workspace:drive:shared-drive-list');
 }
 
 /** @internal Exported for tests. */
@@ -270,6 +290,48 @@ export async function handleSearchDriveFiles(args: DriveSearchArgs & Record<stri
       return formatFilesAsText(files);
     } catch (error) {
       return formatDriveRecoveryError('search files', error);
+    }
+  });
+}
+
+interface ListSharedDrivesArgs {
+  email?: string;
+  page_size?: number;
+  pageSize?: number;
+  page_token?: string;
+  pageToken?: string;
+  return_json?: boolean;
+  returnJson?: boolean;
+}
+
+export async function handleListSharedDrives(args: ListSharedDrivesArgs & Record<string, unknown>): Promise<McpToolResponse | string | object> {
+  const accountManager = getAccountManager();
+  const rawArgs = args as Record<string, unknown>;
+  const returnJson = readAliasedBoolean(rawArgs, 'return_json', 'returnJson') ?? false;
+  const pageSize = readAliasedNumber(rawArgs, 'page_size', 'pageSize');
+  const pageToken = readAliasedString(rawArgs, 'page_token', 'pageToken');
+
+  // Resolve email - uses instance account if not provided, validates if provided
+  const email = await resolveEmail(args);
+
+  return await accountManager.withTokenRenewal(email, async () => {
+    try {
+      const driveService = await getDriveService();
+      const result = await driveService.listSharedDrives(email, { pageSize, pageToken });
+
+      // Return JSON if requested, otherwise format as human-readable text
+      // Return string directly - server.ts handles MCP response wrapping
+      if (returnJson) {
+        return formatDriveJsonResult('list shared drives', result, 'google-workspace:drive:shared-drive-list');
+      }
+
+      if (!result.success) {
+        return formatDriveRecoveryError('list shared drives', new Error(result.error || 'Unknown error'));
+      }
+      const drives = result.data?.drives || [];
+      return formatSharedDrivesAsText(drives);
+    } catch (error) {
+      return formatDriveRecoveryError('list shared drives', error);
     }
   });
 }

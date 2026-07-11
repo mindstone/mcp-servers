@@ -82,6 +82,7 @@ const endpointOverrides = new Map(Object.entries({
 
   list_drive_files: ['drive', 'GET', 'https://www.googleapis.com/drive/v3/files'],
   search_drive_files: ['drive', 'GET', 'https://www.googleapis.com/drive/v3/files'],
+  list_shared_drives: ['drive', 'GET', 'https://www.googleapis.com/drive/v3/drives'],
   upload_drive_file: ['drive', 'POST', 'https://www.googleapis.com/upload/drive/v3/files'],
   download_drive_file: ['drive', 'GET', 'https://www.googleapis.com/drive/v3/files/{fileId}'],
   create_drive_folder: ['drive', 'POST', 'https://www.googleapis.com/drive/v3/files'],
