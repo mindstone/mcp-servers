@@ -29,8 +29,9 @@
  * external-text boundary reaches it.
  */
 
-const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content[ \t]*>/gi;
+const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content\s*>/gi;
 const ESCAPED_UNTRUSTED_CLOSE_TAG = '<\\/untrusted-content>';
+const UNTRUSTED_ENVELOPE = /^<untrusted-content source="[^"]*">([\s\S]*)<\/untrusted-content>$/;
 
 function escapeAttr(s: string): string {
   return s.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
@@ -38,11 +39,15 @@ function escapeAttr(s: string): string {
 
 /**
  * Rewrite every `</untrusted-content>` variant (case-insensitive, optional
- * space/tab before `>`) inside `s` to a benign textual form, so an attacker
+ * whitespace before `>`) inside `s` to a benign textual form, so an attacker
  * who controls the wrapped content cannot terminate the envelope early.
  */
 function escapeCloseTagSentinels(s: string): string {
   return s.replace(UNTRUSTED_CLOSE_TAG_VARIANT, ESCAPED_UNTRUSTED_CLOSE_TAG);
+}
+
+function unescapeCloseTagSentinels(s: string): string {
+  return s.replaceAll(ESCAPED_UNTRUSTED_CLOSE_TAG, '</untrusted-content>');
 }
 
 /**
@@ -74,13 +79,24 @@ export function wrapUntrusted(text: string | undefined, source: string): string 
 }
 
 /**
- * Recursively wrap every string value reachable inside `value` (strings,
- * arrays, plain-object property values) in an `<untrusted-content>` envelope.
+ * Strip one `<untrusted-content>` envelope from `text` if present, returning raw
+ * strings unchanged. This is intentionally one-layer and idempotent for already
+ * raw input so callers can accept either displayed wrapped content or manually
+ * authored content.
+ */
+export function unwrapUntrusted(text: string): string {
+  const match = UNTRUSTED_ENVELOPE.exec(text);
+  if (!match) return text;
+  return unescapeCloseTagSentinels(match[1]);
+}
+
+/**
+ * Recursively wrap every string key and value reachable inside `value` (strings,
+ * arrays, plain-object property keys and values) in an `<untrusted-content>` envelope.
  *
  * Use this when a whole response blob is third-party data and you want to
- * envelope it wholesale rather than enumerate fields. Object keys are NOT
- * wrapped (they are structural), only the string values. Non-string leaves
- * (numbers, booleans, null) pass through unchanged.
+ * envelope it wholesale rather than enumerate fields. Non-string leaves (numbers,
+ * booleans, null) pass through unchanged.
  */
 export function wrapUntrustedJsonStrings<T>(value: T, source: string): T {
   if (typeof value === 'string') {
@@ -91,7 +107,32 @@ export function wrapUntrustedJsonStrings<T>(value: T, source: string): T {
   }
   if (value && typeof value === 'object') {
     return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, wrapUntrustedJsonStrings(item, source)]),
+      Object.entries(value).map(([key, item]) => [
+        wrapUntrusted(key, source) ?? key,
+        wrapUntrustedJsonStrings(item, source),
+      ]),
+    ) as T;
+  }
+  return value;
+}
+
+/**
+ * Recursively unwrap every string key and value reachable inside `value`.
+ * Non-string leaves pass through unchanged.
+ */
+export function unwrapUntrustedJsonStrings<T>(value: T): T {
+  if (typeof value === 'string') {
+    return unwrapUntrusted(value) as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => unwrapUntrustedJsonStrings(item)) as T;
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        unwrapUntrusted(key),
+        unwrapUntrustedJsonStrings(item),
+      ]),
     ) as T;
   }
   return value;
