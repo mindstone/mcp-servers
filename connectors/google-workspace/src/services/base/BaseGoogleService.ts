@@ -86,6 +86,18 @@ export abstract class BaseGoogleService<TClient> {
         );
       }
 
+      // Transient refresh blip (a temporary network error, not a dead grant): surface a
+      // retryable error rather than an AUTH_REQUIRED that would push the user to reconnect a
+      // grant that's actually fine. formatErrorResponse maps this to a generic retry, not the
+      // reconnect CTA. Mirrors the canRetry handling in withTokenRenewal / listAccounts.
+      if (!tokenStatus.valid && tokenStatus.canRetry) {
+        throw new AccountError(
+          `${this.serviceName} token refresh failed temporarily`,
+          'TEMPORARY_AUTH_ERROR',
+          'Please try again in a moment'
+        );
+      }
+
       if (!tokenStatus.valid || !tokenStatus.token) {
         throw new GoogleServiceError(
           `${this.serviceName} authentication required`,

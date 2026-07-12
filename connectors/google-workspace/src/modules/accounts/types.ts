@@ -43,6 +43,7 @@ export interface TokenStatus {
   reason?: string;
   authUrl?: string;
   requiredScopes?: string[];
+  canRetry?: boolean;  // Transient refresh failure that may succeed on retry — not a dead grant.
 }
 
 export interface AuthenticationError extends AccountError {
