@@ -413,6 +413,18 @@ function normalizeDraftData(data: ManageDraftParams['data']) {
   };
 }
 
+// Fail loudly on a malformed recipient list — a non-array crashes buildMimeMessage
+// deep in the service and used to surface as an opaque InternalError. Empty arrays are
+// valid for drafts, so only the shape is checked here. Covers to/cc/bcc alike.
+function assertRecipientsArray(value: unknown, field: 'to' | 'cc' | 'bcc'): void {
+  if (value !== undefined && !Array.isArray(value)) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      `Draft recipients (${field}) must be an array of email addresses`
+    );
+  }
+}
+
 export async function handleComposeWorkspaceEmail(
   params: ComposeWorkspaceEmailParams
 ): Promise<ComposeWorkspaceEmailResult> {
@@ -864,6 +876,9 @@ export async function handleManageWorkspaceDraft(params: ManageDraftParams) {
               'Draft data is required for create action'
             );
           }
+          assertRecipientsArray(data.to, 'to');
+          assertRecipientsArray(data.cc, 'cc');
+          assertRecipientsArray(data.bcc, 'bcc');
           if (data.to) data.to.forEach(validateEmail);
           if (data.cc) data.cc.forEach(validateEmail);
           if (data.bcc) data.bcc.forEach(validateEmail);
@@ -897,6 +912,9 @@ export async function handleManageWorkspaceDraft(params: ManageDraftParams) {
               'Draft ID and data are required for update action'
             );
           }
+          assertRecipientsArray(data.to, 'to');
+          assertRecipientsArray(data.cc, 'cc');
+          assertRecipientsArray(data.bcc, 'bcc');
           if (data.to) data.to.forEach(validateEmail);
           if (data.cc) data.cc.forEach(validateEmail);
           if (data.bcc) data.bcc.forEach(validateEmail);
@@ -949,9 +967,17 @@ export async function handleManageWorkspaceDraft(params: ManageDraftParams) {
           );
       }
     } catch (error) {
+      if (error instanceof McpError) {
+        throw error;
+      }
+      const details = error instanceof GmailError && error.details
+        ? `${error.message}: ${error.details}`
+        : error instanceof Error
+          ? error.message
+          : 'Unknown error';
       throw new McpError(
         ErrorCode.InternalError,
-        `Failed to manage draft: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to manage draft: ${details}`
       );
     }
   });

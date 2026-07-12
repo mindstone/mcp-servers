@@ -11,6 +11,26 @@ import logger from '../../../utils/logger.js';
 
 export type DraftAction = 'create' | 'read' | 'update' | 'delete' | 'send';
 
+/**
+ * Extracts the HTTP status from a googleapis (GaxiosError-shaped) failure,
+ * preferring `response.status` and falling back to a numeric `code`.
+ */
+function extractHttpStatus(error: unknown): number | undefined {
+  if (typeof error !== 'object' || error === null) return undefined;
+  const candidate = error as { response?: { status?: unknown }; status?: unknown; code?: unknown };
+  if (typeof candidate.response?.status === 'number') return candidate.response.status;
+  if (typeof candidate.status === 'number') return candidate.status;
+  if (typeof candidate.code === 'number') return candidate.code;
+  if (typeof candidate.code === 'string' && /^\d+$/.test(candidate.code)) return Number(candidate.code);
+  return undefined;
+}
+
+function describeApiError(error: unknown): string {
+  const message = error instanceof Error ? error.message : 'Unknown error';
+  const status = extractHttpStatus(error);
+  return status !== undefined ? `${message} (status ${status})` : message;
+}
+
 export interface ManageDraftParams {
   email: string;
   action: DraftAction;
@@ -100,10 +120,12 @@ export class DraftService {
         attachments: data.attachments
       };
     } catch (error) {
+      const details = describeApiError(error);
+      logger.warn(`Failed to create draft: ${details}`);
       throw new GmailError(
         'Failed to create draft',
         'CREATE_ERROR',
-        error instanceof Error ? error.message : 'Unknown error'
+        details
       );
     }
   }
@@ -212,7 +234,8 @@ export class DraftService {
         id: draftId,
         requestBody: {
           message: {
-            raw: encodedMessage
+            raw: encodedMessage,
+            threadId: data.threadId // Include threadId for replies
           }
         }
       });
@@ -228,10 +251,12 @@ export class DraftService {
         attachments: data.attachments
       };
     } catch (error) {
+      const details = describeApiError(error);
+      logger.warn(`Failed to update draft ${draftId}: ${details}`);
       throw new GmailError(
         'Failed to update draft',
         'UPDATE_ERROR',
-        error instanceof Error ? error.message : 'Unknown error'
+        details
       );
     }
   }
