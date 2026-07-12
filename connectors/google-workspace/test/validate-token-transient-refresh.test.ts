@@ -117,6 +117,47 @@ describe('validateToken transient-refresh retry + canRetry', () => {
     expect(status).toMatchObject({ valid: false, status: 'AUTH_REQUIRED' });
     expect(status.canRetry).toBeUndefined();
   });
+
+  it('reclassifies a transient-then-invalid_grant sequence as a dead grant (not retryable)', async () => {
+    // Attempt 1 is a network blip; the retry surfaces invalid_grant. The grant is genuinely
+    // dead, so it must be AUTH_REQUIRED with no canRetry — not mislabelled as transient.
+    vi.stubEnv('CREDENTIALS_PATH', seedExpiredToken());
+    vi.resetModules();
+    const { TokenManager } = await import('../src/modules/accounts/token.js');
+
+    let attempts = 0;
+    const tokenManager = new TokenManager({
+      refreshToken: async () => {
+        attempts += 1;
+        throw new Error(attempts === 1 ? 'temporarily unavailable' : 'invalid_grant');
+      },
+    } as never);
+
+    const status = await tokenManager.validateToken('user@example.com');
+
+    expect(attempts).toBe(2);
+    expect(status).toMatchObject({ valid: false, status: 'AUTH_REQUIRED' });
+    expect(status.canRetry).toBeUndefined();
+  });
+
+  it('autoRenewToken also reclassifies a transient-then-invalid_grant sequence as a dead grant', async () => {
+    vi.stubEnv('CREDENTIALS_PATH', seedExpiredToken());
+    vi.resetModules();
+    const { TokenManager } = await import('../src/modules/accounts/token.js');
+
+    let attempts = 0;
+    const tokenManager = new TokenManager({
+      refreshToken: async () => {
+        attempts += 1;
+        throw new Error(attempts === 1 ? 'temporarily unavailable' : 'invalid_grant');
+      },
+    } as never);
+
+    const renewal = await tokenManager.autoRenewToken('user@example.com');
+
+    expect(attempts).toBe(2);
+    expect(renewal).toMatchObject({ success: false, status: 'AUTH_REQUIRED', canRetry: false });
+  });
 });
 
 describe('getAuthenticatedClient transient-refresh mapping', () => {

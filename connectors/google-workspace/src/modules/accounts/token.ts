@@ -107,6 +107,55 @@ export class TokenManager {
   }
 
   /**
+   * Refreshes the access token, retrying once on a non-invalid_grant failure.
+   *
+   * Shared by autoRenewToken and validateToken so the retry + failure-classification
+   * logic can't drift between the two paths. On success the refreshed token is persisted
+   * (scope + refresh_token preserved, since Google omits them on refresh). The outcome
+   * distinguishes a dead grant (invalidGrant: true → reconnect) from a transient blip
+   * (invalidGrant: false → retryable), including the case where a transient first attempt
+   * is followed by an invalid_grant on retry.
+   *
+   * Callers must have already established that token.refresh_token and this.oauthClient exist.
+   */
+  private async refreshWithRetry(
+    email: string,
+    token: any
+  ): Promise<{ ok: true; token: any } | { ok: false; invalidGrant: boolean }> {
+    const attemptRefresh = async () => {
+      const newToken = await this.oauthClient!.refreshToken(token.refresh_token);
+      // Preserve original scope and refresh_token - Google doesn't return these on refresh
+      newToken.scope = newToken.scope || token.scope;
+      newToken.refresh_token = newToken.refresh_token || token.refresh_token;
+      await this.saveToken(email, newToken);
+      return newToken;
+    };
+
+    try {
+      return { ok: true, token: await attemptRefresh() };
+    } catch (error) {
+      if (isRefreshTokenInvalidError(error)) {
+        logger.error('Refresh token is invalid or revoked');
+        return { ok: false, invalidGrant: true };
+      }
+      // Not a refresh-token problem — a transient blip. Try once more.
+      try {
+        logger.warn('First refresh attempt failed, trying once more');
+        return { ok: true, token: await attemptRefresh() };
+      } catch (secondError) {
+        // Re-classify the retry failure: a transient blip followed by an invalid_grant is
+        // still a dead grant, so it must not be mislabelled as retryable.
+        if (isRefreshTokenInvalidError(secondError)) {
+          logger.error('Refresh token is invalid or revoked (surfaced on retry)');
+          return { ok: false, invalidGrant: true };
+        }
+        logger.error('Both refresh attempts failed, but refresh token may still be valid');
+        return { ok: false, invalidGrant: false };
+      }
+    }
+  }
+
+  /**
    * Basic token validation - just checks if token exists and isn't expired.
    * No scope validation - auth issues handled via 401 responses.
    */
@@ -152,52 +201,17 @@ export class TokenManager {
           };
         }
 
-        try {
-          // Attempt to refresh the token
-          const newToken = await this.oauthClient.refreshToken(token.refresh_token);
-          // Preserve original scope - Google doesn't return scope on refresh
-          newToken.scope = newToken.scope || token.scope;
-          // Preserve refresh_token if not returned (Google sometimes omits it)
-          newToken.refresh_token = newToken.refresh_token || token.refresh_token;
-          await this.saveToken(email, newToken);
+        const outcome = await this.refreshWithRetry(email, token);
+        if (outcome.ok) {
           logger.info('Token refreshed successfully');
           return {
             success: true,
             status: 'REFRESHED',
-            token: newToken
+            token: outcome.token
           };
-        } catch (error) {
-          // Check if the error indicates an invalid/revoked refresh token
-          const isRefreshTokenInvalid = isRefreshTokenInvalidError(error);
-
-          if (!isRefreshTokenInvalid) {
-            // If it's not a refresh token issue, try one more time
-            try {
-              logger.warn('First refresh attempt failed, trying once more');
-              const newToken = await this.oauthClient.refreshToken(token.refresh_token);
-              // Preserve original scope and refresh_token
-              newToken.scope = newToken.scope || token.scope;
-              newToken.refresh_token = newToken.refresh_token || token.refresh_token;
-              await this.saveToken(email, newToken);
-              logger.info('Token refreshed successfully on second attempt');
-              return {
-                success: true,
-                status: 'REFRESHED',
-                token: newToken
-              };
-            } catch (secondError) {
-              logger.error('Both refresh attempts failed, but refresh token may still be valid');
-              return {
-                success: false,
-                status: 'REFRESH_FAILED',
-                reason: 'Token refresh failed, temporary error',
-                canRetry: true
-              };
-            }
-          }
-
+        }
+        if (outcome.invalidGrant) {
           // Refresh token is invalid, need full reauth
-          logger.error('Refresh token is invalid or revoked');
           return {
             success: false,
             status: 'AUTH_REQUIRED',
@@ -205,6 +219,12 @@ export class TokenManager {
             canRetry: false
           };
         }
+        return {
+          success: false,
+          status: 'REFRESH_FAILED',
+          reason: 'Token refresh failed, temporary error',
+          canRetry: true
+        };
       }
 
       // Token is still valid
@@ -269,55 +289,33 @@ export class TokenManager {
         }
 
         if (token.refresh_token && this.oauthClient) {
-          try {
-            const newToken = await this.oauthClient.refreshToken(token.refresh_token);
-            // Preserve original scope and refresh_token - Google doesn't return these on refresh
-            newToken.scope = newToken.scope || token.scope;
-            newToken.refresh_token = newToken.refresh_token || token.refresh_token;
-            await this.saveToken(email, newToken);
+          // Retry-once + failure classification lives in refreshWithRetry (shared with
+          // autoRenewToken). A single transient network blip shouldn't be reported as a
+          // dead grant; the canRetry flag lets callers (e.g. BaseGoogleService) surface a
+          // retryable error instead of demanding a reconnect.
+          const outcome = await this.refreshWithRetry(email, token);
+          if (outcome.ok) {
             logger.info('Token refreshed successfully');
             return {
               valid: true,
               status: 'REFRESHED',
-              token: newToken,
-              requiredScopes: newToken.scope ? newToken.scope.split(' ') : undefined
+              token: outcome.token,
+              requiredScopes: outcome.token.scope ? outcome.token.scope.split(' ') : undefined
             };
-          } catch (error) {
-            logger.error('Token refresh failed', error as Error);
-            if (isRefreshTokenInvalidError(error)) {
-              return {
-                valid: false,
-                status: 'AUTH_REQUIRED',
-                reason: 'Refresh token is invalid or revoked'
-              };
-            }
-            // Not a refresh-token problem — retry once before giving up, mirroring
-            // autoRenewToken. A single transient network blip shouldn't be reported as a
-            // dead grant, and the canRetry flag lets callers (e.g. BaseGoogleService) surface
-            // a retryable error instead of demanding a reconnect.
-            try {
-              logger.warn('First validation refresh attempt failed, trying once more');
-              const newToken = await this.oauthClient.refreshToken(token.refresh_token);
-              newToken.scope = newToken.scope || token.scope;
-              newToken.refresh_token = newToken.refresh_token || token.refresh_token;
-              await this.saveToken(email, newToken);
-              logger.info('Token refreshed successfully on second attempt');
-              return {
-                valid: true,
-                status: 'REFRESHED',
-                token: newToken,
-                requiredScopes: newToken.scope ? newToken.scope.split(' ') : undefined
-              };
-            } catch (secondError) {
-              logger.error('Both validation refresh attempts failed, but refresh token may still be valid');
-              return {
-                valid: false,
-                status: 'REFRESH_FAILED',
-                reason: 'Token refresh failed, temporary error',
-                canRetry: true
-              };
-            }
           }
+          if (outcome.invalidGrant) {
+            return {
+              valid: false,
+              status: 'AUTH_REQUIRED',
+              reason: 'Refresh token is invalid or revoked'
+            };
+          }
+          return {
+            valid: false,
+            status: 'REFRESH_FAILED',
+            reason: 'Token refresh failed, temporary error',
+            canRetry: true
+          };
         }
         logger.debug('No refresh token available');
         return {

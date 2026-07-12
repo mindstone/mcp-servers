@@ -378,8 +378,15 @@ export class AccountManager {
           };
           break;
           
-        case 'INVALID':
         case 'REFRESH_FAILED':
+          // Transient refresh blip (canRetry) keeps the grant valid — no reconnect required,
+          // mirroring listAccounts. A non-retryable REFRESH_FAILED still reports as invalid.
+          account.auth_status = tokenStatus.canRetry
+            ? { valid: true, status: tokenStatus.status, reason: tokenStatus.reason }
+            : { valid: false, status: tokenStatus.status, reason: tokenStatus.reason, authUrl: undefined };
+          break;
+
+        case 'INVALID':
         case 'EXPIRED':
           account.auth_status = {
             valid: false,

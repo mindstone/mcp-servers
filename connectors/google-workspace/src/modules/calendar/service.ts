@@ -152,6 +152,14 @@ export class CalendarService {
     const accountManager = getAccountManager();
     try {
       const tokenStatus = await accountManager.validateToken(email);
+      if (!tokenStatus.valid && tokenStatus.canRetry) {
+        // Transient refresh blip, not a dead grant — retryable, not a reconnect demand.
+        throw new CalendarError(
+          'Calendar sign-in refresh hit a temporary error',
+          'TEMPORARY_AUTH_ERROR',
+          'Please try again in a moment'
+        );
+      }
       if (!tokenStatus.valid || !tokenStatus.token) {
         throw new CalendarError(
           'Calendar authentication required',
@@ -194,6 +202,15 @@ export class CalendarService {
         if (tokenStatus.valid && tokenStatus.token) {
           this.oauth2Client.setCredentials(tokenStatus.token);
           return await operation();
+        }
+        if (!tokenStatus.valid && tokenStatus.canRetry) {
+          // Transient refresh blip during 401 recovery — retryable, not a reconnect demand.
+          // Mirrors withTokenRenewal so the raw 401 doesn't fall through to the reconnect CTA.
+          throw new AccountError(
+            'Calendar sign-in refresh hit a temporary error',
+            'TEMPORARY_AUTH_ERROR',
+            'Please try again in a moment'
+          );
         }
       }
       const status = error && typeof error === 'object'

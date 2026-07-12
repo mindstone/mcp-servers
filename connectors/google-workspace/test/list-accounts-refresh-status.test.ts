@@ -169,4 +169,37 @@ describe('list_workspace_accounts refresh-failure status mapping', () => {
       status: 'NO_TOKEN',
     });
   });
+
+  // validateAccount is the other reporting path (via getAccount); it must honour canRetry the
+  // same way listAccounts does, rather than collapsing every REFRESH_FAILED into valid: false.
+  it('validateAccount reports a transient refresh failure as valid (no reconnect required)', async () => {
+    const manager = await initManager(
+      'gw-validate-account-transient-',
+      [{ email: 'user@example.com', description: 'User', refreshToken: 'transient-token' }],
+      rejectTransient,
+    );
+
+    const account = await manager.validateAccount('user@example.com');
+
+    expect(account.auth_status).toMatchObject({
+      valid: true,
+      status: 'REFRESH_FAILED',
+    });
+    expect(account.auth_status?.reason).toMatch(/temporary/i);
+  });
+
+  it('validateAccount still reports an invalid/revoked grant as disconnected (regression guard)', async () => {
+    const manager = await initManager(
+      'gw-validate-account-invalid-grant-',
+      [{ email: 'user@example.com', description: 'User', refreshToken: 'revoked-token' }],
+      rejectInvalidGrant,
+    );
+
+    const account = await manager.validateAccount('user@example.com');
+
+    expect(account.auth_status).toMatchObject({
+      valid: false,
+      status: 'AUTH_REQUIRED',
+    });
+  });
 });

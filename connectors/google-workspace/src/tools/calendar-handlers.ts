@@ -246,6 +246,11 @@ export async function handleGetCurrentTime(params: { email?: string }) {
     try {
       // Fast-fail auth gate: throw clear error instead of helper's silent UTC fallback
       const tokenStatus = await accountManager.validateToken(email);
+      if (!tokenStatus.valid && tokenStatus.canRetry) {
+        // Transient refresh blip, not a dead grant — surface a retryable error rather than
+        // "Authentication required", which would wrongly push the user to reconnect.
+        throw new McpError(ErrorCode.InternalError, 'Google Workspace sign-in refresh hit a temporary error. Please try again in a moment.');
+      }
       if (!tokenStatus.valid || !tokenStatus.token) {
         throw new McpError(ErrorCode.InvalidRequest, 'Authentication required');
       }
@@ -350,6 +355,11 @@ export async function handleFindFreeSlots(params: {
   return accountManager.withTokenRenewal(email, async () => {
     try {
       const tokenStatus = await accountManager.validateToken(email);
+      if (!tokenStatus.valid && tokenStatus.canRetry) {
+        // Transient refresh blip, not a dead grant — surface a retryable error rather than
+        // "Authentication required", which would wrongly push the user to reconnect.
+        throw new McpError(ErrorCode.InternalError, 'Google Workspace sign-in refresh hit a temporary error. Please try again in a moment.');
+      }
       if (!tokenStatus.valid || !tokenStatus.token) {
         throw new McpError(ErrorCode.InvalidRequest, 'Authentication required');
       }
