@@ -26,10 +26,17 @@ export const accountTools: ToolMetadata[] = [
       default_package_id     // mirrors the package_id of the is_default account; empty string if no accounts
     }
 
+    auth_status.valid means "reconnect is NOT required". A transient refresh blip (status
+    "REFRESH_FAILED" with a temporary-error reason) keeps it true; anything else that isn't a live
+    grant sets it false — a revoked/invalid grant ("AUTH_REQUIRED"), a missing token ("NO_TOKEN"),
+    an unusable token ("INVALID"), or a hard error ("ERROR"). Read status/reason for detail.
+
     Common Response Patterns:
-    - Valid account exists → Proceed with requested operation (use its package_id)
+    - Valid account exists (auth_status.valid true) → Proceed with requested operation (use its package_id)
     - Multiple accounts exist → Ask user which to use; fall back to default_package_id if user has no preference
     - Token expired → Proceed normally (auto-refresh occurs)
+    - Transient refresh failure (auth_status.valid true, status "REFRESH_FAILED", reason mentions a temporary error) → Proceed / retry the operation; do NOT tell the user to reconnect — the grant is still valid, the refresh just hit a temporary network blip
+    - Reconnect required (auth_status.valid false, e.g. status "AUTH_REQUIRED", "NO_TOKEN", "INVALID", or "ERROR") → Start authentication flow
     - No accounts exist → Start authentication flow
 
     Example Usage:

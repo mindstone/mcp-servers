@@ -16,6 +16,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 - The compose email "finish in Gmail" fallback (shown when sending from Rebel is turned off in your settings) now recognises the block from structured error data forwarded by newer hosts, instead of relying only on the wording of the error message — so it keeps working even when the host shortens or rewords the error text.
 
+### Fixed
+
+- A temporary network hiccup while refreshing a Google account's sign-in no longer makes `list_workspace_accounts` report the account as disconnected. Such a blip now reports the account as still valid (with a "temporary error" status for anything that looks closer), matching how the connector already proceeds with the operation — so an assistant won't wrongly tell you to reconnect an account that's actually fine. A genuinely revoked or expired sign-in still correctly reports as needing reconnection.
+
 ## [0.1.5] - 2026-07-05
 
 ### Changed

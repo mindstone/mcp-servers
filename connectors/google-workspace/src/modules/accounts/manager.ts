@@ -48,8 +48,19 @@ export class AccountManager {
           valid: true,
           status: renewalResult.status
         };
+      } else if (renewalResult.canRetry) {
+        // Transient refresh failure (temporary network error, not a revoked grant):
+        // the grant is still good and no reconnect is required. Report valid:true so an
+        // agent keying off the boolean doesn't wrongly send the user to reconnect over a
+        // blip — this mirrors withTokenRenewal, which proceeds when canRetry is set. The
+        // status + reason still carry the transient detail for consumers that look deeper.
+        account.auth_status = {
+          valid: true,
+          status: renewalResult.status,
+          reason: renewalResult.reason
+        };
       } else {
-        // If auto-renewal failed, try to get an auth URL for re-authentication
+        // Refresh token invalid/revoked (or otherwise non-retryable) — reconnect required.
         account.auth_status = {
           valid: false,
           status: renewalResult.status,
