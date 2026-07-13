@@ -7,29 +7,10 @@ import {
 } from '../types.js';
 import { GmailAttachmentService } from './attachment.js';
 import { buildMimeMessage } from './mime-builder.js';
+import { describeApiError } from '../../../utils/apiError.js';
 import logger from '../../../utils/logger.js';
 
 export type DraftAction = 'create' | 'read' | 'update' | 'delete' | 'send';
-
-/**
- * Extracts the HTTP status from a googleapis (GaxiosError-shaped) failure,
- * preferring `response.status` and falling back to a numeric `code`.
- */
-function extractHttpStatus(error: unknown): number | undefined {
-  if (typeof error !== 'object' || error === null) return undefined;
-  const candidate = error as { response?: { status?: unknown }; status?: unknown; code?: unknown };
-  if (typeof candidate.response?.status === 'number') return candidate.response.status;
-  if (typeof candidate.status === 'number') return candidate.status;
-  if (typeof candidate.code === 'number') return candidate.code;
-  if (typeof candidate.code === 'string' && /^\d+$/.test(candidate.code)) return Number(candidate.code);
-  return undefined;
-}
-
-function describeApiError(error: unknown): string {
-  const message = error instanceof Error ? error.message : 'Unknown error';
-  const status = extractHttpStatus(error);
-  return status !== undefined ? `${message} (status ${status})` : message;
-}
 
 export interface ManageDraftParams {
   email: string;
@@ -163,7 +144,7 @@ export class DraftService {
       throw new GmailError(
         'Failed to list drafts',
         'LIST_ERROR',
-        error instanceof Error ? error.message : 'Unknown error'
+        describeApiError(error)
       );
     }
   }
@@ -198,7 +179,7 @@ export class DraftService {
       throw new GmailError(
         'Failed to get draft',
         'GET_ERROR',
-        error instanceof Error ? error.message : 'Unknown error'
+        describeApiError(error)
       );
     }
   }
@@ -274,7 +255,7 @@ export class DraftService {
       throw new GmailError(
         'Failed to delete draft',
         'DELETE_ERROR',
-        error instanceof Error ? error.message : 'Unknown error'
+        describeApiError(error)
       );
     }
   }
@@ -361,7 +342,7 @@ export class DraftService {
       throw new GmailError(
         'Failed to send draft',
         'SEND_ERROR',
-        error instanceof Error ? error.message : 'Unknown error'
+        describeApiError(error)
       );
     }
   }

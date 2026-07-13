@@ -18,6 +18,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 
+- When a Gmail, Calendar, Contacts, Forms, or Tasks action fails, the connector now surfaces the real cause — the underlying Google API message and its HTTP status (e.g. "Requested entity was not found. (status 404)") — instead of collapsing every failure to a generic "Failed to …". Validation errors (such as a missing draft ID) also keep their specific error code instead of being flattened to a generic internal error. This makes failures diagnosable rather than opaque.
 - A temporary network hiccup while refreshing a Google account's sign-in no longer makes `list_workspace_accounts` report the account as disconnected. Such a blip now reports the account as still valid (with a "temporary error" status for anything that looks closer), matching how the connector already proceeds with the operation — so an assistant won't wrongly tell you to reconnect an account that's actually fine. A genuinely revoked or expired sign-in still correctly reports as needing reconnection.
 
 ## [0.1.5] - 2026-07-05

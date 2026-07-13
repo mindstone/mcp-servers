@@ -1,6 +1,7 @@
 import { getTasksService } from '../modules/tasks/index.js';
 import { getAccountManager, resolveEmail } from '../modules/accounts/index.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import { toMcpError } from '../utils/apiError.js';
 import { ListTasksOptions } from '../modules/tasks/types.js';
 import {
   readAliasedBoolean,
@@ -169,11 +170,7 @@ export async function handleListTaskLists(params: ListTaskListsParams) {
 
       return wrapUntrustedContent(lines.join('\n'), 'google-workspace:tasks:task-lists');
     } catch (error) {
-      if (error instanceof McpError) throw error;
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to list task lists: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to list task lists');
     }
   });
 }
@@ -218,11 +215,7 @@ export async function handleListTasks(params: ListTasksParams) {
       const { tasks, nextPageToken } = result.data || { tasks: [], nextPageToken: undefined };
       return formatTasksAsText(tasks, taskListId, nextPageToken);
     } catch (error) {
-      if (error instanceof McpError) throw error;
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to list tasks: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to list tasks');
     }
   });
 }
@@ -274,11 +267,7 @@ export async function handleCreateTask(params: CreateTaskParams) {
         `google-workspace:tasks:task/${task.id}`
       );
     } catch (error) {
-      if (error instanceof McpError) throw error;
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to create task: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to create task');
     }
   });
 }
@@ -341,11 +330,7 @@ export async function handleUpdateTask(params: UpdateTaskParams) {
         `google-workspace:tasks:task/${task.id}`
       );
     } catch (error) {
-      if (error instanceof McpError) throw error;
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to update task: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to update task');
     }
   });
 }
@@ -394,11 +379,7 @@ export async function handleCompleteTask(params: CompleteTaskParams) {
         `google-workspace:tasks:task/${task.id}`
       );
     } catch (error) {
-      if (error instanceof McpError) throw error;
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to complete task: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to complete task');
     }
   });
 }
@@ -441,11 +422,7 @@ export async function handleDeleteTask(params: DeleteTaskParams) {
 
       return `Task deleted successfully.\n\nTask ID: ${taskId}\nTask List: ${taskListId}`;
     } catch (error) {
-      if (error instanceof McpError) throw error;
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to delete task: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to delete task');
     }
   });
 }

@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import { describeApiError } from '../../../utils/apiError.js';
 import {
   GetGmailSettingsParams,
   GetGmailSettingsResponse,
@@ -120,7 +121,7 @@ export class SettingsService {
       throw new GmailError(
         'Failed to get Gmail settings',
         'SETTINGS_ERROR',
-        `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Error: ${describeApiError(error)}`
       );
     }
   }

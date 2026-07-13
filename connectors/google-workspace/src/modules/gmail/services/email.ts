@@ -16,6 +16,7 @@ import { buildMimeMessage } from './mime-builder.js';
 import { AttachmentResponseTransformer } from '../../attachments/response-transformer.js';
 import { AttachmentIndexService } from '../../attachments/index-service.js';
 import logger from '../../../utils/logger.js';
+import { describeApiError } from '../../../utils/apiError.js';
 
 type GmailMessage = gmail_v1.Schema$Message;
 
@@ -327,7 +328,7 @@ export class EmailService {
       throw new GmailError(
         `Failed to get thread ${threadId}`,
         'THREAD_ERROR',
-        `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Error: ${describeApiError(error)}`
       );
     }
   }
@@ -483,7 +484,7 @@ export class EmailService {
       throw new GmailError(
         'Failed to get emails',
         'FETCH_ERROR',
-        `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Error: ${describeApiError(error)}`
       );
     }
   }
@@ -561,7 +562,7 @@ export class EmailService {
       throw new GmailError(
         'Failed to send email',
         'SEND_ERROR',
-        `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Error: ${describeApiError(error)}`
       );
     }
   }

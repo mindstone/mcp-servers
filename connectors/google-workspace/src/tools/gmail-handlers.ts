@@ -1,7 +1,8 @@
 import { getGmailService } from '../modules/gmail/index.js';
 import { getAccountManager, validateEmail, resolveEmail } from '../modules/accounts/index.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { GmailError, SendEmailParams } from '../modules/gmail/types.js';
+import { toMcpError } from '../utils/apiError.js';
+import { SendEmailParams } from '../modules/gmail/types.js';
 import {
   ManageLabelParams,
   ManageLabelAssignmentParams,
@@ -566,10 +567,7 @@ export async function handleSearchWorkspaceEmails(params: SearchEmailsParams & R
       }
       return formatEmailsAsText(result);
     } catch (error) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to search emails: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to search emails');
     }
   });
 }
@@ -695,10 +693,7 @@ export async function handleGetWorkspaceEmailThread(params: GetThreadParams) {
       }
       return formatThreadAsText(result, offset, includeFullBodies);
     } catch (error) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to get thread: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to get thread');
     }
   });
 }
@@ -813,15 +808,7 @@ export async function handleSendWorkspaceEmail(params: SendEmailRequestParams & 
         structuredContent: sendResult,
       };
     } catch (error) {
-      const details = error instanceof GmailError && error.details
-        ? `${error.message}: ${error.details}`
-        : error instanceof Error
-          ? error.message
-          : 'Unknown error';
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to send email: ${details}`
-      );
+      throw toMcpError(error, 'Failed to send email');
     }
   });
 }
@@ -836,10 +823,7 @@ export async function handleGetWorkspaceGmailSettings(params: { email?: string }
     try {
       return await gmailService.getWorkspaceGmailSettings({ email });
     } catch (error) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to get Gmail settings: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to get Gmail settings');
     }
   });
 }
@@ -967,18 +951,7 @@ export async function handleManageWorkspaceDraft(params: ManageDraftParams) {
           );
       }
     } catch (error) {
-      if (error instanceof McpError) {
-        throw error;
-      }
-      const details = error instanceof GmailError && error.details
-        ? `${error.message}: ${error.details}`
-        : error instanceof Error
-          ? error.message
-          : 'Unknown error';
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to manage draft: ${details}`
-      );
+      throw toMcpError(error, 'Failed to manage draft');
     }
   });
 }
@@ -1011,10 +984,7 @@ export async function handleManageWorkspaceLabel(params: ManageLabelParams) {
         ...(Object.keys(data).length > 0 ? { data } : {}),
       });
     } catch (error) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to manage label: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to manage label');
     }
   });
 }
@@ -1043,10 +1013,7 @@ export async function handleManageWorkspaceLabelAssignment(params: ManageLabelAs
         }]
       };
     } catch (error) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to manage label assignment: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to manage label assignment');
     }
   });
 }
@@ -1198,13 +1165,7 @@ export async function handleManageWorkspaceAttachment(params: ManageAttachmentPa
           );
       }
     } catch (error) {
-      if (error instanceof McpError) {
-        throw error;
-      }
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to manage attachment: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to manage attachment');
     }
   });
 }
@@ -1231,10 +1192,7 @@ export async function handleManageWorkspaceLabelFilter(params: ManageLabelFilter
         ...(data ? { data } : {}),
       });
     } catch (error) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to manage label filter: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to manage label filter');
     }
   });
 }
@@ -1414,10 +1372,7 @@ export async function handleArchiveWorkspaceEmail(params: GmailQuickActionParams
         ? `Message ${ids[0]} archived successfully.`
         : `${ids.length} messages archived successfully.`;
     } catch (error) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to archive email: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to archive email');
     }
   });
 }
@@ -1436,10 +1391,7 @@ export async function handleTrashWorkspaceEmail(params: GmailQuickActionParams):
         ? `Message ${ids[0]} moved to trash.`
         : `${ids.length} messages moved to trash.`;
     } catch (error) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to trash email: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to trash email');
     }
   });
 }
@@ -1458,10 +1410,7 @@ export async function handleUntrashWorkspaceEmail(params: GmailQuickActionParams
         ? `Message ${ids[0]} restored from trash.`
         : `${ids.length} messages restored from trash.`;
     } catch (error) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to untrash email: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to untrash email');
     }
   });
 }
@@ -1485,10 +1434,7 @@ export async function handleMarkWorkspaceEmailRead(params: GmailQuickActionParam
         ? `Message ${ids[0]} marked as read.`
         : `${ids.length} messages marked as read.`;
     } catch (error) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to mark email as read: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to mark email as read');
     }
   });
 }
@@ -1512,10 +1458,7 @@ export async function handleMarkWorkspaceEmailUnread(params: GmailQuickActionPar
         ? `Message ${ids[0]} marked as unread.`
         : `${ids.length} messages marked as unread.`;
     } catch (error) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to mark email as unread: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to mark email as unread');
     }
   });
 }

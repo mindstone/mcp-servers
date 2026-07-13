@@ -1,6 +1,7 @@
 import { CalendarService } from '../modules/calendar/service.js';
 import { DriveService } from '../modules/drive/service.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import { toMcpError } from '../utils/apiError.js';
 import { getAccountManager, validateEmail, resolveEmail } from '../modules/accounts/index.js';
 import { CalendarError, EventResponse, CalendarListItem, EventTime } from '../modules/calendar/types.js';
 import { google } from 'googleapis';
@@ -316,11 +317,7 @@ export async function handleGetCurrentTime(params: { email?: string }) {
         upcomingDays
       };
     } catch (error) {
-      if (error instanceof McpError) throw error;
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to get current time: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to get current time');
     }
   });
 }
@@ -444,11 +441,7 @@ export async function handleFindFreeSlots(params: {
         calendars: results
       }, 'google-workspace:calendar:freebusy');
     } catch (error) {
-      if (error instanceof McpError) throw error;
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to find free slots: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to find free slots');
     }
   });
 }
@@ -467,11 +460,7 @@ export async function handleListWorkspaceCalendars(params: { email?: string }) {
       const calendars = await calendarService.listCalendars(email);
       return wrapUntrustedJsonStrings(calendars, 'google-workspace:calendar:list');
     } catch (error) {
-      if (error instanceof McpError) throw error;
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to list calendars: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to list calendars');
     }
   });
 }
@@ -571,10 +560,7 @@ export async function handleListWorkspaceCalendarEvents(params: any) {
 
       return formatEventsAsText(events, tzInfo);
     } catch (error) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to list calendar events: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to list calendar events');
     }
   });
 }
@@ -601,10 +587,7 @@ export async function handleGetWorkspaceCalendarEvent(params: any) {
         `google-workspace:calendar:event/${eventId}`
       );
     } catch (error) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to get calendar event: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to get calendar event');
     }
   });
 }
@@ -760,10 +743,7 @@ export async function handleCreateWorkspaceCalendarEvent(params: any) {
           error.details
         );
       }
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to create calendar event: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to create calendar event');
     }
   });
 }
@@ -804,10 +784,7 @@ export async function handleManageWorkspaceCalendarEvent(params: any) {
       });
       return wrapUntrustedJsonStrings(managedEvent, `google-workspace:calendar:event/${eventId}`);
     } catch (error) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to manage calendar event: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to manage calendar event');
     }
   });
 }
@@ -856,11 +833,8 @@ export async function handleDeleteWorkspaceCalendarEvent(params: any) {
           error.details
         );
       }
-      
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to delete calendar event: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+
+      throw toMcpError(error, 'Failed to delete calendar event');
     }
   });
 }

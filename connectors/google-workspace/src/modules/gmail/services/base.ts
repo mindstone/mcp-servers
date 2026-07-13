@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { BaseGoogleService } from '../../../services/base/BaseGoogleService.js';
+import { describeApiError } from '../../../utils/apiError.js';
 import {
   GetEmailsParams,
   SendEmailParams,
@@ -72,7 +73,7 @@ export class GmailService extends BaseGoogleService<ReturnType<typeof google.gma
       throw new GmailError(
         'Failed to initialize Gmail service',
         'INIT_ERROR',
-        error instanceof Error ? error.message : 'Unknown error'
+        describeApiError(error)
       );
     }
   }

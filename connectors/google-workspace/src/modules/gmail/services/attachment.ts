@@ -1,5 +1,6 @@
 import { google, gmail_v1 } from 'googleapis';
-import { 
+import { describeApiError } from '../../../utils/apiError.js';
+import {
   GmailAttachment,
   IncomingGmailAttachment,
   OutgoingGmailAttachment,
@@ -166,7 +167,7 @@ export class GmailAttachmentService {
       throw new GmailError(
         'Failed to get attachment',
         'ATTACHMENT_ERROR',
-        `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Error: ${describeApiError(error)}`
       );
     }
   }

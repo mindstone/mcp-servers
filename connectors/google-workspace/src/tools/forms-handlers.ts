@@ -2,6 +2,7 @@ import { getFormsService, FormsService } from '../modules/forms/index.js';
 import { getDriveService, DriveService } from '../modules/drive/index.js';
 import { getAccountManager, resolveEmail } from '../modules/accounts/index.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import { toMcpError } from '../utils/apiError.js';
 import { Form, FormItem, FormResponse, Question } from '../modules/forms/types.js';
 import {
   readAliasedNumber,
@@ -298,11 +299,7 @@ export async function handleListForms(params: ListFormsParams) {
 
       return wrapUntrustedContent(lines.join('\n'), 'google-workspace:forms:list');
     } catch (error) {
-      if (error instanceof McpError) throw error;
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to list forms: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to list forms');
     }
   });
 }
@@ -384,11 +381,7 @@ export async function handleGetForm(params: GetFormParams) {
 
       return wrapUntrustedContent(lines.join('\n'), `google-workspace:forms:form/${formId}`);
     } catch (error) {
-      if (error instanceof McpError) throw error;
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to get form: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to get form');
     }
   });
 }
@@ -477,11 +470,7 @@ export async function handleListFormResponses(params: ListFormResponsesParams) {
 
       return wrapUntrustedContent(lines.join('\n'), `google-workspace:forms:responses/${formId}`);
     } catch (error) {
-      if (error instanceof McpError) throw error;
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to list form responses: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to list form responses');
     }
   });
 }
@@ -566,11 +555,7 @@ export async function handleGetFormResponse(params: GetFormResponseParams) {
 
       return wrapUntrustedContent(lines.join('\n'), `google-workspace:forms:response/${responseId}`);
     } catch (error) {
-      if (error instanceof McpError) throw error;
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to get form response: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw toMcpError(error, 'Failed to get form response');
     }
   });
 }

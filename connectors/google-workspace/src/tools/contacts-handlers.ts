@@ -5,6 +5,7 @@ import {
 } from "../modules/contacts/types.js";
 import { ContactsService } from "../services/contacts/index.js";
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
+import { toMcpError } from "../utils/apiError.js";
 import { getAccountManager, resolveEmail } from "../modules/accounts/index.js";
 import {
   readAliasedBoolean,
@@ -79,12 +80,7 @@ export async function handleGetContacts(
         throw error;
       } else {
         // Catch unexpected errors
-        throw new McpError(
-          ErrorCode.InternalError,
-          `Failed to get contacts: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`
-        );
+        throw toMcpError(error, 'Failed to get contacts');
       }
     }
   });
@@ -168,10 +164,7 @@ export async function handleSearchContacts(
       } else if (error instanceof McpError) {
         throw error;
       } else {
-        throw new McpError(
-          ErrorCode.InternalError,
-          `Failed to search contacts: ${error instanceof Error ? error.message : "Unknown error"}`
-        );
+        throw toMcpError(error, 'Failed to search contacts');
       }
     }
   });

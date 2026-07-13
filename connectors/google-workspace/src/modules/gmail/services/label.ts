@@ -1,4 +1,5 @@
 import { gmail_v1 } from 'googleapis';
+import { describeApiError } from '../../../utils/apiError.js';
 import {
   Label,
   CreateLabelParams,
@@ -415,7 +416,7 @@ export class LabelService {
       throw new GmailError(
         'Failed to create label',
         'CREATE_ERROR',
-        error instanceof Error ? error.message : 'Unknown error'
+        describeApiError(error)
       );
     }
   }
@@ -437,7 +438,7 @@ export class LabelService {
       throw new GmailError(
         'Failed to fetch labels',
         'FETCH_ERROR',
-        error instanceof Error ? error.message : 'Unknown error'
+        describeApiError(error)
       );
     }
   }
@@ -507,7 +508,7 @@ export class LabelService {
       throw new GmailError(
         'Failed to update label',
         'UPDATE_ERROR',
-        error instanceof Error ? error.message : 'Unknown error'
+        describeApiError(error)
       );
     }
   }
@@ -522,7 +523,7 @@ export class LabelService {
       throw new GmailError(
         'Failed to delete label',
         'DELETE_ERROR',
-        error instanceof Error ? error.message : 'Unknown error'
+        describeApiError(error)
       );
     }
   }
@@ -541,7 +542,7 @@ export class LabelService {
       throw new GmailError(
         'Failed to modify message labels',
         'MODIFY_ERROR',
-        error instanceof Error ? error.message : 'Unknown error'
+        describeApiError(error)
       );
     }
   }
@@ -609,7 +610,7 @@ export class LabelService {
       throw new GmailError(
         'Failed to create label filter',
         'CREATE_ERROR',
-        error instanceof Error ? error.message : 'Unknown error'
+        describeApiError(error)
       );
     }
   }
@@ -662,7 +663,7 @@ export class LabelService {
       throw new GmailError(
         'Failed to get label filters',
         'FETCH_ERROR',
-        error instanceof Error ? error.message : 'Unknown error'
+        describeApiError(error)
       );
     }
   }
@@ -734,7 +735,7 @@ export class LabelService {
       throw new GmailError(
         'Failed to update label filter',
         'UPDATE_ERROR',
-        error instanceof Error ? error.message : 'Unknown error'
+        describeApiError(error)
       );
     }
   }
@@ -749,7 +750,7 @@ export class LabelService {
       throw new GmailError(
         'Failed to delete label filter',
         'DELETE_ERROR',
-        error instanceof Error ? error.message : 'Unknown error'
+        describeApiError(error)
       );
     }
   }
