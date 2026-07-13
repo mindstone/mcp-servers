@@ -4,6 +4,7 @@ import {
   describeApiError,
   extractHttpStatus,
   hasErrorDetails,
+  isAuthHandoffError,
   toMcpError,
 } from '../src/utils/apiError.js';
 
@@ -83,7 +84,7 @@ describe('toMcpError', () => {
     const domain = { message: 'Failed to update draft', code: 'UPDATE_ERROR', details: 'Requested entity was not found. (status 404)' };
     const mcp = toMcpError(domain, 'Failed to manage draft');
     expect(mcp).toBeInstanceOf(McpError);
-    expect(mcp.code).toBe(ErrorCode.InternalError);
+    expect((mcp as McpError).code).toBe(ErrorCode.InternalError);
     expect(mcp.message).toContain(
       'Failed to manage draft: Failed to update draft: Requested entity was not found. (status 404)'
     );
@@ -107,5 +108,62 @@ describe('toMcpError', () => {
     const mcp = toMcpError(transport, 'Failed to list tasks');
     expect(mcp.message).toContain('Failed to list tasks: Boom (status 500)');
     expect(mcp.message).not.toContain('internal quota state');
+  });
+
+  it('passes an auth-handoff domain error through UNCHANGED so the auth code survives', () => {
+    // An expired-token AccountError/CalendarError must reach formatErrorResponse as itself, not
+    // wrapped into McpError(InternalError) — otherwise the `auth_required` reconnect handoff
+    // (keyed on the domain error's string `code`) is lost. Regression guard for the mid-action
+    // auth-expiry bug.
+    const authError = Object.assign(new Error('Authentication required'), {
+      code: 'AUTH_REQUIRED',
+      resolution: 'Reconnect your Google account',
+    });
+    const result = toMcpError(authError, 'Failed to create calendar event');
+    expect(result).toBe(authError);
+    expect(result).not.toBeInstanceOf(McpError);
+    expect((result as { code: string }).code).toBe('AUTH_REQUIRED');
+  });
+
+  it('passes a HOST_ORCHESTRATED_AUTH_REQUIRED error through unchanged', () => {
+    const authError = Object.assign(new Error('Sign-in needed'), { code: 'HOST_ORCHESTRATED_AUTH_REQUIRED' });
+    expect(toMcpError(authError, 'Failed to send email')).toBe(authError);
+  });
+
+  it('still wraps a NON-auth domain error into McpError (no false pass-through)', () => {
+    const permError = Object.assign(new Error('Insufficient permissions'), {
+      code: 'PERMISSION_DENIED',
+      details: 'The caller does not have permission',
+    });
+    const mcp = toMcpError(permError, 'Failed to create calendar event');
+    expect(mcp).toBeInstanceOf(McpError);
+    expect((mcp as McpError).code).toBe(ErrorCode.InternalError);
+    expect(mcp.message).toContain('Failed to create calendar event: Insufficient permissions: The caller does not have permission');
+  });
+
+  it('does not pass a non-Error auth-shaped value through (must be a real Error to throw safely)', () => {
+    // A plain object with an auth code is NOT passed through — toMcpError must always return a
+    // throwable Error. It falls through to the describeApiError wrap instead.
+    const mcp = toMcpError({ code: 'AUTH_REQUIRED', message: 'x' }, 'Failed to get contacts');
+    expect(mcp).toBeInstanceOf(McpError);
+  });
+});
+
+describe('isAuthHandoffError', () => {
+  it('recognizes the two auth-handoff codes', () => {
+    expect(isAuthHandoffError({ code: 'AUTH_REQUIRED' })).toBe(true);
+    expect(isAuthHandoffError({ code: 'HOST_ORCHESTRATED_AUTH_REQUIRED' })).toBe(true);
+  });
+
+  it('rejects non-auth codes and non-string codes', () => {
+    expect(isAuthHandoffError({ code: 'PERMISSION_DENIED' })).toBe(false);
+    expect(isAuthHandoffError({ code: 401 })).toBe(false);
+    expect(isAuthHandoffError({ message: 'no code' })).toBe(false);
+  });
+
+  it('rejects non-objects', () => {
+    expect(isAuthHandoffError('AUTH_REQUIRED')).toBe(false);
+    expect(isAuthHandoffError(null)).toBe(false);
+    expect(isAuthHandoffError(undefined)).toBe(false);
   });
 });

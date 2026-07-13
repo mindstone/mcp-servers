@@ -49,15 +49,41 @@ export function hasErrorDetails(error: unknown): error is { message: string; cod
 }
 
 /**
- * Normalizes any thrown value into an McpError for a tool handler's outer
- * catch. An McpError (e.g. an InvalidParams validation failure raised earlier
- * in the handler) is passed through unchanged so its code and message survive;
- * a domain error surfaces its `details`; anything else is described with its
- * HTTP status. Prevents the "Failed to X" opaque-error class where the real
- * cause was silently dropped.
+ * Auth-handoff error codes: a domain error (AccountError / CalendarError / …)
+ * carrying one of these codes must NOT be wrapped into a generic McpError —
+ * `server.ts` `formatErrorResponse` keys the structured `auth_required`
+ * reconnect handoff on the raw domain error's string `code`. Kept as a
+ * structural check (no class import) so it works uniformly across every domain
+ * error type without coupling this util to the accounts/calendar/gmail modules.
  */
-export function toMcpError(error: unknown, fallbackContext: string): McpError {
+const AUTH_HANDOFF_CODES = new Set(['AUTH_REQUIRED', 'HOST_ORCHESTRATED_AUTH_REQUIRED']);
+
+/**
+ * True when `error` is a thrown value that signals the account needs
+ * (re)authentication — i.e. it exposes a string `code` in {@link AUTH_HANDOFF_CODES}.
+ */
+export function isAuthHandoffError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' && AUTH_HANDOFF_CODES.has(code);
+}
+
+/**
+ * Normalizes any thrown value into an error suitable for a tool handler's outer
+ * catch. An McpError (e.g. an InvalidParams validation failure raised earlier
+ * in the handler) is passed through unchanged so its code and message survive.
+ * An **auth-handoff domain error** (code `AUTH_REQUIRED` /
+ * `HOST_ORCHESTRATED_AUTH_REQUIRED`) is ALSO passed through unchanged: wrapping
+ * it into `McpError(InternalError)` would erase the domain `code` that
+ * `formatErrorResponse` reads to emit the `auth_required` reconnect handoff,
+ * silently degrading an expired-token failure to a generic "Failed to …"
+ * message. Any other domain error surfaces its `details`; anything else is
+ * described with its HTTP status. Prevents the "Failed to X" opaque-error class
+ * where the real cause was silently dropped.
+ */
+export function toMcpError(error: unknown, fallbackContext: string): Error {
   if (error instanceof McpError) return error;
+  if (isAuthHandoffError(error) && error instanceof Error) return error;
   const detail = hasErrorDetails(error) && error.details
     ? `${error.message}: ${error.details}`
     : describeApiError(error);

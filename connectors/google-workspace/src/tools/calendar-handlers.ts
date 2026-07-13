@@ -737,9 +737,10 @@ export async function handleCreateWorkspaceCalendarEvent(params: any) {
     } catch (error) {
       // CalendarError here is operational (auth/permission/API failure), not caller-arg
       // validation — genuine bad args are rejected by the explicit pre-checks above.
-      // Route it through toMcpError so the real cause reaches the user (InternalError +
-      // detail-in-message). An InvalidParams code would be re-labelled ARG_VALIDATION_FAILED
-      // by the host and shown as generic "needs more from you" copy, hiding the cause.
+      // Route it through toMcpError so the real cause reaches the user: server.ts's
+      // formatErrorResponse folds the thrown error's message into `action_required`. (An
+      // auth CalendarError/AccountError is passed through unchanged so formatErrorResponse can
+      // emit its structured `auth_required` reconnect handoff.)
       throw toMcpError(error, 'Failed to create calendar event');
     }
   });

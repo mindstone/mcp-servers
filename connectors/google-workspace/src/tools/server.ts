@@ -992,7 +992,15 @@ export class GSuiteServer {
 
   private formatErrorResponse(error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error occurred';
-    const code = error instanceof AccountError ? error.code : undefined;
+    // Read the string domain-error `code` from ANY domain error, not just AccountError:
+    // CalendarError/GmailError/ContactsError all expose a string `code`, and a
+    // `getCalendarClient` auth failure surfaces as `CalendarError('AUTH_REQUIRED')`, not an
+    // AccountError. Keying only on `instanceof AccountError` silently dropped those into the
+    // generic branch below and skipped the `auth_required` reconnect handoff. McpError's numeric
+    // `code` is naturally excluded by the `typeof … === 'string'` guard (its code never matches
+    // the string auth codes checked below).
+    const rawCode = (error as { code?: unknown } | null)?.code;
+    const code = typeof rawCode === 'string' ? rawCode : undefined;
     const status = typeof error === 'object' && error !== null
       ? (error as { response?: { status?: unknown }; status?: unknown; code?: unknown }).response?.status
         ?? (error as { response?: { status?: unknown }; status?: unknown; code?: unknown }).status
