@@ -1,6 +1,7 @@
 import { docsService } from '../../services/docs/index.js';
 import { DocsService } from './service.js';
 import { DocsOperationResult } from './types.js';
+import { describeApiError } from '../../utils/apiError.js';
 
 // Export types and service
 export * from './types.js';
@@ -22,6 +23,6 @@ export async function initializeDocsModule(): Promise<void> {
 export function handleDocsError(error: unknown): DocsOperationResult {
   return {
     success: false,
-    error: error instanceof Error ? error.message : 'Unknown error occurred',
+    error: describeApiError(error),
   };
 }

@@ -3,7 +3,7 @@ import { DriveService } from '../modules/drive/service.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { toMcpError } from '../utils/apiError.js';
 import { getAccountManager, validateEmail, resolveEmail } from '../modules/accounts/index.js';
-import { CalendarError, EventResponse, CalendarListItem, EventTime } from '../modules/calendar/types.js';
+import { EventResponse, CalendarListItem, EventTime } from '../modules/calendar/types.js';
 import { google } from 'googleapis';
 import { wrapUntrustedContent, wrapUntrustedJsonStrings } from '../utils/untrusted-content.js';
 
@@ -735,14 +735,11 @@ export async function handleCreateWorkspaceCalendarEvent(params: any) {
       });
       return wrapUntrustedJsonStrings(createdEvent, 'google-workspace:calendar:event/create');
     } catch (error) {
-      // Check if this is a CalendarError with a specific code (e.g., PERMISSION_DENIED)
-      if (error instanceof CalendarError) {
-        throw new McpError(
-          ErrorCode.InvalidParams,
-          error.message,
-          error.details
-        );
-      }
+      // CalendarError here is operational (auth/permission/API failure), not caller-arg
+      // validation — genuine bad args are rejected by the explicit pre-checks above.
+      // Route it through toMcpError so the real cause reaches the user (InternalError +
+      // detail-in-message). An InvalidParams code would be re-labelled ARG_VALIDATION_FAILED
+      // by the host and shown as generic "needs more from you" copy, hiding the cause.
       throw toMcpError(error, 'Failed to create calendar event');
     }
   });
@@ -825,15 +822,9 @@ export async function handleDeleteWorkspaceCalendarEvent(params: any) {
           'Event deleted completely'
       };
     } catch (error) {
-      // Check if this is a CalendarError with a specific code
-      if (error instanceof CalendarError) {
-        throw new McpError(
-          ErrorCode.InvalidParams,
-          error.message,
-          error.details
-        );
-      }
-
+      // CalendarError here is operational (auth/permission/API failure), not caller-arg
+      // validation — genuine bad args are rejected by the explicit pre-checks above.
+      // Route it through toMcpError so the real cause reaches the user (see create-event).
       throw toMcpError(error, 'Failed to delete calendar event');
     }
   });

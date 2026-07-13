@@ -13,6 +13,7 @@ import {
   TabInfo,
 } from './types.js';
 import { DOCS_SCOPES } from './scopes.js';
+import { describeApiError } from '../../utils/apiError.js';
 
 const DEFAULT_MAX_CHARS = 50000;
 const TRUNCATION_MARKER = '\n\n[TRUNCATED - document exceeds character limit]';
@@ -166,7 +167,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: describeApiError(error),
       };
     }
   }
@@ -232,7 +233,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: describeApiError(error),
       };
     }
   }
@@ -288,7 +289,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: describeApiError(error),
       };
     }
   }
@@ -358,7 +359,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: describeApiError(error),
       };
     }
   }
@@ -421,7 +422,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: describeApiError(error),
       };
     }
   }
@@ -464,7 +465,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: describeApiError(error),
       };
     }
   }
@@ -518,7 +519,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: describeApiError(error),
       };
     }
   }

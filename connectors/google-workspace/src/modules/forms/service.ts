@@ -1,5 +1,6 @@
 import { google, forms_v1 } from 'googleapis';
 import { BaseGoogleService } from '../../services/base/BaseGoogleService.js';
+import { describeApiError } from '../../utils/apiError.js';
 import { FORMS_SCOPES } from './scopes.js';
 import {
   Form,
@@ -169,7 +170,7 @@ export class FormsService extends BaseGoogleService<forms_v1.Forms> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
+        error: describeApiError(error)
       };
     }
   }
@@ -248,7 +249,7 @@ export class FormsService extends BaseGoogleService<forms_v1.Forms> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
+        error: describeApiError(error)
       };
     }
   }
@@ -322,7 +323,7 @@ export class FormsService extends BaseGoogleService<forms_v1.Forms> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
+        error: describeApiError(error)
       };
     }
   }

@@ -1,5 +1,6 @@
 import { google, tasks_v1 } from 'googleapis';
 import { BaseGoogleService } from '../../services/base/BaseGoogleService.js';
+import { describeApiError } from '../../utils/apiError.js';
 import { TASKS_SCOPES } from './scopes.js';
 import {
   TaskList,
@@ -103,7 +104,7 @@ export class TasksService extends BaseGoogleService<tasks_v1.Tasks> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
+        error: describeApiError(error)
       };
     }
   }
@@ -174,7 +175,7 @@ export class TasksService extends BaseGoogleService<tasks_v1.Tasks> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
+        error: describeApiError(error)
       };
     }
   }
@@ -234,7 +235,7 @@ export class TasksService extends BaseGoogleService<tasks_v1.Tasks> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
+        error: describeApiError(error)
       };
     }
   }
@@ -286,7 +287,7 @@ export class TasksService extends BaseGoogleService<tasks_v1.Tasks> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
+        error: describeApiError(error)
       };
     }
   }
@@ -355,7 +356,7 @@ export class TasksService extends BaseGoogleService<tasks_v1.Tasks> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
+        error: describeApiError(error)
       };
     }
   }
@@ -392,7 +393,7 @@ export class TasksService extends BaseGoogleService<tasks_v1.Tasks> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
+        error: describeApiError(error)
       };
     }
   }

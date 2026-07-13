@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { BaseGoogleService } from '../../services/base/BaseGoogleService.js';
+import { describeApiError } from '../../utils/apiError.js';
 import { DRIVE_SCOPES } from '../drive/scopes.js';
 import {
   CommentsOperationResult,
@@ -131,7 +132,7 @@ export class CommentsService extends BaseGoogleService<ReturnType<typeof google.
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: describeApiError(error),
       };
     }
   }
@@ -180,7 +181,7 @@ export class CommentsService extends BaseGoogleService<ReturnType<typeof google.
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: describeApiError(error),
       };
     }
   }
@@ -218,7 +219,7 @@ export class CommentsService extends BaseGoogleService<ReturnType<typeof google.
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: describeApiError(error),
       };
     }
   }
@@ -255,7 +256,7 @@ export class CommentsService extends BaseGoogleService<ReturnType<typeof google.
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: describeApiError(error),
       };
     }
   }
@@ -287,7 +288,7 @@ export class CommentsService extends BaseGoogleService<ReturnType<typeof google.
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: describeApiError(error),
       };
     }
   }

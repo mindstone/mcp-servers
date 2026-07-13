@@ -11,6 +11,7 @@ import {
   SlideInfo,
 } from './types.js';
 import { SLIDES_SCOPES } from './scopes.js';
+import { describeApiError } from '../../utils/apiError.js';
 
 const DEFAULT_MAX_CHARS = 50000;
 const TRUNCATION_MARKER = '\n\n[TRUNCATED - presentation exceeds character limit]';
@@ -257,7 +258,7 @@ export class SlidesService extends BaseGoogleService<slides_v1.Slides> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: describeApiError(error),
       };
     }
   }
@@ -306,7 +307,7 @@ export class SlidesService extends BaseGoogleService<slides_v1.Slides> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: describeApiError(error),
       };
     }
   }
@@ -342,7 +343,7 @@ export class SlidesService extends BaseGoogleService<slides_v1.Slides> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: describeApiError(error),
       };
     }
   }
@@ -406,7 +407,7 @@ export class SlidesService extends BaseGoogleService<slides_v1.Slides> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: describeApiError(error),
       };
     }
   }
@@ -449,7 +450,7 @@ export class SlidesService extends BaseGoogleService<slides_v1.Slides> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: describeApiError(error),
       };
     }
   }
@@ -494,7 +495,7 @@ export class SlidesService extends BaseGoogleService<slides_v1.Slides> {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: describeApiError(error),
       };
     }
   }

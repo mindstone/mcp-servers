@@ -1,7 +1,6 @@
 import {
   GetContactsParams,
-  GetContactsResponse,
-  ContactsError
+  GetContactsResponse
 } from "../modules/contacts/types.js";
 import { ContactsService } from "../services/contacts/index.js";
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
@@ -68,20 +67,10 @@ export async function handleGetContacts(
       });
       return wrapUntrustedJsonStrings(result, 'google-workspace:contacts:list');
     } catch (error) {
-      if (error instanceof ContactsError) {
-        // Map ContactsError to McpError
-        throw new McpError(
-          ErrorCode.InternalError, // Or map specific error codes
-          `Contacts API Error: ${error.message}`,
-          { code: error.code, details: error.details }
-        );
-      } else if (error instanceof McpError) {
-        // Re-throw existing McpErrors (like auth errors from token renewal)
-        throw error;
-      } else {
-        // Catch unexpected errors
-        throw toMcpError(error, 'Failed to get contacts');
-      }
+      // toMcpError passes an McpError through, and folds a ContactsError's details into
+      // the message (InternalError) so the real cause reaches the user — the host drops
+      // an McpError's `data` arg, so details-as-data (the old shape) were invisible.
+      throw toMcpError(error, 'Failed to get contacts');
     }
   });
 }
@@ -155,17 +144,9 @@ export async function handleSearchContacts(
       }
       return formatContactsAsText(result.results, result.totalResults);
     } catch (error) {
-      if (error instanceof ContactsError) {
-        throw new McpError(
-          ErrorCode.InternalError,
-          `Contacts search error: ${error.message}`,
-          { code: error.code, details: error.details }
-        );
-      } else if (error instanceof McpError) {
-        throw error;
-      } else {
-        throw toMcpError(error, 'Failed to search contacts');
-      }
+      // See handleGetContacts: toMcpError surfaces the real cause (details folded into
+      // the message) and passes an McpError through unchanged.
+      throw toMcpError(error, 'Failed to search contacts');
     }
   });
 }

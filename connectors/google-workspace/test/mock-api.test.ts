@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
+import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import manifest from './request-manifest.json';
 import { mswServer } from './fixtures/setup.js';
 
@@ -399,6 +400,41 @@ describe('Google Workspace mock API happy paths', () => {
       end: { dateTime: '2026-05-19T14:05:00Z' },
     });
     expect(JSON.stringify(created)).toContain('created-event-1');
+  });
+
+  it('surfaces operational Calendar/Contacts failures as InternalError with the real cause (not InvalidParams)', async () => {
+    // Regression guard for the error-opacity follow-up: an operational Google API failure
+    // must reach the user via toMcpError (InternalError + real message), NOT be re-thrown as
+    // InvalidParams — which the Rebel host re-labels ARG_VALIDATION_FAILED and hides behind
+    // generic "needs a bit more from you" copy. See docs/plans/260713_gws-error-opacity-followups.
+    installHappyPathGoogleApiMocks();
+    mswServer.use(
+      http.post('https://www.googleapis.com/calendar/v3/calendars/primary/events', () =>
+        HttpResponse.json({ error: { code: 500, message: 'Backend Error' } }, { status: 500 })),
+      http.get('https://people.googleapis.com/v1/people/me/connections', () =>
+        HttpResponse.json({ error: { code: 500, message: 'Backend Error' } }, { status: 500 })),
+    );
+    const handlers = await loadHandlers();
+
+    const createEvent = handlers.handleCreateWorkspaceCalendarEvent({
+      calendar_id: 'primary',
+      summary: 'Doomed event',
+      start: { dateTime: '2026-05-19T14:00:00Z' },
+      end: { dateTime: '2026-05-19T14:05:00Z' },
+    });
+    await expect(createEvent).rejects.toBeInstanceOf(McpError);
+    await createEvent.catch((err: McpError) => {
+      expect(err.code).toBe(ErrorCode.InternalError);
+      expect(err.code).not.toBe(ErrorCode.InvalidParams);
+      expect(err.message).toContain('Failed to create calendar event');
+    });
+
+    const getContacts = handlers.handleGetContacts({ person_fields: 'names,emailAddresses', page_size: 5 });
+    await expect(getContacts).rejects.toBeInstanceOf(McpError);
+    await getContacts.catch((err: McpError) => {
+      expect(err.code).toBe(ErrorCode.InternalError);
+      expect(err.message).toContain('Failed to get contacts');
+    });
   });
 
   it('covers Drive read and write tools', async () => {
