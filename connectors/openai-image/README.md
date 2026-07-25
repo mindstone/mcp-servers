@@ -9,7 +9,7 @@ OpenAI image generation MCP server — text-to-image and image edits via OpenAI'
 
 ## Status
 
-- **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-openai-image)
+- **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-openai-image)
 - **Auth:** API key ([`OPENAI_API_KEY`](./server.json))
 - **Tools:** [2](./src/index.ts) (image generation, image editing)
 - **Surface:** cloud-api

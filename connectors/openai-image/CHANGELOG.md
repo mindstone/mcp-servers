@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-25
+
+### Changed
+
+- Workspace fence now accepts declared-Space symlink roots (matches the built-in file tools' read/write posture); request timeout retuned 90s to 180s for high-quality generation
+
 ### Security
 
 - **Declared-Space symlink roots for the workspace fence.** `edit_image` and `generate_image` now read (and write generated images) through in-workspace symlinks whose canonical targets land inside `MCP_WORKSPACE_PATH` **or** one of the host-supplied declared-Space roots in the new `MCP_ALLOWED_SYMLINK_ROOTS` env var — the same roots the host's built-in `Read`/`Write`/`Edit` tools already trust. This fixes the reported defect where the connector's own generated-image output dir (a symlink into a cloud-synced Space) was unreadable by `edit_image`, making 18/18 `edit_image` calls fail. The fence now matches the built-ins' posture: a lexical workspace pre-gate (`path.relative`), then per-call canonical containment with fail-soft skip of an uncanonicalisable root. The previous `startsWith` containment and the cached `workspaceRealPathPromise` snapshot are removed. Invariant #5 in `mcp-servers/AGENTS.md` is amended to record this openai-image-only exception.
