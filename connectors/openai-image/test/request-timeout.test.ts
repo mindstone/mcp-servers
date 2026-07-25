@@ -7,10 +7,10 @@ afterEach(() => {
 });
 
 describe('request timeout configuration', () => {
-  it('defaults to 90000ms when no override is set', async () => {
+  it('defaults to the calibrated 180000ms when no override is set', async () => {
     const connector = await importConnectorModule();
-    expect(connector.OPENAI_IMAGE_REQUEST_TIMEOUT_MS).toBe(90_000);
-    expect(connector.DEFAULT_OPENAI_IMAGE_REQUEST_TIMEOUT_MS).toBe(90_000);
+    expect(connector.OPENAI_IMAGE_REQUEST_TIMEOUT_MS).toBe(180_000);
+    expect(connector.DEFAULT_OPENAI_IMAGE_REQUEST_TIMEOUT_MS).toBe(180_000);
   });
 
   it('accepts valid OPENAI_IMAGE_REQUEST_TIMEOUT_MS overrides', async () => {
@@ -26,7 +26,7 @@ describe('request timeout configuration', () => {
       OPENAI_IMAGE_REQUEST_TIMEOUT_MS: 'foo',
     });
 
-    expect(connector.OPENAI_IMAGE_REQUEST_TIMEOUT_MS).toBe(90_000);
+    expect(connector.OPENAI_IMAGE_REQUEST_TIMEOUT_MS).toBe(180_000);
     expect(warnSpy).toHaveBeenCalled();
   });
 });

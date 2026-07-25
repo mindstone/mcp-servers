@@ -16,7 +16,7 @@ const require = createRequire(import.meta.url);
 const packageJson = require('../package.json') as { version: string };
 
 export const SERVER_VERSION = packageJson.version;
-export const DEFAULT_OPENAI_IMAGE_REQUEST_TIMEOUT_MS = 90_000;
+export const DEFAULT_OPENAI_IMAGE_REQUEST_TIMEOUT_MS = 180_000;
 export const NOT_CONFIGURED_RESOLUTION =
   "Set OPENAI_API_KEY in your MCP host's settings.";
 const MAX_LOCAL_IMAGE_BYTES = 25 * 1024 * 1024;
@@ -97,6 +97,13 @@ export class OpenAIImageToolError extends Error {
   }
 }
 
+class WorkspaceFenceToolError extends OpenAIImageToolError {
+  constructor(message: string, resolution: string) {
+    super('WORKSPACE_FENCE_VIOLATION', message, resolution);
+    this.name = 'WorkspaceFenceToolError';
+  }
+}
+
 const modelSupportsModeration = (model: string): boolean =>
   model.startsWith('gpt-image-2');
 
@@ -105,6 +112,60 @@ export const configuredModel = (): string =>
 
 export const configuredWorkspacePath = (): string | undefined =>
   process.env.MCP_WORKSPACE_PATH?.trim() || undefined;
+
+const parseAllowedSymlinkRoots = (rawValue: string): string[] => {
+  if (!rawValue) {
+    return [];
+  }
+
+  let parsedValue: unknown;
+  try {
+    parsedValue = JSON.parse(rawValue);
+  } catch {
+    logger.warn(
+      '[openai-image] Invalid MCP_ALLOWED_SYMLINK_ROOTS; using workspace-only mode.',
+      { reason: 'invalid-json' },
+    );
+    return [];
+  }
+
+  if (
+    !Array.isArray(parsedValue) ||
+    !parsedValue.every(
+      (entry): entry is string =>
+        typeof entry === 'string' &&
+        entry.trim().length > 0 &&
+        path.isAbsolute(entry),
+    )
+  ) {
+    logger.warn(
+      '[openai-image] Invalid MCP_ALLOWED_SYMLINK_ROOTS; using workspace-only mode.',
+      { reason: 'expected-absolute-path-array' },
+    );
+    return [];
+  }
+
+  return parsedValue;
+};
+
+// The parsed roots are a module-load snapshot: the env is read once per spawn
+// (parallel to WORKSPACE_PATH). Cache the parsed result keyed by the raw env
+// string so repeated calls within a single process do not re-emit the
+// malformed-env warning — the snapshot is stable for a given env value.
+let allowedSymlinkRootsCache: { rawEnv: string; roots: string[] } | undefined;
+
+export const configuredAllowedSymlinkRoots = (): string[] => {
+  const rawEnv = process.env.MCP_ALLOWED_SYMLINK_ROOTS?.trim() ?? '';
+  if (allowedSymlinkRootsCache && allowedSymlinkRootsCache.rawEnv === rawEnv) {
+    return allowedSymlinkRootsCache.roots;
+  }
+  const roots = parseAllowedSymlinkRoots(rawEnv);
+  allowedSymlinkRootsCache = { rawEnv, roots };
+  return roots;
+};
+
+const WORKSPACE_PATH = configuredWorkspacePath();
+const ALLOWED_SYMLINK_ROOTS = configuredAllowedSymlinkRoots();
 
 export const configuredApiKey = (): string | undefined => {
   const raw = process.env.OPENAI_API_KEY;
@@ -157,6 +218,15 @@ const sanitizeUserFacingText = (value: string): string => {
 };
 
 const toErrorPayload = (error: unknown): ToolErrorPayload => {
+  if (error instanceof WorkspaceFenceToolError) {
+    return {
+      ok: false,
+      code: error.code,
+      error: error.message,
+      resolution: error.resolution,
+    };
+  }
+
   if (error instanceof OpenAIImageToolError) {
     return {
       ok: false,
@@ -378,7 +448,7 @@ export const resetFallbackDirectoryCacheForTests = (): void => {
 };
 
 const getImageSaveDir = async (): Promise<string> => {
-  const workspacePath = configuredWorkspacePath();
+  const workspacePath = WORKSPACE_PATH;
   if (workspacePath) {
     const chiefOfStaff = findChiefOfStaffFolder(workspacePath);
     if (chiefOfStaff) {
@@ -436,6 +506,7 @@ export const saveImageToDisk = async (
   index: number,
   count: number,
 ): Promise<string> => {
+  await ensureOutputDirectoryIsAllowed(saveDir);
   await fs.promises.mkdir(saveDir, { recursive: true });
   const buffer = validateBase64ImageData(b64);
 
@@ -495,6 +566,9 @@ const getWorkspacePathResolutionError = (
   if (code === 'ENOENT') {
     return `Workspace path is unavailable: ${workspacePath}. Open or create a workspace first.`;
   }
+  if (code === 'ELOOP') {
+    return `Workspace path contains a symbolic link loop: ${workspacePath}. Choose a working workspace path and try again.`;
+  }
   return `Failed to access workspace path: ${workspacePath} — ${getErrorMessage(error)}`;
 };
 
@@ -510,17 +584,149 @@ const getLocalImageReadError = (
   if (code === 'EACCES' || code === 'EPERM') {
     return `${imageLabel} permission denied: ${inputPath}`;
   }
+  if (code === 'ELOOP') {
+    return `${imageLabel} path contains a symbolic link loop: ${inputPath}`;
+  }
   return `Failed to read ${imageLabel.toLowerCase()}: ${inputPath} — ${getErrorMessage(error)}`;
 };
 
-let workspaceRealPathPromise: Promise<string> | null = null;
-const WORKSPACE_PATH = configuredWorkspacePath();
+const isInsideZone = (realPath: string, zoneRoot: string): boolean => {
+  const relativePath = path.relative(zoneRoot, realPath);
+  return (
+    relativePath === '' ||
+    (!relativePath.startsWith('..') && !path.isAbsolute(relativePath))
+  );
+};
+
+const isLexicallyInsideWorkspace = (
+  resolvedPath: string,
+  workspacePath: string,
+): boolean => isInsideZone(resolvedPath, path.resolve(workspacePath));
+
+const isInsideConfiguredCanonicalZone = async (
+  targetRealPath: string,
+  workspaceRealPath: string,
+): Promise<boolean> => {
+  if (isInsideZone(targetRealPath, workspaceRealPath)) {
+    return true;
+  }
+
+  for (const [rootIndex, configuredRoot] of ALLOWED_SYMLINK_ROOTS.entries()) {
+    try {
+      const canonicalRoot = await fs.promises.realpath(configuredRoot);
+      if (isInsideZone(targetRealPath, canonicalRoot)) {
+        return true;
+      }
+    } catch (error) {
+      // A root that cannot be identified cannot authorise a path; other roots
+      // remain usable, matching the host file tools' fail-soft root handling.
+      logger.warn(
+        '[openai-image] Skipping an unavailable allowed symlink root.',
+        { rootIndex, code: getErrorCode(error) ?? 'UNKNOWN' },
+      );
+    }
+  }
+
+  return false;
+};
+
+const formatWorkspaceContainmentError = (
+  subject: string,
+  inputPath: string,
+  workspacePath: string,
+  reason: 'outside' | 'unverifiable' = 'outside',
+): WorkspaceFenceToolError => {
+  const message =
+    reason === 'outside'
+      ? `${subject} is outside your workspace and folders linked as Spaces. Path: ${inputPath}. Workspace: ${workspacePath}.`
+      : `${subject} could not be verified safely. Path: ${inputPath}. Workspace: ${workspacePath}.`;
+  return new WorkspaceFenceToolError(
+    message,
+    'Move or copy the file into your workspace or a folder linked as a Space, then try again.',
+  );
+};
+
+const canonicalizeDeepestExistingAncestor = async (
+  targetPath: string,
+): Promise<string> => {
+  let candidatePath = path.resolve(targetPath);
+  const missingSegments: string[] = [];
+
+  while (true) {
+    try {
+      const canonicalAncestor = await fs.promises.realpath(candidatePath);
+      return path.resolve(canonicalAncestor, ...missingSegments);
+    } catch (error) {
+      if (getErrorCode(error) !== 'ENOENT') {
+        throw error;
+      }
+
+      const parentPath = path.dirname(candidatePath);
+      if (parentPath === candidatePath) {
+        throw error;
+      }
+      missingSegments.unshift(path.basename(candidatePath));
+      candidatePath = parentPath;
+    }
+  }
+};
+
+const ensureOutputDirectoryIsAllowed = async (
+  saveDir: string,
+): Promise<void> => {
+  const workspacePath = WORKSPACE_PATH;
+  if (!workspacePath) {
+    return;
+  }
+
+  const resolvedSaveDir = path.resolve(saveDir);
+  if (!isLexicallyInsideWorkspace(resolvedSaveDir, workspacePath)) {
+    throw formatWorkspaceContainmentError(
+      'Generated image folder',
+      saveDir,
+      workspacePath,
+    );
+  }
+
+  let workspaceRealPath: string;
+  let prospectiveRealPath: string;
+  try {
+    [workspaceRealPath, prospectiveRealPath] = await Promise.all([
+      fs.promises.realpath(workspacePath),
+      canonicalizeDeepestExistingAncestor(resolvedSaveDir),
+    ]);
+  } catch {
+    throw formatWorkspaceContainmentError(
+      'Generated image folder',
+      saveDir,
+      workspacePath,
+      'unverifiable',
+    );
+  }
+
+  if (
+    !(await isInsideConfiguredCanonicalZone(
+      prospectiveRealPath,
+      workspaceRealPath,
+    ))
+  ) {
+    throw formatWorkspaceContainmentError(
+      'Generated image folder',
+      saveDir,
+      workspacePath,
+    );
+  }
+};
 
 export const resolveWorkspaceScopedImagePath = async (
   inputPath: string,
   imageLabel: string,
 ): Promise<
-  { resolvedPath: string; realPath: string } | { errorText: string }
+  | { resolvedPath: string; realPath: string }
+  | {
+      errorText: string;
+      safeFenceResolution?: string;
+    }
 > => {
   const workspaceBase = WORKSPACE_PATH;
   if (!workspaceBase) {
@@ -531,17 +737,25 @@ export const resolveWorkspaceScopedImagePath = async (
   }
 
   const resolvedPath = path.isAbsolute(inputPath)
-    ? inputPath
+    ? path.resolve(inputPath)
     : path.resolve(workspaceBase, inputPath);
+
+  if (!isLexicallyInsideWorkspace(resolvedPath, workspaceBase)) {
+    const fenceError = formatWorkspaceContainmentError(
+      imageLabel,
+      inputPath,
+      workspaceBase,
+    );
+    return {
+      errorText: fenceError.message,
+      safeFenceResolution: fenceError.resolution,
+    };
+  }
 
   let workspaceReal: string;
   try {
-    if (!workspaceRealPathPromise) {
-      workspaceRealPathPromise = fs.promises.realpath(workspaceBase);
-    }
-    workspaceReal = await workspaceRealPathPromise;
+    workspaceReal = await fs.promises.realpath(workspaceBase);
   } catch (error) {
-    workspaceRealPathPromise = null;
     return { errorText: getWorkspacePathResolutionError(workspaceBase, error) };
   }
 
@@ -552,15 +766,15 @@ export const resolveWorkspaceScopedImagePath = async (
     return { errorText: getLocalImageReadError(imageLabel, inputPath, error) };
   }
 
-  const normalizedWorkspace = workspaceReal.endsWith(path.sep)
-    ? workspaceReal
-    : `${workspaceReal}${path.sep}`;
-  const isInsideWorkspace =
-    targetReal === workspaceReal || targetReal.startsWith(normalizedWorkspace);
-
-  if (!isInsideWorkspace) {
+  if (!(await isInsideConfiguredCanonicalZone(targetReal, workspaceReal))) {
+    const fenceError = formatWorkspaceContainmentError(
+      imageLabel,
+      inputPath,
+      workspaceBase,
+    );
     return {
-      errorText: `${imageLabel} is outside your workspace: ${inputPath}. Move or drag the file into your workspace first, then try again.`,
+      errorText: fenceError.message,
+      safeFenceResolution: fenceError.resolution,
     };
   }
 
@@ -582,7 +796,14 @@ export const getSupportedImageMime = (filePath: string): string | null => {
   }
 };
 
-const workspaceFenceError = (rawErrorText: string): OpenAIImageToolError => {
+const workspaceFenceError = (
+  rawErrorText: string,
+  safeFenceResolution?: string,
+): OpenAIImageToolError => {
+  if (safeFenceResolution) {
+    return new WorkspaceFenceToolError(rawErrorText, safeFenceResolution);
+  }
+
   const sanitized = sanitizeUserFacingText(rawErrorText);
   const suffix = sanitized.toLowerCase().includes('outside your workspace')
     ? 'Move or copy the file into your workspace and try again.'
@@ -604,7 +825,10 @@ const loadLocalEditImage = async (
     imageLabel,
   );
   if ('errorText' in resolvedPathResult) {
-    throw workspaceFenceError(resolvedPathResult.errorText);
+    throw workspaceFenceError(
+      resolvedPathResult.errorText,
+      resolvedPathResult.safeFenceResolution,
+    );
   }
 
   const { resolvedPath, realPath } = resolvedPathResult;
@@ -749,7 +973,7 @@ const networkOrTimeoutError = (controller: FetchAbortController): OpenAIImageToo
     return new OpenAIImageToolError(
       'TIMEOUT',
       `OpenAI image API request exceeded the ${Math.round(OPENAI_IMAGE_REQUEST_TIMEOUT_MS / 1000)}s timeout.`,
-      'Try a smaller batch or simpler prompt, or raise OPENAI_IMAGE_REQUEST_TIMEOUT_MS in your MCP host config.',
+      "Retry once. For a faster draft, retry with quality: 'medium'.",
     );
   }
   return new OpenAIImageToolError(
@@ -840,7 +1064,9 @@ const generateImageSchema = z.object({
   quality: z
     .enum(['low', 'medium', 'high', 'auto'])
     .optional()
-    .describe('Image quality level (defaults to high)'),
+    .describe(
+      'Image quality (defaults to high). Medium is usually about 50 seconds and $0.04; high can take up to 3 minutes and cost about $0.21.',
+    ),
   count: z
     .number()
     .int()
@@ -883,7 +1109,9 @@ const editImageSchema = z.object({
   quality: z
     .enum(['low', 'medium', 'high', 'auto'])
     .optional()
-    .describe('Output quality.'),
+    .describe(
+      'Output quality (defaults to high). Medium is usually about 50 seconds and $0.04; high can take up to 3 minutes and cost about $0.21.',
+    ),
   count: z
     .number()
     .int()

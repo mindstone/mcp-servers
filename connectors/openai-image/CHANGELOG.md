@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Declared-Space symlink roots for the workspace fence.** `edit_image` and `generate_image` now read (and write generated images) through in-workspace symlinks whose canonical targets land inside `MCP_WORKSPACE_PATH` **or** one of the host-supplied declared-Space roots in the new `MCP_ALLOWED_SYMLINK_ROOTS` env var — the same roots the host's built-in `Read`/`Write`/`Edit` tools already trust. This fixes the reported defect where the connector's own generated-image output dir (a symlink into a cloud-synced Space) was unreadable by `edit_image`, making 18/18 `edit_image` calls fail. The fence now matches the built-ins' posture: a lexical workspace pre-gate (`path.relative`), then per-call canonical containment with fail-soft skip of an uncanonicalisable root. The previous `startsWith` containment and the cached `workspaceRealPathPromise` snapshot are removed. Invariant #5 in `mcp-servers/AGENTS.md` is amended to record this openai-image-only exception.
+- **Output-write containment.** `saveImageToDisk` now applies the same workspace-or-declared-root containment to the resolved output directory before `mkdir`/`writeFile` (deepest-existing-ancestor handling), matching the host's built-in `Write` tool. An undeclared symlink target for `Chief-of-Staff`/`generated-images` is now rejected fail-closed with `WORKSPACE_FENCE_VIOLATION` instead of silently following it.
+- **Whole-array validation of `MCP_ALLOWED_SYMLINK_ROOTS`.** Unset / empty / malformed JSON / non-array / any entry that is non-string, empty, or relative → the entire value is malformed → strict workspace-only + one structured stderr warning. A mixed `[validRoot, invalidEntry]` grants nothing; valid entries are not salvaged.
+
+### Fixed
+
+- **Symbolic fence errors.** Fence errors now name the model-supplied input path and the workspace root (never the canonical `realpath` of a symlink target) through a dedicated fence-error formatter, so the agent can self-correct instead of guessing path spellings. The global `sanitizeUserFacingText` basename-collapsing (which guards API keys, prompts, and raw OS messages) is unchanged.
+- **Request timeout retuned for `quality: 'high'`.** `DEFAULT_OPENAI_IMAGE_REQUEST_TIMEOUT_MS` raised from `90000` (90s) to `180000` (3 min). The 90s cap was sized for the pre-`gpt-image-2` model; the 260422 default-quality-`high` change made high-quality generation (OpenAI documents up to ~2 min) essentially always exceed it. The `TIMEOUT` recovery copy now gives agent-actionable advice (retry once, or retry with `quality: 'medium'` for a faster draft) instead of host-env advice the agent cannot act on.
+- **`WORKSPACE_FENCE_VIOLATION` error code reconciled with docs.** The README's recovery contract now lists the actual emitted codes (MED-2). No consumer keyed on the old `WORKSPACE_VIOLATION` spelling (grep-verified).
+
+### Changed
+
+- The `quality` `.describe()` strings on both tools now state the latency/cost tradeoff: medium ≈ ~50 s / ~$0.04; high ≈ up to ~3 min / ~$0.21. Default stays `high`.
+- `server.json` `OPENAI_IMAGE_REQUEST_TIMEOUT_MS` default updated `90000` → `180000`; optional `MCP_ALLOWED_SYMLINK_ROOTS` declaration added (for standalone OSS users).
+
+
 ## [0.1.2] - 2026-05-19
 
 ### Documentation

@@ -55,7 +55,11 @@ describe('TIMEOUT recovery code', () => {
       expect(payload.ok).toBe(false);
       expect(payload.code).toBe('TIMEOUT');
       expect(typeof payload.error).toBe('string');
-      expect(typeof payload.resolution).toBe('string');
+      expect(payload.resolution).toMatch(/retry once/iu);
+      expect(payload.resolution).toContain("quality: 'medium'");
+      expect(payload.resolution).not.toContain(
+        'OPENAI_IMAGE_REQUEST_TIMEOUT_MS',
+      );
       expect(fetchSpy).toHaveBeenCalledTimes(1);
     } finally {
       await close();

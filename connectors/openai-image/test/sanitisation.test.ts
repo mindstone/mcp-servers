@@ -1,10 +1,17 @@
+import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { extractToolPayload, importConnectorModule } from './helpers.js';
+import {
+  createInMemoryClientPair,
+  extractToolPayload,
+  importConnectorModule,
+} from './helpers.js';
 
 const SENTINEL_API_KEY = 'sk-live-NEGATIVE-TEST-DO-NOT-USE';
 const SENTINEL_PROMPT = 'NEGATIVE-TEST-PROMPT-DO-NOT-LOG';
 const SENTINEL_PATH = '/tmp/NEGATIVE-TEST-PATH-DO-NOT-LOG/output.png';
+const cleanupTargets: string[] = [];
 const ERROR_CODES = [
   'NOT_CONFIGURED',
   'INVALID_API_KEY',
@@ -16,9 +23,15 @@ const ERROR_CODES = [
   'WRITE_FAILED',
 ] as const;
 
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
+  while (cleanupTargets.length > 0) {
+    const target = cleanupTargets.pop();
+    if (target) {
+      await fs.rm(target, { recursive: true, force: true });
+    }
+  }
 });
 
 describe('sanitisation', () => {
@@ -65,5 +78,42 @@ describe('sanitisation', () => {
     expect(combinedLogs).not.toContain(SENTINEL_PROMPT);
     expect(combinedLogs).not.toContain(SENTINEL_PATH);
     expect(combinedLogs).toContain('REDACTED-API-KEY');
+  });
+
+  it('keeps only the supplied path and workspace root in a fence error', async () => {
+    const workspace = await fs.mkdtemp(path.join('/tmp', 'Acme-workspace-'));
+    const outsideRoot = await fs.mkdtemp(path.join('/tmp', 'Acme-outside-'));
+    cleanupTargets.push(workspace, outsideRoot);
+    const outsideFile = path.join(outsideRoot, 'private.png');
+    await fs.writeFile(outsideFile, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    const suppliedPath = path.join(workspace, 'linked.png');
+    await fs.symlink(outsideFile, suppliedPath);
+    const canonicalOutsideRoot = await fs.realpath(outsideRoot);
+
+    const connector = await importConnectorModule({
+      MCP_WORKSPACE_PATH: workspace,
+      OPENAI_API_KEY: 'sk-test-Acme-fence-message',
+    });
+    const pair = await createInMemoryClientPair(connector.createServer());
+
+    try {
+      const result = (await pair.client.callTool({
+        name: 'edit_image',
+        arguments: {
+          prompt: 'Acme fence message',
+          image_paths: [suppliedPath],
+        },
+      })) as CallToolResult;
+      const payload = extractToolPayload(result);
+      const payloadText = JSON.stringify(payload);
+
+      expect(payload.code).toBe('WORKSPACE_FENCE_VIOLATION');
+      expect(payloadText).toContain(suppliedPath);
+      expect(payloadText).toContain(workspace);
+      expect(payloadText).not.toContain(canonicalOutsideRoot);
+      expect(payloadText).not.toContain('/tmp/Acme-unrelated');
+    } finally {
+      await pair.close();
+    }
   });
 });
