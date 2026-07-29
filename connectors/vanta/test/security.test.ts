@@ -129,6 +129,11 @@ describe('validateDocumentUrl — SSRF guard', () => {
       expect(() => validateDocumentUrl('https://[::]/doc.pdf'))
         .toThrowError(VantaApiError);
     });
+
+    it('rejects IPv6 documentation range 2001:db8::/32', () => {
+      expect(() => validateDocumentUrl('https://[2001:db8::1]/doc.pdf'))
+        .toThrowError(VantaApiError);
+    });
   });
 
   describe('rejects IPv4-mapped IPv6 (C6 fix)', () => {

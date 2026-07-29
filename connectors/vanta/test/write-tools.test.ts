@@ -481,6 +481,29 @@ describe('Vanta write tools', () => {
       expect(payload.error).toMatch(/non-public address/);
     });
 
+    it('re-validates redirect hostnames via DNS and refuses private answers', async () => {
+      setDnsLookupForTesting(async (hostname) => {
+        if (hostname === 'redirected.example.com') {
+          return [{ address: '127.0.0.1', family: 4 }];
+        }
+        return [{ address: '93.184.216.34', family: 4 }];
+      });
+      mswServer.use(
+        http.get(SOURCE_URL, () =>
+          new HttpResponse(null, {
+            status: 302,
+            headers: { Location: 'https://redirected.example.com/secret.pdf' },
+          })),
+      );
+
+      const payload = await callUpload();
+
+      expect(payload.ok).toBe(false);
+      expect(payload.code).toBe('CONFIG_INVALID');
+      expect(payload.error).toMatch(/redirect/i);
+      expect(payload.error).toMatch(/resolves to a non-public address/);
+    });
+
     it('refuses a redirect chain longer than the hop budget', async () => {
       allowPublicDns();
       mswServer.use(
@@ -510,6 +533,60 @@ describe('Vanta write tools', () => {
       );
 
       const payload = await callUpload();
+
+      expect(payload.ok).toBe(false);
+      expect(payload.code).toBe('SOURCE_TIMEOUT');
+    });
+
+    it('times out a response body that dribbles slower than the timeout budget', async () => {
+      allowPublicDns();
+      setRemoteDocumentLimitsForTesting({ timeoutMs: 40 });
+      const { handler } = captureMultipart(
+        'https://api.vanta.com/v1/documents/:documentId/uploads',
+        { id: 'upload_1' },
+        201,
+      );
+      mswServer.use(handler);
+      const originalFetch = globalThis.fetch;
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+        const requestUrl = input instanceof URL
+          ? input.toString()
+          : typeof input === 'string'
+            ? input
+            : input.url;
+        if (requestUrl === SOURCE_URL) {
+          const neverCompletesBody = {
+            getReader() {
+              return {
+                read: () => new Promise<ReadableStreamReadResult<Uint8Array>>(() => {}),
+                cancel: () => Promise.resolve(undefined),
+                releaseLock: () => undefined,
+                closed: Promise.resolve(undefined),
+              } as ReadableStreamDefaultReader<Uint8Array>;
+            },
+          } as unknown as ReadableStream<Uint8Array>;
+          return {
+            ok: true,
+            status: 200,
+            headers: new Headers({ 'Content-Type': 'application/pdf' }),
+            body: neverCompletesBody,
+          } as Response;
+        }
+        return originalFetch(input, init);
+      });
+
+      let payload: {
+        ok: boolean;
+        code: string;
+        error: string;
+        action_required: string;
+        next_step: string;
+      };
+      try {
+        payload = await callUpload();
+      } finally {
+        fetchSpy.mockRestore();
+      }
 
       expect(payload.ok).toBe(false);
       expect(payload.code).toBe('SOURCE_TIMEOUT');

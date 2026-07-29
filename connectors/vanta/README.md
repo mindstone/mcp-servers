@@ -116,6 +116,7 @@ This server enforces:
 
 - HTTPS-only URL validation on both upload tools (rejects `file:`, `localhost`, RFC1918, link-local incl. cloud metadata addresses, IPv6 loopback/ULA, and hostnames whose DNS records resolve to any of those).
 - Bounded document fetching: at most 3 redirects, **each hop re-validated** through the same URL guard, a 30-second timeout, and a 25 MB size cap enforced while streaming (a source cannot lie its way past the cap with a false `Content-Length`).
+- Content-Type handling is header sanitization, not byte-level MIME sniffing: untrustworthy source labels are replaced with `application/octet-stream`.
 - Distinct, structured failures for every refusal — blocked host, non-HTTPS, oversize, timeout, redirect limit — rather than a generic error.
 - 50-requests-per-minute rate limiting with single-flight token exchange.
 - Response truncation at 25 KB with binary-search trimming.

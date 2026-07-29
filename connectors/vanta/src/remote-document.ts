@@ -22,8 +22,9 @@ const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
 const FALLBACK_CONTENT_TYPE = 'application/octet-stream';
 const FALLBACK_FILE_NAME = 'document';
 const MAX_FILE_NAME_LENGTH = 128;
-// RFC 6838 restricted-name characters, lowercased. Anything else is treated as an
-// untrustworthy Content-Type and replaced with the fallback.
+// RFC 6838 restricted-name characters, lowercased. This validates/sanitizes the
+// fetched Content-Type header only; it does NOT inspect file bytes.
+// Untrustworthy labels are replaced with the fallback.
 const MIME_TYPE_PATTERN = /^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/;
 
 export interface RemoteDocument {
@@ -142,7 +143,16 @@ const validateHop = async (rawUrl: string, fieldName: string, isRedirect: boolea
   }
 };
 
-const readCappedBody = async (response: Response): Promise<Uint8Array<ArrayBuffer>> => {
+const abortError = (): Error => {
+  const error = new Error('The operation was aborted.');
+  error.name = 'AbortError';
+  return error;
+};
+
+const readCappedBody = async (
+  response: Response,
+  signal: AbortSignal,
+): Promise<Uint8Array<ArrayBuffer>> => {
   const limit = maxBytes();
   const declaredLength = Number(response.headers.get('content-length'));
   if (Number.isFinite(declaredLength) && declaredLength > limit) {
@@ -162,18 +172,36 @@ const readCappedBody = async (response: Response): Promise<Uint8Array<ArrayBuffe
   // against the bytes actually received, and the stream is cancelled the moment it
   // is exceeded so an oversized source cannot be drained into memory.
   const reader = body.getReader();
+  if (signal.aborted) {
+    void reader.cancel().catch(() => {});
+    throw abortError();
+  }
+  let onAbort: (() => void) | undefined;
+  const abortPromise = new Promise<never>((_resolve, reject) => {
+    onAbort = () => {
+      void reader.cancel().catch(() => {});
+      reject(abortError());
+    };
+    signal.addEventListener('abort', onAbort);
+  });
   const chunks: Uint8Array[] = [];
   let received = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (!value) continue;
-    received += value.byteLength;
-    if (received > limit) {
-      void reader.cancel().catch(() => {});
-      throw tooLargeError(limit);
+  try {
+    while (true) {
+      const { done, value } = await Promise.race([reader.read(), abortPromise]);
+      if (done) break;
+      if (!value) continue;
+      received += value.byteLength;
+      if (received > limit) {
+        void reader.cancel().catch(() => {});
+        throw tooLargeError(limit);
+      }
+      chunks.push(value);
     }
-    chunks.push(value);
+  } finally {
+    if (onAbort) {
+      signal.removeEventListener('abort', onAbort);
+    }
   }
 
   if (received === 0) {
@@ -262,7 +290,7 @@ export async function fetchRemoteDocument(
         );
       }
 
-      const bytes = await readCappedBody(response);
+      const bytes = await readCappedBody(response, controller.signal);
       return {
         bytes,
         contentType: resolveContentType(response.headers.get('content-type')),

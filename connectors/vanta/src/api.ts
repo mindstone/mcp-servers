@@ -330,6 +330,9 @@ const privateIPv6Reason = (raw: string): string | null => {
   // Unique-local fc00::/7
   if (/^f[cd][0-9a-f]{0,2}:/.test(lower)) return 'IPv6 unique-local (fc00::/7)';
 
+  // Documentation-only prefix; denying it keeps this allowlist fail-closed.
+  if (/^2001:0*db8(?::|$)/.test(lower)) return 'IPv6 documentation range (2001:db8::/32)';
+
   return null;
 };
 

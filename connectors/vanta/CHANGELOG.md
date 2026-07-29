@@ -14,12 +14,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- `vanta_upload_document` now takes `document_id` (an existing Vanta document) plus optional `effective_at_date` and `file_name`, and reports `submission_required` because Vanta files API uploads as drafts until the document is submitted for review.
+- `vanta_upload_document` now takes `document_id` (an existing Vanta document) plus optional `effective_at_date` and `file_name`, and reports `submission_required` because Vanta files API uploads as drafts until the document is submitted for review; `document_name` was renamed to `file_name` for this tool.
 - `vanta_attach_vendor_document` now requires `document_type` (Vanta requires the `type` form field) and treats `document_name` as the optional document title.
 
 ### Security
 
-- Document uploads fetch the caller-supplied URL server-side, so the fetch is bounded: HTTPS-only, at most 3 redirects with every hop re-validated against the private-address guard, a 30-second timeout, a 25 MB cap enforced while streaming rather than trusting `Content-Length`, sanitized file names, and a safe fallback content type. Each refusal returns its own error code (`SOURCE_TOO_LARGE`, `SOURCE_TIMEOUT`, `SOURCE_UNREACHABLE`, `SOURCE_REDIRECT_LIMIT`, or `CONFIG_INVALID`) instead of a generic failure.
+- Document uploads fetch the caller-supplied URL server-side, so the fetch is bounded: HTTPS-only, at most 3 redirects with every hop re-validated against the private-address guard, a 30-second timeout, a 25 MB cap enforced while streaming rather than trusting `Content-Length`, sanitized file names, and a safe fallback content type derived from a sanitized source header (no byte-level MIME sniffing). Each refusal returns its own error code (`SOURCE_TOO_LARGE`, `SOURCE_TIMEOUT`, `SOURCE_UNREACHABLE`, `SOURCE_REDIRECT_LIMIT`, or `CONFIG_INVALID`) instead of a generic failure.
 
 ### Removed
 
