@@ -93,7 +93,7 @@ Several tool contracts are still being repaired:
 - `vanta_get_compliance_summary` reads fields the current Vanta API does not return.
 - Some list filters are silently ignored because their parameter names no longer match the current API.
 
-These fixes are in progress and tracked in the changelog.
+These fixes are in progress; the changelog records what each release has fixed.
 
 ## Safety
 

@@ -113,9 +113,14 @@ describe('Auth — credential handling', () => {
     });
 
     const result = await testClient.callTool('vanta_list_controls', { page_size: 1 });
-    const payload = result.json as { error: string };
+    const payload = result.json as { error: string; next_step: string };
     expect(payload.error).toContain('[REDACTED]');
     expect(payload.error).not.toContain('abc123');
+    const legacyScopeLabel = ['read', 'write'].join('-');
+    expect(payload.next_step).not.toContain(legacyScopeLabel);
+    expect(payload.next_step).toMatch(/Manage Vanta app/i);
+    expect(payload.next_step).toContain('vanta-api.all:read');
+    expect(payload.next_step).toContain('vanta-api.all:write');
   });
 });
 

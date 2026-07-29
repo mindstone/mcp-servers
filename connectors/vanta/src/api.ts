@@ -448,7 +448,7 @@ const makeHttpError = async (response: Response): Promise<VantaApiError> => {
       'AUTH',
       message,
       'The Vanta API rejected the request as unauthorized.',
-      'Verify VANTA_CLIENT_ID and VANTA_CLIENT_SECRET are correct and that the OAuth client has the Manage Vanta (read-write) scope.',
+      'Verify VANTA_CLIENT_ID and VANTA_CLIENT_SECRET are correct and that the OAuth client is a Manage Vanta app; this connector requests the vanta-api.all:read and vanta-api.all:write scopes at token exchange.',
       response.status,
     );
   }
