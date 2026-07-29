@@ -21,8 +21,10 @@ const resolveRegion = (region: string | undefined): { api: string; token: string
 };
 const DEFAULT_TIMEOUT_MS = 60_000;
 const MIN_TIMEOUT_MS = 5_000;
+// Vanta's documented maximum (shared PageSize schema, https://developer.vanta.com/api-reference/vulnerabilities/get-vulnerabilities.md)
 const MAX_PAGE_SIZE = 100;
 const RATE_LIMIT_WINDOW_MS = 60_000;
+// Manage Vanta: 50 req/min (token endpoint separately 5 req/min), https://developer.vanta.com/reference/manage-vanta/overview
 const RATE_LIMIT_MAX_REQUESTS = 50;
 const MAX_RETRIES = 3;
 const DEFAULT_RESPONSE_SIZE_CAP_BYTES = 25 * 1024;
