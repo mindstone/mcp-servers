@@ -71,7 +71,7 @@ COST: Dubbing credits per minute of source media.`,
         throw new ElevenLabsError(
           'ElevenLabs API key not configured',
           'AUTH_REQUIRED',
-          'Ask the user for their API key, then call configure_elevenlabs_api_key.',
+          'The user adds the ElevenLabs API key in Settings → Connectors in the app. Do not ask for it in chat.',
         );
       }
 
@@ -164,7 +164,7 @@ COST: FREE — status read only.`,
         throw new ElevenLabsError(
           'ElevenLabs API key not configured',
           'AUTH_REQUIRED',
-          'Ask the user for their API key, then call configure_elevenlabs_api_key.',
+          'The user adds the ElevenLabs API key in Settings → Connectors in the app. Do not ask for it in chat.',
         );
       }
 
@@ -235,7 +235,7 @@ COST: FREE — download only (generation credits charged at submit).`,
         throw new ElevenLabsError(
           'ElevenLabs API key not configured',
           'AUTH_REQUIRED',
-          'Ask the user for their API key, then call configure_elevenlabs_api_key.',
+          'The user adds the ElevenLabs API key in Settings → Connectors in the app. Do not ask for it in chat.',
         );
       }
 
@@ -283,7 +283,7 @@ COST: FREE — no generation; permanently removes the dubbing job.`,
         throw new ElevenLabsError(
           'ElevenLabs API key not configured',
           'AUTH_REQUIRED',
-          'Ask the user for their API key, then call configure_elevenlabs_api_key.',
+          'The user adds the ElevenLabs API key in Settings → Connectors in the app. Do not ask for it in chat.',
         );
       }
 

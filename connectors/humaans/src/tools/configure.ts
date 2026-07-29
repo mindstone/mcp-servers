@@ -10,7 +10,7 @@ export function registerConfigureTools(server: McpServer): void {
     'configure_humaans_api_key',
     {
       description:
-        'Configure the Humaans API access token. Call this when the user provides their token. ' +
+        'Host-managed setup only. The user adds the Humaans API access token in Settings → Connectors in the app. Do not ask for or accept the token in chat. ' +
         'Get a token from https://app.humaans.io/settings/home?tokens=1 — ' +
         'click "Generate new token", name it (e.g., "MCP Server"), select scopes: public:read, private:read, private:write.',
       inputSchema: z.object({

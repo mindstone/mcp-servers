@@ -10,7 +10,7 @@ export function registerConfigureTools(server: McpServer): void {
     'configure_talentlms',
     {
       description:
-        'Configure TalentLMS API credentials. Call this when the user provides their API key and domain.\n\n' +
+        'Host-managed setup only. The user adds the TalentLMS API key and domain in Settings → Connectors in the app. Do not ask for or accept the key in chat.\n\n' +
         'WORKFLOW:\n' +
         '1. Go to your TalentLMS admin panel → Account & Settings → Security\n' +
         '2. Enable API access\n' +

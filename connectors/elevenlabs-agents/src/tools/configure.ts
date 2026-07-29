@@ -18,13 +18,13 @@ export function registerConfigureTools(server: McpServer): void {
   server.registerTool(
     'configure_elevenlabs_agents_api_key',
     {
-      description: `Save the user's ElevenLabs API key for this session.
+      description: `Host-managed setup only. The user adds the ElevenLabs Agents API key in Settings → Connectors in the app. Do not ask for or accept the key in chat.
 
 WHEN TO USE:
-- When the user provides their API key in chat
-- After AUTH_REQUIRED errors from any other ElevenLabs Agents tool
+- Only when the host supplies the key during connector setup
 
-EXAMPLE: {"api_key": "sk_..."}
+EXAMPLE:
+- Host-managed setup supplies the key directly after the user saves it in Settings → Connectors
 
 RELATED TOOLS:
 - list_agents: inspect agents after configuring

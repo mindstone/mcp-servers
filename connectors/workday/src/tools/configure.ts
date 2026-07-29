@@ -24,7 +24,7 @@ export function registerConfigureTools(server: McpServer): void {
   server.registerTool(
     'configure_workday_credentials',
     {
-      description: `Configure Workday API credentials. Call this when the user provides their Workday OAuth credentials.
+      description: `Host-managed setup only. The user adds their Workday OAuth credentials in Settings → Connectors in the app. Do not ask for or accept credentials in chat.
 
 SETUP PREREQUISITES:
 1. A Workday Integration System User (ISU) with appropriate security group access

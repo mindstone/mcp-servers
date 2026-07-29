@@ -18,9 +18,7 @@ function noApiKeyError(): string {
     error: 'Fathom API key not configured',
     resolution: 'To use Fathom, you need to configure an API key first.',
     next_step: {
-      action: 'Ask the user for their Fathom API key, then call configure_fathom_api_key',
-      tool_to_call: 'configure_fathom_api_key',
-      tool_parameters: { api_key: '<user_provided_key>' },
+      action: 'The user adds the Fathom API key in Settings → Connectors in the app. Do not ask for it in chat.',
       get_key_from: 'https://fathom.video/customize#api-access-header',
     },
   });

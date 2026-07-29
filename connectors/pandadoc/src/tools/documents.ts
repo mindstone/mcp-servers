@@ -19,9 +19,7 @@ function noApiKeyError(): string {
     error: 'PandaDoc API key not configured',
     resolution: 'To use PandaDoc, you need to configure an API key first.',
     next_step: {
-      action: 'Ask the user for their PandaDoc API key, then call configure_pandadoc_api_key',
-      tool_to_call: 'configure_pandadoc_api_key',
-      tool_parameters: { api_key: '<user_provided_key>' },
+      action: 'The user adds the PandaDoc API key in Settings → Connectors in the app. Do not ask for it in chat.',
       get_key_from: 'PandaDoc Settings → API → Developer Dashboard. Requires Business or Enterprise plan.',
     },
   });

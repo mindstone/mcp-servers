@@ -10,11 +10,7 @@ export function registerConfigureTools(server: McpServer): void {
     'configure_kling_api_keys',
     {
       description:
-        'Save Kling API credentials. Call this when the user provides their API keys.\n\n' +
-        'WHEN TO USE:\n' +
-        '- User says "here are my Kling keys" or provides access_key/secret_key\n' +
-        '- You get an AUTH_REQUIRED error from other Kling tools\n' +
-        '- User wants to update/change their Kling credentials\n\n' +
+        'Host-managed setup only. The user adds both Kling API keys in Settings → Connectors in the app. Do not ask for or accept the keys in chat.\n\n' +
         'WHERE TO GET KEYS:\n' +
         'Direct user to: https://app.klingai.com/global/dev/api-key\n' +
         '1. Sign in to Kling AI\n' +

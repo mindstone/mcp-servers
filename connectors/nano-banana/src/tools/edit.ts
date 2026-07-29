@@ -76,9 +76,7 @@ export function registerEditTools(server: McpServer): void {
               code: 'AUTH_REQUIRED',
               resolution: 'Configure your Gemini API key. Get one at https://aistudio.google.com/api-keys',
               next_step: {
-                action: 'Ask the user for their Gemini API key, then call configure_nano_banana_api_key',
-                tool_to_call: 'configure_nano_banana_api_key',
-                tool_parameters: { api_key: '<user_provided_key>' },
+                action: 'The user adds the Gemini API key in Settings → Connectors in the app. Do not ask for it in chat.',
                 get_key_from: 'https://aistudio.google.com/api-keys',
               },
             }, null, 2),

@@ -10,7 +10,7 @@ export function registerConfigureTools(server: McpServer): void {
     'configure_pandadoc_api_key',
     {
       description:
-        'Configure the PandaDoc API key. Call this tool when the user provides their PandaDoc API key. ' +
+        'Host-managed setup only. The user adds the PandaDoc API key in Settings → Connectors in the app. Do not ask for or accept the key in chat. ' +
         'Get an API key from the PandaDoc Developer Dashboard: ' +
         'Settings → API → Developer Dashboard → Generate a Sandbox key (for testing) or Production key (for live use). ' +
         'Note: API access requires a PandaDoc Business or Enterprise plan.',

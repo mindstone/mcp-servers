@@ -10,8 +10,7 @@ export function registerConfigureTools(server: McpServer): void {
     'configure_napkin_api_key',
     {
       description:
-        'Configure the Napkin AI API key for this session. ' +
-        'Only call this if you get an error saying "Napkin API key not configured". ' +
+        'Host-managed setup only. The user adds the Napkin API key in Settings → Connectors in the app. Do not ask for or accept the key in chat. ' +
         'HOW USER GETS THEIR KEY: Go to https://app.napkin.ai → Account Settings → Developers → Create API token.',
       inputSchema: z.object({
         api_key: z.string().min(1).describe('The Napkin AI API token (starts with "sk-")'),

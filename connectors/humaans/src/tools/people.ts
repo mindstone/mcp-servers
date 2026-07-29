@@ -56,9 +56,7 @@ function noApiKeyError(): string {
     error: 'Humaans API key not configured',
     resolution: 'To use Humaans, you need to configure an API access token first.',
     next_step: {
-      action: 'Ask the user for their Humaans API token, then call configure_humaans_api_key',
-      tool_to_call: 'configure_humaans_api_key',
-      tool_parameters: { api_key: '<user_provided_token>' },
+      action: 'The user adds the Humaans API token in Settings → Connectors in the app. Do not ask for it in chat.',
       get_key_from: 'https://app.humaans.io/settings/home?tokens=1',
     },
   });
