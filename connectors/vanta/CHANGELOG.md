@@ -28,6 +28,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Updated vendor category guidance to describe Vanta's documented free-form category displayName values (for example `cloudMonitoring`) instead of invented enums.
 - Corrected the README status summary to reflect the 17-tool surface (11 read + 6 write).
 - Added a source-stamped Vanta contract snapshot and tests that assert surviving read tools only call documented paths with documented query parameters.
+- Lowered the page-size cap from 500 to Vanta's documented maximum of 100, including the single-page `getById` fallback scan.
+- Lowered the shared API rate limiter from 60 requests/minute to Vanta's documented 50 requests/minute limit.
+- Fixed stale rate-limit documentation and comments that still advertised 60 requests/minute.
+- Aligned `STATUS.json` domains with the README's compliance-summary domain.
 
 ## [0.1.0] - 2026-05-19
 

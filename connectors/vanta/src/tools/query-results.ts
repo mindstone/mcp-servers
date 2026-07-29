@@ -5,7 +5,7 @@ import { stringifyToolResult, toToolErrorResponse, type VantaApiClient } from '.
 export const queryTestResultsSchema = z.object({
   test_id: z.string().min(1).describe('Vanta test ID whose entities/results should be listed'),
   entity_status: z.string().optional().describe('Filter by documented entity status: FAILING or DEACTIVATED'),
-  page_size: z.number().int().min(1).max(500).optional().default(25).describe('Number of test entities to return, up to 500'),
+  page_size: z.number().int().min(1).max(100).optional().default(25).describe('Number of test entities to return, up to 100'),
   page_cursor: z.string().optional().describe('Cursor from a previous response for the next page'),
 });
 

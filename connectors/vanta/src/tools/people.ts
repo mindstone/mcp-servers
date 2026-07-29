@@ -5,7 +5,7 @@ import { stringifyToolResult, toToolErrorResponse, type VantaApiClient } from '.
 export const listPeopleSchema = z.object({
   email_or_name: z.string().optional().describe('Filter people by email address, first name, or last name'),
   employment_status: z.string().optional().describe('Filter by documented employment status'),
-  page_size: z.number().int().min(1).max(500).optional().default(25).describe('Number of people to return, up to 500'),
+  page_size: z.number().int().min(1).max(100).optional().default(25).describe('Number of people to return, up to 100'),
   page_cursor: z.string().optional().describe('Cursor from a previous response for the next page'),
 });
 

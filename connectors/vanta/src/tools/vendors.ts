@@ -5,7 +5,7 @@ import { VantaApiError, stringifyToolResult, toToolErrorResponse, validateDocume
 export const listVendorsSchema = z.object({
   name: z.string().optional().describe('Filter vendors by name (case-insensitive partial match)'),
   status: z.string().optional().describe('Filter by documented vendor status: MANAGED, ARCHIVED, or IN_PROCUREMENT'),
-  page_size: z.number().int().min(1).max(500).optional().default(25).describe('Number of vendors to return, up to 500'),
+  page_size: z.number().int().min(1).max(100).optional().default(25).describe('Number of vendors to return, up to 100'),
   page_cursor: z.string().optional().describe('Cursor from a previous response for the next page'),
 });
 

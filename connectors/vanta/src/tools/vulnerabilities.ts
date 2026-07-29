@@ -6,7 +6,7 @@ export const listVulnerabilitiesSchema = z.object({
   severity: z.string().optional().describe('Filter by documented severity: CRITICAL, HIGH, MEDIUM, or LOW'),
   integration_id: z.string().optional().describe('Filter by the Vanta integration ID that detected the vulnerability'),
   is_deactivated: z.boolean().optional().describe('Filter by whether Vanta monitoring is deactivated for the vulnerability'),
-  page_size: z.number().int().min(1).max(500).optional().default(25).describe('Number of vulnerabilities to return, up to 500'),
+  page_size: z.number().int().min(1).max(100).optional().default(25).describe('Number of vulnerabilities to return, up to 100'),
   page_cursor: z.string().optional().describe('Cursor from a previous response for the next page'),
 });
 

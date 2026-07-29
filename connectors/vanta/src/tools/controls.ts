@@ -4,7 +4,7 @@ import { stringifyToolResult, toToolErrorResponse, type VantaApiClient } from '.
 
 export const listControlsSchema = z.object({
   framework: z.string().optional().describe('Filter by framework, such as SOC2, ISO27001, or HIPAA'),
-  page_size: z.number().int().min(1).max(500).optional().default(25).describe('Number of controls to return, up to 500'),
+  page_size: z.number().int().min(1).max(100).optional().default(25).describe('Number of controls to return, up to 100'),
   page_cursor: z.string().optional().describe('Cursor from a previous response for the next page'),
 });
 

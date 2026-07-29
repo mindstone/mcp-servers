@@ -8,6 +8,7 @@ import {
   MOCK_CLIENT_SECRET,
   successTokenHandler,
 } from './helpers/vanta-mock-api.js';
+import { buildQueryParams } from '../src/api.js';
 
 const paginated = (data: Array<Record<string, unknown>>) =>
   HttpResponse.json({
@@ -28,6 +29,12 @@ describe('Read tools — documented request contracts', () => {
   afterEach(async () => {
     if (testClient) await testClient.close();
     vi.unstubAllEnvs();
+  });
+
+  it('caps outgoing page_size query parameters at Vanta\'s documented maximum', () => {
+    expect(Object.fromEntries(buildQueryParams({ page_size: 500 }))).toEqual({
+      pageSize: '100',
+    });
   });
 
   it('sends only documented query parameters for repaired list filters', async () => {

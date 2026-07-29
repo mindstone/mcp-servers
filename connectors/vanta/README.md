@@ -96,7 +96,7 @@ These fixes are in progress; the changelog records what each release has fixed.
 This server enforces:
 
 - HTTPS-only URL validation on document attachment tools (rejects `file:`, `localhost`, RFC1918, link-local, and other internal addresses).
-- 60-requests-per-minute rate limiting with single-flight token exchange.
+- 50-requests-per-minute rate limiting with single-flight token exchange.
 - Response truncation at 25 KB with binary-search trimming.
 - Bearer-token redaction in all error messages.
 

@@ -21,9 +21,9 @@ const resolveRegion = (region: string | undefined): { api: string; token: string
 };
 const DEFAULT_TIMEOUT_MS = 60_000;
 const MIN_TIMEOUT_MS = 5_000;
-const MAX_PAGE_SIZE = 500;
+const MAX_PAGE_SIZE = 100;
 const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX_REQUESTS = 60;
+const RATE_LIMIT_MAX_REQUESTS = 50;
 const MAX_RETRIES = 3;
 const DEFAULT_RESPONSE_SIZE_CAP_BYTES = 25 * 1024;
 const MAX_RESPONSE_BODY_BYTES = 2 * 1024 * 1024; // 2MB pre-parse safety cap
@@ -561,7 +561,7 @@ export class VantaApiClient {
   private tokenExpiresAt = 0;
   // Single-flight cache so N concurrent first-call tool invocations share one
   // token exchange instead of racing N parallel POST /oauth/token requests
-  // (each of which would burn a slot in the 60-req/min shared rate-limit
+  // (each of which would burn a slot in the 50-req/min shared rate-limit
   // counter).
   private inflightTokenRequest: Promise<string> | undefined;
 

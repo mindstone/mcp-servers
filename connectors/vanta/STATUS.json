@@ -17,7 +17,8 @@
       "controls",
       "people",
       "vendors",
-      "documents"
+      "documents",
+      "compliance summary"
     ]
   },
   "surface": "cloud-api",
