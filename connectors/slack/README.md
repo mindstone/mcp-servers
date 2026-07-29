@@ -11,7 +11,7 @@ Slack workspace MCP server — channels, messages, threads, reactions, users, fi
 
 - **Version:** [0.1.6](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-slack)
 - **Auth:** OAuth (host-orchestrated) ([`SLACK_CLIENT_SECRET`](./server.json))
-- **Tools:** [24](./src/tools/) (messages, channels, threads, users, files)
+- **Tools:** [25](./src/tools/) (messages, channels, threads, users, files)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -192,7 +192,7 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 }
 ```
 
-## Tools (24)
+## Tools (25)
 
 ### Authentication
 - `authenticate_slack_workspace` — Returns structured auth_required response; the host drives OAuth.
@@ -202,6 +202,7 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 - `search_slack_messages` — Search across all channels (Slack search modifiers supported).
 - `get_slack_saved_messages` — Get messages saved for later (uses `is:saved`).
 - `get_slack_message_by_link` — Retrieve a message from its permalink URL.
+- `compose_slack_message` — Open an inline editable compose form before sending; the form posts via `post_slack_message` when the user clicks Send.
 - `post_slack_message` — Post a message; DM recipient verification baked in. Self-DMs are blocked and redirected to `send_myself_a_note` (a user-token self-DM never notifies).
 - `reply_to_slack_thread` — Reply to an existing thread.
 - `schedule_slack_message` — Schedule a message for the future. Self-DMs are blocked (scheduled self-notes are not supported yet).

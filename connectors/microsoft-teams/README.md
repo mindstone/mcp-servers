@@ -11,7 +11,7 @@ Microsoft 365 Teams MCP server — list and read Teams chats, send chat messages
 
 - **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-teams)
 - **Auth:** OAuth (host-orchestrated, shared with [`mcp-server-microsoft-mail`](../microsoft-mail/)) ([`MS_CLIENT_ID`](./server.json))
-- **Tools:** [7](./src/tools.ts) (chats, messages, teams, channels, presence)
+- **Tools:** [8](./src/tools.ts) (chats, messages, teams, channels, presence)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 - **Shared library:** [`@mindstone/mcp-server-microsoft-shared`](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-shared)
@@ -164,7 +164,7 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 }
 ```
 
-## Tools (7)
+## Tools (8)
 
 | Tool | Description |
 | ---- | ----------- |
@@ -172,6 +172,7 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 | `get_chat` | Get details about a specific chat. |
 | `list_chat_messages` | List recent messages from a chat. |
 | `send_chat_message` | Send a message to a chat. |
+| `compose_chat_message` | Open an inline editable compose form before sending; the form posts via `send_chat_message` when the user clicks Send. |
 | `list_teams` | List teams you are a member of. |
 | `list_channels` | List channels in a team. |
 | `get_presence` | Get your current presence status. |
