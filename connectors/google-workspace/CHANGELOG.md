@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-29
+
+### Changed
+
+- Surface real Google API errors, auth-reconnect handoff on expired sign-in, shared-drive discovery + targeting in Drive tools, interactive Gmail compose view with Open-in-Gmail link
+
 ### Added
 
 - New `list_shared_drives` tool: discover the shared drives an account can access (id, name, creation time), so agents can find shared-drive content instead of guessing. `list_drive_files` and `search_drive_files` gained optional `options.driveId` and `options.corpora` parameters for targeting a specific shared drive or searching across all drives (`corpora: 'allDrives'`). When `driveId` is set the connector forces `corpora: 'drive'` (the Drive API rejects any other pairing), overriding a caller-supplied value. The README now documents shared-drive behaviour, including the two Drive API limitations that can't be fixed connector-side (no `owners[]` on shared-drive-native files; Revisions API unsupported for shared-drive files).
