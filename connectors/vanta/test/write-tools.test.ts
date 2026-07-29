@@ -31,7 +31,35 @@ describe('Vanta write tools', () => {
   };
 
   describe('vanta_create_vendor', () => {
-    it('sends POST /v1/vendors with documented fields', async () => {
+    it('sends POST /v1/vendors with the minimum documented body', async () => {
+      await setupClient();
+
+      let capturedMethod = '';
+      let capturedPath = '';
+      let capturedBody: any = null;
+
+      mswServer.use(
+        http.post('https://api.vanta.com/v1/vendors', async ({ request }) => {
+          capturedMethod = request.method;
+          capturedPath = new URL(request.url).pathname;
+          capturedBody = await request.json();
+          return HttpResponse.json({ id: 'vendor_123', name: 'Test Vendor' });
+        }),
+      );
+
+      const result = await client.callTool('vanta_create_vendor', {
+        vendor_name: 'Test Vendor',
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(capturedMethod).toBe('POST');
+      expect(capturedPath).toBe('/v1/vendors');
+      expect(capturedBody).toEqual({
+        name: 'Test Vendor',
+      });
+    });
+
+    it('sends optional create fields when provided', async () => {
       await setupClient();
 
       let capturedMethod = '';
@@ -54,6 +82,7 @@ describe('Vanta write tools', () => {
         description: 'A test vendor',
         vendor_contact_name: 'Alice',
         vendor_contact_email: 'alice@example.com',
+        risk_level: 'HIGH',
       });
 
       expect(result.isError).toBeFalsy();
@@ -66,6 +95,7 @@ describe('Vanta write tools', () => {
         additionalNotes: 'A test vendor',
         accountManagerName: 'Alice',
         accountManagerEmail: 'alice@example.com',
+        inherentRiskLevel: 'HIGH',
       });
     });
   });

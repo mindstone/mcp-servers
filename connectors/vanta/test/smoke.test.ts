@@ -47,7 +47,7 @@ describe('Smoke test — Vanta MCP server', () => {
     vi.unstubAllEnvs();
   });
 
-  it('registers the final Stage 2 tool surface', async () => {
+  it('registers the final Stage 3a tool surface', async () => {
     const { createServer } = await import('../src/server.js');
     testClient = await createInMemoryTestClient({
       createServer,

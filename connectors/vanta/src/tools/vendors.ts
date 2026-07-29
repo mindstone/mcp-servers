@@ -15,22 +15,23 @@ export const getVendorSchema = z.object({
 
 export const createVendorSchema = z.object({
   vendor_name: z.string().min(1).describe('Name of the vendor'),
-  vendor_website: z.string().min(1).describe('Website URL of the vendor'),
-  vendor_category: z.string().min(1).describe('Category for the vendor (e.g., INFRASTRUCTURE, SOFTWARE, PROFESSIONAL_SERVICES)'),
+  vendor_website: z.string().min(1).optional().describe('Website URL of the vendor'),
+  vendor_category: z.string().min(1).optional().describe('Vendor category displayName (free-form string, e.g. cloudMonitoring)'),
   description: z.string().optional().describe('Description of the vendor relationship'),
   vendor_contact_name: z.string().optional().describe('Primary contact name at the vendor'),
   vendor_contact_email: z.string().optional().describe('Primary contact email at the vendor'),
+  risk_level: z.string().optional().describe('Vendor risk level (LOW, MEDIUM, HIGH, CRITICAL, or UNSCORED)'),
 });
 
 export const updateVendorSchema = z.object({
   vendor_id: z.string().min(1).describe('Vanta vendor ID to update'),
   vendor_name: z.string().optional().describe('Updated vendor name'),
   vendor_website: z.string().optional().describe('Updated vendor website URL'),
-  vendor_category: z.string().optional().describe('Updated vendor category'),
+  vendor_category: z.string().optional().describe('Updated vendor category displayName (free-form string, e.g. cloudMonitoring)'),
   description: z.string().optional().describe('Updated description'),
   vendor_contact_name: z.string().optional().describe('Updated contact name'),
   vendor_contact_email: z.string().optional().describe('Updated contact email'),
-  risk_level: z.string().optional().describe('Vendor risk level (e.g., LOW, MEDIUM, HIGH, CRITICAL)'),
+  risk_level: z.string().optional().describe('Vendor risk level (LOW, MEDIUM, HIGH, CRITICAL, or UNSCORED)'),
 });
 
 export const attachVendorDocumentSchema = z.object({
@@ -90,12 +91,13 @@ export async function vantaCreateVendor(
   try {
     const body: Record<string, unknown> = {
       name: args.vendor_name,
-      websiteUrl: args.vendor_website,
-      category: args.vendor_category,
     };
+    if (args.vendor_website !== undefined) body.websiteUrl = args.vendor_website;
+    if (args.vendor_category !== undefined) body.category = args.vendor_category;
     if (args.description !== undefined) body.additionalNotes = args.description;
     if (args.vendor_contact_name !== undefined) body.accountManagerName = args.vendor_contact_name;
     if (args.vendor_contact_email !== undefined) body.accountManagerEmail = args.vendor_contact_email;
+    if (args.risk_level !== undefined) body.inherentRiskLevel = args.risk_level;
 
     const vendor = await client.post('/v1/vendors', body);
     return stringifyToolResult({ ok: true, vendor });

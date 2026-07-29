@@ -14,12 +14,14 @@ type ContractEndpoint = {
   method: string;
   path: string;
   queryParams: string[];
+  requiredBodyFields: string[];
 };
 
 type RecordedCall = {
   method: string;
   path: string;
   queryParams: string[];
+  bodyKeys: string[];
 };
 
 class RecordingVantaClient {
@@ -49,17 +51,17 @@ class RecordingVantaClient {
   }
 
   async post<T>(endpoint: string, body: Record<string, unknown> = {}): Promise<T> {
-    this.record('POST', endpoint);
+    this.record('POST', endpoint, {}, {}, body);
     return {} as T;
   }
 
   async put<T>(endpoint: string, body: Record<string, unknown> = {}): Promise<T> {
-    this.record('PUT', endpoint);
+    this.record('PUT', endpoint, {}, {}, body);
     return {} as T;
   }
 
   async patch<T>(endpoint: string, body: Record<string, unknown> = {}): Promise<T> {
-    this.record('PATCH', endpoint);
+    this.record('PATCH', endpoint, {}, {}, body);
     return {} as T;
   }
 
@@ -72,12 +74,14 @@ class RecordingVantaClient {
     endpoint: string,
     params: Record<string, unknown> = {},
     paramMap: Record<string, string> = {},
+    body: Record<string, unknown> = {},
   ): void {
     const queryParams = Array.from(buildQueryParams(params, paramMap).keys()).sort();
     this.calls.push({
       method,
       path: normalizeContractPath(endpoint),
       queryParams,
+      bodyKeys: Object.keys(body).sort(),
     });
   }
 }
@@ -204,6 +208,14 @@ describe('Vanta contract snapshot', () => {
         `undeclared sent-but-undeclared: [${undeclaredParams.join(', ') || 'none'}]`;
 
       expect(call.queryParams, mismatchMessage).toEqual(exercisedDeclaredParams);
+
+      if (call.method !== 'GET') {
+        const missingRequiredBodyFields = endpoint.requiredBodyFields.filter((field) => !call.bodyKeys.includes(field));
+        expect(
+          missingRequiredBodyFields,
+          `${call.method} ${call.path} missing required body fields: [${missingRequiredBodyFields.join(', ') || 'none'}]`,
+        ).toEqual([]);
+      }
     }
   });
 });

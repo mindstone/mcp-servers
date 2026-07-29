@@ -22,8 +22,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Rebuilt `vanta_get_compliance_summary` on Vanta's documented `GET /v1/frameworks` counters instead of nonexistent fields on test records.
 - Updated `vanta_query_test_results` to call the documented `GET /v1/tests/{testId}/entities` endpoint and use its `entityStatus` filter.
 - Fixed list-filter query parameter names for vulnerabilities, tests, controls, people, and vendors so filters are sent using the names declared in Vanta's OpenAPI reference.
-- Repaired `vanta_create_vendor` to send the correct fields (`name`, `websiteUrl`, `category`, `additionalNotes`, `accountManagerName`, `accountManagerEmail`) as documented.
+- Repaired `vanta_create_vendor` to accept the documented minimum body (`name`), while still mapping optional vendor fields (`websiteUrl`, `category`, `additionalNotes`, `accountManagerName`, `accountManagerEmail`) when provided.
+- Added optional `risk_level` on `vanta_create_vendor`, mapped to Vanta's documented `inherentRiskLevel` field.
 - Repaired `vanta_update_vendor` to use the `PATCH` method and the correct field names.
+- Updated vendor category guidance to describe Vanta's documented free-form category displayName values (for example `cloudMonitoring`) instead of invented enums.
+- Corrected the README status summary to reflect the 17-tool surface (11 read + 6 write).
 - Added a source-stamped Vanta contract snapshot and tests that assert surviving read tools only call documented paths with documented query parameters.
 
 ## [0.1.0] - 2026-05-19
