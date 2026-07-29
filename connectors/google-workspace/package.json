@@ -55,7 +55,7 @@
     "@vitest/coverage-v8": "^4.1.3",
     "happy-dom": "^20.8.9",
     "msw": "^2.13.2",
-    "shx": "^0.3.4",
+    "shx": "^0.4.0",
     "typescript": "^5.8.2",
     "vitest": "^4.1.3"
   },
