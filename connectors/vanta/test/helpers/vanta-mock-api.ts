@@ -4,6 +4,11 @@ export const MOCK_CLIENT_ID = 'vci_test_clientid';
 export const MOCK_CLIENT_SECRET = 'vcs_test_clientsecret';
 export const MOCK_ACCESS_TOKEN = 'vmt_test_access_token_abc123';
 
+export interface CapturedTokenRequest {
+  url: string;
+  body: Record<string, unknown>;
+}
+
 /**
  * Counter wrapper around the token endpoint so tests can assert how many
  * POST /oauth/token calls happened in a given window (used by the
@@ -26,6 +31,34 @@ export function createTokenCounter() {
     },
     reset() {
       count = 0;
+    },
+  };
+}
+
+export function createCapturingTokenHandler(urls = ['https://api.vanta.com/oauth/token']) {
+  const requests: CapturedTokenRequest[] = [];
+  const handlers = urls.map((url) =>
+    http.post(url, async ({ request }) => {
+      const body = await request.json();
+      requests.push({
+        url: request.url,
+        body: typeof body === 'object' && body !== null && !Array.isArray(body) ? body as Record<string, unknown> : {},
+      });
+      return HttpResponse.json({
+        access_token: MOCK_ACCESS_TOKEN,
+        expires_in: 3600,
+        token_type: 'Bearer',
+      });
+    }),
+  );
+
+  return {
+    handlers,
+    get requests() {
+      return requests;
+    },
+    reset() {
+      requests.length = 0;
     },
   };
 }

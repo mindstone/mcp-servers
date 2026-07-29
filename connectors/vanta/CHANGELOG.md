@@ -6,6 +6,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Corrected the OAuth token exchange scope from the invalid `vanta-api.all:read-write` string to Vanta's documented `vanta-api.all:read vanta-api.all:write` pair.
+- Resolved all standard `VANTA_REGION` values to Vanta's canonical `api.vanta.com` host for both token exchange and API calls; `VANTA_REGION` remains accepted as a validated compatibility no-op.
+
 ## [0.1.0] - 2026-05-19
 
 ### Added

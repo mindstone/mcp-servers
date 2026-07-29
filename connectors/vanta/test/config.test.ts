@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createInMemoryTestClient, type McpTestClient } from '@mindstone/mcp-test-harness';
+import { http } from 'msw';
 
 import { mswServer } from './helpers/setup.js';
-import { MOCK_CLIENT_ID, MOCK_CLIENT_SECRET } from './helpers/vanta-mock-api.js';
+import {
+  MOCK_CLIENT_ID,
+  MOCK_CLIENT_SECRET,
+  createCapturingTokenHandler,
+} from './helpers/vanta-mock-api.js';
 
 describe('VANTA_REGION validation — fail-closed on unknown region (C6 fix)', () => {
   let testClient: McpTestClient;
@@ -16,7 +21,7 @@ describe('VANTA_REGION validation — fail-closed on unknown region (C6 fix)', (
     const { createServer } = await import('../src/server.js');
     // The factory constructs the client, which calls resolveRegion(). If region
     // validation fails closed, createServer() must throw rather than silently
-    // routing to api.vanta.com (which would send EU/AUS tenant data to US).
+    // accepting an unsupported Vanta deployment value.
     expect(() =>
       createInMemoryTestClient({
         createServer,
@@ -27,6 +32,63 @@ describe('VANTA_REGION validation — fail-closed on unknown region (C6 fix)', (
         },
       }),
     ).rejects.toThrowError(/VANTA_REGION/);
+  });
+
+  it('resolves standard regions to the canonical Vanta API host for token and API calls', async () => {
+    const { createServer } = await import('../src/server.js');
+    const tokenUrls = [
+      'https://api.vanta.com/oauth/token',
+      'https://api.eu.vanta.com/oauth/token',
+      'https://api.aus.vanta.com/oauth/token',
+    ];
+    const controlsUrls = [
+      'https://api.vanta.com/v1/controls',
+      'https://api.eu.vanta.com/v1/controls',
+      'https://api.aus.vanta.com/v1/controls',
+    ];
+
+    for (const [label, region] of [
+      ['unset', undefined],
+      ['us', 'us'],
+      ['eu', 'eu'],
+      ['aus', 'aus'],
+    ] as const) {
+      const tokenCapture = createCapturingTokenHandler(tokenUrls);
+      const apiRequests: string[] = [];
+      mswServer.use(
+        ...tokenCapture.handlers,
+        ...controlsUrls.map((url) =>
+          http.get(url, ({ request }) => {
+            apiRequests.push(request.url);
+            return HttpResponseJson({
+              results: {
+                data: [{ id: `control-${label}`, name: 'mock' }],
+                pageInfo: { endCursor: null, hasNextPage: false },
+              },
+            });
+          }),
+        ),
+      );
+
+      const env: NodeJS.ProcessEnv = {
+        VANTA_CLIENT_ID: MOCK_CLIENT_ID,
+        VANTA_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+      };
+      if (region) env.VANTA_REGION = region;
+
+      const client = await createInMemoryTestClient({ createServer, env });
+      try {
+        const result = await client.callTool('vanta_list_controls', { page_size: 1 });
+        const payload = result.json as { ok: boolean };
+        expect(payload.ok).toBe(true);
+        expect(tokenCapture.requests).toHaveLength(1);
+        expect(apiRequests).toHaveLength(1);
+        expect(new URL(tokenCapture.requests[0]?.url ?? '').origin).toBe('https://api.vanta.com');
+        expect(new URL(apiRequests[0] ?? '').origin).toBe('https://api.vanta.com');
+      } finally {
+        await client.close();
+      }
+    }
   });
 
   it('accepts empty / unset VANTA_REGION as us-default', async () => {

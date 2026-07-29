@@ -1,7 +1,7 @@
 const VANTA_REGIONS: Record<string, { api: string; token: string }> = {
   us: { api: 'https://api.vanta.com/v1', token: 'https://api.vanta.com/oauth/token' },
-  eu: { api: 'https://api.eu.vanta.com/v1', token: 'https://api.eu.vanta.com/oauth/token' },
-  aus: { api: 'https://api.aus.vanta.com/v1', token: 'https://api.aus.vanta.com/oauth/token' },
+  eu: { api: 'https://api.vanta.com/v1', token: 'https://api.vanta.com/oauth/token' },
+  aus: { api: 'https://api.vanta.com/v1', token: 'https://api.vanta.com/oauth/token' },
 };
 
 const resolveRegion = (region: string | undefined): { api: string; token: string } => {
@@ -704,7 +704,7 @@ export class VantaApiClient {
           grant_type: 'client_credentials',
           client_id: this.clientId,
           client_secret: this.clientSecret,
-          scope: 'vanta-api.all:read-write',
+          scope: 'vanta-api.all:read vanta-api.all:write',
         }),
         signal: controller.signal,
       });

@@ -36,7 +36,7 @@
         },
         {
           "name": "VANTA_REGION",
-          "description": "Vanta API region: us (default), eu, or aus",
+          "description": "Accepted for compatibility; US/EU/AU tenants all use api.vanta.com",
           "isRequired": false,
           "isSecret": false,
           "format": "string",

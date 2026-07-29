@@ -5,6 +5,7 @@ import { mswServer } from './helpers/setup.js';
 import {
   MOCK_CLIENT_ID,
   MOCK_CLIENT_SECRET,
+  createCapturingTokenHandler,
   createTokenCounter,
   listControlsHandler,
   slowTokenHandler,
@@ -47,6 +48,29 @@ describe('Auth — credential handling', () => {
     // Host-neutral text — must not reference any specific UI surface
     expect(payload.next_step).not.toMatch(/Settings\s*[→>]\s*Connectors/i);
     expect(payload.next_step).not.toMatch(/Rebel/i);
+  });
+
+  it('requests the documented Manage Vanta read and write scopes during token exchange', async () => {
+    const tokenCapture = createCapturingTokenHandler();
+    mswServer.use(
+      ...tokenCapture.handlers,
+      listControlsHandler([{ id: 'c1', name: 'mock' }]),
+    );
+
+    const { createServer } = await import('../src/server.js');
+    testClient = await createInMemoryTestClient({
+      createServer,
+      env: {
+        VANTA_CLIENT_ID: MOCK_CLIENT_ID,
+        VANTA_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+      },
+    });
+
+    const result = await testClient.callTool('vanta_list_controls', { page_size: 1 });
+    const payload = result.json as { ok: boolean };
+    expect(payload.ok).toBe(true);
+    expect(tokenCapture.requests).toHaveLength(1);
+    expect(tokenCapture.requests[0]?.body.scope).toBe('vanta-api.all:read vanta-api.all:write');
   });
 
   it('does NOT expose the bearer token in error messages even when redaction is exercised', async () => {

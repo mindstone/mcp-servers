@@ -43,7 +43,7 @@ After clicking the button, your host will prompt you to fill: `VANTA_CLIENT_ID`,
 - **Auth:** OAuth client-credentials grant (`VANTA_CLIENT_ID` + `VANTA_CLIENT_SECRET`)
 - **Tools:** 18 (13 read + 5 write across vulnerabilities, tests, controls, resources, evidence, people, vendors, documents, compliance summary)
 - **Surface:** cloud-api
-- **Regions:** US, EU, AUS (set via `VANTA_REGION`)
+- **Regions:** `VANTA_REGION` is accepted for backward compatibility; all standard tenants (US, EU, AU) share one API host (`api.vanta.com`). The knob routes nothing in this package.
 
 ## Installation
 
@@ -57,10 +57,10 @@ Set these environment variables before starting the server:
 
 - `VANTA_CLIENT_ID` — Vanta OAuth Client ID (required)
 - `VANTA_CLIENT_SECRET` — Vanta OAuth Client Secret (required)
-- `VANTA_REGION` — `us` (default), `eu`, or `aus`
+- `VANTA_REGION` — accepted for backward compatibility; all standard tenants (US, EU, AU) share one API host (`api.vanta.com`). The knob routes nothing in this package.
 - `VANTA_REQUEST_TIMEOUT_MS` — request timeout in milliseconds (default 60000)
 
-To generate credentials, open the [Vanta Developer Console](https://app.vanta.com/settings/developer-console), create a new OAuth client with the "Manage Vanta" (read-write) scope, and copy the Client ID and Client Secret.
+To generate credentials, open the [Vanta Developer Console](https://app.vanta.com/settings/developer-console), create a new "Manage Vanta" app type, and copy the Client ID and Client Secret. The connector requests `vanta-api.all:read vanta-api.all:write` during token exchange.
 
 ## Tools
 
@@ -83,6 +83,17 @@ To generate credentials, open the [Vanta Developer Console](https://app.vanta.co
 - `vanta_attach_vendor_document`
 - `vanta_update_vulnerability`
 - `vanta_upload_document`
+
+## Known limitations
+
+Several tool contracts are still being repaired:
+
+- Five write tools call wrong or nonexistent endpoints: `vanta_create_vendor`, `vanta_update_vendor`, `vanta_update_vulnerability`, `vanta_attach_vendor_document`, and `vanta_upload_document`.
+- `vanta_list_evidence` and `vanta_list_resources` call API paths that Vanta has removed from the current Manage Vanta reference.
+- `vanta_get_compliance_summary` reads fields the current Vanta API does not return.
+- Some list filters are silently ignored because their parameter names no longer match the current API.
+
+These fixes are in progress and tracked in the changelog.
 
 ## Safety
 
