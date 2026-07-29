@@ -80,6 +80,27 @@ const normalizeContractPath = (endpoint: string): string => {
   return normalized;
 };
 
+const documentedButUnexercisedQueryParams: Record<string, string[]> = {
+  'GET /vulnerabilities': [
+    'q',
+    'externalVulnerabilityId',
+    'isFixAvailable',
+    'packageIdentifier',
+    'slaDeadlineAfterDate',
+    'slaDeadlineBeforeDate',
+    'includeVulnerabilitiesWithoutSlas',
+    'vulnerableAssetId',
+  ],
+  'GET /tests': ['integrationFilter', 'controlFilter', 'ownerFilter', 'categoryFilter', 'isInRollout'],
+  'GET /frameworks': ['pageCursor'],
+  'GET /people': [
+    'tasksSummaryStatusMatchesAny',
+    'taskTypeMatchesAny',
+    'taskStatusMatchesAny',
+    'groupIdsMatchesAny',
+  ],
+};
+
 describe('Vanta contract snapshot', () => {
   it('records the token exchange contract and valid Manage Vanta scopes', () => {
     expect(contract.token).toEqual({
@@ -143,9 +164,25 @@ describe('Vanta contract snapshot', () => {
     for (const call of recorder.calls) {
       const endpoint = contractEndpoints.get(endpointKey(call));
       expect(endpoint, `${call.method} ${call.path} is missing from the contract snapshot`).toBeDefined();
-      expect(call.queryParams, `${call.method} ${call.path} sent undeclared params`).toEqual(
-        call.queryParams.filter((param) => endpoint?.queryParams.includes(param)),
-      );
+      if (!endpoint) {
+        continue;
+      }
+
+      const exclusions = documentedButUnexercisedQueryParams[endpointKey(call)] ?? [];
+      expect(
+        exclusions.filter((param) => !endpoint.queryParams.includes(param)),
+        `${call.method} ${call.path} exclusion list contains undeclared params`,
+      ).toEqual([]);
+
+      const exercisedDeclaredParams = endpoint.queryParams.filter((param) => !exclusions.includes(param)).sort();
+      const missingParams = exercisedDeclaredParams.filter((param) => !call.queryParams.includes(param));
+      const undeclaredParams = call.queryParams.filter((param) => !exercisedDeclaredParams.includes(param));
+      const mismatchMessage =
+        `${call.method} ${call.path} query params mismatch; ` +
+        `missing declared-but-unsent: [${missingParams.join(', ') || 'none'}]; ` +
+        `undeclared sent-but-undeclared: [${undeclaredParams.join(', ') || 'none'}]`;
+
+      expect(call.queryParams, mismatchMessage).toEqual(exercisedDeclaredParams);
     }
   });
 });
