@@ -40,7 +40,7 @@ COST: FREE — no credits consumed.`,
         throw new ElevenLabsError(
           'ElevenLabs API key not configured',
           'AUTH_REQUIRED',
-          'Ask the user for their API key, then call configure_elevenlabs_api_key.',
+          'The user adds the ElevenLabs API key in Settings → Connectors in the app. Do not ask for it in chat.',
         );
       }
 
@@ -103,7 +103,7 @@ COST: FREE — no credits consumed.`,
         throw new ElevenLabsError(
           'ElevenLabs API key not configured',
           'AUTH_REQUIRED',
-          'Ask the user for their API key, then call configure_elevenlabs_api_key.',
+          'The user adds the ElevenLabs API key in Settings → Connectors in the app. Do not ask for it in chat.',
         );
       }
 

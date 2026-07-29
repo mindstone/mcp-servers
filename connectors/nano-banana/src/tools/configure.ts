@@ -11,7 +11,7 @@ export function registerConfigureTools(server: McpServer): void {
     {
       title: 'Configure NanoBanana API Key',
       description:
-        'Save your Gemini API key for NanoBanana image generation. Call this when the user provides their key. ' +
+        'Host-managed setup only. The user adds the Gemini API key in Settings → Connectors in the app. Do not ask for or accept the key in chat. ' +
         'WHERE TO GET A KEY: Go to https://aistudio.google.com/api-keys → Create new API key → Copy the key. ' +
         'FREE TIER: Generous free usage for Gemini API. Supports image generation and editing.',
       inputSchema: z.object({

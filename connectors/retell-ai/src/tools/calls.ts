@@ -96,7 +96,7 @@ COMMON MISTAKES:
 - Updating the agent or LLM but not publishing the version before calling
 
 ERROR RECOVERY:
-- 401: API key is missing or invalid → ask the user for the key, then configure_retell_api_key
+- 401: API key is missing or invalid → the user adds it in Settings → Connectors in the app; do not ask for it in chat
 - 404: resource/version/binding not found → check phone number outbound_agents, get_agent_versions, then publish_agent or pass override_agent_version
 - 422: bad parameter shape/value → verify E.164 phone numbers and valid agent/version IDs
 

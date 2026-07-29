@@ -35,7 +35,7 @@ function requireApiKey(): string {
     throw new GammaError(
       'Gamma API key not configured',
       'AUTH_REQUIRED',
-      'Ask the user for their Gamma API key (get it from https://gamma.app/settings/developers), then call configure_gamma_api_key to set it up.',
+      'The user adds the Gamma API key in Settings → Connectors in the app. Do not ask for it in chat. Get it from https://gamma.app/settings/developers.',
     );
   }
   return getApiKey();

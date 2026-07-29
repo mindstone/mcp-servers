@@ -10,8 +10,7 @@ export function registerConfigureTools(server: McpServer): void {
     'configure_opus_api_key',
     {
       description:
-        'Configure the OpusClip API key for this session. ' +
-        'WHEN TO USE: only call this if you get an error saying "Opus API key not configured" or "AUTH_FAILED". ' +
+        'Host-managed setup only. The user adds the OpusClip API key in Settings → Connectors in the app. Do not ask for or accept the key in chat. ' +
         'HOW USER GETS THEIR KEY: go to https://app.opus.pro/settings/integration-tokens and create a new token. ' +
         'After configuring, all other opus_* tools will work immediately.',
       inputSchema: z.object({

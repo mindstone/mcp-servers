@@ -10,8 +10,7 @@ export function registerConfigureTools(server: McpServer): void {
     'configure_gamma_api_key',
     {
       description:
-        'Configure the Gamma API key for this session. ' +
-        'Only call this if you get an error saying "Gamma API key not configured". ' +
+        'Host-managed setup only. The user adds the Gamma API key in Settings → Connectors in the app. Do not ask for or accept the key in chat. ' +
         'HOW USER GETS THEIR KEY: Go to https://gamma.app/settings/developers → Create API Key → Copy the key.',
       inputSchema: z.object({
         api_key: z.string().min(1).describe('The Gamma API key'),

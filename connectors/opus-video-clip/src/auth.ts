@@ -33,7 +33,7 @@ export function requireApiKey(): string {
     throw new OpusError(
       'Opus API key not configured',
       'AUTH_REQUIRED',
-      'Ask the user for their OpusClip API key (https://app.opus.pro/settings/integration-tokens), then call configure_opus_api_key to set it up.',
+      'The user adds the OpusClip API key in Settings → Connectors in the app. Do not ask for it in chat. Get it from https://app.opus.pro/settings/integration-tokens.',
     );
   }
   return apiKey;

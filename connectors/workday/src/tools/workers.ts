@@ -21,8 +21,7 @@ function notConfiguredResponse(): string {
     error: 'Workday not configured',
     resolution: 'Configure Workday with your OAuth credentials first.',
     next_step: {
-      action: 'Ask the user for their Workday credentials, then call configure_workday_credentials',
-      tool_to_call: 'configure_workday_credentials',
+      action: 'The user adds the Workday credentials in Settings → Connectors in the app. Do not ask for it in chat.',
     },
   });
 }

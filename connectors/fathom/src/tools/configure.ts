@@ -10,7 +10,7 @@ export function registerConfigureTools(server: McpServer): void {
     'configure_fathom_api_key',
     {
       description:
-        'Configure the Fathom API key. Call this tool when the user provides their Fathom API key. ' +
+        'Host-managed setup only. The user adds the Fathom API key in Settings → Connectors in the app. Do not ask for or accept the key in chat. ' +
         'Get your API key from https://fathom.video/customize#api-access-header — ' +
         'click "Add +", select "Generate API Key", name it (e.g., "MCP Server").',
       inputSchema: z.object({

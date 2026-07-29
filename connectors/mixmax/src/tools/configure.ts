@@ -10,7 +10,7 @@ export function registerConfigureTools(server: McpServer): void {
     'configure_mixmax_api_key',
     {
       description:
-        'Configure the Mixmax API token. Call this tool when the user provides their Mixmax API token. ' +
+        'Host-managed setup only. The user adds the Mixmax API token in Settings → Connectors in the app. Do not ask for or accept the token in chat. ' +
         'Get your token from https://app.mixmax.com/dashboard/settings/personal/integrations — ' +
         'scroll to "API Key" section and click "Generate Token". ' +
         'Requires a Mixmax Growth or Enterprise annual plan.',

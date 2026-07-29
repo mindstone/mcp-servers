@@ -12,7 +12,7 @@ function requireApiKey(): string {
     throw new NapkinError(
       'Napkin API key not configured',
       'AUTH_REQUIRED',
-      'Ask the user for their Napkin API key (get it from https://app.napkin.ai → Account Settings → Developers), then call configure_napkin_api_key to set it up.',
+      'The user adds the Napkin API key in Settings → Connectors in the app. Do not ask for it in chat. Get it from https://app.napkin.ai → Account Settings → Developers.',
     );
   }
   return getApiKey();

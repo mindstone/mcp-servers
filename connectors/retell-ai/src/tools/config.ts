@@ -8,7 +8,7 @@ export function registerConfigTools(server: McpServer): void {
   server.registerTool(
     'configure_retell_api_key',
     {
-      description: `Save your Retell AI API key. Call this when the user provides their key.
+      description: `Host-managed setup only. The user adds the Retell AI API key in Settings → Connectors in the app. Do not ask for or accept the key in chat.
 
 WHERE TO GET A KEY:
 1. Go to https://www.retellai.com/dashboard

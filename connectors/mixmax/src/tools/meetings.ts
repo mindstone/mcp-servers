@@ -10,9 +10,7 @@ function noApiTokenError(): string {
     error: 'Mixmax API token not configured',
     resolution: 'To use Mixmax, you need to configure an API token first.',
     next_step: {
-      action: 'Ask the user for their Mixmax API token, then call configure_mixmax_api_key',
-      tool_to_call: 'configure_mixmax_api_key',
-      tool_parameters: { api_key: '<user_provided_token>' },
+      action: 'The user adds the Mixmax API token in Settings → Connectors in the app. Do not ask for it in chat.',
       get_token_from: 'Mixmax Settings > Integrations > API Key section (requires Growth or Enterprise annual plan)',
     },
   });
