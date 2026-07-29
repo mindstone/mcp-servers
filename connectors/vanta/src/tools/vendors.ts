@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { VantaApiError, stringifyToolResult, toToolErrorResponse, validateDocumentUrlWithDns, type VantaApiClient } from '../api.js';
 
 export const listVendorsSchema = z.object({
-  category: z.string().optional().describe('Filter by vendor category'),
-  status: z.string().optional().describe('Filter by vendor status'),
+  name: z.string().optional().describe('Filter vendors by name (case-insensitive partial match)'),
+  status: z.string().optional().describe('Filter by documented vendor status: MANAGED, ARCHIVED, or IN_PROCUREMENT'),
   page_size: z.number().int().min(1).max(500).optional().default(25).describe('Number of vendors to return, up to 500'),
   page_cursor: z.string().optional().describe('Cursor from a previous response for the next page'),
 });
@@ -52,10 +52,12 @@ export async function vantaListVendors(
 ): Promise<string> {
   try {
     const result = await client.getPaginated('/v1/vendors', {
-      category: args.category,
+      name: args.name,
       status: args.status,
       page_size: args.page_size,
       page_cursor: args.page_cursor,
+    }, {
+      status: 'statusMatchesAny',
     });
 
     return stringifyToolResult({

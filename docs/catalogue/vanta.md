@@ -5,7 +5,7 @@ title: vanta — mcp-servers catalogue
 
 # vanta
 
-Vanta compliance MCP server — read and write vulnerabilities, tests, controls, evidence, resources, people, vendors, and compliance summaries via the Vanta API.
+Vanta compliance MCP server — read and write vulnerabilities, tests, controls, people, vendors, documents, and compliance summaries via the Vanta API.
 
 
 
@@ -15,7 +15,7 @@ Vanta compliance MCP server — read and write vulnerabilities, tests, controls,
 |-------|-------|
 | Version | 0.1.0 |
 | Auth | OAuth (`VANTA_CLIENT_SECRET`) |
-| Tools | 18 (vulnerabilities, tests, controls, resources, evidence, people, vendors, documents) |
+| Tools | 16 (vulnerabilities, tests, controls, people, vendors, documents) |
 | Surface | cloud API |
 
 ## Evidence

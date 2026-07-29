@@ -6,10 +6,18 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed
+
+- Removed `vanta_list_evidence` and `vanta_list_resources` because the current Manage Vanta reference has no `GET /v1/evidence` endpoint and no tenant-wide `GET /v1/resources` endpoint.
+
 ### Fixed
 
 - Corrected the OAuth token exchange scope from the invalid `vanta-api.all:read-write` string to Vanta's documented `vanta-api.all:read vanta-api.all:write` pair.
 - Resolved all standard `VANTA_REGION` values to Vanta's canonical `api.vanta.com` host for both token exchange and API calls; `VANTA_REGION` remains accepted as a validated compatibility no-op.
+- Rebuilt `vanta_get_compliance_summary` on Vanta's documented `GET /v1/frameworks` counters instead of nonexistent fields on test records.
+- Updated `vanta_query_test_results` to call the documented `GET /v1/tests/{testId}/entities` endpoint and use its `entityStatus` filter.
+- Fixed list-filter query parameter names for vulnerabilities, tests, controls, people, and vendors so filters are sent using the names declared in Vanta's OpenAPI reference.
+- Added a source-stamped Vanta contract snapshot and tests that assert surviving read tools only call documented paths with documented query parameters.
 
 ## [0.1.0] - 2026-05-19
 

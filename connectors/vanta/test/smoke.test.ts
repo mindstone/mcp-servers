@@ -13,9 +13,7 @@ const EXPECTED_TOOLS = [
   'vanta_get_vendor',
   'vanta_get_vulnerability',
   'vanta_list_controls',
-  'vanta_list_evidence',
   'vanta_list_people',
-  'vanta_list_resources',
   'vanta_list_tests',
   'vanta_list_vendors',
   'vanta_list_vulnerabilities',
@@ -46,7 +44,7 @@ describe('Smoke test — Vanta MCP server', () => {
     vi.unstubAllEnvs();
   });
 
-  it('registers all 18 tools', async () => {
+  it('registers the final Stage 2 tool surface', async () => {
     const { createServer } = await import('../src/server.js');
     testClient = await createInMemoryTestClient({
       createServer,

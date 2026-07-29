@@ -3,9 +3,9 @@ import { z } from 'zod';
 import { VantaApiError, stringifyToolResult, toToolErrorResponse, type VantaApiClient } from '../api.js';
 
 export const listVulnerabilitiesSchema = z.object({
-  severity: z.string().optional().describe('Filter by severity, such as CRITICAL, HIGH, MEDIUM, LOW, or INFORMATIONAL'),
-  status: z.string().optional().describe('Filter by vulnerability status, such as OPEN, IN_PROGRESS, FIXED, or ACCEPTED'),
-  service: z.string().optional().describe('Filter by service or integration name'),
+  severity: z.string().optional().describe('Filter by documented severity: CRITICAL, HIGH, MEDIUM, or LOW'),
+  integration_id: z.string().optional().describe('Filter by the Vanta integration ID that detected the vulnerability'),
+  is_deactivated: z.boolean().optional().describe('Filter by whether Vanta monitoring is deactivated for the vulnerability'),
   page_size: z.number().int().min(1).max(500).optional().default(25).describe('Number of vulnerabilities to return, up to 500'),
   page_cursor: z.string().optional().describe('Cursor from a previous response for the next page'),
 });
@@ -32,10 +32,13 @@ export async function vantaListVulnerabilities(
   try {
     const result = await client.getPaginated('/v1/vulnerabilities', {
       severity: args.severity,
-      status: args.status,
-      service: args.service,
+      integration_id: args.integration_id,
+      is_deactivated: args.is_deactivated,
       page_size: args.page_size,
       page_cursor: args.page_cursor,
+    }, {
+      integration_id: 'integrationId',
+      is_deactivated: 'isDeactivated',
     });
 
     return stringifyToolResult({

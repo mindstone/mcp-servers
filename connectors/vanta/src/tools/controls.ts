@@ -4,7 +4,6 @@ import { stringifyToolResult, toToolErrorResponse, type VantaApiClient } from '.
 
 export const listControlsSchema = z.object({
   framework: z.string().optional().describe('Filter by framework, such as SOC2, ISO27001, or HIPAA'),
-  status: z.string().optional().describe('Filter by control status'),
   page_size: z.number().int().min(1).max(500).optional().default(25).describe('Number of controls to return, up to 500'),
   page_cursor: z.string().optional().describe('Cursor from a previous response for the next page'),
 });
@@ -20,9 +19,10 @@ export async function vantaListControls(client: VantaApiClient, args: ListContro
   try {
     const result = await client.getPaginated('/v1/controls', {
       framework: args.framework,
-      status: args.status,
       page_size: args.page_size,
       page_cursor: args.page_cursor,
+    }, {
+      framework: 'frameworkMatchesAny',
     });
 
     return stringifyToolResult({

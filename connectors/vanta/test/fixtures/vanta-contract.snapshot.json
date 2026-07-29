@@ -1,0 +1,177 @@
+{
+  "_meta": {
+    "sourceUrls": [
+      "https://developer.vanta.com/reference/manage-vanta/overview",
+      "https://developer.vanta.com/docs/concepts/authentication",
+      "https://developer.vanta.com/llms.txt",
+      "https://developer.vanta.com/reference/manage-vanta.json",
+      "https://developer.vanta.com/api-reference/vulnerabilities/get-vulnerabilities.md",
+      "https://developer.vanta.com/api-reference/vulnerabilities/get-vulnerability-by-id.md",
+      "https://developer.vanta.com/api-reference/tests/list-tests.md",
+      "https://developer.vanta.com/api-reference/tests/get-test-by-id.md",
+      "https://developer.vanta.com/api-reference/tests/get-test-entities-by-test-id.md",
+      "https://developer.vanta.com/api-reference/controls/list-controls.md",
+      "https://developer.vanta.com/api-reference/controls/get-control-by-an-id.md",
+      "https://developer.vanta.com/api-reference/frameworks/list-available-frameworks.md",
+      "https://developer.vanta.com/api-reference/people/list-people.md",
+      "https://developer.vanta.com/api-reference/vendors/list-vendors.md",
+      "https://developer.vanta.com/api-reference/vendors/get-vendor-by-id.md",
+      "https://developer.vanta.com/api-reference/integrations/list-resources.md"
+    ],
+    "fetchDate": "2026-07-29",
+    "provenance": "Trimmed contract snapshot derived from Vanta's generated Manage Vanta reference and endpoint pages; this is not a full OpenAPI copy."
+  },
+  "token": {
+    "method": "POST",
+    "path": "/oauth/token",
+    "validScopes": [
+      "vanta-api.all:read",
+      "vanta-api.all:write"
+    ],
+    "requiredBodyFields": [
+      "grant_type",
+      "client_id",
+      "client_secret",
+      "scope"
+    ]
+  },
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/vulnerabilities",
+      "queryParams": [
+        "q",
+        "pageSize",
+        "pageCursor",
+        "isDeactivated",
+        "externalVulnerabilityId",
+        "isFixAvailable",
+        "packageIdentifier",
+        "slaDeadlineAfterDate",
+        "slaDeadlineBeforeDate",
+        "severity",
+        "integrationId",
+        "includeVulnerabilitiesWithoutSlas",
+        "vulnerableAssetId"
+      ],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/vulnerabilities/{vulnerabilityId}",
+      "queryParams": [],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/tests",
+      "queryParams": [
+        "pageSize",
+        "pageCursor",
+        "statusFilter",
+        "frameworkFilter",
+        "integrationFilter",
+        "controlFilter",
+        "ownerFilter",
+        "categoryFilter",
+        "isInRollout"
+      ],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/tests/{testId}",
+      "queryParams": [],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/tests/{testId}/entities",
+      "queryParams": [
+        "entityStatus",
+        "pageSize",
+        "pageCursor"
+      ],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/controls",
+      "queryParams": [
+        "pageSize",
+        "pageCursor",
+        "frameworkMatchesAny"
+      ],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/controls/{controlId}",
+      "queryParams": [],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/frameworks",
+      "queryParams": [
+        "pageSize",
+        "pageCursor"
+      ],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/people",
+      "queryParams": [
+        "pageSize",
+        "pageCursor",
+        "tasksSummaryStatusMatchesAny",
+        "taskTypeMatchesAny",
+        "taskStatusMatchesAny",
+        "emailAndNameFilter",
+        "groupIdsMatchesAny",
+        "employmentStatus"
+      ],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/vendors",
+      "queryParams": [
+        "pageSize",
+        "pageCursor",
+        "name",
+        "statusMatchesAny"
+      ],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/vendors/{vendorId}",
+      "queryParams": [],
+      "requiredBodyFields": []
+    }
+  ],
+  "exclusions": [
+    {
+      "tool": "vanta_create_vendor",
+      "reason": "Stage 3a repairs CreateVendorInput field mapping and extends this snapshot."
+    },
+    {
+      "tool": "vanta_update_vendor",
+      "reason": "Stage 3a repairs PATCH method and UpdateVendorInput field mapping and extends this snapshot."
+    },
+    {
+      "tool": "vanta_update_vulnerability",
+      "reason": "Stage 3a replaces this nonexistent PATCH capability with deactivate/reactivate monitoring tools."
+    },
+    {
+      "tool": "vanta_attach_vendor_document",
+      "reason": "Stage 3b rebuilds the multipart vendor-document upload flow and extends this snapshot."
+    },
+    {
+      "tool": "vanta_upload_document",
+      "reason": "Stage 3b rebuilds the document create/upload flow and extends this snapshot."
+    }
+  ]
+}

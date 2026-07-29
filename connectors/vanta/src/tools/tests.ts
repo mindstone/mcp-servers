@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { stringifyToolResult, toToolErrorResponse, type VantaApiClient } from '../api.js';
 
 export const listTestsSchema = z.object({
-  status: z.string().optional().describe('Filter by test status, such as PASS, FAIL, NOT_APPLICABLE, or DISABLED'),
+  status: z.string().optional().describe('Filter by documented test status, such as OK, NEEDS_ATTENTION, DEACTIVATED, IN_PROGRESS, INVALID, or NOT_APPLICABLE'),
   framework: z.string().optional().describe('Filter by framework, such as SOC2, ISO27001, or HIPAA'),
   page_size: z.number().int().min(1).max(500).optional().default(25).describe('Number of tests to return, up to 500'),
   page_cursor: z.string().optional().describe('Cursor from a previous response for the next page'),
@@ -23,6 +23,9 @@ export async function vantaListTests(client: VantaApiClient, args: ListTestsArgs
       framework: args.framework,
       page_size: args.page_size,
       page_cursor: args.page_cursor,
+    }, {
+      status: 'statusFilter',
+      framework: 'frameworkFilter',
     });
 
     return stringifyToolResult({

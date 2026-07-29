@@ -110,11 +110,6 @@ const snakeToCamel = (key: string): string => key.replace(/_([a-z])/g, (_match, 
 const DEFAULT_PARAM_MAP: Record<string, string> = {
   page_size: 'pageSize',
   page_cursor: 'pageCursor',
-  status: 'statusFilter',
-  category: 'categoryFilter',
-  framework: 'frameworkFilter',
-  severity: 'severityFilter',
-  service: 'serviceFilter',
 };
 
 export function buildQueryParams(

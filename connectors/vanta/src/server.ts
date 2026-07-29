@@ -9,10 +9,8 @@ import {
   vantaGetControl,
   vantaListControls,
 } from './tools/controls.js';
-import { listEvidenceSchema, vantaListEvidence } from './tools/evidence.js';
 import { listPeopleSchema, vantaListPeople } from './tools/people.js';
 import { queryTestResultsSchema, vantaQueryTestResults } from './tools/query-results.js';
-import { listResourcesSchema, vantaListResources } from './tools/resources.js';
 import { complianceSummarySchema, vantaGetComplianceSummary } from './tools/summary.js';
 import {
   getTestSchema,
@@ -79,7 +77,7 @@ export function createServer(options: CreateServerOptions = {}): McpServer {
 
   server.registerTool('vanta_list_vulnerabilities', {
     title: 'List Vanta Vulnerabilities',
-    description: `List vulnerabilities from Vanta with optional severity, status, and service filters.
+    description: `List vulnerabilities from Vanta with optional severity, integration, and deactivation filters.
 
 WORKFLOW:
 - Start here to review open vulnerability posture.
@@ -117,7 +115,7 @@ RETURNS:
 
   server.registerTool('vanta_list_controls', {
     title: 'List Vanta Controls',
-    description: 'List Vanta controls with optional framework and status filters.',
+    description: 'List Vanta controls with an optional framework filter.',
     annotations: readOnlyAnnotations,
     inputSchema: listControlsSchema,
   }, async (input) => textResult(await vantaListControls(client, input)));
@@ -129,44 +127,30 @@ RETURNS:
     inputSchema: getControlSchema,
   }, async (input) => textResult(await vantaGetControl(client, input)));
 
-  server.registerTool('vanta_list_resources', {
-    title: 'List Vanta Resources',
-    description: 'List monitored resources from Vanta with an optional resource_type filter.',
-    annotations: readOnlyAnnotations,
-    inputSchema: listResourcesSchema,
-  }, async (input) => textResult(await vantaListResources(client, input)));
-
-  server.registerTool('vanta_list_evidence', {
-    title: 'List Vanta Evidence',
-    description: 'List evidence items from Vanta with optional type and status filters.',
-    annotations: readOnlyAnnotations,
-    inputSchema: listEvidenceSchema,
-  }, async (input) => textResult(await vantaListEvidence(client, input)));
-
   server.registerTool('vanta_list_people', {
     title: 'List Vanta People',
-    description: 'List people tracked in Vanta with optional role and status filters.',
+    description: 'List people tracked in Vanta with optional name/email and employment-status filters.',
     annotations: readOnlyAnnotations,
     inputSchema: listPeopleSchema,
   }, async (input) => textResult(await vantaListPeople(client, input)));
 
   server.registerTool('vanta_query_test_results', {
     title: 'Query Vanta Test Results',
-    description: 'Query Vanta test results with flexible filters including date range.',
+    description: 'List test entities/results for one Vanta test with an optional entity-status filter.',
     annotations: readOnlyAnnotations,
     inputSchema: queryTestResultsSchema,
   }, async (input) => textResult(await vantaQueryTestResults(client, input)));
 
   server.registerTool('vanta_get_compliance_summary', {
     title: 'Get Vanta Compliance Summary',
-    description: 'Get an aggregate compliance summary with pass/fail counts by framework.',
+    description: 'Get an aggregate compliance summary from Vanta framework counters.',
     annotations: readOnlyAnnotations,
     inputSchema: complianceSummarySchema,
   }, async (input) => textResult(await vantaGetComplianceSummary(client, input)));
 
   server.registerTool('vanta_list_vendors', {
     title: 'List Vanta Vendors',
-    description: 'List vendors tracked in Vanta with optional category and status filters.',
+    description: 'List vendors tracked in Vanta with optional name and status filters.',
     annotations: readOnlyAnnotations,
     inputSchema: listVendorsSchema,
   }, async (input) => textResult(await vantaListVendors(client, input)));
