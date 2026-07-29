@@ -89,13 +89,13 @@ export async function vantaCreateVendor(
 ): Promise<string> {
   try {
     const body: Record<string, unknown> = {
-      vendorName: args.vendor_name,
-      vendorWebsite: args.vendor_website,
-      vendorCategory: args.vendor_category,
+      name: args.vendor_name,
+      websiteUrl: args.vendor_website,
+      category: args.vendor_category,
     };
-    if (args.description !== undefined) body.description = args.description;
-    if (args.vendor_contact_name !== undefined) body.vendorContactName = args.vendor_contact_name;
-    if (args.vendor_contact_email !== undefined) body.vendorContactEmail = args.vendor_contact_email;
+    if (args.description !== undefined) body.additionalNotes = args.description;
+    if (args.vendor_contact_name !== undefined) body.accountManagerName = args.vendor_contact_name;
+    if (args.vendor_contact_email !== undefined) body.accountManagerEmail = args.vendor_contact_email;
 
     const vendor = await client.post('/v1/vendors', body);
     return stringifyToolResult({ ok: true, vendor });
@@ -111,13 +111,13 @@ export async function vantaUpdateVendor(
   try {
     client.validateId(args.vendor_id);
     const body: Record<string, unknown> = {};
-    if (args.vendor_name !== undefined) body.vendorName = args.vendor_name;
-    if (args.vendor_website !== undefined) body.vendorWebsite = args.vendor_website;
-    if (args.vendor_category !== undefined) body.vendorCategory = args.vendor_category;
-    if (args.description !== undefined) body.description = args.description;
-    if (args.vendor_contact_name !== undefined) body.vendorContactName = args.vendor_contact_name;
-    if (args.vendor_contact_email !== undefined) body.vendorContactEmail = args.vendor_contact_email;
-    if (args.risk_level !== undefined) body.riskLevel = args.risk_level;
+    if (args.vendor_name !== undefined) body.name = args.vendor_name;
+    if (args.vendor_website !== undefined) body.websiteUrl = args.vendor_website;
+    if (args.vendor_category !== undefined) body.category = args.vendor_category;
+    if (args.description !== undefined) body.additionalNotes = args.description;
+    if (args.vendor_contact_name !== undefined) body.accountManagerName = args.vendor_contact_name;
+    if (args.vendor_contact_email !== undefined) body.accountManagerEmail = args.vendor_contact_email;
+    if (args.risk_level !== undefined) body.inherentRiskLevel = args.risk_level;
 
     if (Object.keys(body).length === 0) {
       throw new VantaApiError(
@@ -128,7 +128,7 @@ export async function vantaUpdateVendor(
       );
     }
 
-    const vendor = await client.put(`/v1/vendors/${encodeURIComponent(args.vendor_id)}`, body);
+    const vendor = await client.patch(`/v1/vendors/${encodeURIComponent(args.vendor_id)}`, body);
     return stringifyToolResult({ ok: true, vendor });
   } catch (error) {
     return toToolErrorResponse(error);

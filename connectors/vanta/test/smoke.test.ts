@@ -7,6 +7,7 @@ import { MOCK_CLIENT_ID, MOCK_CLIENT_SECRET } from './helpers/vanta-mock-api.js'
 const EXPECTED_TOOLS = [
   'vanta_attach_vendor_document',
   'vanta_create_vendor',
+  'vanta_deactivate_vulnerability_monitoring',
   'vanta_get_compliance_summary',
   'vanta_get_control',
   'vanta_get_test',
@@ -18,8 +19,8 @@ const EXPECTED_TOOLS = [
   'vanta_list_vendors',
   'vanta_list_vulnerabilities',
   'vanta_query_test_results',
+  'vanta_reactivate_vulnerability_monitoring',
   'vanta_update_vendor',
-  'vanta_update_vulnerability',
   'vanta_upload_document',
 ].sort();
 
@@ -27,13 +28,15 @@ const WRITE_TOOLS = new Set([
   'vanta_create_vendor',
   'vanta_update_vendor',
   'vanta_attach_vendor_document',
-  'vanta_update_vulnerability',
+  'vanta_deactivate_vulnerability_monitoring',
+  'vanta_reactivate_vulnerability_monitoring',
   'vanta_upload_document',
 ]);
 
 const DESTRUCTIVE_TOOLS = new Set([
   'vanta_update_vendor',
-  'vanta_update_vulnerability',
+  'vanta_deactivate_vulnerability_monitoring',
+  'vanta_reactivate_vulnerability_monitoring',
 ]);
 
 describe('Smoke test — Vanta MCP server', () => {

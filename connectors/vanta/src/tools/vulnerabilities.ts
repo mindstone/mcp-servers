@@ -14,16 +14,20 @@ export const getVulnerabilitySchema = z.object({
   vulnerability_id: z.string().min(1).describe('Vanta vulnerability ID returned by vanta_list_vulnerabilities'),
 });
 
-export const updateVulnerabilitySchema = z.object({
-  vulnerability_id: z.string().min(1).describe('Vanta vulnerability ID to update'),
-  status: z.string().optional().describe('New vulnerability status (e.g., OPEN, IN_PROGRESS, FIXED, ACCEPTED)'),
-  remediation_status: z.string().optional().describe('Remediation status (e.g., IN_PROGRESS, COMPLETED, DEFERRED)'),
-  remediation_note: z.string().optional().describe('Note explaining the remediation plan or reason for status change'),
+export const deactivateVulnerabilityMonitoringSchema = z.object({
+  vulnerability_id: z.string().min(1).describe('Vanta vulnerability ID to deactivate monitoring for'),
+  deactivate_reason: z.string().min(1).describe('Reason for deactivating the vulnerability'),
+  should_reactivate_when_fixable: z.boolean().describe('Whether or not vulnerability should reactivate when it becomes fixable'),
+});
+
+export const reactivateVulnerabilityMonitoringSchema = z.object({
+  vulnerability_id: z.string().min(1).describe('Vanta vulnerability ID to reactivate monitoring for'),
 });
 
 export type ListVulnerabilitiesArgs = z.infer<typeof listVulnerabilitiesSchema>;
 export type GetVulnerabilityArgs = z.infer<typeof getVulnerabilitySchema>;
-export type UpdateVulnerabilityArgs = z.infer<typeof updateVulnerabilitySchema>;
+export type DeactivateVulnerabilityMonitoringArgs = z.infer<typeof deactivateVulnerabilityMonitoringSchema>;
+export type ReactivateVulnerabilityMonitoringArgs = z.infer<typeof reactivateVulnerabilityMonitoringSchema>;
 
 export async function vantaListVulnerabilities(
   client: VantaApiClient,
@@ -67,29 +71,45 @@ export async function vantaGetVulnerability(
   }
 }
 
-export async function vantaUpdateVulnerability(
+export async function vantaDeactivateVulnerabilityMonitoring(
   client: VantaApiClient,
-  args: UpdateVulnerabilityArgs,
+  args: DeactivateVulnerabilityMonitoringArgs,
 ): Promise<string> {
   try {
     client.validateId(args.vulnerability_id);
-    const body: Record<string, unknown> = {};
-    if (args.status !== undefined) body.status = args.status;
-    if (args.remediation_status !== undefined) body.remediationStatus = args.remediation_status;
-    if (args.remediation_note !== undefined) body.remediationNote = args.remediation_note;
+    const body = {
+      updates: [
+        {
+          id: args.vulnerability_id,
+          deactivateReason: args.deactivate_reason,
+          shouldReactivateWhenFixable: args.should_reactivate_when_fixable,
+        },
+      ],
+    };
 
-    if (Object.keys(body).length === 0) {
-      throw new VantaApiError(
-        'CONFIG_INVALID',
-        'No update fields provided. Provide at least one field to update.',
-        'The update_vulnerability call did not include any fields to change.',
-        'Pass one or more fields (status, remediation_status, remediation_note) alongside vulnerability_id.',
-      );
-    }
+    const result = await client.post('/v1/vulnerabilities/deactivate', body);
+    return stringifyToolResult({ ok: true, result });
+  } catch (error) {
+    return toToolErrorResponse(error);
+  }
+}
 
-    body.vulnerabilityId = args.vulnerability_id;
-    const vulnerability = await client.patch('/v1/vulnerabilities', body);
-    return stringifyToolResult({ ok: true, vulnerability });
+export async function vantaReactivateVulnerabilityMonitoring(
+  client: VantaApiClient,
+  args: ReactivateVulnerabilityMonitoringArgs,
+): Promise<string> {
+  try {
+    client.validateId(args.vulnerability_id);
+    const body = {
+      updates: [
+        {
+          id: args.vulnerability_id,
+        },
+      ],
+    };
+
+    const result = await client.post('/v1/vulnerabilities/reactivate', body);
+    return stringifyToolResult({ ok: true, result });
   } catch (error) {
     return toToolErrorResponse(error);
   }

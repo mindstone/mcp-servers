@@ -79,14 +79,15 @@ To generate credentials, open the [Vanta Developer Console](https://app.vanta.co
 - `vanta_create_vendor`
 - `vanta_update_vendor`
 - `vanta_attach_vendor_document`
-- `vanta_update_vulnerability`
+- `vanta_deactivate_vulnerability_monitoring`
+- `vanta_reactivate_vulnerability_monitoring`
 - `vanta_upload_document`
 
 ## Known limitations
 
 Several tool contracts are still being repaired:
 
-- Five write tools call wrong or nonexistent endpoints: `vanta_create_vendor`, `vanta_update_vendor`, `vanta_update_vulnerability`, `vanta_attach_vendor_document`, and `vanta_upload_document`.
+- Two write tools call wrong or nonexistent endpoints: `vanta_attach_vendor_document` and `vanta_upload_document`.
 
 These fixes are in progress; the changelog records what each release has fixed.
 

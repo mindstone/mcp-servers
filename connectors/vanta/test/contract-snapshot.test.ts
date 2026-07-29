@@ -6,8 +6,8 @@ import { vantaListPeople } from '../src/tools/people.js';
 import { vantaQueryTestResults } from '../src/tools/query-results.js';
 import { vantaGetComplianceSummary } from '../src/tools/summary.js';
 import { vantaListTests, vantaGetTest } from '../src/tools/tests.js';
-import { vantaListVendors, vantaGetVendor } from '../src/tools/vendors.js';
-import { vantaListVulnerabilities, vantaGetVulnerability } from '../src/tools/vulnerabilities.js';
+import { vantaListVendors, vantaGetVendor, vantaCreateVendor, vantaUpdateVendor } from '../src/tools/vendors.js';
+import { vantaListVulnerabilities, vantaGetVulnerability, vantaDeactivateVulnerabilityMonitoring, vantaReactivateVulnerabilityMonitoring } from '../src/tools/vulnerabilities.js';
 import contract from './fixtures/vanta-contract.snapshot.json' with { type: 'json' };
 
 type ContractEndpoint = {
@@ -48,6 +48,21 @@ class RecordingVantaClient {
     return {} as T;
   }
 
+  async post<T>(endpoint: string, body: Record<string, unknown> = {}): Promise<T> {
+    this.record('POST', endpoint);
+    return {} as T;
+  }
+
+  async put<T>(endpoint: string, body: Record<string, unknown> = {}): Promise<T> {
+    this.record('PUT', endpoint);
+    return {} as T;
+  }
+
+  async patch<T>(endpoint: string, body: Record<string, unknown> = {}): Promise<T> {
+    this.record('PATCH', endpoint);
+    return {} as T;
+  }
+
   validateId(id: string): void {
     expect(id).toBeTruthy();
   }
@@ -76,7 +91,9 @@ const normalizeContractPath = (endpoint: string): string => {
   normalized = normalized.replace(/\/tests\/[^/]+$/, '/tests/{testId}');
   normalized = normalized.replace(/\/controls\/[^/]+$/, '/controls/{controlId}');
   normalized = normalized.replace(/\/vendors\/[^/]+$/, '/vendors/{vendorId}');
-  normalized = normalized.replace(/\/vulnerabilities\/[^/]+$/, '/vulnerabilities/{vulnerabilityId}');
+  if (!normalized.endsWith('/deactivate') && !normalized.endsWith('/reactivate')) {
+    normalized = normalized.replace(/\/vulnerabilities\/[^/]+$/, '/vulnerabilities/{vulnerabilityId}');
+  }
   return normalized;
 };
 
@@ -111,7 +128,7 @@ describe('Vanta contract snapshot', () => {
     });
   });
 
-  it('covers every surviving read-tool client call and declares every query parameter sent', async () => {
+  it('covers every surviving read-tool and repaired write-tool client call and declares every query parameter sent', async () => {
     const recorder = new RecordingVantaClient();
     const client = recorder as unknown as VantaApiClient;
 
@@ -123,6 +140,8 @@ describe('Vanta contract snapshot', () => {
       page_cursor: 'cursor-vuln',
     });
     await vantaGetVulnerability(client, { vulnerability_id: 'vuln_123' });
+    await vantaDeactivateVulnerabilityMonitoring(client, { vulnerability_id: 'vuln_123', deactivate_reason: 'reason', should_reactivate_when_fixable: true });
+    await vantaReactivateVulnerabilityMonitoring(client, { vulnerability_id: 'vuln_123' });
     await vantaListTests(client, {
       status: 'NEEDS_ATTENTION',
       framework: 'soc2',
@@ -156,6 +175,8 @@ describe('Vanta contract snapshot', () => {
       page_cursor: 'cursor-vendors',
     });
     await vantaGetVendor(client, { vendor_id: 'vendor_123' });
+    await vantaCreateVendor(client, { vendor_name: 'Acme', vendor_website: 'https://acme.com', vendor_category: 'cloudMonitoring' });
+    await vantaUpdateVendor(client, { vendor_id: 'vendor_123', vendor_name: 'Acme Updated' });
 
     const contractEndpoints = new Map(
       (contract.endpoints as ContractEndpoint[]).map((endpoint) => [endpointKey(endpoint), endpoint]),

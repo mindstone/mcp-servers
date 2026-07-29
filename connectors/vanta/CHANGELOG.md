@@ -6,8 +6,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Added `vanta_deactivate_vulnerability_monitoring` and `vanta_reactivate_vulnerability_monitoring` using the current Vanta endpoints.
+
 ### Removed
 
+- Removed `vanta_update_vulnerability` because the current Vanta API provides monitoring toggles instead of a generic update.
 - Removed `vanta_list_evidence` and `vanta_list_resources` because the current Manage Vanta reference has no `GET /v1/evidence` endpoint and no tenant-wide `GET /v1/resources` endpoint.
 
 ### Fixed
@@ -17,6 +22,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Rebuilt `vanta_get_compliance_summary` on Vanta's documented `GET /v1/frameworks` counters instead of nonexistent fields on test records.
 - Updated `vanta_query_test_results` to call the documented `GET /v1/tests/{testId}/entities` endpoint and use its `entityStatus` filter.
 - Fixed list-filter query parameter names for vulnerabilities, tests, controls, people, and vendors so filters are sent using the names declared in Vanta's OpenAPI reference.
+- Repaired `vanta_create_vendor` to send the correct fields (`name`, `websiteUrl`, `category`, `additionalNotes`, `accountManagerName`, `accountManagerEmail`) as documented.
+- Repaired `vanta_update_vendor` to use the `PATCH` method and the correct field names.
 - Added a source-stamped Vanta contract snapshot and tests that assert surviving read tools only call documented paths with documented query parameters.
 
 ## [0.1.0] - 2026-05-19

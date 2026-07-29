@@ -16,7 +16,11 @@
       "https://developer.vanta.com/api-reference/people/list-people.md",
       "https://developer.vanta.com/api-reference/vendors/list-vendors.md",
       "https://developer.vanta.com/api-reference/vendors/get-vendor-by-id.md",
-      "https://developer.vanta.com/api-reference/integrations/list-resources.md"
+      "https://developer.vanta.com/api-reference/integrations/list-resources.md",
+      "https://developer.vanta.com/api-reference/vendors/create-a-vendor.md",
+      "https://developer.vanta.com/api-reference/vendors/update-vendor-by-id.md",
+      "https://developer.vanta.com/api-reference/vulnerabilities/deactivate-vulnerability-monitoring-for-a-vulnerability.md",
+      "https://developer.vanta.com/api-reference/vulnerabilities/reactivate-vulnerability-monitoring.md"
     ],
     "fetchDate": "2026-07-29",
     "provenance": "Trimmed contract snapshot derived from Vanta's generated Manage Vanta reference and endpoint pages; this is not a full OpenAPI copy."
@@ -150,21 +154,39 @@
       "path": "/vendors/{vendorId}",
       "queryParams": [],
       "requiredBodyFields": []
+    },
+    {
+      "method": "POST",
+      "path": "/vendors",
+      "queryParams": [],
+      "requiredBodyFields": [
+        "name"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/vendors/{vendorId}",
+      "queryParams": [],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "POST",
+      "path": "/vulnerabilities/deactivate",
+      "queryParams": [],
+      "requiredBodyFields": [
+        "updates"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/vulnerabilities/reactivate",
+      "queryParams": [],
+      "requiredBodyFields": [
+        "updates"
+      ]
     }
   ],
   "exclusions": [
-    {
-      "tool": "vanta_create_vendor",
-      "reason": "Stage 3a repairs CreateVendorInput field mapping and extends this snapshot."
-    },
-    {
-      "tool": "vanta_update_vendor",
-      "reason": "Stage 3a repairs PATCH method and UpdateVendorInput field mapping and extends this snapshot."
-    },
-    {
-      "tool": "vanta_update_vulnerability",
-      "reason": "Stage 3a replaces this nonexistent PATCH capability with deactivate/reactivate monitoring tools."
-    },
     {
       "tool": "vanta_attach_vendor_document",
       "reason": "Stage 3b rebuilds the multipart vendor-document upload flow and extends this snapshot."

@@ -34,10 +34,12 @@ import {
 import {
   getVulnerabilitySchema,
   listVulnerabilitiesSchema,
-  updateVulnerabilitySchema,
+  deactivateVulnerabilityMonitoringSchema,
+  reactivateVulnerabilityMonitoringSchema,
   vantaGetVulnerability,
   vantaListVulnerabilities,
-  vantaUpdateVulnerability,
+  vantaDeactivateVulnerabilityMonitoring,
+  vantaReactivateVulnerabilityMonitoring,
 } from './tools/vulnerabilities.js';
 
 const SERVER_VERSION = (createRequire(import.meta.url)('../package.json') as { version: string }).version;
@@ -183,12 +185,19 @@ RETURNS:
     inputSchema: attachVendorDocumentSchema,
   }, async (input) => textResult(await vantaAttachVendorDocument(client, input)));
 
-  server.registerTool('vanta_update_vulnerability', {
-    title: 'Update Vanta Vulnerability',
-    description: 'Update the status or remediation info for a Vanta vulnerability.',
+  server.registerTool('vanta_deactivate_vulnerability_monitoring', {
+    title: 'Deactivate Vanta Vulnerability Monitoring',
+    description: 'Deactivate monitoring for select vulnerabilities. Vanta will not monitor a deactivated vulnerability until it is reactivated.',
     annotations: mutateAnnotations,
-    inputSchema: updateVulnerabilitySchema,
-  }, async (input) => textResult(await vantaUpdateVulnerability(client, input)));
+    inputSchema: deactivateVulnerabilityMonitoringSchema,
+  }, async (input) => textResult(await vantaDeactivateVulnerabilityMonitoring(client, input)));
+
+  server.registerTool('vanta_reactivate_vulnerability_monitoring', {
+    title: 'Reactivate Vanta Vulnerability Monitoring',
+    description: 'Reactivate vulnerabilities and resume Vanta monitoring.',
+    annotations: mutateAnnotations,
+    inputSchema: reactivateVulnerabilityMonitoringSchema,
+  }, async (input) => textResult(await vantaReactivateVulnerabilityMonitoring(client, input)));
 
   server.registerTool('vanta_upload_document', {
     title: 'Upload Vanta Evidence Document',
