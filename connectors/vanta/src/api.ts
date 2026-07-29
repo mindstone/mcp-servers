@@ -35,6 +35,20 @@ const VALID_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000; // Refresh 5 min before expiry
 const TOKEN_TTL_MS = 60 * 60 * 1000; // Vanta tokens last 1 hour
 
+// Vanta issues one active token per Application, so every tool shares a single
+// requested scope set — there is no per-call narrowing available. `documents:upload`
+// is a separate scope from `all:write` and is required by the document-upload
+// endpoints (https://developer.vanta.com/reference/manage-vanta/overview, scope
+// table; verified 2026-07-29). Kept as an array so the exact string is pinned by a
+// test and cannot drift back into an invented literal.
+export const REQUESTED_TOKEN_SCOPES = [
+  'vanta-api.all:read',
+  'vanta-api.all:write',
+  'vanta-api.documents:upload',
+] as const;
+
+export const REQUESTED_TOKEN_SCOPE_STRING = REQUESTED_TOKEN_SCOPES.join(' ');
+
 export type VantaApiErrorCode =
   | 'CONFIG_MISSING'
   | 'CONFIG_INVALID'
@@ -44,7 +58,14 @@ export type VantaApiErrorCode =
   | 'NOT_FOUND'
   | 'API_ERROR'
   | 'NETWORK'
-  | 'RESPONSE_INVALID';
+  | 'RESPONSE_INVALID'
+  // Failures of the server-side document fetch that feeds Vanta's multipart upload
+  // endpoints. Distinct codes so an agent can tell "your URL is too big" from
+  // "your URL is unreachable" from "your URL redirects forever".
+  | 'SOURCE_TOO_LARGE'
+  | 'SOURCE_TIMEOUT'
+  | 'SOURCE_UNREACHABLE'
+  | 'SOURCE_REDIRECT_LIMIT';
 
 interface VantaPageInfo {
   endCursor?: string | null;
@@ -196,6 +217,17 @@ const readErrorMessage = (body: unknown, fallback: string): string => {
   return raw ? sanitizeErrorText(raw) : fallback;
 };
 
+// Vanta answers a bad scope request with an OAuth `invalid_scope` error, which needs
+// different recovery advice from a bad client secret: the app itself must be updated.
+const mentionsInvalidScope = (body: unknown): boolean => {
+  if (body === null || body === undefined) return false;
+  try {
+    return /invalid_scope/i.test(JSON.stringify(body));
+  } catch {
+    return false;
+  }
+};
+
 const parseErrorBody = async (response: Response): Promise<unknown> => {
   try {
     return await response.json();
@@ -204,8 +236,10 @@ const parseErrorBody = async (response: Response): Promise<unknown> => {
   }
 };
 
-// Cohort-mirrored SSRF guard for tools that pass a URL to Vanta's server-side
-// fetcher (attach_vendor_document, upload_document). Lift-and-adapt from
+// Cohort-mirrored SSRF guard for the document URLs this connector fetches itself
+// before forwarding the bytes to Vanta's multipart upload endpoints
+// (attach_vendor_document, upload_document — see remote-document.ts, which also
+// re-runs this guard on every redirect hop). Lift-and-adapt from
 // runway/src/client.ts isPrivateHostname() and napkin/src/client.ts. Blocks:
 //   - non-HTTPS schemes (file:, chrome:, chrome-extension:, javascript:, data:,
 //     view-source:, about:*, plain http:);
@@ -216,9 +250,9 @@ const parseErrorBody = async (response: Response): Promise<unknown> => {
 //   - hostnames whose DNS records resolve to any of the above (best-effort
 //     anti-rebind — still a TOCTOU window vs the fetcher; defence in depth).
 //
-// HTTP (non-TLS) is rejected because the Vanta backend fetches the URL on
-// behalf of the user — accepting an http:// URL would let an agent
-// downgrade-attack their own organisation.
+// HTTP (non-TLS) is rejected because the connector fetches the URL on behalf of the
+// user — accepting an http:// URL would let an agent downgrade-attack their own
+// organisation, and the fetched bytes become compliance evidence.
 
 const privateIPv4Reason = (octets: [number, number, number, number]): string | null => {
   const [a, b] = octets;
@@ -445,7 +479,7 @@ const makeHttpError = async (response: Response): Promise<VantaApiError> => {
       'AUTH',
       message,
       'The Vanta API rejected the request as unauthorized.',
-      'Verify VANTA_CLIENT_ID and VANTA_CLIENT_SECRET are correct and that the OAuth client is a Manage Vanta app; this connector requests the vanta-api.all:read and vanta-api.all:write scopes at token exchange.',
+      `Verify VANTA_CLIENT_ID and VANTA_CLIENT_SECRET are correct and that the OAuth client is a Manage Vanta app; this connector requests these scopes at token exchange: ${REQUESTED_TOKEN_SCOPE_STRING}.`,
       response.status,
     );
   }
@@ -588,6 +622,15 @@ export class VantaApiClient {
     return this.requestJson<T>(endpoint, { method: 'POST', body });
   }
 
+  /**
+   * POSTs multipart/form-data — the shape Vanta's document-upload endpoints require.
+   * Content-Type is deliberately left unset so the runtime writes the multipart
+   * boundary itself; setting it by hand makes Vanta answer 415.
+   */
+  async postMultipart<T>(endpoint: string, form: FormData): Promise<T> {
+    return this.requestJson<T>(endpoint, { method: 'POST', formData: form });
+  }
+
   async put<T>(endpoint: string, body: Record<string, unknown>): Promise<T> {
     return this.requestJson<T>(endpoint, { method: 'PUT', body });
   }
@@ -701,7 +744,7 @@ export class VantaApiClient {
           grant_type: 'client_credentials',
           client_id: this.clientId,
           client_secret: this.clientSecret,
-          scope: 'vanta-api.all:read vanta-api.all:write',
+          scope: REQUESTED_TOKEN_SCOPE_STRING,
         }),
         signal: controller.signal,
       });
@@ -709,11 +752,16 @@ export class VantaApiClient {
       if (!response.ok) {
         const body = await parseErrorBody(response);
         const message = readErrorMessage(body, `Token request failed with HTTP ${response.status}`);
+        const scopeRejected = mentionsInvalidScope(body);
         throw new VantaApiError(
           'AUTH',
           message,
-          'Vanta rejected the OAuth client-credentials token exchange.',
-          'Verify VANTA_CLIENT_ID and VANTA_CLIENT_SECRET in the Vanta Developer Console; regenerate the client secret if needed.',
+          scopeRejected
+            ? 'Vanta rejected the requested OAuth scopes.'
+            : 'Vanta rejected the OAuth client-credentials token exchange.',
+          scopeRejected
+            ? `This connector requests all of: ${REQUESTED_TOKEN_SCOPE_STRING}. Open the Vanta Developer Console, confirm the app type is "Manage Vanta", and update the app so it may request every scope listed — the document-upload scope is separate from vanta-api.all:write and is required by the evidence-upload tools.`
+            : 'Verify VANTA_CLIENT_ID and VANTA_CLIENT_SECRET in the Vanta Developer Console; regenerate the client secret if needed.',
           response.status,
         );
       }
@@ -760,9 +808,10 @@ export class VantaApiClient {
       params?: Record<string, unknown>;
       paramMap?: Record<string, string>;
       body?: Record<string, unknown>;
+      formData?: FormData;
     } = {},
   ): Promise<T> {
-    const { method = 'GET', params = {}, paramMap = {}, body } = options;
+    const { method = 'GET', params = {}, paramMap = {}, body, formData } = options;
     const accessToken = await this.getAccessToken();
     const url = new URL(`${this.baseUrl}${normalizeEndpoint(endpoint)}`);
     const searchParams = buildQueryParams(params, paramMap);
@@ -774,7 +823,7 @@ export class VantaApiClient {
       Accept: 'application/json',
       Authorization: `Bearer ${accessToken}`,
     };
-    if (body) {
+    if (body && !formData) {
       headers['Content-Type'] = 'application/json';
     }
 
@@ -787,7 +836,7 @@ export class VantaApiClient {
         const response = await fetch(url, {
           method,
           headers,
-          ...(body ? { body: JSON.stringify(body) } : {}),
+          ...(formData ? { body: formData } : body ? { body: JSON.stringify(body) } : {}),
           signal: controller.signal,
         });
 

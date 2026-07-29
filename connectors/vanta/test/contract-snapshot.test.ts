@@ -1,20 +1,26 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { http, HttpResponse } from 'msw';
 
-import { VantaApiClient, buildQueryParams } from '../src/api.js';
+import { mswServer } from './helpers/setup.js';
+import { VantaApiClient, buildQueryParams, setDnsLookupForTesting } from '../src/api.js';
 import { vantaListControls, vantaGetControl } from '../src/tools/controls.js';
+import { vantaUploadDocument } from '../src/tools/documents.js';
 import { vantaListPeople } from '../src/tools/people.js';
 import { vantaQueryTestResults } from '../src/tools/query-results.js';
 import { vantaGetComplianceSummary } from '../src/tools/summary.js';
 import { vantaListTests, vantaGetTest } from '../src/tools/tests.js';
-import { vantaListVendors, vantaGetVendor, vantaCreateVendor, vantaUpdateVendor } from '../src/tools/vendors.js';
+import { vantaListVendors, vantaGetVendor, vantaCreateVendor, vantaUpdateVendor, vantaAttachVendorDocument } from '../src/tools/vendors.js';
 import { vantaListVulnerabilities, vantaGetVulnerability, vantaDeactivateVulnerabilityMonitoring, vantaReactivateVulnerabilityMonitoring } from '../src/tools/vulnerabilities.js';
 import contract from './fixtures/vanta-contract.snapshot.json' with { type: 'json' };
+
+const DOCUMENT_SOURCE_URL = 'https://files.example.com/evidence.pdf';
 
 type ContractEndpoint = {
   method: string;
   path: string;
   queryParams: string[];
   requiredBodyFields: string[];
+  requiredFormFields?: string[];
 };
 
 type RecordedCall = {
@@ -22,6 +28,7 @@ type RecordedCall = {
   path: string;
   queryParams: string[];
   bodyKeys: string[];
+  formFields?: string[];
 };
 
 class RecordingVantaClient {
@@ -65,6 +72,17 @@ class RecordingVantaClient {
     return {} as T;
   }
 
+  async postMultipart<T>(endpoint: string, form: FormData): Promise<T> {
+    this.calls.push({
+      method: 'POST',
+      path: normalizeContractPath(endpoint),
+      queryParams: [],
+      bodyKeys: [],
+      formFields: Array.from(new Set(form.keys())).sort(),
+    });
+    return {} as T;
+  }
+
   validateId(id: string): void {
     expect(id).toBeTruthy();
   }
@@ -91,6 +109,8 @@ const endpointKey = (endpoint: Pick<ContractEndpoint, 'method' | 'path'>) =>
 
 const normalizeContractPath = (endpoint: string): string => {
   let normalized = endpoint.startsWith('/v1/') ? endpoint.slice(3) : endpoint;
+  normalized = normalized.replace(/\/documents\/[^/]+\/uploads$/, '/documents/{documentId}/uploads');
+  normalized = normalized.replace(/\/vendors\/[^/]+\/documents$/, '/vendors/{vendorId}/documents');
   normalized = normalized.replace(/\/tests\/[^/]+\/entities$/, '/tests/{testId}/entities');
   normalized = normalized.replace(/\/tests\/[^/]+$/, '/tests/{testId}');
   normalized = normalized.replace(/\/controls\/[^/]+$/, '/controls/{controlId}');
@@ -123,16 +143,35 @@ const documentedButUnexercisedQueryParams: Record<string, string[]> = {
 };
 
 describe('Vanta contract snapshot', () => {
+  beforeEach(() => {
+    setDnsLookupForTesting(async () => [{ address: '93.184.216.34', family: 4 }]);
+    mswServer.use(
+      http.get(DOCUMENT_SOURCE_URL, () =>
+        HttpResponse.arrayBuffer(new Uint8Array([0x25, 0x50, 0x44, 0x46]).buffer as ArrayBuffer, {
+          headers: { 'Content-Type': 'application/pdf' },
+        }),
+      ),
+    );
+  });
+
+  afterEach(() => {
+    setDnsLookupForTesting(null);
+  });
+
+  it('no longer excludes any tool from contract coverage', () => {
+    expect(contract.exclusions).toEqual([]);
+  });
+
   it('records the token exchange contract and valid Manage Vanta scopes', () => {
     expect(contract.token).toEqual({
       method: 'POST',
       path: '/oauth/token',
-      validScopes: ['vanta-api.all:read', 'vanta-api.all:write'],
+      validScopes: ['vanta-api.all:read', 'vanta-api.all:write', 'vanta-api.documents:upload'],
       requiredBodyFields: ['grant_type', 'client_id', 'client_secret', 'scope'],
     });
   });
 
-  it('covers every surviving read-tool and repaired write-tool client call and declares every query parameter sent', async () => {
+  it('covers every read-tool and write-tool client call and declares every query parameter sent', async () => {
     const recorder = new RecordingVantaClient();
     const client = recorder as unknown as VantaApiClient;
 
@@ -181,6 +220,15 @@ describe('Vanta contract snapshot', () => {
     await vantaGetVendor(client, { vendor_id: 'vendor_123' });
     await vantaCreateVendor(client, { vendor_name: 'Acme', vendor_website: 'https://acme.com', vendor_category: 'cloudMonitoring' });
     await vantaUpdateVendor(client, { vendor_id: 'vendor_123', vendor_name: 'Acme Updated' });
+    await vantaAttachVendorDocument(client, {
+      vendor_id: 'vendor_123',
+      document_url: DOCUMENT_SOURCE_URL,
+      document_type: 'SOC2_REPORT',
+    });
+    await vantaUploadDocument(client, {
+      document_id: 'access-requests',
+      document_url: DOCUMENT_SOURCE_URL,
+    });
 
     const contractEndpoints = new Map(
       (contract.endpoints as ContractEndpoint[]).map((endpoint) => [endpointKey(endpoint), endpoint]),
@@ -209,7 +257,19 @@ describe('Vanta contract snapshot', () => {
 
       expect(call.queryParams, mismatchMessage).toEqual(exercisedDeclaredParams);
 
-      if (call.method !== 'GET') {
+      if (call.formFields) {
+        const missingRequiredFormFields = (endpoint.requiredFormFields ?? []).filter(
+          (field) => !call.formFields?.includes(field),
+        );
+        expect(
+          missingRequiredFormFields,
+          `${call.method} ${call.path} missing required multipart fields: [${missingRequiredFormFields.join(', ') || 'none'}]`,
+        ).toEqual([]);
+        expect(
+          endpoint.requiredFormFields,
+          `${call.method} ${call.path} is recorded as multipart but the snapshot declares no required form fields`,
+        ).toBeDefined();
+      } else if (call.method !== 'GET') {
         const missingRequiredBodyFields = endpoint.requiredBodyFields.filter((field) => !call.bodyKeys.includes(field));
         expect(
           missingRequiredBodyFields,

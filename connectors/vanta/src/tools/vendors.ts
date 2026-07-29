@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-import { VantaApiError, stringifyToolResult, toToolErrorResponse, validateDocumentUrlWithDns, type VantaApiClient } from '../api.js';
+import { VantaApiError, stringifyToolResult, toToolErrorResponse, type VantaApiClient } from '../api.js';
+import { buildUploadForm, fetchRemoteDocument } from '../remote-document.js';
 
 export const listVendorsSchema = z.object({
   name: z.string().optional().describe('Filter vendors by name (case-insensitive partial match)'),
@@ -34,11 +35,18 @@ export const updateVendorSchema = z.object({
   risk_level: z.string().optional().describe('Vendor risk level (LOW, MEDIUM, HIGH, CRITICAL, or UNSCORED)'),
 });
 
+// POST /v1/vendors/{vendorId}/documents — multipart/form-data, `file` and `type`
+// required, `title` and `description` optional.
+// https://developer.vanta.com/api-reference/vendors/add-document-to-a-vendor
+// https://developer.vanta.com/docs/guides/create-vendors-and-attach-documentation
+// (verified 2026-07-29)
 export const attachVendorDocumentSchema = z.object({
   vendor_id: z.string().min(1).describe('Vanta vendor ID to attach the document to'),
-  document_name: z.string().min(1).describe('Name of the document'),
-  document_url: z.string().min(1).describe('URL of the document to attach'),
-  document_type: z.string().optional().describe('Type of document (e.g., SOC2_REPORT, SECURITY_QUESTIONNAIRE, CONTRACT)'),
+  document_url: z.string().min(1).describe('Public https:// URL of the file to attach; the connector downloads it and forwards the bytes to Vanta'),
+  document_type: z.string().min(1).describe('Vanta vendor document type, required. Documented values include SOC2_REPORT, ISO_27001_REPORT, PEN_TEST, DPA, PRIVACY_POLICY, OTHER'),
+  document_name: z.string().optional().describe("The document's title in Vanta"),
+  description: z.string().optional().describe('Description of the document'),
+  file_name: z.string().optional().describe('File name to store in Vanta; defaults to the name from the URL or Content-Disposition header'),
 });
 
 export type ListVendorsArgs = z.infer<typeof listVendorsSchema>;
@@ -143,18 +151,24 @@ export async function vantaAttachVendorDocument(
 ): Promise<string> {
   try {
     client.validateId(args.vendor_id);
-    const safeUrl = await validateDocumentUrlWithDns(args.document_url, 'document_url');
-    const body: Record<string, unknown> = {
-      documentName: args.document_name,
-      documentUrl: safeUrl.toString(),
-    };
-    if (args.document_type !== undefined) body.documentType = args.document_type;
+    const file = await fetchRemoteDocument(args.document_url, { fileName: args.file_name });
+    const form = buildUploadForm(file, {
+      type: args.document_type,
+      title: args.document_name,
+      description: args.description,
+    });
 
-    const document = await client.post(
+    const document = await client.postMultipart(
       `/v1/vendors/${encodeURIComponent(args.vendor_id)}/documents`,
-      body,
+      form,
     );
-    return stringifyToolResult({ ok: true, document });
+    return stringifyToolResult({
+      ok: true,
+      document,
+      file_name: file.fileName,
+      content_type: file.contentType,
+      size_bytes: file.bytes.byteLength,
+    });
   } catch (error) {
     return toToolErrorResponse(error);
   }

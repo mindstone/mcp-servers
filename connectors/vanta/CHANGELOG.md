@@ -9,6 +9,17 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - Added `vanta_deactivate_vulnerability_monitoring` and `vanta_reactivate_vulnerability_monitoring` using the current Vanta endpoints.
+- Added `vanta-api.documents:upload` to the requested OAuth scopes; Vanta requires it for the document-upload endpoint and it is separate from `vanta-api.all:write`. A Manage Vanta app that cannot request all three scopes now fails token exchange with `invalid_scope`, and the error names the scopes to add.
+- Added multipart/form-data support to the API client so the upload tools can send files the way Vanta's endpoints require.
+
+### Changed
+
+- `vanta_upload_document` now takes `document_id` (an existing Vanta document) plus optional `effective_at_date` and `file_name`, and reports `submission_required` because Vanta files API uploads as drafts until the document is submitted for review.
+- `vanta_attach_vendor_document` now requires `document_type` (Vanta requires the `type` form field) and treats `document_name` as the optional document title.
+
+### Security
+
+- Document uploads fetch the caller-supplied URL server-side, so the fetch is bounded: HTTPS-only, at most 3 redirects with every hop re-validated against the private-address guard, a 30-second timeout, a 25 MB cap enforced while streaming rather than trusting `Content-Length`, sanitized file names, and a safe fallback content type. Each refusal returns its own error code (`SOURCE_TOO_LARGE`, `SOURCE_TIMEOUT`, `SOURCE_UNREACHABLE`, `SOURCE_REDIRECT_LIMIT`, or `CONFIG_INVALID`) instead of a generic failure.
 
 ### Removed
 
@@ -17,7 +28,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Corrected the OAuth token exchange scope from the invalid `vanta-api.all:read-write` string to Vanta's documented `vanta-api.all:read vanta-api.all:write` pair.
+- Corrected the OAuth token exchange scope from the invalid `vanta-api.all:read-write` string to Vanta's documented space-separated scope list.
+- Rebuilt `vanta_upload_document` and `vanta_attach_vendor_document` on Vanta's documented multipart upload endpoints (`POST /v1/documents/{documentId}/uploads` and `POST /v1/vendors/{vendorId}/documents`); both previously sent JSON bodies, and the document tool posted to an endpoint whose required fields it never sent.
 - Resolved all standard `VANTA_REGION` values to Vanta's canonical `api.vanta.com` host for both token exchange and API calls; `VANTA_REGION` remains accepted as a validated compatibility no-op.
 - Rebuilt `vanta_get_compliance_summary` on Vanta's documented `GET /v1/frameworks` counters instead of nonexistent fields on test records.
 - Updated `vanta_query_test_results` to call the documented `GET /v1/tests/{testId}/entities` endpoint and use its `entityStatus` filter.

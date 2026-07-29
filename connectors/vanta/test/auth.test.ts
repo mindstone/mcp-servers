@@ -50,7 +50,7 @@ describe('Auth — credential handling', () => {
     expect(payload.next_step).not.toMatch(/Rebel/i);
   });
 
-  it('requests the documented Manage Vanta read and write scopes during token exchange', async () => {
+  it('requests the documented Manage Vanta read, write, and document-upload scopes during token exchange', async () => {
     const tokenCapture = createCapturingTokenHandler();
     mswServer.use(
       ...tokenCapture.handlers,
@@ -70,7 +70,9 @@ describe('Auth — credential handling', () => {
     const payload = result.json as { ok: boolean };
     expect(payload.ok).toBe(true);
     expect(tokenCapture.requests).toHaveLength(1);
-    expect(tokenCapture.requests[0]?.body.scope).toBe('vanta-api.all:read vanta-api.all:write');
+    expect(tokenCapture.requests[0]?.body.scope).toBe(
+      'vanta-api.all:read vanta-api.all:write vanta-api.documents:upload',
+    );
   });
 
   it('does NOT expose the bearer token in error messages even when redaction is exercised', async () => {
@@ -121,6 +123,7 @@ describe('Auth — credential handling', () => {
     expect(payload.next_step).toMatch(/Manage Vanta app/i);
     expect(payload.next_step).toContain('vanta-api.all:read');
     expect(payload.next_step).toContain('vanta-api.all:write');
+    expect(payload.next_step).toContain('vanta-api.documents:upload');
   });
 });
 

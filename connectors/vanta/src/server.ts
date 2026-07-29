@@ -180,7 +180,18 @@ RETURNS:
 
   server.registerTool('vanta_attach_vendor_document', {
     title: 'Attach Document to Vanta Vendor',
-    description: 'Attach a compliance document to an existing vendor in Vanta.',
+    description: `Attach a compliance document (SOC 2 report, DPA, pen test, questionnaire) to an existing vendor in Vanta.
+
+HOW IT WORKS:
+- Pass a public https:// URL. The connector downloads the file and forwards the bytes to Vanta as a multipart upload.
+- document_type is required; Vanta rejects the upload without it.
+- Vanta accepts .pdf, .docx, .jpg, .png, and .xlsx files.
+
+RELATED TOOLS:
+- vanta_list_vendors to find the vendor_id.
+
+RETURNS:
+- JSON with ok, document, file_name, content_type, and size_bytes.`,
     annotations: createAnnotations,
     inputSchema: attachVendorDocumentSchema,
   }, async (input) => textResult(await vantaAttachVendorDocument(client, input)));
@@ -201,7 +212,15 @@ RETURNS:
 
   server.registerTool('vanta_upload_document', {
     title: 'Upload Vanta Evidence Document',
-    description: 'Upload an evidence document to Vanta for compliance audits.',
+    description: `Attach an evidence file to an existing Vanta document.
+
+HOW IT WORKS:
+- document_id must be an existing Vanta document (from the Vanta Documents page); this tool does not create documents.
+- Pass a public https:// URL. The connector downloads the file and forwards the bytes to Vanta as a multipart upload.
+- Vanta files the upload as a DRAFT: the document must be submitted for review in Vanta before auditors can see it. The response says so via submission_required.
+
+RETURNS:
+- JSON with ok, upload, file_name, content_type, size_bytes, and submission_required.`,
     annotations: createAnnotations,
     inputSchema: uploadDocumentSchema,
   }, async (input) => textResult(await vantaUploadDocument(client, input)));

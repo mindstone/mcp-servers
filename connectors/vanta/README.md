@@ -60,7 +60,19 @@ Set these environment variables before starting the server:
 - `VANTA_REGION` — accepted for backward compatibility; all standard tenants (US, EU, AU) share one API host (`api.vanta.com`). The knob routes nothing in this package.
 - `VANTA_REQUEST_TIMEOUT_MS` — request timeout in milliseconds (default 60000)
 
-To generate credentials, open the [Vanta Developer Console](https://app.vanta.com/settings/developer-console), create a new "Manage Vanta" app type, and copy the Client ID and Client Secret. The connector requests `vanta-api.all:read vanta-api.all:write` during token exchange.
+To generate credentials, open the [Vanta Developer Console](https://app.vanta.com/settings/developer-console), create a new "Manage Vanta" app type, and copy the Client ID and Client Secret.
+
+### Requested OAuth scopes
+
+The connector requests exactly this scope string at every token exchange:
+
+```
+vanta-api.all:read vanta-api.all:write vanta-api.documents:upload
+```
+
+`vanta-api.documents:upload` is a [separate scope from `vanta-api.all:write`](https://developer.vanta.com/reference/manage-vanta/overview) and is required by Vanta's document-upload endpoint. Vanta issues one active token per application and validates scopes against the application, so there is no way to request a narrower set per tool — the trade-off is accepted deliberately: every install carries the upload scope, including installs that never upload.
+
+**Upgrading from an earlier version:** if your Manage Vanta app cannot request `vanta-api.documents:upload`, token exchange fails with `invalid_scope` and every tool stops working. Update (or recreate) the app in the Developer Console so it may request all three scopes.
 
 ## Tools
 
@@ -83,19 +95,28 @@ To generate credentials, open the [Vanta Developer Console](https://app.vanta.co
 - `vanta_reactivate_vulnerability_monitoring`
 - `vanta_upload_document`
 
+### File uploads
+
+Vanta's upload endpoints take the file as `multipart/form-data`, so both upload tools take a **public `https://` URL** and the connector downloads the file itself before forwarding the bytes to Vanta:
+
+- `vanta_upload_document` attaches evidence to an **existing** Vanta document (`document_id`), via `POST /v1/documents/{documentId}/uploads`.
+- `vanta_attach_vendor_document` attaches a document to a vendor (`vendor_id`, plus a required `document_type` such as `SOC2_REPORT`), via `POST /v1/vendors/{vendorId}/documents`.
+
+Vanta accepts `.pdf`, `.docx`, `.jpg`, `.png`, and `.xlsx` files.
+
 ## Known limitations
 
-Several tool contracts are still being repaired:
-
-- Two write tools call wrong or nonexistent endpoints: `vanta_attach_vendor_document` and `vanta_upload_document`.
-
-These fixes are in progress; the changelog records what each release has fixed.
+- **Uploads land as drafts.** Vanta files an API upload against a document as a draft; the document must be submitted for review in Vanta before auditors can see the evidence. The tool result says so via `submission_required`, but the connector has no tool that submits.
+- **No document creation.** `vanta_upload_document` attaches a file to a document that already exists in Vanta; it cannot create the document.
+- **Single-page ID fallback.** When a direct `GET` by ID returns 404, the connector scans only the first 100 records before reporting not-found.
 
 ## Safety
 
 This server enforces:
 
-- HTTPS-only URL validation on document attachment tools (rejects `file:`, `localhost`, RFC1918, link-local, and other internal addresses).
+- HTTPS-only URL validation on both upload tools (rejects `file:`, `localhost`, RFC1918, link-local incl. cloud metadata addresses, IPv6 loopback/ULA, and hostnames whose DNS records resolve to any of those).
+- Bounded document fetching: at most 3 redirects, **each hop re-validated** through the same URL guard, a 30-second timeout, and a 25 MB size cap enforced while streaming (a source cannot lie its way past the cap with a false `Content-Length`).
+- Distinct, structured failures for every refusal — blocked host, non-HTTPS, oversize, timeout, redirect limit — rather than a generic error.
 - 50-requests-per-minute rate limiting with single-flight token exchange.
 - Response truncation at 25 KB with binary-search trimming.
 - Bearer-token redaction in all error messages.

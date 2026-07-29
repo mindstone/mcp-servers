@@ -3,11 +3,68 @@ import { createInMemoryTestClient, type McpTestClient } from '@mindstone/mcp-tes
 import { http, HttpResponse } from 'msw';
 
 import { mswServer } from './helpers/setup.js';
+import { setDnsLookupForTesting } from '../src/api.js';
+import { setRemoteDocumentLimitsForTesting } from '../src/remote-document.js';
 import {
   MOCK_CLIENT_ID,
   MOCK_CLIENT_SECRET,
   successTokenHandler,
 } from './helpers/vanta-mock-api.js';
+
+const SOURCE_URL = 'https://files.example.com/evidence/access-review.pdf';
+const SOURCE_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46]); // "%PDF"
+
+/** Point every source hostname at a public IP so the DNS anti-rebind layer passes. */
+const allowPublicDns = () => {
+  setDnsLookupForTesting(async () => [{ address: '93.184.216.34', family: 4 }]);
+};
+
+const sourceFileHandler = (
+  url = SOURCE_URL,
+  contentType = 'application/pdf',
+  bytes = SOURCE_BYTES,
+) =>
+  http.get(url, () =>
+    HttpResponse.arrayBuffer(bytes.buffer.slice(0) as ArrayBuffer, {
+      headers: { 'Content-Type': contentType },
+    }),
+  );
+
+interface CapturedMultipart {
+  method: string;
+  path: string;
+  contentType: string | null;
+  fields: Record<string, string>;
+  file?: { name: string; type: string; size: number; text: string };
+}
+
+const captureMultipart = (
+  urlPattern: string,
+  responseBody: Record<string, unknown>,
+  status = 200,
+) => {
+  const captured: CapturedMultipart = { method: '', path: '', contentType: null, fields: {} };
+  const handler = http.post(urlPattern, async ({ request }) => {
+    captured.method = request.method;
+    captured.path = new URL(request.url).pathname;
+    captured.contentType = request.headers.get('content-type');
+    const form = await request.formData();
+    for (const [key, value] of form.entries()) {
+      if (typeof value === 'string') {
+        captured.fields[key] = value;
+      } else {
+        captured.file = {
+          name: value.name,
+          type: value.type,
+          size: value.size,
+          text: await value.text(),
+        };
+      }
+    }
+    return HttpResponse.json(responseBody, { status });
+  });
+  return { captured, handler };
+};
 
 describe('Vanta write tools', () => {
   let client: McpTestClient;
@@ -16,6 +73,8 @@ describe('Vanta write tools', () => {
     if (client) {
       await client.close();
     }
+    setDnsLookupForTesting(null);
+    setRemoteDocumentLimitsForTesting(null);
   });
 
   const setupClient = async () => {
@@ -212,6 +271,319 @@ describe('Vanta write tools', () => {
           },
         ],
       });
+    });
+  });
+
+  describe('vanta_upload_document', () => {
+    it('proxies the source file as multipart to POST /v1/documents/{documentId}/uploads', async () => {
+      allowPublicDns();
+      const { captured, handler } = captureMultipart(
+        'https://api.vanta.com/v1/documents/:documentId/uploads',
+        { id: 'upload_1', fileName: 'access-review.pdf', title: 'Manual Evidence' },
+        201,
+      );
+      mswServer.use(sourceFileHandler(), handler);
+      await setupClient();
+
+      const result = await client.callTool('vanta_upload_document', {
+        document_id: 'access-requests',
+        document_url: SOURCE_URL,
+        description: 'Q3 access review evidence',
+        effective_at_date: '2026-07-01',
+      });
+
+      const payload = result.json as { ok: boolean; submission_required: boolean };
+      expect(payload.ok).toBe(true);
+      expect(captured.method).toBe('POST');
+      expect(captured.path).toBe('/v1/documents/access-requests/uploads');
+      expect(captured.contentType).toMatch(/^multipart\/form-data; boundary=/);
+      expect(captured.file).toBeDefined();
+      expect(captured.file?.name).toBe('access-review.pdf');
+      expect(captured.file?.type).toBe('application/pdf');
+      expect(captured.file?.text).toBe('%PDF');
+      expect(captured.fields).toEqual({
+        description: 'Q3 access review evidence',
+        effectiveAtDate: '2026-07-01',
+      });
+      // Vanta stores API uploads as drafts until the document is submitted for
+      // review, so the tool must say so rather than implying the evidence is live.
+      expect(payload.submission_required).toBe(true);
+    });
+
+    it('omits optional form fields that were not supplied', async () => {
+      allowPublicDns();
+      const { captured, handler } = captureMultipart(
+        'https://api.vanta.com/v1/documents/:documentId/uploads',
+        { id: 'upload_1' },
+        201,
+      );
+      mswServer.use(sourceFileHandler(), handler);
+      await setupClient();
+
+      const result = await client.callTool('vanta_upload_document', {
+        document_id: 'access-requests',
+        document_url: SOURCE_URL,
+      });
+
+      expect((result.json as { ok: boolean }).ok).toBe(true);
+      expect(captured.fields).toEqual({});
+      expect(captured.file?.name).toBe('access-review.pdf');
+    });
+  });
+
+  describe('vanta_attach_vendor_document', () => {
+    it('proxies the source file as multipart to POST /v1/vendors/{vendorId}/documents', async () => {
+      allowPublicDns();
+      const { captured, handler } = captureMultipart(
+        'https://api.vanta.com/v1/vendors/:vendorId/documents',
+        { id: 'doc_1', title: 'Acme SOC 2', type: 'SOC2_REPORT' },
+      );
+      mswServer.use(sourceFileHandler(), handler);
+      await setupClient();
+
+      const result = await client.callTool('vanta_attach_vendor_document', {
+        vendor_id: 'vendor_123',
+        document_url: SOURCE_URL,
+        document_type: 'SOC2_REPORT',
+        document_name: 'Acme SOC 2 Type II',
+        description: 'Provided by the vendor',
+      });
+
+      expect((result.json as { ok: boolean }).ok).toBe(true);
+      expect(captured.method).toBe('POST');
+      expect(captured.path).toBe('/v1/vendors/vendor_123/documents');
+      expect(captured.contentType).toMatch(/^multipart\/form-data; boundary=/);
+      expect(captured.file?.name).toBe('access-review.pdf');
+      expect(captured.file?.type).toBe('application/pdf');
+      expect(captured.file?.text).toBe('%PDF');
+      expect(captured.fields).toEqual({
+        type: 'SOC2_REPORT',
+        title: 'Acme SOC 2 Type II',
+        description: 'Provided by the vendor',
+      });
+    });
+
+    it('requires document_type because Vanta requires the type form field', async () => {
+      allowPublicDns();
+      await setupClient();
+
+      const result = await client.callTool('vanta_attach_vendor_document', {
+        vendor_id: 'vendor_123',
+        document_url: SOURCE_URL,
+      });
+
+      expect(result.isError).toBe(true);
+    });
+  });
+
+  describe('document-source fetch hardening', () => {
+    const uploadArgs = (overrides: Record<string, unknown> = {}) => ({
+      document_id: 'access-requests',
+      document_url: SOURCE_URL,
+      ...overrides,
+    });
+
+    const callUpload = async (overrides: Record<string, unknown> = {}) => {
+      await setupClient();
+      const result = await client.callTool('vanta_upload_document', uploadArgs(overrides));
+      return result.json as {
+        ok: boolean;
+        code: string;
+        error: string;
+        action_required: string;
+        next_step: string;
+      };
+    };
+
+    it('refuses a source URL that points at a private address (SSRF)', async () => {
+      const payload = await callUpload({ document_url: 'https://10.0.0.5/secret.pdf' });
+
+      expect(payload.ok).toBe(false);
+      expect(payload.code).toBe('CONFIG_INVALID');
+      expect(payload.error).toMatch(/non-public address/);
+      expect(payload.next_step).toBeTruthy();
+    });
+
+    it('refuses a source hostname whose DNS records resolve to a private address', async () => {
+      setDnsLookupForTesting(async () => [{ address: '169.254.169.254', family: 4 }]);
+      const payload = await callUpload();
+
+      expect(payload.ok).toBe(false);
+      expect(payload.code).toBe('CONFIG_INVALID');
+      expect(payload.error).toMatch(/resolves to a non-public address/);
+    });
+
+    it('refuses a plain http:// source URL', async () => {
+      allowPublicDns();
+      const payload = await callUpload({ document_url: 'http://files.example.com/doc.pdf' });
+
+      expect(payload.ok).toBe(false);
+      expect(payload.code).toBe('CONFIG_INVALID');
+      expect(payload.error).toMatch(/must use the https: protocol/);
+    });
+
+    it('aborts a source response that exceeds the size cap while streaming (no Content-Length)', async () => {
+      allowPublicDns();
+      setRemoteDocumentLimitsForTesting({ maxBytes: 64 });
+      mswServer.use(
+        http.get(SOURCE_URL, () => {
+          const stream = new ReadableStream({
+            start(controller) {
+              // Five 32-byte chunks with no Content-Length: the cap must be
+              // enforced from the bytes actually received, not a declared size.
+              for (let i = 0; i < 5; i++) {
+                controller.enqueue(new Uint8Array(32));
+              }
+              controller.close();
+            },
+          });
+          return new HttpResponse(stream, { headers: { 'Content-Type': 'application/pdf' } });
+        }),
+      );
+
+      const payload = await callUpload();
+
+      expect(payload.ok).toBe(false);
+      expect(payload.code).toBe('SOURCE_TOO_LARGE');
+      expect(payload.error).toMatch(/64 bytes/);
+    });
+
+    it('rejects a source that declares an oversized Content-Length before streaming', async () => {
+      allowPublicDns();
+      setRemoteDocumentLimitsForTesting({ maxBytes: 64 });
+      mswServer.use(
+        http.get(SOURCE_URL, () =>
+          new HttpResponse(new Uint8Array(8), {
+            headers: { 'Content-Type': 'application/pdf', 'Content-Length': '999999' },
+          }),
+        ),
+      );
+
+      const payload = await callUpload();
+
+      expect(payload.ok).toBe(false);
+      expect(payload.code).toBe('SOURCE_TOO_LARGE');
+    });
+
+    it('re-validates every redirect hop and refuses a redirect to a private address', async () => {
+      allowPublicDns();
+      mswServer.use(
+        http.get(SOURCE_URL, () =>
+          new HttpResponse(null, { status: 302, headers: { Location: 'https://169.254.169.254/creds' } }),
+        ),
+      );
+
+      const payload = await callUpload();
+
+      expect(payload.ok).toBe(false);
+      expect(payload.code).toBe('CONFIG_INVALID');
+      expect(payload.error).toMatch(/redirect/i);
+      expect(payload.error).toMatch(/non-public address/);
+    });
+
+    it('refuses a redirect chain longer than the hop budget', async () => {
+      allowPublicDns();
+      mswServer.use(
+        http.get('https://files.example.com/hop/:n', ({ params }) => {
+          const next = Number(params.n) + 1;
+          return new HttpResponse(null, {
+            status: 302,
+            headers: { Location: `https://files.example.com/hop/${next}` },
+          });
+        }),
+      );
+
+      const payload = await callUpload({ document_url: 'https://files.example.com/hop/1' });
+
+      expect(payload.ok).toBe(false);
+      expect(payload.code).toBe('SOURCE_REDIRECT_LIMIT');
+    });
+
+    it('times out a slow source fetch with a distinct error', async () => {
+      allowPublicDns();
+      setRemoteDocumentLimitsForTesting({ timeoutMs: 40 });
+      mswServer.use(
+        http.get(SOURCE_URL, async () => {
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          return HttpResponse.arrayBuffer(new Uint8Array(4).buffer as ArrayBuffer);
+        }),
+      );
+
+      const payload = await callUpload();
+
+      expect(payload.ok).toBe(false);
+      expect(payload.code).toBe('SOURCE_TIMEOUT');
+    });
+
+    it('reports an unreachable or erroring source distinctly', async () => {
+      allowPublicDns();
+      mswServer.use(
+        http.get(SOURCE_URL, () => new HttpResponse('nope', { status: 403 })),
+      );
+
+      const payload = await callUpload();
+
+      expect(payload.ok).toBe(false);
+      expect(payload.code).toBe('SOURCE_UNREACHABLE');
+      expect(payload.error).toMatch(/403/);
+    });
+
+    it('falls back to a safe content type when the source declares a bogus one', async () => {
+      allowPublicDns();
+      const { captured, handler } = captureMultipart(
+        'https://api.vanta.com/v1/documents/:documentId/uploads',
+        { id: 'upload_1' },
+        201,
+      );
+      mswServer.use(sourceFileHandler(SOURCE_URL, 'not a mime type at all'), handler);
+      await setupClient();
+
+      const result = await client.callTool('vanta_upload_document', uploadArgs());
+
+      expect((result.json as { ok: boolean }).ok).toBe(true);
+      expect(captured.file?.type).toBe('application/octet-stream');
+    });
+
+    it('prefers the Content-Disposition filename and sanitizes path traversal', async () => {
+      allowPublicDns();
+      const { captured, handler } = captureMultipart(
+        'https://api.vanta.com/v1/documents/:documentId/uploads',
+        { id: 'upload_1' },
+        201,
+      );
+      mswServer.use(
+        http.get(SOURCE_URL, () =>
+          HttpResponse.arrayBuffer(new Uint8Array(SOURCE_BYTES).buffer as ArrayBuffer, {
+            headers: {
+              'Content-Type': 'application/pdf',
+              'Content-Disposition': 'attachment; filename="../../etc/pass wd.pdf"',
+            },
+          }),
+        ),
+        handler,
+      );
+      await setupClient();
+
+      await client.callTool('vanta_upload_document', uploadArgs());
+
+      expect(captured.file?.name).toBe('.._.._etc_pass_wd.pdf');
+    });
+
+    it('refuses an empty source response instead of uploading zero bytes', async () => {
+      allowPublicDns();
+      mswServer.use(
+        http.get(SOURCE_URL, () =>
+          HttpResponse.arrayBuffer(new Uint8Array(0).buffer as ArrayBuffer, {
+            headers: { 'Content-Type': 'application/pdf' },
+          }),
+        ),
+      );
+
+      const payload = await callUpload();
+
+      expect(payload.ok).toBe(false);
+      expect(payload.code).toBe('SOURCE_UNREACHABLE');
+      expect(payload.error).toMatch(/empty/i);
     });
   });
 });

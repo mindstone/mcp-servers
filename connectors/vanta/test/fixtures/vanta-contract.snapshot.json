@@ -20,7 +20,11 @@
       "https://developer.vanta.com/api-reference/vendors/create-a-vendor.md",
       "https://developer.vanta.com/api-reference/vendors/update-vendor-by-id.md",
       "https://developer.vanta.com/api-reference/vulnerabilities/deactivate-vulnerability-monitoring-for-a-vulnerability.md",
-      "https://developer.vanta.com/api-reference/vulnerabilities/reactivate-vulnerability-monitoring.md"
+      "https://developer.vanta.com/api-reference/vulnerabilities/reactivate-vulnerability-monitoring.md",
+      "https://developer.vanta.com/api-reference/documents/upload-file-for-document.md",
+      "https://developer.vanta.com/api-reference/vendors/add-document-to-a-vendor.md",
+      "https://developer.vanta.com/docs/guides/upload-a-document.md",
+      "https://developer.vanta.com/docs/guides/create-vendors-and-attach-documentation.md"
     ],
     "fetchDate": "2026-07-29",
     "provenance": "Trimmed contract snapshot derived from Vanta's generated Manage Vanta reference and endpoint pages; this is not a full OpenAPI copy."
@@ -30,7 +34,8 @@
     "path": "/oauth/token",
     "validScopes": [
       "vanta-api.all:read",
-      "vanta-api.all:write"
+      "vanta-api.all:write",
+      "vanta-api.documents:upload"
     ],
     "requiredBodyFields": [
       "grant_type",
@@ -184,16 +189,36 @@
       "requiredBodyFields": [
         "updates"
       ]
-    }
-  ],
-  "exclusions": [
-    {
-      "tool": "vanta_attach_vendor_document",
-      "reason": "Stage 3b rebuilds the multipart vendor-document upload flow and extends this snapshot."
     },
     {
-      "tool": "vanta_upload_document",
-      "reason": "Stage 3b rebuilds the document create/upload flow and extends this snapshot."
+      "method": "POST",
+      "path": "/documents/{documentId}/uploads",
+      "contentType": "multipart/form-data",
+      "queryParams": [],
+      "requiredBodyFields": [],
+      "requiredFormFields": [
+        "file"
+      ],
+      "optionalFormFields": [
+        "description",
+        "effectiveAtDate"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/vendors/{vendorId}/documents",
+      "contentType": "multipart/form-data",
+      "queryParams": [],
+      "requiredBodyFields": [],
+      "requiredFormFields": [
+        "file",
+        "type"
+      ],
+      "optionalFormFields": [
+        "title",
+        "description"
+      ]
     }
-  ]
+  ],
+  "exclusions": []
 }
