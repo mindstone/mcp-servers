@@ -158,7 +158,11 @@ if (existsSync(readmePath)) {
 
   // README ## Status block must match package.json version and STATUS.json tools.count
   // (the ## Tools (N) heading check above is separate; this closes the Status drift gap).
-  const statusBlockMatch = readme.match(/^##\s+Status\s*$\n([\s\S]*?)(?=\n##\s|$)/m);
+  // The `m` flag is needed for the `^##` heading anchor, but it also makes a plain
+  // `$` in the lookahead match at ANY line end — so the lazy capture stopped at the
+  // blank line right after `## Status`, bound an empty block, and the checks below
+  // never fired. `$(?![\s\S])` pins the alternative to absolute end-of-input.
+  const statusBlockMatch = readme.match(/^##\s+Status\s*$\n([\s\S]*?)(?=\n##\s|$(?![\s\S]))/m);
   if (statusBlockMatch) {
     const block = statusBlockMatch[1];
     const readmeVersion = (block.match(/\*\*Version:\*\*\s*\[?(\d+\.\d+\.\d+)/) || [])[1];
