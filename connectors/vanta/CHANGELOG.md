@@ -6,6 +6,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-30
+
+### Changed
+
+- Full repair: fix OAuth scope + canonical host, remove phantom tools, repair vendor writes, add hardened document upload
+
 ### Added
 
 - Added `vanta_deactivate_vulnerability_monitoring` and `vanta_reactivate_vulnerability_monitoring` using the current Vanta endpoints.

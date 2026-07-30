@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-vanta",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "mcpName": "io.github.mindstone/mcp-server-vanta",
   "description": "Vanta compliance MCP server — read and write vulnerabilities, tests, controls, evidence, resources, people, vendors, and compliance summaries via the Vanta API",
   "license": "FSL-1.1-MIT",
