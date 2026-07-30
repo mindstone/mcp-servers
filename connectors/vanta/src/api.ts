@@ -246,6 +246,9 @@ const parseErrorBody = async (response: Response): Promise<unknown> => {
 //   - localhost / loopback / IPv6 loopback (every textual form);
 //   - RFC1918 private ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16);
 //   - 169.254.0.0/16 link-local (includes IMDS 169.254.169.254);
+//   - other RFC 6890 special-use ranges: 100.64.0.0/10 shared/CGNAT (Tailscale
+//     et al.), 198.18.0.0/15 benchmarking, TEST-NET documentation ranges,
+//     192.88.99.0/24 6to4 relay, 224.0.0.0/4 multicast, 240.0.0.0/4 reserved;
 //   - IPv4-mapped IPv6 forms (`::ffff:127.0.0.1` etc.);
 //   - hostnames whose DNS records resolve to any of the above (best-effort
 //     anti-rebind — still a TOCTOU window vs the fetcher; defence in depth).
@@ -255,13 +258,28 @@ const parseErrorBody = async (response: Response): Promise<unknown> => {
 // organisation, and the fetched bytes become compliance evidence.
 
 const privateIPv4Reason = (octets: [number, number, number, number]): string | null => {
-  const [a, b] = octets;
+  const [a, b, c] = octets;
   if (a === 127) return 'loopback range (127.0.0.0/8)';
   if (a === 10) return 'RFC1918 private range (10.0.0.0/8)';
   if (a === 192 && b === 168) return 'RFC1918 private range (192.168.0.0/16)';
   if (a === 172 && b >= 16 && b <= 31) return 'RFC1918 private range (172.16.0.0/12)';
   if (a === 169 && b === 254) return 'link-local range (169.254.0.0/16, includes IMDS)';
   if (a === 0) return 'unspecified range (0.0.0.0/8)';
+  // RFC 6598 shared address space — carrier-grade NAT, also used by overlay
+  // networks (e.g. Tailscale): reachable non-public hosts on this machine.
+  if (a === 100 && b >= 64 && b <= 127) return 'shared/CGNAT range (100.64.0.0/10, RFC 6598)';
+  // Benchmarking (RFC 2544) — not publicly routable.
+  if (a === 198 && (b === 18 || b === 19)) return 'benchmarking range (198.18.0.0/15)';
+  // Documentation-only TEST-NETs; denying them keeps this allowlist fail-closed
+  // (parity with the IPv6 2001:db8::/32 deny below).
+  if (a === 192 && b === 0 && c === 2) return 'documentation range (192.0.2.0/24, TEST-NET-1)';
+  if (a === 198 && b === 51 && c === 100) return 'documentation range (198.51.100.0/24, TEST-NET-2)';
+  if (a === 203 && b === 0 && c === 113) return 'documentation range (203.0.113.0/24, TEST-NET-3)';
+  // Deprecated 6to4 relay anycast (RFC 7526).
+  if (a === 192 && b === 88 && c === 99) return '6to4 relay range (192.88.99.0/24)';
+  // Multicast (224.0.0.0/4) and reserved/broadcast (240.0.0.0/4 incl. 255.255.255.255).
+  if (a >= 224 && a <= 239) return 'multicast range (224.0.0.0/4)';
+  if (a >= 240) return 'reserved range (240.0.0.0/4)';
   return null;
 };
 

@@ -104,6 +104,49 @@ describe('validateDocumentUrl — SSRF guard', () => {
     });
   });
 
+  describe('rejects other RFC 6890 special-use ranges (adversarial R1 fix)', () => {
+    const denySpecialUse = [
+      // RFC 6598 shared/CGNAT — reachable non-public hosts (e.g. Tailscale)
+      'https://100.64.0.1/secret.pdf',
+      'https://100.100.100.100/secret.pdf',
+      'https://100.127.255.254/secret.pdf',
+      // RFC 2544 benchmarking
+      'https://198.18.0.1/doc.pdf',
+      'https://198.19.255.1/doc.pdf',
+      // TEST-NET documentation ranges (fail-closed parity with 2001:db8::/32)
+      'https://192.0.2.1/doc.pdf',
+      'https://198.51.100.1/doc.pdf',
+      'https://203.0.113.1/doc.pdf',
+      // Deprecated 6to4 relay anycast
+      'https://192.88.99.1/doc.pdf',
+      // Multicast + reserved/broadcast
+      'https://224.0.0.1/doc.pdf',
+      'https://239.255.255.255/doc.pdf',
+      'https://240.0.0.1/doc.pdf',
+      'https://255.255.255.255/doc.pdf',
+    ];
+
+    for (const url of denySpecialUse) {
+      it(`rejects ${url}`, () => {
+        expect(() => validateDocumentUrl(url)).toThrowError(VantaApiError);
+      });
+    }
+
+    // Edges of the CGNAT /10 — must NOT be in the deny block
+    it('accepts 100.63.255.1 (just below 100.64.0.0/10)', () => {
+      expect(() => validateDocumentUrl('https://100.63.255.1/doc.pdf')).not.toThrow();
+    });
+
+    it('accepts 100.128.0.1 (just above 100.64.0.0/10)', () => {
+      expect(() => validateDocumentUrl('https://100.128.0.1/doc.pdf')).not.toThrow();
+    });
+
+    it('rejects IPv4-mapped IPv6 shared range [::ffff:100.64.0.1]', () => {
+      expect(() => validateDocumentUrl('https://[::ffff:100.64.0.1]/secret.pdf'))
+        .toThrowError(VantaApiError);
+    });
+  });
+
   describe('rejects IPv6 loopback / link-local / ULA', () => {
     it('rejects [::1]', () => {
       expect(() => validateDocumentUrl('https://[::1]/doc.pdf'))
