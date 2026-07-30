@@ -284,6 +284,33 @@ describe('validateDocumentUrl — SSRF guard', () => {
       ).rejects.toThrowError(VantaApiError);
       expect(dnsCalls).toBe(0);
     });
+
+    // Adversarial R2 fix: hex-only HOSTNAMES (all chars happen to be hex
+    // digits + dots) must NOT be misclassified as IP literals — they need DNS.
+    it('does not skip DNS for hex-only hostnames like dead.cafe', async () => {
+      let dnsCalls = 0;
+      setDnsLookupForTesting(async () => {
+        dnsCalls += 1;
+        return [{ address: '127.0.0.1', family: 4 }];
+      });
+      await expect(
+        validateDocumentUrlWithDns('https://dead.cafe/secret.pdf'),
+      ).rejects.toThrowError(VantaApiError);
+      expect(dnsCalls).toBe(1);
+    });
+
+    it('does not skip DNS for hex-only hostnames resolving to CGNAT space', async () => {
+      setDnsLookupForTesting(async () => [{ address: '100.64.0.1', family: 4 }]);
+      await expect(
+        validateDocumentUrlWithDns('https://bead.deed/secret.pdf'),
+      ).rejects.toThrowError(VantaApiError);
+    });
+
+    it('accepts hex-only hostnames whose DNS answer is public', async () => {
+      setDnsLookupForTesting(async () => [{ address: '93.184.216.34', family: 4 }]);
+      const url = await validateDocumentUrlWithDns('https://dead.cafe/doc.pdf');
+      expect(url.hostname).toBe('dead.cafe');
+    });
   });
 
   describe('produces structured recovery-contract errors', () => {

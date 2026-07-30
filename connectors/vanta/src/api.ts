@@ -453,7 +453,13 @@ export async function validateDocumentUrlWithDns(
   const parsed = sanitizeDocumentUrl(rawUrl, fieldName);
 
   // If the hostname is a literal IP we've already checked it; skip DNS.
-  const literal = parseIPv4(parsed.hostname) || /^\[?[0-9a-f:.]+\]?$/i.test(parsed.hostname);
+  // Must be a REAL IP check: a hex character-class regex misclassifies hex-only
+  // hostnames (e.g. dead.cafe) as literals and would skip the DNS scan below.
+  // WHATWG URL already normalizes hex/octal/decimal IPv4 forms to dotted-quad,
+  // so parseIPv4 catches those; net.isIP covers bracketed and raw IPv6.
+  const { isIP } = await import('node:net');
+  const bare = parsed.hostname.replace(/^\[|\]$/g, '');
+  const literal = parseIPv4(parsed.hostname) !== null || isIP(bare) !== 0;
   if (literal) return parsed;
 
   let addresses: Array<{ address: string; family: number }>;
