@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-07-30
+
+### Changed
+
+- Honest multi-cause 403 copy connector-wide with sanitised requiredScopes diagnostics; some 403 error codes normalised (e.g. PERMISSION_DENIED to SCOPE_MISSING)
+
 ### Changed
 
 - Extended the honest 403 capability-denied copy across the whole connector — marketing emails, marketing analytics, workflows/automation, the knowledge base, record associations, contacts batch-read, and any generic marketing 403 (previously single-cause "requires Marketing Hub" / "reconnect to refresh scopes" messages that sent users in circles). The message now names all three reasons a capability can be unavailable — the account's plan doesn't include it, the signed-in HubSpot user lacks permission, or (less commonly, since an unauthorised optional scope usually fails the OAuth connect loudly) the app isn't authorised for it — leading with the likelier causes and presenting reconnecting only as the final step once the underlying cause is resolved. Two paths keep a legitimate reconnect-first hybrid because the scope was genuinely added to the app at a known date, so accounts connected earlier really do need to reconnect: HubSpot Lists (`crm.lists.read`) and the conversations tools (`conversations.read`).
