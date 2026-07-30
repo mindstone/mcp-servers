@@ -9,7 +9,7 @@ Microsoft 365 Outlook Mail MCP server — list, search, read, send, reply, forwa
 
 ## Status
 
-- **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-mail)
+- **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-mail)
 - **Auth:** OAuth (host-orchestrated) ([`MS_CLIENT_ID`](./server.json))
 - **Tools:** [13](./src/tools.ts) (messages, folders, drafts)
 - **Surface:** cloud-api

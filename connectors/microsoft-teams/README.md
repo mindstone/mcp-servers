@@ -9,7 +9,7 @@ Microsoft 365 Teams MCP server — list and read Teams chats, send chat messages
 
 ## Status
 
-- **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-teams)
+- **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-teams)
 - **Auth:** OAuth (host-orchestrated, shared with [`mcp-server-microsoft-mail`](../microsoft-mail/)) ([`MS_CLIENT_ID`](./server.json))
 - **Tools:** [8](./src/tools.ts) (chats, messages, teams, channels, presence)
 - **Surface:** cloud-api

@@ -13,7 +13,7 @@ Slack workspace MCP server — channels, messages, threads, reactions, users, fi
 
 | Field | Value |
 |-------|-------|
-| Version | 0.1.6 |
+| Version | 0.2.0 |
 | Auth | OAuth (host-orchestrated) (`SLACK_CLIENT_SECRET`) |
 | Tools | 25 (messages, channels, threads, users, files) |
 | Surface | cloud API |
