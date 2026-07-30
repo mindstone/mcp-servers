@@ -4,6 +4,12 @@ All notable changes to this connector will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-30
+
+### Changed
+
+- Add compose_chat_message interactive compose view (MCP App); send_chat_message input schema is now strict (unknown keys rejected)
+
 ## [0.1.2] - 2026-07-03
 
 ### Changed
