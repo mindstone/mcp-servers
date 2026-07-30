@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   setDnsLookupForTesting,
@@ -119,6 +119,12 @@ describe('validateDocumentUrl — SSRF guard', () => {
       'https://203.0.113.1/doc.pdf',
       // Deprecated 6to4 relay anycast
       'https://192.88.99.1/doc.pdf',
+      // Remaining IANA special-purpose /24s (adversarial R3 completeness)
+      'https://192.0.0.8/doc.pdf',
+      'https://192.0.0.170/doc.pdf',
+      'https://192.31.196.1/doc.pdf',
+      'https://192.52.193.1/doc.pdf',
+      'https://192.175.48.1/doc.pdf',
       // Multicast + reserved/broadcast
       'https://224.0.0.1/doc.pdf',
       'https://239.255.255.255/doc.pdf',
@@ -143,6 +149,13 @@ describe('validateDocumentUrl — SSRF guard', () => {
 
     it('rejects IPv4-mapped IPv6 shared range [::ffff:100.64.0.1]', () => {
       expect(() => validateDocumentUrl('https://[::ffff:100.64.0.1]/secret.pdf'))
+        .toThrowError(VantaApiError);
+    });
+
+    it('rejects IPv4-mapped IPv6 protocol-assignment [::ffff:192.0.0.8] (hex-normalized form)', () => {
+      expect(() => validateDocumentUrl('https://[::ffff:192.0.0.8]/secret.pdf'))
+        .toThrowError(VantaApiError);
+      expect(() => validateDocumentUrl('https://[::ffff:c000:8]/secret.pdf'))
         .toThrowError(VantaApiError);
     });
   });
@@ -255,6 +268,21 @@ describe('validateDocumentUrl — SSRF guard', () => {
       await expect(
         validateDocumentUrlWithDns('https://nonexistent.example.invalid/'),
       ).rejects.toThrowError(VantaApiError);
+    });
+
+    // Adversarial R3: a stuck resolver must not hang the proxy past its fetch
+    // budget — the lookup is bounded and fails closed.
+    it('fails closed when DNS lookup hangs (bounded by timeout)', async () => {
+      vi.useFakeTimers();
+      try {
+        setDnsLookupForTesting(async () => new Promise(() => {})); // never resolves
+        const pending = validateDocumentUrlWithDns('https://hangs.example.com/');
+        const assertion = expect(pending).rejects.toThrowError(VantaApiError);
+        await vi.advanceTimersByTimeAsync(11_000); // past the 10s DNS bound
+        await assertion;
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('accepts hostnames whose A records are all public', async () => {

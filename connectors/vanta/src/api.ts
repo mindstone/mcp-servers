@@ -246,9 +246,11 @@ const parseErrorBody = async (response: Response): Promise<unknown> => {
 //   - localhost / loopback / IPv6 loopback (every textual form);
 //   - RFC1918 private ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16);
 //   - 169.254.0.0/16 link-local (includes IMDS 169.254.169.254);
-//   - other RFC 6890 special-use ranges: 100.64.0.0/10 shared/CGNAT (Tailscale
-//     et al.), 198.18.0.0/15 benchmarking, TEST-NET documentation ranges,
-//     192.88.99.0/24 6to4 relay, 224.0.0.0/4 multicast, 240.0.0.0/4 reserved;
+//   - the complete non-public IANA special-purpose IPv4 registry: 100.64.0.0/10
+//     shared/CGNAT (Tailscale et al.), 198.18.0.0/15 benchmarking, TEST-NET
+//     documentation ranges, 192.88.99.0/24 6to4 relay, 192.0.0.0/24 protocol
+//     assignments, 192.31.196.0/24 + 192.175.48.0/24 AS112, 192.52.193.0/24 AMT,
+//     224.0.0.0/4 multicast, 240.0.0.0/4 reserved;
 //   - IPv4-mapped IPv6 forms (`::ffff:127.0.0.1` etc.);
 //   - hostnames whose DNS records resolve to any of the above (best-effort
 //     anti-rebind — still a TOCTOU window vs the fetcher; defence in depth).
@@ -277,6 +279,14 @@ const privateIPv4Reason = (octets: [number, number, number, number]): string | n
   if (a === 203 && b === 0 && c === 113) return 'documentation range (203.0.113.0/24, TEST-NET-3)';
   // Deprecated 6to4 relay anycast (RFC 7526).
   if (a === 192 && b === 88 && c === 99) return '6to4 relay range (192.88.99.0/24)';
+  // Remaining IANA special-purpose /24s: IETF protocol assignments (incl.
+  // NAT64/DNS64 discovery 192.0.0.170/171), AS112, and AMT anycast. Tiny ranges
+  // that never host compliance documents — denied so this guard covers the
+  // complete non-public special-purpose registry rather than a subset.
+  if (a === 192 && b === 0 && c === 0) return 'IETF protocol assignments (192.0.0.0/24)';
+  if (a === 192 && b === 31 && c === 196) return 'AS112-v4 range (192.31.196.0/24)';
+  if (a === 192 && b === 52 && c === 193) return 'AMT anycast range (192.52.193.0/24)';
+  if (a === 192 && b === 175 && c === 48) return 'AS112 direct delegation (192.175.48.0/24)';
   // Multicast (224.0.0.0/4) and reserved/broadcast (240.0.0.0/4 incl. 255.255.255.255).
   if (a >= 224 && a <= 239) return 'multicast range (224.0.0.0/4)';
   if (a >= 240) return 'reserved range (240.0.0.0/4)';
@@ -446,6 +456,29 @@ export function setDnsLookupForTesting(fn: DnsLookupFn | null): void {
   dnsLookupImpl = fn ?? defaultDnsLookup;
 }
 
+// dns.lookup has no abort signal; a stuck resolver must not hang the upload
+// proxy past its documented fetch budget, so bound the wait ourselves.
+const DNS_LOOKUP_TIMEOUT_MS = 10_000;
+
+const lookupWithTimeout = async (
+  hostname: string,
+): Promise<Array<{ address: string; family: number }>> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      dnsLookupImpl(hostname),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`DNS lookup for "${hostname}" timed out`)),
+          DNS_LOOKUP_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+};
+
 export async function validateDocumentUrlWithDns(
   rawUrl: string,
   fieldName = 'document_url',
@@ -464,10 +497,10 @@ export async function validateDocumentUrlWithDns(
 
   let addresses: Array<{ address: string; family: number }>;
   try {
-    addresses = await dnsLookupImpl(parsed.hostname);
+    addresses = await lookupWithTimeout(parsed.hostname);
   } catch {
-    // If DNS fails, refuse the request rather than letting Vanta fetch a
-    // hostname we cannot verify. This is fail-closed by design.
+    // If DNS fails (including by timeout), refuse the request rather than
+    // letting Vanta fetch a hostname we cannot verify. Fail-closed by design.
     throw new VantaApiError(
       'CONFIG_INVALID',
       `"${fieldName}" hostname "${parsed.hostname}" could not be resolved.`,
