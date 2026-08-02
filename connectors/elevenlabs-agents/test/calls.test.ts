@@ -37,6 +37,7 @@ describe('outbound call tool', () => {
     });
 
     const result = await testClient.callTool('make_outbound_call', {
+      agent_id: 'agent_test_123',
       phone_number_id: 'pn_test_123',
       to_number: '+14155559876',
       dynamic_variables: {
@@ -47,6 +48,7 @@ describe('outbound call tool', () => {
 
     expect(result.isError).toBeFalsy();
     expect(captured.body).toEqual({
+      agent_id: 'agent_test_123',
       agent_phone_number_id: 'pn_test_123',
       to_number: '+14155559876',
       conversation_initiation_client_data: {
@@ -66,6 +68,7 @@ describe('outbound call tool', () => {
     });
 
     const result = await testClient.callTool('make_outbound_call', {
+      agent_id: 'agent_test_123',
       phone_number_id: 'pn_test_123',
       to_number: '415-555-9876',
     });
@@ -89,6 +92,7 @@ describe('outbound call tool', () => {
     });
 
     const result = await testClient.callTool('make_outbound_call', {
+      agent_id: 'agent_test_123',
       phone_number_id: 'pn_sip_trunk_123',
       to_number: '+14155559876',
     });
@@ -97,6 +101,7 @@ describe('outbound call tool', () => {
     expect(captured.endpointHit).toBe(true);
     expect(ENDPOINTS.SIP_TRUNK_OUTBOUND_CALL).toBe('/convai/sip-trunk/outbound-call');
     expect(captured.body).toEqual({
+      agent_id: 'agent_test_123',
       agent_phone_number_id: 'pn_sip_trunk_123',
       to_number: '+14155559876',
     });
@@ -109,6 +114,7 @@ describe('outbound call tool', () => {
     });
 
     const result = await testClient.callTool('make_outbound_call', {
+      agent_id: 'agent_test_123',
       phone_number_id: 'pn_missing_provider',
       to_number: '+14155559876',
     });
@@ -133,6 +139,7 @@ describe('outbound call tool', () => {
     });
 
     const result = await testClient.callTool('make_outbound_call', {
+      agent_id: 'agent_test_123',
       phone_number_id: 'pn_hostile_provider',
       to_number: '+14155559876',
     });

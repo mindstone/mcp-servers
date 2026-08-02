@@ -61,8 +61,6 @@ const createAgentSchema = z.object({
 const updateAgentSchema = z.object({
   agent_id: z.string().min(1).describe('Agent ID to update.'),
   ...firstClassAuthoringSchema,
-}).refine((value) => hasAnyAuthoringChange(value), {
-  message: 'Provide at least one field to update: a first-class authoring field or advanced_config.',
 });
 
 function isObj(value: unknown): value is Obj {
@@ -421,6 +419,14 @@ COMMON MISTAKES:
       },
     },
     withErrorHandling(async (args) => {
+      if (!hasAnyAuthoringChange(args as Record<string, unknown>)) {
+        throw new ElevenLabsError(
+          'Provide at least one field to update: name/system_prompt/first_message/voice_id/language/llm_model/temperature/knowledge_base_document_ids or advanced_config.',
+          'INVALID_ARGUMENTS',
+          'Include at least one editable field in addition to agent_id, then retry.',
+        );
+      }
+
       const apiKey = requireApiKey();
       const { agent_id, ...updateArgs } = args;
       const body = buildAuthoringBody(updateArgs as Record<string, unknown>);

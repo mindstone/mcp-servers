@@ -446,7 +446,6 @@ describe('Stage 5 external-text envelope coverage', () => {
     assertSentinelOnlyInsideEnvelopes(kbJson);
 
     const added = await testClient.callTool('add_knowledge_base_document', {
-      mode: 'text',
       text: 'Refunds take 3 business days.',
       name: 'Refund policy',
     });

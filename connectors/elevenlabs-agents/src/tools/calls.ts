@@ -55,7 +55,7 @@ WHEN TO USE:
 - Call one recipient immediately after confirming the phone number assignment
 - Validate a telephony setup before creating a larger scheduled batch
 
-EXAMPLE: {"phone_number_id": "pn_123", "to_number": "+14155559876", "dynamic_variables": {"customer_name": "Jane"}}
+EXAMPLE: {"agent_id": "agent_123", "phone_number_id": "pn_123", "to_number": "+14155559876", "dynamic_variables": {"customer_name": "Jane"}}
 
 RELATED TOOLS:
 - get_phone_number: inspect the provider and assigned agent first
@@ -66,6 +66,8 @@ RETURNS: outbound_call.
 
 COST: Uses ElevenLabs telephony/call minutes.`,
       inputSchema: z.object({
+        agent_id: z.string().min(1)
+          .describe('Agent ID that should handle the outbound conversation.'),
         phone_number_id: z.string().min(1)
           .describe('Phone number ID to place the call from. Use list_phone_numbers first if needed.'),
         to_number: z.string().min(1)
@@ -92,6 +94,7 @@ COST: Uses ElevenLabs telephony/call minutes.`,
       const endpoint = resolveOutboundEndpoint(phoneNumber);
 
       const body: Record<string, unknown> = {
+        agent_id: args.agent_id,
         agent_phone_number_id: args.phone_number_id,
         to_number: args.to_number,
       };

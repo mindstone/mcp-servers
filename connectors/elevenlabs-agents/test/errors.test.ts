@@ -120,7 +120,7 @@ const WRITE_TOOL_CASES: ToolCase[] = [
   },
   {
     tool: 'make_outbound_call',
-    args: { phone_number_id: 'pn_test_123', to_number: '+14155559876' },
+    args: { agent_id: 'agent_test_123', phone_number_id: 'pn_test_123', to_number: '+14155559876' },
   },
   {
     tool: 'submit_batch_call',
@@ -140,7 +140,7 @@ const WRITE_TOOL_CASES: ToolCase[] = [
   },
   {
     tool: 'add_knowledge_base_document',
-    args: { mode: 'text', text: 'Refunds take 3 business days.' },
+    args: { text: 'Refunds take 3 business days.' },
   },
   {
     tool: 'delete_knowledge_base_document',
