@@ -181,7 +181,25 @@ export async function elevenLabsJson<T>(
   options: ElevenLabsFetchOptions = {},
 ): Promise<T> {
   const response = await elevenLabsFetch(apiKey, urlPath, options);
-  return (await response.json()) as T;
+  const body = await response.text();
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    // The parser's own message quotes the leading response bytes ("Unexpected token
+    // 'X', \"XINJECTX S\"... is not valid JSON"), which would put unenveloped
+    // third-party bytes into a model-visible error. Replace it with a
+    // connector-authored message and keep the diagnostics on stderr, body-free.
+    console.error(
+      `[ElevenLabs Agents API] Non-JSON response body (HTTP ${response.status}, `
+      + `content-type ${response.headers.get('content-type') ?? 'unknown'}, `
+      + `${Buffer.byteLength(body, 'utf8')} bytes)`,
+    );
+    throw new ElevenLabsError(
+      'ElevenLabs API returned a response that is not valid JSON.',
+      'INVALID_RESPONSE',
+      'Retry the request. If it keeps failing, check ElevenLabs service status before retrying again.',
+    );
+  }
 }
 
 /** Map response Content-Type to a file extension (OpenAPI drift — don't trust empty schemas). */

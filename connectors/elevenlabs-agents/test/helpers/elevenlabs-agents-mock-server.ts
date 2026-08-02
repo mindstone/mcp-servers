@@ -4,6 +4,7 @@ import {
   mockBatchCall,
   mockBatchCallListItem,
   FASTAPI_422_DETAIL,
+  MALFORMED_JSON_RESPONSE_BODY,
   MOCK_API_KEY,
   makeFakeAudioBuffer,
   mockAgent,
@@ -392,6 +393,21 @@ export function createElevenLabsAgentsRateLimitHandlers() {
   return [
     http.all(`${BASE_V1}/convai/*`, () =>
       HttpResponse.json({ detail: { message: 'Rate limit exceeded' } }, { status: 429 }),
+    ),
+  ];
+}
+
+/**
+ * Returns a hostile non-JSON body with a JSON content-type and a 200 status for every
+ * ConvAI endpoint — the shape that makes `JSON.parse` quote raw response bytes back.
+ */
+export function createElevenLabsAgentsMalformedJsonHandlers() {
+  return [
+    http.all(`${BASE_V1}/convai/*`, () =>
+      HttpResponse.text(MALFORMED_JSON_RESPONSE_BODY, {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
     ),
   ];
 }

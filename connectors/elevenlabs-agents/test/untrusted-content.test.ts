@@ -7,13 +7,21 @@
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
-import { sanitizeConversation, sanitizePhoneNumber } from '../src/sanitize.js';
+import {
+  sanitizeAgent,
+  sanitizeAgentSummary,
+  sanitizeConversation,
+  sanitizeKbDoc,
+  sanitizePhoneNumber,
+} from '../src/sanitize.js';
 import { wrapUntrusted, wrapUntrustedJsonStrings } from '../src/untrusted-content.js';
 import { mswServer } from './helpers/setup.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
 import {
   ATTACK_PAYLOAD,
   CLOSE_TAG_AGENT_NAME,
+  CREATOR_NAME_ATTACK,
+  DEPENDENT_AGENT_NAME_ATTACK,
   HOSTILE_MAP_KEY,
   MOCK_API_KEY,
   NESTED_TOOL_CALL_ARGUMENTS_ATTACK,
@@ -173,6 +181,15 @@ describe('Stage 5 external-text envelope coverage', () => {
     const agents = listedJson.agents as Array<Record<string, unknown>>;
     expectEnvelopedAndDefanged(agents[0].name, 'elevenlabs-agents:list_agents:name', CLOSE_TAG_AGENT_NAME);
     expect(String(agents[0].name)).toContain(`${ESCAPED_CLOSE_TAG}inject`);
+    const listedAccessInfo = agents[0].access_info as Record<string, unknown>;
+    expectEnvelopedAndDefanged(
+      listedAccessInfo.creator_name,
+      'elevenlabs-agents:list_agents:access_info:creator_name',
+      CREATOR_NAME_ATTACK,
+    );
+    expectEnveloped(listedAccessInfo.creator_email, 'elevenlabs-agents:list_agents:access_info:creator_email');
+    expect(listedAccessInfo.role).toBe('admin');
+    expect(listedAccessInfo.is_creator).toBe(false);
     const listedPrompt = (
       ((agents[0].conversation_config as Record<string, unknown>).agent as Record<string, unknown>).prompt
     ) as Record<string, unknown>;
@@ -188,6 +205,11 @@ describe('Stage 5 external-text envelope coverage', () => {
     const agent = singleJson.agent as Record<string, unknown>;
     expectEnvelopedAndDefanged(agent.name, 'elevenlabs-agents:get_agent:name', CLOSE_TAG_AGENT_NAME);
     expect(String(agent.name)).toContain(`${ESCAPED_CLOSE_TAG}inject`);
+    expectEnvelopedAndDefanged(
+      (agent.access_info as Record<string, unknown>).creator_name,
+      'elevenlabs-agents:get_agent:access_info:creator_name',
+      CREATOR_NAME_ATTACK,
+    );
     expectEnvelopedAndDefanged(agent.system_prompt, 'elevenlabs-agents:get_agent:system_prompt', ATTACK_PAYLOAD);
     expectEnvelopedAndDefanged(
       ((agent.conversation_config as Record<string, unknown>).agent as Record<string, unknown>).first_message,
@@ -365,6 +387,55 @@ describe('Stage 5 external-text envelope coverage', () => {
     assertSentinelOnlyInsideEnvelopes(phoneNumber);
   });
 
+  it('fails safe for future agent and knowledge-base prose fields', () => {
+    // Same drift guard as the conversation/phone test above, extended to the two
+    // surfaces the Stage-2 adversarial pass caught passing current API fields
+    // (`access_info.creator_name`, `dependent_agents[].name`) through raw.
+    const summary = sanitizeAgentSummary(
+      {
+        agent_id: 'agent_future_123',
+        access_info: { is_creator: false, role: 'admin', creator_name: CREATOR_NAME_ATTACK },
+        future_tagline: ATTACK_PAYLOAD,
+      },
+      'elevenlabs-agents:future_agent_summary',
+    ) as Record<string, unknown>;
+
+    const agent = sanitizeAgent(
+      {
+        agent_id: 'agent_future_123',
+        conversation_config: { agent: { future_persona_note: ATTACK_PAYLOAD } },
+        platform_settings: { widget: { future_greeting: ATTACK_PAYLOAD } },
+        tags: [ATTACK_PAYLOAD],
+      },
+      'elevenlabs-agents:future_agent',
+    ) as Record<string, unknown>;
+
+    const doc = sanitizeKbDoc(
+      {
+        id: 'doc_future_123',
+        type: 'text',
+        dependent_agents: [{ id: 'agent_future_123', name: DEPENDENT_AGENT_NAME_ATTACK }],
+        future_owner_note: ATTACK_PAYLOAD,
+        content: ATTACK_PAYLOAD,
+      },
+      'elevenlabs-agents:future_kb_doc',
+    ) as Record<string, unknown>;
+
+    expect(summary.agent_id).toBe('agent_future_123');
+    expect((summary.access_info as Record<string, unknown>).role).toBe('admin');
+    expect(agent.agent_id).toBe('agent_future_123');
+    expect(doc.documentation_id).toBe('doc_future_123');
+    expect(doc.id).toBeUndefined();
+    expect(doc.type).toBe('text');
+    expect(doc.content_truncated).toBe(false);
+
+    // No field-by-field assertions on the prose fields: any raw passthrough on these
+    // surfaces trips the sentinel walker immediately.
+    assertSentinelOnlyInsideEnvelopes(summary);
+    assertSentinelOnlyInsideEnvelopes(agent);
+    assertSentinelOnlyInsideEnvelopes(doc);
+  });
+
   it('envelopes phone labels and KB names/content with ~50KB truncation metadata', async () => {
     mswServer.use(...createElevenLabsAgentsHandlers());
     testClient = await createTestClient({
@@ -400,6 +471,14 @@ describe('Stage 5 external-text envelope coverage', () => {
     const listedKbJson = listedKb.json as Record<string, unknown>;
     const docs = listedKbJson.documents as Array<Record<string, unknown>>;
     expectEnvelopedAndDefanged(docs[0].name, 'elevenlabs-agents:list_knowledge_base_docs:name', ATTACK_PAYLOAD);
+    const listedDependentAgent = (docs[0].dependent_agents as Array<Record<string, unknown>>)[0];
+    expectEnvelopedAndDefanged(
+      listedDependentAgent.name,
+      'elevenlabs-agents:list_knowledge_base_docs:dependent_agents[0]:name',
+      DEPENDENT_AGENT_NAME_ATTACK,
+    );
+    expect(listedDependentAgent.id).toBe('agent_test_123');
+    expect(listedDependentAgent.type).toBe('available');
     const [hostileMetadataKey, hostileMetadataValue] = expectWrappedMapEntry(
       docs[0].metadata,
       'hostile_map_key',
@@ -422,6 +501,11 @@ describe('Stage 5 external-text envelope coverage', () => {
     const document = kbJson.document as Record<string, unknown>;
     const kbRawContent = `${ATTACK_PAYLOAD}\n${OVERSIZED_KB_PADDING}`;
     expectEnvelopedAndDefanged(document.name, 'elevenlabs-agents:get_knowledge_base_doc:name', ATTACK_PAYLOAD);
+    expectEnvelopedAndDefanged(
+      ((document.dependent_agents as Array<Record<string, unknown>>)[0]).name,
+      'elevenlabs-agents:get_knowledge_base_doc:dependent_agents[0]:name',
+      DEPENDENT_AGENT_NAME_ATTACK,
+    );
     const [getMetadataKey, getMetadataValue] = expectWrappedMapEntry(
       document.metadata,
       'hostile_map_key',

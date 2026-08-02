@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mswServer } from './helpers/setup.js';
 import {
   createElevenLabsAgentsHandlers,
+  createElevenLabsAgentsMalformedJsonHandlers,
   createElevenLabsAgentsMissingPermissionHandlers,
   createElevenLabsAgentsUnauthorizedHandlers,
   createElevenLabsAgents422Handlers,
@@ -9,6 +10,7 @@ import {
   MOCK_API_KEY,
 } from './helpers/elevenlabs-agents-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
+import { MALFORMED_JSON_RESPONSE_BODY, SENTINEL } from './fixtures/elevenlabs-agents-data.js';
 
 const SECRET_KEY = 'super-secret-elevenlabs-agents-key-999';
 
@@ -303,6 +305,30 @@ describe('Error handling — ElevenLabs Agents', () => {
 
       const result = await testClient.callTool('list_agents', { page_size: 1 });
       expectStructuredError(result, 'RATE_LIMITED');
+    });
+  });
+
+  describe('Malformed JSON success bodies', () => {
+    it.each([
+      { tool: 'list_agents', args: { page_size: 1 } },
+      { tool: 'add_knowledge_base_document', args: { text: 'Refunds take 3 business days.' } },
+    ])('$tool returns INVALID_RESPONSE without echoing response bytes', async ({ tool, args }) => {
+      mswServer.use(...createElevenLabsAgentsMalformedJsonHandlers());
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool(tool, args);
+      expectStructuredError(result, 'INVALID_RESPONSE');
+
+      // The raw SyntaxError message quotes the leading response bytes; nothing derived
+      // from the body may reach model-visible output, enveloped or otherwise.
+      expect(result.text).not.toContain(SENTINEL);
+      expect(result.text).not.toContain(MALFORMED_JSON_RESPONSE_BODY.slice(0, 12));
+      expect(result.text).not.toContain('Unexpected token');
+      expect(parseErrorBody(result).error).toBe(
+        'ElevenLabs API returned a response that is not valid JSON.',
+      );
     });
   });
 

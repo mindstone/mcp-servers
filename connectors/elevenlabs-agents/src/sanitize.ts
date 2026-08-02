@@ -49,10 +49,6 @@ function isObj(value: unknown): value is Obj {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function wrapStr(value: unknown, source: string): unknown {
-  return typeof value === 'string' ? wrapUntrusted(value, source) : value;
-}
-
 // Keep only structural string fields literal; everything else in transcript turns
 // is attacker-controlled phone-call content and must be enveloped recursively.
 const TRANSCRIPT_TURN_LITERAL_STRING_KEYS = new Set([
@@ -90,6 +86,15 @@ const CONVERSATION_TRANSCRIPT_ARRAY_KEYS = new Set([
 ]);
 
 const CONVERSATION_LITERAL_STRING_KEYS = new Set<string>();
+
+// Agent and knowledge-base responses are fail-safe by default for the same reason
+// conversations are: every string a workspace collaborator can author is a prompt-injection
+// surface, and the ElevenLabs response models keep growing new ones — `documents[].
+// dependent_agents[].name` and `agents[].access_info.creator_name` were both added upstream
+// after this connector's allowlist was written. No key-specific exception is carried here;
+// only the shared structural predicate (ids/`*_id`, `role`/`type`/`status`/`timestamp`,
+// phone numbers) keeps a string literal.
+const AGENT_AND_KB_LITERAL_STRING_KEYS = new Set<string>();
 
 function isStructuralLiteralStringKey(key?: string): boolean {
   if (!key) return false;
@@ -166,6 +171,10 @@ function sanitizeConversationValue(value: unknown, source: string, key?: string)
   return sanitizeStringsByDefault(value, source, key, CONVERSATION_LITERAL_STRING_KEYS);
 }
 
+function sanitizeAgentOrKbValue(value: unknown, source: string, key?: string): unknown {
+  return sanitizeStringsByDefault(value, source, key, AGENT_AND_KB_LITERAL_STRING_KEYS);
+}
+
 function sanitizeNestedText(value: unknown, source: string): unknown {
   if (Array.isArray(value)) {
     return value.map((item, index) => sanitizeNestedText(item, `${source}[${index}]`));
@@ -208,33 +217,18 @@ function truncateUtf8(text: string, maxBytes: number): { text: string; truncated
 
 export function sanitizeAgentSummary(agent: unknown, source: string): unknown {
   if (!isObj(agent)) return agent;
-  const out = sanitizeNestedText(agent, source);
-  const agentObj = isObj(out) ? out : agent;
-  return {
-    ...agentObj,
-    name: wrapStr(agentObj.name, `${source}:name`),
-    prompt: wrapStr(agentObj.prompt, `${source}:prompt`),
-    system_prompt: wrapStr(agentObj.system_prompt, `${source}:system_prompt`),
-    first_message: wrapStr(agentObj.first_message, `${source}:first_message`),
-  };
+  return sanitizeAgentOrKbValue(agent, source);
 }
 
+/**
+ * Full agent config. The deny-by-default walk already recurses into
+ * `conversation_config` / `platform_settings` and routes `metadata` /
+ * `dynamic_variables` through `wrapUntrustedJsonStrings`, so the full-config
+ * response needs nothing beyond the summary walk.
+ */
 export function sanitizeAgent(agent: unknown, source: string): unknown {
   if (!isObj(agent)) return agent;
-  const base = sanitizeAgentSummary(agent, source);
-  const out = isObj(base) ? { ...base } : { ...agent };
-
-  if (isObj(out.conversation_config)) {
-    out.conversation_config = sanitizeNestedText(out.conversation_config, `${source}:conversation_config`);
-  }
-  if (isObj(out.platform_settings)) {
-    out.platform_settings = sanitizeNestedText(out.platform_settings, `${source}:platform_settings`);
-  }
-  if (isObj(out.metadata)) {
-    out.metadata = wrapUntrustedJsonStrings(out.metadata, `${source}:metadata`);
-  }
-
-  return out;
+  return sanitizeAgentOrKbValue(agent, source);
 }
 
 export function sanitizeConversation(conversation: unknown, source: string): unknown {
@@ -288,19 +282,22 @@ export function sanitizeBatchCall(batchCall: unknown, source: string): unknown {
   return out;
 }
 
-function wrapKbBodyString(
-  out: Obj,
-  field: string,
-  source: string,
-  metadataPrefix: string,
-): void {
-  const raw = out[field];
-  if (typeof raw !== 'string') return;
+/**
+ * Body-bearing fields are enveloped outside the deny-by-default walk because they
+ * must be byte-truncated *before* wrapping and carry sidecar truncation metadata.
+ * A non-string value here (upstream shape drift) falls back to the same
+ * deny-by-default walk rather than passing through raw.
+ */
+function sanitizeKbBodyField(out: Obj, field: string, raw: unknown, source: string): void {
+  if (typeof raw !== 'string') {
+    out[field] = sanitizeAgentOrKbValue(raw, `${source}:${field}`, field);
+    return;
+  }
   const { text, truncated, originalBytes } = truncateUtf8(raw, KB_CONTENT_LIMIT_BYTES);
   out[field] = wrapUntrusted(text, `${source}:${field}`);
-  out[`${metadataPrefix}_truncated`] = truncated;
-  out[`${metadataPrefix}_original_bytes`] = originalBytes;
-  out[`${metadataPrefix}_returned_bytes`] = Buffer.byteLength(text, 'utf8');
+  out[`${field}_truncated`] = truncated;
+  out[`${field}_original_bytes`] = originalBytes;
+  out[`${field}_returned_bytes`] = Buffer.byteLength(text, 'utf8');
 }
 
 export function sanitizeKbDoc(doc: unknown, source: string): unknown {
@@ -321,18 +318,21 @@ export function sanitizeKbDoc(doc: unknown, source: string): unknown {
     delete out.id;
   }
 
-  out.name = wrapStr(out.name, `${source}:name`);
-  if (out.metadata !== undefined) {
-    out.metadata = wrapUntrustedJsonStrings(out.metadata, `${source}:metadata`);
+  const bodyFields = new Map<string, unknown>();
+  for (const field of [...KB_METADATA_BODY_FIELDS, 'content']) {
+    if (field in out) {
+      bodyFields.set(field, out[field]);
+      delete out[field];
+    }
   }
 
-  for (const field of KB_METADATA_BODY_FIELDS) {
-    wrapKbBodyString(out, field, source, field);
+  const sanitized = sanitizeAgentOrKbValue(out, source) as Obj;
+
+  for (const [field, raw] of bodyFields) {
+    sanitizeKbBodyField(sanitized, field, raw, source);
   }
 
-  wrapKbBodyString(out, 'content', source, 'content');
-
-  return out;
+  return sanitized;
 }
 
 export function sanitizeList<T>(

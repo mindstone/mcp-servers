@@ -7,6 +7,11 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Security
+
+- Agent and knowledge-base responses now envelope external text deny-by-default, matching the conversation and phone-number surfaces. Previously an allowlist of field names was used, so current API fields authored by any workspace collaborator — `agents[].access_info.creator_name` and `documents[].dependent_agents[].name` — reached the model unenveloped.
+- Responses that are not valid JSON now fail with a connector-authored `INVALID_RESPONSE` error. The parser's own message quotes the leading response bytes, which put unenveloped third-party text into a model-visible error.
+
 ## [0.1.1] - 2026-07-11
 
 ### Fixed
