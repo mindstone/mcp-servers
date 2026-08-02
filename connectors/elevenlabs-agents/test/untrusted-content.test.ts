@@ -10,8 +10,10 @@ import * as fs from 'node:fs';
 import {
   sanitizeAgent,
   sanitizeAgentSummary,
+  sanitizeBatchCall,
   sanitizeConversation,
   sanitizeKbDoc,
+  sanitizeOutboundCall,
   sanitizePhoneNumber,
 } from '../src/sanitize.js';
 import * as sanitizeModule from '../src/sanitize.js';
@@ -20,6 +22,8 @@ import { mswServer } from './helpers/setup.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
 import {
   ATTACK_PAYLOAD,
+  CALL_AGENT_NAME_ATTACK,
+  CALL_BRANCH_NAME_ATTACK,
   CLOSE_TAG_AGENT_NAME,
   CREATOR_NAME_ATTACK,
   DEPENDENT_AGENT_NAME_ATTACK,
@@ -546,7 +550,7 @@ describe('Stage 5 external-text envelope coverage', () => {
     assertSentinelOnlyInsideEnvelopes(addedJson);
   });
 
-  it('envelopes batch call names, per-recipient failure text, and dynamic variables', async () => {
+  it('envelopes batch call names, agent/branch names, per-recipient failure text, and dynamic variables', async () => {
     mswServer.use(...createElevenLabsAgentsHandlers());
     testClient = await createTestClient({
       env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
@@ -556,6 +560,17 @@ describe('Stage 5 external-text envelope coverage', () => {
     const listedJson = listed.json as Record<string, unknown>;
     const batchCalls = listedJson.batch_calls as Array<Record<string, unknown>>;
     expectEnvelopedAndDefanged(batchCalls[0].call_name, 'elevenlabs-agents:list_batch_calls:call_name', ATTACK_PAYLOAD);
+    expectEnvelopedAndDefanged(
+      batchCalls[0].agent_name,
+      'elevenlabs-agents:list_batch_calls:agent_name',
+      CALL_AGENT_NAME_ATTACK,
+    );
+    expectEnvelopedAndDefanged(
+      batchCalls[0].branch_name,
+      'elevenlabs-agents:list_batch_calls:branch_name',
+      CALL_BRANCH_NAME_ATTACK,
+    );
+    expect(batchCalls[0].agent_id).toBe('agent_test_123');
     const listedBatchDynamicVars = (((batchCalls[0].recipients as Array<Record<string, unknown>>)[0]
       .conversation_initiation_client_data as Record<string, unknown>).dynamic_variables as Record<string, unknown>);
     expectEnvelopedAndDefanged(
@@ -588,6 +603,18 @@ describe('Stage 5 external-text envelope coverage', () => {
     const singleJson = single.json as Record<string, unknown>;
     const batchCall = singleJson.batch_call as Record<string, unknown>;
     expectEnvelopedAndDefanged(batchCall.call_name, 'elevenlabs-agents:get_batch_call:call_name', ATTACK_PAYLOAD);
+    expectEnvelopedAndDefanged(
+      batchCall.agent_name,
+      'elevenlabs-agents:get_batch_call:agent_name',
+      CALL_AGENT_NAME_ATTACK,
+    );
+    expectEnvelopedAndDefanged(
+      batchCall.branch_name,
+      'elevenlabs-agents:get_batch_call:branch_name',
+      CALL_BRANCH_NAME_ATTACK,
+    );
+    expect(batchCall.batch_id).toBe('batch_test_123');
+    expect(batchCall.status).toBe('queued');
     const recipients = batchCall.recipients as Array<Record<string, unknown>>;
     expectEnvelopedAndDefanged(
       recipients[1].error_message,
@@ -634,6 +661,95 @@ describe('Stage 5 external-text envelope coverage', () => {
       'Renewals wave 1',
     );
     assertSentinelOnlyInsideEnvelopes(submittedJson);
+  });
+
+  it('envelopes outbound-call agent/branch names and dynamic variables', async () => {
+    mswServer.use(...createElevenLabsAgentsHandlers());
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('make_outbound_call', {
+      agent_id: 'agent_test_123',
+      phone_number_id: 'pn_test_123',
+      to_number: '+14155559876',
+    });
+    const json = result.json as Record<string, unknown>;
+    const call = json.outbound_call as Record<string, unknown>;
+    expectEnvelopedAndDefanged(
+      call.agent_name,
+      'elevenlabs-agents:make_outbound_call:agent_name',
+      CALL_AGENT_NAME_ATTACK,
+    );
+    expectEnvelopedAndDefanged(
+      call.branch_name,
+      'elevenlabs-agents:make_outbound_call:branch_name',
+      CALL_BRANCH_NAME_ATTACK,
+    );
+    expect(call.call_id).toBe('outbound_call_test_123');
+    expect(call.status).toBe('queued');
+    expect(call.to_number).toBe('+14155559876');
+    const dynamicVars = ((call.conversation_initiation_client_data as Record<string, unknown>)
+      .dynamic_variables as Record<string, unknown>);
+    expectEnvelopedAndDefanged(
+      expectWrappedMapEntry(
+        dynamicVars,
+        'customer_name',
+        'elevenlabs-agents:make_outbound_call:conversation_initiation_client_data:dynamic_variables',
+      )[1],
+      'elevenlabs-agents:make_outbound_call:conversation_initiation_client_data:dynamic_variables',
+      ATTACK_PAYLOAD,
+    );
+    assertSentinelOnlyInsideEnvelopes(json);
+  });
+
+  it('fails safe for future batch-call and outbound-call prose fields', () => {
+    // Same drift guard as the conversation/phone and agent/KB tests above, extended to
+    // the last two surfaces that carried a key allowlist. `agent_name` and `branch_name`
+    // are current v2.60 batch-call fields the old allowlist omitted; the `future_*` keys
+    // stand in for the next ones upstream adds.
+    const batchCall = sanitizeBatchCall(
+      {
+        id: 'batch_future_123',
+        status: 'queued',
+        agent_id: 'agent_future_123',
+        agent_name: CALL_AGENT_NAME_ATTACK,
+        branch_name: CALL_BRANCH_NAME_ATTACK,
+        future_batch_note: ATTACK_PAYLOAD,
+        recipients: [
+          { id: 'recipient_future_1', phone_number: '+14155551234', future_recipient_note: ATTACK_PAYLOAD },
+        ],
+      },
+      'elevenlabs-agents:future_batch_call',
+    ) as Record<string, unknown>;
+
+    const outboundCall = sanitizeOutboundCall(
+      {
+        call_id: 'outbound_future_123',
+        status: 'queued',
+        to_number: '+14155559876',
+        agent_name: CALL_AGENT_NAME_ATTACK,
+        branch_name: CALL_BRANCH_NAME_ATTACK,
+        future_call_note: ATTACK_PAYLOAD,
+        nested: { future_note: ATTACK_PAYLOAD },
+      },
+      'elevenlabs-agents:future_outbound_call',
+    ) as Record<string, unknown>;
+
+    // Structural work survives the deny-by-default walk on both surfaces.
+    expect(batchCall.batch_id).toBe('batch_future_123');
+    expect(batchCall.id).toBeUndefined();
+    expect(batchCall.status).toBe('queued');
+    expect(batchCall.agent_id).toBe('agent_future_123');
+    expect(((batchCall.recipients as Array<Record<string, unknown>>)[0]).phone_number).toBe('+14155551234');
+    expect(outboundCall.call_id).toBe('outbound_future_123');
+    expect(outboundCall.status).toBe('queued');
+    expect(outboundCall.to_number).toBe('+14155559876');
+
+    // No field-by-field assertions on the prose fields: any raw passthrough on these
+    // surfaces trips the sentinel walker immediately.
+    assertSentinelOnlyInsideEnvelopes(batchCall);
+    assertSentinelOnlyInsideEnvelopes(outboundCall);
   });
 
   it('envelopes simulated conversation turns and simulation analysis prose', async () => {
@@ -722,19 +838,19 @@ describe('Stage 5 external-text envelope coverage', () => {
  * model raw. Same for `agents: ["…"]` / `documents: ["…"]` root arrays, which
  * `sanitizeList` fans out one bare string at a time.
  */
+/**
+ * `sanitizeList` is the only exported member exempt from the tables below: it takes
+ * `(items, sanitizer, source)`, collapses a non-array root to `[]` (fail-closed),
+ * and delegates every element to one of the entry points tested here. Any *other*
+ * sanitizer added to the module is picked up automatically.
+ */
+const EXEMPT_EXPORTS = new Set(['sanitizeList']);
+
+const rootSanitizers = Object.entries(sanitizeModule)
+  .filter((entry): entry is [string, (value: unknown, source: string) => unknown] =>
+    typeof entry[1] === 'function' && !EXEMPT_EXPORTS.has(entry[0]));
+
 describe('non-object response roots are enveloped, not passed through', () => {
-  /**
-   * `sanitizeList` is the only exported member exempt from the table below: it takes
-   * `(items, sanitizer, source)`, collapses a non-array root to `[]` (fail-closed),
-   * and delegates every element to one of the entry points tested here. Any *other*
-   * sanitizer added to the module is picked up automatically.
-   */
-  const EXEMPT_EXPORTS = new Set(['sanitizeList']);
-
-  const rootSanitizers = Object.entries(sanitizeModule)
-    .filter((entry): entry is [string, (value: unknown, source: string) => unknown] =>
-      typeof entry[1] === 'function' && !EXEMPT_EXPORTS.has(entry[0]));
-
   it('covers every exported sanitizer except the documented fan-out helper', () => {
     expect(Object.keys(sanitizeModule)).toContain('sanitizeList');
     expect(rootSanitizers.length).toBeGreaterThan(0);
@@ -818,6 +934,47 @@ describe('non-object response roots are enveloped, not passed through', () => {
       expectEnvelopedAndDefanged(items[0], `elevenlabs-agents:${tool}`, ATTACK_PAYLOAD);
       assertSentinelOnlyInsideEnvelopes(result.json);
     });
+  });
+});
+
+/**
+ * The key-allowlist idiom is gone from this connector: no surface sanitizer decides
+ * "envelope this string" by looking the key up in a list of known prose fields. Round 1
+ * caught the allowlist omitting `access_info.creator_name` and `dependent_agents[].name`;
+ * round 3 caught the last two consumers omitting `agent_name` and `branch_name`. Rather
+ * than pin those four names, this table asserts the *policy* on every exported sanitizer
+ * at once — a fifth omission (or a ninth sanitizer) is covered the day it lands.
+ */
+describe('object roots are deny-by-default on every surface', () => {
+  const HOSTILE_OBJECT_ROOT = {
+    id: 'object_root_test_123',
+    agent_id: 'agent_test_123',
+    status: 'queued',
+    type: 'text',
+    phone_number: '+14155551234',
+    // Real fields the old batch/outbound allowlist omitted…
+    agent_name: CALL_AGENT_NAME_ATTACK,
+    branch_name: CALL_BRANCH_NAME_ATTACK,
+    // …and stand-ins for whatever upstream adds next, at both depths.
+    future_prose_field: ATTACK_PAYLOAD,
+    nested: { future_nested_note: ATTACK_PAYLOAD },
+    items: [{ future_item_note: ATTACK_PAYLOAD }],
+  };
+
+  it.each(rootSanitizers)('%s envelopes unknown prose keys on an object root', (name, sanitize) => {
+    const out = sanitize(HOSTILE_OBJECT_ROOT, `elevenlabs-agents:${name}:object_root`) as Record<string, unknown>;
+
+    // Structural literals still survive, so this is a policy assertion, not "wrap everything".
+    expect(out.agent_id).toBe('agent_test_123');
+    expect(out.status).toBe('queued');
+    expect(out.type).toBe('text');
+    expect(out.phone_number).toBe('+14155551234');
+    assertSentinelOnlyInsideEnvelopes(out);
+  });
+
+  it('leaves the source fixture unmutated', () => {
+    expect(HOSTILE_OBJECT_ROOT.agent_name).toBe(CALL_AGENT_NAME_ATTACK);
+    expect(HOSTILE_OBJECT_ROOT.nested.future_nested_note).toBe(ATTACK_PAYLOAD);
   });
 });
 

@@ -14,24 +14,6 @@ const KB_CONTENT_LIMIT_BYTES = 50_000;
 
 /** Body-bearing string fields on GET /knowledge-base/{id} metadata (not the /content body). */
 const KB_METADATA_BODY_FIELDS = ['extracted_inner_html'] as const;
-const NESTED_TEXT_KEYS = new Set([
-  'name',
-  'call_name',
-  'label',
-  'prompt',
-  'system_prompt',
-  'first_message',
-  'description',
-  'summary',
-  'text',
-  'message',
-  'error_message',
-  'content',
-  'title',
-  'instructions',
-  'reason',
-  'value',
-]);
 
 const STRUCTURAL_LITERAL_STRING_KEYS = new Set([
   'role',
@@ -95,6 +77,15 @@ const CONVERSATION_LITERAL_STRING_KEYS = new Set<string>();
 // only the shared structural predicate (ids/`*_id`, `role`/`type`/`status`/`timestamp`,
 // phone numbers) keeps a string literal.
 const AGENT_AND_KB_LITERAL_STRING_KEYS = new Set<string>();
+
+// Outbound-call and batch-call responses are fail-safe by default for the same reason:
+// a workspace collaborator names the agent and the workflow branch, and ElevenLabs'
+// released v2.60 `BatchCallResponse`/`BatchCallDetailedResponse` models carry both
+// `agent_name` and `branch_name` — neither of which a key allowlist written before
+// they existed could have covered. No key-specific exception is carried here; only
+// the shared structural predicate (ids/`*_id`, `role`/`type`/`status`/`timestamp`,
+// phone numbers) keeps a string literal.
+const CALL_LITERAL_STRING_KEYS = new Set<string>();
 
 /** No key at all -> no structural exemption can apply. Used for non-object response roots. */
 const NO_LITERAL_STRING_KEYS = new Set<string>();
@@ -178,6 +169,10 @@ function sanitizeAgentOrKbValue(value: unknown, source: string, key?: string): u
   return sanitizeStringsByDefault(value, source, key, AGENT_AND_KB_LITERAL_STRING_KEYS);
 }
 
+function sanitizeCallValue(value: unknown, source: string, key?: string): unknown {
+  return sanitizeStringsByDefault(value, source, key, CALL_LITERAL_STRING_KEYS);
+}
+
 /**
  * Every exported sanitizer must decide what to do with a **non-object root**. An
  * HTTP-200 body that is a bare JSON scalar (`"XINJECTX SYSTEM: …"`) or a bare array
@@ -199,29 +194,6 @@ function sanitizeNonObjectRoot(
     return value.map((item, index) => itemSanitizer(item, `${source}[${index}]`));
   }
   return sanitizeStringsByDefault(value, source, undefined, NO_LITERAL_STRING_KEYS);
-}
-
-function sanitizeNestedText(value: unknown, source: string): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item, index) => sanitizeNestedText(item, `${source}[${index}]`));
-  }
-  if (!isObj(value)) return value;
-
-  const out: Obj = { ...value };
-  for (const [key, child] of Object.entries(out)) {
-    if (typeof child === 'string' && NESTED_TEXT_KEYS.has(key)) {
-      out[key] = wrapUntrusted(child, `${source}:${key}`);
-      continue;
-    }
-    if (key === 'dynamic_variables' || key === 'analysis' || key === 'summary' || key === 'metadata') {
-      out[key] = wrapUntrustedJsonStrings(child, `${source}:${key}`);
-      continue;
-    }
-    if (Array.isArray(child) || isObj(child)) {
-      out[key] = sanitizeNestedText(child, `${source}:${key}`);
-    }
-  }
-  return out;
 }
 
 function sanitizeTranscriptTurns(turns: unknown, source: string): unknown {
@@ -291,12 +263,17 @@ export function sanitizePhoneNumber(phoneNumber: unknown, source: string): unkno
 
 export function sanitizeOutboundCall(call: unknown, source: string): unknown {
   if (!isObj(call)) return sanitizeNonObjectRoot(call, source, sanitizeOutboundCall);
-  return sanitizeNestedText(call, source);
+  return sanitizeCallValue(call, source);
 }
 
+/**
+ * Batch-call responses get the same deny-by-default walk as every other surface; the
+ * only surface-specific work is the `id` -> `batch_id` remap, which runs *after* the
+ * walk (`id` survives it literally via the shared structural predicate).
+ */
 export function sanitizeBatchCall(batchCall: unknown, source: string): unknown {
   if (!isObj(batchCall)) return sanitizeNonObjectRoot(batchCall, source, sanitizeBatchCall);
-  const sanitized = sanitizeNestedText(batchCall, source);
+  const sanitized = sanitizeCallValue(batchCall, source);
   const out = isObj(sanitized) ? { ...sanitized } : { ...batchCall };
 
   // List/get/submit responses use `id`; get/cancel/retry tools expect `batch_id`.
