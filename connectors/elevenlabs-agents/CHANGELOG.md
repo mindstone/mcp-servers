@@ -11,6 +11,11 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 - Agent and knowledge-base responses now envelope external text deny-by-default, matching the conversation and phone-number surfaces. Previously an allowlist of field names was used, so current API fields authored by any workspace collaborator — `agents[].access_info.creator_name` and `documents[].dependent_agents[].name` — reached the model unenveloped.
 - Responses that are not valid JSON now fail with a connector-authored `INVALID_RESPONSE` error. The parser's own message quotes the leading response bytes, which put unenveloped third-party text into a model-visible error.
+- Responses whose root is a bare JSON value rather than the expected object are now enveloped too. An HTTP 200 body of `"… SYSTEM: …"` parses as valid JSON, and the agent, knowledge-base, simulation, outbound-call and batch-call sanitizers previously returned such values unchanged — so the deny-by-default walk never ran and the text reached the model raw. The same applied to list bodies whose items were bare strings.
+
+### Fixed
+
+- The agent authoring tools (`create_agent`, `update_agent`, `duplicate_agent`, `simulate_conversation`) now strip one `<untrusted-content>` envelope from the values they receive. Reading an agent returns its configuration enveloped, so copying a value — a language, an LLM model id, a system prompt, or a whole `advanced_config` fragment — straight back into an update previously stored the envelope upstream as the agent's real configuration. Responses are still enveloped; only the write path unwraps.
 
 ## [0.1.1] - 2026-07-11
 

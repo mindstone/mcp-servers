@@ -14,6 +14,7 @@ import {
   sanitizeKbDoc,
   sanitizePhoneNumber,
 } from '../src/sanitize.js';
+import * as sanitizeModule from '../src/sanitize.js';
 import { wrapUntrusted, wrapUntrustedJsonStrings } from '../src/untrusted-content.js';
 import { mswServer } from './helpers/setup.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
@@ -29,7 +30,10 @@ import {
   SENTINEL,
   TOOL_CALL_TRANSCRIPT_JSON,
 } from './fixtures/elevenlabs-agents-data.js';
-import { createElevenLabsAgentsHandlers } from './helpers/elevenlabs-agents-mock-server.js';
+import {
+  createElevenLabsAgentsHandlers,
+  createElevenLabsAgentsNonObjectRootHandlers,
+} from './helpers/elevenlabs-agents-mock-server.js';
 
 const ESCAPED_CLOSE_TAG = '<\\/untrusted-content>';
 
@@ -706,6 +710,114 @@ describe('Stage 5 external-text envelope coverage', () => {
     expect(parsed).not.toHaveProperty('transcript');
     expect(String(parsed.message ?? '')).not.toContain('tool_calls');
     if (fs.existsSync(parsed.file_path as string)) fs.unlinkSync(parsed.file_path as string);
+  });
+});
+
+/**
+ * Non-object response roots. An HTTP-200 body of `"XINJECTX SYSTEM: …"` is *valid*
+ * JSON, so `elevenLabsJson` parses it happily and hands a bare string to whichever
+ * surface sanitizer the tool selected. Before this fix the agent, knowledge-base,
+ * simulation, outbound-call and batch-call entry points all returned non-object
+ * inputs unchanged, so the deny-by-default walk never ran and the bytes reached the
+ * model raw. Same for `agents: ["…"]` / `documents: ["…"]` root arrays, which
+ * `sanitizeList` fans out one bare string at a time.
+ */
+describe('non-object response roots are enveloped, not passed through', () => {
+  /**
+   * `sanitizeList` is the only exported member exempt from the table below: it takes
+   * `(items, sanitizer, source)`, collapses a non-array root to `[]` (fail-closed),
+   * and delegates every element to one of the entry points tested here. Any *other*
+   * sanitizer added to the module is picked up automatically.
+   */
+  const EXEMPT_EXPORTS = new Set(['sanitizeList']);
+
+  const rootSanitizers = Object.entries(sanitizeModule)
+    .filter((entry): entry is [string, (value: unknown, source: string) => unknown] =>
+      typeof entry[1] === 'function' && !EXEMPT_EXPORTS.has(entry[0]));
+
+  it('covers every exported sanitizer except the documented fan-out helper', () => {
+    expect(Object.keys(sanitizeModule)).toContain('sanitizeList');
+    expect(rootSanitizers.length).toBeGreaterThan(0);
+    expect(rootSanitizers.map(([name]) => name)).not.toContain('sanitizeList');
+  });
+
+  it.each(rootSanitizers)('%s envelopes a hostile scalar root', (name, sanitize) => {
+    const source = `elevenlabs-agents:${name}:scalar_root`;
+    expectEnvelopedAndDefanged(sanitize(ATTACK_PAYLOAD, source), source, ATTACK_PAYLOAD);
+  });
+
+  it.each(rootSanitizers)('%s envelopes hostile strings inside a root array', (name, sanitize) => {
+    const out = sanitize([ATTACK_PAYLOAD, { name: ATTACK_PAYLOAD }], `elevenlabs-agents:${name}:array_root`);
+    expect(Array.isArray(out), `${name} must keep an array root an array`).toBe(true);
+    assertSentinelOnlyInsideEnvelopes(out);
+  });
+
+  it.each(rootSanitizers)('%s leaves non-string primitive roots structurally intact', (name, sanitize) => {
+    const source = `elevenlabs-agents:${name}:primitive_root`;
+    expect(sanitize(null, source)).toBeNull();
+    expect(sanitize(42, source)).toBe(42);
+    expect(sanitize(false, source)).toBe(false);
+  });
+
+  describe('through the tool boundary', () => {
+    let testClient: McpTestClient;
+
+    afterEach(async () => {
+      if (testClient) await testClient.close();
+      vi.unstubAllEnvs();
+    });
+
+    async function connect(): Promise<McpTestClient> {
+      mswServer.use(
+        ...createElevenLabsAgentsNonObjectRootHandlers(),
+        ...createElevenLabsAgentsHandlers(),
+      );
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+      return testClient;
+    }
+
+    it('get_agent envelopes an HTTP-200 body that is a bare hostile JSON string', async () => {
+      const client = await connect();
+      const result = await client.callTool('get_agent', { agent_id: 'agent_test_123' });
+
+      expect(result.isError).toBeFalsy();
+      expectEnvelopedAndDefanged(
+        (result.json as Record<string, unknown>).agent,
+        'elevenlabs-agents:get_agent',
+        ATTACK_PAYLOAD,
+      );
+      assertSentinelOnlyInsideEnvelopes(result.json);
+    });
+
+    it('get_knowledge_base_doc envelopes a bare hostile JSON string body', async () => {
+      const client = await connect();
+      const result = await client.callTool('get_knowledge_base_doc', { documentation_id: 'doc_test_123' });
+
+      expect(result.isError).toBeFalsy();
+      expectEnvelopedAndDefanged(
+        (result.json as Record<string, unknown>).document,
+        'elevenlabs-agents:get_knowledge_base_doc',
+        ATTACK_PAYLOAD,
+      );
+      assertSentinelOnlyInsideEnvelopes(result.json);
+    });
+
+    it.each([
+      ['list_agents', 'agents'],
+      ['list_knowledge_base_docs', 'documents'],
+      ['list_conversations', 'conversations'],
+    ])('%s envelopes list items that are bare hostile strings', async (tool, key) => {
+      const client = await connect();
+      const result = await client.callTool(tool, { page_size: 1 });
+
+      expect(result.isError).toBeFalsy();
+      const items = (result.json as Record<string, unknown>)[key] as unknown[];
+      expect(items).toHaveLength(1);
+      expectEnvelopedAndDefanged(items[0], `elevenlabs-agents:${tool}`, ATTACK_PAYLOAD);
+      assertSentinelOnlyInsideEnvelopes(result.json);
+    });
   });
 });
 

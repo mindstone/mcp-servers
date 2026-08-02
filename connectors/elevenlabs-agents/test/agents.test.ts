@@ -9,6 +9,18 @@ import {
   MOCK_API_KEY,
 } from './helpers/elevenlabs-agents-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
+import { ATTACK_PAYLOAD, CLOSE_TAG_AGENT_NAME } from './fixtures/elevenlabs-agents-data.js';
+
+type Json = Record<string, any>;
+
+/**
+ * Close-tag *variants* (`</UNTRUSTED-CONTENT \t>`) are defanged to the single
+ * canonical form on the way out, and unescaping restores that canonical form — so a
+ * value carrying a breakout attempt round-trips normalized, not byte-identical.
+ * Ordinary text, and the canonical close tag itself, round-trip exactly.
+ */
+const ATTACK_PAYLOAD_AFTER_ROUND_TRIP =
+  ATTACK_PAYLOAD.replace(/<\/untrusted-content\s*>/gi, '</untrusted-content>');
 
 describe('agents tools', () => {
   let testClient: McpTestClient;
@@ -192,6 +204,129 @@ describe('agents tools', () => {
     expect(result.json).toMatchObject({
       ok: true,
       agent_id: 'agent_test_123',
+    });
+  });
+
+  /**
+   * Round-trip contract (adversarial round 2, F2). `get_agent` returns every
+   * non-structural string enveloped, and these tools tell the model to read the
+   * config before patching it — so the model hands enveloped values straight back to
+   * `update_agent`. Storing the envelope upstream would corrupt the agent, so the
+   * write side strips exactly one envelope. The *output* boundary is untouched:
+   * hostile prose in a config-shaped field is still enveloped on the way out.
+   */
+  describe('enveloped-input round-trip contract', () => {
+    it('update_agent restores first-class fields copied out of a get_agent response', async () => {
+      const { handler, captured } = createUpdateAgentCapturingHandler();
+      mswServer.use(handler, ...createElevenLabsAgentsHandlers());
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const read = await testClient.callTool('get_agent', { agent_id: 'agent_test_123' });
+      const agent = (read.json as Json).agent as Json;
+      const agentConfig = agent.conversation_config.agent as Json;
+
+      // Precondition: these really do come back wrapped, so the model has no raw copy.
+      expect(String(agent.name)).toContain('<untrusted-content source=');
+      expect(String(agentConfig.language)).toContain('<untrusted-content source=');
+      expect(String(agentConfig.prompt.llm_model)).toContain('<untrusted-content source=');
+
+      const write = await testClient.callTool('update_agent', {
+        agent_id: 'agent_test_123',
+        name: agent.name,
+        language: agentConfig.language,
+        llm_model: agentConfig.prompt.llm_model,
+        system_prompt: agentConfig.prompt.prompt,
+      });
+
+      expect(write.isError).toBeFalsy();
+      expect(captured.body).toEqual({
+        name: CLOSE_TAG_AGENT_NAME,
+        conversation_config: {
+          agent: {
+            language: 'en',
+            prompt: {
+              prompt: ATTACK_PAYLOAD_AFTER_ROUND_TRIP,
+              llm_model: 'gpt-realtime',
+            },
+          },
+        },
+      });
+
+      // …and reading it back returns the same enveloped shape, so get → update → get is stable.
+      const reread = (write.json as Json).agent as Json;
+      expect(String(reread.conversation_config.agent.language)).toContain('<untrusted-content source=');
+    });
+
+    it('update_agent unwraps an advanced_config fragment copied wholesale from get_agent', async () => {
+      const { handler, captured } = createUpdateAgentCapturingHandler();
+      mswServer.use(handler, ...createElevenLabsAgentsHandlers());
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const read = await testClient.callTool('get_agent', { agent_id: 'agent_test_123' });
+      const agent = (read.json as Json).agent as Json;
+
+      const write = await testClient.callTool('update_agent', {
+        agent_id: 'agent_test_123',
+        advanced_config: { conversation_config: agent.conversation_config },
+      });
+
+      expect(write.isError).toBeFalsy();
+      const body = captured.body as Json;
+      expect(body.conversation_config.agent.language).toBe('en');
+      expect(body.conversation_config.agent.prompt.llm_model).toBe('gpt-realtime');
+      expect(body.conversation_config.agent.prompt.temperature).toBe(0.4);
+      expect(body.conversation_config.agent.prompt.knowledge_base_document_ids).toEqual(['doc_test_123']);
+      expect(body.conversation_config.tts.voice_id).toBe('voice_test_123');
+      expect(JSON.stringify(body)).not.toContain('<untrusted-content source=');
+    });
+
+    it('duplicate_agent and simulate_conversation strip envelopes from copied text too', async () => {
+      const duplicate = createDuplicateAgentCapturingHandler();
+      const simulate = createSimulateConversationCapturingHandler();
+      mswServer.use(duplicate.handler, simulate.handler, ...createElevenLabsAgentsHandlers());
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const read = await testClient.callTool('get_agent', { agent_id: 'agent_test_123' });
+      const agent = (read.json as Json).agent as Json;
+
+      await testClient.callTool('duplicate_agent', { agent_id: 'agent_test_123', name: agent.name });
+      expect(duplicate.captured.body).toEqual({ name: CLOSE_TAG_AGENT_NAME });
+
+      await testClient.callTool('simulate_conversation', {
+        agent_id: 'agent_test_123',
+        user_message: 'Reschedule my appointment.',
+        language: agent.conversation_config.agent.language,
+      });
+      expect((simulate.captured.body as Json).simulation_specification.simulated_user_config.language).toBe('en');
+    });
+
+    it('keeps hostile prose in a config-shaped field enveloped on the way out', async () => {
+      const { handler, captured } = createUpdateAgentCapturingHandler();
+      mswServer.use(handler, ...createElevenLabsAgentsHandlers());
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('update_agent', {
+        agent_id: 'agent_test_123',
+        language: ATTACK_PAYLOAD,
+      });
+
+      // Input side: raw text is forwarded verbatim — unwrapping never invents an envelope.
+      expect((captured.body as Json).conversation_config.agent.language).toBe(ATTACK_PAYLOAD);
+
+      // Output side: `language` buys no allowlist exemption. This is why the fix is
+      // input-side unwrapping rather than widening the literal-string key set.
+      const returned = String(((result.json as Json).agent as Json).conversation_config.agent.language);
+      expect(returned).toContain('<untrusted-content source=');
+      expect(returned).toContain('XINJECTX');
+      expect(returned.match(/<\/untrusted-content>/gi) ?? []).toHaveLength(1);
     });
   });
 

@@ -96,6 +96,9 @@ const CONVERSATION_LITERAL_STRING_KEYS = new Set<string>();
 // phone numbers) keeps a string literal.
 const AGENT_AND_KB_LITERAL_STRING_KEYS = new Set<string>();
 
+/** No key at all -> no structural exemption can apply. Used for non-object response roots. */
+const NO_LITERAL_STRING_KEYS = new Set<string>();
+
 function isStructuralLiteralStringKey(key?: string): boolean {
   if (!key) return false;
   return (
@@ -175,6 +178,29 @@ function sanitizeAgentOrKbValue(value: unknown, source: string, key?: string): u
   return sanitizeStringsByDefault(value, source, key, AGENT_AND_KB_LITERAL_STRING_KEYS);
 }
 
+/**
+ * Every exported sanitizer must decide what to do with a **non-object root**. An
+ * HTTP-200 body that is a bare JSON scalar (`"XINJECTX SYSTEM: …"`) or a bare array
+ * parses fine in `elevenLabsJson`, so an entry point that returns non-objects
+ * unchanged hands raw third-party bytes straight to the model — the object-shaped
+ * deny-by-default walk never runs. Never `return value` from that branch.
+ *
+ * Root arrays re-enter the caller's own sanitizer per item so its structural work
+ * (ID remapping, knowledge-base body truncation) still happens; everything else goes
+ * through the deny-by-default walk with no key, where no structural exemption can
+ * apply. Non-strings (numbers, booleans, `null`) pass through the walk unchanged.
+ */
+function sanitizeNonObjectRoot(
+  value: unknown,
+  source: string,
+  itemSanitizer: (item: unknown, source: string) => unknown,
+): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item, index) => itemSanitizer(item, `${source}[${index}]`));
+  }
+  return sanitizeStringsByDefault(value, source, undefined, NO_LITERAL_STRING_KEYS);
+}
+
 function sanitizeNestedText(value: unknown, source: string): unknown {
   if (Array.isArray(value)) {
     return value.map((item, index) => sanitizeNestedText(item, `${source}[${index}]`));
@@ -216,7 +242,7 @@ function truncateUtf8(text: string, maxBytes: number): { text: string; truncated
 }
 
 export function sanitizeAgentSummary(agent: unknown, source: string): unknown {
-  if (!isObj(agent)) return agent;
+  if (!isObj(agent)) return sanitizeNonObjectRoot(agent, source, sanitizeAgentSummary);
   return sanitizeAgentOrKbValue(agent, source);
 }
 
@@ -227,41 +253,49 @@ export function sanitizeAgentSummary(agent: unknown, source: string): unknown {
  * response needs nothing beyond the summary walk.
  */
 export function sanitizeAgent(agent: unknown, source: string): unknown {
-  if (!isObj(agent)) return agent;
+  if (!isObj(agent)) return sanitizeNonObjectRoot(agent, source, sanitizeAgent);
   return sanitizeAgentOrKbValue(agent, source);
 }
 
+/**
+ * No non-object-root guard needed: `sanitizeConversationValue` *is* the
+ * deny-by-default walk, which already handles scalar, array, and object roots.
+ */
 export function sanitizeConversation(conversation: unknown, source: string): unknown {
   return sanitizeConversationValue(conversation, source);
 }
 
+/**
+ * `simulated_conversation` gets the stricter transcript-turn walk; every *other*
+ * top-level key — including ones this connector does not surface today — goes
+ * through the deny-by-default simulation walk rather than being copied raw, so a
+ * new upstream prose field cannot ship unenveloped if a caller ever returns more
+ * of this object than `simulated_conversation` + `analysis`.
+ */
 export function sanitizeSimulation(result: unknown, source: string): unknown {
-  if (!isObj(result)) return result;
-  const out: Obj = { ...result };
+  if (!isObj(result)) return sanitizeNonObjectRoot(result, source, sanitizeSimulation);
 
-  out.simulated_conversation = sanitizeTranscriptTurns(
-    out.simulated_conversation,
-    `${source}:simulated_conversation`,
-  );
-
-  if (out.analysis !== undefined) {
-    out.analysis = sanitizeSimulationAnalysisValue(out.analysis, `${source}:analysis`);
+  const out: Obj = {};
+  for (const [key, value] of Object.entries(result)) {
+    out[key] = key === 'simulated_conversation'
+      ? sanitizeTranscriptTurns(value, `${source}:${key}`)
+      : sanitizeSimulationAnalysisValue(value, `${source}:${key}`, key);
   }
-
   return out;
 }
 
+/** Same as `sanitizeConversation`: the walk itself covers every root shape. */
 export function sanitizePhoneNumber(phoneNumber: unknown, source: string): unknown {
   return sanitizeConversationValue(phoneNumber, source);
 }
 
 export function sanitizeOutboundCall(call: unknown, source: string): unknown {
-  if (!isObj(call)) return call;
+  if (!isObj(call)) return sanitizeNonObjectRoot(call, source, sanitizeOutboundCall);
   return sanitizeNestedText(call, source);
 }
 
 export function sanitizeBatchCall(batchCall: unknown, source: string): unknown {
-  if (!isObj(batchCall)) return batchCall;
+  if (!isObj(batchCall)) return sanitizeNonObjectRoot(batchCall, source, sanitizeBatchCall);
   const sanitized = sanitizeNestedText(batchCall, source);
   const out = isObj(sanitized) ? { ...sanitized } : { ...batchCall };
 
@@ -301,7 +335,7 @@ function sanitizeKbBodyField(out: Obj, field: string, raw: unknown, source: stri
 }
 
 export function sanitizeKbDoc(doc: unknown, source: string): unknown {
-  if (!isObj(doc)) return doc;
+  if (!isObj(doc)) return sanitizeNonObjectRoot(doc, source, sanitizeKbDoc);
   const out: Obj = { ...doc };
 
   // List responses use `id`; get/delete tools expect `documentation_id`.
@@ -335,6 +369,12 @@ export function sanitizeKbDoc(doc: unknown, source: string): unknown {
   return sanitized;
 }
 
+/**
+ * Not a surface sanitizer: it fans an already-extracted array out to one. A
+ * non-array root collapses to `[]` (fail-closed, nothing reaches the model), and
+ * every element — including a bare hostile string — goes through `sanitizer`,
+ * whose own non-object-root branch envelopes it.
+ */
 export function sanitizeList<T>(
   items: unknown,
   sanitizer: (item: unknown, source: string) => unknown,

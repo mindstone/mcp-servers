@@ -133,7 +133,9 @@ node dist/index.js
 
 ## Security notes
 
-All external text returned by the ElevenLabs API is wrapped in `<untrusted-content>` envelopes before it reaches the model. This is especially important for conversation transcripts, which can contain attacker-controlled caller speech.
+All external text returned by the ElevenLabs API is wrapped in `<untrusted-content>` envelopes before it reaches the model. This is especially important for conversation transcripts, which can contain attacker-controlled caller speech. Enveloping is deny-by-default: anything that is not a recognised structural value (IDs, enums, timestamps, phone numbers) is wrapped, including responses whose root is a bare JSON value rather than an object.
+
+Because reads come back enveloped, the agent authoring tools strip one envelope from the values they are given. Copying a language, model id, prompt, or `advanced_config` fragment out of `get_agent` and back into `update_agent` therefore stores the original text upstream rather than the envelope around it.
 
 Outbound numbers are validated in E.164 format before any billing-surface call is sent upstream. Scheduled batches run on ElevenLabs' servers even if the client app is closed, so they should be monitored with `list_batch_calls` / `get_batch_call` and stopped with `cancel_batch_call` when needed.
 

@@ -412,6 +412,46 @@ export function createElevenLabsAgentsMalformedJsonHandlers() {
   ];
 }
 
+/**
+ * HTTP-200 bodies that are perfectly *valid* JSON but not the expected object shape:
+ * a bare hostile scalar where an object is expected, and list bodies whose items are
+ * bare hostile scalars. `elevenLabsJson` parses both without complaint, so whatever
+ * the surface sanitizer does with a non-object root is exactly what reaches the model.
+ */
+export function createElevenLabsAgentsNonObjectRootHandlers() {
+  return [
+    http.get(`${BASE_V1}/convai/agents`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      return HttpResponse.json({ agents: [ATTACK_PAYLOAD], next_cursor: 'cursor_agents_2' });
+    }),
+
+    http.get(`${BASE_V1}/convai/agents/:agentId`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      return HttpResponse.json(ATTACK_PAYLOAD);
+    }),
+
+    http.get(`${BASE_V1}/convai/knowledge-base`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      return HttpResponse.json({ documents: [ATTACK_PAYLOAD] });
+    }),
+
+    http.get(`${BASE_V1}/convai/knowledge-base/:documentationId`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      return HttpResponse.json(ATTACK_PAYLOAD);
+    }),
+
+    http.get(`${BASE_V1}/convai/conversations`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      return HttpResponse.json({ conversations: [ATTACK_PAYLOAD] });
+    }),
+  ];
+}
+
 /** Returns FastAPI-style 422 detail arrays for every ConvAI endpoint. */
 export function createElevenLabsAgents422Handlers() {
   return [

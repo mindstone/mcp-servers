@@ -9,6 +9,7 @@ import {
   sanitizeSimulation,
 } from '../sanitize.js';
 import { ElevenLabsError } from '../types.js';
+import { unwrapUntrusted, unwrapUntrustedJsonStrings } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
 type Obj = Record<string, unknown>;
@@ -87,6 +88,37 @@ function extractNextCursor(result: unknown): string | undefined {
       : typeof obj.next_page_token === 'string'
         ? obj.next_page_token
         : undefined;
+}
+
+/**
+ * Round-trip contract for the authoring surface.
+ *
+ * `get_agent` / `list_agents` return every non-structural string enveloped
+ * (deny-by-default, `sanitize.ts`), and these tools' own descriptions tell the model
+ * to read the current config *before* patching it. So the values the model copies
+ * back in — a `language`, an `llm_model`, a `system_prompt`, or a whole
+ * `advanced_config` fragment lifted out of a `get_agent` response — arrive wrapped.
+ * Strip exactly one envelope on the way in so what gets stored upstream is the
+ * original text, not `<untrusted-content …>…</untrusted-content>`.
+ *
+ * This input-side half is deliberately chosen over widening the output allowlist:
+ * hostile prose sitting in a config-shaped field still leaves `get_agent` enveloped,
+ * so the deny-by-default output boundary is untouched. `unwrapUntrusted` is
+ * one-layer and a no-op on any string that is not a whole envelope, so ordinary
+ * hand-authored input passes through byte-identical.
+ */
+function unwrapAuthoredInput(value: unknown): unknown {
+  if (typeof value === 'string') return unwrapUntrusted(value);
+  if (value === null || typeof value !== 'object') return value;
+  // Objects/arrays (advanced_config, knowledge_base_document_ids) may have been copied
+  // wholesale from an enveloped response — unwrap keys and values recursively.
+  return unwrapUntrustedJsonStrings(value);
+}
+
+function unwrapAuthoredArgs(args: Record<string, unknown>): Obj {
+  return Object.fromEntries(
+    Object.entries(args).map(([key, value]) => [key, unwrapAuthoredInput(value)]),
+  );
 }
 
 function hasAnyAuthoringChange(value: Record<string, unknown>): boolean {
@@ -180,9 +212,10 @@ function buildAuthoringPatch(args: Record<string, unknown>): Obj {
 }
 
 function buildAuthoringBody(args: Record<string, unknown>): Obj {
-  const patch = buildAuthoringPatch(args);
-  return isObj(args.advanced_config)
-    ? deepMerge(patch, args.advanced_config) as Obj
+  const authored = unwrapAuthoredArgs(args);
+  const patch = buildAuthoringPatch(authored);
+  return isObj(authored.advanced_config)
+    ? deepMerge(patch, authored.advanced_config) as Obj
     : patch;
 }
 
@@ -479,7 +512,9 @@ COST: Uses ElevenLabs agent resources; duplication is not read-only.`,
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
-      const body = args.name ? { name: args.name } : {};
+      // Same round-trip contract as buildAuthoringBody: `name` comes back enveloped
+      // from get_agent/list_agents, so a copied name must not be stored as an envelope.
+      const body = args.name ? { name: unwrapUntrusted(args.name) } : {};
       const result = await elevenLabsJson<unknown>(
         apiKey,
         ENDPOINTS.agentDuplicate(args.agent_id),
@@ -594,8 +629,10 @@ COST: Uses ElevenLabs LLM/simulation credits.`,
           body: JSON.stringify({
             simulation_specification: {
               simulated_user_config: {
-                first_message: args.user_message,
-                ...(args.language ? { language: args.language } : {}),
+                // `language` is read back enveloped from get_agent; `user_message` may be
+                // quoted from an enveloped transcript. Same round-trip contract.
+                first_message: unwrapUntrusted(args.user_message),
+                ...(args.language ? { language: unwrapUntrusted(args.language) } : {}),
                 ...(args.disable_first_message_interruptions !== undefined
                   ? { disable_first_message_interruptions: args.disable_first_message_interruptions }
                   : {}),
