@@ -8,6 +8,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import {
+  CONTAINER_BRANCH_KEYS,
   sanitizeAgent,
   sanitizeAgentSummary,
   sanitizeBatchCall,
@@ -28,6 +29,8 @@ import {
   CREATOR_NAME_ATTACK,
   DEPENDENT_AGENT_NAME_ATTACK,
   HOSTILE_MAP_KEY,
+  MALFORMED_TRANSCRIPT_OBJECT_ATTACK,
+  MALFORMED_TRANSCRIPT_SCALAR_ATTACK,
   MOCK_API_KEY,
   NESTED_TOOL_CALL_ARGUMENTS_ATTACK,
   OVERSIZED_KB_PADDING,
@@ -36,6 +39,7 @@ import {
 } from './fixtures/elevenlabs-agents-data.js';
 import {
   createElevenLabsAgentsHandlers,
+  createElevenLabsAgentsMalformedTranscriptHandlers,
   createElevenLabsAgentsNonObjectRootHandlers,
 } from './helpers/elevenlabs-agents-mock-server.js';
 
@@ -842,7 +846,9 @@ describe('Stage 5 external-text envelope coverage', () => {
  * `sanitizeList` is the only exported member exempt from the tables below: it takes
  * `(items, sanitizer, source)`, collapses a non-array root to `[]` (fail-closed),
  * and delegates every element to one of the entry points tested here. Any *other*
- * sanitizer added to the module is picked up automatically.
+ * sanitizer added to the module is picked up automatically — including the inner
+ * walkers (`sanitizeTranscriptTurns`, `sanitize*Value`), which are exported precisely
+ * so this enumeration reaches them rather than only the surface entry points.
  */
 const EXEMPT_EXPORTS = new Set(['sanitizeList']);
 
@@ -850,11 +856,57 @@ const rootSanitizers = Object.entries(sanitizeModule)
   .filter((entry): entry is [string, (value: unknown, source: string) => unknown] =>
     typeof entry[1] === 'function' && !EXEMPT_EXPORTS.has(entry[0]));
 
+/**
+ * The helpers deliberately left unexported, each with the reason it cannot be driven
+ * from the table. The completeness gate below fails if a *new* `function sanitize…`
+ * appears in `src/sanitize.ts` that is neither exported (and therefore table-driven)
+ * nor listed here — so the next passthrough cannot hide in an inner helper the way
+ * the non-array transcript check did.
+ */
+const UNEXPORTED_HELPERS = new Map<string, string>([
+  [
+    'sanitizeStringsByDefault',
+    'the deny-by-default walk itself; 4-arg (value, source, key, literalStringKeys). Every row below lands here.',
+  ],
+  [
+    'sanitizeNonObjectRoot',
+    '3-arg (value, source, itemSanitizer); exercised through every exported entry point by the root-shape rows.',
+  ],
+  [
+    'sanitizeKbBodyField',
+    'returns void and mutates an out-object; exercised through sanitizeKbDoc by the KB truncation tests.',
+  ],
+]);
+
 describe('non-object response roots are enveloped, not passed through', () => {
   it('covers every exported sanitizer except the documented fan-out helper', () => {
     expect(Object.keys(sanitizeModule)).toContain('sanitizeList');
     expect(rootSanitizers.length).toBeGreaterThan(0);
     expect(rootSanitizers.map(([name]) => name)).not.toContain('sanitizeList');
+  });
+
+  it('every sanitizer declared in src/sanitize.ts is table-driven or explicitly exempt', () => {
+    const source = fs.readFileSync(new URL('../src/sanitize.ts', import.meta.url), 'utf8');
+    const declared = [...source.matchAll(/^(?:export )?function (sanitize\w+)/gm)].map((match) => match[1]);
+    expect(declared.length, 'no sanitizers found — the declaration regex has rotted').toBeGreaterThan(5);
+
+    const covered = new Set<string>([
+      ...rootSanitizers.map(([name]) => name),
+      ...EXEMPT_EXPORTS,
+      ...UNEXPORTED_HELPERS.keys(),
+    ]);
+    expect(
+      declared.filter((name) => !covered.has(name)),
+      'new sanitizer: export it (the table picks it up automatically) or add it to UNEXPORTED_HELPERS with a reason',
+    ).toEqual([]);
+
+    for (const name of UNEXPORTED_HELPERS.keys()) {
+      expect(declared, `${name} is listed as an unexported helper but no longer exists`).toContain(name);
+      expect(
+        Object.keys(sanitizeModule),
+        `${name} is exported now — drop it from UNEXPORTED_HELPERS so the table drives it`,
+      ).not.toContain(name);
+    }
   });
 
   it.each(rootSanitizers)('%s envelopes a hostile scalar root', (name, sanitize) => {
@@ -938,6 +990,66 @@ describe('non-object response roots are enveloped, not passed through', () => {
 });
 
 /**
+ * Round 4: the response *root* is a perfectly ordinary object, so the guard above never
+ * fires — it is the nested transcript *container* that arrives in the wrong shape.
+ * `sanitizeTranscriptTurns` used to return a non-array unchanged, so a valid HTTP-200
+ * `{"simulated_conversation": "XINJECTX SYSTEM: …"}` reached the model raw through
+ * `simulate_conversation`. Asserted at the tool boundary, where the bytes actually leave.
+ */
+describe('malformed transcript containers are enveloped, not passed through', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  async function simulate(simulatedConversation: unknown): Promise<Record<string, unknown>> {
+    mswServer.use(
+      ...createElevenLabsAgentsMalformedTranscriptHandlers(simulatedConversation),
+      ...createElevenLabsAgentsHandlers(),
+    );
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+    const result = await testClient.callTool('simulate_conversation', {
+      agent_id: 'agent_test_123',
+      user_message: 'hello',
+    });
+    expect(result.isError).toBeFalsy();
+    return result.json as Record<string, unknown>;
+  }
+
+  it('simulate_conversation envelopes a bare hostile string where turns were expected', async () => {
+    const json = await simulate(MALFORMED_TRANSCRIPT_SCALAR_ATTACK);
+
+    expectEnvelopedAndDefanged(
+      json.simulated_conversation,
+      'elevenlabs-agents:simulate_conversation:simulated_conversation',
+      MALFORMED_TRANSCRIPT_SCALAR_ATTACK,
+    );
+    assertSentinelOnlyInsideEnvelopes(json);
+  });
+
+  it('simulate_conversation envelopes an object where turns were expected', async () => {
+    const json = await simulate(MALFORMED_TRANSCRIPT_OBJECT_ATTACK);
+
+    const transcript = json.simulated_conversation as Record<string, unknown>;
+    expectEnvelopedAndDefanged(
+      transcript.summary,
+      'elevenlabs-agents:simulate_conversation:simulated_conversation:summary',
+      MALFORMED_TRANSCRIPT_SCALAR_ATTACK,
+    );
+    expectEnvelopedAndDefanged(
+      (transcript.turn as Record<string, unknown>).message,
+      'elevenlabs-agents:simulate_conversation:simulated_conversation:turn:message',
+      ATTACK_PAYLOAD,
+    );
+    assertSentinelOnlyInsideEnvelopes(json);
+  });
+});
+
+/**
  * The key-allowlist idiom is gone from this connector: no surface sanitizer decides
  * "envelope this string" by looking the key up in a list of known prose fields. Round 1
  * caught the allowlist omitting `access_info.creator_name` and `dependent_agents[].name`;
@@ -955,11 +1067,22 @@ describe('object roots are deny-by-default on every surface', () => {
     // Real fields the old batch/outbound allowlist omitted…
     agent_name: CALL_AGENT_NAME_ATTACK,
     branch_name: CALL_BRANCH_NAME_ATTACK,
-    // …and stand-ins for whatever upstream adds next, at both depths.
+    // …and stand-ins for whatever upstream adds next, at three depths and through an array.
     future_prose_field: ATTACK_PAYLOAD,
-    nested: { future_nested_note: ATTACK_PAYLOAD },
+    nested: {
+      future_nested_note: ATTACK_PAYLOAD,
+      deeper: { future_deep_note: ATTACK_PAYLOAD },
+    },
     items: [{ future_item_note: ATTACK_PAYLOAD }],
   };
+
+  /** Read a value by path so a *dropped* field fails as loudly as an unenveloped one. */
+  function at(value: unknown, path: readonly (string | number)[]): unknown {
+    return path.reduce<unknown>(
+      (acc, segment) => (acc as Record<string | number, unknown> | undefined)?.[segment],
+      value,
+    );
+  }
 
   it.each(rootSanitizers)('%s envelopes unknown prose keys on an object root', (name, sanitize) => {
     const out = sanitize(HOSTILE_OBJECT_ROOT, `elevenlabs-agents:${name}:object_root`) as Record<string, unknown>;
@@ -972,9 +1095,53 @@ describe('object roots are deny-by-default on every surface', () => {
     assertSentinelOnlyInsideEnvelopes(out);
   });
 
+  it.each(rootSanitizers)('%s envelopes hostile strings nested two and three levels deep', (name, sanitize) => {
+    const source = `elevenlabs-agents:${name}:nested_root`;
+    const out = sanitize(HOSTILE_OBJECT_ROOT, source);
+
+    expectEnvelopedAndDefanged(at(out, ['nested', 'future_nested_note']), `${source}:nested:future_nested_note`, ATTACK_PAYLOAD);
+    expectEnvelopedAndDefanged(at(out, ['nested', 'deeper', 'future_deep_note']), `${source}:nested:deeper:future_deep_note`, ATTACK_PAYLOAD);
+    expectEnvelopedAndDefanged(at(out, ['items', 0, 'future_item_note']), `${source}:items[0]:future_item_note`, ATTACK_PAYLOAD);
+    assertSentinelOnlyInsideEnvelopes(out);
+  });
+
+  /**
+   * The round-4 class: a key that routes its value to a *different* walker, carrying a
+   * value of the wrong shape. `CONTAINER_BRANCH_KEYS` is exported from `sanitize.ts` and
+   * derived from the branch-key sets themselves, so a newly added branch key is covered
+   * here the day it lands rather than the day someone remembers to list it.
+   */
+  const WRONG_CONTAINER_SHAPES: ReadonlyArray<readonly [string, unknown]> = [
+    ['scalar', ATTACK_PAYLOAD],
+    ['object', { note: ATTACK_PAYLOAD, deeper: { note: ATTACK_PAYLOAD } }],
+    ['array of scalars', [ATTACK_PAYLOAD]],
+  ];
+
+  it('exports a non-empty container-branch key set to drive the table', () => {
+    expect(CONTAINER_BRANCH_KEYS.size).toBeGreaterThan(0);
+    expect([...CONTAINER_BRANCH_KEYS]).toContain('simulated_conversation');
+    expect([...CONTAINER_BRANCH_KEYS]).toContain('transcript_turns');
+  });
+
+  it.each(rootSanitizers)('%s envelopes wrong-shaped container fields', (name, sanitize) => {
+    for (const key of CONTAINER_BRANCH_KEYS) {
+      for (const [shape, value] of WRONG_CONTAINER_SHAPES) {
+        const source = `elevenlabs-agents:${name}:${key}:${shape}`;
+        const out = sanitize({ [key]: value }, source);
+
+        assertSentinelOnlyInsideEnvelopes(out);
+        expect(
+          JSON.stringify(out),
+          `${name} dropped the ${shape} value of ${key} instead of enveloping it`,
+        ).toContain(SENTINEL);
+      }
+    }
+  });
+
   it('leaves the source fixture unmutated', () => {
     expect(HOSTILE_OBJECT_ROOT.agent_name).toBe(CALL_AGENT_NAME_ATTACK);
     expect(HOSTILE_OBJECT_ROOT.nested.future_nested_note).toBe(ATTACK_PAYLOAD);
+    expect(HOSTILE_OBJECT_ROOT.nested.deeper.future_deep_note).toBe(ATTACK_PAYLOAD);
   });
 });
 

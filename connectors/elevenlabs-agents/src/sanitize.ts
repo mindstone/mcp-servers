@@ -5,6 +5,18 @@
  * Conversations are the security-critical core: a phone caller can dictate a
  * prompt injection into the transcript and transcript-turn content. This file
  * is the single auditable map from API field to `<untrusted-content>` wrapper.
+ *
+ * **No-passthrough rule.** No function here may return an upstream value unchanged
+ * because its container had an unexpected shape. Four adversarial review rounds each
+ * found one more instance of that one idiom — a prose-field allowlist that missed
+ * fields upstream had added, a non-object response root, and a non-array transcript
+ * container — and every one of them handed attacker-authored bytes to the model raw.
+ * An unexpected shape routes through the deny-by-default walk instead; it never
+ * short-circuits it. The only early returns left keep a *structural* value literal
+ * (ids / `*_id`, `role` / `type` / `status` / `timestamp`, phone numbers,
+ * `*_ids` / `*_numbers` collections) or pass a non-string primitive through, and each
+ * is marked inline. `test/untrusted-content.test.ts` enumerates this module's exports
+ * at runtime and fails the day a new one breaks the rule.
  */
 import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
 
@@ -67,6 +79,23 @@ const CONVERSATION_TRANSCRIPT_ARRAY_KEYS = new Set([
   'turns',
 ]);
 
+/** The simulation response's transcript container; same walker as the conversation ones. */
+const SIMULATION_TRANSCRIPT_KEY = 'simulated_conversation';
+
+/**
+ * Every key whose *value* is routed to a walker other than the default one. These are
+ * the branch points, and therefore the only places where a wrong-shaped value could
+ * historically escape the walk (round 4: `{simulated_conversation: "<attack>"}` reached
+ * the model raw). Exported so the policy table in `test/untrusted-content.test.ts` can
+ * feed hostile scalars and objects to each branch key without re-listing them — a
+ * newly added branch key is covered the day it lands.
+ */
+export const CONTAINER_BRANCH_KEYS: ReadonlySet<string> = new Set([
+  ...CONVERSATION_TRANSCRIPT_ARRAY_KEYS,
+  ...CONVERSATION_JSON_STRING_KEYS,
+  SIMULATION_TRANSCRIPT_KEY,
+]);
+
 const CONVERSATION_LITERAL_STRING_KEYS = new Set<string>();
 
 // Agent and knowledge-base responses are fail-safe by default for the same reason
@@ -120,16 +149,28 @@ function sanitizeStringsByDefault(
   literalStringKeys: ReadonlySet<string>,
 ): unknown {
   if (typeof value === 'string') {
+    // JUSTIFIED LITERAL (no-passthrough rule): the key names a structural value — an
+    // id / `*_id`, a `role`/`type`/`status`/`timestamp` enum, or a phone number — whose
+    // shape the connector recognises and whose consumers string-compare it. Enveloping
+    // these would break tool round-trips. `literalStringKeys` is the per-surface escape
+    // hatch and is EMPTY on every response surface (only the two internal transcript /
+    // simulation-analysis walkers populate it); it is not a prose-field allowlist.
     return (isStructuralLiteralStringKey(key) || (key ? literalStringKeys.has(key) : false))
       ? value
       : wrapUntrusted(value, source);
   }
   if (Array.isArray(value)) {
+    // JUSTIFIED LITERAL: an all-string `*_ids` / `*_numbers` collection is the plural of
+    // the structural predicate above. A copy, not the input array, and any non-string
+    // member drops the whole collection into the walk below.
     if (isStructuralLiteralStringCollectionKey(key) && value.every((item) => typeof item === 'string')) {
       return [...value];
     }
     return value.map((item, index) => sanitizeStringsByDefault(item, `${source}[${index}]`, undefined, literalStringKeys));
   }
+  // Not a passthrough: strings and arrays are handled above and objects below, so this
+  // branch only ever sees a non-string primitive (number / boolean / null / undefined),
+  // which carries no injectable text.
   if (!isObj(value)) return value;
 
   const out: Obj = {};
@@ -143,33 +184,48 @@ function sanitizeStringsByDefault(
   return out;
 }
 
-function sanitizeTranscriptTurnValue(value: unknown, source: string, key?: string): unknown {
+/*
+ * The per-surface walkers. Each is one call into the deny-by-default walk with that
+ * surface's structural-literal key set; none of them may add a shape check of its own
+ * (file header, no-passthrough rule). All are exported — including the ones no tool
+ * calls directly — so the runtime policy table in `test/untrusted-content.test.ts`
+ * enumerates and exercises every walk entry point rather than only the surface ones.
+ */
+
+export function sanitizeTranscriptTurnValue(value: unknown, source: string, key?: string): unknown {
   return sanitizeStringsByDefault(value, source, key, TRANSCRIPT_TURN_LITERAL_STRING_KEYS);
 }
 
-function sanitizeSimulationAnalysisValue(value: unknown, source: string, key?: string): unknown {
+export function sanitizeSimulationAnalysisValue(value: unknown, source: string, key?: string): unknown {
   return sanitizeStringsByDefault(value, source, key, SIMULATION_ANALYSIS_LITERAL_STRING_KEYS);
 }
 
-function sanitizeConversationValue(value: unknown, source: string, key?: string): unknown {
+export function sanitizeConversationValue(value: unknown, source: string, key?: string): unknown {
+  // Both keyed branches are routing for a *keyed* call. `sanitizeConversation` and
+  // `sanitizePhoneNumber` call in at the root with no key, and the recursion below
+  // stays inside `sanitizeStringsByDefault`, so today a nested `transcript_turns` is
+  // walked by the conversation key set rather than the transcript one — which is
+  // strictly *stricter* (`CONVERSATION_LITERAL_STRING_KEYS` is empty, so `tool_name` /
+  // `scope` / `successful` are enveloped too). Nested `analysis` / `metadata` /
+  // `dynamic_variables` do reach `wrapUntrustedJsonStrings`, via the same-named branch
+  // inside the walk. Kept so a keyed caller cannot route around either walker.
   if (key && CONVERSATION_TRANSCRIPT_ARRAY_KEYS.has(key)) {
     return sanitizeTranscriptTurns(value, source);
   }
   if (key && CONVERSATION_JSON_STRING_KEYS.has(key)) {
     return wrapUntrustedJsonStrings(value, source);
   }
-  // Conversation and phone-number payloads are fail-safe by default: every
-  // string is enveloped unless it is a narrow structural literal
-  // (IDs/enums/status/timestamps/phone numbers) or a transcript-turn field
-  // handled by the stricter transcript walker above.
+  // Conversation and phone-number payloads are fail-safe by default: every string is
+  // enveloped unless it is a narrow structural literal (IDs/enums/status/timestamps/
+  // phone numbers).
   return sanitizeStringsByDefault(value, source, key, CONVERSATION_LITERAL_STRING_KEYS);
 }
 
-function sanitizeAgentOrKbValue(value: unknown, source: string, key?: string): unknown {
+export function sanitizeAgentOrKbValue(value: unknown, source: string, key?: string): unknown {
   return sanitizeStringsByDefault(value, source, key, AGENT_AND_KB_LITERAL_STRING_KEYS);
 }
 
-function sanitizeCallValue(value: unknown, source: string, key?: string): unknown {
+export function sanitizeCallValue(value: unknown, source: string, key?: string): unknown {
   return sanitizeStringsByDefault(value, source, key, CALL_LITERAL_STRING_KEYS);
 }
 
@@ -196,9 +252,22 @@ function sanitizeNonObjectRoot(
   return sanitizeStringsByDefault(value, source, undefined, NO_LITERAL_STRING_KEYS);
 }
 
-function sanitizeTranscriptTurns(turns: unknown, source: string): unknown {
-  if (!Array.isArray(turns)) return turns;
-  return turns.map((turn, index) => sanitizeTranscriptTurnValue(turn, `${source}[${index}]`));
+/**
+ * Transcript turns normally arrive as an array, and this function deliberately does
+ * **not** check for one. `{"simulated_conversation": "XINJECTX SYSTEM: …"}` and
+ * `{"transcript_turns": {…}}` are valid HTTP-200 bodies, and the array check that used
+ * to guard this walk returned them unchanged — attacker-authored bytes straight to the
+ * model (the round-4 finding, and the same no-passthrough rule the file header states).
+ *
+ * The deny-by-default walk already handles array, object and scalar shapes, and for an
+ * array it produces exactly the per-turn `source[i]` labelling this used to do by hand,
+ * so there is nothing for a shape check to add.
+ *
+ * Exported so the runtime policy table can drive it directly rather than only through
+ * the surface entry points that call it.
+ */
+export function sanitizeTranscriptTurns(turns: unknown, source: string): unknown {
+  return sanitizeTranscriptTurnValue(turns, source);
 }
 
 function truncateUtf8(text: string, maxBytes: number): { text: string; truncated: boolean; originalBytes: number } {
@@ -238,18 +307,18 @@ export function sanitizeConversation(conversation: unknown, source: string): unk
 }
 
 /**
- * `simulated_conversation` gets the stricter transcript-turn walk; every *other*
- * top-level key — including ones this connector does not surface today — goes
- * through the deny-by-default simulation walk rather than being copied raw, so a
- * new upstream prose field cannot ship unenveloped if a caller ever returns more
- * of this object than `simulated_conversation` + `analysis`.
+ * `simulated_conversation` gets the stricter transcript-turn walk — whatever shape it
+ * arrives in; every *other* top-level key — including ones this connector does not
+ * surface today — goes through the deny-by-default simulation walk rather than being
+ * copied raw, so a new upstream prose field cannot ship unenveloped if a caller ever
+ * returns more of this object than `simulated_conversation` + `analysis`.
  */
 export function sanitizeSimulation(result: unknown, source: string): unknown {
   if (!isObj(result)) return sanitizeNonObjectRoot(result, source, sanitizeSimulation);
 
   const out: Obj = {};
   for (const [key, value] of Object.entries(result)) {
-    out[key] = key === 'simulated_conversation'
+    out[key] = key === SIMULATION_TRANSCRIPT_KEY
       ? sanitizeTranscriptTurns(value, `${source}:${key}`)
       : sanitizeSimulationAnalysisValue(value, `${source}:${key}`, key);
   }
@@ -274,7 +343,12 @@ export function sanitizeOutboundCall(call: unknown, source: string): unknown {
 export function sanitizeBatchCall(batchCall: unknown, source: string): unknown {
   if (!isObj(batchCall)) return sanitizeNonObjectRoot(batchCall, source, sanitizeBatchCall);
   const sanitized = sanitizeCallValue(batchCall, source);
-  const out = isObj(sanitized) ? { ...sanitized } : { ...batchCall };
+  // The walk returns an object for an object root, so this branch is unreachable. It
+  // returns the *sanitized* value rather than spreading the raw input, because a
+  // `{ ...batchCall }` fallback is precisely the passthrough the file header forbids —
+  // an unreachable one is still a template for the next reader.
+  if (!isObj(sanitized)) return sanitized;
+  const out: Obj = { ...sanitized };
 
   // List/get/submit responses use `id`; get/cancel/retry tools expect `batch_id`.
   const batchId =

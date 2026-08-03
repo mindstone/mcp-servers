@@ -452,6 +452,26 @@ export function createElevenLabsAgentsNonObjectRootHandlers() {
   ];
 }
 
+/**
+ * An HTTP-200 simulation body whose `simulated_conversation` is the wrong *shape* — a
+ * bare hostile string, or an object — where an array of turns is expected. The body is
+ * valid JSON and the response root is a perfectly ordinary object, so the non-object-root
+ * guard never fires; whatever the transcript walker does with a non-array is exactly what
+ * `simulate_conversation` hands the model.
+ */
+export function createElevenLabsAgentsMalformedTranscriptHandlers(simulatedConversation: unknown) {
+  return [
+    http.post(`${BASE_V1}/convai/agents/:agentId/simulate-conversation`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      return HttpResponse.json({
+        simulated_conversation: simulatedConversation,
+        analysis: mockSimulation.analysis,
+      } as JsonBody);
+    }),
+  ];
+}
+
 /** Returns FastAPI-style 422 detail arrays for every ConvAI endpoint. */
 export function createElevenLabsAgents422Handlers() {
   return [
