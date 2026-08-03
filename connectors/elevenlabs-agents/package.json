@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-elevenlabs-agents",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "mcpName": "io.github.mindstone/mcp-server-elevenlabs-agents",
   "description": "ElevenLabs Conversational AI: agents, calls, conversations, and knowledge base for MCP hosts",
   "license": "FSL-1.1-MIT",

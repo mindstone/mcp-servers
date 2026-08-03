@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-08-03
+
+### Changed
+
+- Land the tools/list schema fix on main and envelope all ElevenLabs response text deny-by-default (closes prompt-injection paths); route API-key setup to connector settings.
+
 ### Security
 
 - Agent and knowledge-base responses now envelope external text deny-by-default, matching the conversation and phone-number surfaces. Previously an allowlist of field names was used, so current API fields authored by any workspace collaborator — `agents[].access_info.creator_name` and `documents[].dependent_agents[].name` — reached the model unenveloped.
