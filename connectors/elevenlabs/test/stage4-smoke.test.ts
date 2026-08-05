@@ -41,6 +41,6 @@ describe('Stage 4 smoke — tool registration', () => {
     for (const name of STAGE4_TOOL_NAMES) {
       expect(toolNames, `missing ${name}`).toContain(name);
     }
-    expect(toolsResult.tools).toHaveLength(24);
+    expect(toolsResult.tools).toHaveLength(32);
   });
 });

@@ -9,7 +9,7 @@ ElevenLabs MCP server for Model Context Protocol hosts. Generate speech, music, 
 
 - **Version:** [0.4.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs)
 - **Auth:** API key ([`ELEVENLABS_API_KEY`](./server.json))
-- **Tools:** [24](./src/tools/) (account, voices, speech, music, transcription, voice conversion, isolation, alignment, cloning, dialogue, voice design, dubbing)
+- **Tools:** [32](./src/tools/) (account, usage, voices, speech, music, transcription, voice conversion, isolation, alignment, cloning, dialogue, voice design, dubbing, history, pronunciation dictionaries)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -114,13 +114,14 @@ node dist/index.js
 }
 ```
 
-## Tools (24)
+## Tools (32)
 
 ### Configuration
 - `configure_elevenlabs_api_key` — Save your ElevenLabs API key
 
 ### Account & discovery (FREE)
 - `check_subscription` — Check subscription tier and character credit usage
+- `get_usage_stats` — Credit usage over time grouped by product/model/voice (workspace analytics API)
 - `list_models` — List TTS models with languages and capabilities
 
 ### Voices
@@ -133,10 +134,21 @@ node dist/index.js
 - `create_voice_from_preview` — Save a design preview as a permanent voice (`destructiveHint`)
 
 ### Speech & conversion
-- `generate_speech` — Generate spoken audio from text using text-to-speech
+- `generate_speech` — Generate spoken audio from text using text-to-speech (supports `seed` and `pronunciation_dictionary_locators`)
+- `generate_speech_with_timestamps` — Generate speech with character-level timing; also writes an `.srt` subtitle file and alignment JSON
 - `generate_sound_effect` — Generate sound effects from a text description
 - `speech_to_speech` — Convert source audio to a different voice
 - `text_to_dialogue` — Multi-voice dialogue from a script (one voice per line)
+
+### History (FREE)
+- `list_history` — List previously generated audio items (find that voiceover from last week)
+- `get_history_item_audio` — Re-download the audio of a past generation by history_item_id
+
+### Pronunciation dictionaries
+- `list_pronunciation_dictionaries` — List pronunciation dictionaries (brand names, jargon) (FREE)
+- `get_pronunciation_dictionary` — Get one dictionary's metadata and current rules (FREE)
+- `add_pronunciation_dictionary` — Create a dictionary from alias/IPA rules (`destructiveHint`)
+- `archive_pronunciation_dictionary` — Archive a dictionary so it is no longer applied (`destructiveHint`; reversible in the dashboard)
 
 ### Audio processing
 - `isolate_audio` — Remove background noise from an audio file (source must be ≥ ~4.6s; shorter clips fail upstream)
@@ -154,7 +166,7 @@ node dist/index.js
 - `generate_music_from_plan` — Generate music from a composition plan
 
 ### Transcription
-- `transcribe_audio` — Transcribe speech from an audio file to text
+- `transcribe_audio` — Transcribe speech from an audio file to text, with optional speaker diarization (`diarize`, `num_speakers`, `diarization_threshold`) and word-level timestamps (`include_word_timestamps`); `scribe_v1` and `scribe_v2` models
 
 Local file paths for upload tools must be inside `MCP_WORKSPACE_PATH` (or `os.tmpdir()` when unset). See `src/tools/file-input.ts`.
 

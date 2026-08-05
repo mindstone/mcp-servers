@@ -11,6 +11,14 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+- `transcribe_audio` gains speaker diarization (`diarize`, `num_speakers`, `diarization_threshold`) and word-level timestamps (`timestamps_granularity`, `include_word_timestamps`), plus the `scribe_v2` model option. Diarized output is grouped into per-speaker `utterances[]` with enveloped text.
+- `list_history` and `get_history_item_audio` (FREE) — browse past generations and re-download their audio without regenerating.
+- `get_usage_stats` (FREE) — credit usage over time via the workspace analytics API (`POST /v1/workspace/analytics/query/usage-by-product-over-time`, the successor of the deprecated `GET /v1/usage/character-stats`), grouped by product type, model, voice, or user.
+- Pronunciation dictionary suite: `list_pronunciation_dictionaries` / `get_pronunciation_dictionary` (FREE) and `add_pronunciation_dictionary` / `archive_pronunciation_dictionary` (both `destructiveHint: true`; archiving is reversible in the dashboard).
+- `generate_speech_with_timestamps` — TTS via `/v1/text-to-speech/{voice_id}/with-timestamps`; writes the audio file, the raw character-alignment JSON, and an `.srt` subtitle file built from word timing.
+- `generate_speech` gains optional `seed` and `pronunciation_dictionary_locators` params.
+
 ## [0.4.0] - 2026-07-11
 
 ### Changed

@@ -4,6 +4,13 @@ import {
   mockVoices,
   mockMusicPlan,
   mockTranscription,
+  mockDiarizedTranscription,
+  mockHistory,
+  mockWorkspaceUsage,
+  mockPronunciationDictionaryList,
+  mockPronunciationDictionaryDetail,
+  mockAddPronunciationDictionary,
+  mockSpeechWithTimestamps,
   mockSubscription,
   mockModels,
   mockSharedVoices,
@@ -262,6 +269,77 @@ export function createElevenLabsHandlers(expectedApiKey = MOCK_API_KEY) {
       }
       return new HttpResponse(null, { status: 200 });
     }),
+
+    // GET /history — list generated items (JSON)
+    http.get(`${BASE_V1}/history`, ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      return HttpResponse.json(mockHistory);
+    }),
+
+    // GET /history/:id/audio — history audio download (binary)
+    http.get(`${BASE_V1}/history/:historyItemId/audio`, ({ request, params }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      if (params.historyItemId === 'missing-history-id') {
+        return HttpResponse.json({ detail: 'History item not found' }, { status: 404 });
+      }
+      const audioBuffer = makeFakeAudioBuffer(2048);
+      return new HttpResponse(audioBuffer, {
+        headers: { 'Content-Type': 'audio/mpeg' },
+      });
+    }),
+
+    // POST /workspace/analytics/query/usage-by-product-over-time (JSON)
+    http.post(`${BASE_V1}/workspace/analytics/query/usage-by-product-over-time`, ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      return HttpResponse.json(mockWorkspaceUsage);
+    }),
+
+    // GET /pronunciation-dictionaries — list (JSON)
+    http.get(`${BASE_V1}/pronunciation-dictionaries`, ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      return HttpResponse.json(mockPronunciationDictionaryList);
+    }),
+
+    // POST /pronunciation-dictionaries/add-from-rules (JSON)
+    http.post(`${BASE_V1}/pronunciation-dictionaries/add-from-rules`, ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      return HttpResponse.json(mockAddPronunciationDictionary);
+    }),
+
+    // GET /pronunciation-dictionaries/:id — metadata + rules (JSON)
+    http.get(`${BASE_V1}/pronunciation-dictionaries/:dictionaryId`, ({ request, params }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      if (params.dictionaryId === 'missing-pd-id') {
+        return HttpResponse.json({ detail: 'Pronunciation dictionary not found' }, { status: 404 });
+      }
+      return HttpResponse.json(mockPronunciationDictionaryDetail);
+    }),
+
+    // PATCH /pronunciation-dictionaries/:id — archive (JSON)
+    http.patch(`${BASE_V1}/pronunciation-dictionaries/:dictionaryId`, ({ request, params }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      if (params.dictionaryId === 'missing-pd-id') {
+        return HttpResponse.json({ detail: 'Pronunciation dictionary not found' }, { status: 404 });
+      }
+      return HttpResponse.json({
+        ...mockPronunciationDictionaryDetail,
+        archived_time_unix: 1_754_831_999,
+      });
+    }),
+
+    // POST /text-to-speech/:voiceId/with-timestamps (JSON: base64 + alignment)
+    http.post(`${BASE_V1}/text-to-speech/:voiceId/with-timestamps`, ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      return HttpResponse.json(mockSpeechWithTimestamps);
+    }),
   ];
 }
 
@@ -333,6 +411,35 @@ export function createStthCapturingHandler(expectedApiKey = MOCK_API_KEY) {
     const l = form.get('language_code');
     if (typeof l === 'string') captured.languageCode = l;
     return HttpResponse.json(mockTranscription);
+  });
+  return { handler, captured };
+}
+
+/**
+ * STT handler that captures diarization/timestamp form fields sent by
+ * `transcribe_audio` and returns a diarized transcript fixture.
+ */
+export function createDiarizedSttCapturingHandler(expectedApiKey = MOCK_API_KEY) {
+  const captured: {
+    diarize?: string;
+    numSpeakers?: string;
+    diarizationThreshold?: string;
+    timestampsGranularity?: string;
+  } = {};
+
+  const handler = http.post(`${BASE_V1}/speech-to-text`, async ({ request }) => {
+    const authError = checkAuth(request, expectedApiKey);
+    if (authError) return authError;
+    const form = await request.formData();
+    const d = form.get('diarize');
+    if (typeof d === 'string') captured.diarize = d;
+    const n = form.get('num_speakers');
+    if (typeof n === 'string') captured.numSpeakers = n;
+    const t = form.get('diarization_threshold');
+    if (typeof t === 'string') captured.diarizationThreshold = t;
+    const g = form.get('timestamps_granularity');
+    if (typeof g === 'string') captured.timestampsGranularity = g;
+    return HttpResponse.json(mockDiarizedTranscription);
   });
   return { handler, captured };
 }

@@ -7,9 +7,17 @@ import {
   ElevenLabsError,
   type ModelInfo,
   type SubscriptionResponse,
+  type WorkspaceUsageResponse,
 } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
+
+const USAGE_INTERVAL_SECONDS = {
+  hour: 3_600,
+  day: 86_400,
+  week: 604_800,
+  month: 2_592_000,
+} as const;
 
 export function registerAccountTools(server: McpServer): void {
   server.registerTool(
@@ -71,6 +79,103 @@ COST: FREE — no credits consumed.`,
           (resetIso ? `; next reset ${resetIso}` : '') +
           '. See tier field for plan name.',
         hint: 'Call this before large batch generations. Quota errors elsewhere should be resolved by waiting for reset or upgrading the plan.',
+      });
+    }),
+  );
+
+  server.registerTool(
+    'get_usage_stats',
+    {
+      description: `Report ElevenLabs credit usage over time, grouped by product (speech, music, dubbing, etc.).
+
+WHEN TO USE:
+- Answer "how many ElevenLabs credits did we use this week/month?"
+- Break down spend by product type, model, voice, or user before proposing large batch jobs
+
+EXAMPLE: {"days_back": 30, "interval": "day", "group_by": "product_type"}
+
+RELATED TOOLS:
+- check_subscription: current-period character balance and next reset (simpler point-in-time answer)
+- list_history: browse individual past generations instead of aggregate spend
+
+RETURNS: rows[] of column-keyed records plus totals_by_group and total_credits_used (the credits-denominated column is identified via the API's column_units, e.g. total_usage). Uses the workspace analytics API (POST /v1/workspace/analytics/query/usage-by-product-over-time); requires an API key with usage-metrics permission.
+
+COST: FREE — analytics read only.`,
+      inputSchema: z.object({
+        days_back: z.number().int().min(1).max(365).optional().describe('How many days of history to include, ending now. Default: 30.'),
+        interval: z.enum(['hour', 'day', 'week', 'month']).optional().describe('Bucket size for the time series. Default: day.'),
+        group_by: z.enum(['product_type', 'model', 'voice_id', 'user_id']).optional().describe('Dimension to break usage down by. Default: product_type.'),
+      }),
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      const apiKey = getApiKey();
+      if (!apiKey) {
+        throw new ElevenLabsError(
+          'ElevenLabs API key not configured',
+          'AUTH_REQUIRED',
+          'The user adds the ElevenLabs API key in Settings → Connectors in the app. Do not ask for it in chat.',
+        );
+      }
+
+      const daysBack = args.days_back ?? 30;
+      const intervalSeconds = USAGE_INTERVAL_SECONDS[args.interval ?? 'day'];
+      const groupBy = args.group_by ?? 'product_type';
+
+      const endTime = Date.now();
+      const startTime = endTime - daysBack * 86_400_000;
+
+      const data = await elevenLabsJson<WorkspaceUsageResponse>(
+        apiKey,
+        ENDPOINTS.WORKSPACE_USAGE_BY_PRODUCT,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            start_time: startTime,
+            end_time: endTime,
+            interval_seconds: intervalSeconds,
+            group_by: [groupBy],
+          }),
+        },
+      );
+
+      // Tabular API: columns + rows. Zip into records. Values are API enum
+      // strings (product types) or IDs — no free-text fields to envelope.
+      const columns = data.columns ?? [];
+      const rows = (data.rows ?? []).map((row) =>
+        Object.fromEntries(columns.map((col, i) => [col, row[i] ?? null])),
+      );
+
+      // The credits column is not name-stable — the docs example calls it
+      // `credits_used` while the live API returns `total_usage`. Identify it
+      // by its `credits` unit in column_units, with name fallbacks.
+      const units = data.column_units ?? [];
+      let creditsColumn = columns.find((_, i) => units[i] === 'credits');
+      if (!creditsColumn) {
+        creditsColumn = ['credits_used', 'total_usage'].find((name) => columns.includes(name));
+      }
+
+      const totalsByGroup: Record<string, number> = {};
+      for (const row of rows) {
+        const group = String(row[groupBy] ?? 'unknown');
+        const raw = creditsColumn ? row[creditsColumn] : null;
+        const credits = typeof raw === 'number' ? raw : 0;
+        totalsByGroup[group] = (totalsByGroup[group] ?? 0) + credits;
+      }
+      const totalCredits = Object.values(totalsByGroup).reduce((sum, v) => sum + v, 0);
+
+      return JSON.stringify({
+        ok: true,
+        window: { days_back: daysBack, interval: args.interval ?? 'day', group_by: groupBy },
+        credits_column: creditsColumn ?? null,
+        total_credits_used: totalCredits,
+        totals_by_group: totalsByGroup,
+        rows,
+        row_count: rows.length,
+        cost: 'FREE — analytics read only',
+        message: creditsColumn
+          ? `Usage over the last ${daysBack} day${daysBack === 1 ? '' : 's'}: ${totalCredits.toLocaleString()} credits across ${rows.length} ${args.interval ?? 'day'} bucket${rows.length === 1 ? '' : 's'}, grouped by ${groupBy}.`
+          : `Usage over the last ${daysBack} day${daysBack === 1 ? '' : 's'}: ${rows.length} row${rows.length === 1 ? '' : 's'} grouped by ${groupBy} (no credits-denominated column in the response; see rows for raw values).`,
       });
     }),
   );

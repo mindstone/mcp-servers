@@ -70,11 +70,90 @@ export interface TranscriptionWord {
   start: number;
   end: number;
   type?: string;
+  /** Present when the request enabled diarize (e.g. "speaker_0"). */
+  speaker_id?: string;
 }
 
 export interface TranscriptionResponse {
   text: string;
   words?: TranscriptionWord[];
+  language_code?: string;
+  language_probability?: number;
+}
+
+export interface HistoryItem {
+  history_item_id: string;
+  date_unix?: number;
+  character_count_change_from?: number;
+  character_count_change_to?: number;
+  content_type?: string;
+  request_id?: string;
+  voice_id?: string;
+  model_id?: string;
+  voice_name?: string;
+  voice_category?: string;
+  text?: string;
+  source?: string;
+}
+
+export interface HistoryResponse {
+  history: HistoryItem[];
+  has_more?: boolean;
+  last_history_item_id?: string;
+}
+
+/** Tabular response from POST /v1/workspace/analytics/query/usage-by-product-over-time. */
+export interface WorkspaceUsageResponse {
+  columns: string[];
+  column_types?: string[];
+  column_units?: Array<string | null>;
+  rows: Array<Array<string | number | boolean | null>>;
+}
+
+export interface PronunciationDictionaryRule {
+  string_to_replace: string;
+  type: 'alias' | 'phoneme';
+  alias?: string;
+  phoneme?: string;
+  alphabet?: string;
+  case_sensitive?: boolean;
+  word_boundaries?: boolean;
+}
+
+export interface PronunciationDictionaryMetadata {
+  id: string;
+  name: string;
+  description?: string | null;
+  latest_version_id?: string;
+  latest_version_rules_num?: number;
+  version_id?: string;
+  version_rules_num?: number;
+  permission_on_resource?: string | null;
+  created_by?: string;
+  creation_time_unix?: number;
+  archived_time_unix?: number | null;
+}
+
+export interface PronunciationDictionaryListResponse {
+  pronunciation_dictionaries: PronunciationDictionaryMetadata[];
+  has_more?: boolean;
+  next_cursor?: string | null;
+}
+
+export interface PronunciationDictionaryWithRules extends PronunciationDictionaryMetadata {
+  rules?: PronunciationDictionaryRule[];
+}
+
+export interface CharacterAlignment {
+  characters: string[];
+  character_start_times_seconds: number[];
+  character_end_times_seconds: number[];
+}
+
+export interface AudioWithTimestampsResponse {
+  audio_base64: string;
+  alignment?: CharacterAlignment | null;
+  normalized_alignment?: CharacterAlignment | null;
 }
 
 export interface AudioResult {

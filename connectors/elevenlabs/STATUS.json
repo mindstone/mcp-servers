@@ -10,9 +10,10 @@
     ]
   },
   "tools": {
-    "count": 24,
+    "count": 32,
     "domains": [
       "account",
+      "usage",
       "voices",
       "speech",
       "music",
@@ -23,7 +24,9 @@
       "cloning",
       "dialogue",
       "voice design",
-      "dubbing"
+      "dubbing",
+      "history",
+      "pronunciation dictionaries"
     ]
   },
   "surface": "cloud-api",
