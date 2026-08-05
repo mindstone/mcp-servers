@@ -149,7 +149,7 @@ default (max 50MB via max_size_mb). Don't pass message permalinks or thread_ts.`
       );
       if (!downloadResponse.ok) {
         return errorJson({
-          error: `Download failed: ${downloadResponse.status} ${downloadResponse.statusText}`,
+          error: `Download failed: Slack returned HTTP ${downloadResponse.status}`,
           action_required: 'Verify the file is still available and you have access.',
           next_step: 'retry',
           file_id: fileId,
@@ -318,7 +318,7 @@ Max file size: 50MB.`,
       const uploadResponse = await postSlackFileToUploadUrl(uploadUrl, buffer);
       if (!uploadResponse.ok) {
         return errorJson({
-          error: `Upload failed: ${uploadResponse.status} ${uploadResponse.statusText}`,
+          error: `Upload failed: Slack returned HTTP ${uploadResponse.status}`,
           action_required: 'Retry the upload. If it persists, verify the files:write scope.',
           next_step: 'retry',
           file_id: fileId,
