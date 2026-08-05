@@ -84,7 +84,8 @@ export async function checkSalesEmailReadScope(
 /**
  * Attach the model-visible scope note: redaction warning when the scope is
  * definitively absent, unverified warning when the check couldn't say, no
- * note when it is present.
+ * note when it is present. Appends to any `notes` the caller already set
+ * (e.g. partial-failure reporting) rather than replacing them.
  */
 export async function attachSalesEmailScopeNote<T extends object>(
   result: T,
@@ -92,7 +93,9 @@ export async function attachSalesEmailScopeNote<T extends object>(
 ): Promise<T & { notes?: string[] }> {
   const granted = await checkSalesEmailReadScope(getClient);
   if (granted === true) return result;
-  return { ...result, notes: [granted === false ? SALES_EMAIL_READ_NOTE : SALES_EMAIL_SCOPE_UNKNOWN_NOTE] };
+  const existing = (result as { notes?: unknown }).notes;
+  const priorNotes = Array.isArray(existing) ? existing.filter((n): n is string => typeof n === 'string') : [];
+  return { ...result, notes: [...priorNotes, granted === false ? SALES_EMAIL_READ_NOTE : SALES_EMAIL_SCOPE_UNKNOWN_NOTE] };
 }
 
 export function __resetSalesEmailScopeCacheForTests(): void {

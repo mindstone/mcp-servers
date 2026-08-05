@@ -839,12 +839,16 @@ export async function handleGetContactEngagements(args: { contactId: string; lim
 
     // Get associations for the contact to find related engagements. A single
     // failing association type degrades to an empty list — the timeline is
-    // best-effort — but the degradation is logged, never silent.
+    // best-effort — but the degradation is both logged AND reported to the
+    // caller via `notes` (a silent gap would make an incomplete timeline look
+    // complete).
+    const failedAssociationTypes: string[] = [];
     const associationsOrEmpty = async (engagementType: 'calls' | 'emails' | 'meetings') => {
       try {
         return await client.getAssociations('contacts', args.contactId, engagementType);
       } catch (error) {
         logger.warn(`Contact engagement associations for ${engagementType} failed:`, error);
+        failedAssociationTypes.push(engagementType);
         return { results: [] as Array<{ id: string; type: string }> };
       }
     };
@@ -864,9 +868,10 @@ export async function handleGetContactEngagements(args: { contactId: string; lim
     const emailProps = [...defaultProps, 'hs_email_subject', 'hs_email_text', 'hs_email_direction', 'hs_email_status'];
     const meetingProps = [...defaultProps, 'hs_meeting_title', 'hs_meeting_body', 'hs_meeting_start_time', 'hs_meeting_end_time', 'hs_meeting_outcome'];
 
-    // Per-engagement failures degrade to an omitted entry (logged, not
-    // silent); surviving engagements are envelope-wrapped like every other
-    // engagement read — bodies and subjects are external text.
+    // Per-engagement failures degrade to an omitted entry; the omission is
+    // counted and reported to the caller via `notes` (never silent). Surviving
+    // engagements are envelope-wrapped like every other engagement read —
+    // bodies and subjects are external text.
     const fetchEngagements = async (
       engagementType: 'calls' | 'emails' | 'meetings',
       ids: string[],
@@ -880,16 +885,44 @@ export async function handleGetContactEngagements(args: { contactId: string; lim
           })
         )
       );
-      return sanitizeHubSpotResponse(
-        fetched.filter((entry) => entry !== null),
-        `hubspot:engagements/${engagementType}`,
-      );
+      const present = fetched.filter((entry) => entry !== null);
+      return {
+        items: sanitizeHubSpotResponse(present, `hubspot:engagements/${engagementType}`),
+        dropped: fetched.length - present.length,
+      };
     };
-    const [calls, emails, meetings] = await Promise.all([
+    const [callResult, emailResult, meetingResult] = await Promise.all([
       fetchEngagements('calls', callIds, callProps),
       fetchEngagements('emails', emailIds, emailProps),
       fetchEngagements('meetings', meetingIds, meetingProps),
     ]);
+    const calls = callResult.items;
+    const emails = emailResult.items;
+    const meetings = meetingResult.items;
+
+    // Model-visible partial-failure reporting: the notes are connector-authored
+    // (type names and counts only — no upstream error text), so they are
+    // trusted strings, deliberately NOT enveloped.
+    const partialFailureNotes: string[] = [];
+    if (failedAssociationTypes.length > 0) {
+      partialFailureNotes.push(
+        `Could not list associated ${failedAssociationTypes.join(', ')} for this contact (HubSpot association lookup failed); the timeline is incomplete for those engagement types.`,
+      );
+    }
+    const droppedParts = (
+      [
+        ['call', callResult.dropped],
+        ['email', emailResult.dropped],
+        ['meeting', meetingResult.dropped],
+      ] as const
+    )
+      .filter(([, dropped]) => dropped > 0)
+      .map(([noun, dropped]) => `${dropped} ${dropped === 1 ? noun : `${noun}s`}`);
+    if (droppedParts.length > 0) {
+      partialFailureNotes.push(
+        `Some engagements could not be fetched and were omitted (${droppedParts.join(', ')}); the timeline is incomplete.`,
+      );
+    }
 
     return attachSalesEmailScopeNote({
       contactId: args.contactId,
@@ -900,7 +933,8 @@ export async function handleGetContactEngagements(args: { contactId: string; lim
         totalCalls: callAssocs.results.length,
         totalEmails: emailAssocs.results.length,
         totalMeetings: meetingAssocs.results.length
-      }
+      },
+      ...(partialFailureNotes.length > 0 ? { notes: partialFailureNotes } : {})
     }, getHubSpotClientAsync);
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType: 'contact_engagements', operation: 'get', args });
