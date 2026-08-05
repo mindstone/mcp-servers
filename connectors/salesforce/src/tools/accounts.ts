@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, checkSaveResult, sanitizeRecords } from '../utils.js';
+import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, checkSaveResult, formatVendorErrors, sanitizeRecords } from '../utils.js';
 import { withConnection } from '../client.js';
 import { type SaveResult } from '../types.js';
 
@@ -63,7 +63,7 @@ export function registerAccountTools(server: McpServer): void {
         const result = await conn.sobject('Account').create(data);
         if (!result.success) {
           const { ConnectorError } = await import('../types.js');
-          throw new ConnectorError('Failed to create account', 'CREATE_ERROR', JSON.stringify(result.errors));
+          throw new ConnectorError('Failed to create account', 'CREATE_ERROR', formatVendorErrors(result.errors));
         }
         return JSON.stringify({ ok: true, status: 'success', object: 'Account', id: result.id, name: args.name });
       });

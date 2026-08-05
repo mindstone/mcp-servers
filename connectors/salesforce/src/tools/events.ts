@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, formatSOQLDateTime, sanitizeRecords } from '../utils.js';
+import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, formatSOQLDateTime, formatVendorErrors, sanitizeRecords } from '../utils.js';
 import { withConnection } from '../client.js';
 import { ConnectorError } from '../types.js';
 
@@ -78,7 +78,7 @@ export function registerEventTools(server: McpServer): void {
         if (args.owner_id) data.OwnerId = args.owner_id;
         if (args.fields) validateAndMergeCustomFields(data, args.fields);
         const result = await conn.sobject('Event').create(data);
-        if (!result.success) throw new ConnectorError('Failed to create event', 'CREATE_ERROR', JSON.stringify(result.errors));
+        if (!result.success) throw new ConnectorError('Failed to create event', 'CREATE_ERROR', formatVendorErrors(result.errors));
         return JSON.stringify({ ok: true, status: 'success', object: 'Event', id: result.id, subject: args.subject });
       });
     }),

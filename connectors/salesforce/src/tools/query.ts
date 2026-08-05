@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, validateObjectName, validateFields, isValidQueryFieldName, isValidFieldName, escapeSOQL, ALLOWED_FILTER_OPERATORS, validateAndMergeCustomFields, checkSaveResult, sanitizeRecords } from '../utils.js';
+import { withErrorHandling, validateObjectName, validateFields, isValidQueryFieldName, isValidFieldName, escapeSOQL, ALLOWED_FILTER_OPERATORS, validateAndMergeCustomFields, checkSaveResult, formatVendorErrors, sanitizeRecords } from '../utils.js';
 import { withConnection } from '../client.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { ConnectorError, type SaveResult } from '../types.js';
@@ -219,7 +219,7 @@ export function registerQueryTools(server: McpServer): void {
         const data: Record<string, unknown> = {};
         validateAndMergeCustomFields(data, args.fields);
         const result = await conn.sobject(args.object_name).create(data);
-        if (!result.success) throw new ConnectorError(`Failed to create ${args.object_name} record`, 'CREATE_ERROR', JSON.stringify(result.errors));
+        if (!result.success) throw new ConnectorError(`Failed to create ${args.object_name} record`, 'CREATE_ERROR', formatVendorErrors(result.errors));
         return JSON.stringify({ ok: true, status: 'success', object: args.object_name, id: result.id });
       });
     }),

@@ -31,9 +31,44 @@ export function withErrorHandling<T>(
           isError: true,
         };
       }
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      // Unexpected errors: log the raw detail locally for diagnostics, then
+      // decide what the model may see.
+      console.error('[Salesforce MCP] Unexpected error while handling tool call:', error);
+      // jsforce API errors (HttpApiError shape: string errorCode): the message
+      // is authored by the vendor API (validation-rule text, error bodies) and
+      // stays actionable for the caller, but it is org-controlled text, so it
+      // MUST be enveloped before it reaches model-visible output (invariant #6).
+      const vendorCode = (error as { errorCode?: unknown }).errorCode;
+      if (error instanceof Error && typeof vendorCode === 'string') {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                ok: false,
+                error: wrapUntrusted(error.message, 'salesforce:vendor_errors'),
+                code: 'VENDOR_ERROR',
+                vendor_code: vendorCode,
+              }),
+            },
+          ],
+          isError: true,
+        };
+      }
+      // Anything else (runtime failures, network errors, …): return a
+      // sanitised message — ad-hoc error text can embed environment details
+      // such as tokens or file paths.
       return {
-        content: [{ type: 'text', text: JSON.stringify({ ok: false, error: errorMessage }) }],
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              ok: false,
+              error: 'Unexpected internal error while handling the request',
+              code: 'INTERNAL_ERROR',
+            }),
+          },
+        ],
         isError: true,
       };
     }
@@ -206,6 +241,17 @@ export function validateAndMergeCustomFields(
 export const ALLOWED_FILTER_OPERATORS = new Set(['=', '!=', '<', '>', '<=', '>=', 'LIKE']);
 
 /**
+ * Vendor error payloads (e.g. `SaveResult.errors`) are org-authored text:
+ * validation-rule messages and error bodies are defined in the customer's
+ * Salesforce org and can carry arbitrary content. Envelope them before they
+ * reach model-visible output (AGENTS.md invariant #6, FOX-3490).
+ */
+export function formatVendorErrors(errors: unknown): string {
+  const detail = typeof errors === 'string' ? errors : JSON.stringify(errors);
+  return wrapUntrusted(detail ?? 'Unknown vendor error', 'salesforce:vendor_errors')!;
+}
+
+/**
  * Keys whose values are structural identifiers, not user-authored text: record
  * IDs are copied verbatim into follow-up tool calls (update, convert, link), so
  * enveloping them would corrupt that flow. Everything else reachable inside a
@@ -254,6 +300,6 @@ export function checkSaveResult(
 ): void {
   const res = Array.isArray(result) ? result[0] : result;
   if (!res.success) {
-    throw new ConnectorError(errorMessage, 'UPDATE_ERROR', JSON.stringify(res.errors));
+    throw new ConnectorError(errorMessage, 'UPDATE_ERROR', formatVendorErrors(res.errors));
   }
 }

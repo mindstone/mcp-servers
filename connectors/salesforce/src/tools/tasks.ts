@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, formatSOQLDate, checkSaveResult, sanitizeRecords } from '../utils.js';
+import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, formatSOQLDate, checkSaveResult, formatVendorErrors, sanitizeRecords } from '../utils.js';
 import { withConnection } from '../client.js';
 import { ConnectorError, type SaveResult } from '../types.js';
 
@@ -74,7 +74,7 @@ export function registerTaskTools(server: McpServer): void {
         if (args.owner_id) data.OwnerId = args.owner_id;
         if (args.fields) validateAndMergeCustomFields(data, args.fields);
         const result = await conn.sobject('Task').create(data);
-        if (!result.success) throw new ConnectorError('Failed to create task', 'CREATE_ERROR', JSON.stringify(result.errors));
+        if (!result.success) throw new ConnectorError('Failed to create task', 'CREATE_ERROR', formatVendorErrors(result.errors));
         return JSON.stringify({ ok: true, status: 'success', object: 'Task', id: result.id, subject: args.subject });
       });
     }),
