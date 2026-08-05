@@ -65,11 +65,11 @@ const EXPECTED_ANNOTATIONS: Record<
   list_knowledge_base_docs: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
   list_phone_numbers: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
   make_outbound_call: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
-  rebuild_knowledge_base_rag_index: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  rebuild_knowledge_base_rag_index: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
   retry_batch_call: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
   simulate_conversation: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
   submit_batch_call: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
-  submit_conversation_feedback: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  submit_conversation_feedback: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
   update_agent: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
   update_phone_number: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
 };

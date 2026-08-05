@@ -197,7 +197,7 @@ RELATED TOOLS:
 
 RETURNS: ok confirmation.
 
-FREE.`,
+COST: FREE — but this writes production analytics state (destructiveHint is set).`,
       inputSchema: z.object({
         conversation_id: z.string().min(1).describe('Conversation ID to leave feedback on.'),
         feedback: z.enum(['like', 'dislike'])
@@ -205,7 +205,7 @@ FREE.`,
       }),
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: true,
         openWorldHint: true,
       },

@@ -455,7 +455,7 @@ RELATED TOOLS:
 
 RETURNS: rag_index (id, model, status, progress_percentage, used bytes).
 
-COST: FREE — indexing consumes workspace compute, and calling this on an already-indexed document just returns the current status.`,
+COST: FREE — indexing consumes workspace compute, and calling this on an already-indexed document just returns the current status. It still initiates production indexing, so destructiveHint is set.`,
       inputSchema: z.object({
         documentation_id: z.string().min(1).describe('Knowledge-base document ID to (re)index.'),
         model: z.enum(['e5_mistral_7b_instruct', 'multilingual_e5_large_instruct']).optional()
@@ -463,7 +463,7 @@ COST: FREE — indexing consumes workspace compute, and calling this on an alrea
       }),
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: true,
         openWorldHint: true,
       },
