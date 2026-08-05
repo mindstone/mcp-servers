@@ -421,13 +421,15 @@ export function createStthCapturingHandler(expectedApiKey = MOCK_API_KEY) {
  */
 export function createDiarizedSttCapturingHandler(expectedApiKey = MOCK_API_KEY) {
   const captured: {
+    requestCount: number;
     diarize?: string;
     numSpeakers?: string;
     diarizationThreshold?: string;
     timestampsGranularity?: string;
-  } = {};
+  } = { requestCount: 0 };
 
   const handler = http.post(`${BASE_V1}/speech-to-text`, async ({ request }) => {
+    captured.requestCount += 1;
     const authError = checkAuth(request, expectedApiKey);
     if (authError) return authError;
     const form = await request.formData();

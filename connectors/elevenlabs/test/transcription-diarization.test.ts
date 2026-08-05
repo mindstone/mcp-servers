@@ -89,8 +89,8 @@ describe('transcribe_audio — diarization and timestamps', () => {
     expect(parsed.words[0].speaker_id).toBe('speaker_0');
   });
 
-  it('rejects num_speakers combined with diarization_threshold', async () => {
-    const { handler } = createDiarizedSttCapturingHandler();
+  it('rejects num_speakers combined with diarization_threshold — with zero network requests', async () => {
+    const { handler, captured } = createDiarizedSttCapturingHandler();
     mswServer.use(handler);
     await openClient();
 
@@ -104,6 +104,57 @@ describe('transcribe_audio — diarization and timestamps', () => {
     expect(result.isError).toBe(true);
     const parsed = JSON.parse(result.text);
     expect(parsed.code).toBe('INVALID_INPUT');
+    // The conflict is rejected before any upload leaves the process.
+    expect(captured.requestCount).toBe(0);
+  });
+
+  it('rejects num_speakers when diarize is not enabled — with zero network requests', async () => {
+    const { handler, captured } = createDiarizedSttCapturingHandler();
+    mswServer.use(handler);
+    await openClient();
+
+    const result = await testClient.callTool('transcribe_audio', {
+      file_path: clipPath,
+      num_speakers: 2,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.text).code).toBe('INVALID_INPUT');
+    expect(captured.requestCount).toBe(0);
+  });
+
+  it('rejects diarization_threshold when diarize is false — with zero network requests', async () => {
+    const { handler, captured } = createDiarizedSttCapturingHandler();
+    mswServer.use(handler);
+    await openClient();
+
+    const result = await testClient.callTool('transcribe_audio', {
+      file_path: clipPath,
+      diarize: false,
+      diarization_threshold: 0.3,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.text).code).toBe('INVALID_INPUT');
+    expect(captured.requestCount).toBe(0);
+  });
+
+  it('forwards diarization_threshold when diarize is true and num_speakers is omitted', async () => {
+    const { handler, captured } = createDiarizedSttCapturingHandler();
+    mswServer.use(handler);
+    await openClient();
+
+    const result = await testClient.callTool('transcribe_audio', {
+      file_path: clipPath,
+      diarize: true,
+      diarization_threshold: 0.25,
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(captured.requestCount).toBe(1);
+    expect(captured.diarize).toBe('true');
+    expect(captured.diarizationThreshold).toBe('0.25');
+    expect(captured.numSpeakers).toBeUndefined();
   });
 
   it('returns AUTH_REQUIRED without an API key', async () => {

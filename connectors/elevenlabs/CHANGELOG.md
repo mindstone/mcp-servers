@@ -20,6 +20,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 - `get_usage_stats` no longer reports a minutes-denominated `total_usage` column as credits, silently zeroes numeric-string values, pads short rows with nulls, or labels missing group values as `unknown`.
+- `transcribe_audio` now rejects `num_speakers` / `diarization_threshold` when `diarize` is not `true` (previously accepted and forwarded), and the `num_speakers` + `diarization_threshold` conflict is rejected too — both before any network request is made.
 
 ### Added
 - `transcribe_audio` gains speaker diarization (`diarize`, `num_speakers`, `diarization_threshold`) and word-level timestamps (`timestamps_granularity`, `include_word_timestamps`), plus the `scribe_v2` model option. Diarized output is grouped into per-speaker `utterances[]` with enveloped text.

@@ -66,8 +66,8 @@ COST: Credits based on audio duration.`,
         model_id: z.enum(['scribe_v1', 'scribe_v2']).optional().describe('STT model. Default: scribe_v1.'),
         tag_audio_events: z.boolean().optional().describe('When true, include non-speech events like "(laughter)" in the transcript. Default: false.'),
         diarize: z.boolean().optional().describe('When true, annotate which speaker is talking (adds utterances[] to the result). Default: false.'),
-        num_speakers: z.number().int().min(1).max(32).optional().describe('Maximum number of speakers (1-32) when known. Only applies with diarize: true.'),
-        diarization_threshold: z.number().min(0.1).max(0.4).optional().describe('Speaker-similarity threshold (0.1-0.4); higher predicts fewer distinct speakers. Only applies with diarize: true and no num_speakers.'),
+        num_speakers: z.number().int().min(1).max(32).optional().describe('Maximum number of speakers (1-32) when known. Only valid with diarize: true (rejected otherwise).'),
+        diarization_threshold: z.number().min(0.1).max(0.4).optional().describe('Speaker-similarity threshold (0.1-0.4); higher predicts fewer distinct speakers. Only valid with diarize: true and no num_speakers (rejected otherwise).'),
         timestamps_granularity: z.enum(['word', 'character', 'none']).optional().describe('Timestamp granularity in the API response. Default: word.'),
         include_word_timestamps: z.boolean().optional().describe('When true, include the words[] array with per-word start/end times in the result. Default: false.'),
       }),
@@ -80,6 +80,16 @@ COST: Credits based on audio duration.`,
           'ElevenLabs API key not configured',
           'AUTH_REQUIRED',
           'The user adds the ElevenLabs API key in Settings → Connectors in the app. Do not ask for it in chat.',
+        );
+      }
+
+      const diarize = args.diarize ?? false;
+
+      if (!diarize && (args.num_speakers != null || args.diarization_threshold != null)) {
+        throw new ElevenLabsError(
+          'num_speakers and diarization_threshold only apply with diarize: true.',
+          'INVALID_INPUT',
+          'Set diarize: true to use speaker tuning options, or omit them.',
         );
       }
 
@@ -136,7 +146,6 @@ COST: Credits based on audio duration.`,
       // audio — the most attacker-controllable text this connector returns.
       // `message` stays numeric-only; never echo transcript substrings into it.
       const words = data.words ?? [];
-      const diarize = args.diarize ?? false;
       const utterances = diarize ? groupWordsIntoUtterances(words) : [];
       const speakerCount = new Set(utterances.map((u) => u.speaker_id)).size;
 
