@@ -14,6 +14,7 @@ are maintained manually as part of the PR review checklist.
 ### Added
 - `nano_banana_generate` / `nano_banana_edit`: new optional `image_size` parameter (`"1K"` / `"2K"` / `"4K"`, default `"1K"`), forwarded as `generationConfig.imageConfig.imageSize`. An explicit `image_size` is refused with a structured `UNSUPPORTED_IMAGE_SIZE` error on `gemini-2.5-flash-image`, which only produces ~1K output.
 - `nano_banana_edit`: multi-image input via the new `source_image_paths` array (up to 14 reference images, combinable with the legacy `source_image_path`) for multi-image composition/fusion. Every local source path stays sandboxed under `MCP_WORKSPACE_PATH` exactly as before.
+- `nano_banana_edit`: source images may now be `https://` URLs (previously they fell through to a not-found error). Remote fetches are hardened: HTTPS only, userinfo refused, private/loopback/link-local hosts refused, redirects followed manually with every hop re-validated, a 20MB size cap enforced on both the Content-Length header and the streamed body, and a PNG/JPEG/WebP Content-Type check.
 
 ### Fixed
 - Tool descriptions no longer advertise "4K" as a default trait of the default model — output resolution defaults to ~1K unless `image_size` is set explicitly.

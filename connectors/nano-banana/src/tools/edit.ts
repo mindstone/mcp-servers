@@ -18,6 +18,7 @@ import {
   type ImageConfig,
 } from '../types.js';
 import { resolveSavePath, resolveSourcePath } from './path-safety.js';
+import { fetchRemoteImage, isRemoteImageUrl } from './remote-image.js';
 
 const MODEL_DESCRIPTION =
   'Model to use: "gemini-3.1-flash-image-preview" (Nano Banana 2, default — pro-quality at flash speed), ' +
@@ -38,15 +39,6 @@ function getMimeTypeFromPath(filePath: string): string | null {
 }
 
 /**
- * Detect whether a user-supplied source image is a remote URL
- * (https:// / http://). Remote URLs bypass the local-file sandbox —
- * they never touch the filesystem.
- */
-function isRemoteUrl(value: string): boolean {
-  return /^https?:\/\//i.test(value);
-}
-
-/**
  * Gemini 3 image models accept up to 14 reference images per request
  * (multi-image composition/fusion). Enforced across the combined
  * source_image_path + source_image_paths inputs.
@@ -61,6 +53,36 @@ interface LoadedSourceImage {
 type LoadSourceResult =
   | { ok: true; image: LoadedSourceImage }
   | { ok: false; errorText: string };
+
+/**
+ * Fetch and base64-encode one remote (https://) source image.
+ * Validation, redirect, content-type, and size rules live in
+ * `remote-image.ts`; this wrapper only maps the outcome onto the same
+ * result shape as local file loads.
+ */
+async function loadRemoteSourceImage(rawSource: string): Promise<LoadSourceResult> {
+  try {
+    const remote = await fetchRemoteImage(rawSource);
+    return { ok: true, image: { mimeType: remote.mimeType, base64: remote.base64 } };
+  } catch (error) {
+    if (error instanceof NanoBananaError) {
+      return {
+        ok: false,
+        errorText: JSON.stringify({ ok: false, error: error.message, code: error.code, resolution: error.resolution }, null, 2),
+      };
+    }
+    const errMsg = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      errorText: JSON.stringify({
+        ok: false,
+        error: `Failed to fetch remote source image: ${errMsg}`,
+        code: 'REMOTE_IMAGE_FETCH_FAILED',
+        resolution: 'Check the URL is reachable and points directly to a PNG/JPEG/WebP image, or download it into the workspace and pass a local path.',
+      }, null, 2),
+    };
+  }
+}
 
 /**
  * Read and base64-encode one local source image.
@@ -121,7 +143,7 @@ export function registerEditTools(server: McpServer): void {
       description:
         `Edit one or more existing images using Google Gemini's image editing capabilities.\n\n` +
         `Use this when the user wants to modify, edit, or transform an existing image using AI, or combine elements from several images into one.\n\n` +
-        `Provide up to ${MAX_REFERENCE_IMAGES} source image file paths and edit instructions. The edited image will appear inline in the conversation.\n\n` +
+        `Provide up to ${MAX_REFERENCE_IMAGES} source images — workspace file paths or https:// URLs — and edit instructions. The edited image will appear inline in the conversation.\n\n` +
         `Examples of edit prompts:\n` +
         `- "Remove the background and make it transparent"\n` +
         `- "Change the color of the car to red"\n` +
@@ -129,8 +151,8 @@ export function registerEditTools(server: McpServer): void {
         `- "Make this photo look like a watercolor painting"\n` +
         `- "Combine these images: put the product from the first image on the table from the second"`,
       inputSchema: z.object({
-        source_image_path: z.string().min(1).optional().describe('Path to the image file to edit (supports ~ for home directory). Single-image shorthand for source_image_paths — provide one or the other (or both).'),
-        source_image_paths: z.array(z.string().min(1)).min(1).max(MAX_REFERENCE_IMAGES).optional().describe(`Up to ${MAX_REFERENCE_IMAGES} reference image files to edit or combine (multi-image composition/fusion). Each entry follows the same rules as source_image_path.`),
+        source_image_path: z.string().min(1).optional().describe('Image to edit: a workspace file path (supports ~ for home directory) or an https:// URL. Single-image shorthand for source_image_paths — provide one or the other (or both).'),
+        source_image_paths: z.array(z.string().min(1)).min(1).max(MAX_REFERENCE_IMAGES).optional().describe(`Up to ${MAX_REFERENCE_IMAGES} reference images to edit or combine (multi-image composition/fusion). Each entry follows the same rules as source_image_path.`),
         prompt: z.string().min(1).describe('Instructions for how to edit the image(s)'),
         model: z.enum(SUPPORTED_MODELS).optional().describe(MODEL_DESCRIPTION),
         aspect_ratio: z.enum(SUPPORTED_ASPECT_RATIOS).optional().describe('Aspect ratio for the edited image'),
@@ -187,10 +209,8 @@ export function registerEditTools(server: McpServer): void {
 
       const loadedSources: LoadedSourceImage[] = [];
       for (const rawSource of rawSources) {
-        const loadResult = isRemoteUrl(rawSource)
-          // Remote URL fetching is not wired up here yet — fail with a clean,
-          // actionable message rather than a misleading sandbox violation.
-          ? { ok: false as const, errorText: `Remote source image URLs are not supported: ${rawSource}. Download the image into the workspace and pass the local path instead.` }
+        const loadResult = isRemoteImageUrl(rawSource)
+          ? await loadRemoteSourceImage(rawSource)
           : loadLocalSourceImage(rawSource);
         if (!loadResult.ok) {
           return {
