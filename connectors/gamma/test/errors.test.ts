@@ -253,4 +253,67 @@ describe('Bridge integration', () => {
     expect(result.isError).toBeFalsy();
     expect(result.text).toContain('configured successfully');
   });
+
+  it('ignores a malformed bridge state file, observably', async () => {
+    bridgeStatePath = path.join(os.tmpdir(), `gamma-bridge-bad-${Date.now()}.json`);
+    fs.writeFileSync(bridgeStatePath, 'not json at all {', { mode: 0o600 });
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    testClient = await createTestClient({
+      env: { GAMMA_API_KEY: '', MCP_HOST_BRIDGE_STATE: bridgeStatePath },
+    });
+
+    const result = await testClient.callTool('configure_gamma_api_key', {
+      api_key: 'new-api-key',
+    });
+
+    // Bridge unavailable → surfaced as a structured error, not a silent skip.
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('BRIDGE_ERROR');
+    const logged = consoleSpy.mock.calls.map((call) => call.join(' ')).join('\n');
+    expect(logged).toContain('[gamma] Bridge state file could not be parsed');
+    consoleSpy.mockRestore();
+  });
+
+  it('ignores a bridge state path that is not a regular file', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    testClient = await createTestClient({
+      env: { GAMMA_API_KEY: '', MCP_HOST_BRIDGE_STATE: os.tmpdir() },
+    });
+
+    const result = await testClient.callTool('configure_gamma_api_key', {
+      api_key: 'new-api-key',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('BRIDGE_ERROR');
+    // The exact warning depends on platform open() semantics for directories;
+    // either way the rejection must be observable.
+    const logged = consoleSpy.mock.calls.map((call) => call.join(' ')).join('\n');
+    expect(logged).toMatch(/\[gamma\] Bridge state file (is not a regular file|is not readable)/);
+    consoleSpy.mockRestore();
+  });
+
+  it('ignores a bridge state file with an invalid port/token shape', async () => {
+    bridgeStatePath = path.join(os.tmpdir(), `gamma-bridge-shape-${Date.now()}.json`);
+    fs.writeFileSync(bridgeStatePath, JSON.stringify({ port: 'not-a-port', token: 42 }), {
+      mode: 0o600,
+    });
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    testClient = await createTestClient({
+      env: { GAMMA_API_KEY: '', MCP_HOST_BRIDGE_STATE: bridgeStatePath },
+    });
+
+    const result = await testClient.callTool('configure_gamma_api_key', {
+      api_key: 'new-api-key',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('BRIDGE_ERROR');
+    const logged = consoleSpy.mock.calls.map((call) => call.join(' ')).join('\n');
+    expect(logged).toContain('[gamma] Bridge state file has an unexpected shape');
+    consoleSpy.mockRestore();
+  });
 });
