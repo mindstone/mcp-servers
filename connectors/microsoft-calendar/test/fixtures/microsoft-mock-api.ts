@@ -85,7 +85,18 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
             end: { dateTime: '2026-05-20T09:30:00', timeZone: 'Pacific Standard Time' },
             location: { displayName: 'Room A' },
             organizer: { emailAddress: { address: 'alice@example.com', name: 'Alice' } },
-            attendees: [{ emailAddress: { address: 'bob@example.com' } }],
+            attendees: [
+              {
+                emailAddress: { address: 'bob@example.com', name: 'Bob' },
+                type: 'required',
+                status: { response: 'accepted' },
+              },
+              {
+                emailAddress: { address: 'carol@example.com', name: 'Carol' },
+                type: 'optional',
+                status: { response: 'declined' },
+              },
+            ],
             isAllDay: false,
             webLink: 'https://outlook.com/event-1',
           },
@@ -129,6 +140,29 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
         isAllDay: false,
         webLink: 'https://outlook.com/event-1',
         onlineMeeting: { joinUrl: 'https://teams.microsoft.com/l/meetup/abc' },
+      });
+    }),
+
+    // /me/events/{id}/attachments (GET) — get_event with includeAttachments
+    http.get(`${GRAPH_BASE}/me/events/:id/attachments`, async ({ request }) => {
+      const url = new URL(request.url);
+      await capture(request, url.pathname, url.search);
+      return HttpResponse.json({
+        value: [
+          {
+            id: 'att-1',
+            name: 'Agenda.docx',
+            contentType:
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            size: 12345,
+          },
+          {
+            id: 'att-2',
+            name: 'Budget.xlsx',
+            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            size: 23456,
+          },
+        ],
       });
     }),
 

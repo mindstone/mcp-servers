@@ -3,14 +3,18 @@ import { z } from 'zod';
 import { callGraph } from './client.js';
 import { errorResponse, successJson, withErrorHandling } from './utils.js';
 import {
+  cancelEvent,
   createEvent,
   deleteEvent,
+  findMeetingTimes,
   getEvent,
   getFreeBusy,
   listCalendars,
   listEvents,
   respondToEvent,
   updateEvent,
+  RecurrenceSchema,
+  type RecurrenceInput,
 } from './calendar.js';
 
 const ShowAsEnum = z.enum(['free', 'tentative', 'busy', 'oof', 'workingElsewhere', 'unknown']);
@@ -34,6 +38,9 @@ const CreateEventSchema = z
     isAllDay: z.boolean().optional().describe('All-day event (default: false)'),
     showAs: ShowAsEnum.optional().describe(
       'How this event should appear in availability (free/busy) views',
+    ),
+    recurrence: RecurrenceSchema.optional().describe(
+      'Recurrence for a repeating event, as a Microsoft Graph recurrence object: { "pattern": { "type": "weekly", "interval": 1, "daysOfWeek": ["monday"] }, "range": { "type": "endDate", "startDate": "2026-05-20", "endDate": "2026-08-20" } }',
     ),
     deviceTimezone: z
       .string()
@@ -102,6 +109,10 @@ export function registerCalendarTools(server: McpServer): void {
       description: 'Get detailed information about a specific calendar event.',
       inputSchema: z.object({
         id: z.string().optional().describe('Event ID'),
+        includeAttachments: z
+          .boolean()
+          .optional()
+          .describe('Also list attachment metadata (id, name, contentType, size) (default: false)'),
       }).shape,
       annotations: {
         readOnlyHint: true,
@@ -118,7 +129,9 @@ export function registerCalendarTools(server: McpServer): void {
           next_step: 'list_events',
         });
       }
-      const result = await callGraph(extra, (c, signal) => getEvent(c, { id: args.id! }, signal));
+      const result = await callGraph(extra, (c, signal) =>
+        getEvent(c, { id: args.id!, includeAttachments: args.includeAttachments }, signal),
+      );
       return successJson(result);
     }),
   );
@@ -190,6 +203,7 @@ export function registerCalendarTools(server: McpServer): void {
               | 'workingElsewhere'
               | 'unknown'
               | undefined,
+            recurrence: args.recurrence as RecurrenceInput | undefined,
             deviceTimezone: args.deviceTimezone as string | undefined,
           },
           signal,
@@ -213,6 +227,17 @@ export function registerCalendarTools(server: McpServer): void {
         end: z.string().optional().describe('New end date/time'),
         location: z.string().optional().describe('New location'),
         body: z.string().optional().describe('New description'),
+        addAttendees: z
+          .array(z.string())
+          .optional()
+          .describe('Email addresses to add as required attendees (merged with the current list)'),
+        removeAttendees: z
+          .array(z.string())
+          .optional()
+          .describe('Email addresses to remove from the attendee list'),
+        recurrence: RecurrenceSchema.optional().describe(
+          'New recurrence for the event (Graph pattern/range object). When changing recurrence, also pass start and end so the series stays consistent.',
+        ),
         deviceTimezone: z
           .string()
           .optional()
@@ -246,6 +271,9 @@ export function registerCalendarTools(server: McpServer): void {
             end: args.end,
             location: args.location,
             body: args.body,
+            addAttendees: args.addAttendees,
+            removeAttendees: args.removeAttendees,
+            recurrence: args.recurrence,
             deviceTimezone: args.deviceTimezone,
           },
           signal,
@@ -286,6 +314,43 @@ export function registerCalendarTools(server: McpServer): void {
       }
       const result = await callGraph(extra, (c, signal) =>
         deleteEvent(c, { id: args.id!, notifyAttendees: args.notifyAttendees }, signal),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // cancel_event
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'cancel_event',
+    {
+      description:
+        'Cancel a meeting as its organizer, optionally sending a cancellation message to all attendees. The event moves to the Deleted Items folder. Prefer this over delete_event for meetings with attendees so they are notified.',
+      inputSchema: z.object({
+        id: z.string().optional().describe('Event ID'),
+        comment: z
+          .string()
+          .optional()
+          .describe('Cancellation message sent to attendees (e.g. "Cancelling — rescheduling to next week")'),
+      }).shape,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.id) {
+        return errorResponse({
+          error:
+            'Missing required parameter: "id" (event to cancel). Example: { "id": "AAMkAGI2...", "comment": "Rescheduling to next week" }. WARNING: This cancels the meeting and notifies attendees.',
+          action_required: 'Provide the event ID.',
+          next_step: 'list_events',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        cancelEvent(c, { id: args.id!, comment: args.comment }, signal),
       );
       return successJson(result);
     }),
@@ -379,6 +444,74 @@ export function registerCalendarTools(server: McpServer): void {
             emails: args.emails!,
             startDateTime: args.startDateTime!,
             endDateTime: args.endDateTime!,
+            deviceTimezone: args.deviceTimezone,
+          },
+          signal,
+        ),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // find_meeting_times
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'find_meeting_times',
+    {
+      description:
+        'Suggest time slots within a window when ALL given attendees are free, based on their free/busy availability. Returns candidate start/end times in the resolved timezone that can be passed directly to create_event. Include your own email address in attendees to account for your own availability.',
+      inputSchema: z.object({
+        attendees: z
+          .array(z.string())
+          .optional()
+          .describe('Email addresses whose availability must all be free'),
+        startDateTime: z.string().optional().describe('Start of the search window (ISO format)'),
+        endDateTime: z.string().optional().describe('End of the search window (ISO format)'),
+        durationMinutes: z
+          .number()
+          .optional()
+          .describe('Required meeting length in minutes (e.g. 30)'),
+        intervalMinutes: z
+          .number()
+          .optional()
+          .describe('Slot granularity in minutes, 5-60 (default: 30)'),
+        maxSuggestions: z
+          .number()
+          .optional()
+          .describe('Maximum number of candidate slots to return, 1-20 (default: 5)'),
+        deviceTimezone: z
+          .string()
+          .optional()
+          .describe(
+            "User's device IANA timezone from system prompt (e.g. \"Europe/London\"). Used to interpret the window if calendar settings unavailable.",
+          ),
+      }).shape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.attendees?.length || !args.startDateTime || !args.endDateTime || !args.durationMinutes) {
+        return errorResponse({
+          error:
+            'Missing required parameters: "attendees" (array of emails), "startDateTime", "endDateTime", and "durationMinutes". Example: { "attendees": ["alice@example.com", "me@example.com"], "startDateTime": "2026-05-21T08:00:00", "endDateTime": "2026-05-21T18:00:00", "durationMinutes": 30 }',
+          action_required: 'Provide attendees, startDateTime, endDateTime, and durationMinutes.',
+          next_step: 'find_meeting_times',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        findMeetingTimes(
+          c,
+          {
+            attendees: args.attendees!,
+            startDateTime: args.startDateTime!,
+            endDateTime: args.endDateTime!,
+            durationMinutes: args.durationMinutes!,
+            intervalMinutes: args.intervalMinutes,
+            maxSuggestions: args.maxSuggestions,
             deviceTimezone: args.deviceTimezone,
           },
           signal,

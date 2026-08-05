@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Client } from '@mindstone/mcp-server-microsoft-shared';
 import {
+  cancelEvent,
   createEvent,
   deleteEvent,
+  findMeetingTimes,
   getEvent,
   getFreeBusy,
   listCalendars,
@@ -57,7 +59,11 @@ describe('Graph request signal propagation', () => {
 
   it('getEvent passes signal to GraphRequest.options', async () => {
     const { client, builder } = createMockClient();
-    builder.get.mockResolvedValueOnce({ id: 'evt-1' });
+    builder.get.mockResolvedValueOnce({
+      id: 'evt-1',
+      start: { dateTime: '2026-05-20T09:00:00', timeZone: 'UTC' },
+      end: { dateTime: '2026-05-20T10:00:00', timeZone: 'UTC' },
+    });
     const signal = new AbortController().signal;
     await getEvent(client, { id: 'evt-1' }, signal);
     expect(builder.options).toHaveBeenCalledWith({ signal });
@@ -114,6 +120,13 @@ describe('Graph request signal propagation', () => {
     expect(builder.options).toHaveBeenCalledWith({ signal });
   });
 
+  it('cancelEvent passes signal to GraphRequest.options', async () => {
+    const { client, builder } = createMockClient();
+    const signal = new AbortController().signal;
+    await cancelEvent(client, { id: 'evt-1', comment: 'Rescheduling' }, signal);
+    expect(builder.options).toHaveBeenCalledWith({ signal });
+  });
+
   it('respondToEvent passes signal to GraphRequest.options', async () => {
     const { client, builder } = createMockClient();
     const signal = new AbortController().signal;
@@ -132,6 +145,26 @@ describe('Graph request signal propagation', () => {
         emails: ['alice@example.com'],
         startDateTime: '2026-05-20T08:00:00Z',
         endDateTime: '2026-05-20T18:00:00Z',
+        deviceTimezone: 'America/New_York',
+      },
+      signal,
+    );
+    expect(builder.options).toHaveBeenCalledWith({ signal });
+    expect(builder.options.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('findMeetingTimes passes signal to GraphRequest.options for both timezone lookup and POST', async () => {
+    const { client, builder } = createMockClient();
+    builder.get.mockResolvedValueOnce({ timeZone: 'UTC' });
+    builder.post.mockResolvedValueOnce({ value: [] });
+    const signal = new AbortController().signal;
+    await findMeetingTimes(
+      client,
+      {
+        attendees: ['alice@example.com'],
+        startDateTime: '2026-05-20T09:00:00',
+        endDateTime: '2026-05-20T12:00:00',
+        durationMinutes: 30,
         deviceTimezone: 'America/New_York',
       },
       signal,
