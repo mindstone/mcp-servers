@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { fathomFetch } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import {
   type MeetingsListResponse,
   type MeetingItem,
@@ -67,6 +68,49 @@ function getSpeakerName(entry: TranscriptEntry): string {
   const speaker = entry.speaker;
   if (!speaker) return 'Unknown';
   return speaker.display_name || speaker.name || speaker.matched_calendar_invitee_email || speaker.email || 'Unknown';
+}
+
+/**
+ * Wrap every caller-controllable text field of a meeting (titles, attendee
+ * names, AI summary, action items) in an untrusted-content envelope.
+ * Meeting content is authored by meeting participants, not by the user, so
+ * the host LLM must see it as data, not instructions (invariant #6).
+ * Connector-controlled metadata (ids, timestamps, URLs, emails) stays raw.
+ */
+function sanitizeMeeting(meeting: MeetingItem): MeetingItem {
+  return {
+    ...meeting,
+    title: wrapUntrusted(meeting.title, 'fathom:meeting:title') ?? meeting.title,
+    meeting_title:
+      meeting.meeting_title == null
+        ? meeting.meeting_title
+        : (wrapUntrusted(meeting.meeting_title, 'fathom:meeting:title') ?? null),
+    calendar_invitees: (meeting.calendar_invitees || []).map((invitee) => ({
+      ...invitee,
+      name: wrapUntrusted(invitee.name, 'fathom:meeting:invitee_name'),
+    })),
+    recorded_by: meeting.recorded_by
+      ? {
+          ...meeting.recorded_by,
+          name: wrapUntrusted(meeting.recorded_by.name, 'fathom:meeting:recorder_name'),
+        }
+      : meeting.recorded_by,
+    default_summary: meeting.default_summary
+      ? {
+          template_name: wrapUntrusted(meeting.default_summary.template_name, 'fathom:meeting:summary_template'),
+          markdown_formatted: wrapUntrusted(meeting.default_summary.markdown_formatted, 'fathom:meeting:summary'),
+        }
+      : meeting.default_summary,
+    action_items: meeting.action_items
+      ? meeting.action_items.map((item) => ({
+          ...item,
+          description: wrapUntrusted(item.description, 'fathom:meeting:action_item') ?? item.description,
+          assignee: item.assignee
+            ? { ...item.assignee, name: wrapUntrusted(item.assignee.name, 'fathom:meeting:assignee_name') }
+            : item.assignee,
+        }))
+      : meeting.action_items,
+  };
 }
 
 export function registerMeetingTools(server: McpServer): void {
@@ -136,7 +180,7 @@ Rate limit: Fathom allows ~60 API calls/minute.`,
         }
       } while (cursor);
 
-      const trimmedMeetings = meetings.slice(0, limit);
+      const trimmedMeetings = meetings.slice(0, limit).map(sanitizeMeeting);
       const hasMore = stoppedEarly || meetings.length > limit;
 
       return JSON.stringify({
@@ -210,11 +254,13 @@ Rate limit: May use 1-11 API calls depending on meeting position in history.`,
         }
       }
 
+      const sanitized = sanitizeMeeting(meeting);
+
       return JSON.stringify({
         ok: true,
         meeting: {
-          title: meeting.title,
-          meeting_title: meeting.meeting_title,
+          title: sanitized.title,
+          meeting_title: sanitized.meeting_title,
           recording_id: meeting.recording_id,
           url: meeting.url,
           share_url: meeting.share_url,
@@ -223,9 +269,14 @@ Rate limit: May use 1-11 API calls depending on meeting position in history.`,
           scheduled_end_time: meeting.scheduled_end_time,
           recording_start_time: meeting.recording_start_time,
           recording_end_time: meeting.recording_end_time,
-          calendar_invitees: meeting.calendar_invitees,
-          recorded_by: meeting.recorded_by,
-          summary,
+          calendar_invitees: sanitized.calendar_invitees,
+          recorded_by: sanitized.recorded_by,
+          summary: summary
+            ? {
+                template_name: wrapUntrusted(summary.template_name, 'fathom:meeting:summary_template'),
+                markdown_formatted: wrapUntrusted(summary.markdown_formatted, 'fathom:meeting:summary'),
+              }
+            : null,
         },
       });
     }),
@@ -299,9 +350,20 @@ Use list_fathom_meetings first to find the recording_id.`,
         args.start_entry + entries.length < (matchedIndices ? matchedIndices.size : totalCount);
 
       if (args.format === 'json') {
+        const wrappedEntries = entries.map((entry) => ({
+          ...entry,
+          text: wrapUntrusted(entry.text, 'fathom:transcript:text') ?? entry.text,
+          speaker: entry.speaker
+            ? {
+                ...entry.speaker,
+                name: wrapUntrusted(entry.speaker.name, 'fathom:transcript:speaker'),
+                display_name: wrapUntrusted(entry.speaker.display_name, 'fathom:transcript:speaker'),
+              }
+            : entry.speaker,
+        }));
         return JSON.stringify({
           ok: true,
-          transcript: entries,
+          transcript: wrappedEntries,
           count: entries.length,
           totalCount,
           hasMore,
@@ -311,7 +373,8 @@ Use list_fathom_meetings first to find the recording_id.`,
         });
       }
 
-      // Text format (default)
+      // Text format (default). Transcript lines are caller-controllable speech,
+      // so the whole body goes out inside one untrusted-content envelope.
       const lines = entries.map((entry) => {
         const timestamp = formatTimestamp(entry);
         const speaker = getSpeakerName(entry);
@@ -323,7 +386,8 @@ Use list_fathom_meetings first to find the recording_id.`,
         ? `Transcript: ${directMatchCount} matches for "${args.search_query}" (showing ${entries.length} entries with context, ${totalCount} total in transcript)`
         : `Transcript (${entries.length} of ${totalCount} entries)`;
 
-      return `${header}${hasMore ? ' - more available with start_entry parameter' : ''}\n\n${lines.join('\n')}`;
+      const body = wrapUntrusted(lines.join('\n'), 'fathom:transcript') ?? '';
+      return `${header}${hasMore ? ' - more available with start_entry parameter' : ''}\n\n${body}`;
     }),
   );
 
@@ -363,7 +427,7 @@ Rate limit: May use 1-11 API calls depending on meeting position in history.`,
       }
 
       const participants = (meeting.calendar_invitees || []).map((invitee) => ({
-        name: invitee.name || null,
+        name: wrapUntrusted(invitee.name, 'fathom:meeting:invitee_name') ?? null,
         email: invitee.email,
         email_domain: invitee.email_domain || null,
         is_external: invitee.is_external ?? false,
@@ -372,7 +436,7 @@ Rate limit: May use 1-11 API calls depending on meeting position in history.`,
       return JSON.stringify({
         ok: true,
         recording_id: recordingId,
-        title: meeting.title,
+        title: wrapUntrusted(meeting.title, 'fathom:meeting:title') ?? meeting.title,
         participants,
         count: participants.length,
       });

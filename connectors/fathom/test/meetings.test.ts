@@ -80,7 +80,9 @@ describe('Fathom meetings tools', () => {
     };
 
     expect(json.ok).toBe(true);
-    expect(json.meeting.title).toBe('Weekly Standup');
+    expect(json.meeting.title).toBe(
+      '<untrusted-content source="fathom:meeting:title">Weekly Standup</untrusted-content>',
+    );
     expect(json.meeting.recording_id).toBe(101);
     expect(json.meeting.calendar_invitees).toHaveLength(2);
     expect(json.meeting.summary).toBeDefined();
@@ -225,9 +227,13 @@ describe('Fathom meetings tools', () => {
 
     expect(json.ok).toBe(true);
     expect(json.recording_id).toBe(101);
-    expect(json.title).toBe('Weekly Standup');
+    expect(json.title).toBe(
+      '<untrusted-content source="fathom:meeting:title">Weekly Standup</untrusted-content>',
+    );
     expect(json.participants).toHaveLength(2);
-    expect(json.participants[0].name).toBe('Alice');
+    expect(json.participants[0].name).toBe(
+      '<untrusted-content source="fathom:meeting:invitee_name">Alice</untrusted-content>',
+    );
     expect(json.participants[0].email).toBe('alice@example.com');
     expect(json.count).toBe(2);
   });
