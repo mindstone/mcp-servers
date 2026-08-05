@@ -108,6 +108,30 @@ export const mockKnowledgeArticleDetail = {
   description: 'Step-by-step guide for configuring VPN access on macOS.',
 };
 
+export const mockCatalogItems = [
+  {
+    sys_id: 'cat-sys-id-001',
+    name: 'Standard laptop',
+    short_description: 'Request a standard laptop for a new hire',
+    category: 'Hardware',
+    price: '$1200',
+    active: 'true',
+  },
+  {
+    sys_id: 'cat-sys-id-002',
+    name: 'VPN access',
+    short_description: 'Request VPN access to the corporate network',
+    category: 'Network',
+    price: '$0',
+    active: 'true',
+  },
+];
+
+export const mockCatalogItemDetail = {
+  ...mockCatalogItems[0],
+  description: 'A 14-inch business laptop with standard software image.',
+};
+
 export const mockUsers = [
   {
     sys_id: 'user-sys-id-001',

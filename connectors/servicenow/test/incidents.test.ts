@@ -50,7 +50,10 @@ describe('ServiceNow incident tools', () => {
     const json = result.json as { ok: boolean; incident: { number: string; short_description: string } };
     expect(json.ok).toBe(true);
     expect(json.incident.number).toBe('INC0010001');
-    expect(json.incident.short_description).toBe('VPN not connecting');
+    // Free-text fields arrive in the untrusted-content envelope (invariant #6)
+    expect(json.incident.short_description).toBe(
+      '<untrusted-content source="servicenow:incident:short_description">VPN not connecting</untrusted-content>',
+    );
   });
 
   it('get_servicenow_incident by sys_id returns incident', async () => {
@@ -128,7 +131,48 @@ describe('ServiceNow incident tools', () => {
     expect(json.ok).toBe(true);
     expect(json.message).toBe('Incident updated.');
     expect(json.incident.state).toBe('2');
-    expect(json.incident.assigned_to).toBe('jane.doe');
+    expect(json.incident.assigned_to).toBe(
+      '<untrusted-content source="servicenow:incident:assigned_to">jane.doe</untrusted-content>',
+    );
+  });
+
+  it('update_servicenow_incident appends work_notes and comments journal fields', async () => {
+    let capturedBody: Record<string, string> = {};
+    mswServer.use(
+      http.patch(
+        'https://test-instance.service-now.com/api/now/table/incident/:sysId',
+        async ({ request }) => {
+          capturedBody = (await request.json()) as Record<string, string>;
+          return HttpResponse.json({
+            result: { sys_id: 'inc-sys-id-001', ...capturedBody },
+          });
+        },
+      ),
+    );
+    testClient = await createTestClient({ env: TEST_ENV });
+
+    const result = await testClient.callTool('update_servicenow_incident', {
+      sys_id: 'inc-sys-id-001',
+      work_notes: 'Investigating the network switch.',
+      comments: 'We are looking into this now.',
+    });
+    const json = result.json as {
+      ok: boolean;
+      message: string;
+      incident: { work_notes: string; comments: string };
+    };
+    expect(json.ok).toBe(true);
+    expect(json.message).toBe('Incident updated.');
+    // Journal fields reach the API verbatim...
+    expect(capturedBody.work_notes).toBe('Investigating the network switch.');
+    expect(capturedBody.comments).toBe('We are looking into this now.');
+    // ...and are enveloped when echoed back (invariant #6).
+    expect(json.incident.work_notes).toBe(
+      '<untrusted-content source="servicenow:incident:work_notes">Investigating the network switch.</untrusted-content>',
+    );
+    expect(json.incident.comments).toBe(
+      '<untrusted-content source="servicenow:incident:comments">We are looking into this now.</untrusted-content>',
+    );
   });
 
   // ── Basic auth header ─────────────────────────────────────────

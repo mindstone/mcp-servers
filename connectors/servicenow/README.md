@@ -8,8 +8,8 @@ ServiceNow ITSM MCP server for Model Context Protocol hosts. Manage incidents, c
 ## Status
 
 - **Version:** [0.2.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-servicenow)
-- **Auth:** Basic auth (username + password) ([`SERVICENOW_PASSWORD`](./server.json))
-- **Tools:** [10](./src/tools/) (incidents, change-requests, users, knowledge)
+- **Auth:** Basic auth (username + password) or OAuth 2.0 client credentials ([`SERVICENOW_PASSWORD`](./server.json))
+- **Tools:** [13](./src/tools/) (incidents, change-requests, users, knowledge, service-catalog)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -81,8 +81,20 @@ node dist/index.js
 - `SERVICENOW_INSTANCE` — ServiceNow instance name (e.g. `acme` for acme.service-now.com)
 - `SERVICENOW_USERNAME` — ServiceNow username
 - `SERVICENOW_PASSWORD` — ServiceNow password
+- `SERVICENOW_CLIENT_ID` — optional OAuth 2.0 client ID (alternative to username/password; see below)
+- `SERVICENOW_CLIENT_SECRET` — optional OAuth 2.0 client secret
 - `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
 - `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
+
+### OAuth 2.0 (client credentials)
+
+Instances that enforce MFA/SSO often disable basic auth. As an alternative, the connector supports the OAuth 2.0 client credentials grant:
+
+1. On the instance, enable the inbound client credentials grant (system property `glide.oauth.inbound.client.credential.grant_type.enabled = true`).
+2. Create an entry under **System OAuth → Application Registry → New → Create an OAuth API endpoint for external clients** and note the client ID and secret.
+3. Set `SERVICENOW_INSTANCE`, `SERVICENOW_CLIENT_ID`, and `SERVICENOW_CLIENT_SECRET` (leave username/password unset).
+
+Tokens are fetched from the instance's `oauth_token.do` endpoint and cached until shortly before expiry. When both auth methods are configured, basic auth takes precedence.
 
 ## Host configuration examples
 
@@ -122,7 +134,7 @@ node dist/index.js
 }
 ```
 
-## Tools (10)
+## Tools (13)
 
 ### Configuration
 - `configure_servicenow` — Configure ServiceNow instance credentials
@@ -131,11 +143,12 @@ node dist/index.js
 - `list_servicenow_incidents` — List or search incidents
 - `get_servicenow_incident` — Get a single incident by number or sys_id
 - `create_servicenow_incident` — Create a new incident
-- `update_servicenow_incident` — Update an existing incident
+- `update_servicenow_incident` — Update an existing incident (including appending `work_notes` / `comments` journal entries)
 
 ### Change requests
 - `list_servicenow_change_requests` — List or search change requests
 - `get_servicenow_change_request` — Get a single change request by number or sys_id
+- `create_servicenow_change_request` — Create a new change request
 
 ### Users
 - `list_servicenow_users` — List or search users
@@ -143,6 +156,14 @@ node dist/index.js
 ### Knowledge base
 - `search_servicenow_knowledge` — Search knowledge base articles
 - `get_servicenow_knowledge_article` — Get a full knowledge base article
+
+### Service catalog
+- `list_servicenow_catalog_items` — List or search service catalog items
+- `get_servicenow_catalog_item` — Get a single catalog item by sys_id
+
+## Security
+
+All external text returned by ServiceNow (record descriptions, work notes, user names, article bodies, and any custom fields) is wrapped in `<untrusted-content source="servicenow:...">...</untrusted-content>` envelopes with close-tag breakout escaping before it reaches the model, so third-party content is treated as data, not instructions. Identifiers (`sys_id`, `number`), timestamps, and choice-list display values are left literal so they can be copied into follow-up tool calls.
 
 ## Licence
 

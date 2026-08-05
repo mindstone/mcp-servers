@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { servicenowFetch, buildQueryParams } from '../client.js';
+import { sanitizeRecords } from '../sanitize.js';
 import { withErrorHandling } from '../utils.js';
+
+const USER_SOURCE = 'servicenow:user';
 
 export function registerUserTools(server: McpServer): void {
   // ── list_servicenow_users ─────────────────────────────────────
@@ -44,7 +47,11 @@ export function registerUserTools(server: McpServer): void {
       const users = await servicenowFetch<Array<Record<string, unknown>>>(
         `/sys_user${params}`,
       );
-      return JSON.stringify({ ok: true, users, count: users.length });
+      return JSON.stringify({
+        ok: true,
+        users: sanitizeRecords(users, USER_SOURCE),
+        count: users.length,
+      });
     }),
   );
 }

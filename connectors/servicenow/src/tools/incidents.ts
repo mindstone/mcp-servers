@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { servicenowFetch, buildQueryParams } from '../client.js';
+import { sanitizeRecord, sanitizeRecords } from '../sanitize.js';
 import { withErrorHandling } from '../utils.js';
+
+const INCIDENT_SOURCE = 'servicenow:incident';
 
 export function registerIncidentTools(server: McpServer): void {
   // ── list_servicenow_incidents ─────────────────────────────────
@@ -44,7 +47,11 @@ export function registerIncidentTools(server: McpServer): void {
       const incidents = await servicenowFetch<Array<Record<string, unknown>>>(
         `/incident${params}`,
       );
-      return JSON.stringify({ ok: true, incidents, count: incidents.length });
+      return JSON.stringify({
+        ok: true,
+        incidents: sanitizeRecords(incidents, INCIDENT_SOURCE),
+        count: incidents.length,
+      });
     }),
   );
 
@@ -80,13 +87,13 @@ export function registerIncidentTools(server: McpServer): void {
             error: `Incident ${args.identifier} not found.`,
           });
         }
-        return JSON.stringify({ ok: true, incident: results[0] });
+        return JSON.stringify({ ok: true, incident: sanitizeRecord(results[0], INCIDENT_SOURCE) });
       }
       // Treat as sys_id
       const incident = await servicenowFetch<Record<string, unknown>>(
         `/incident/${encodeURIComponent(args.identifier)}?sysparm_display_value=true`,
       );
-      return JSON.stringify({ ok: true, incident });
+      return JSON.stringify({ ok: true, incident: sanitizeRecord(incident, INCIDENT_SOURCE) });
     }),
   );
 
@@ -135,7 +142,11 @@ export function registerIncidentTools(server: McpServer): void {
           body: JSON.stringify(body),
         },
       );
-      return JSON.stringify({ ok: true, message: 'Incident created.', incident });
+      return JSON.stringify({
+        ok: true,
+        message: 'Incident created.',
+        incident: sanitizeRecord(incident, INCIDENT_SOURCE),
+      });
     }),
   );
 
@@ -147,6 +158,8 @@ export function registerIncidentTools(server: McpServer): void {
       description:
         'Update an existing incident in ServiceNow by sys_id. ' +
         'Use get_servicenow_incident to find the sys_id first. ' +
+        'Use work_notes to add an internal note and comments to add a customer-visible comment ' +
+        '(each is appended as a new journal entry). ' +
         'State values: "1" (New), "2" (In Progress), "3" (On Hold), "6" (Resolved), "7" (Closed).',
       inputSchema: z.object({
         sys_id: z
@@ -177,6 +190,14 @@ export function registerIncidentTools(server: McpServer): void {
           .string()
           .optional()
           .describe('Close notes (required when resolving)'),
+        work_notes: z
+          .string()
+          .optional()
+          .describe('Internal work note to append to the incident journal (not visible to the caller)'),
+        comments: z
+          .string()
+          .optional()
+          .describe('Customer-visible comment to append to the incident journal'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
@@ -192,6 +213,8 @@ export function registerIncidentTools(server: McpServer): void {
         'assignment_group',
         'close_code',
         'close_notes',
+        'work_notes',
+        'comments',
       ] as const;
       for (const field of updatableFields) {
         if (args[field] !== undefined) {
@@ -207,7 +230,11 @@ export function registerIncidentTools(server: McpServer): void {
           body: JSON.stringify(body),
         },
       );
-      return JSON.stringify({ ok: true, message: 'Incident updated.', incident });
+      return JSON.stringify({
+        ok: true,
+        message: 'Incident updated.',
+        incident: sanitizeRecord(incident, INCIDENT_SOURCE),
+      });
     }),
   );
 }
