@@ -42,6 +42,28 @@ describe('Mixmax message tools', () => {
     expect(json.hasNext).toBe(false);
   });
 
+  it('list_mixmax_messages envelopes external-text fields', async () => {
+    await setup();
+    const result = await testClient.callTool('list_mixmax_messages', {});
+    const json = result.json as {
+      messages: Array<{
+        subject: string;
+        from: { email: string; name: string };
+        to: Array<{ email: string }>;
+      }>;
+    };
+
+    expect(json.messages[0].subject).toBe(
+      '<untrusted-content source="mixmax:message.subject">Quarterly Update</untrusted-content>',
+    );
+    expect(json.messages[0].from.email).toBe(
+      '<untrusted-content source="mixmax:message.from.email">sender@acme.com</untrusted-content>',
+    );
+    expect(json.messages[0].to[0].email).toBe(
+      '<untrusted-content source="mixmax:message.to.email">alice@acme.com</untrusted-content>',
+    );
+  });
+
   // --- VAL-B1-MIXMAX-003: send operations ---
   it('send_mixmax_email validates input and sends', async () => {
     let capturedPayload: Record<string, unknown> = {};

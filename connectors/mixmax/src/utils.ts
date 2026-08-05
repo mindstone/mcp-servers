@@ -1,5 +1,28 @@
+import { z } from 'zod';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { MixmaxError } from './types.js';
+
+
+/**
+ * Validate a Mixmax API response body against a Zod schema. Throws a
+ * MixmaxError with an actionable resolution instead of leaking a raw ZodError
+ * when the vendor changes a response shape.
+ */
+export function parseApiResponse<S extends z.ZodType>(
+  schema: S,
+  data: unknown,
+  resource: string,
+): z.infer<S> {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    throw new MixmaxError(
+      `Unexpected ${resource} response shape from the Mixmax API`,
+      'INVALID_API_RESPONSE',
+      'The Mixmax API returned data in an unexpected format. Try again, or update the connector if the problem persists.',
+    );
+  }
+  return result.data as z.infer<S>;
+}
 
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
 

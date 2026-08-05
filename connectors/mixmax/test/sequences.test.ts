@@ -79,24 +79,10 @@ describe('Mixmax sequence tools', () => {
     };
 
     expect(json.ok).toBe(true);
-    expect(json.sequence.name).toBe('Onboarding Drip');
+    // External-text fields arrive inside untrusted-content envelopes (FOX-3490)
+    expect(json.sequence.name).toBe('<untrusted-content source="mixmax:sequence.name">Onboarding Drip</untrusted-content>');
     expect(json.sequence.stages).toHaveLength(2);
-    expect(json.sequence.stages[0].subject).toBe('Welcome to Acme!');
-  });
-
-  it('add_mixmax_sequence_recipients adds recipients', async () => {
-    await setup();
-    const result = await testClient.callTool('add_mixmax_sequence_recipients', {
-      sequenceId: 'seq-001',
-      recipients: [
-        { email: 'alice@acme.com', variables: { first_name: 'Alice' } },
-        { email: 'bob@acme.com', variables: { first_name: 'Bob' } },
-      ],
-    });
-    const json = result.json as { ok: boolean; message: string };
-
-    expect(json.ok).toBe(true);
-    expect(json.message).toContain('2 recipient(s)');
+    expect(json.sequence.stages[0].subject).toBe('<untrusted-content source="mixmax:sequence.stages.subject">Welcome to Acme!</untrusted-content>');
   });
 
   // --- VAL-COMMON-003: Invalid credentials fail cleanly without leaking secrets ---

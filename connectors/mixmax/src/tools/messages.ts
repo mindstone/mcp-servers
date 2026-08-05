@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { mixmaxFetch } from '../client.js';
-import { withErrorHandling } from '../utils.js';
+import { withErrorHandling, parseApiResponse } from '../utils.js';
 import { isConfigured } from '../auth.js';
-import type { MessagesResponse } from '../types.js';
+import { messagesResponseSchema } from '../types.js';
+import { sanitizeMessages } from '../sanitize.js';
 
 function noApiTokenError(): string {
   return JSON.stringify({
@@ -22,19 +23,17 @@ export function registerMessageTools(server: McpServer): void {
     'list_mixmax_messages',
     {
       description:
-        `List emails sent through Mixmax with open/click tracking data.
+        `List emails in Mixmax: drafts, scheduled sends, and sent messages.
 
 Returns for each message:
-- _id, subject, recipients (to/cc/bcc)
-- sentAt / scheduledAt: When it was sent or is scheduled
-- opens: Number of times opened, with timestamps
-- clicks: Links clicked, with URLs and timestamps
-- state: "sent", "draft", or "scheduled"
+- _id, subject, from, and to/cc/bcc recipients
+- sent / scheduled: epoch-ms timestamps. A message with "scheduled" but no "sent" is scheduled to send — cancel it with cancel_mixmax_message.
+- trackingEnabled / linkTrackingEnabled flags
 
 USE CASES:
 - "Show my recent emails" — call with no params
-- "Did they open my email?" — find the message, check opens count/timestamps
-- "What emails are scheduled?" — look for state: "scheduled"
+- "What emails are scheduled?" — look for messages with a "scheduled" timestamp
+- Open/click/reply aggregates per message, template, or sequence — use get_mixmax_report
 
 PAGINATION: Cursor-based. If hasNext is true, pass the "next" value as the next parameter.`,
       inputSchema: z.object({
@@ -49,12 +48,16 @@ PAGINATION: Cursor-based. If hasNext is true, pass the "next" value as the next 
       let path = `/messages?limit=${args.limit}`;
       if (args.next) path += `&next=${encodeURIComponent(args.next)}`;
 
-      const data = await mixmaxFetch<MessagesResponse>(path);
+      const data = parseApiResponse(
+        messagesResponseSchema,
+        await mixmaxFetch<unknown>(path),
+        'messages list',
+      );
 
       return JSON.stringify({
         ok: true,
-        messages: data.results || [],
-        count: (data.results || []).length,
+        messages: sanitizeMessages(data.results),
+        count: data.results.length,
         hasNext: data.hasNext ?? false,
         ...(data.next ? { next: data.next } : {}),
       });
@@ -65,15 +68,13 @@ PAGINATION: Cursor-based. If hasNext is true, pass the "next" value as the next 
     'send_mixmax_email',
     {
       description:
-        `Send an email via Mixmax through the user's connected Gmail account. Open and click tracking is enabled automatically.
+        `Send an email via Mixmax through the user's connected Gmail account.
 
 IMPORTANT: Confirm with the user before sending — this sends a real email immediately.
 
 BODY FORMAT: HTML is supported. Use <p>, <br>, <b>, <ul>, etc. for formatting. Plain text also works.
 
-TRACKING: Mixmax automatically tracks opens and clicks. The user can check tracking data later via list_mixmax_messages.
-
-NOTE: This sends through Mixmax, not raw Gmail. The email will appear in the user's Gmail sent folder with Mixmax tracking pixels.`,
+NOTE: This sends through Mixmax, not raw Gmail. The email will appear in the user's Gmail sent folder. To schedule a send for later, use send_mixmax_snippet with the scheduledAt parameter instead (the /send API sends immediately).`,
       inputSchema: z.object({
         to: z.array(z.string().email()).min(1).describe('Recipient email addresses'),
         subject: z.string().min(1).describe('Email subject line'),
@@ -106,4 +107,5 @@ NOTE: This sends through Mixmax, not raw Gmail. The email will appear in the use
       });
     }),
   );
+
 }

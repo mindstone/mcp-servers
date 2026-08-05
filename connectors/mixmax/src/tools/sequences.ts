@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { mixmaxFetch } from '../client.js';
-import { withErrorHandling } from '../utils.js';
+import { withErrorHandling, parseApiResponse } from '../utils.js';
 import { isConfigured } from '../auth.js';
-import type { SequencesResponse } from '../types.js';
+import { sequencesResponseSchema, sequenceDetailSchema } from '../types.js';
+import { sanitizeSequences, sanitizeSequence } from '../sanitize.js';
 
 function noApiTokenError(): string {
   return JSON.stringify({
@@ -25,11 +26,10 @@ export function registerSequenceTools(server: McpServer): void {
         `List Mixmax sequences (automated email drip campaigns).
 
 Returns for each sequence:
-- _id: Use with get_mixmax_sequence for full details or add_mixmax_sequence_recipients to enroll people
-- name: Sequence name
-- numStages: Number of email stages in the drip
-- isPaused: Whether the sequence is currently active
-- numRecipients / numFinished / numBounced: Recipient stats
+- _id: Use with get_mixmax_sequence, add_mixmax_sequence_recipients, or remove_mixmax_sequence_recipients
+- name, createdAt, timezone, variables
+
+For per-sequence performance stats (sent / opened / clicked / replied / bounced), use get_mixmax_report with type "sequences".
 
 TYPICAL WORKFLOW:
 1. list_mixmax_sequences to find the sequence
@@ -49,12 +49,16 @@ PAGINATION: Cursor-based. If hasNext is true, pass the "next" value as the next 
       let path = `/sequences?limit=${args.limit}`;
       if (args.next) path += `&next=${encodeURIComponent(args.next)}`;
 
-      const data = await mixmaxFetch<SequencesResponse>(path);
+      const data = parseApiResponse(
+        sequencesResponseSchema,
+        await mixmaxFetch<unknown>(path),
+        'sequences list',
+      );
 
       return JSON.stringify({
         ok: true,
-        sequences: data.results || [],
-        count: (data.results || []).length,
+        sequences: sanitizeSequences(data.results),
+        count: data.results.length,
         hasNext: data.hasNext ?? false,
         ...(data.next ? { next: data.next } : {}),
       });
@@ -68,10 +72,8 @@ PAGINATION: Cursor-based. If hasNext is true, pass the "next" value as the next 
         `Get full details for a single Mixmax sequence including all stages.
 
 Returns:
-- name, isPaused, createdAt
-- stages: Array of email steps, each with subject line, body content, delay settings, and send window
-- Recipient statistics (total, finished, bounced, paused)
-- Scheduling rules (send window, timezone, skip weekends)
+- _id, name, variables
+- stages: Array of email steps, each with subject, HTML body, type, and scheduleBetween send-window settings
 
 USE list_mixmax_sequences FIRST to find the _id.`,
       inputSchema: z.object({
@@ -82,11 +84,15 @@ USE list_mixmax_sequences FIRST to find the _id.`,
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiTokenError();
 
-      const data = await mixmaxFetch<Record<string, unknown>>(
-        `/sequences/${encodeURIComponent(args.sequenceId)}?expand=stages`,
+      const data = parseApiResponse(
+        sequenceDetailSchema,
+        await mixmaxFetch<unknown>(
+          `/sequences/${encodeURIComponent(args.sequenceId)}?expand=stages`,
+        ),
+        'sequence detail',
       );
 
-      return JSON.stringify({ ok: true, sequence: data });
+      return JSON.stringify({ ok: true, sequence: sanitizeSequence(data) });
     }),
   );
 
@@ -96,7 +102,7 @@ USE list_mixmax_sequences FIRST to find the _id.`,
       description:
         `Add recipients to a Mixmax sequence, enrolling them in the automated email drip campaign.
 
-IMPORTANT: Confirm with the user before calling — this adds real people to a live sequence and they WILL receive emails starting from stage 1.
+IMPORTANT: Confirm with the user before calling — this adds real people to a live sequence and they WILL receive emails starting from stage 1 (unless scheduledAt is used to delay activation).
 
 WORKFLOW:
 1. list_mixmax_sequences to find the sequence _id
@@ -134,4 +140,5 @@ TEMPLATE VARIABLES: If the sequence stages use variables like {{first_name}}, pa
       });
     }),
   );
+
 }

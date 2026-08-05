@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { mixmaxFetch } from '../client.js';
-import { withErrorHandling } from '../utils.js';
+import { withErrorHandling, parseApiResponse } from '../utils.js';
 import { isConfigured } from '../auth.js';
-import type { SnippetsResponse } from '../types.js';
+import { snippetsResponseSchema } from '../types.js';
+import { sanitizeSnippets } from '../sanitize.js';
 
 function noApiTokenError(): string {
   return JSON.stringify({
@@ -26,15 +27,14 @@ export function registerSnippetTools(server: McpServer): void {
 
 Returns for each snippet:
 - _id: Use with send_mixmax_snippet to send it
-- name: Template name
-- subject: Email subject line the template uses
-- body: HTML body content (check for template variables like {{first_name}})
-- isShared: Whether it's shared with the team or personal
+- name / title: Template name and title
+- isInline, source, createdAt
+
+NOTE: The list API does not return snippet bodies — review template content in Mixmax, or send a test to yourself first.
 
 WORKFLOW FOR SENDING A TEMPLATE:
 1. list_mixmax_snippets to browse available templates
-2. Review the body for template variables (e.g. {{first_name}}, {{company}})
-3. send_mixmax_snippet with the _id, recipients, and matching variables
+2. send_mixmax_snippet with the _id, recipients, and matching variables
 
 PAGINATION: Cursor-based. If hasNext is true, pass the "next" value as the next parameter.`,
       inputSchema: z.object({
@@ -49,12 +49,16 @@ PAGINATION: Cursor-based. If hasNext is true, pass the "next" value as the next 
       let path = `/snippets?limit=${args.limit}`;
       if (args.next) path += `&next=${encodeURIComponent(args.next)}`;
 
-      const data = await mixmaxFetch<SnippetsResponse>(path);
+      const data = parseApiResponse(
+        snippetsResponseSchema,
+        await mixmaxFetch<unknown>(path),
+        'snippets list',
+      );
 
       return JSON.stringify({
         ok: true,
-        snippets: data.results || [],
-        count: (data.results || []).length,
+        snippets: sanitizeSnippets(data.results),
+        count: data.results.length,
         hasNext: data.hasNext ?? false,
         ...(data.next ? { next: data.next } : {}),
       });
@@ -67,7 +71,7 @@ PAGINATION: Cursor-based. If hasNext is true, pass the "next" value as the next 
       description:
         `Send a Mixmax template (snippet) to one or more recipients.
 
-IMPORTANT: Confirm with the user before sending — this sends a real email using the template content.
+IMPORTANT: Confirm with the user before sending — this sends (or schedules) a real email using the template content.
 
 WORKFLOW:
 1. list_mixmax_snippets to find the template and its _id
@@ -75,7 +79,7 @@ WORKFLOW:
 3. Confirm recipients and variable values with user
 4. Call this tool with matching variables
 
-NOTE: Variables are applied to ALL recipients equally. If you need different variables per recipient, send one at a time.`,
+NOTE: Variables are applied to ALL recipients equally. If you need different variables per recipient, send one at a time. Sending fails with an error if the template has variables that are left unresolved.`,
       inputSchema: z.object({
         snippetId: z.string().min(1).describe('The _id of the snippet/template (from list_mixmax_snippets)'),
         to: z.array(z.string().email()).min(1).describe('Recipient email addresses'),

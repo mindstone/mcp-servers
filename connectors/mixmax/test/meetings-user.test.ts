@@ -28,15 +28,17 @@ describe('Mixmax meeting types and user tools', () => {
     const result = await testClient.callTool('list_mixmax_meeting_types', {});
     const json = result.json as {
       ok: boolean;
-      meetingTypes: Array<{ name: string; duration: number }>;
+      meetingTypes: Array<{ name: string; durationMin: number }>;
       count: number;
     };
 
     expect(json.ok).toBe(true);
     expect(json.meetingTypes).toHaveLength(2);
     expect(json.count).toBe(2);
-    expect(json.meetingTypes[0].name).toBe('30 min intro call');
-    expect(json.meetingTypes[0].duration).toBe(30);
+    expect(json.meetingTypes[0].name).toBe(
+      '<untrusted-content source="mixmax:meetingtype.name">30 min intro call</untrusted-content>',
+    );
+    expect(json.meetingTypes[0].durationMin).toBe(30);
   });
 
   it('get_mixmax_user returns user profile', async () => {
@@ -48,8 +50,12 @@ describe('Mixmax meeting types and user tools', () => {
     };
 
     expect(json.ok).toBe(true);
-    expect(json.user.name).toBe('Test User');
-    expect(json.user.email).toBe('testuser@acme.com');
+    expect(json.user.name).toBe(
+      '<untrusted-content source="mixmax:user.name">Test User</untrusted-content>',
+    );
+    expect(json.user.email).toBe(
+      '<untrusted-content source="mixmax:user.email">testuser@acme.com</untrusted-content>',
+    );
     expect(json.user.plan).toBe('Growth');
   });
 

@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export const REQUEST_TIMEOUT_MS = 30_000;
 export const MIXMAX_API_BASE = 'https://api.mixmax.com/v1';
 
@@ -17,62 +19,125 @@ export class MixmaxError extends Error {
   }
 }
 
-export interface SequenceItem {
-  _id: string;
-  name: string;
-  numStages?: number;
-  isPaused?: boolean;
-  numRecipients?: number;
-  numFinished?: number;
-  numBounced?: number;
-  createdAt?: string;
-}
+/**
+ * Response schemas. Mixmax responses are validated at the boundary per repo
+ * convention; schemas are `.passthrough()` so new vendor fields flow through
+ * instead of breaking the connector.
+ */
 
-export interface SequencesResponse {
-  results: SequenceItem[];
-  hasNext?: boolean;
-  next?: string;
-}
+const addressSchema = z
+  .object({
+    email: z.string().optional(),
+    name: z.string().optional(),
+  })
+  .passthrough();
 
-export interface MessagesResponse {
-  results: MessageItem[];
-  hasNext?: boolean;
-  next?: string;
-}
+export const messageItemSchema = z
+  .object({
+    _id: z.string(),
+    subject: z.string().optional(),
+    body: z.string().optional(),
+    from: addressSchema.optional(),
+    to: z.array(addressSchema).optional(),
+    cc: z.array(addressSchema).optional(),
+    bcc: z.array(addressSchema).optional(),
+    sent: z.number().optional(),
+    scheduled: z.number().optional(),
+  })
+  .passthrough();
+export type MessageItem = z.infer<typeof messageItemSchema>;
 
-export interface MessageItem {
-  _id: string;
-  subject?: string;
-  recipients?: {
-    to?: Array<{ email: string }>;
-    cc?: Array<{ email: string }>;
-    bcc?: Array<{ email: string }>;
-  };
-  sentAt?: string;
-  scheduledAt?: string;
-  opens?: number;
-  clicks?: number;
-  state?: string;
-}
+export const messagesResponseSchema = z
+  .object({
+    results: z.array(messageItemSchema).default([]),
+    hasNext: z.boolean().optional(),
+    next: z.string().optional(),
+  })
+  .passthrough();
+export type MessagesResponse = z.infer<typeof messagesResponseSchema>;
 
-export interface SnippetsResponse {
-  results: SnippetItem[];
-  hasNext?: boolean;
-  next?: string;
-}
+export const sequenceItemSchema = z
+  .object({
+    _id: z.string(),
+    name: z.string().optional(),
+    isPaused: z.boolean().optional(),
+    createdAt: z.string().optional(),
+  })
+  .passthrough();
+export type SequenceItem = z.infer<typeof sequenceItemSchema>;
 
-export interface SnippetItem {
-  _id: string;
-  name?: string;
-  subject?: string;
-  body?: string;
-  isShared?: boolean;
-}
+export const sequencesResponseSchema = z
+  .object({
+    results: z.array(sequenceItemSchema).default([]),
+    hasNext: z.boolean().optional(),
+    next: z.string().optional(),
+  })
+  .passthrough();
+export type SequencesResponse = z.infer<typeof sequencesResponseSchema>;
 
-export interface MeetingType {
-  name?: string;
-  duration?: number;
-  location?: string;
-  slug?: string;
-  link?: string;
-}
+export const sequenceStageSchema = z
+  .object({
+    _id: z.string().optional(),
+    subject: z.string().optional(),
+    body: z.string().optional(),
+    type: z.string().optional(),
+  })
+  .passthrough();
+
+export const sequenceDetailSchema = z
+  .object({
+    _id: z.string(),
+    name: z.string().optional(),
+    stages: z.array(sequenceStageSchema).optional(),
+  })
+  .passthrough();
+export type SequenceDetail = z.infer<typeof sequenceDetailSchema>;
+
+export const snippetItemSchema = z
+  .object({
+    _id: z.string(),
+    name: z.string().optional(),
+    title: z.string().optional(),
+    subject: z.string().optional(),
+    body: z.string().optional(),
+  })
+  .passthrough();
+export type SnippetItem = z.infer<typeof snippetItemSchema>;
+
+export const snippetsResponseSchema = z
+  .object({
+    results: z.array(snippetItemSchema).default([]),
+    hasNext: z.boolean().optional(),
+    next: z.string().optional(),
+  })
+  .passthrough();
+export type SnippetsResponse = z.infer<typeof snippetsResponseSchema>;
+
+export const meetingTypeSchema = z
+  .object({
+    _id: z.string().optional(),
+    name: z.string().optional(),
+    durationMin: z.number().optional(),
+    link: z.string().optional(),
+  })
+  .passthrough();
+export type MeetingType = z.infer<typeof meetingTypeSchema>;
+
+/**
+ * GET /meetingtypes returns `{ results: [...] }`; tolerate a bare array too
+ * (the connector previously passed `data.results || data` through raw).
+ */
+export const meetingTypesResponseSchema = z.union([
+  z.object({ results: z.array(meetingTypeSchema).default([]) }).passthrough(),
+  z.array(meetingTypeSchema),
+]);
+
+export const userSchema = z
+  .object({
+    _id: z.string().optional(),
+    name: z.string().optional(),
+    email: z.string().optional(),
+  })
+  .passthrough();
+export type MixmaxUser = z.infer<typeof userSchema>;
+
