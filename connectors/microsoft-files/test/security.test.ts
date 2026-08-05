@@ -480,3 +480,113 @@ describe('read_document download byte cap', () => {
     expect(json.error).toContain('exceeds the maximum size');
   });
 });
+
+describe('list pagination', () => {
+  let client: McpTestClient;
+  let cfg: MicrosoftTestConfig;
+  let state: MockApiState;
+
+  const escapedBase = GRAPH_BASE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const permissionsRx = new RegExp(`${escapedBase}/me/drive/items/[^/]+/permissions(\\?.*)?$`);
+
+  beforeAll(async () => {
+    cfg = createMicrosoftConfigDir();
+    client = await createTestClient({
+      env: {
+        MS_CLIENT_ID: 'mock-client-id',
+        MS_CONFIG_DIR: cfg.configPath,
+      },
+    });
+  });
+
+  beforeEach(() => {
+    const mock = createMockApi();
+    state = mock.state;
+    mswServer.use(...mock.handlers);
+  });
+
+  afterAll(async () => {
+    if (client) await client.close();
+    if (cfg) cfg.cleanup();
+  });
+
+  function permission(id: string) {
+    return { id, roles: ['read'] };
+  }
+
+  it('follows @odata.nextLink and merges all pages', async () => {
+    let pagesServed = 0;
+    mswServer.use(
+      http.get(permissionsRx, ({ request }) => {
+        pagesServed += 1;
+        const url = new URL(request.url);
+        if (!url.searchParams.has('$skiptoken')) {
+          return HttpResponse.json({
+            value: [permission('perm-p1')],
+            '@odata.nextLink': `${GRAPH_BASE}/me/drive/items/item-1/permissions?$skiptoken=p2`,
+          });
+        }
+        return HttpResponse.json({ value: [permission('perm-p2')] });
+      }),
+    );
+    const result = await client.callTool('list_file_permissions', { path: 'item-1' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      count: number;
+      truncated: boolean;
+      permissions: Array<{ id: string }>;
+    };
+    expect(json.count).toBe(2);
+    expect(json.truncated).toBe(false);
+    expect(json.permissions.map((p) => p.id)).toEqual(['perm-p1', 'perm-p2']);
+    expect(pagesServed).toBe(2);
+  });
+
+  it('stops at the page cap and flags truncation instead of looping forever', async () => {
+    let pagesServed = 0;
+    mswServer.use(
+      http.get(permissionsRx, ({ request }) => {
+        pagesServed += 1;
+        const url = new URL(request.url);
+        const page = Number(url.searchParams.get('$skiptoken') ?? '0');
+        return HttpResponse.json({
+          value: [permission(`perm-${page}`)],
+          '@odata.nextLink': `${GRAPH_BASE}/me/drive/items/item-1/permissions?$skiptoken=${page + 1}`,
+        });
+      }),
+    );
+    const result = await client.callTool('list_file_permissions', { path: 'item-1' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { count: number; truncated: boolean };
+    expect(json.count).toBe(10);
+    expect(json.truncated).toBe(true);
+    expect(pagesServed).toBe(10);
+  });
+
+  it('refuses a nextLink pointing off the Graph host (token must not leak)', async () => {
+    mswServer.use(
+      http.get(permissionsRx, () =>
+        HttpResponse.json({
+          value: [permission('perm-p1')],
+          '@odata.nextLink': 'https://evil.example.com/collect?token=here',
+        }),
+      ),
+    );
+    const result = await client.callTool('list_file_permissions', { path: 'item-1' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { count: number; truncated: boolean };
+    expect(json.count).toBe(1);
+    expect(json.truncated).toBe(true);
+    expect(
+      state.requests.some((r) => r.url.startsWith('https://evil.example.com/')),
+    ).toBe(false);
+  });
+
+  it('single-page responses report truncated: false', async () => {
+    const result = await client.callTool('list_file_versions', { path: 'item-1' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { count: number; truncated: boolean };
+    expect(json.count).toBe(2);
+    expect(json.truncated).toBe(false);
+  });
+});

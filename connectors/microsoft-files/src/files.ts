@@ -125,7 +125,10 @@ const GraphPermissionSchema = z
   .passthrough();
 
 const GraphPermissionListSchema = z
-  .object({ value: z.array(GraphPermissionSchema) })
+  .object({
+    value: z.array(GraphPermissionSchema),
+    '@odata.nextLink': z.string().optional(),
+  })
   .passthrough();
 
 const GraphDriveItemVersionSchema = z
@@ -141,7 +144,10 @@ const GraphDriveItemVersionSchema = z
   .passthrough();
 
 const GraphDriveItemVersionListSchema = z
-  .object({ value: z.array(GraphDriveItemVersionSchema) })
+  .object({
+    value: z.array(GraphDriveItemVersionSchema),
+    '@odata.nextLink': z.string().optional(),
+  })
   .passthrough();
 
 const GraphItemActivitySchema = z
@@ -168,7 +174,10 @@ const GraphItemActivitySchema = z
   .passthrough();
 
 const GraphItemActivityListSchema = z
-  .object({ value: z.array(GraphItemActivitySchema) })
+  .object({
+    value: z.array(GraphItemActivitySchema),
+    '@odata.nextLink': z.string().optional(),
+  })
   .passthrough();
 
 const GraphUploadedItemSchema = z
@@ -829,6 +838,63 @@ export async function readTextFile(
 // Permission management (invite / list / revoke)
 // ---------------------------------------------------------------------------
 
+// Graph collection endpoints page their results via @odata.nextLink. Follow
+// the chain so results are not silently truncated, but bound the page count
+// so a huge or hostile collection cannot pin the connector in a fetch loop;
+// the caller surfaces `truncated: true` when the bound is hit.
+const MAX_LIST_PAGES = 10;
+
+// nextLink is an absolute URL supplied by the upstream and the SDK attaches
+// the bearer token to whatever it fetches, so only ever follow links back to
+// the Graph host itself. A link anywhere else is treated as the end of the
+// collection (results so far are still returned, flagged truncated).
+function isGraphHostUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' && parsed.hostname === 'graph.microsoft.com';
+  } catch {
+    return false;
+  }
+}
+
+interface PagedValues<S extends { value: unknown[] }> {
+  value: S['value'];
+  truncated: boolean;
+}
+
+async function collectPagedValues<S extends { value: unknown[]; '@odata.nextLink'?: string }>(
+  client: Client,
+  endpoint: string,
+  schema: z.ZodType<S>,
+  signal: AbortSignal,
+): Promise<PagedValues<S>> {
+  const all: unknown[] = [];
+  let next: string | undefined = endpoint;
+  let pages = 0;
+  let truncated = false;
+  while (next) {
+    if (pages >= MAX_LIST_PAGES) {
+      truncated = true;
+      break;
+    }
+    const parsed: S = schema.parse(await client.api(next).options({ signal }).get());
+    all.push(...parsed.value);
+    pages += 1;
+    const nextLink: string | undefined = parsed['@odata.nextLink'];
+    if (nextLink === undefined) {
+      next = undefined;
+    } else if (isGraphHostUrl(nextLink)) {
+      next = nextLink;
+    } else {
+      // Hostile or malformed continuation link: stop, keep the valid pages,
+      // and flag the truncation instead of fetching an arbitrary URL.
+      next = undefined;
+      truncated = true;
+    }
+  }
+  return { value: all as S['value'], truncated };
+}
+
 export async function inviteToFile(
   client: Client,
   args: InviteToFileArgs,
@@ -863,13 +929,17 @@ export async function listFilePermissions(
   signal: AbortSignal,
 ): Promise<unknown> {
   const endpoint = buildDriveItemEndpoint(args.path, '/permissions');
-  const response = await client.api(endpoint).options({ signal }).get();
-
-  const parsed = GraphPermissionListSchema.parse(response);
+  const { value, truncated } = await collectPagedValues(
+    client,
+    endpoint,
+    GraphPermissionListSchema,
+    signal,
+  );
 
   return {
-    count: parsed.value.length,
-    permissions: parsed.value.map((permission) =>
+    count: value.length,
+    truncated,
+    permissions: value.map((permission) =>
       formatPermission(permission, 'list_file_permissions'),
     ),
   };
@@ -903,13 +973,17 @@ export async function listFileVersions(
   signal: AbortSignal,
 ): Promise<unknown> {
   const endpoint = buildDriveItemEndpoint(args.path, '/versions');
-  const response = await client.api(endpoint).options({ signal }).get();
-
-  const parsed = GraphDriveItemVersionListSchema.parse(response);
+  const { value, truncated } = await collectPagedValues(
+    client,
+    endpoint,
+    GraphDriveItemVersionListSchema,
+    signal,
+  );
 
   return {
-    count: parsed.value.length,
-    versions: parsed.value.map((version) => ({
+    count: value.length,
+    truncated,
+    versions: value.map((version) => ({
       // Structural, NOT enveloped: version.id round-trips verbatim as the
       // versionId argument of restore_file_version.
       id: version.id,
@@ -956,13 +1030,17 @@ export async function listFileActivities(
   const endpoint = args.path
     ? buildDriveItemEndpoint(args.path, '/activities')
     : '/me/drive/activities';
-  const response = await client.api(endpoint).options({ signal }).get();
-
-  const parsed = GraphItemActivityListSchema.parse(response);
+  const { value, truncated } = await collectPagedValues(
+    client,
+    endpoint,
+    GraphItemActivityListSchema,
+    signal,
+  );
 
   return {
-    count: parsed.value.length,
-    activities: parsed.value.map((activity) =>
+    count: value.length,
+    truncated,
+    activities: value.map((activity) =>
       formatActivity(activity, 'list_file_activities'),
     ),
   };
