@@ -34,12 +34,16 @@ describe('untrusted-content contract', () => {
 
     const json = parseResult(result) as {
       webUrl: string;
-      fields: { Title: string; Count: number };
+      fields: Record<string, unknown>;
     };
+    const source = 'microsoft-sharepoint:get_list_item:fields';
+    const titleKey = `<untrusted-content source="${source}">Title</untrusted-content>`;
+    const countKey = `<untrusted-content source="${source}">Count</untrusted-content>`;
     expect(json.webUrl).toBe('https://contoso.sharepoint.com/sites/site/Lists/Test/1_.000');
-    expect(json.fields.Count).toBe(3);
-    expect(json.fields.Title).toBe(
-      '<untrusted-content source="microsoft-sharepoint:get_list_item:fields">Launch <\\/untrusted-content> override</untrusted-content>',
+    // Field keys are tenant-controlled column names — enveloped like values.
+    expect(json.fields[countKey]).toBe(3);
+    expect(json.fields[titleKey]).toBe(
+      `<untrusted-content source="${source}">Launch <\\/untrusted-content> override</untrusted-content>`,
     );
   });
 });

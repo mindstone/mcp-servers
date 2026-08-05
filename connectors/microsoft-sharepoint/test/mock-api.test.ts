@@ -352,8 +352,10 @@ describe('microsoft-sharepoint mock-API integration', () => {
       itemId: 'item-1',
     });
     expect(getResult.isError).not.toBe(true);
-    const getJson = getResult.json as { fields: { Department: string } };
-    expect(getJson.fields.Department).toContain('Marketing');
+    const getJson = getResult.json as { fields: Record<string, unknown> };
+    // Field keys are tenant-controlled column names, so they are enveloped too.
+    const departmentKey = '<untrusted-content source="microsoft-sharepoint:get_file_metadata:fields">Department</untrusted-content>';
+    expect(String(getJson.fields[departmentKey])).toContain('Marketing');
 
     const updateResult = await client.callTool('update_file_metadata', {
       driveId: 'drive-1',
@@ -361,8 +363,9 @@ describe('microsoft-sharepoint mock-API integration', () => {
       fields: { Status: 'Updated' },
     });
     expect(updateResult.isError).not.toBe(true);
-    const updateJson = updateResult.json as { updatedFields: { Status: string } };
-    expect(updateJson.updatedFields.Status).toContain('Updated');
+    const updateJson = updateResult.json as { updatedFields: Record<string, unknown> };
+    const statusKey = '<untrusted-content source="microsoft-sharepoint:update_file_metadata:updatedFields">Status</untrusted-content>';
+    expect(String(updateJson.updatedFields[statusKey])).toContain('Updated');
   });
 
   it('get_site_by_path and get_sites_delta return site discovery payloads', async () => {
@@ -397,13 +400,17 @@ describe('microsoft-sharepoint mock-API integration', () => {
     const json = result.json as {
       ok?: unknown;
       count: number;
+      truncated: boolean;
       columns: Array<{ name?: string; displayName?: string; type: string; required: boolean }>;
     };
     expect(json.ok).toBeUndefined();
     expect(json.count).toBe(2);
+    expect(json.truncated).toBe(false);
     expect(json.columns[0]?.type).toBe('text');
     expect(json.columns[1]?.type).toBe('choice');
     expect(json.columns[1]?.required).toBe(true);
+    // Both the internal column name and the display name are tenant-controlled.
+    expect(json.columns[0]?.name).toContain('<untrusted-content');
     expect(json.columns[1]?.displayName).toContain('<untrusted-content');
   });
 
@@ -485,13 +492,30 @@ describe('microsoft-sharepoint mock-API integration', () => {
     const json = result.json as {
       ok?: unknown;
       count: number;
-      permissions: Array<{ id: string; roles: string[]; grantedTo: Array<{ displayName?: string; email?: string }> }>;
+      truncated: boolean;
+      permissions: Array<{
+        id: string;
+        roles: Array<string | undefined>;
+        shareId?: string;
+        link?: { type?: string; scope?: string; webUrl?: string };
+        grantedTo: Array<{ displayName?: string; email?: string }>;
+      }>;
     };
     expect(json.ok).toBeUndefined();
     expect(json.count).toBe(1);
+    expect(json.truncated).toBe(false);
     expect(json.permissions[0]?.id).toBe('perm-1');
     expect(json.permissions[0]?.grantedTo[0]?.displayName).toContain('<untrusted-content');
     expect(json.permissions[0]?.grantedTo[0]?.displayName).toContain('Alice Example');
+    // Every Graph-controlled string field is enveloped, not just displayName.
+    expect(json.permissions[0]?.roles[0]).toContain('<untrusted-content');
+    expect(json.permissions[0]?.roles[0]).toContain('read');
+    expect(json.permissions[0]?.shareId).toContain('<untrusted-content');
+    expect(json.permissions[0]?.link?.type).toContain('<untrusted-content');
+    expect(json.permissions[0]?.link?.scope).toContain('<untrusted-content');
+    expect(json.permissions[0]?.link?.webUrl).toContain('<untrusted-content');
+    expect(json.permissions[0]?.grantedTo[0]?.email).toContain('<untrusted-content');
+    expect(json.permissions[0]?.grantedTo[0]?.email).toContain('alice@example.com');
   });
 
   it('invite_item_collaborators POSTs to /invite with safe defaults', async () => {

@@ -17,6 +17,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Changed
 
 - `get_recent_files`: tool description and response now state explicitly that results come from the user's personal OneDrive (`/me/drive/recent`), not from SharePoint site document libraries, removing a scope-confusion trap in a SharePoint-branded connector.
+- `list_list_columns`, `list_file_versions`, and `list_item_permissions` now follow Graph `@odata.nextLink` continuations (each hop validated as a vendor HTTPS host, capped at 1000 items) and return a `truncated` flag — plus a `note` when capped — so a first page is never silently mistaken for the complete collection.
+- List-item and file-metadata `fields` object keys (tenant-controlled column names) are now enveloped in <untrusted-content> alongside their values, matching the canonical shared envelope helper.
+
+### Security
+
+- `upload_library_file_binary`: validate the Graph-issued `uploadUrl` before streaming bytes to it — HTTPS only, no embedded credentials, no IP-literal hosts, and only allow-listed Microsoft Graph/SharePoint hosts (SSRF guard). Redirects are never auto-followed; an unexpected 3xx fails closed. Upload-session error bodies are no longer embedded in tool errors (fixed diagnostic plus HTTP status only), keeping attacker-controlled text out of model-visible output.
+- `get_sites_delta`: a caller-supplied `deltaLink` is now validated against the same vendor-host policy before it is fetched with the user's auth header.
+- Vendor error text surfaced through tool error responses (Graph `error.message` bodies) is now enveloped in <untrusted-content> so the model treats it as data, not instructions.
+- Enveloped additional tenant-controlled response fields in <untrusted-content>: permission `roles`/`shareId`/`link`/`email`, list column internal `name`, site-page `publishingState`/`pageLayout`, and list `template`.
+- Re-synced the vendored untrusted-content envelope helper with the canonical shared copy (whitespace-tolerant close-tag defanging, key enveloping, unwrap helpers).
 
 ## [0.1.2] - 2026-07-03
 
