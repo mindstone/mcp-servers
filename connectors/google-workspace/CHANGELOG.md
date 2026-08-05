@@ -19,6 +19,14 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 - An expired or revoked Google sign-in now reliably prompts a reconnect across every module. Previously, a first-request-of-the-session auth failure in Gmail or Contacts, and any auth failure in Tasks, Forms, Docs, Slides, Comments, or Sheets, collapsed to a plain error string: the shared service layer mangled the internal "needs to reconnect" code (`HTTP_AUTH_REQUIRED`), `validateScopes` reported an invalid grant as a generic scope problem, and the result-envelope services (`{ success: false }`) flattened the error to text. Auth-handoff errors (`AUTH_REQUIRED`, `TEMPORARY_AUTH_ERROR`) now pass through the service layer unchanged, so the host's reconnect prompt (or a "try again in a moment" for a transient refresh blip) shows instead of an opaque failure.
 - `server.json` now declares every environment variable the connector reads: `GOOGLE_WORKSPACE_DISABLE_REFRESH` and `MCP_WORKSPACE_PATH` (previously undocumented despite being load-bearing for token refresh and attachment-path containment), plus the legacy `WORKSPACE_BASE_PATH` and `GAUTH_FILE` fallbacks, marked as deprecated in favour of their modern counterparts.
+- `update_workspace_vacation_responder` no longer erases a pending scheduled end when you change something else: an omitted `end_time` now preserves the existing end, and removing one requires the explicit new `clear_end_time` parameter. An end already in the past is still not carried into a re-enable (Gmail requires start before end, and an expired end is meaningless).
+- `update_workspace_vacation_responder` keeps an existing HTML auto-reply body as HTML when you don't pass a new body, instead of flattening the markup into the plain-text body.
+- `update_workspace_vacation_responder` now rejects numeric Unix-seconds timestamps (e.g. `1786464000`), matching the existing rejection of digit-only strings — both must be epoch milliseconds in the unambiguous window `[1e12, 1e14)`. Previously a numeric seconds value was accepted and silently became a 1970-adjacent time.
+- Tighter input validation on the new write tools: `update_workspace_contact` requires `resource_name` in the documented `people/<id>` form, contact `email_address` must look like an email address, `phone_number` must contain a digit, Chat space names must be exactly `spaces/<id>`, and Chat message text is capped at the API's 4096-character limit.
+
+### Security
+
+- Path-based Gmail attachment reads no longer have a check-then-use race window: after the workspace-containment check the file is opened once (with `O_NOFOLLOW` where supported) and read through the same file descriptor, so a path swapped for an out-of-workspace symlink between check and read is refused.
 
 ## [0.2.0] - 2026-07-29
 

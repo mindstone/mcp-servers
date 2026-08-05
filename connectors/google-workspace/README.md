@@ -189,6 +189,10 @@ Known Drive API limitations for shared-drive files (not fixable in this connecto
 - Files native to a shared drive have no `owners[]` — ownership belongs to the drive itself. Use `lastModifyingUser` and `createdTime` as proxies when attributing files.
 - The Revisions API does not support shared-drive files, so `list_file_revisions` / `download_file_revision` only work for My Drive files.
 
+### Vacation responder
+
+`update_workspace_vacation_responder` merges with the existing settings (the Gmail API otherwise replaces the whole resource): omitted subject/body are kept, an existing HTML body stays HTML, and a pending scheduled end is preserved when `end_time` is omitted. To remove a scheduled end and make the auto-reply open-ended, pass `clear_end_time: true` (mutually exclusive with `end_time`). An already-past end is never carried into a re-enable.
+
 ## Security notes
 
 - Token and account writes use temp-file plus rename, restrictive permissions, fsync, and symlink rejection.
