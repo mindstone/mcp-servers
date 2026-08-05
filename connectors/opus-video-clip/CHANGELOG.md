@@ -10,6 +10,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ### Added
 - `MCP_WORKSPACE_PATH` declared in `server.json` (optional).
 
+### Changed
+- `opus_upload_video` now accepts the same typed preference schemas as
+  `opus_create_project` (`curationPref`, `renderPref`, `importPref`,
+  `uploadedVideoAttr`, `conclusionActions`) instead of untyped
+  `z.record(z.unknown())` passthroughs.
+
 ### Security
 - `opus_upload_video` previously accepted ANY absolute filesystem path and
   uploaded it to Opus/GCS. Reads are now confined to `MCP_WORKSPACE_PATH`

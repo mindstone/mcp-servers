@@ -6,6 +6,13 @@ import { opusFetch, opusFetchUnauthenticated } from '../client.js';
 import { OpusError, getUploadTimeoutMs } from '../types.js';
 import { resolveUploadSourcePath } from '../path-safety.js';
 import { withErrorHandling } from '../utils.js';
+import {
+  ConclusionActionSchema,
+  CurationPreferenceSchema,
+  ImportPreferenceSchema,
+  RenderPreferenceSchema,
+  UploadedVideoAttrSchema,
+} from './projects.js';
 
 /**
  * Cache of completed uploadId → projectId so a network glitch between
@@ -183,11 +190,11 @@ async function putUploadBytes(
 async function performUpload(args: {
   filePath: string;
   brandTemplateId?: string;
-  curationPref?: unknown;
-  renderPref?: unknown;
-  importPref?: unknown;
-  uploadedVideoAttr?: unknown;
-  conclusionActions?: unknown;
+  curationPref?: z.infer<typeof CurationPreferenceSchema>;
+  renderPref?: z.infer<typeof RenderPreferenceSchema>;
+  importPref?: z.infer<typeof ImportPreferenceSchema>;
+  uploadedVideoAttr?: z.infer<typeof UploadedVideoAttrSchema>;
+  conclusionActions?: z.infer<typeof ConclusionActionSchema>[];
 }): Promise<{ uploadId: string; project: ClipProjectResponse; resumed: boolean }> {
   const stat = fs.statSync(args.filePath);
   if (!stat.isFile()) {
@@ -293,11 +300,11 @@ export function registerUploadTools(server: McpServer): void {
               'The file MUST live inside the workspace sandbox: MCP_WORKSPACE_PATH when set, otherwise the system temp directory. Paths outside the sandbox are refused.',
           ),
         brandTemplateId: z.string().optional(),
-        curationPref: z.record(z.unknown()).optional(),
-        renderPref: z.record(z.unknown()).optional(),
-        importPref: z.record(z.unknown()).optional(),
-        uploadedVideoAttr: z.record(z.unknown()).optional(),
-        conclusionActions: z.array(z.record(z.unknown())).optional(),
+        curationPref: CurationPreferenceSchema.optional(),
+        renderPref: RenderPreferenceSchema.optional(),
+        importPref: ImportPreferenceSchema.optional(),
+        uploadedVideoAttr: UploadedVideoAttrSchema.optional(),
+        conclusionActions: z.array(ConclusionActionSchema).optional(),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },

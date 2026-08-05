@@ -401,6 +401,18 @@ describe('Opus tool behaviour (MSW-mocked)', () => {
         fs.rmSync(workspace, { recursive: true, force: true });
       }
     });
+    it('rejects an untyped preference shape at schema level', async () => {
+      mswServer.use(...createOpusHandlers());
+      testClient = await createTestClient({
+        env: { OPUS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+      const result = await testClient.callTool('opus_upload_video', {
+        file_path: '/tmp/whatever.mp4',
+        // @ts-expect-error — curationPref must be an object, not arbitrary JSON
+        curationPref: 'free-form string',
+      });
+      expect(result.isError).toBe(true);
+    });
   });
 
   describe('error normalisation', () => {
