@@ -61,6 +61,79 @@ function toRecipientArray(value: string | string[] | undefined): string[] {
   return flattened;
 }
 
+/**
+ * Draft field payload shared by email_save_draft and email_update_draft.
+ */
+export interface DraftFields {
+  to?: string | string[];
+  subject?: string;
+  text?: string;
+  html?: string;
+  reply_to_message_id?: string;
+}
+
+/**
+ * Build a raw RFC822 draft message and append it to the account's Drafts
+ * mailbox with \Draft \Seen flags. Returns the new draft's Message-ID,
+ * mailbox, and (when the server reports it) UID.
+ */
+export async function appendDraftMessage(
+  fromEmail: string,
+  fields: DraftFields,
+): Promise<{ messageId: string; mailbox: string; uid?: number }> {
+  const { to, subject, text, html, reply_to_message_id } = fields;
+
+  const messageId = generateMessageId(fromEmail);
+  const draftTransport = nodemailer.createTransport({
+    streamTransport: true,
+    buffer: true,
+    newline: 'unix',
+  });
+
+  const draftResult = await draftTransport.sendMail({
+    from: fromEmail,
+    to,
+    subject,
+    text,
+    html,
+    messageId,
+    ...(reply_to_message_id
+      ? {
+          inReplyTo: reply_to_message_id,
+          references: reply_to_message_id,
+        }
+      : {}),
+  });
+  draftTransport.close();
+
+  const rawMessageValue = (draftResult as { message?: unknown }).message;
+  const rawMessage = Buffer.isBuffer(rawMessageValue)
+    ? rawMessageValue
+    : typeof rawMessageValue === 'string'
+      ? Buffer.from(rawMessageValue)
+      : null;
+  if (!rawMessage) {
+    throw new Error('Unable to construct raw draft message');
+  }
+
+  const draftsMailbox = await resolveDraftsMailbox();
+  const client = await getConnection();
+  const appendResult = await client.append(draftsMailbox, rawMessage, [
+    '\\Draft',
+    '\\Seen',
+  ]);
+
+  if (!appendResult) {
+    throw new Error('Unable to append draft message');
+  }
+
+  return {
+    messageId,
+    mailbox: draftsMailbox,
+    ...(appendResult.uid !== undefined ? { uid: appendResult.uid } : {}),
+  };
+}
+
 export function registerSendTools(server: McpServer): void {
   // ── email_send ──────────────────────────────────────────────────
 
@@ -204,55 +277,19 @@ export function registerSendTools(server: McpServer): void {
         throw new Error('Provide at least a subject or a text/html body');
       }
 
-      const messageId = generateMessageId(config.email);
-      const draftTransport = nodemailer.createTransport({
-        streamTransport: true,
-        buffer: true,
-        newline: 'unix',
-      });
-
-      const draftResult = await draftTransport.sendMail({
-        from: config.email,
+      const draft = await appendDraftMessage(config.email, {
         to,
         subject,
         text,
         html,
-        messageId,
-        ...(reply_to_message_id
-          ? {
-              inReplyTo: reply_to_message_id,
-              references: reply_to_message_id,
-            }
-          : {}),
+        reply_to_message_id,
       });
-      draftTransport.close();
-
-      const rawMessageValue = (draftResult as { message?: unknown }).message;
-      const rawMessage = Buffer.isBuffer(rawMessageValue)
-        ? rawMessageValue
-        : typeof rawMessageValue === 'string'
-          ? Buffer.from(rawMessageValue)
-          : null;
-      if (!rawMessage) {
-        throw new Error('Unable to construct raw draft message');
-      }
-
-      const draftsMailbox = await resolveDraftsMailbox();
-      const client = await getConnection();
-      const appendResult = await client.append(draftsMailbox, rawMessage, [
-        '\\Draft',
-        '\\Seen',
-      ]);
-
-      if (!appendResult) {
-        throw new Error('Unable to append draft message');
-      }
 
       return JSON.stringify({
         ok: true,
-        messageId,
-        mailbox: draftsMailbox,
-        ...(appendResult.uid !== undefined ? { uid: appendResult.uid } : {}),
+        messageId: draft.messageId,
+        mailbox: draft.mailbox,
+        ...(draft.uid !== undefined ? { uid: draft.uid } : {}),
       });
     }),
   );

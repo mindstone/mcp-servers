@@ -6,6 +6,7 @@ import {
   registerMessageTools,
   registerAttachmentTools,
   registerSendTools,
+  registerDraftTools,
 } from './tools/index.js';
 
 const require = createRequire(import.meta.url);
@@ -22,6 +23,7 @@ export function createServer(): McpServer {
   registerMessageTools(server);
   registerAttachmentTools(server);
   registerSendTools(server);
+  registerDraftTools(server);
 
   return server;
 }
