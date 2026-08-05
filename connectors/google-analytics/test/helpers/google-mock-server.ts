@@ -196,5 +196,48 @@ export function createGoogleHandlers() {
       if (err) return err;
       return HttpResponse.json({ changeHistoryEvents: [] });
     }),
+
+    http.get(new RegExp(`^${escapeRegex(ADMIN_BETA)}/properties/[^/]+/dataStreams$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        dataStreams: [
+          {
+            name: 'properties/200/dataStreams/300',
+            displayName: 'Acme Web Stream',
+            type: 'WEB_DATA_STREAM',
+            createTime: '2024-01-01T00:00:00Z',
+            webStreamData: {
+              defaultUri: 'https://example.com',
+              measurementId: 'G-XXXXXXX',
+            },
+          },
+        ],
+      });
+    }),
+
+    http.get(new RegExp(`^${escapeRegex(ADMIN_ALPHA)}/properties/[^/]+/dataStreams/[^/]+/globalSiteTag$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        name: 'properties/200/dataStreams/300/globalSiteTag',
+        snippet: '<script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXX"></script>',
+      });
+    }),
+
+    http.get(new RegExp(`^${escapeRegex(ADMIN_ALPHA)}/properties/[^/]+/bigQueryLinks$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        bigQueryLinks: [
+          {
+            name: 'properties/200/bigQueryLinks/400',
+            project: 'acme-analytics-export',
+            dailyExportEnabled: true,
+            streamingExportEnabled: false,
+          },
+        ],
+      });
+    }),
   ];
 }

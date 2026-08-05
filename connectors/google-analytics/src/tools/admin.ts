@@ -223,6 +223,7 @@ export function registerAdminTools(server: McpServer): void {
       const streamId = webStream.name.split('/').pop();
       const response = await googleApi<{ snippet?: string; name?: string }>(
         `/${property}/dataStreams/${streamId}/globalSiteTag`,
+        { baseUrl: Bases.adminAlpha },
       );
       return JSON.stringify({
         ok: true,
@@ -255,6 +256,7 @@ export function registerAdminTools(server: McpServer): void {
       }>(`/${property}/bigQueryLinks`, {
         itemKey: 'bigQueryLinks',
         query: { pageSize: 200 },
+        baseUrl: Bases.adminAlpha,
       });
       return JSON.stringify({
         ok: true,

@@ -115,6 +115,34 @@ describe('tool calls — happy path', () => {
     const results = parsed.results as Array<{ apiName: string; fieldType: string }>;
     expect(results.some((entry) => entry.apiName === 'country')).toBe(true);
   });
+
+  it('ga_get_global_site_tag returns the snippet for the web stream', async () => {
+    await setup();
+    const result = await testClient.client.callTool({
+      name: 'ga_get_global_site_tag',
+      arguments: { property_id: '200' },
+    });
+    const parsed = parseToolResult(result);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.dataStream).toBe('properties/200/dataStreams/300');
+    expect(String(parsed.globalSiteTag)).toContain('gtag/js?id=G-XXXXXXX');
+    expect(parsed.displayName).toBe(
+      '<untrusted-content source="ga4-admin">Acme Web Stream</untrusted-content>',
+    );
+  });
+
+  it('ga_list_bigquery_links returns the mocked links', async () => {
+    await setup();
+    const result = await testClient.client.callTool({
+      name: 'ga_list_bigquery_links',
+      arguments: { property_id: '200' },
+    });
+    const parsed = parseToolResult(result);
+    expect(parsed.ok).toBe(true);
+    const links = parsed.bigQueryLinks as Array<{ name: string; project: string }>;
+    expect(links).toHaveLength(1);
+    expect(links[0].project).toBe('acme-analytics-export');
+  });
 });
 
 describe('error handling', () => {
