@@ -11,7 +11,7 @@ Slack workspace MCP server — channels, messages, threads, reactions, users, fi
 
 - **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-slack)
 - **Auth:** OAuth (host-orchestrated) ([`SLACK_CLIENT_SECRET`](./server.json))
-- **Tools:** [25](./src/tools/) (messages, channels, threads, users, files)
+- **Tools:** [39](./src/tools/) (messages, channels, threads, users, files, pins)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -193,7 +193,7 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 }
 ```
 
-## Tools (25)
+## Tools (39)
 
 ### Authentication
 - `authenticate_slack_workspace` — Returns structured auth_required response; the host drives OAuth.
