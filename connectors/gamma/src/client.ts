@@ -23,6 +23,120 @@ import {
 const GAMMA_API_BASE = 'https://public-api.gamma.app/v1.0';
 
 /**
+ * Hosts allowed to serve export downloads. Export URLs come from Gamma's own
+ * API responses (`pdfUrl` / `pptxUrl` in the status payload), but a poisoned or
+ * compromised payload must not be able to point the connector's outbound fetch
+ * at an arbitrary host (SSRF) or a plaintext endpoint. Gamma-controlled hosts
+ * only; deliberately hard-coded, not env-overridable. Subdomains allowed
+ * (`public-api.gamma.app`, CDN subdomains); lookalikes such as
+ * `gamma.app.evil.example` or `evilgamma.app` are rejected.
+ */
+const GAMMA_EXPORT_ALLOWED_HOST = 'gamma.app';
+
+function isAllowedExportHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return host === GAMMA_EXPORT_ALLOWED_HOST || host.endsWith(`.${GAMMA_EXPORT_ALLOWED_HOST}`);
+}
+
+/**
+ * True for loopback, private, link-local, and reserved IP literals (and
+ * localhost-style names) that an export URL must never resolve to.
+ */
+function isPrivateOrReservedHost(hostname: string): boolean {
+  const lower = hostname.toLowerCase();
+
+  if (lower === 'localhost' || lower === '[::1]' || lower === '::1') {
+    return true;
+  }
+
+  if (lower.endsWith('.local')) {
+    return true;
+  }
+
+  // IPv4 private/reserved ranges
+  const ipMatch = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipMatch) {
+    const [, a, b] = ipMatch.map(Number);
+    if (a === 127) return true;            // 127.0.0.0/8 loopback
+    if (a === 10) return true;             // 10.0.0.0/8 private
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12 private
+    if (a === 192 && b === 168) return true; // 192.168.0.0/16 private
+    if (a === 169 && b === 254) return true; // 169.254.0.0/16 link-local
+    if (a === 0) return true;              // 0.0.0.0/8
+  }
+
+  // IPv6 loopback / unique-local / link-local (URL parsing wraps in [])
+  if (lower.startsWith('[') && lower.endsWith(']')) {
+    const inner = lower.slice(1, -1);
+    if (inner === '::1' || inner === '::' || inner.startsWith('fe80:') || inner.startsWith('fc') || inner.startsWith('fd')) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Validate an export download URL before any outbound request is made.
+ *
+ * Rejects:
+ *  - malformed URLs
+ *  - non-HTTPS schemes
+ *  - URLs carrying userinfo (`https://user:pass@host/...`)
+ *  - hosts outside the Gamma allow-list (`gamma.app` and subdomains)
+ *  - hosts matching private/loopback/link-local/reserved IP ranges
+ *
+ * Throws a `GammaError` (with `URL_REJECTED` code) on any failure. Mirrors
+ * napkin's `validateDownloadUrl`.
+ */
+export function validateDownloadUrl(input: string): URL {
+  let parsed: URL;
+  try {
+    parsed = new URL(input);
+  } catch {
+    throw new GammaError(
+      'Invalid export URL',
+      'URL_REJECTED',
+      'The export URL must be a valid URL returned by the Gamma API (pdfUrl / pptxUrl in the status payload).',
+    );
+  }
+
+  if (parsed.protocol !== 'https:') {
+    throw new GammaError(
+      `Refusing non-HTTPS export URL scheme '${parsed.protocol.replace(/:$/, '')}'`,
+      'URL_REJECTED',
+      'Only https:// URLs are accepted for export downloads.',
+    );
+  }
+
+  if (parsed.username || parsed.password) {
+    throw new GammaError(
+      'Refusing export URL containing userinfo (user:pass@host)',
+      'URL_REJECTED',
+      'Strip userinfo from the URL; only plain Gamma-hosted https URLs are accepted.',
+    );
+  }
+
+  if (isPrivateOrReservedHost(parsed.hostname)) {
+    throw new GammaError(
+      `Refusing export URL whose host '${parsed.hostname}' is a private/loopback/reserved address`,
+      'URL_REJECTED',
+      'Export URLs must point at a public Gamma host.',
+    );
+  }
+
+  if (!isAllowedExportHost(parsed.hostname)) {
+    throw new GammaError(
+      `Refusing export URL host '${parsed.hostname}': not on the Gamma allow-list (${GAMMA_EXPORT_ALLOWED_HOST} and subdomains)`,
+      'URL_REJECTED',
+      'Export URLs must come from the Gamma API status payload. Other hosts are refused to prevent the connector fetching arbitrary URLs.',
+    );
+  }
+
+  return parsed;
+}
+
+/**
  * Make an authenticated request to the Gamma API.
  */
 async function gammaFetch<T>(
@@ -229,12 +343,18 @@ export async function listFolders(
 /**
  * Download an export file (PDF/PPTX) to the system tmpdir.
  * Returns the absolute path of the downloaded file.
+ *
+ * The URL is validated against the Gamma export allow-list BEFORE any outbound
+ * request is made — a rejected URL produces a structured `URL_REJECTED` error
+ * with zero network calls.
  */
 export async function downloadExportFile(
   url: string,
   generationId: string,
   format: 'pdf' | 'pptx',
 ): Promise<string> {
+  const validated = validateDownloadUrl(url);
+
   const { writeFileSync } = await import('fs');
   const { join } = await import('path');
   const { tmpdir } = await import('os');
@@ -243,7 +363,7 @@ export async function downloadExportFile(
   const fileName = `gamma_export_${safeId}_${Date.now()}.${format}`;
   const filePath = join(tmpdir(), fileName);
 
-  const response = await fetch(url);
+  const response = await fetch(validated.toString());
   if (!response.ok) {
     throw new Error(`Download failed: HTTP ${response.status}`);
   }

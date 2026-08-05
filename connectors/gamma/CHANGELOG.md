@@ -13,6 +13,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Security
 - `gamma_list_themes` and `gamma_list_folders` now return workspace-authored theme and folder names inside `<untrusted-content>` envelopes with close-tag breakout escaping (repo security invariant #6). IDs, cursors, and keywords remain raw.
+- Export downloads now validate the URL before fetching: HTTPS only, no userinfo, private/loopback/reserved hosts rejected, and hosts restricted to `gamma.app` and its subdomains (mirrors napkin's `validateDownloadUrl`). A rejected URL degrades gracefully in `gamma_get_status` — the generation result is returned and the refusal is surfaced in the message.
 
 ### Fixed
 - Removed a duplicated `### Changed` heading in the 0.3.3 entry.

@@ -169,7 +169,7 @@ node dist/index.js
 - `configure_gamma_api_key` can store the key in memory, or hand it to a host bridge when `MCP_HOST_BRIDGE_STATE` is present.
 - Host bridge requests, when configured, go to `127.0.0.1` using the token from the bridge state file.
 - Theme and folder names returned by `gamma_list_themes` / `gamma_list_folders` are workspace-authored text and are wrapped in `<untrusted-content>` envelopes so the model treats them as data, not instructions.
-- PDF/PPTX exports are downloaded from Gamma-provided URLs into the system temp directory with a sanitized generation ID in the filename.
+- PDF/PPTX exports are downloaded from Gamma-provided URLs into the system temp directory with a sanitized generation ID in the filename. Export URLs are validated before any outbound request: HTTPS only, no userinfo, private/loopback/reserved hosts rejected, and hosts restricted to `gamma.app` and its subdomains.
 - Generation can create content in the user's Gamma workspace, may consume Gamma credits, and can set workspace/external sharing options.
 
 ## Licence
