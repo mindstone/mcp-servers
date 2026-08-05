@@ -228,9 +228,40 @@ WORKFLOW:
         `/invoice/${encodeURIComponent(args.invoiceId)}/pdf?minorversion=${QBO_MINOR_VERSION}`,
         'application/pdf',
       );
-      // invoiceId is alphanumeric-validated above, so the filename is safe.
-      const outputPath = path.join(os.tmpdir(), `quickbooks_invoice_${args.invoiceId}.pdf`);
-      fs.writeFileSync(outputPath, pdfBuffer);
+      // invoiceId is alphanumeric-validated above, so the basename is safe —
+      // but a validated pathname is never re-trusted as a write target. The
+      // PDF lands inside a fresh, unpredictable staging directory created
+      // atomically with fs.mkdtempSync directly under the canonical temp
+      // root (mode 0700), so another local principal cannot pre-create,
+      // rename, or symlink-swap any path component, and concurrent same-ID
+      // downloads cannot collide. The file itself is opened with
+      // O_CREAT|O_EXCL|O_WRONLY (mode 0600), fstat-checked to be a regular
+      // file, and written through the single verified descriptor.
+      const tmpRoot = fs.realpathSync(os.tmpdir());
+      const stagingDir = fs.mkdtempSync(path.join(tmpRoot, 'quickbooks-invoice-'));
+      const outputPath = path.join(stagingDir, `quickbooks_invoice_${args.invoiceId}.pdf`);
+      try {
+        const fd = fs.openSync(outputPath, 'wx', 0o600);
+        try {
+          if (!fs.fstatSync(fd).isFile()) {
+            throw new QuickBooksError(
+              'Download target is not a regular file.',
+              'DOWNLOAD_WRITE_FAILED',
+              'Try the download again.',
+            );
+          }
+          fs.writeSync(fd, pdfBuffer);
+        } finally {
+          fs.closeSync(fd);
+        }
+      } catch (error) {
+        // Never leave a partial download behind; removal is best-effort so
+        // the original error stays observable.
+        try {
+          fs.rmSync(stagingDir, { recursive: true, force: true });
+        } catch { /* best effort */ }
+        throw error;
+      }
 
       return JSON.stringify({
         ok: true,

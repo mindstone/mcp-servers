@@ -374,19 +374,94 @@ describe('download_quickbooks_invoice_pdf', () => {
     vi.unstubAllEnvs();
   });
 
-  it('downloads the invoice PDF to the temp directory', async () => {
+  it('downloads the invoice PDF into a fresh private staging directory', async () => {
     mswServer.use(...createQuickBooksHandlers());
     testClient = await createTestClient({ env: defaultEnv() });
 
     const result = await testClient.callTool('download_quickbooks_invoice_pdf', { invoiceId: 'inv-001' });
     const json = result.json as Record<string, unknown>;
     expect(json.ok).toBe(true);
-    expect(String(json.filePath)).toContain('quickbooks_invoice_inv-001.pdf');
+    const filePath = String(json.filePath);
+    expect(filePath).toContain('quickbooks_invoice_inv-001.pdf');
 
     const fs = await import('fs');
-    const content = fs.readFileSync(String(json.filePath));
+    const path = await import('path');
+    const os = await import('os');
+
+    const content = fs.readFileSync(filePath);
     expect(content.subarray(0, 4).toString()).toBe('%PDF');
-    fs.unlinkSync(String(json.filePath));
+
+    // The write must land inside a fresh mkdtemp staging directory directly
+    // under the canonical temp root — never at the predictable top-level path.
+    const stagingDir = path.dirname(filePath);
+    expect(path.basename(stagingDir)).toMatch(/^quickbooks-invoice-/);
+    expect(path.dirname(stagingDir)).toBe(fs.realpathSync(os.tmpdir()));
+    expect(filePath).not.toBe(
+      path.join(fs.realpathSync(os.tmpdir()), 'quickbooks_invoice_inv-001.pdf'),
+    );
+
+    // Directory and file are private to this process (no group/other access).
+    const dirMode = fs.statSync(stagingDir).mode & 0o777;
+    const fileMode = fs.statSync(filePath).mode & 0o777;
+    expect(dirMode & 0o077).toBe(0);
+    expect(fileMode & 0o077).toBe(0);
+
+    fs.rmSync(stagingDir, { recursive: true, force: true });
+  });
+
+  it('does not follow a pre-created symlink at the legacy predictable path', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const os = await import('os');
+
+    // Local-attacker setup: a symlink at the old predictable download path
+    // pointing at a victim file the connector process can write.
+    const victimPath = path.join(os.tmpdir(), `quickbooks-pdf-victim-${process.pid}`);
+    const symlinkPath = path.join(os.tmpdir(), 'quickbooks_invoice_inv-001.pdf');
+    fs.writeFileSync(victimPath, 'victim-sentinel');
+    fs.rmSync(symlinkPath, { force: true });
+    fs.symlinkSync(victimPath, symlinkPath);
+
+    mswServer.use(...createQuickBooksHandlers());
+    testClient = await createTestClient({ env: defaultEnv() });
+
+    try {
+      const result = await testClient.callTool('download_quickbooks_invoice_pdf', { invoiceId: 'inv-001' });
+      const json = result.json as Record<string, unknown>;
+      expect(json.ok).toBe(true);
+
+      // The victim file is untouched and the write went to the staging dir.
+      expect(fs.readFileSync(victimPath, 'utf8')).toBe('victim-sentinel');
+      const filePath = String(json.filePath);
+      expect(filePath).not.toBe(fs.realpathSync(symlinkPath));
+      expect(path.basename(path.dirname(filePath))).toMatch(/^quickbooks-invoice-/);
+      fs.rmSync(path.dirname(filePath), { recursive: true, force: true });
+    } finally {
+      fs.rmSync(symlinkPath, { force: true });
+      fs.rmSync(victimPath, { force: true });
+    }
+  });
+
+  it('concurrent same-ID downloads get distinct files and both succeed', async () => {
+    mswServer.use(...createQuickBooksHandlers());
+    testClient = await createTestClient({ env: defaultEnv() });
+
+    const [first, second] = await Promise.all([
+      testClient.callTool('download_quickbooks_invoice_pdf', { invoiceId: 'inv-001' }),
+      testClient.callTool('download_quickbooks_invoice_pdf', { invoiceId: 'inv-001' }),
+    ]);
+    const firstJson = first.json as Record<string, unknown>;
+    const secondJson = second.json as Record<string, unknown>;
+    expect(firstJson.ok).toBe(true);
+    expect(secondJson.ok).toBe(true);
+    expect(String(firstJson.filePath)).not.toBe(String(secondJson.filePath));
+
+    const fs = await import('fs');
+    const path = await import('path');
+    expect(fs.readFileSync(String(firstJson.filePath)).subarray(0, 4).toString()).toBe('%PDF');
+    expect(fs.readFileSync(String(secondJson.filePath)).subarray(0, 4).toString()).toBe('%PDF');
+    fs.rmSync(path.dirname(String(firstJson.filePath)), { recursive: true, force: true });
+    fs.rmSync(path.dirname(String(secondJson.filePath)), { recursive: true, force: true });
   });
 
   it('rejects an invalid invoice ID before any outbound request', async () => {
