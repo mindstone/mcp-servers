@@ -11,6 +11,9 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+- `update_servicenow_incident` now accepts `work_notes` and `comments`, so notes can be appended to an incident's journal — previously there was no way to add a note or comment to an incident.
+
 ### Security
 - All external text returned by ServiceNow (incident/change-request/knowledge/user records, including fields added by instance customisation) is now wrapped in `<untrusted-content>` envelopes with close-tag breakout escaping, per the repo's untrusted-content invariant. Identifiers, timestamps, and choice-list display values stay literal so they can be copied into follow-up tool calls.
 

@@ -131,7 +131,7 @@ node dist/index.js
 - `list_servicenow_incidents` — List or search incidents
 - `get_servicenow_incident` — Get a single incident by number or sys_id
 - `create_servicenow_incident` — Create a new incident
-- `update_servicenow_incident` — Update an existing incident
+- `update_servicenow_incident` — Update an existing incident (including appending `work_notes` / `comments` journal entries)
 
 ### Change requests
 - `list_servicenow_change_requests` — List or search change requests
