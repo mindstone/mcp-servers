@@ -177,11 +177,13 @@ This guard is secure-by-default: it prevents an agent from accidentally performi
 - `list-contact-groups`: Retrieve a list of contact groups
 - `list-currencies`: Retrieve currencies enabled in the connected Xero organisation
 - `list-invoice-attachments`: Retrieve files attached to a Xero invoice
+- `list-purchase-orders`: Retrieve a list of purchase orders
 - `create-contact`: Create a new contact
 - `create-credit-note`: Create a new credit note
 - `create-invoice`: Create a new invoice. Supports optional `currencyCode`, such as `USD`, when that currency is enabled in the connected Xero organisation.
 - `create-payment`: Create a new payment
 - `create-quote`: Create a new quote
+- `create-purchase-order`: Create a new purchase order (requires `XERO_ALLOW_WRITES=1`)
 - `create-credit-note`: Create a new credit note
 - `create-payroll-timesheet`: Create a new Payroll Timesheet
 - `update-contact`: Update an existing contact
