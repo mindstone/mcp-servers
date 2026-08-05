@@ -339,6 +339,18 @@ export async function listEvents(
       'microsoft-calendar:list_events:organizer',
     ),
     attendeeCount: event.attendees?.length ?? 0,
+    attendees: event.attendees?.map(
+      (a: {
+        emailAddress?: { address?: string; name?: string };
+        type?: string;
+        status?: { response?: string };
+      }) => ({
+        email: wrapUntrusted(a.emailAddress?.address, 'microsoft-calendar:list_events:attendees.email'),
+        name: wrapUntrusted(a.emailAddress?.name, 'microsoft-calendar:list_events:attendees.name'),
+        type: a.type,
+        status: a.status?.response,
+      }),
+    ),
     isAllDay: event.isAllDay,
     webLink: event.webLink,
   }));

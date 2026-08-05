@@ -71,6 +71,24 @@ describe('microsoft-calendar mock-API integration', () => {
     expect(call).toBeDefined();
   });
 
+  it('list_events includes per-attendee RSVP status (enveloped)', async () => {
+    const result = await client.callTool('list_events', { top: 5 });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      events: Array<{
+        attendeeCount: number;
+        attendees?: Array<{ email: string; name: string; type: string; status: string }>;
+      }>;
+    };
+    const first = json.events[0];
+    expect(first?.attendeeCount).toBe(2);
+    expect(first?.attendees).toHaveLength(2);
+    expect(first?.attendees?.[0]?.status).toBe('accepted');
+    expect(first?.attendees?.[1]?.status).toBe('declined');
+    expect(first?.attendees?.[0]?.email).toContain('<untrusted-content');
+    expect(first?.attendees?.[0]?.email).toContain('bob@example.com');
+  });
+
   // -------------------------------------------------------------------------
   // get_event
   // -------------------------------------------------------------------------

@@ -85,7 +85,18 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
             end: { dateTime: '2026-05-20T09:30:00', timeZone: 'Pacific Standard Time' },
             location: { displayName: 'Room A' },
             organizer: { emailAddress: { address: 'alice@example.com', name: 'Alice' } },
-            attendees: [{ emailAddress: { address: 'bob@example.com' } }],
+            attendees: [
+              {
+                emailAddress: { address: 'bob@example.com', name: 'Bob' },
+                type: 'required',
+                status: { response: 'accepted' },
+              },
+              {
+                emailAddress: { address: 'carol@example.com', name: 'Carol' },
+                type: 'optional',
+                status: { response: 'declined' },
+              },
+            ],
             isAllDay: false,
             webLink: 'https://outlook.com/event-1',
           },
