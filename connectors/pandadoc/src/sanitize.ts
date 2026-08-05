@@ -12,28 +12,52 @@
  * Identifiers and URLs are structural: downstream tool calls reference them
  * verbatim (`recipients[].id`, `fields[].uuid`, `contacts[].id`, …), and URLs
  * are surfaced for the user to open — not auto-followed. String values under
- * the keys in `STRUCTURAL_KEYS` are therefore left untouched, as are dates,
- * status enums, counts, and booleans.
+ * the keys in `STRUCTURAL_KEYS` are therefore left raw ONLY when they still
+ * look like what the key claims to be (identifier charset / parseable
+ * http(s) URL); anything else — e.g. prose or a prompt-injection payload
+ * smuggled under an `id` or `url` key — is enveloped like any other
+ * attacker-controllable text. Dates, status enums, counts, and booleans are
+ * passed through unchanged.
  */
 import { wrapUntrusted } from './untrusted-content.js';
 
 type Obj = Record<string, unknown>;
 
 /**
- * Keys whose string values are identifiers or URLs rather than prose.
- * Kept raw so enveloped output stays machine-usable.
+ * Keys whose string values are expected to be identifiers rather than prose.
+ * Kept raw so enveloped output stays machine-usable — but only while the
+ * value actually matches the identifier charset.
  */
-const STRUCTURAL_KEYS = new Set([
+const IDENTIFIER_KEYS = new Set([
   'id',
   'uuid',
   'folder_uuid',
   'parent_uuid',
   'entity_id',
-  'url',
-  'href',
-  'shared_link',
-  'avatar',
 ]);
+
+/**
+ * Keys whose string values are expected to be URLs. Kept raw so the user can
+ * open them — but only while the value parses as an http(s) URL.
+ */
+const URL_KEYS = new Set(['url', 'href', 'shared_link', 'avatar']);
+
+/** Conservative identifier charset: PandaDoc ids/uuids are alphanumeric plus separators. */
+const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._~-]{0,199}$/;
+
+function isSafeIdentifier(value: string): boolean {
+  return IDENTIFIER_PATTERN.test(value);
+}
+
+function isSafeUrl(value: string): boolean {
+  if (value.length > 2048) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
 
 function isObj(v: unknown): v is Obj {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -45,8 +69,10 @@ function wrapStr(v: unknown, source: string): unknown {
 
 /**
  * Like `wrapUntrustedJsonStrings`, but string values under structural keys
- * (identifiers, URLs) pass through unchanged. Object keys themselves are
- * structural and never wrapped.
+ * (identifiers, URLs) pass through unchanged ONLY when they still validate as
+ * the identifier/URL they claim to be; malformed values are enveloped like
+ * any other external text. Object keys themselves are structural and never
+ * wrapped.
  */
 function wrapJsonStrings(v: unknown, source: string): unknown {
   if (typeof v === 'string') {
@@ -59,11 +85,23 @@ function wrapJsonStrings(v: unknown, source: string): unknown {
     return Object.fromEntries(
       Object.entries(v).map(([key, item]) => [
         key,
-        STRUCTURAL_KEYS.has(key) ? item : wrapJsonStrings(item, source),
+        wrapStructuralValue(key, item, source),
       ]),
     );
   }
   return v;
+}
+
+function wrapStructuralValue(key: string, item: unknown, source: string): unknown {
+  if (IDENTIFIER_KEYS.has(key)) {
+    if (typeof item !== 'string') return item;
+    return isSafeIdentifier(item) ? item : wrapUntrusted(item, `${source}:${key}`);
+  }
+  if (URL_KEYS.has(key)) {
+    if (typeof item !== 'string') return item;
+    return isSafeUrl(item) ? item : wrapUntrusted(item, `${source}:${key}`);
+  }
+  return wrapJsonStrings(item, source);
 }
 
 /** Wrap the workspace-authored `name` on a compact document object. */
@@ -134,7 +172,7 @@ export function sanitizeContentLibraryItemDetails(item: unknown, source: string)
   return out;
 }
 
-/** Wrap recipient data (echoed by send responses) — ids and shared links stay raw. */
+/** Wrap recipient data (echoed by send responses) — ids and shared links stay raw only when they validate as identifiers/URLs. */
 export function sanitizeRecipients(recipients: unknown, source: string): unknown {
   if (!Array.isArray(recipients)) return recipients;
   return recipients.map((r) => (isObj(r) ? wrapJsonStrings(r, source) : r));
