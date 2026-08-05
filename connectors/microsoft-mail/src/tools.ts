@@ -15,6 +15,7 @@ import {
   deleteEmail,
   downloadAttachment,
   forwardEmail,
+  getConversation,
   getEmail,
   listAttachments,
   listEmails,
@@ -133,6 +134,51 @@ sign-in, Microsoft 365 tools become available.`,
         });
       }
       const result = await callGraph(extra, (c, signal) => getEmail(c, { id: args.id! }, signal));
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // get_conversation
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'get_conversation',
+    {
+      description:
+        'List all messages in an email thread (conversation), oldest first. Provide a message ID from list_emails/search_emails or a conversationId.',
+      inputSchema: z.object({
+        id: z
+          .string()
+          .optional()
+          .describe('Any message ID in the thread; its conversationId is resolved automatically'),
+        conversationId: z
+          .string()
+          .optional()
+          .describe('Graph conversation ID, if already known'),
+        top: z.number().optional().describe('Number of messages to return (default: 25, max: 100)'),
+      }).shape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.id && !args.conversationId) {
+        return errorResponse({
+          error:
+            'Missing required parameter: "id" (any message ID in the thread) or "conversationId". Example: { "id": "AAMkAGI2..." }. Use list_emails or search_emails to find message IDs.',
+          action_required: 'Provide a message ID or a conversationId.',
+          next_step: 'list_emails',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        getConversation(
+          c,
+          { id: args.id, conversationId: args.conversationId, top: args.top },
+          signal,
+        ),
+      );
       return successJson(result);
     }),
   );

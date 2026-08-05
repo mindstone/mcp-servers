@@ -103,6 +103,7 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
       return HttpResponse.json({
         id: String(params.id),
         subject: 'Welcome',
+        conversationId: 'conv-1',
         from: { emailAddress: { address: 'alice@example.com', name: 'Alice' } },
         toRecipients: [{ emailAddress: { address: 'me@example.com' } }],
         ccRecipients: [],

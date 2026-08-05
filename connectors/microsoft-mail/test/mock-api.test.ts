@@ -492,4 +492,44 @@ describe('microsoft-mail mock-API integration', () => {
     expect(json.error).toContain('Missing required parameters');
     expect(json.next_step).toBe('set_email_flag');
   });
+
+  it('get_conversation resolves the thread from a message ID', async () => {
+    const result = await client.callTool('get_conversation', { id: 'msg-1' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      ok?: unknown;
+      conversationId: string;
+      count: number;
+      messages: unknown[];
+    };
+    expect(json.ok).toBeUndefined();
+    expect(json.conversationId).toBe('conv-1');
+    expect(json.count).toBe(1);
+    const listCall = state.requests.find(
+      (r) => r.method === 'GET' && r.pathname.endsWith('/me/messages'),
+    );
+    expect(decodeURIComponent(listCall?.search ?? '')).toContain(
+      "conversationId eq 'conv-1'",
+    );
+  });
+
+  it('get_conversation accepts a conversationId directly', async () => {
+    const result = await client.callTool('get_conversation', { conversationId: 'conv-9' });
+    expect(result.isError).not.toBe(true);
+    const listCall = state.requests.find(
+      (r) => r.method === 'GET' && r.pathname.endsWith('/me/messages'),
+    );
+    expect(decodeURIComponent(listCall?.search ?? '')).toContain(
+      "conversationId eq 'conv-9'",
+    );
+  });
+
+  it('get_conversation returns an error envelope when neither id nor conversationId is given', async () => {
+    const result = await client.callTool('get_conversation', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Missing required parameter');
+    expect(json.next_step).toBe('list_emails');
+  });
 });

@@ -35,6 +35,33 @@ const GraphMessageMutationSchema = z
   })
   .passthrough();
 
+const GraphConversationIdSchema = z
+  .object({ conversationId: z.string() })
+  .passthrough();
+
+const GraphConversationMessageSchema = z
+  .object({
+    id: z.string(),
+    subject: z.string().optional(),
+    from: z
+      .object({
+        emailAddress: z
+          .object({ address: z.string().optional(), name: z.string().optional() })
+          .passthrough(),
+      })
+      .passthrough()
+      .optional(),
+    receivedDateTime: z.string().optional(),
+    bodyPreview: z.string().optional(),
+    isRead: z.boolean().optional(),
+    hasAttachments: z.boolean().optional(),
+  })
+  .passthrough();
+
+const GraphConversationListSchema = z
+  .object({ value: z.array(GraphConversationMessageSchema).default([]) })
+  .passthrough();
+
 const WELL_KNOWN_FOLDERS: Record<string, string> = {
   inbox: 'inbox',
   'sent items': 'sentitems',
@@ -701,5 +728,74 @@ export async function setEmailFlag(
     id: updated.id,
     flag: updated.flag?.flagStatus ?? args.flag,
     message: messages[args.flag],
+  };
+}
+
+export interface GetConversationArgs {
+  id?: string;
+  conversationId?: string;
+  top?: number;
+}
+
+export async function getConversation(
+  client: Client,
+  args: GetConversationArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  let conversationId = args.conversationId;
+  if (!conversationId && args.id) {
+    const message = await client
+      .api(`/me/messages/${args.id}`)
+      .options({ signal })
+      .select('conversationId')
+      .get();
+    conversationId = GraphConversationIdSchema.parse(message).conversationId;
+  }
+  if (!conversationId) {
+    throw new Error('A message id or conversationId is required to load a conversation.');
+  }
+  // The conversation ID is embedded in an OData $filter literal; refuse values
+  // that could break out of the quoted string.
+  if (conversationId.includes("'")) {
+    throw new Error('Invalid conversationId: must not contain single quotes.');
+  }
+
+  const top = Math.min(args.top ?? 25, 100);
+  const endpoint =
+    '/me/messages?' +
+    [
+      `$filter=conversationId eq '${conversationId}'`,
+      '$orderby=receivedDateTime asc',
+      `$top=${top}`,
+      '$select=id,subject,from,receivedDateTime,bodyPreview,isRead,hasAttachments',
+    ].join('&');
+
+  const response = await client.api(endpoint).options({ signal }).get();
+  const parsed = GraphConversationListSchema.parse(response);
+
+  const formatted = parsed.value.map((email) => ({
+    id: email.id,
+    subject: wrapUntrusted(email.subject, 'microsoft-mail:get_conversation:subject'),
+    from: wrapUntrusted(
+      email.from?.emailAddress?.address,
+      'microsoft-mail:get_conversation:from',
+    ),
+    fromName: wrapUntrusted(
+      email.from?.emailAddress?.name,
+      'microsoft-mail:get_conversation:fromName',
+    ),
+    receivedAt: email.receivedDateTime,
+    preview: wrapUntrusted(
+      email.bodyPreview?.substring(0, 200),
+      'microsoft-mail:get_conversation:preview',
+    ),
+    isRead: email.isRead,
+    hasAttachments: email.hasAttachments,
+  }));
+
+  return {
+    conversationId,
+    count: formatted.length,
+    messages: formatted,
   };
 }

@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - `update_draft` tool: patches a draft's subject, body, to/cc recipients, or importance before sending.
 - `mark_email_read` tool: marks an email read or unread.
 - `set_email_flag` tool: flags an email for follow-up, marks it complete, or clears the flag.
+- `get_conversation` tool: lists every message in a thread (oldest first) from a message ID or conversationId.
 
 ## [0.2.0] - 2026-07-29
 

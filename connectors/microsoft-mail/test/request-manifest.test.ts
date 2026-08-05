@@ -124,6 +124,12 @@ const MANIFEST: ManifestRow[] = [
     pathname: '/v1.0/me/messages/:id',
     args: { id: 'msg-1', flag: 'flagged' },
   },
+  {
+    tool: 'get_conversation',
+    method: 'GET',
+    pathname: '/v1.0/me/messages',
+    args: { conversationId: 'conv-1' },
+  },
 ];
 
 function matchPath(actual: string, pattern: string): boolean {
