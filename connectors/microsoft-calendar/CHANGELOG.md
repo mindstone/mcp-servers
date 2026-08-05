@@ -16,6 +16,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Changed
 - Microsoft Graph responses on the event read/write paths (`list_events`, `get_event`, `create_event`, `update_event`, `find_meeting_times`) are now validated with Zod at the boundary; malformed payloads fail closed with a clear error instead of a downstream TypeError. The remaining casts (`get_free_busy`, `list_calendars`) are still planned debt.
+- Tool inputs are validated fail-closed before any Graph request: attendee/email fields require email addresses, date-time fields require ISO 8601, numeric knobs (`top`, `durationMinutes`, `intervalMinutes`, `maxSuggestions`) require bounded positive integers, and recurrence `pattern`/`range` objects are strict (unknown keys rejected) with the documented cross-field rules (`endDate` requires `endDate`, `numbered` requires `numberOfOccurrences`).
+- `find_meeting_times` only suggests slots when availability for EVERY requested attendee was resolved; attendees whose schedule row Graph omits (or returns without an `availabilityView`) are listed in `unresolvableAttendees` and no slots are returned.
+- `list_events` and `get_event` attachments no longer silently drop Graph pages: the response reports `truncated` / `attachmentsTruncated` when an `@odata.nextLink` is present (the vendor-supplied continuation URL itself is never surfaced).
+- `update_event` no longer risks sending `{ address: undefined }` to Graph: current attendees without an email address are left out of the merged list and reported in the response.
+
+### Security
+- Envelope every Graph-sourced string that reaches model-visible output: structural-looking fields (IDs, `webLink`/meeting URLs, attendee `type`/`status`, `bodyType`, attachment `id`/`contentType`, `scheduleId`, `availabilityView`, timestamps, calendar `color`) pass through raw only when they match their documented closed format and are enveloped otherwise.
+- Envelope vendor-authored error text (`formatGraphError` output, which interpolates the Graph error-body message) before it becomes model-visible, closing a prompt-injection path through crafted Graph error responses.
+- Widened the untrusted-content close-tag escaping to all whitespace variants (`</untrusted-content\n>`, `\r`, form feed), matching the sibling connectors.
+- Stopped logging the mailboxSettings failure message verbatim; only status/code are logged so a vendor response body cannot reach logs unsanitised.
 
 ## [0.1.2] - 2026-07-03
 
