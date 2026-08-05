@@ -16,6 +16,8 @@ import type {
   FreshdeskTicketField,
   FreshdeskAgent,
   FreshdeskGroup,
+  FreshdeskContact,
+  FreshdeskCompany,
 } from './types.js';
 import { statusToString, priorityToString, sourceToString } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
@@ -26,6 +28,8 @@ export const UNTRUSTED_TICKET_CLOSE = '</untrusted-content>';
 const TICKET_SOURCE = 'external-ticket';
 const AGENT_SOURCE = 'external-agent';
 const GROUP_SOURCE = 'external-group';
+const CONTACT_SOURCE = 'external-contact';
+const COMPANY_SOURCE = 'external-company';
 
 /**
  * Wrap an optional external-text field in an `<untrusted-content>` envelope.
@@ -159,5 +163,87 @@ export function wrapGroupUntrustedFields(group: FreshdeskGroup): FreshdeskGroup 
   if (name !== undefined) wrapped.name = name;
   const description = wrapField(group.description, GROUP_SOURCE);
   if (description !== undefined) wrapped.description = description;
+  return wrapped;
+}
+
+export function formatContactConcise(contact: FreshdeskContact): string {
+  const name = wrapField(contact.name, CONTACT_SOURCE) ?? '(no name)';
+  const email = contact.email ?? 'no email';
+  const company = contact.company_id ? ` — company #${contact.company_id}` : '';
+  return `#${contact.id}: ${name} <${email}>${company}`;
+}
+
+export function formatContactDetailed(contact: FreshdeskContact): string {
+  const name = wrapField(contact.name, CONTACT_SOURCE);
+  const jobTitle = wrapField(contact.job_title, CONTACT_SOURCE);
+  const address = wrapField(contact.address, CONTACT_SOURCE);
+  const description = wrapField(contact.description, CONTACT_SOURCE);
+  return [
+    `Contact #${contact.id}`,
+    `Name: ${name ?? '(no name)'}`,
+    contact.email ? `Email: ${contact.email}` : '',
+    contact.phone ? `Phone: ${contact.phone}` : '',
+    contact.mobile ? `Mobile: ${contact.mobile}` : '',
+    jobTitle ? `Job Title: ${jobTitle}` : '',
+    contact.company_id ? `Company ID: ${contact.company_id}` : '',
+    address ? `Address: ${address}` : '',
+    contact.tags && contact.tags.length > 0 ? `Tags: ${contact.tags.join(', ')}` : '',
+    description ? `Description: ${description}` : '',
+    contact.created_at ? `Created: ${contact.created_at}` : '',
+    contact.updated_at ? `Updated: ${contact.updated_at}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+/**
+ * Return a shallow clone of the contact with external-text fields enveloped;
+ * ids, emails, and timestamps are left untouched.
+ */
+export function wrapContactUntrustedFields(contact: FreshdeskContact): FreshdeskContact {
+  const wrapped: FreshdeskContact = { ...contact };
+  for (const key of ['name', 'job_title', 'address', 'description'] as const) {
+    const value = wrapField(contact[key], CONTACT_SOURCE);
+    if (value !== undefined) wrapped[key] = value;
+  }
+  return wrapped;
+}
+
+export function formatCompanyConcise(company: FreshdeskCompany): string {
+  const name = wrapField(company.name, COMPANY_SOURCE) ?? '(unnamed)';
+  const domains = company.domains && company.domains.length > 0 ? ` (${company.domains.join(', ')})` : '';
+  return `#${company.id}: ${name}${domains}`;
+}
+
+export function formatCompanyDetailed(company: FreshdeskCompany): string {
+  const name = wrapField(company.name, COMPANY_SOURCE);
+  const description = wrapField(company.description, COMPANY_SOURCE);
+  const note = wrapField(company.note, COMPANY_SOURCE);
+  return [
+    `Company #${company.id}`,
+    `Name: ${name ?? '(unnamed)'}`,
+    company.domains && company.domains.length > 0 ? `Domains: ${company.domains.join(', ')}` : '',
+    company.industry ? `Industry: ${company.industry}` : '',
+    company.tier ? `Tier: ${company.tier}` : '',
+    company.health_score ? `Health score: ${company.health_score}` : '',
+    description ? `Description: ${description}` : '',
+    note ? `Note: ${note}` : '',
+    company.created_at ? `Created: ${company.created_at}` : '',
+    company.updated_at ? `Updated: ${company.updated_at}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+/**
+ * Return a shallow clone of the company with external-text fields enveloped;
+ * ids, domains, and timestamps are left untouched.
+ */
+export function wrapCompanyUntrustedFields(company: FreshdeskCompany): FreshdeskCompany {
+  const wrapped: FreshdeskCompany = { ...company };
+  for (const key of ['name', 'description', 'note'] as const) {
+    const value = wrapField(company[key], COMPANY_SOURCE);
+    if (value !== undefined) wrapped[key] = value;
+  }
   return wrapped;
 }

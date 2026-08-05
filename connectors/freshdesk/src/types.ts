@@ -119,6 +119,39 @@ export interface FreshdeskGroup {
   updated_at?: string;
 }
 
+export interface FreshdeskContact {
+  id: number;
+  name?: string;
+  email?: string;
+  phone?: string;
+  mobile?: string;
+  twitter_id?: string;
+  job_title?: string;
+  company_id?: number;
+  description?: string;
+  address?: string;
+  tags?: string[];
+  active?: boolean;
+  deleted?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface FreshdeskCompany {
+  id: number;
+  name: string;
+  description?: string;
+  note?: string;
+  domains?: string[];
+  industry?: string;
+  tier?: string;
+  health_score?: string;
+  account_tier?: string;
+  renewal_date?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Status / Priority / Source maps
 // ---------------------------------------------------------------------------

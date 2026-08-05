@@ -5,7 +5,11 @@ import {
   mockTicketFields,
   mockAgents,
   mockGroups,
+  mockContacts,
+  mockCompanies,
   makeTicket,
+  makeContact,
+  makeCompany,
 } from '../fixtures/freshdesk-data.js';
 
 const DOMAIN = 'testacme';
@@ -208,6 +212,57 @@ export function createFreshdeskHandlers(
       const authError = checkAuth(request);
       if (authError) return authError;
       return HttpResponse.json(mockGroups);
+    }),
+
+    // ── Contacts & Companies ──────────────────────────────────────
+
+    http.get(`${base}/contacts`, ({ request }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+
+      const url = new URL(request.url);
+      const email = url.searchParams.get('email');
+      const companyId = url.searchParams.get('company_id');
+      let contacts = mockContacts;
+      if (email) contacts = contacts.filter((c) => c.email === email);
+      if (companyId) contacts = contacts.filter((c) => c.company_id === parseInt(companyId, 10));
+      return HttpResponse.json(contacts);
+    }),
+
+    http.get(`${base}/contacts/:id`, ({ request, params }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+
+      const id = parseInt(params.id as string, 10);
+      if (id === 404) {
+        return HttpResponse.json({ message: 'Resource not found' }, { status: 404 });
+      }
+      const contact = mockContacts.find((c) => c.id === id) || makeContact(id);
+      return HttpResponse.json(contact);
+    }),
+
+    http.get(`${base}/search/contacts`, ({ request }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+      return HttpResponse.json({ results: [mockContacts[1]], total: 1 });
+    }),
+
+    http.get(`${base}/companies`, ({ request }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+      return HttpResponse.json(mockCompanies);
+    }),
+
+    http.get(`${base}/companies/:id`, ({ request, params }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+
+      const id = parseInt(params.id as string, 10);
+      if (id === 404) {
+        return HttpResponse.json({ message: 'Resource not found' }, { status: 404 });
+      }
+      const company = mockCompanies.find((c) => c.id === id) || makeCompany(id);
+      return HttpResponse.json(company);
     }),
   ];
 }

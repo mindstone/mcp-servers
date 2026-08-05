@@ -4,6 +4,8 @@ import type {
   FreshdeskTicketField,
   FreshdeskAgent,
   FreshdeskGroup,
+  FreshdeskContact,
+  FreshdeskCompany,
 } from '../../src/types.js';
 
 export function makeTicket(id: number, overrides: Partial<FreshdeskTicket> = {}): FreshdeskTicket {
@@ -122,4 +124,47 @@ export const mockAgents: FreshdeskAgent[] = [
 export const mockGroups: FreshdeskGroup[] = [
   makeGroup(1, { name: 'Support' }),
   makeGroup(2, { name: 'Escalations' }),
+];
+
+export function makeContact(id: number, overrides: Partial<FreshdeskContact> = {}): FreshdeskContact {
+  return {
+    id,
+    name: `Contact ${id}`,
+    email: `contact${id}@example.com`,
+    phone: '+14155550100',
+    job_title: 'Support Manager',
+    company_id: 900,
+    description: `Contact ${id} notes`,
+    tags: ['vip'],
+    active: true,
+    created_at: '2025-08-01T09:00:00Z',
+    updated_at: '2026-01-10T09:00:00Z',
+    ...overrides,
+  };
+}
+
+export function makeCompany(id: number, overrides: Partial<FreshdeskCompany> = {}): FreshdeskCompany {
+  return {
+    id,
+    name: `Company ${id}`,
+    description: `Company ${id} description`,
+    note: `Company ${id} internal note`,
+    domains: [`company${id}.example.com`],
+    industry: 'Software',
+    tier: 'Enterprise',
+    health_score: 'Good',
+    created_at: '2025-08-01T09:00:00Z',
+    updated_at: '2026-01-10T09:00:00Z',
+    ...overrides,
+  };
+}
+
+export const mockContacts: FreshdeskContact[] = [
+  makeContact(100),
+  makeContact(101, { name: 'Jane Customer', email: 'jane@example.com' }),
+];
+
+export const mockCompanies: FreshdeskCompany[] = [
+  makeCompany(900, { name: 'Acme Corp', domains: ['acme.example.com'] }),
+  makeCompany(901, { name: 'TechCorp' }),
 ];
