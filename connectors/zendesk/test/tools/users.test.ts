@@ -73,7 +73,10 @@ describe('User tools', () => {
       const data = result.json as any;
       expect(data.ok).toBe(true);
       expect(data.user.id).toBe(100);
-      expect(data.user.name).toBe('Test User');
+      // User names are end-user-authored: returned inside an envelope.
+      expect(data.user.name).toBe(
+        '<untrusted-content source="external-user">Test User</untrusted-content>',
+      );
     });
   });
 });

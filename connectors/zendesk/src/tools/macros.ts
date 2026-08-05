@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ZendeskMacro, ZendeskMacroApplyResult, ZendeskTicket } from '../types.js';
 import { getAccount } from '../auth.js';
 import { zendeskFetch, noAccountError } from '../client.js';
-import { formatMacro } from '../formatters.js';
+import { formatMacro, wrapMacroFields, wrapUntrustedTicketContent } from '../formatters.js';
 import { withErrorHandling } from '../utils.js';
 
 export function registerMacroTools(server: McpServer): void {
@@ -70,11 +70,13 @@ Use apply_zendesk_macro to apply a macro to a ticket.`,
 
       const format = args.response_format || 'concise';
       const formatOpts = { format: format as 'concise' | 'detailed' };
+      // Macro titles/descriptions are authored in Zendesk — wrap them.
+      const wrappedMacros = macros.map(m => wrapMacroFields(m));
       if (format === 'concise') {
-        const lines = macros.map(m => formatMacro(m, formatOpts));
-        return `Macros (${macros.length} of ${totalCount})${hasMore ? ' - more available' : ''}:\n${lines.join('\n')}`;
+        const lines = wrappedMacros.map(m => formatMacro(m, formatOpts));
+        return `Macros (${wrappedMacros.length} of ${totalCount})${hasMore ? ' - more available' : ''}:\n${lines.join('\n')}`;
       }
-      return JSON.stringify({ ok: true, macros, count: macros.length, total: totalCount, hasMore });
+      return JSON.stringify({ ok: true, macros: wrappedMacros, count: wrappedMacros.length, total: totalCount, hasMore });
     }),
   );
 
@@ -108,11 +110,12 @@ Use list_zendesk_macros to find macro IDs.`,
       }
 
       const response = await zendeskFetch<{ macro: ZendeskMacro }>(account, `/macros/${args.macro_id}.json`);
+      const macro = wrapMacroFields(response.macro);
       const format = args.response_format || 'detailed';
       if (format === 'concise') {
-        return formatMacro(response.macro, { format: 'concise' });
+        return formatMacro(macro, { format: 'concise' });
       }
-      return JSON.stringify({ ok: true, macro: response.macro });
+      return JSON.stringify({ ok: true, macro });
     }),
   );
 
@@ -202,7 +205,7 @@ Example:
         comment_added: hasComment,
         ticket: {
           id: updateResponse.ticket.id,
-          subject: updateResponse.ticket.subject,
+          subject: wrapUntrustedTicketContent(updateResponse.ticket.subject),
           status: updateResponse.ticket.status,
           priority: updateResponse.ticket.priority,
         },

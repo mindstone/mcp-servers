@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ZendeskGroup, ZendeskTicketField, ZendeskView, ZendeskOrganization } from '../types.js';
 import { getAccount } from '../auth.js';
 import { zendeskFetch, noAccountError } from '../client.js';
-import { formatGroup, formatTicketField } from '../formatters.js';
+import { formatGroup, formatTicketField, wrapOrganizationFields } from '../formatters.js';
 import { withErrorHandling } from '../utils.js';
 
 export function registerDiscoveryTools(server: McpServer): void {
@@ -152,18 +152,20 @@ Use organization IDs when:
         next_page?: string;
       }>(account, '/organizations.json', { params });
 
+      // Organization names/details/notes are externally authored — wrap them.
+      const organizations = response.organizations.map(o => wrapOrganizationFields(o));
       const format = args.response_format || 'concise';
       if (format === 'concise') {
-        const lines = response.organizations.map(o => {
+        const lines = organizations.map(o => {
           const domains = o.domain_names?.length ? ` [${o.domain_names.join(', ')}]` : '';
           return `${o.name} (ID: ${o.id})${domains}`;
         });
-        return `Organizations (${response.organizations.length} of ${response.count}):\n${lines.join('\n')}`;
+        return `Organizations (${organizations.length} of ${response.count}):\n${lines.join('\n')}`;
       }
       return JSON.stringify({
         ok: true,
-        organizations: response.organizations,
-        count: response.organizations.length,
+        organizations,
+        count: organizations.length,
         total: response.count,
         hasMore: !!response.next_page,
       });

@@ -57,7 +57,10 @@ describe('Macro tools', () => {
       const data = result.json as any;
       expect(data.ok).toBe(true);
       expect(data.macro.id).toBe(800);
-      expect(data.macro.title).toBe('Close and Resolve');
+      // Macro titles are authored in Zendesk: returned inside an envelope.
+      expect(data.macro.title).toBe(
+        '<untrusted-content source="external-macro">Close and Resolve</untrusted-content>',
+      );
     });
   });
 

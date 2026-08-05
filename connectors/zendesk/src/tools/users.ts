@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ZendeskUser } from '../types.js';
 import { getAccount } from '../auth.js';
 import { zendeskFetch, noAccountError } from '../client.js';
-import { formatUser } from '../formatters.js';
+import { formatUser, wrapUserFields } from '../formatters.js';
 import { withErrorHandling } from '../utils.js';
 
 export function registerUserTools(server: McpServer): void {
@@ -47,14 +47,17 @@ Returns user ID, name, email, role, and organization.`,
 
       const format = args.response_format || 'concise';
       const formatOpts = { format: format as 'concise' | 'detailed' };
+      // User names and emails are end-user-authored — wrap them before they
+      // reach the host LLM.
+      const wrappedUsers = response.results.map(u => wrapUserFields(u));
       if (format === 'concise') {
-        const lines = response.results.map(u => formatUser(u, formatOpts));
-        return `Users (${response.results.length} of ${response.count}):\n${lines.join('\n')}`;
+        const lines = wrappedUsers.map(u => formatUser(u, formatOpts));
+        return `Users (${wrappedUsers.length} of ${response.count}):\n${lines.join('\n')}`;
       }
       return JSON.stringify({
         ok: true,
-        users: response.results,
-        count: response.results.length,
+        users: wrappedUsers,
+        count: wrappedUsers.length,
         total: response.count,
       });
     }),
@@ -82,11 +85,12 @@ Returns full user details including name, email, role, phone, organization, and 
       }
 
       const response = await zendeskFetch<{ user: ZendeskUser }>(account, `/users/${args.user_id}.json`);
+      const user = wrapUserFields(response.user);
       const format = args.response_format || 'detailed';
       if (format === 'concise') {
-        return formatUser(response.user, { format: 'concise' });
+        return formatUser(user, { format: 'concise' });
       }
-      return JSON.stringify({ ok: true, user: response.user });
+      return JSON.stringify({ ok: true, user });
     }),
   );
 }
