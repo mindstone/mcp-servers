@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
+import type { WebClient } from '@slack/web-api';
 import { z } from 'zod';
 import { errorJson, parseSlackPermalink, slackTsToDatetime, withErrorHandling } from '../utils.js';
 import { getSlackClient, getSlackReaderClient, getSlackUserClient } from '../client.js';
@@ -63,6 +64,218 @@ function unknownAuthedUserJson(channel: string): string {
   });
 }
 
+// ---------------------------------------------------------------------
+// Search backend selection: Real-Time Search API with loud legacy fallback
+// ---------------------------------------------------------------------
+// Slack's Real-Time Search API (`assistant.search.context`, launched Feb
+// 2026) superseded legacy `search.messages` — Slack's own usage guidelines
+// say "DON'T use the legacy `search:read` scope and related search.messages".
+// But RTS requires the granular `search:read.*` scopes, which a connected
+// Slack app may not have been granted yet (granting them is the host's OAuth
+// consent decision, not something this connector can force). So the backend
+// is probed per workspace: the first search call tries RTS; a scope/feature
+// refusal flips the process to the legacy endpoint — loudly. Every response
+// carries `search_backend`, and legacy responses add a `search_backend_note` naming the
+// refusal, so the degradation is never silent.
+
+type SearchBackend = 'assistant.search.context' | 'search.messages';
+
+/**
+ * Slack error codes that mean "RTS cannot work with this token/install" (as
+ * opposed to transient failures, which must surface as errors). On any of
+ * these we cache the legacy backend for the process lifetime; re-auth with
+ * the granular scopes restarts the probe because the cache is keyed by team
+ * and a token-refresh does not add scopes.
+ */
+const RTS_FALLBACK_ERROR_CODES: ReadonlySet<string> = new Set([
+  'missing_scope',
+  'not_allowed_token_type',
+  'feature_not_enabled',
+  'access_denied',
+  'deprecated_endpoint',
+  'method_deprecated',
+]);
+
+/**
+ * RTS is cursor-paginated with a tight per-user rate limit (~10 req/min), so
+ * satisfying a legacy-style `page` parameter costs one API call per page.
+ * Deep walks are capped; beyond the cap the deepest fetched page is returned
+ * with `page_walk_truncated: true`.
+ */
+const MAX_RTS_PAGE_WALKS = 5;
+
+const searchBackendCache = new Map<string, SearchBackend>();
+
+/** Test-only: reset the per-workspace backend probe cache. */
+export function _resetSearchBackendCache(): void {
+  searchBackendCache.clear();
+}
+
+function slackErrorDataCode(err: unknown): string | null {
+  if (!err || typeof err !== 'object') return null;
+  const data = (err as { data?: unknown }).data;
+  if (!data || typeof data !== 'object') return null;
+  const code = (data as { error?: unknown }).error;
+  return typeof code === 'string' ? code : null;
+}
+
+interface MessageSearchQuery {
+  query: string;
+  count: number;
+  sort: 'score' | 'timestamp';
+  sort_dir?: 'asc' | 'desc';
+  page: number;
+}
+
+/** Backend-neutral projection of one search hit (legacy search.messages shape). */
+interface NormalizedSearchMatch {
+  ts?: string;
+  channel?: { id?: string; name?: string };
+  user?: string;
+  text?: string;
+  permalink?: string;
+}
+
+interface MessageSearchResult {
+  matches: NormalizedSearchMatch[];
+  total: number;
+  page: number;
+  pageCount: number;
+  hasMore: boolean;
+  backend: SearchBackend;
+  /** Slack error code that forced the legacy fallback, when observed. */
+  fallbackReason?: string;
+  pageWalkTruncated?: boolean;
+}
+
+interface RtsSearchMessage {
+  author_user_id?: string;
+  channel_id?: string;
+  channel_name?: string;
+  message_ts?: string;
+  content?: string;
+  permalink?: string;
+}
+
+interface RtsSearchResponse {
+  results?: { messages?: RtsSearchMessage[] };
+  response_metadata?: { next_cursor?: string };
+}
+
+async function searchViaRealTimeSearch(
+  userClient: WebClient,
+  opts: MessageSearchQuery,
+): Promise<Omit<MessageSearchResult, 'backend' | 'fallbackReason'>> {
+  const limit = Math.min(opts.count, 20); // RTS caps `limit` at 20.
+  let cursor: string | undefined;
+  let page = 0;
+  let data: RtsSearchResponse = {};
+  do {
+    page += 1;
+    // `assistant.search.context` has no typed WebClient method in this SDK
+    // version; apiCall posts to the same /api/<method> endpoint.
+    data = (await userClient.apiCall('assistant.search.context', {
+      query: opts.query,
+      limit,
+      sort: opts.sort,
+      ...(opts.sort_dir ? { sort_dir: opts.sort_dir } : {}),
+      // Ask for every conversation type so results match the legacy "search
+      // everywhere the user can see" semantics. A token missing one of the
+      // granular scopes gets missing_scope → loud legacy fallback.
+      channel_types: 'public_channel,private_channel,mpim,im',
+      ...(cursor ? { cursor } : {}),
+    })) as unknown as RtsSearchResponse;
+    const nextCursor = data.response_metadata?.next_cursor;
+    cursor = nextCursor ? nextCursor : undefined;
+  } while (page < opts.page && cursor && page < MAX_RTS_PAGE_WALKS);
+  const rawMessages = data.results?.messages ?? [];
+  return {
+    matches: rawMessages.map((m) => ({
+      ts: m.message_ts,
+      channel: { id: m.channel_id, name: m.channel_name },
+      user: m.author_user_id,
+      text: m.content,
+      permalink: m.permalink,
+    })),
+    // RTS returns no total hit count; the number of matches on the final
+    // fetched page is the only honest figure available.
+    total: rawMessages.length,
+    page,
+    pageCount: cursor ? page + 1 : page,
+    hasMore: Boolean(cursor),
+    ...(page < opts.page ? { pageWalkTruncated: true } : {}),
+  };
+}
+
+async function searchViaLegacySearchMessages(
+  userClient: WebClient,
+  opts: MessageSearchQuery,
+): Promise<Omit<MessageSearchResult, 'backend' | 'fallbackReason'>> {
+  const result = await userClient.search.messages({
+    query: opts.query,
+    count: opts.count,
+    sort: opts.sort,
+    sort_dir: opts.sort_dir,
+    page: opts.page,
+  });
+  const rawMatches = result.messages?.matches || [];
+  const pageCount = result.messages?.paging?.pages || 1;
+  return {
+    matches: rawMatches.map((m) => ({
+      ts: m.ts,
+      channel: m.channel,
+      user: m.user,
+      text: m.text,
+      permalink: m.permalink,
+    })),
+    total: result.messages?.total || 0,
+    page: opts.page,
+    pageCount,
+    hasMore: opts.page < pageCount,
+  };
+}
+
+export async function runMessageSearch(
+  userClient: WebClient,
+  opts: MessageSearchQuery,
+): Promise<MessageSearchResult> {
+  const cacheKey = process.env.SLACK_TEAM_ID ?? 'default';
+  let fallbackReason: string | undefined;
+  if (searchBackendCache.get(cacheKey) !== 'search.messages') {
+    try {
+      const rts = await searchViaRealTimeSearch(userClient, opts);
+      searchBackendCache.set(cacheKey, 'assistant.search.context');
+      return { ...rts, backend: 'assistant.search.context' };
+    } catch (err) {
+      const code = slackErrorDataCode(err);
+      if (!code || !RTS_FALLBACK_ERROR_CODES.has(code)) throw err;
+      searchBackendCache.set(cacheKey, 'search.messages');
+      fallbackReason = code;
+      console.error(
+        `[slack-mcp] Real-Time Search (assistant.search.context) unavailable for this workspace (${code}); ` +
+          'falling back to legacy search.messages for this process. Grant the granular search:read.* scopes ' +
+          '(search:read.public/private/im/mpim) and reconnect to enable the recommended search path.',
+      );
+    }
+  }
+  const legacy = await searchViaLegacySearchMessages(userClient, opts);
+  return { ...legacy, backend: 'search.messages', ...(fallbackReason ? { fallbackReason } : {}) };
+}
+
+/** Loud-fallback note attached to every legacy-backend search response. */
+export function searchBackendNote(result: MessageSearchResult): string | undefined {
+  if (result.backend !== 'search.messages') return undefined;
+  const reason = result.fallbackReason
+    ? `Slack returned "${result.fallbackReason}" for assistant.search.context.`
+    : 'assistant.search.context was previously refused for this workspace token.';
+  return (
+    `DEPRECATED BACKEND IN USE: results came from legacy search.messages, which Slack officially discourages. ` +
+    `${reason} To enable the recommended Real-Time Search API, reconnect Slack with the granular ` +
+    `search:read.public/private/im/mpim scopes.`
+  );
+}
+
+
 export function registerMessageTools(server: McpServer): void {
   // ---------------------------------------------------------------------
   // search_slack_messages
@@ -72,7 +285,10 @@ export function registerMessageTools(server: McpServer): void {
     {
       description: `Search messages across all channels in the Slack workspace.
 
-Requires user authorization (search:read scope). Supports Slack search modifiers:
+Requires user authorization. Uses Slack's Real-Time Search API
+(assistant.search.context) when the connected app has the granular
+search:read.* scopes; otherwise falls back to legacy search.messages and says
+so in the response (search_backend + search_backend_note). Supports Slack search modifiers:
 - from:@username   — Messages from a specific user
 - in:#channel      — Messages in a specific channel
 - before:YYYY-MM-DD / after:YYYY-MM-DD — Date filters
@@ -101,7 +317,7 @@ Set to_me=true to prepend "to:@<your_username>" automatically.`,
         return errorJson({
           error: 'Search requires user authorization.',
           action_required:
-            'Reconnect Slack via authenticate_slack_workspace to grant the search:read user scope.',
+            'Reconnect Slack via authenticate_slack_workspace to grant search scopes.',
           next_step: 'authenticate_slack_workspace',
         });
       }
@@ -111,16 +327,15 @@ Set to_me=true to prepend "to:@<your_username>" automatically.`,
         const authResult = await userClient.auth.test();
         if (authResult.user) query = `to:@${authResult.user} ${query}`;
       }
-      const page = args.page || 1;
-      const result = await userClient.search.messages({
+      const result = await runMessageSearch(userClient, {
         query,
         count: args.count || 20,
         sort: args.sort || 'score',
         sort_dir: args.sort_dir,
-        page,
+        page: args.page || 1,
       });
       const isConcise = args.response_format === 'concise';
-      const rawMatches = result.messages?.matches || [];
+      const rawMatches = result.matches;
       const userIds = extractUserIdsFromMessages(rawMatches);
       await resolveUserIdsToCache(userIds);
       const matches = rawMatches.map((m) =>
@@ -133,16 +348,24 @@ Set to_me=true to prepend "to:@<your_username>" automatically.`,
           ...(isConcise ? {} : { permalink: m.permalink }),
         }),
       );
-      const total = result.messages?.total || 0;
-      const pageCount = result.messages?.paging?.pages || 1;
-      const hasMore = page < pageCount;
+      const note = searchBackendNote(result);
       return JSON.stringify({
         ok: true,
         messages: matches,
-        total,
-        page,
-        pageCount,
-        ...(hasMore ? { hint: 'More results available. Use page parameter to fetch next page.' } : {}),
+        total: result.total,
+        page: result.page,
+        pageCount: result.pageCount,
+        search_backend: result.backend,
+        ...(result.hasMore
+          ? { hint: 'More results available. Use page parameter to fetch next page.' }
+          : {}),
+        ...(result.pageWalkTruncated
+          ? {
+              page_walk_truncated: true,
+              page_walk_note: `Real-Time Search is cursor-paginated; deep page walks are capped. Showing page ${result.page} of the requested page ${args.page}.`,
+            }
+          : {}),
+        ...(note ? { search_backend_note: note } : {}),
       });
     }),
   );
@@ -155,7 +378,9 @@ Set to_me=true to prepend "to:@<your_username>" automatically.`,
     {
       description: `Get messages you've saved for later in Slack.
 
-Uses Slack search with is:saved modifier. Requires user token with search:read scope.
+Uses Slack search with the is:saved modifier (Real-Time Search API when the
+connected app has the granular search:read.* scopes, otherwise legacy
+search.messages — the response says which via search_backend).
 Additional filters: in:#channel, from:@username, before:/after:DATE, has:link, has:reaction.`,
       inputSchema: z.object({
         query: z.string().optional(),
@@ -178,7 +403,7 @@ Additional filters: in:#channel, from:@username, before:/after:DATE, has:link, h
         return errorJson({
           error: 'Saved messages require user authorization.',
           action_required:
-            'Reconnect Slack via authenticate_slack_workspace to grant search:read.',
+            'Reconnect Slack via authenticate_slack_workspace to grant search scopes.',
           next_step: 'authenticate_slack_workspace',
         });
       }
@@ -186,16 +411,15 @@ Additional filters: in:#channel, from:@username, before:/after:DATE, has:link, h
       const query = userQuery.toLowerCase().includes('is:saved')
         ? userQuery
         : `is:saved ${userQuery}`.trim();
-      const page = args.page || 1;
-      const result = await userClient.search.messages({
+      const result = await runMessageSearch(userClient, {
         query,
         count: args.count || 20,
         sort: args.sort || 'timestamp',
         sort_dir: args.sort_dir || 'desc',
-        page,
+        page: args.page || 1,
       });
       const isConcise = args.response_format === 'concise';
-      const rawMatches = result.messages?.matches || [];
+      const rawMatches = result.matches;
       const userIds = extractUserIdsFromMessages(rawMatches);
       await resolveUserIdsToCache(userIds);
       const matches = rawMatches.map((m) =>
@@ -208,19 +432,27 @@ Additional filters: in:#channel, from:@username, before:/after:DATE, has:link, h
           ...(isConcise ? {} : { permalink: m.permalink }),
         }),
       );
-      const total = result.messages?.total || 0;
-      const pageCount = result.messages?.paging?.pages || 1;
-      const hasMore = page < pageCount;
+      const note = searchBackendNote(result);
       return JSON.stringify({
         ok: true,
         messages: matches,
-        total,
-        page,
-        pageCount,
-        ...(hasMore ? { hint: 'More results available. Use page parameter to fetch next page.' } : {}),
-        ...(total === 0
+        total: result.total,
+        page: result.page,
+        pageCount: result.pageCount,
+        search_backend: result.backend,
+        ...(result.hasMore
+          ? { hint: 'More results available. Use page parameter to fetch next page.' }
+          : {}),
+        ...(result.pageWalkTruncated
+          ? {
+              page_walk_truncated: true,
+              page_walk_note: `Real-Time Search is cursor-paginated; deep page walks are capped. Showing page ${result.page} of the requested page ${args.page}.`,
+            }
+          : {}),
+        ...(result.total === 0
           ? { note: 'No saved messages found. Save messages in Slack using "Save for later".' }
           : {}),
+        ...(note ? { search_backend_note: note } : {}),
       });
     }),
   );

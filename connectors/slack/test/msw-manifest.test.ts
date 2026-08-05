@@ -48,6 +48,11 @@ const RAW_URL_PATTERN = /https:\/\/slack\.com\/api\/([a-zA-Z0-9._]+)/g;
 // a string. Add them here when we adopt them.
 const PAGINATE_PATTERN = /\bpaginate\(\s*['"`]([a-zA-Z]+)\.([a-zA-Z]+)['"`]/g;
 
+// Untyped WebClient calls — `apiCall('group.method', ...)` (used for methods
+// with no typed SDK wrapper, e.g. assistant.search.context). The full dotted
+// method name maps straight onto the URL path.
+const API_CALL_PATTERN = /\.apiCall\(\s*['"`]([a-zA-Z0-9.]+)['"`]/g;
+
 function walk(dir: string, files: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
@@ -73,11 +78,14 @@ function collectProductionUrls(): Set<string> {
   // server methods like server.registerTool) — filter aggressively to
   // avoid false positives.
   const SLACK_GROUPS = new Set([
+    'assistant',
     'auth',
     'bookmarks',
     'chat',
     'conversations',
+    'emoji',
     'files',
+    'pins',
     'reactions',
     'reminders',
     'search',
@@ -103,7 +111,15 @@ function collectProductionUrls(): Set<string> {
       found.add(urlFor(group, method));
     }
 
-    // 3. Capture raw URL literals (oauth.v2.access in tokenProvider).
+    // 3. Capture apiCall('group.method', ...) usages (full dotted method).
+    for (const m of contents.matchAll(API_CALL_PATTERN)) {
+      const method = m[1];
+      const group = method.split('.')[0];
+      if (!SLACK_GROUPS.has(group)) continue;
+      found.add(`${SLACK_API_BASE}/${method}`);
+    }
+
+    // 4. Capture raw URL literals (oauth.v2.access in tokenProvider).
     for (const m of contents.matchAll(RAW_URL_PATTERN)) {
       found.add(`${SLACK_API_BASE}/${m[1]}`);
     }

@@ -199,8 +199,8 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 - `list_slack_workspaces` — Check Slack connection status (connected, token health, near-expiry).
 
 ### Messages
-- `search_slack_messages` — Search across all channels (Slack search modifiers supported).
-- `get_slack_saved_messages` — Get messages saved for later (uses `is:saved`).
+- `search_slack_messages` — Search across all channels (Slack search modifiers supported). Uses Slack's Real-Time Search API (`assistant.search.context`) when the connected app holds the granular `search:read.*` scopes; otherwise falls back to legacy `search.messages` and says so in the response (`search_backend` / `search_backend_note`).
+- `get_slack_saved_messages` — Get messages saved for later (uses `is:saved`). Same search-backend reporting as `search_slack_messages`.
 - `get_slack_message_by_link` — Retrieve a message from its permalink URL.
 - `compose_slack_message` — Open an inline editable compose form before sending; the form posts via `post_slack_message` when the user clicks Send.
 - `post_slack_message` — Post a message; DM recipient verification baked in. Self-DMs are blocked and redirected to `send_myself_a_note` (a user-token self-DM never notifies).

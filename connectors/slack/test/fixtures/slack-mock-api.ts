@@ -15,6 +15,7 @@ export const SLACK_API_BASE = 'https://slack.com/api';
  * sync with `src/**` references via the msw-manifest test.
  */
 export const SLACK_PRODUCTION_API_URLS: string[] = [
+  `${SLACK_API_BASE}/assistant.search.context`,
   `${SLACK_API_BASE}/auth.test`,
   `${SLACK_API_BASE}/bookmarks.add`,
   `${SLACK_API_BASE}/chat.postMessage`,
@@ -198,6 +199,25 @@ export function createSlackHandlers() {
             },
           ],
         },
+      }),
+    ),
+    http.post(`${SLACK_API_BASE}/assistant.search.context`, () =>
+      HttpResponse.json({
+        ok: true,
+        results: {
+          messages: [
+            {
+              author_user_id: 'U123',
+              team_id: TEAM_ID,
+              channel_id: 'C123TEST',
+              channel_name: 'general',
+              message_ts: '1704067200.123456',
+              content: 'Searched message',
+              permalink: 'https://test.slack.com/archives/C123TEST/p1704067200123456',
+            },
+          ],
+        },
+        response_metadata: { next_cursor: '' },
       }),
     ),
     http.post(`${SLACK_API_BASE}/reactions.add`, () => HttpResponse.json({ ok: true })),
