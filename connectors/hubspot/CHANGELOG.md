@@ -13,6 +13,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 
+- Generic custom-object tools: `search_hubspot_object`, `get_hubspot_object`, and `create_hubspot_object` work with any CRM object type (standard plural names or tenant-defined custom objects such as `p_widgets` / `2-1234567`). Text search uses HubSpot's native full-text `query` field; `objectType` is validated against the connector's safe-shape regex before any path interpolation. Custom object types need the `crm.objects.custom.read` / `crm.objects.custom.write` OAuth scopes enabled on the connected app — a 403 surfaces the honest multi-cause capability copy.
 - Notes read/update/delete tools: `search_hubspot_notes` (text search matches `hs_note_body`), `get_hubspot_note`, `update_hubspot_note`, and `delete_hubspot_note`. Notes were previously create-only, which dead-ended meeting-note workflows; the full lifecycle is now available. Update/delete are flagged `destructiveHint` per the write-tool convention.
 
 ### Security

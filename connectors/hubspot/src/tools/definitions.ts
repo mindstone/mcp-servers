@@ -2028,6 +2028,92 @@ RETURNS: Created line item with id`,
   }
 ];
 
+// Custom Object Tools — generic CRM object type for tenant-defined objects
+export const customObjectTools: ToolMetadata[] = [
+  {
+    name: 'search_hubspot_object',
+    category: 'Custom Objects',
+    description: `Search records of ANY HubSpot object type, including custom objects.
+
+USE THIS WHEN:
+- The object type isn't covered by a dedicated tool (contacts/companies/deals/tickets/leads/tasks/notes/products/line_items) — e.g. a tenant-defined custom object like "p_widgets" or "2-1234567"
+- Prefer the dedicated search_hubspot_<object> tools for standard objects
+
+objectType: the CRM object type name — standard plural names ("contacts") or custom object names/IDs ("p_widgets", "2-1234567"). Custom object names are visible in HubSpot under Settings → Data Management → Custom Objects, or via list_hubspot_properties on a known type.
+
+The query parameter uses HubSpot's native full-text search across the object's default searchable properties. Use filters for precise property matching.
+
+REQUIRES the crm.objects.custom.read OAuth scope for custom object types. On a 403 the account's plan or the connected app's scopes are the likely cause — reconnecting alone won't help unless the scope is enabled on the app.`,
+    aliases: ['search_hubspot_custom_objects', 'search_custom_objects'],
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        objectType: { type: 'string', pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$', description: 'Object type name (e.g. "contacts", "p_widgets", "2-1234567")' },
+        query: { type: 'string', description: 'Free-text search across the object\'s searchable properties' },
+        filters: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              propertyName: { type: 'string' },
+              operator: { type: 'string', enum: ['EQ', 'NEQ', 'LT', 'LTE', 'GT', 'GTE', 'CONTAINS_TOKEN', 'IN'] },
+              value: { type: 'string' }
+            }
+          },
+          description: 'Filter criteria for precise matching'
+        },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return (default: basic info)' },
+        limit: { type: 'number', description: 'Max results (default 10, max 100)' },
+        ...searchPaginationProperties
+      },
+      required: ['objectType']
+    }
+  },
+  {
+    name: 'get_hubspot_object',
+    category: 'Custom Objects',
+    description: `Get a single record of ANY HubSpot object type by ID, including custom objects.
+
+PREREQUISITE: Get the record ID from search_hubspot_object first.
+
+REQUIRES the crm.objects.custom.read OAuth scope for custom object types.`,
+    aliases: ['get_hubspot_custom_object', 'get_custom_object'],
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        objectType: { type: 'string', pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$', description: 'Object type name (e.g. "p_widgets", "2-1234567")' },
+        objectId: { type: 'string', description: 'HubSpot record ID (numeric string)' },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' },
+        associations: { type: 'array', items: { type: 'string' }, description: 'Associated object types to include (e.g. ["contacts", "deals"])' }
+      },
+      required: ['objectType', 'objectId']
+    }
+  },
+  {
+    name: 'create_hubspot_object',
+    category: 'Custom Objects',
+    description: `Create a record of ANY HubSpot object type, including custom objects.
+
+Use list_hubspot_properties with the same objectType first to discover the
+object's properties and their expected values. To link the new record to other
+records, follow up with create_hubspot_association (or create_hubspot_labeled_association).
+
+REQUIRES the crm.objects.custom.write OAuth scope for custom object types.`,
+    aliases: ['create_hubspot_custom_object', 'create_custom_object'],
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        objectType: { type: 'string', pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$', description: 'Object type name (e.g. "p_widgets", "2-1234567")' },
+        properties: { type: 'object', description: 'Record properties', additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH } }
+      },
+      required: ['objectType', 'properties']
+    }
+  }
+];
+
 // Forms Tools
 export const formsTools: ToolMetadata[] = [
   {
@@ -2984,6 +3070,7 @@ const BASE_TOOLS: ToolMetadata[] = [
   ...engagementTools,
   ...productTools,
   ...lineItemTools,
+  ...customObjectTools,
   ...formsTools,
   ...analyticsTools,
   ...marketingEmailTools,

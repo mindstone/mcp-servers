@@ -144,6 +144,7 @@ export interface SearchFilter {
 export interface SearchRequest {
   filterGroups?: Array<{ filters: SearchFilter[] }>;
   sorts?: Array<{ propertyName: string; direction: 'ASCENDING' | 'DESCENDING' }>;
+  query?: string;
   properties?: string[];
   limit?: number;
   after?: string;

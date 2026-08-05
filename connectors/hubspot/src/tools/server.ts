@@ -76,7 +76,10 @@ import {
   handleUpdateProduct,
   handleSearchLineItems,
   handleGetLineItem,
-  handleCreateLineItem
+  handleCreateLineItem,
+  handleSearchCustomObjects,
+  handleGetCustomObject,
+  handleCreateCustomObject
 } from './crm-handlers.js';
 import {
   handleListForms,
@@ -558,6 +561,17 @@ export class HubSpotServer {
             break;
           case 'create_hubspot_line_item':
             result = await handleCreateLineItem(args as unknown as Parameters<typeof handleCreateLineItem>[0]);
+            break;
+
+          // Custom Objects (generic object type)
+          case 'search_hubspot_object':
+            result = await handleSearchCustomObjects(args as unknown as Parameters<typeof handleSearchCustomObjects>[0]);
+            break;
+          case 'get_hubspot_object':
+            result = await handleGetCustomObject(args as unknown as Parameters<typeof handleGetCustomObject>[0]);
+            break;
+          case 'create_hubspot_object':
+            result = await handleCreateCustomObject(args as unknown as Parameters<typeof handleCreateCustomObject>[0]);
             break;
 
           // Forms

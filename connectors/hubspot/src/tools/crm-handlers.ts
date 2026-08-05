@@ -1,4 +1,4 @@
-import { getHubSpotClientAsync, SearchFilter, SearchRequest, HubSpotApiError } from '../api/hubspot-client.js';
+import { getHubSpotClientAsync, SearchFilter, SearchRequest, HubSpotApiError, assertHubSpotObjectType } from '../api/hubspot-client.js';
 import { injectHostMetadata } from '../utils/user-context.js';
 import {
   buildHubSpotCapabilityDeniedError,
@@ -917,4 +917,57 @@ export async function handleCreateLineItem(args: { properties: Record<string, st
     logger.error(`Create line item failed:`, parsed);
     throw new Error(JSON.stringify(parsed));
   }
+}
+
+// Custom object handlers — generic CRM object type (e.g. a tenant-defined
+// 'p_widgets' or '2-1234567'). Unlike the per-object search handlers, the
+// text query rides HubSpot's native full-text `query` search field because a
+// custom object's searchable properties aren't known to the connector.
+interface CustomObjectSearchArgs {
+  objectType: string;
+  query?: string;
+  filters?: SearchFilter[];
+  properties?: string[];
+  limit?: number;
+  after?: string;
+}
+
+export async function handleSearchCustomObjects(args: CustomObjectSearchArgs) {
+  assertHubSpotObjectType(args.objectType, 'objectType');
+
+  try {
+    const client = await getHubSpotClientAsync();
+    const searchRequest: SearchRequest = {
+      limit: args.limit || 10,
+      properties: args.properties,
+      after: args.after
+    };
+    if (args.query && args.query.trim()) {
+      searchRequest.query = args.query;
+    }
+    if (args.filters && args.filters.length > 0) {
+      searchRequest.filterGroups = [{ filters: args.filters }];
+    }
+
+    const [result, validation] = await Promise.all([
+      client.searchObjects(args.objectType, searchRequest),
+      validateRequestedProperties(args.objectType, args.properties),
+    ]);
+    logger.info(`Found ${result.results.length} ${args.objectType}`);
+    return attachPropertyValidation(sanitizeHubSpotResponse(result, `hubspot:crm/${args.objectType}`), validation);
+  } catch (error) {
+    const parsed = parseHubSpotError(error, { objectType: args.objectType, operation: 'search', args });
+    logger.error(`Search ${args.objectType} failed:`, parsed);
+    throw new Error(JSON.stringify(parsed));
+  }
+}
+
+export async function handleGetCustomObject(args: { objectType: string; objectId: string } & GetArgs) {
+  assertHubSpotObjectType(args.objectType, 'objectType');
+  return getObject(args.objectType, args.objectId, args);
+}
+
+export async function handleCreateCustomObject(args: { objectType: string } & CreateArgs) {
+  assertHubSpotObjectType(args.objectType, 'objectType');
+  return createObject(args.objectType, args);
 }
