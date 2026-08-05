@@ -7,6 +7,7 @@ import {
 import type { AuthRequiredReason } from '@mindstone/mcp-server-microsoft-shared';
 import { CalendarBusinessError } from './calendar.js';
 import { AUTH_TOOL_NAME, REQUEST_TIMEOUT_MS, getMsPackageId } from './types.js';
+import { wrapUntrusted } from './untrusted-content.js';
 
 /**
  * Compose a per-call abort signal with the cohort timeout.
@@ -172,6 +173,16 @@ function detectTokenProviderAuthReason(err: unknown): AuthRequiredReason | null 
 }
 
 /**
+ * `formatGraphError()` interpolates the vendor-authored Graph error-body
+ * message for most statuses (and the caught error's message otherwise), so
+ * the whole formatted string is enveloped before it becomes model-visible
+ * (AGENTS.md invariant #6).
+ */
+function envelopedGraphError(err: unknown): string {
+  return wrapUntrusted(formatGraphError(err), 'microsoft-calendar:graph-error') ?? 'Unknown error';
+}
+
+/**
  * Map a Microsoft Graph error / shared TokenProvider error into the right
  * tool response. Returns `auth_required` for token-related failures, the
  * generic recovery-guidance envelope otherwise.
@@ -199,7 +210,7 @@ export function buildErrorResponse(err: unknown): CallToolResult {
           text: JSON.stringify({
             ...buildAuthRequiredResponse(),
             reason,
-            error: formatGraphError(err),
+            error: envelopedGraphError(err),
             package_id: getMsPackageId(),
           }),
         },
@@ -212,7 +223,7 @@ export function buildErrorResponse(err: unknown): CallToolResult {
       {
         type: 'text',
         text: errorJson({
-          error: formatGraphError(err),
+          error: envelopedGraphError(err),
           action_required:
             'Retry the call. If it continues to fail, run authenticate_microsoft_account to refresh the connection.',
           next_step: AUTH_TOOL_NAME,
