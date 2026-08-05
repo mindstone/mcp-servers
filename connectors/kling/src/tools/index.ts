@@ -5,3 +5,4 @@ export { registerExtendTools } from './extend.js';
 export { registerLipSyncTools } from './lip-sync.js';
 export { registerTaskListTools } from './tasks.js';
 export { registerAccountTools } from './account.js';
+export { registerImageTools } from './image.js';

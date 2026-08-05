@@ -14,7 +14,7 @@ describe('Smoke test — tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 9 tools with correct names', async () => {
+  it('registers exactly 10 tools with correct names', async () => {
     mswServer.use(...createKlingHandlers());
 
     testClient = await createTestClient({
@@ -28,12 +28,13 @@ describe('Smoke test — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(9);
+    expect(toolsResult.tools).toHaveLength(10);
     expect(toolNames).toEqual([
       'check_kling_task',
       'configure_kling_api_keys',
       'download_kling_video',
       'extend_kling_video',
+      'generate_kling_image',
       'generate_kling_image_to_video',
       'generate_kling_lip_sync',
       'generate_kling_video',

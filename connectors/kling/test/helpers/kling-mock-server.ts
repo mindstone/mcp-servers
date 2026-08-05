@@ -6,6 +6,7 @@ const mockTaskId = 'task-kling-abc123';
 const mockI2vTaskId = 'task-i2v-456';
 const mockExtendTaskId = 'task-extend-789';
 const mockLipSyncTaskId = 'task-lipsync-012';
+const mockImageTaskId = 'task-image-345';
 const mockVideoId = 'video-abc123';
 
 /**
@@ -192,6 +193,45 @@ export function createKlingHandlers() {
         { status: 404 },
       );
     }),
+
+    // POST /images/generations — start an image generation task
+    http.post(`${BASE}/images/generations`, async ({ request }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+      return HttpResponse.json({
+        code: 0,
+        message: 'success',
+        data: { task_id: mockImageTaskId },
+      });
+    }),
+
+    // GET /images/generations/:taskId — check image task status
+    http.get(`${BASE}/images/generations/:taskId`, ({ request, params }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+      const taskId = params.taskId as string;
+      if (taskId === mockImageTaskId) {
+        return HttpResponse.json({
+          code: 0,
+          message: 'success',
+          data: {
+            task_id: mockImageTaskId,
+            task_status: 'succeed',
+            task_status_msg: 'Generation completed',
+            task_result: {
+              images: [
+                { index: 0, url: 'https://cdn.klingai.com/image/345-0.png' },
+                { index: 1, url: 'https://cdn.klingai.com/image/345-1.png' },
+              ],
+            },
+          },
+        });
+      }
+      return HttpResponse.json(
+        { code: 1201, message: 'Task not found', data: null },
+        { status: 404 },
+      );
+    }),
   ];
 }
 
@@ -235,4 +275,4 @@ export function createKlingRateLimitHandlers() {
   ];
 }
 
-export { mockTaskId, mockI2vTaskId, mockExtendTaskId, mockLipSyncTaskId, mockVideoId };
+export { mockTaskId, mockI2vTaskId, mockExtendTaskId, mockLipSyncTaskId, mockImageTaskId, mockVideoId };
