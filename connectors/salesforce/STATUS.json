@@ -11,13 +11,19 @@
     ]
   },
   "tools": {
-    "count": 26,
+    "count": 37,
     "domains": [
       "accounts",
       "contacts",
       "opportunities",
       "leads",
       "tasks",
+      "cases",
+      "events",
+      "search",
+      "notes",
+      "campaigns",
+      "reports",
       "query"
     ]
   },

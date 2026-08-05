@@ -11,7 +11,7 @@ Salesforce CRM MCP server — accounts, contacts, opportunities, leads, tasks, u
 
 - **Version:** [0.1.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-salesforce)
 - **Auth:** OAuth (local 127.0.0.1 callback) or static access token ([`SALESFORCE_CLIENT_SECRET`](./server.json), [`SALESFORCE_ACCESS_TOKEN`](./server.json))
-- **Tools:** [26](./src/tools/) (accounts, contacts, opportunities, leads, tasks, query)
+- **Tools:** [37](./src/tools/) (accounts, contacts, opportunities, leads, tasks, cases, events, search, notes, campaigns, reports, query)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -135,7 +135,7 @@ Then call `salesforce_connect_account` to start the OAuth flow.
 - `SALESFORCE_OAUTH_PORT` — OAuth callback port (`0` = OS-assigned; default: `0`)
 - `SALESFORCE_OAUTH_SCOPES` — Space-separated OAuth scopes. Leave unset to use the connector default.
 
-## Available Tools (26)
+## Available Tools (37)
 
 ### Account Management
 - `salesforce_connect_account` — Connect a Salesforce account via OAuth
@@ -168,6 +168,29 @@ Then call `salesforce_connect_account` to start the OAuth flow.
 - `salesforce_create_task` — Create a task
 - `salesforce_update_task` — Update a task
 
+### Cases
+- `salesforce_get_cases` — Get support cases with filters
+- `salesforce_create_case` — Create a support case
+- `salesforce_update_case` — Update a support case
+
+### Events
+- `salesforce_get_events` — Get calendar events with filters
+- `salesforce_create_event` — Create a calendar event
+
+### Search
+- `salesforce_search` — Cross-object full-text search (SOSL)
+
+### Notes
+- `salesforce_get_notes` — Get notes attached to a record
+- `salesforce_create_note` — Create a note, optionally attached to a record
+
+### Campaigns
+- `salesforce_get_campaigns` — Get marketing campaigns with filters
+- `salesforce_get_campaign_members` — Get leads/contacts in a campaign
+
+### Reports
+- `salesforce_run_report` — Run an existing Salesforce report (Analytics REST API)
+
 ### Users
 - `salesforce_get_users` — Get Salesforce users
 
@@ -187,6 +210,7 @@ Then call `salesforce_connect_account` to start the OAuth flow.
 - OAuth credentials are stored under `SALESFORCE_CONFIG_DIR` (default `~/.mcp/salesforce`) with restrictive directory and file permissions.
 - Write and disconnect tools are marked so capable hosts can ask for confirmation before changing Salesforce data.
 - SOQL helper paths escape string and `LIKE` values, strip comments quote-safely before applying the query limit cap, and enforce a maximum of 200 records for raw SOQL queries.
+- Record text returned by read tools is wrapped in `<untrusted-content>` envelopes so Salesforce-authored field values are presented to the model as data, not instructions.
 
 ## Licence
 

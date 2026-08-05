@@ -100,6 +100,49 @@ export function createSalesforceHandlers() {
           records: [{ Id: '00T000000000001', Subject: 'Follow up', Status: 'Not Started', Priority: 'Normal', attributes: { type: 'Task' } }],
         });
       }
+      if (soql.includes('FROM Case')) {
+        return HttpResponse.json({
+          totalSize: 1,
+          done: true,
+          records: [{ Id: '500000000000001', CaseNumber: '00001001', Subject: 'Login issue', Status: 'New', Priority: 'Medium', attributes: { type: 'Case' } }],
+        });
+      }
+      if (soql.includes('FROM Event')) {
+        return HttpResponse.json({
+          totalSize: 1,
+          done: true,
+          records: [{ Id: '00U000000000001', Subject: 'Quarterly review', StartDateTime: '2026-08-10T14:00:00.000Z', EndDateTime: '2026-08-10T15:00:00.000Z', attributes: { type: 'Event' } }],
+        });
+      }
+      if (soql.includes('FROM ContentNote')) {
+        return HttpResponse.json({
+          totalSize: 1,
+          done: true,
+          records: [{
+            Id: '069000000000001',
+            Title: 'Discovery call notes',
+            TextPreview: 'Discussed renewal pricing.',
+            Content: Buffer.from('Discussed renewal pricing.', 'utf8').toString('base64'),
+            CreatedDate: '2026-08-01T10:00:00.000Z',
+            OwnerId: '005000000000001',
+            attributes: { type: 'ContentNote' },
+          }],
+        });
+      }
+      if (soql.includes('FROM CampaignMember')) {
+        return HttpResponse.json({
+          totalSize: 1,
+          done: true,
+          records: [{ Id: '00v000000000001', CampaignId: '701000000000001', ContactId: '003000000000001', Status: 'Sent', attributes: { type: 'CampaignMember' } }],
+        });
+      }
+      if (soql.includes('FROM Campaign')) {
+        return HttpResponse.json({
+          totalSize: 1,
+          done: true,
+          records: [{ Id: '701000000000001', Name: 'Q3 Webinar Series', Type: 'Webinar', Status: 'In Progress', IsActive: true, attributes: { type: 'Campaign' } }],
+        });
+      }
       if (soql.includes('FROM User')) {
         return HttpResponse.json({
           totalSize: 1,
@@ -108,6 +151,45 @@ export function createSalesforceHandlers() {
         });
       }
       return HttpResponse.json({ totalSize: 0, done: true, records: [] });
+    }),
+
+    // Analytics REST: run report
+    http.get('*/services/data/*/analytics/reports/:reportId', ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      const includeDetails = new URL(request.url).searchParams.get('includeDetails') === 'true';
+      return HttpResponse.json({
+        attributes: { type: 'Report', reportId: params.reportId },
+        reportMetadata: { name: 'Pipeline by Stage', reportFormat: 'SUMMARY', developerName: 'Pipeline_by_Stage' },
+        reportExtendedMetadata: {
+          aggregateColumnInfo: { 's!AMOUNT': { label: 'Sum of Amount' } },
+          groupingColumnInfo: { STAGE_NAME: { label: 'Stage' } },
+        },
+        factMap: {
+          'T!T': {
+            aggregates: [{ label: '50000', value: 50000 }],
+            rows: includeDetails
+              ? [{ dataCells: [{ label: 'Big Deal', value: '006000000000001' }] }]
+              : [],
+          },
+        },
+        groupingsDown: { groupings: [{ label: 'Prospecting', value: 'Prospecting' }] },
+        groupingsAcross: { groupings: [] },
+        hasDetailRows: includeDetails,
+        allData: true,
+      });
+    }),
+
+    // SOSL search
+    http.get('*/services/data/*/search*', ({ request }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      return HttpResponse.json({
+        searchRecords: [
+          { Id: '001000000000001', Name: 'Acme Corp', Industry: 'Technology', attributes: { type: 'Account' } },
+          { Id: '003000000000001', FirstName: 'Jane', LastName: 'Doe', Email: 'jane@acme.com', attributes: { type: 'Contact' } },
+        ],
+      });
     }),
 
     // Create records (POST to sobject)

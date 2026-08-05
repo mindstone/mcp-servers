@@ -8,16 +8,24 @@ const EXPECTED_TOOLS = [
   'salesforce_connect_account',
   'salesforce_convert_lead',
   'salesforce_create_account',
+  'salesforce_create_case',
   'salesforce_create_contact',
+  'salesforce_create_event',
   'salesforce_create_lead',
+  'salesforce_create_note',
   'salesforce_create_opportunity',
   'salesforce_create_record',
   'salesforce_create_task',
   'salesforce_describe_object',
   'salesforce_disconnect_account',
   'salesforce_get_accounts',
+  'salesforce_get_campaign_members',
+  'salesforce_get_campaigns',
+  'salesforce_get_cases',
   'salesforce_get_contacts',
+  'salesforce_get_events',
   'salesforce_get_leads',
+  'salesforce_get_notes',
   'salesforce_get_opportunities',
   'salesforce_get_records',
   'salesforce_get_tasks',
@@ -25,7 +33,10 @@ const EXPECTED_TOOLS = [
   'salesforce_list_connected_accounts',
   'salesforce_list_objects',
   'salesforce_query',
+  'salesforce_run_report',
+  'salesforce_search',
   'salesforce_update_account',
+  'salesforce_update_case',
   'salesforce_update_contact',
   'salesforce_update_lead',
   'salesforce_update_opportunity',
@@ -43,7 +54,7 @@ describe('Smoke test — Salesforce MCP server', () => {
     vi.unstubAllEnvs();
   });
 
-  it('should register all 26 tools via MCP protocol', async () => {
+  it('should register all 37 tools via MCP protocol', async () => {
     mswServer.use(...createSalesforceHandlers());
     tempConfig = createTempConfig({
       accounts: [{ id: 'test-user', username: 'test@example.com', connected_at: new Date().toISOString() }],
@@ -73,7 +84,7 @@ describe('Smoke test — Salesforce MCP server', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(26);
+    expect(toolsResult.tools).toHaveLength(37);
     expect(toolNames).toEqual(EXPECTED_TOOLS);
   });
 
@@ -115,12 +126,19 @@ describe('Smoke test — Salesforce MCP server', () => {
     const readOnlyTools = [
       'salesforce_list_connected_accounts',
       'salesforce_get_accounts',
+      'salesforce_get_campaign_members',
+      'salesforce_get_campaigns',
+      'salesforce_get_cases',
       'salesforce_get_contacts',
+      'salesforce_get_events',
       'salesforce_get_opportunities',
       'salesforce_get_leads',
+      'salesforce_get_notes',
       'salesforce_get_tasks',
       'salesforce_get_users',
       'salesforce_query',
+      'salesforce_run_report',
+      'salesforce_search',
       'salesforce_describe_object',
       'salesforce_list_objects',
       'salesforce_get_records',
@@ -129,6 +147,7 @@ describe('Smoke test — Salesforce MCP server', () => {
     const destructiveTools = [
       'salesforce_disconnect_account',
       'salesforce_update_account',
+      'salesforce_update_case',
       'salesforce_update_contact',
       'salesforce_update_opportunity',
       'salesforce_update_lead',

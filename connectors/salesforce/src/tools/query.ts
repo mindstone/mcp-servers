@@ -1,7 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, validateObjectName, validateFields, isValidQueryFieldName, isValidFieldName, escapeSOQL, ALLOWED_FILTER_OPERATORS, validateAndMergeCustomFields, checkSaveResult } from '../utils.js';
+import { withErrorHandling, validateObjectName, validateFields, isValidQueryFieldName, isValidFieldName, escapeSOQL, ALLOWED_FILTER_OPERATORS, validateAndMergeCustomFields, checkSaveResult, sanitizeRecords } from '../utils.js';
 import { withConnection } from '../client.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import { ConnectorError, type SaveResult } from '../types.js';
 
 // Strip SQL-style line ("// ...") and block ("/* ... ") comments from a
@@ -137,7 +138,7 @@ export function registerQueryTools(server: McpServer): void {
         const MAX_LIMIT = 200;
         const query = applyQueryLimitCap(args.query, MAX_LIMIT);
         const result = await conn.query(query);
-        return JSON.stringify({ ok: true, records: result.records, totalSize: result.totalSize, done: result.done });
+        return JSON.stringify({ ok: true, records: sanitizeRecords(result.records, 'salesforce:query:records'), totalSize: result.totalSize, done: result.done });
       });
     }),
   );
@@ -154,20 +155,22 @@ export function registerQueryTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       return withConnection(undefined, async (conn) => {
         const metadata = await conn.sobject(args.object_name).describe();
+        // Labels and record-type names are org-authored text — envelope them;
+        // field API names stay raw (they are identifiers, reused in queries).
         return JSON.stringify({
           ok: true,
           name: metadata.name,
-          label: metadata.label,
-          labelPlural: metadata.labelPlural,
+          label: wrapUntrusted(metadata.label, 'salesforce:describe_object:label'),
+          labelPlural: wrapUntrusted(metadata.labelPlural, 'salesforce:describe_object:labelPlural'),
           fields: metadata.fields.map((f) => ({
             name: f.name,
-            label: f.label,
+            label: wrapUntrusted(f.label, 'salesforce:describe_object:field_label'),
             type: f.type,
             required: !f.nillable && !f.defaultedOnCreate,
             updateable: f.updateable,
             createable: f.createable,
           })),
-          recordTypeInfos: metadata.recordTypeInfos,
+          recordTypeInfos: sanitizeRecords(metadata.recordTypeInfos, 'salesforce:describe_object:recordTypeInfos'),
         });
       });
     }),
@@ -187,7 +190,7 @@ export function registerQueryTools(server: McpServer): void {
         const result = await conn.describeGlobal();
         let objects = result.sobjects.map((s) => ({
           name: s.name,
-          label: s.label,
+          label: wrapUntrusted(s.label, 'salesforce:list_objects:label'),
           queryable: s.queryable,
           createable: s.createable,
           updateable: s.updateable,
@@ -289,7 +292,7 @@ export function registerQueryTools(server: McpServer): void {
         const limit = Math.min(Math.max(1, args.limit ?? 50), 200);
         soql += ` LIMIT ${limit}`;
         const result = await conn.query(soql);
-        return JSON.stringify({ ok: true, records: result.records, totalSize: result.totalSize, done: result.done });
+        return JSON.stringify({ ok: true, records: sanitizeRecords(result.records, 'salesforce:get_records:records'), totalSize: result.totalSize, done: result.done });
       });
     }),
   );

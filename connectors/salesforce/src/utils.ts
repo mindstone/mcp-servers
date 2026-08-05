@@ -1,5 +1,6 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ConnectorError } from './types.js';
+import { wrapUntrusted } from './untrusted-content.js';
 
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
 
@@ -64,6 +65,19 @@ export function escapeSOQL(value: string): string {
 }
 
 /**
+ * Escape a user-supplied search term for interpolation inside a SOSL
+ * `FIND {term}` clause. SOSL gives special meaning to a different character
+ * set than SOQL — every reserved character is backslash-escaped so the term
+ * is always a single literal token and can never break out of the braces or
+ * inject operators (AND/OR groupings, wildcards, field scoping).
+ */
+export function escapeSOSL(term: string): string {
+  if (!term) return '';
+  // Backslash MUST be escaped first to avoid double-escaping.
+  return term.replace(/\\/g, '\\\\').replace(/([?&|!{}[\]()^~*:"+-])/g, '\\$1');
+}
+
+/**
  * Escape a user-supplied substring for interpolation inside a SOQL
  * `LIKE '%...%'` clause. Identical to `escapeSOQL` semantically (both
  * escape `\\`, `'`, `%`, `_`) but exists as a separate helper so every
@@ -116,6 +130,32 @@ export function formatSOQLDate(dateStr: string, paramName: string): string {
 }
 
 /**
+ * Format a date or datetime string as a SOQL datetime literal (UTC).
+ * Accepts a plain date ("2026-01-09", treated as midnight UTC) or an ISO 8601
+ * datetime ("2026-01-09T14:30:00Z", offsets supported).
+ */
+export function formatSOQLDateTime(value: string, paramName: string): string {
+  const dateOnly = value.match(/^(\d{4}-\d{2}-\d{2})$/);
+  if (dateOnly) return `${dateOnly[1]}T00:00:00Z`;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d{1,3})?(Z|[+-]\d{2}:?\d{2})?$/.test(value)) {
+    throw new ConnectorError(
+      `Invalid ${paramName}: "${value}"`,
+      'INVALID_DATE_FORMAT',
+      'Use ISO 8601 (e.g., "2026-01-09T14:30:00Z") or a plain date ("2026-01-09", treated as midnight UTC)',
+    );
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new ConnectorError(
+      `Invalid ${paramName}: "${value}"`,
+      'INVALID_DATE_FORMAT',
+      'Use ISO 8601 (e.g., "2026-01-09T14:30:00Z") or a plain date ("2026-01-09", treated as midnight UTC)',
+    );
+  }
+  return parsed.toISOString();
+}
+
+/**
  * Validate field names and return validated or default fields.
  */
 export function validateFields(
@@ -164,6 +204,49 @@ export function validateAndMergeCustomFields(
 }
 
 export const ALLOWED_FILTER_OPERATORS = new Set(['=', '!=', '<', '>', '<=', '>=', 'LIKE']);
+
+/**
+ * Keys whose values are structural identifiers, not user-authored text: record
+ * IDs are copied verbatim into follow-up tool calls (update, convert, link), so
+ * enveloping them would corrupt that flow. Everything else reachable inside a
+ * Salesforce record (names, emails, descriptions, subjects, …) is authored in
+ * the external system and MUST be enveloped (AGENTS.md invariant #6, FOX-3490).
+ */
+function isStructuralRecordKey(key: string): boolean {
+  return key === 'Id' || key === 'attributes' || key.endsWith('Id');
+}
+
+function wrapRecordValue(value: unknown, source: string): unknown {
+  if (typeof value === 'string') return wrapUntrusted(value, source);
+  if (Array.isArray(value)) return value.map((item) => wrapRecordValue(item, source));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        isStructuralRecordKey(key) ? item : wrapRecordValue(item, source),
+      ]),
+    );
+  }
+  return value;
+}
+
+/**
+ * Envelope every external-text field in a list of Salesforce records before
+ * they are returned to the LLM. Structural keys (Id, *Id, attributes) pass
+ * through raw so downstream tool calls can use them as identifiers.
+ */
+export function sanitizeRecords(records: unknown[], source: string): unknown[] {
+  return records.map((record) => wrapRecordValue(record, source));
+}
+
+/**
+ * Envelope every string inside an arbitrary external-data blob (report
+ * results, metadata payloads), leaving structural keys (Id, *Id, attributes)
+ * raw. Use for non-record response shapes where every value is org-authored.
+ */
+export function sanitizeExternalData<T>(value: T, source: string): T {
+  return wrapRecordValue(value, source) as T;
+}
 
 export function checkSaveResult(
   result: { success: boolean; errors?: unknown[] } | Array<{ success: boolean; errors?: unknown[] }>,

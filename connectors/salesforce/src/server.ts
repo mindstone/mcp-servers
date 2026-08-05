@@ -8,6 +8,12 @@ import {
   registerOpportunityTools,
   registerLeadTools,
   registerTaskTools,
+  registerCaseTools,
+  registerEventTools,
+  registerSearchTools,
+  registerNoteTools,
+  registerCampaignTools,
+  registerReportTools,
   registerUserTools,
   registerQueryTools,
 } from './tools/index.js';
@@ -26,6 +32,12 @@ export function createServer(): McpServer {
   registerOpportunityTools(server);
   registerLeadTools(server);
   registerTaskTools(server);
+  registerCaseTools(server);
+  registerEventTools(server);
+  registerSearchTools(server);
+  registerNoteTools(server);
+  registerCampaignTools(server);
+  registerReportTools(server);
   registerUserTools(server);
   registerQueryTools(server);
 

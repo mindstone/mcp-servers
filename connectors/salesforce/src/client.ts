@@ -1,6 +1,7 @@
 import jsforce from 'jsforce';
 import {
   ConnectorError,
+  SALESFORCE_API_VERSION,
   type SalesforceTokenData,
   type SalesforceAccount,
 } from './types.js';
@@ -72,6 +73,7 @@ export async function getConnection(accountId?: string): Promise<jsforce.Connect
   const connectionConfig: any = {
     instanceUrl: tokenData.instance_url,
     accessToken: tokenData.access_token,
+    version: SALESFORCE_API_VERSION,
   };
 
   // Only hand jsforce a refresh token when we can also give it a way to USE

@@ -11,6 +11,23 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+
+- New Case tools: `salesforce_get_cases`, `salesforce_create_case`, `salesforce_update_case` for support/customer-success workflows.
+- New Event tools: `salesforce_get_events`, `salesforce_create_event` for calendar/meeting-prep workflows. Date filters accept plain dates or ISO 8601 datetimes.
+- New `salesforce_search` tool: cross-object full-text search (SOSL) across Account, Contact, Lead, Opportunity, Case, Task, and Event. Search terms are escaped against SOSL reserved characters.
+- New Note tools: `salesforce_get_notes` and `salesforce_create_note` (ContentNote, linked to a record via ContentDocumentLink) for meeting-notes-into-CRM workflows. Note bodies are base64-decoded and enveloped on read.
+- New Campaign read tools: `salesforce_get_campaigns` and `salesforce_get_campaign_members` for marketing attribution questions.
+- New `salesforce_run_report` tool: run an existing Salesforce report via the Analytics REST API and return groupings, aggregates, and (optionally) detail rows.
+
+### Changed
+
+- The Salesforce API version is now pinned to v66.0 (Spring '26) via `SALESFORCE_API_VERSION` instead of riding jsforce's bundled default (v50.0), so the connector talks to a deliberate, tested API version.
+
+### Security
+
+- Envelope every record field returned by `salesforce_query`, `salesforce_get_records`, and all `salesforce_get_*` tools in `<untrusted-content>` tags so org-authored text (names, emails, descriptions, subjects) is treated as data, not instructions (FOX-3490). Record IDs stay raw so they can be reused in follow-up calls. Org-authored labels in `salesforce_describe_object` and `salesforce_list_objects` are enveloped too.
+
 ## [0.1.3] - 2026-06-12
 
 ### Changed
