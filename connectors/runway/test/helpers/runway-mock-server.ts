@@ -85,6 +85,13 @@ export function createRunwayHandlers(expectedApiKey = MOCK_API_KEY) {
       return HttpResponse.json({ id: 'task-vid2vid-001' });
     }),
 
+    // POST /v1/video_upscale
+    http.post(`${BASE}/video_upscale`, async ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      return HttpResponse.json({ id: 'task-upscale-001' });
+    }),
+
     // POST /v1/character_performance
     http.post(`${BASE}/character_performance`, async ({ request }) => {
       const authError = checkAuth(request, expectedApiKey);
@@ -380,6 +387,13 @@ export function createBodyCapturingHandlers(expectedApiKey = MOCK_API_KEY) {
       const body = await request.json();
       capturedBodies.push({ url: request.url, method: 'POST', body });
       return HttpResponse.json({ id: 'task-vid2vid-001' });
+    }),
+    http.post(`${BASE}/video_upscale`, async ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      const body = await request.json();
+      capturedBodies.push({ url: request.url, method: 'POST', body });
+      return HttpResponse.json({ id: 'task-upscale-001' });
     }),
     http.post(`${BASE}/voices`, async ({ request }) => {
       const authError = checkAuth(request, expectedApiKey);

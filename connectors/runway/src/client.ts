@@ -651,8 +651,7 @@ export function costEstimate(
   const rates: Record<string, number> = {
     'gen4.5': 12,
     gen4_turbo: 5,
-    gen3a_turbo: 5,
-    gen4_aleph: 15,
+    aleph2: 28,
     act_two: 5,
     veo3: 40,
     'veo3.1': audio === false ? 20 : 40,

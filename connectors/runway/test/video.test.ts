@@ -56,6 +56,44 @@ describe('Video generation tools', () => {
       const postBody = capturedBodies.find(c => c.url.includes('/text_to_video'))?.body as Record<string, unknown>;
       expect(postBody.contentModeration).toEqual({ publicFigureThreshold: 'low' });
     });
+
+    it('sends negative_prompt for veo models', async () => {
+      const { handlers, capturedBodies } = createBodyCapturingHandlers(MOCK_API_KEY);
+      mswServer.use(...handlers);
+
+      testClient = await createTestClient({
+        env: { RUNWAYML_API_SECRET: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('generate_video_from_text', {
+        prompt_text: 'A calm beach at sunset',
+        model: 'veo3.1',
+        negative_prompt: 'people, text, watermark',
+      });
+
+      expect(result.isError).toBeFalsy();
+      const postBody = capturedBodies.find(c => c.url.includes('/text_to_video'))?.body as Record<string, unknown>;
+      expect(postBody.negativePrompt).toBe('people, text, watermark');
+    });
+
+    it('omits negative_prompt for gen4.5 (unsupported upstream)', async () => {
+      const { handlers, capturedBodies } = createBodyCapturingHandlers(MOCK_API_KEY);
+      mswServer.use(...handlers);
+
+      testClient = await createTestClient({
+        env: { RUNWAYML_API_SECRET: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      await testClient.callTool('generate_video_from_text', {
+        prompt_text: 'A calm beach at sunset',
+        model: 'gen4.5',
+        negative_prompt: 'people',
+      });
+
+      const postBody = capturedBodies.find(c => c.url.includes('/text_to_video'))?.body as Record<string, unknown>;
+      expect(postBody.negativePrompt).toBeUndefined();
+    });
+
   });
 
   describe('generate_video_from_image', () => {
@@ -109,6 +147,27 @@ describe('Video generation tools', () => {
       expect(promptImage[0]).toEqual({ uri: 'https://example.com/start.jpg', position: 'first' });
       expect(promptImage[1]).toEqual({ uri: 'https://example.com/end.jpg', position: 'last' });
     });
+
+    it('sends negative_prompt for veo models', async () => {
+      const { handlers, capturedBodies } = createBodyCapturingHandlers(MOCK_API_KEY);
+      mswServer.use(...handlers);
+
+      testClient = await createTestClient({
+        env: { RUNWAYML_API_SECRET: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('generate_video_from_image', {
+        prompt_image: 'https://example.com/photo.jpg',
+        prompt_text: 'Gentle waves rolling in',
+        model: 'veo3.1_fast',
+        negative_prompt: 'boats, birds',
+      });
+
+      expect(result.isError).toBeFalsy();
+      const postBody = capturedBodies.find(c => c.url.includes('/image_to_video'))?.body as Record<string, unknown>;
+      expect(postBody.negativePrompt).toBe('boats, birds');
+    });
+
   });
 
   describe('generate_video_from_video', () => {
@@ -129,7 +188,30 @@ describe('Video generation tools', () => {
       const data = JSON.parse(result.text);
       expect(data.ok).toBe(true);
       expect(data.task_id).toBe('task-vid2vid-001');
-      expect(data.model).toBe('gen4_aleph');
+      expect(data.model).toBe('aleph2');
+
+      const postBody = capturedBodies.find(c => c.url.includes('/video_to_video'))?.body as Record<string, unknown>;
+      expect(postBody.model).toBe('aleph2');
+    });
+
+    it('maps reference_image to an aleph2 keyframe at second 0', async () => {
+      const { handlers, capturedBodies } = createBodyCapturingHandlers(MOCK_API_KEY);
+      mswServer.use(...handlers);
+
+      testClient = await createTestClient({
+        env: { RUNWAYML_API_SECRET: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('generate_video_from_video', {
+        video: 'https://example.com/input.mp4',
+        prompt_text: 'Make it look like a watercolor painting',
+        reference_image: 'https://example.com/style.jpg',
+      });
+
+      expect(result.isError).toBeFalsy();
+      const postBody = capturedBodies.find(c => c.url.includes('/video_to_video'))?.body as Record<string, unknown>;
+      expect(postBody.keyframes).toEqual([{ uri: 'https://example.com/style.jpg', seconds: 0 }]);
+      expect(postBody.references).toBeUndefined();
     });
   });
 

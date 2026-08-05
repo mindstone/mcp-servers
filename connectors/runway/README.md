@@ -9,7 +9,7 @@ Runway ML MCP server for Model Context Protocol hosts. Generate AI video, images
 
 - **Version:** [0.3.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-runway)
 - **Auth:** API key ([`RUNWAYML_API_SECRET`](./server.json))
-- **Tools:** [22](./src/tools/) (video, image, audio, voices, tasks)
+- **Tools:** [23](./src/tools/) (video, image, audio, voices, tasks)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -118,7 +118,7 @@ node dist/index.js
 }
 ```
 
-## Tools (22)
+## Tools (23)
 
 ### Configuration
 - `configure_runway_api_key` — Save your Runway API key
@@ -126,8 +126,9 @@ node dist/index.js
 ### Video
 - `generate_video_from_image` — Animate a still image into a video
 - `generate_video_from_text` — Create a video from a text description
-- `generate_video_from_video` — Re-style or transform an existing video
+- `generate_video_from_video` — Re-style or transform an existing video (Aleph 2.0)
 - `character_performance` — Animate a character with facial expressions and body movements (Act-Two)
+- `upscale_video` — Upscale a video up to 4K (Magnific Video Upscaler)
 
 ### Image
 - `generate_image` — Generate an image from text, optionally with reference images

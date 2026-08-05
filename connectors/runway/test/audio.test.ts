@@ -33,6 +33,65 @@ describe('Audio generation tools', () => {
       expect(data.voice).toBe('Bernard');
       expect(data.estimated_credits).toBeGreaterThan(0);
     });
+
+    it('submits eleven_v3 with a preset voice', async () => {
+      const { handlers, capturedBodies } = createBodyCapturingHandlers(MOCK_API_KEY);
+      mswServer.use(...handlers);
+
+      testClient = await createTestClient({
+        env: { RUNWAYML_API_SECRET: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('generate_speech', {
+        text: 'Wow [laughs], that is amazing!',
+        voice: 'Maya',
+        model: 'eleven_v3',
+      });
+
+      expect(result.isError).toBeFalsy();
+      const data = JSON.parse(result.text);
+      expect(data.ok).toBe(true);
+      expect(data.model).toBe('eleven_v3');
+
+      const postBody = capturedBodies.find(c => c.url.includes('/text_to_speech'))?.body as Record<string, unknown>;
+      expect(postBody.model).toBe('eleven_v3');
+      expect(postBody.promptText).toBe('Wow [laughs], that is amazing!');
+      expect(postBody.voice).toEqual({ type: 'runway-preset', presetId: 'Maya' });
+    });
+
+    it('rejects a custom voice with eleven_v3', async () => {
+      mswServer.use(...createRunwayHandlers());
+
+      testClient = await createTestClient({
+        env: { RUNWAYML_API_SECRET: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('generate_speech', {
+        text: 'Hello from a custom voice.',
+        voice: 'b0a4c1d2-0000-4000-8000-customvoice01',
+        model: 'eleven_v3',
+      });
+
+      expect(result.isError).toBe(true);
+      const data = JSON.parse(result.text);
+      expect(data.ok).toBe(false);
+      expect(data.code).toBe('INVALID_INPUT');
+      expect(data.error).toContain('preset voices only');
+    });
+
+    it('defaults to eleven_multilingual_v2 when model is omitted', async () => {
+      const { handlers, capturedBodies } = createBodyCapturingHandlers(MOCK_API_KEY);
+      mswServer.use(...handlers);
+
+      testClient = await createTestClient({
+        env: { RUNWAYML_API_SECRET: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      await testClient.callTool('generate_speech', { text: 'Default model check.' });
+
+      const postBody = capturedBodies.find(c => c.url.includes('/text_to_speech'))?.body as Record<string, unknown>;
+      expect(postBody.model).toBe('eleven_multilingual_v2');
+    });
   });
 
   describe('generate_sound_effect', () => {

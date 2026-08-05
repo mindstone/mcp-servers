@@ -1,9 +1,30 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { runwayFetch, runwayRawFetch } from '../client.js';
-import type { VoiceListResponse, VoicePreviewResponse } from '../types.js';
+import { wrapUntrusted } from '../untrusted-content.js';
+import type { VoicePreviewResponse } from '../types.js';
 import { RunwayError } from '../types.js';
 import { withErrorHandling } from '../utils.js';
+
+/**
+ * External-response schema for GET /v1/voices. `name` and `description` are
+ * authored in the external system (by the user, or by whoever created the
+ * voice), so they are attacker-controllable text and must be enveloped before
+ * they reach model-visible output (invariant #6).
+ */
+const voiceItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullish(),
+  createdAt: z.string(),
+  status: z.string(),
+});
+
+const voiceListResponseSchema = z.object({
+  data: z.array(voiceItemSchema),
+  hasMore: z.boolean(),
+  nextCursor: z.string().nullish(),
+});
 
 export function registerVoiceTools(server: McpServer): void {
   // ── List Custom Voices ────────────────────────────────────────────────
@@ -17,9 +38,13 @@ export function registerVoiceTools(server: McpServer): void {
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async () => {
-      const result = await runwayFetch<VoiceListResponse>('/voices');
+      const raw = await runwayFetch<unknown>('/voices');
+      const result = voiceListResponseSchema.parse(raw);
       const voices = result.data.map(v => ({
-        id: v.id, name: v.name, description: v.description || '', status: v.status, created: v.createdAt,
+        id: v.id,
+        name: wrapUntrusted(v.name, 'runway-voice'),
+        description: wrapUntrusted(v.description || '', 'runway-voice'),
+        status: v.status, created: v.createdAt,
       }));
       return JSON.stringify({
         ok: true, voices, count: voices.length, has_more: result.hasMore,

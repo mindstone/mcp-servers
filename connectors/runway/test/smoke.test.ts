@@ -25,6 +25,7 @@ const EXPECTED_TOOLS = [
   'query_credit_usage',
   'swap_voice',
   'upload_media',
+  'upscale_video',
   'wait_for_runway_task',
   'check_runway_task',
 ].sort();
@@ -40,7 +41,7 @@ describe('Smoke test — tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 22 tools with correct names', async () => {
+  it('registers exactly 23 tools with correct names', async () => {
     mswServer.use(...createRunwayHandlers());
 
     testClient = await createTestClient({
@@ -53,13 +54,13 @@ describe('Smoke test — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(22);
+    expect(toolsResult.tools).toHaveLength(23);
     expect(toolNames).toEqual(EXPECTED_TOOLS);
   });
 });
 
 describe('Spawned stdio smoke test', () => {
-  it('lists 22 tools from built dist/index.js', async () => {
+  it('lists 23 tools from built dist/index.js', async () => {
     const { createStdioTestClient } = await import('@mindstone/mcp-test-harness');
     const { join } = await import('path');
 
@@ -75,7 +76,7 @@ describe('Spawned stdio smoke test', () => {
 
     try {
       const toolsResult = await client.client.listTools();
-      expect(toolsResult.tools).toHaveLength(22);
+      expect(toolsResult.tools).toHaveLength(23);
     } finally {
       await client.close();
     }
