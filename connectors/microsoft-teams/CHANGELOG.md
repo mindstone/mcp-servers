@@ -4,6 +4,10 @@ All notable changes to this connector will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Corrected the 0.1.0 changelog entry below, which claimed "search" and "replies" tools that never actually shipped (message search and threaded replies only arrive in this release, as `search_messages` / `reply_to_message` / `reply_to_channel_message`).
+
 ### Added
 
 - `get_user_presence` (a colleague's availability; requires `Presence.Read.All`) and `set_presence` (set your own status via `setUserPreferredPresence`, with an optional duration; requires `Presence.ReadWrite`).
@@ -35,4 +39,4 @@ All notable changes to this connector will be documented in this file.
 
 ### Added
 
-- Initial Microsoft 365 Teams MCP server with seven tools for chats, messages, search, channels, sends, and replies.
+- Initial Microsoft 365 Teams MCP server with seven tools covering chats, messages, teams, channels, sends, and presence. (Corrected after release: the original entry also claimed search and reply tools, which did not exist until later.)
