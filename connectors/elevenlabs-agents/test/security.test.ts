@@ -84,4 +84,26 @@ describe('validatePublicHttpsUrl', () => {
   ])('rejects %s (%s)', (value) => {
     expect(() => validatePublicHttpsUrl('url', value)).toThrowError(/must be a public https URL/);
   });
+
+  // The WHATWG parser preserves terminal root-label dots, and `localhost.` is
+  // DNS-equivalent to `localhost` — every blocked hostname spelling must stay
+  // blocked with one or two trailing dots appended.
+  it.each([
+    ['https://localhost./hook', 'localhost + one trailing dot'],
+    ['https://localhost../hook', 'localhost + two trailing dots'],
+    ['https://metadata.google.internal./', '.internal + one trailing dot'],
+    ['https://metadata.google.internal../', '.internal + two trailing dots'],
+    ['https://printer.local./hook', '.local + one trailing dot'],
+    ['https://printer.local../hook', '.local + two trailing dots'],
+    ['https://wiki.internal./hook', 'wiki.internal + one trailing dot'],
+    ['https://intranet./hook', 'single-label + trailing dot'],
+    ['https://127.0.0.1./hook', 'IPv4 loopback + trailing dot'],
+    ['https://./hook', 'root label only'],
+  ])('rejects %s (%s)', (value) => {
+    expect(() => validatePublicHttpsUrl('url', value)).toThrowError(/must be a public https URL/);
+  });
+
+  it('accepts a public hostname written with a trailing root-label dot', () => {
+    expect(() => validatePublicHttpsUrl('url', 'https://example.com./hook')).not.toThrow();
+  });
 });

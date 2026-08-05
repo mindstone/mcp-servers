@@ -17,12 +17,16 @@
  *   one dotted-quad check covers the obfuscated spellings.
  * - No internal hostname spellings (`localhost`, `*.local`, `*.internal`, …)
  *   and no single-label names, which only resolve on an internal network.
+ *   Trailing root-label dots are stripped before classification: the WHATWG
+ *   parser preserves them, and `localhost.` is DNS-equivalent to `localhost`,
+ *   so an unstripped comparison would miss that whole spelling class.
  *
  * What this cannot do: a public hostname may still resolve to an internal
  * address (DNS rebinding) or redirect there — but the fetch happens inside
  * ElevenLabs' network, not ours, so local resolution would prove nothing. The
- * fail-closed boundary is scheme + literal-IP/hostname classification, and it
- * is exactly that boundary the checks below enforce.
+ * fail-closed boundary is scheme + literal-IP/hostname classification (on the
+ * trailing-dot-normalised hostname), and it is exactly that boundary the
+ * checks below enforce.
  */
 
 import { ElevenLabsError } from './types.js';
@@ -151,7 +155,12 @@ export function validatePublicHttpsUrl(field: string, value: string): void {
     fail('embedded credentials are not allowed');
   }
 
-  const hostname = parsed.hostname.toLowerCase();
+  // The WHATWG parser preserves terminal root-label dots on hostnames
+  // (`localhost.` stays `localhost.`), and `localhost.` is DNS-equivalent to
+  // `localhost`, so every classification below runs on the hostname with all
+  // trailing dots stripped. Stripping is fail-closed — no legitimate webhook
+  // host needs a trailing dot, and `localhost..` normalises the same way.
+  const hostname = parsed.hostname.toLowerCase().replace(/\.+$/, '');
   if (hostname === '') fail('the hostname is empty');
 
   if (hostname.startsWith('[')) {
