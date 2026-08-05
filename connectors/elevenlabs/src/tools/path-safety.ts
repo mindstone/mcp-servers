@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { ElevenLabsError } from '../types.js';
 
 export type ResolveResult =
   | { ok: true; path: string }
@@ -148,4 +149,85 @@ export function resolveAudioPath(filePath: string): ResolveResult {
   }
 
   return { ok: true, path: canonical };
+}
+
+/**
+ * Resolve the destination for a connector-generated artifact (downloaded or
+ * generated audio, alignment JSON, SRT) inside the canonical workspace root
+ * (`MCP_WORKSPACE_PATH` when set, else `os.tmpdir()`), applying the same
+ * canonical-prefix containment discipline as reads (AGENTS.md invariant #5:
+ * it "applies to download targets and any path joined from external input").
+ *
+ * `fileName` must be a connector-generated basename (UUID-based); it is never
+ * caller-supplied. The containment check runs anyway so a future refactor
+ * that lets external input influence the name fails closed instead of
+ * escaping the workspace.
+ */
+export function resolveWorkspaceOutputPath(fileName: string): string {
+  const root = getAudioWorkspaceRoot();
+  const candidate = path.join(root, fileName);
+  const canonical = canonicalisePrefix(candidate);
+  if (!isInsideAudioWorkspaceRoot(canonical, root)) {
+    throw new ElevenLabsError(
+      `Refusing to write outside the workspace sandbox root (${root}). Got: ${fileName}`,
+      'OUTPUT_PATH_SANDBOX_VIOLATION',
+      'Generated files are written inside MCP_WORKSPACE_PATH (or os.tmpdir() when unset).',
+    );
+  }
+  return canonical;
+}
+
+/**
+ * Write a connector-generated artifact inside the workspace sandbox.
+ *
+ * Exclusive creation: the `wx` flag (O_CREAT|O_EXCL) atomically refuses any
+ * pre-existing path — including symlinks, which O_EXCL does not follow — so
+ * a download can never overwrite or write through a planted file. Filenames
+ * are UUID-based, so a collision means something is wrong, not "retry".
+ *
+ * Returns the canonical destination path.
+ */
+export function writeWorkspaceArtifact(fileName: string, data: Buffer | string): string {
+  const dest = resolveWorkspaceOutputPath(fileName);
+  try {
+    fs.writeFileSync(dest, data, { flag: 'wx' });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+      throw new ElevenLabsError(
+        `Refusing to overwrite an existing file: ${dest}`,
+        'OUTPUT_FILE_EXISTS',
+        'The destination already exists (or is a symlink). Remove it and retry.',
+      );
+    }
+    throw err;
+  }
+  return dest;
+}
+
+/**
+ * Write a set of related artifacts (e.g. audio + alignment + SRT) inside the
+ * workspace sandbox. If any write fails, the artifacts written earlier in the
+ * set are removed so a partial group never survives on disk.
+ *
+ * Returns the canonical destination paths in entry order.
+ */
+export function writeWorkspaceArtifacts(
+  entries: ReadonlyArray<{ fileName: string; data: Buffer | string }>,
+): string[] {
+  const written: string[] = [];
+  try {
+    for (const entry of entries) {
+      written.push(writeWorkspaceArtifact(entry.fileName, entry.data));
+    }
+  } catch (err) {
+    for (const writtenPath of written) {
+      try {
+        fs.unlinkSync(writtenPath);
+      } catch {
+        // Best-effort cleanup; the original error is the one that matters.
+      }
+    }
+    throw err;
+  }
+  return written;
 }

@@ -28,7 +28,7 @@ RELATED TOOLS:
 - generate_speech: single-voice TTS when you only need one narrator
 - check_subscription: confirm credits before long scripts
 
-RETURNS: file_path and size_bytes for the combined dialogue audio (tmp file).
+RETURNS: file_path and size_bytes for the combined dialogue audio (saved under MCP_WORKSPACE_PATH, or os.tmpdir() when unset).
 
 COST: ~1 credit per 100 characters across all lines.`,
       inputSchema: z.object({

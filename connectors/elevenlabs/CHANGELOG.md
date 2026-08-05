@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Security
+- Generated and downloaded artifacts (speech/sound-effect/dialogue audio, history and dubbing downloads, with-timestamps audio/alignment/SRT, voice-design previews) now write inside the canonical `MCP_WORKSPACE_PATH` root — falling back to `os.tmpdir()` only when it is unset — via the same canonical-prefix containment used for file reads, instead of always landing in the host temp directory.
+- Artifact writes use exclusive creation (`O_EXCL`, no symlink follow): a pre-existing destination — regular file or symlink — is rejected rather than overwritten, and multi-artifact writes (`generate_speech_with_timestamps` audio + alignment + SRT) remove earlier artifacts if a later write fails, so no partial set survives.
+
 ### Added
 - `transcribe_audio` gains speaker diarization (`diarize`, `num_speakers`, `diarization_threshold`) and word-level timestamps (`timestamps_granularity`, `include_word_timestamps`), plus the `scribe_v2` model option. Diarized output is grouped into per-speaker `utterances[]` with enveloped text.
 - `list_history` and `get_history_item_audio` (FREE) — browse past generations and re-download their audio without regenerating.

@@ -24,7 +24,7 @@ RELATED TOOLS:
 - generate_speech: synthesize new speech from text instead of converting audio
 - check_subscription: confirm credits before conversion
 
-RETURNS: file_path and size_bytes for the converted audio (saved under os.tmpdir()).
+RETURNS: file_path and size_bytes for the converted audio (saved under MCP_WORKSPACE_PATH, or os.tmpdir() when unset).
 
 COST: Credits based on source audio duration.`,
       inputSchema: z.object({

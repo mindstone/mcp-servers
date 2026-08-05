@@ -1,6 +1,3 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
 import * as crypto from 'crypto';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -14,17 +11,17 @@ import {
   type VoiceDesignResponse,
 } from '../types.js';
 import { withErrorHandling } from '../utils.js';
+import { writeWorkspaceArtifact } from './path-safety.js';
 
 const TEXT_LENGTH_MESSAGE =
   'When provided, text must be 100–1000 characters (ElevenLabs API requirement). Omit text entirely to auto-generate sample lines instead.';
 
-/** Decode a base64 audio preview to a tmp file — never return base64 in tool output. */
+/** Decode a base64 audio preview to a workspace-sandbox file — never return base64 in tool output. */
 function writePreviewAudioToTmp(audioBase64: string, mediaType?: string): { filePath: string; sizeBytes: number } {
   const buffer = Buffer.from(audioBase64, 'base64');
   const ext = mediaType?.includes('wav') ? 'wav' : 'mp3';
   const fileName = `elevenlabs_preview_${crypto.randomUUID()}.${ext}`;
-  const filePath = path.join(os.tmpdir(), fileName);
-  fs.writeFileSync(filePath, buffer);
+  const filePath = writeWorkspaceArtifact(fileName, buffer);
   return { filePath, sizeBytes: buffer.length };
 }
 
@@ -48,7 +45,7 @@ RELATED TOOLS:
 - delete_voice: remove test voices after create_voice_from_preview
 - list_voices: browse existing voices instead of designing new ones
 
-RETURNS: previews[] with generated_voice_id and preview_file_path (audio decoded to tmp — NEVER base64). Preview speech text is auto-generated unless you supply a 100+ character sample line.
+RETURNS: previews[] with generated_voice_id and preview_file_path (audio decoded to a file under MCP_WORKSPACE_PATH, or os.tmpdir() when unset — NEVER base64). Preview speech text is auto-generated unless you supply a 100+ character sample line.
 
 COST: Uses voice-design credits per preview.`,
       inputSchema: z.object({

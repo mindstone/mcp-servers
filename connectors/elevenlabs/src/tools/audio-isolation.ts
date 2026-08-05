@@ -28,7 +28,7 @@ RELATED TOOLS:
 - speech_to_speech: apply a different voice after isolation
 - clone_voice: clone from a cleaner sample
 
-RETURNS: file_path and size_bytes for the isolated audio (saved under os.tmpdir()).
+RETURNS: file_path and size_bytes for the isolated audio (saved under MCP_WORKSPACE_PATH, or os.tmpdir() when unset).
 
 COST: Credits based on audio duration.`,
       inputSchema: z.object({

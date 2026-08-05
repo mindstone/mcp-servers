@@ -130,7 +130,7 @@ node dist/index.js
 - `search_shared_voices` — Search the public shared voice library (filters include accent)
 - `clone_voice` — Create an instant voice clone from local audio samples (`destructiveHint`)
 - `delete_voice` — Permanently delete a voice (`destructiveHint`)
-- `design_voice` — Generate voice-design previews from a text description (slow; previews saved to tmp files)
+- `design_voice` — Generate voice-design previews from a text description (slow; previews saved under the workspace)
 - `create_voice_from_preview` — Save a design preview as a permanent voice (`destructiveHint`)
 
 ### Speech & conversion
@@ -168,7 +168,7 @@ node dist/index.js
 ### Transcription
 - `transcribe_audio` — Transcribe speech from an audio file to text, with optional speaker diarization (`diarize`, `num_speakers`, `diarization_threshold`) and word-level timestamps (`include_word_timestamps`); `scribe_v1` and `scribe_v2` models
 
-Local file paths for upload tools must be inside `MCP_WORKSPACE_PATH` (or `os.tmpdir()` when unset). See `src/tools/file-input.ts`.
+Local file paths for upload tools must be inside `MCP_WORKSPACE_PATH` (or `os.tmpdir()` when unset). See `src/tools/file-input.ts`. Generated and downloaded files (speech audio, subtitles, history/dubbing downloads, voice-design previews) are written into the same canonical workspace root with exclusive creation — existing files are never overwritten. See `src/tools/path-safety.ts`.
 
 ## Licence
 

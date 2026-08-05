@@ -1,7 +1,4 @@
 import { z } from 'zod';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
 import * as crypto from 'crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
@@ -16,6 +13,7 @@ import {
 } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
+import { writeWorkspaceArtifacts } from './path-safety.js';
 
 const pronunciationDictionaryLocatorsSchema = z
   .array(
@@ -355,35 +353,42 @@ COST: ~1 credit per 100 characters.`,
         );
       }
 
-      // Persist artifacts alongside the other generation tools (tmp dir).
-      // The audio/alignment text derives from the caller's own input, so no
-      // untrusted-content envelope applies to file contents.
+      // Persist artifacts inside the workspace sandbox (MCP_WORKSPACE_PATH
+      // when set, else os.tmpdir()) via the shared canonical-containment
+      // helper. The audio/alignment text derives from the caller's own input,
+      // so no untrusted-content envelope applies to file contents.
       const baseName = `elevenlabs_${crypto.randomUUID()}`;
       const ext = extensionFromContentType(
         outputFormat.startsWith('mp3') ? 'audio/mpeg' : 'audio/wav',
       );
-      const audioPath = path.join(os.tmpdir(), `${baseName}.${ext}`);
       const audioBuffer = Buffer.from(data.audio_base64, 'base64');
-      fs.writeFileSync(audioPath, audioBuffer);
+
+      const artifacts: Array<{ fileName: string; data: Buffer | string }> = [
+        { fileName: `${baseName}.${ext}`, data: audioBuffer },
+      ];
 
       const alignment = data.normalized_alignment ?? data.alignment ?? null;
-      let alignmentPath: string | undefined;
-      let srtPath: string | undefined;
       let wordCount = 0;
       let cueCount = 0;
       let durationSeconds: number | undefined;
+      let hasAlignmentArtifacts = false;
       if (alignment && alignment.characters.length > 0) {
-        alignmentPath = path.join(os.tmpdir(), `${baseName}.alignment.json`);
-        fs.writeFileSync(alignmentPath, JSON.stringify(alignment, null, 2));
-
+        hasAlignmentArtifacts = true;
         const words = alignmentToWords(alignment);
         wordCount = words.length;
         durationSeconds = words.length > 0 ? words[words.length - 1].end : undefined;
         const srt = wordsToSrt(words);
-        srtPath = path.join(os.tmpdir(), `${baseName}.srt`);
-        fs.writeFileSync(srtPath, srt);
         cueCount = srt.length > 0 ? srt.trim().split(/\n\n+/).length : 0;
+        artifacts.push({ fileName: `${baseName}.alignment.json`, data: JSON.stringify(alignment, null, 2) });
+        artifacts.push({ fileName: `${baseName}.srt`, data: srt });
       }
+
+      // Exclusive multi-artifact write: if a later artifact fails, the earlier
+      // ones are removed so no partial set survives on disk.
+      const artifactPaths = writeWorkspaceArtifacts(artifacts);
+      const audioPath = artifactPaths[0];
+      const alignmentPath = hasAlignmentArtifacts ? artifactPaths[1] : undefined;
+      const srtPath = hasAlignmentArtifacts ? artifactPaths[2] : undefined;
 
       return JSON.stringify({
         ok: true,

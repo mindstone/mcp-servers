@@ -9,9 +9,6 @@
  * Voices URL: https://api.elevenlabs.io/v2/voices
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
 import * as crypto from 'crypto';
 import {
   ElevenLabsError,
@@ -21,6 +18,7 @@ import {
 } from './types.js';
 import { ELEVENLABS_API_V1_BASE } from './endpoints.js';
 import { envelopeApiErrorDetail, formatApiErrorMessage } from './error-detail.js';
+import { writeWorkspaceArtifact } from './tools/path-safety.js';
 
 export interface ElevenLabsFetchOptions extends RequestInit {
   /** Per-call timeout override (default REQUEST_TIMEOUT_MS). Explicit `signal` wins. */
@@ -244,8 +242,7 @@ export async function elevenLabsAudio(
 
   const buffer = Buffer.from(await response.arrayBuffer());
   const fileName = `elevenlabs_${crypto.randomUUID()}.${ext}`;
-  const filePath = path.join(os.tmpdir(), fileName);
-  fs.writeFileSync(filePath, buffer);
+  const filePath = writeWorkspaceArtifact(fileName, buffer);
 
   return { filePath, sizeBytes: buffer.length };
 }
@@ -276,8 +273,7 @@ export async function elevenLabsBinaryDownload(
   const ext = extensionFromContentType(contentType);
   const buffer = Buffer.from(await response.arrayBuffer());
   const fileName = `elevenlabs_${crypto.randomUUID()}.${ext}`;
-  const filePath = path.join(os.tmpdir(), fileName);
-  fs.writeFileSync(filePath, buffer);
+  const filePath = writeWorkspaceArtifact(fileName, buffer);
 
   return { filePath, sizeBytes: buffer.length };
 }
