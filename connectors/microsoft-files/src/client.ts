@@ -44,6 +44,15 @@ export function getTokenProvider(): TokenProvider {
 }
 
 /**
+ * Access token for raw `fetch` calls the Graph SDK cannot express (binary
+ * content downloads). Called inside `withGraphRetry`'s `fn`, so a 401 retry
+ * re-reads the (newly refreshed) token on the second attempt.
+ */
+export async function getAccessToken(): Promise<string> {
+  return ensureInitialized().tokenProvider.getAccessToken(MS_ACCOUNT_EMAIL);
+}
+
+/**
  * Invoke a Graph operation with a single retry on HTTP 401: cached token is
  * invalidated and the operation is retried so a transient stale-cache hit
  * doesn't fail the tool call. Mirrors the bundled `microsoft-files` retry

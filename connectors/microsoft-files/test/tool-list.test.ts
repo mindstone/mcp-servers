@@ -20,6 +20,13 @@ const EXPECTED_TOOLS = [
   'get_shared',
   'share_file',
   'read_text_file',
+  'invite_to_file',
+  'list_file_permissions',
+  'revoke_file_permission',
+  'list_file_versions',
+  'restore_file_version',
+  'list_file_activities',
+  'read_document',
 ];
 
 const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
@@ -36,6 +43,13 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
   get_shared: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   share_file: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   read_text_file: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  invite_to_file: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+  list_file_permissions: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  revoke_file_permission: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+  list_file_versions: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  restore_file_version: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+  list_file_activities: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  read_document: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
 };
 
 describe('microsoft-files tools/list', () => {
@@ -57,7 +71,7 @@ describe('microsoft-files tools/list', () => {
     if (cfg) cfg.cleanup();
   });
 
-  it('registers exactly the 13 files tools in the locked surface', async () => {
+  it(`registers exactly the ${EXPECTED_TOOLS.length} files tools in the locked surface`, async () => {
     const response = await client.client.listTools();
     const names = response.tools.map((tool) => tool.name).sort();
     expect(names).toEqual([...EXPECTED_TOOLS].sort());

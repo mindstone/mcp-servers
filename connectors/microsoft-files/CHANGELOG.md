@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+- Permission-management tools: `invite_to_file` (share a file or folder with specific people by email, read or write), `list_file_permissions`, and `revoke_file_permission`, backed by the Graph `/invite` and `/permissions` endpoints. Grantee names and emails are returned inside `<untrusted-content>` envelopes, and the Graph permission payloads are validated with Zod at the boundary.
+- Version-history tools: `list_file_versions` and `restore_file_version` (replaces the current content with an earlier version; carries `destructiveHint`), backed by the Graph `/versions` and `/restoreVersion` endpoints.
+- Activity feed: `list_file_activities` (drive-wide, or scoped to one file/folder) backed by the Graph `/activities` endpoints. Activity history requires OneDrive for Business or SharePoint; personal OneDrive accounts do not expose it. Actor names and item names are returned inside `<untrusted-content>` envelopes.
+- `upload_file` accepts binary content via `encoding: "base64"` (up to 10MB); payloads over the 4MB simple-PUT limit go through a resumable Graph upload session (`createUploadSession` + chunked `Content-Range` PUTs to the preauthenticated upload URL). Upload responses are now Zod-validated. Text (`utf8`) behaviour is unchanged, including the 4MB limit.
+- `read_document`: extract the text of `.docx` and `.pptx` files directly (offline Office Open XML text extraction, no new dependencies). Extracted text is returned inside an `<untrusted-content>` envelope and capped at 100k characters (configurable). PDFs and other types return actionable guidance pointing at `download_file` / `read_text_file`; corrupt files fail with a clear message instead of crashing.
+
 ## [0.1.2] - 2026-07-03
 
 ### Changed

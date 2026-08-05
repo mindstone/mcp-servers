@@ -177,6 +177,77 @@ describe('microsoft-files mock-API integration', () => {
     expect(json.next_step).toBe('upload_file');
   });
 
+  it('upload_file with base64 encoding PUTs octet-stream for small binaries', async () => {
+    const result = await client.callTool('upload_file', {
+      path: '/Documents/logo.bin',
+      content: Buffer.from('hello bytes', 'utf-8').toString('base64'),
+      encoding: 'base64',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; success: boolean };
+    expect(json.ok).toBeUndefined();
+    expect(json.success).toBe(true);
+    const call = state.requests.find(
+      (r) => r.method === 'PUT' && r.pathname.includes('/me/drive/root:/Documents/logo.bin:/content'),
+    );
+    expect(call).toBeDefined();
+    expect(call?.contentType).toContain('application/octet-stream');
+  });
+
+  it('upload_file rejects invalid base64 content', async () => {
+    const result = await client.callTool('upload_file', {
+      path: '/Documents/logo.bin',
+      content: 'not!!valid!!base64!!',
+      encoding: 'base64',
+    });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('not valid base64');
+    expect(json.next_step).toBe('upload_file');
+  });
+
+  it('upload_file uses a resumable upload session for base64 content over 4MB', async () => {
+    const bytes = Buffer.alloc(4 * 1024 * 1024 + 1, 0x61);
+    const result = await client.callTool('upload_file', {
+      path: '/Documents/big.bin',
+      content: bytes.toString('base64'),
+      encoding: 'base64',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; success: boolean; id: string; size: string };
+    expect(json.ok).toBeUndefined();
+    expect(json.success).toBe(true);
+    expect(json.id).toBe('new-file-large');
+
+    const sessionCall = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.includes('/createUploadSession'),
+    );
+    expect(sessionCall).toBeDefined();
+
+    const total = bytes.length;
+    const chunks = state.requests.filter((r) => r.url.startsWith('https://upload.example.com/'));
+    expect(chunks).toHaveLength(2);
+    expect(chunks[0]?.contentRange).toBe(`bytes 0-3276799/${total}`);
+    expect(chunks[1]?.contentRange).toBe(`bytes 3276800-${total - 1}/${total}`);
+    // The upload URL is preauthenticated: chunks must not carry the Graph token.
+    expect(chunks[0]?.authorization).toBeUndefined();
+  });
+
+  it('upload_file rejects base64 content over the 10MB cap', async () => {
+    const bytes = Buffer.alloc(10 * 1024 * 1024 + 1, 0x61);
+    const result = await client.callTool('upload_file', {
+      path: '/Documents/huge.bin',
+      content: bytes.toString('base64'),
+      encoding: 'base64',
+    });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Maximum upload size');
+    expect(json.next_step).toBe('upload_file');
+  });
+
   // -------------------------------------------------------------------------
   // create_folder
   // -------------------------------------------------------------------------
@@ -360,6 +431,269 @@ describe('microsoft-files mock-API integration', () => {
 
   it('read_text_file rejects missing path', async () => {
     const result = await client.callTool('read_text_file', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.next_step).toBe('list_files');
+  });
+
+  // -------------------------------------------------------------------------
+  // invite_to_file
+  // -------------------------------------------------------------------------
+  it('invite_to_file POSTs recipients to /invite and returns enveloped grantees', async () => {
+    const result = await client.callTool('invite_to_file', {
+      path: 'item-1',
+      recipients: ['jane@example.com'],
+      role: 'write',
+      message: 'Here is the report',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      ok?: unknown;
+      success: boolean;
+      permissions: Array<{
+        id: string;
+        roles: string[];
+        grantedTo: Array<{ displayName?: string; email?: string }>;
+      }>;
+    };
+    expect(json.ok).toBeUndefined();
+    expect(json.success).toBe(true);
+    expect(json.permissions[0]?.id).toBe('perm-1');
+    expect(json.permissions[0]?.grantedTo[0]?.displayName).toContain('untrusted-content');
+    expect(json.permissions[0]?.grantedTo[0]?.displayName).toContain('Jane Doe');
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.includes('/me/drive/items/item-1/invite'),
+    );
+    expect(call?.body).toMatchObject({
+      recipients: [{ email: 'jane@example.com' }],
+      roles: ['write'],
+      requireSignIn: true,
+      sendInvitation: false,
+      message: 'Here is the report',
+    });
+  });
+
+  it('invite_to_file rejects missing recipients with guidance', async () => {
+    const result = await client.callTool('invite_to_file', { path: 'item-1' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Missing required parameters');
+    expect(json.next_step).toBe('invite_to_file');
+  });
+
+  // -------------------------------------------------------------------------
+  // list_file_permissions
+  // -------------------------------------------------------------------------
+  it('list_file_permissions returns permissions with enveloped identities', async () => {
+    const result = await client.callTool('list_file_permissions', { path: 'item-1' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      ok?: unknown;
+      count: number;
+      permissions: Array<{ id: string; link?: { scope?: string } }>;
+    };
+    expect(json.ok).toBeUndefined();
+    expect(json.count).toBe(2);
+    expect(json.permissions[1]?.link?.scope).toBe('organization');
+    const call = state.requests.find(
+      (r) => r.method === 'GET' && r.pathname.includes('/me/drive/items/item-1/permissions'),
+    );
+    expect(call).toBeDefined();
+  });
+
+  it('list_file_permissions rejects missing path', async () => {
+    const result = await client.callTool('list_file_permissions', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.next_step).toBe('list_file_permissions');
+  });
+
+  // -------------------------------------------------------------------------
+  // revoke_file_permission
+  // -------------------------------------------------------------------------
+  it('revoke_file_permission DELETEs the permission', async () => {
+    const result = await client.callTool('revoke_file_permission', {
+      path: 'item-1',
+      permissionId: 'perm-2',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; success: boolean };
+    expect(json.ok).toBeUndefined();
+    expect(json.success).toBe(true);
+    const call = state.requests.find(
+      (r) =>
+        r.method === 'DELETE' &&
+        r.pathname.includes('/me/drive/items/item-1/permissions/perm-2'),
+    );
+    expect(call).toBeDefined();
+  });
+
+  it('revoke_file_permission rejects missing permissionId', async () => {
+    const result = await client.callTool('revoke_file_permission', { path: 'item-1' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.next_step).toBe('list_file_permissions');
+  });
+
+  // -------------------------------------------------------------------------
+  // list_file_versions
+  // -------------------------------------------------------------------------
+  it('list_file_versions returns formatted version history', async () => {
+    const result = await client.callTool('list_file_versions', { path: 'item-1' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      ok?: unknown;
+      count: number;
+      versions: Array<{ id: string; size: string; lastModifiedBy?: string }>;
+    };
+    expect(json.ok).toBeUndefined();
+    expect(json.count).toBe(2);
+    expect(json.versions[0]?.id).toBe('2.0');
+    expect(json.versions[0]?.lastModifiedBy).toContain('untrusted-content');
+    expect(json.versions[0]?.lastModifiedBy).toContain('Jane Doe');
+    const call = state.requests.find(
+      (r) => r.method === 'GET' && r.pathname.includes('/me/drive/items/item-1/versions'),
+    );
+    expect(call).toBeDefined();
+  });
+
+  it('list_file_versions rejects missing path', async () => {
+    const result = await client.callTool('list_file_versions', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.next_step).toBe('list_file_versions');
+  });
+
+  // -------------------------------------------------------------------------
+  // restore_file_version
+  // -------------------------------------------------------------------------
+  it('restore_file_version POSTs to restoreVersion', async () => {
+    const result = await client.callTool('restore_file_version', {
+      path: 'item-1',
+      versionId: '1.0',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; success: boolean; versionId: string };
+    expect(json.ok).toBeUndefined();
+    expect(json.success).toBe(true);
+    expect(json.versionId).toBe('1.0');
+    const call = state.requests.find(
+      (r) =>
+        r.method === 'POST' &&
+        r.pathname.includes('/me/drive/items/item-1/versions/1.0/restoreVersion'),
+    );
+    expect(call).toBeDefined();
+  });
+
+  it('restore_file_version rejects missing versionId with WARNING guidance', async () => {
+    const result = await client.callTool('restore_file_version', { path: 'item-1' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('WARNING');
+    expect(json.next_step).toBe('list_file_versions');
+  });
+
+  // -------------------------------------------------------------------------
+  // list_file_activities
+  // -------------------------------------------------------------------------
+  it('list_file_activities returns the drive-wide feed with enveloped fields', async () => {
+    const result = await client.callTool('list_file_activities', {});
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      ok?: unknown;
+      count: number;
+      activities: Array<{
+        id: string;
+        actions: string[];
+        actor?: string;
+        item?: { name?: string };
+      }>;
+    };
+    expect(json.ok).toBeUndefined();
+    expect(json.count).toBe(1);
+    expect(json.activities[0]?.actions).toEqual(['edit']);
+    expect(json.activities[0]?.actor).toContain('untrusted-content');
+    expect(json.activities[0]?.actor).toContain('Jane Doe');
+    expect(json.activities[0]?.item?.name).toContain('report.docx');
+    const call = state.requests.find(
+      (r) => r.method === 'GET' && r.pathname.endsWith('/me/drive/activities'),
+    );
+    expect(call).toBeDefined();
+  });
+
+  it('list_file_activities with a path hits the item activities endpoint', async () => {
+    const result = await client.callTool('list_file_activities', { path: 'item-1' });
+    expect(result.isError).not.toBe(true);
+    const call = state.requests.find(
+      (r) => r.method === 'GET' && r.pathname.includes('/me/drive/items/item-1/activities'),
+    );
+    expect(call).toBeDefined();
+  });
+
+  // -------------------------------------------------------------------------
+  // read_document
+  // -------------------------------------------------------------------------
+  it('read_document extracts enveloped text from a .docx', async () => {
+    const result = await client.callTool('read_document', { path: 'item-docx' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      ok?: unknown;
+      mimeType: string;
+      truncated: boolean;
+      content: string;
+    };
+    expect(json.ok).toBeUndefined();
+    expect(json.truncated).toBe(false);
+    expect(json.content).toContain('<untrusted-content source="microsoft-files:read_document:content">');
+    expect(json.content).toContain('Quarterly Results & Outlook');
+    expect(json.content).toContain('Revenue grew 12% year over year.');
+  });
+
+  it('read_document extracts slide text from a .pptx', async () => {
+    const result = await client.callTool('read_document', { path: 'item-pptx' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; content: string };
+    expect(json.content).toContain('--- Slide 1 ---');
+    expect(json.content).toContain('Launch Plan');
+    expect(json.content).toContain('--- Slide 10 ---');
+    expect(json.content).toContain('Next Steps');
+  });
+
+  it('read_document refuses PDFs with download_file guidance', async () => {
+    const result = await client.callTool('read_document', { path: 'item-pdf' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('PDF text extraction is not supported');
+    expect(json.next_step).toBe('download_file');
+  });
+
+  it('read_document refuses plain-text files with read_text_file guidance', async () => {
+    const result = await client.callTool('read_document', { path: 'item-text' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Unsupported document type');
+    expect(json.next_step).toBe('read_text_file');
+  });
+
+  it('read_document reports corrupt Office files instead of crashing', async () => {
+    const result = await client.callTool('read_document', { path: 'item-corrupt' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Could not extract text');
+    expect(json.next_step).toBe('download_file');
+  });
+
+  it('read_document rejects missing path', async () => {
+    const result = await client.callTool('read_document', {});
     expect(result.isError).toBe(true);
     const json = result.json as { ok: boolean; next_step: string };
     expect(json.ok).toBe(false);

@@ -53,6 +53,16 @@ const MANIFEST: ManifestRow[] = [
     args: { path: '/notes.txt', content: 'hello' },
   },
   {
+    tool: 'upload_file',
+    method: 'POST',
+    pathname: '/v1.0/me/drive/root:<rest>:/createUploadSession',
+    args: {
+      path: '/big.bin',
+      content: Buffer.alloc(4 * 1024 * 1024 + 1, 0x61).toString('base64'),
+      encoding: 'base64',
+    },
+  },
+  {
     tool: 'create_folder',
     method: 'POST',
     pathname: '/v1.0/me/drive/root/children',
@@ -105,6 +115,54 @@ const MANIFEST: ManifestRow[] = [
     method: 'GET',
     pathname: '/v1.0/me/drive/items/:id/content',
     args: { path: '01ABC123xyz' },
+  },
+  {
+    tool: 'invite_to_file',
+    method: 'POST',
+    pathname: '/v1.0/me/drive/items/:id/invite',
+    args: { path: '01ABC123xyz', recipients: ['jane@example.com'] },
+  },
+  {
+    tool: 'list_file_permissions',
+    method: 'GET',
+    pathname: '/v1.0/me/drive/items/:id/permissions',
+    args: { path: '01ABC123xyz' },
+  },
+  {
+    tool: 'revoke_file_permission',
+    method: 'DELETE',
+    pathname: '/v1.0/me/drive/items/:id/permissions/:permissionId',
+    args: { path: '01ABC123xyz', permissionId: 'perm-1' },
+  },
+  {
+    tool: 'list_file_versions',
+    method: 'GET',
+    pathname: '/v1.0/me/drive/items/:id/versions',
+    args: { path: '01ABC123xyz' },
+  },
+  {
+    tool: 'restore_file_version',
+    method: 'POST',
+    pathname: '/v1.0/me/drive/items/:id/versions/:versionId/restoreVersion',
+    args: { path: '01ABC123xyz', versionId: '1.0' },
+  },
+  {
+    tool: 'list_file_activities',
+    method: 'GET',
+    pathname: '/v1.0/me/drive/activities',
+    args: {},
+  },
+  {
+    tool: 'list_file_activities',
+    method: 'GET',
+    pathname: '/v1.0/me/drive/items/:id/activities',
+    args: { path: '01ABC123xyz' },
+  },
+  {
+    tool: 'read_document',
+    method: 'GET',
+    pathname: '/v1.0/me/drive/items/:id/content',
+    args: { path: 'item-docx' },
   },
 ];
 

@@ -10,9 +10,16 @@ import {
   getFile,
   getRecent,
   getShared,
+  inviteToFile,
+  listFileActivities,
+  listFilePermissions,
   listFiles,
+  listFileVersions,
   moveFile,
+  readDocument,
   readTextFile,
+  restoreFileVersion,
+  revokeFilePermission,
   searchFiles,
   shareFile,
   uploadFile,
@@ -153,13 +160,21 @@ export function registerFilesTools(server: McpServer): void {
   server.registerTool(
     'upload_file',
     {
-      description: 'Upload a file to OneDrive (text content only, max 4MB).',
+      description:
+        'Upload a file to OneDrive. Text content up to 4MB; binary content as base64 up to 10MB (uploads over 4MB use a resumable upload session).',
       inputSchema: z.object({
         path: z
           .string()
           .optional()
           .describe('Destination path including filename (e.g., "/Documents/note.txt")'),
-        content: z.string().optional().describe('File content (text)'),
+        content: z
+          .string()
+          .optional()
+          .describe('File content (text, or base64 when encoding is "base64")'),
+        encoding: z
+          .enum(['utf8', 'base64'])
+          .optional()
+          .describe('Content encoding (default: utf8). Use "base64" for binary files.'),
       }).shape,
       annotations: {
         readOnlyHint: false,
@@ -177,7 +192,11 @@ export function registerFilesTools(server: McpServer): void {
         });
       }
       const result = await callGraph(extra, (c, signal) =>
-        uploadFile(c, { path: args.path!, content: args.content! }, signal),
+        uploadFile(
+          c,
+          { path: args.path!, content: args.content!, encoding: args.encoding },
+          signal,
+        ),
       );
       return successJson(result);
     }),
@@ -449,6 +468,281 @@ export function registerFilesTools(server: McpServer): void {
       }
       const result = await callGraph(extra, (c, signal) =>
         readTextFile(c, { path: args.path!, maxSize: args.maxSize }, signal),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // invite_to_file
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'invite_to_file',
+    {
+      description:
+        'Share a file or folder with specific people by email (grants read or write permission).',
+      inputSchema: z.object({
+        path: z.string().optional().describe('File/folder path or item ID'),
+        recipients: z
+          .array(z.string().email())
+          .min(1)
+          .optional()
+          .describe('Email addresses to share with'),
+        role: z
+          .enum(['read', 'write'])
+          .optional()
+          .describe('Permission to grant (default: read)'),
+        message: z
+          .string()
+          .optional()
+          .describe('Optional note included in the sharing invitation'),
+        sendInvitation: z
+          .boolean()
+          .optional()
+          .describe('Email the recipients about the share (default: false)'),
+      }).shape,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.path || !args.recipients?.length) {
+        return errorResponse({
+          error:
+            'Missing required parameters: "path" (file/folder to share) and "recipients" (email addresses). Example: { "path": "/Documents/report.pdf", "recipients": ["jane@example.com"], "role": "read" }',
+          action_required: 'Provide the file path or item ID and at least one recipient email.',
+          next_step: 'invite_to_file',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        inviteToFile(
+          c,
+          {
+            path: args.path!,
+            recipients: args.recipients!,
+            role: args.role,
+            message: args.message,
+            sendInvitation: args.sendInvitation,
+          },
+          signal,
+        ),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // list_file_permissions
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'list_file_permissions',
+    {
+      description: 'List the sharing permissions granted on a file or folder.',
+      inputSchema: z.object({
+        path: z.string().optional().describe('File/folder path or item ID'),
+      }).shape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.path) {
+        return errorResponse({
+          error:
+            'Missing required parameter: "path" (file/folder to inspect). Example: { "path": "/Documents/report.pdf" }',
+          action_required: 'Provide the file path or item ID.',
+          next_step: 'list_file_permissions',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        listFilePermissions(c, { path: args.path! }, signal),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // revoke_file_permission
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'revoke_file_permission',
+    {
+      description:
+        'Revoke a sharing permission from a file or folder. Use list_file_permissions to find the permission ID.',
+      inputSchema: z.object({
+        path: z.string().optional().describe('File/folder path or item ID'),
+        permissionId: z
+          .string()
+          .optional()
+          .describe('Permission ID from list_file_permissions'),
+      }).shape,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.path || !args.permissionId) {
+        return errorResponse({
+          error:
+            'Missing required parameters: "path" (file/folder) and "permissionId". Example: { "path": "/Documents/report.pdf", "permissionId": "perm-123" }. Use list_file_permissions to find permission IDs.',
+          action_required: 'Provide both the file path or item ID and the permission ID.',
+          next_step: 'list_file_permissions',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        revokeFilePermission(
+          c,
+          { path: args.path!, permissionId: args.permissionId! },
+          signal,
+        ),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // list_file_versions
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'list_file_versions',
+    {
+      description: 'List the version history of a file.',
+      inputSchema: z.object({
+        path: z.string().optional().describe('File path or item ID'),
+      }).shape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.path) {
+        return errorResponse({
+          error:
+            'Missing required parameter: "path" (file to inspect). Example: { "path": "/Documents/report.docx" }',
+          action_required: 'Provide the file path or item ID.',
+          next_step: 'list_file_versions',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        listFileVersions(c, { path: args.path! }, signal),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // restore_file_version
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'restore_file_version',
+    {
+      description:
+        'Restore a previous version of a file, replacing the current content. Use list_file_versions to find the version ID.',
+      inputSchema: z.object({
+        path: z.string().optional().describe('File path or item ID'),
+        versionId: z
+          .string()
+          .optional()
+          .describe('Version ID from list_file_versions'),
+      }).shape,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.path || !args.versionId) {
+        return errorResponse({
+          error:
+            'Missing required parameters: "path" (file) and "versionId". Example: { "path": "/Documents/report.docx", "versionId": "3.0" }. Use list_file_versions to find version IDs. WARNING: This replaces the current file content.',
+          action_required: 'Provide both the file path or item ID and the version ID.',
+          next_step: 'list_file_versions',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        restoreFileVersion(c, { path: args.path!, versionId: args.versionId! }, signal),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // list_file_activities
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'list_file_activities',
+    {
+      description:
+        'List recent activity in your OneDrive, or on a specific file or folder when a path is given. Requires OneDrive for Business or SharePoint; personal OneDrive accounts do not expose activity history.',
+      inputSchema: z.object({
+        path: z
+          .string()
+          .optional()
+          .describe('File/folder path or item ID (omit for drive-wide activity)'),
+      }).shape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      const result = await callGraph(extra, (c, signal) =>
+        listFileActivities(c, { path: args.path }, signal),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // read_document
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'read_document',
+    {
+      description:
+        'Extract the text of a Word (.docx) or PowerPoint (.pptx) document directly, without downloading it. Use read_text_file for plain-text files.',
+      inputSchema: z.object({
+        path: z.string().optional().describe('Document path or item ID'),
+        maxSize: z
+          .number()
+          .optional()
+          .describe('Max file bytes to download (default: 20MB)'),
+        maxChars: z
+          .number()
+          .optional()
+          .describe('Max extracted characters to return (default: 100000)'),
+      }).shape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.path) {
+        return errorResponse({
+          error:
+            'Missing required parameter: "path" (document to read). Example: { "path": "/Documents/report.docx" }. Works with .docx and .pptx files.',
+          action_required: 'Provide the document path or item ID.',
+          next_step: 'list_files',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        readDocument(
+          c,
+          { path: args.path!, maxSize: args.maxSize, maxChars: args.maxChars },
+          signal,
+        ),
       );
       return successJson(result);
     }),
