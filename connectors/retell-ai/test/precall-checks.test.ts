@@ -239,7 +239,7 @@ describe('checkDynamicVariableReferences', () => {
     expect(result![0]).toContain('update_phone_number');
   });
 
-  it('swallows API errors and returns null (warning is best-effort)', async () => {
+  it('returns an explicit warning when the lookup fails (fail-open but observable)', async () => {
     setApiKey('mock');
     vi.stubGlobal(
       'fetch',
@@ -254,7 +254,10 @@ describe('checkDynamicVariableReferences', () => {
       overrideAgentId: 'agent_x',
     });
 
-    expect(result).toBeNull();
+    expect(result).not.toBeNull();
+    expect(result).toHaveLength(1);
+    expect(result![0]).toContain('prompt check could not run');
+    expect(result![0]).toContain('network down');
   });
 
   it('also checks begin_message for token references', async () => {
