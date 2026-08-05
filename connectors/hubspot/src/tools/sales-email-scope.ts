@@ -18,6 +18,11 @@
  * check, so a stale answer can't suppress the warning for a new credential or
  * preserve it after the scope was granted. An inconclusive check is never
  * memoised — the next call retries.
+ *
+ * In-flight checks are keyed by the same tokenCacheKey. An unkeyed shared
+ * promise would let a concurrent rotation/reconnect await another token's
+ * introspection and then cache that verdict under its own key — suppressing
+ * the warning for a token that genuinely lacks the scope (or vice versa).
  */
 import logger from '../utils/logger.js';
 
@@ -35,7 +40,7 @@ interface TokenInfoClient {
 }
 
 let scopeCache: { tokenCacheKey: string; granted: boolean } | undefined;
-let scopeCheckInFlight: Promise<boolean | undefined> | undefined;
+const scopeChecksInFlight = new Map<string, Promise<boolean | undefined>>();
 
 /**
  * Returns true/false on a definitive answer, undefined when introspection
@@ -48,8 +53,9 @@ export async function checkSalesEmailReadScope(
   const cacheKey = client.tokenCacheKey;
   if (scopeCache && scopeCache.tokenCacheKey === cacheKey) return scopeCache.granted;
 
-  if (!scopeCheckInFlight) {
-    scopeCheckInFlight = (async () => {
+  let inFlight = scopeChecksInFlight.get(cacheKey);
+  if (!inFlight) {
+    inFlight = (async () => {
       try {
         const info = await client.getTokenInfo();
         if (!Array.isArray(info.scopes)) return undefined; // introspection didn't say — caller warns
@@ -59,12 +65,20 @@ export async function checkSalesEmailReadScope(
         return undefined;
       }
     })();
+    scopeChecksInFlight.set(cacheKey, inFlight);
   }
-  const result = await scopeCheckInFlight;
-  scopeCheckInFlight = undefined;
-  // Only a definitive answer is memoised, keyed by the token it describes.
-  if (result !== undefined) scopeCache = { tokenCacheKey: cacheKey, granted: result };
-  return result;
+  try {
+    const result = await inFlight;
+    // Only a definitive answer is memoised, keyed by the token it describes.
+    if (result !== undefined) scopeCache = { tokenCacheKey: cacheKey, granted: result };
+    return result;
+  } finally {
+    // Clear only the entry we awaited — a concurrent rotation may already
+    // have replaced it with a different token's check.
+    if (scopeChecksInFlight.get(cacheKey) === inFlight) {
+      scopeChecksInFlight.delete(cacheKey);
+    }
+  }
 }
 
 /**
@@ -83,5 +97,5 @@ export async function attachSalesEmailScopeNote<T extends object>(
 
 export function __resetSalesEmailScopeCacheForTests(): void {
   scopeCache = undefined;
-  scopeCheckInFlight = undefined;
+  scopeChecksInFlight.clear();
 }

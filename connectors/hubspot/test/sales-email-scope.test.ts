@@ -56,6 +56,32 @@ describe('checkSalesEmailReadScope', () => {
     const client = fakeClient('token-A', async () => ({}));
     expect(await checkSalesEmailReadScope(async () => client)).toBeUndefined();
   });
+
+  it('keys in-flight checks per token — a concurrent rotation cannot borrow another token\'s verdict', async () => {
+    // Token A's introspection is still in flight when token B's check starts.
+    // B must introspect B's own token rather than awaiting A's promise and
+    // caching A's verdict under B's key.
+    let resolveA!: (info: { scopes?: string[] }) => void;
+    const clientA = fakeClient(
+      'token-A',
+      () => new Promise<{ scopes?: string[] }>((resolve) => { resolveA = resolve; }),
+    );
+    const clientB = fakeClient('token-B', async () => ({ scopes: ['oauth'] }));
+
+    const pendingA = checkSalesEmailReadScope(async () => clientA);
+    // Let A's check register as in-flight before B starts.
+    await new Promise((resolve) => setImmediate(resolve));
+    const pendingB = checkSalesEmailReadScope(async () => clientB);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    resolveA({ scopes: ['oauth', 'sales-email-read'] });
+    const [resultA, resultB] = await Promise.all([pendingA, pendingB]);
+
+    expect(resultA).toBe(true);
+    // B ran its own introspection and got its own (scope-less) verdict.
+    expect(clientB.getTokenInfo).toHaveBeenCalledTimes(1);
+    expect(resultB).toBe(false);
+  });
 });
 
 describe('attachSalesEmailScopeNote', () => {
