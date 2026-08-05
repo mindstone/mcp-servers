@@ -192,6 +192,79 @@ export function createGoogleHandlers() {
       });
     }),
 
+    http.get(new RegExp(`^${escapeRegex(ADMIN_BETA)}/properties/[^/]+/googleAdsLinks$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        googleAdsLinks: [
+          {
+            name: 'properties/200/googleAdsLinks/900',
+            customerId: '123-456-7890',
+            canManageClients: false,
+            adsPersonalizationEnabled: true,
+            creatorEmailAddress: 'jane@example.com',
+          },
+        ],
+      });
+    }),
+
+    http.get(new RegExp(`^${escapeRegex(ADMIN_BETA)}/properties/[^/]+/keyEvents$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        keyEvents: [
+          {
+            name: 'properties/200/keyEvents/910',
+            eventName: 'purchase',
+            createTime: '2024-02-01T00:00:00Z',
+            countingMethod: 'ONCE_PER_EVENT',
+            deletable: true,
+          },
+        ],
+      });
+    }),
+
+    http.get(new RegExp(`^${escapeRegex(ADMIN_BETA)}/properties/[^/]+/dataRetentionSettings$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        name: 'properties/200/dataRetentionSettings',
+        eventDataRetention: 'FOURTEEN_MONTHS',
+        resetUserDataOnNewActivity: true,
+      });
+    }),
+
+    http.get(new RegExp(`^${escapeRegex(ADMIN_BETA)}/properties/[^/]+/firebaseLinks$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        firebaseLinks: [
+          {
+            name: 'properties/200/firebaseLinks/920',
+            project: 'acme-app',
+            createTime: '2024-02-15T00:00:00Z',
+          },
+        ],
+      });
+    }),
+
+    http.post(new RegExp(`^${escapeRegex(DATA_BETA)}/properties/[^/]+:runPivotReport$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        rowCount: 2,
+        dimensionHeaders: [{ name: 'country' }],
+        metricHeaders: [{ name: 'sessions' }],
+        pivotHeaders: [{ dimensionNames: ['deviceCategory'] }],
+        rows: [
+          {
+            dimensionValues: [{ value: 'United Kingdom' }],
+            metricValues: [{ value: '1194' }],
+          },
+        ],
+      });
+    }),
+
     http.post(new RegExp(`^${escapeRegex(ADMIN_ALPHA)}/accounts/[^/]+:searchChangeHistoryEvents$`), ({ request }) => {
       const err = checkAuth(request);
       if (err) return err;
