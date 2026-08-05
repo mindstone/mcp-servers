@@ -21,6 +21,7 @@ are maintained manually as part of the PR review checklist.
 ### Security
 - QuickBooks-authored free text (display names, memos, line descriptions, report cells) is now wrapped in `<untrusted-content>` envelopes before reaching the model (FOX-3490 remediation). Typed entity payloads envelope the known free-text fields; `query_quickbooks`, `get_quickbooks_entity`, and reports envelope every string value wholesale.
 - Vendor error text (QuickBooks `Fault` Detail/Message) and Intuit OAuth error descriptions are enveloped in `<untrusted-content>` before they can reach model output, so a compromised API/OAuth response cannot inject instructions or break out of the surrounding envelope.
+- Typed entity payloads (`sanitizeQboEntity`) are now sanitized deny-by-default: every string is enveloped unless its key is a narrow structural predicate (IDs, SyncToken, `*Ref.value` markers, enums, dates/timestamps). This closes the allow-list gaps that left `PrimaryEmailAddr.Address`, `PrimaryPhone.FreeFormNumber`, postal-address fields, and any future vendor-defined free-text fields unwrapped.
 
 ### Changed
 - QuickBooks `minorversion` is centralized in one constant and bumped from 65 to 75 (was hardcoded at every call site).
