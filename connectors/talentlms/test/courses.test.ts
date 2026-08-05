@@ -39,8 +39,18 @@ describe('Course tools', () => {
     expect(data.ok).toBe(true);
     expect(data.courses).toHaveLength(3);
     expect(data.count).toBe(3);
-    expect(data.courses[0].name).toBe('Onboarding 101');
+    expect(data.courses[0].name).toBe('<untrusted-content source="talentlms:courses">Onboarding 101</untrusted-content>');
     expect(data.courses[2].price).toBe('49.99');
+  });
+
+  it('list_talentlms_courses forwards page_size and page_number', async () => {
+    const client = await getClient();
+    const result = await client.callTool('list_talentlms_courses', { page_size: 2, page_number: 2 });
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(data.ok).toBe(true);
+    expect(data.courses).toHaveLength(1);
+    expect(data.courses[0].id).toBe('30');
   });
 
   it('get_talentlms_course returns full course with units and users', async () => {
@@ -49,7 +59,7 @@ describe('Course tools', () => {
     const data = JSON.parse(result.content[0].text as string);
 
     expect(data.ok).toBe(true);
-    expect(data.course.name).toBe('Onboarding 101');
+    expect(data.course.name).toBe('<untrusted-content source="talentlms:course">Onboarding 101</untrusted-content>');
     expect(data.course.users).toHaveLength(2);
     expect(data.course.units).toHaveLength(3);
     expect(data.course.units[2].type).toBe('test');
@@ -73,7 +83,7 @@ describe('Course tools', () => {
     expect(data.ok).toBe(true);
     expect(data.users).toHaveLength(2);
     expect(data.count).toBe(2);
-    expect(data.users[0].name).toBe('Jane Doe');
+    expect(data.users[0].name).toBe('<untrusted-content source="talentlms:course-users">Jane Doe</untrusted-content>');
     expect(data.users[0].completion_status).toBe('completed');
   });
 

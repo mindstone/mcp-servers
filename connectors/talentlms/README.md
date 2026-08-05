@@ -3,13 +3,13 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-talentlms.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-talentlms)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-TalentLMS MCP server for Model Context Protocol hosts. Manage users, courses, groups, branches, enrolments, reporting, and assessments in TalentLMS through a standardised MCP interface.
+TalentLMS MCP server for Model Context Protocol hosts. Manage users, courses, groups, branches, categories, enrolments, reporting, and assessments in TalentLMS through a standardised MCP interface.
 
 ## Status
 
 - **Version:** [0.3.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-talentlms)
 - **Auth:** API key ([`TALENTLMS_API_KEY`](./server.json))
-- **Tools:** [24](./src/tools/) (users, courses, groups, reporting, assessments)
+- **Tools:** [28](./src/tools/) (users, courses, groups, categories, reporting, assessments)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -120,20 +120,23 @@ node dist/index.js
 }
 ```
 
-## Tools (24)
+## Tools (28)
+
+List tools paginate: TalentLMS returns 20 items per page by default — pass `page_size` (max 1000) and `page_number` to page through larger tenants.
 
 ### Configuration
 - `configure_talentlms` — Configure TalentLMS API credentials
 
 ### Users
-- `list_talentlms_users` — List all users
+- `list_talentlms_users` — List users (paginated)
 - `get_talentlms_user` — Get a user's full profile by ID or email
 - `create_talentlms_user` — Create a new user
+- `update_talentlms_user` — Update an existing user (name, email, login, password, bio, timezone, deactivation date; non-privileged user types only)
 - `set_talentlms_user_status` — Activate or deactivate a user
 - `get_talentlms_user_courses` — Get all courses a user is enrolled in
 
 ### Courses
-- `list_talentlms_courses` — List all courses
+- `list_talentlms_courses` — List courses (paginated)
 - `get_talentlms_course` — Get full course details by ID
 - `create_talentlms_course` — Create a new course
 - `get_talentlms_course_users` — Get all users enrolled in a course
@@ -142,23 +145,33 @@ node dist/index.js
 - `get_talentlms_course_sso_link` — Generate an SSO link to launch a user into a course
 
 ### Groups
-- `list_talentlms_groups` — List all groups
+- `list_talentlms_groups` — List groups (paginated)
 - `get_talentlms_group` — Get group details including members and courses
 - `create_talentlms_group` — Create a new group
 - `add_course_to_talentlms_group` — Assign a course to a group
 
 ### Branches
-- `list_talentlms_branches` — List all branches (multi-tenant)
+- `list_talentlms_branches` — List branches (paginated, multi-tenant)
+
+### Categories
+- `list_talentlms_categories` — List course categories (paginated)
 
 ### Reporting
 - `get_talentlms_site_info` — Get site-level statistics and configuration
 - `get_talentlms_timeline` — Get activity timeline for users or courses
 - `get_talentlms_user_progress` — Get detailed progress for a user in a course
+- `get_talentlms_leaderboard` — Gamification leaderboard (users ranked by points; derived from the user list, up to 1000 users)
+- `get_talentlms_user_certifications` — Get a user's issued certifications with expiration dates
 
 ### Assessments
 - `get_talentlms_test_answers` — Get a user's answers for a test/quiz
 - `get_talentlms_survey_answers` — Get a user's responses to a survey
 - `get_talentlms_ilt_sessions` — Get instructor-led training sessions for a unit
+
+## Security notes
+
+- **Untrusted-content envelopes:** text authored inside TalentLMS (course and group descriptions, user names/bios/custom fields, test and survey answers, etc.) is returned inside `<untrusted-content source="...">` envelopes so the host model treats it as data, not instructions. Ids, statuses, timestamps, and other metadata are deliberately left raw so tool chaining (e.g. copying a `user_id` into the next call) keeps working.
+- **Privilege guard:** `create_talentlms_user` and `update_talentlms_user` only accept the non-privileged `Learner`/`Trainer` user types — Administrator/SuperAdmin accounts must be managed in the TalentLMS UI.
 
 ## Licence
 

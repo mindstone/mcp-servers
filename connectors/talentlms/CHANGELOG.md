@@ -11,6 +11,19 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+- **users**: New `update_talentlms_user` tool (POST `/edituser`) for updating name, email, login, password, bio, timezone, and deactivation date. Like `create_talentlms_user`, the `user_type` parameter is restricted to the non-privileged `Learner`/`Trainer` enum.
+- **categories**: New `list_talentlms_categories` tool for browsing the course category tree.
+- **reporting**: New `get_talentlms_leaderboard` tool (users ranked by gamification points, derived from the documented `points`/`level` user-list fields — the v1 API has no dedicated leaderboard endpoint) and `get_talentlms_user_certifications` tool (issued certifications with expiration dates, for compliance-expiry questions).
+- **pagination**: `list_talentlms_users`, `list_talentlms_courses`, `list_talentlms_groups`, `list_talentlms_branches`, and `list_talentlms_categories` now accept `page_size` (max 1000) and `page_number` parameters, matching the v1 API's `page_size:N,page_number:M` colon-path pagination.
+
+### Fixed
+- **pagination**: List tools previously returned only the API's first page (20 items by default) with no way to fetch more, silently truncating tenants larger than one page.
+- **client**: Removed an unverified "2,000-10,000 calls/hour" rate-limit figure from the 429 error message; TalentLMS publishes plan-dependent limits and a burst cap but no fixed per-plan figures.
+
+### Security
+- **FOX-3490**: External text returned by the TalentLMS API (course/group descriptions, user names, bios, custom fields, test/survey answers, site name, ILT instructor/location, and similar user-authored fields) is now wrapped in `<untrusted-content source="...">` envelopes with close-tag breakout escaping, so the host model treats third-party text as data rather than instructions. Ids, statuses, timestamps, scores, and URLs are intentionally left raw so tool chaining keeps working.
+
 ## [0.3.0] - 2026-07-01
 
 ### Changed

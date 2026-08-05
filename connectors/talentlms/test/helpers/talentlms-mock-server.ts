@@ -21,6 +21,22 @@ function checkAuth(request: Request, expectedKey = MOCK_API_KEY): HttpResponse |
 const BASE = `https://${MOCK_DOMAIN}.talentlms.com/api/v1`;
 
 /**
+ * Apply TalentLMS colon-path pagination (page_size:N,page_number:M) to a
+ * fixture array so tests can assert the params are forwarded.
+ */
+function paginate<T>(items: T[], segment: string): T[] {
+  const sizeMatch = segment.match(/page_size:(\d+)/);
+  const pageMatch = segment.match(/page_number:(\d+)/);
+  const size = sizeMatch ? parseInt(sizeMatch[1], 10) : 20;
+  const page = pageMatch ? parseInt(pageMatch[1], 10) : 1;
+  return items.slice((page - 1) * size, page * size);
+}
+
+function isPaginationSegment(segment: string): boolean {
+  return segment.startsWith('page_size:') || segment.startsWith('page_number:');
+}
+
+/**
  * Creates MSW handlers for the TalentLMS API.
  * Verifies Basic auth (apiKey:) on every request.
  *
@@ -59,6 +75,9 @@ export function createTalentLMSHandlers(expectedApiKey = MOCK_API_KEY) {
       if (segment.startsWith('email:')) {
         return HttpResponse.json(fixtures.mockUserFull);
       }
+      if (isPaginationSegment(segment)) {
+        return HttpResponse.json(paginate(fixtures.mockUsers, segment));
+      }
       return HttpResponse.json({ error: { message: 'Not found' } }, { status: 404 });
     }),
 
@@ -66,6 +85,16 @@ export function createTalentLMSHandlers(expectedApiKey = MOCK_API_KEY) {
       const authError = checkAuth(request, expectedApiKey);
       if (authError) return authError;
       return HttpResponse.json(fixtures.mockNewUser);
+    }),
+
+    http.post(`${BASE}/edituser`, async ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      const params = new URLSearchParams(await request.text());
+      if (params.get('user_id') === '999') {
+        return HttpResponse.json({ error: { message: 'User not found', type: 'NotFound' } }, { status: 404 });
+      }
+      return HttpResponse.json({ ...fixtures.mockUserFull, ...Object.fromEntries(params) });
     }),
 
     http.get(`${BASE}/usersetstatus/*`, ({ request }) => {
@@ -94,6 +123,11 @@ export function createTalentLMSHandlers(expectedApiKey = MOCK_API_KEY) {
     http.get(`${BASE}/courses/*`, ({ request }) => {
       const authError = checkAuth(request, expectedApiKey);
       if (authError) return authError;
+      const url = new URL(request.url);
+      const segment = url.pathname.split('/api/v1/courses/')[1] || '';
+      if (isPaginationSegment(segment)) {
+        return HttpResponse.json(paginate(fixtures.mockCourses, segment));
+      }
       return HttpResponse.json(fixtures.mockCourseFull);
     }),
 
@@ -135,6 +169,11 @@ export function createTalentLMSHandlers(expectedApiKey = MOCK_API_KEY) {
     http.get(`${BASE}/groups/*`, ({ request }) => {
       const authError = checkAuth(request, expectedApiKey);
       if (authError) return authError;
+      const url = new URL(request.url);
+      const segment = url.pathname.split('/api/v1/groups/')[1] || '';
+      if (isPaginationSegment(segment)) {
+        return HttpResponse.json(paginate(fixtures.mockGroups, segment));
+      }
       return HttpResponse.json(fixtures.mockGroupFull);
     }),
 
@@ -154,7 +193,44 @@ export function createTalentLMSHandlers(expectedApiKey = MOCK_API_KEY) {
     http.get(`${BASE}/branches`, ({ request }) => {
       const authError = checkAuth(request, expectedApiKey);
       if (authError) return authError;
-      return HttpResponse.json(fixtures.mockBranches);
+      const url = new URL(request.url);
+      if (url.pathname === '/api/v1/branches') {
+        return HttpResponse.json(fixtures.mockBranches);
+      }
+      return undefined;
+    }),
+
+    http.get(`${BASE}/branches/*`, ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      const url = new URL(request.url);
+      const segment = url.pathname.split('/api/v1/branches/')[1] || '';
+      if (isPaginationSegment(segment)) {
+        return HttpResponse.json(paginate(fixtures.mockBranches, segment));
+      }
+      return HttpResponse.json({ error: { message: 'Not found' } }, { status: 404 });
+    }),
+
+    // ─── Categories ─────────────────────────────────────────
+    http.get(`${BASE}/categories`, ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      const url = new URL(request.url);
+      if (url.pathname === '/api/v1/categories') {
+        return HttpResponse.json(fixtures.mockCategories);
+      }
+      return undefined;
+    }),
+
+    http.get(`${BASE}/categories/*`, ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      const url = new URL(request.url);
+      const segment = url.pathname.split('/api/v1/categories/')[1] || '';
+      if (isPaginationSegment(segment)) {
+        return HttpResponse.json(paginate(fixtures.mockCategories, segment));
+      }
+      return HttpResponse.json({ error: { message: 'Not found' } }, { status: 404 });
     }),
 
     // ─── Reporting ──────────────────────────────────────────

@@ -6,6 +6,7 @@ import {
   registerCourseTools,
   registerGroupTools,
   registerBranchTools,
+  registerCategoryTools,
   registerReportingTools,
   registerAssessmentTools,
 } from './tools/index.js';
@@ -24,6 +25,7 @@ export function createServer(): McpServer {
   registerCourseTools(server);
   registerGroupTools(server);
   registerBranchTools(server);
+  registerCategoryTools(server);
   registerReportingTools(server);
   registerAssessmentTools(server);
 

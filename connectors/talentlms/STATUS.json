@@ -10,11 +10,12 @@
     ]
   },
   "tools": {
-    "count": 24,
+    "count": 28,
     "domains": [
       "users",
       "courses",
       "groups",
+      "categories",
       "reporting",
       "assessments"
     ]

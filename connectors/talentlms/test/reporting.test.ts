@@ -39,8 +39,46 @@ describe('Reporting tools', () => {
     expect(data.ok).toBe(true);
     expect(data.branches).toHaveLength(2);
     expect(data.count).toBe(2);
-    expect(data.branches[0].name).toBe('EMEA');
-    expect(data.branches[1].name).toBe('APAC');
+    expect(data.branches[0].name).toBe('<untrusted-content source="talentlms:branches">EMEA</untrusted-content>');
+    expect(data.branches[1].name).toBe('<untrusted-content source="talentlms:branches">APAC</untrusted-content>');
+  });
+
+  it('list_talentlms_categories returns categories', async () => {
+    const client = await getClient();
+    const result = await client.callTool('list_talentlms_categories', {});
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(data.ok).toBe(true);
+    expect(data.categories).toHaveLength(3);
+    expect(data.count).toBe(3);
+    expect(data.categories[0].name).toBe('<untrusted-content source="talentlms:categories">Onboarding</untrusted-content>');
+    expect(data.categories[2].id).toBe('3');
+  });
+
+  it('list_talentlms_categories forwards page_size and page_number', async () => {
+    const client = await getClient();
+    const result = await client.callTool('list_talentlms_categories', { page_size: 2, page_number: 2 });
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(data.ok).toBe(true);
+    expect(data.categories).toHaveLength(1);
+    expect(data.categories[0].id).toBe('3');
+  });
+
+  it('list_talentlms_categories surfaces API errors', async () => {
+    const { http, HttpResponse } = await import('msw');
+    mswServer.use(
+      http.get(`https://${MOCK_DOMAIN}.talentlms.com/api/v1/categories`, () =>
+        HttpResponse.json({ error: { message: 'Server error' } }, { status: 500 }),
+      ),
+    );
+    const client = await getClient();
+    const result = await client.callTool('list_talentlms_categories', {});
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(result.isError).toBe(true);
+    expect(data.ok).toBe(false);
+    expect(data.code).toBe('HTTP_500');
   });
 
   it('get_talentlms_site_info returns site stats', async () => {
@@ -51,7 +89,7 @@ describe('Reporting tools', () => {
     expect(data.ok).toBe(true);
     expect(data.siteInfo.total_users).toBe('150');
     expect(data.siteInfo.total_courses).toBe('25');
-    expect(data.siteInfo.site_name).toBe('Acme LMS');
+    expect(data.siteInfo.site_name).toBe('<untrusted-content source="talentlms:siteinfo">Acme LMS</untrusted-content>');
   });
 
   it('get_talentlms_timeline returns user timeline', async () => {
@@ -76,5 +114,53 @@ describe('Reporting tools', () => {
     expect(data.progress.units).toHaveLength(2);
     expect(data.progress.units[0].status).toBe('completed');
     expect(data.progress.units[1].status).toBe('incomplete');
+  });
+
+  it('get_talentlms_leaderboard ranks users by points descending', async () => {
+    const client = await getClient();
+    const result = await client.callTool('get_talentlms_leaderboard', {});
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(data.ok).toBe(true);
+    expect(data.leaderboard).toHaveLength(3);
+    expect(data.leaderboard[0].id).toBe('2');
+    expect(data.leaderboard[0].points).toBe('450');
+    expect(data.leaderboard[0].first_name).toBe('<untrusted-content source="talentlms:leaderboard">Bob</untrusted-content>');
+    expect(data.leaderboard[1].id).toBe('1');
+    expect(data.leaderboard[2].id).toBe('3');
+  });
+
+  it('get_talentlms_leaderboard respects the limit parameter', async () => {
+    const client = await getClient();
+    const result = await client.callTool('get_talentlms_leaderboard', { limit: 1 });
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(data.ok).toBe(true);
+    expect(data.leaderboard).toHaveLength(1);
+    expect(data.count).toBe(1);
+    expect(data.leaderboard[0].id).toBe('2');
+  });
+
+  it('get_talentlms_user_certifications returns issued certifications', async () => {
+    const client = await getClient();
+    const result = await client.callTool('get_talentlms_user_certifications', { user_id: '1' });
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(data.ok).toBe(true);
+    expect(data.certifications).toHaveLength(2);
+    expect(data.count).toBe(2);
+    expect(data.certifications[0].course_name).toBe('<untrusted-content source="talentlms:user-certifications">Security Training</untrusted-content>');
+    expect(data.certifications[0].expiration_date).toBe('2027-01-10');
+    expect(data.certifications[1].expiration_date).toBe('Never');
+  });
+
+  it('get_talentlms_user_certifications surfaces API errors', async () => {
+    const client = await getClient();
+    const result = await client.callTool('get_talentlms_user_certifications', { user_id: '999' });
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(result.isError).toBe(true);
+    expect(data.ok).toBe(false);
+    expect(data.code).toBe('HTTP_404');
   });
 });
