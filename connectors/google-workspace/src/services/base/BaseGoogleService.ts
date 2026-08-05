@@ -3,6 +3,7 @@ import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { getAccountManager } from '../../modules/accounts/index.js';
 import { AccountError } from '../../modules/accounts/types.js';
 import { findMissingScopes, getServiceNamesForScopes } from '../../utils/scope-hierarchy.js';
+import { isAuthHandoffError } from '../../utils/apiError.js';
 
 /**
  * Base error class for Google services
@@ -99,7 +100,10 @@ export abstract class BaseGoogleService<TClient> {
       }
 
       if (!tokenStatus.valid || !tokenStatus.token) {
-        throw new GoogleServiceError(
+        // AccountError (string `code`), not GoogleServiceError: the latter's numeric
+        // McpError code is invisible to formatErrorResponse's auth handoff, which is
+        // how first-request-of-the-session auth failures degraded to plain errors.
+        throw new AccountError(
           `${this.serviceName} authentication required`,
           'AUTH_REQUIRED',
           'Please authenticate the account'
@@ -118,8 +122,19 @@ export abstract class BaseGoogleService<TClient> {
   /**
    * Common error handler for Google service operations
    * Maps Google API error codes to appropriate MCP error codes
+   *
+   * Auth-handoff errors (AccountError with code AUTH_REQUIRED /
+   * HOST_ORCHESTRATED_AUTH_REQUIRED) pass through unchanged: rewrapping them
+   * here would replace the string `code` that server.ts formatErrorResponse
+   * keys the structured `auth_required` reconnect handoff on with a mangled
+   * `HTTP_AUTH_REQUIRED`, silently degrading an expired grant to a generic
+   * failure — the gap the Tasks/Forms/Docs/Slides/Comments service catches
+   * used to hit on a first-request auth failure.
    */
-  protected handleError(error: unknown, context: string): GoogleServiceError {
+  protected handleError(error: unknown, context: string): Error {
+    if (isAuthHandoffError(error) && error instanceof Error) {
+      return error;
+    }
     if (error instanceof GoogleServiceError) {
       return error;
     }
@@ -190,6 +205,24 @@ export abstract class BaseGoogleService<TClient> {
       const grantedScopes = tokenInfo.requiredScopes;
 
       if (!grantedScopes || grantedScopes.length === 0) {
+        if (!tokenInfo.valid) {
+          // Invalid/expired grant — this is an auth failure, not a scope gap. Keep the
+          // reconnect signal (or transient-retry signal) intact: reporting it as a
+          // generic SCOPE_ERROR let the swallowing service catches (Tasks/Forms/Docs/
+          // Slides/Comments/Sheets) flatten an expired sign-in to a plain string.
+          if (tokenInfo.canRetry) {
+            throw new AccountError(
+              `${this.serviceName} token refresh failed temporarily`,
+              'TEMPORARY_AUTH_ERROR',
+              'Please try again in a moment'
+            );
+          }
+          throw new AccountError(
+            `${this.serviceName} authentication required`,
+            'AUTH_REQUIRED',
+            tokenInfo.reason || 'Connect Google Workspace to continue'
+          );
+        }
         throw new GoogleServiceError(
           'No permissions found',
           'SCOPE_ERROR',

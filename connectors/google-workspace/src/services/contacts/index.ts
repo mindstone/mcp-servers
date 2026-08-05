@@ -4,7 +4,7 @@ import {
   GoogleServiceError
 } from "../base/BaseGoogleService.js";
 import { McpError } from "@modelcontextprotocol/sdk/types.js";
-import { describeApiError } from "../../utils/apiError.js";
+import { describeApiError, isAuthHandoffError } from "../../utils/apiError.js";
 import {
   GetContactsParams,
   GetContactsResponse,
@@ -77,6 +77,7 @@ export class ContactsService extends BaseGoogleService<PeopleApiClient> {
       // Need to handle potential nulls if strict null checks are enabled
       return response.data as GetContactsResponse;
     } catch (error) {
+      if (isAuthHandoffError(error)) throw error;
       // Handle known GoogleServiceError specifically
       if (error instanceof GoogleServiceError) {
         // Assuming GoogleServiceError inherits message and data from McpError
@@ -167,6 +168,7 @@ export class ContactsService extends BaseGoogleService<PeopleApiClient> {
         totalResults: results.length,
       };
     } catch (error) {
+      if (isAuthHandoffError(error)) throw error;
       if (error instanceof GoogleServiceError) {
         const gError = error as McpError & { data?: { code?: string; details?: string } };
         throw new ContactsError(
@@ -247,7 +249,8 @@ export class ContactsService extends BaseGoogleService<PeopleApiClient> {
     };
   }
 
-  private wrapWriteError(error: unknown, action: string): ContactsError {
+  private wrapWriteError(error: unknown, action: string): ContactsError | Error {
+    if (isAuthHandoffError(error) && error instanceof Error) return error;
     if (error instanceof GoogleServiceError) {
       const gError = error as McpError & { data?: { code?: string; details?: string } };
       return new ContactsError(

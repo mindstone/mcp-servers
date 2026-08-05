@@ -14,6 +14,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 
+- An expired or revoked Google sign-in now reliably prompts a reconnect across every module. Previously, a first-request-of-the-session auth failure in Gmail or Contacts, and any auth failure in Tasks, Forms, Docs, Slides, Comments, or Sheets, collapsed to a plain error string: the shared service layer mangled the internal "needs to reconnect" code (`HTTP_AUTH_REQUIRED`), `validateScopes` reported an invalid grant as a generic scope problem, and the result-envelope services (`{ success: false }`) flattened the error to text. Auth-handoff errors (`AUTH_REQUIRED`, `TEMPORARY_AUTH_ERROR`) now pass through the service layer unchanged, so the host's reconnect prompt (or a "try again in a moment" for a transient refresh blip) shows instead of an opaque failure.
 - `server.json` now declares every environment variable the connector reads: `GOOGLE_WORKSPACE_DISABLE_REFRESH` and `MCP_WORKSPACE_PATH` (previously undocumented despite being load-bearing for token refresh and attachment-path containment), plus the legacy `WORKSPACE_BASE_PATH` and `GAUTH_FILE` fallbacks, marked as deprecated in favour of their modern counterparts.
 
 ## [0.2.0] - 2026-07-29

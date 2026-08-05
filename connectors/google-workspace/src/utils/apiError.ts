@@ -52,11 +52,14 @@ export function hasErrorDetails(error: unknown): error is { message: string; cod
  * Auth-handoff error codes: a domain error (AccountError / CalendarError / …)
  * carrying one of these codes must NOT be wrapped into a generic McpError —
  * `server.ts` `formatErrorResponse` keys the structured `auth_required`
- * reconnect handoff on the raw domain error's string `code`. Kept as a
+ * reconnect handoff on the raw domain error's string `code`. TEMPORARY_AUTH_ERROR
+ * (a transient refresh blip) is included so its "try again" resolution survives
+ * to the user; formatErrorResponse deliberately does NOT map it to the
+ * reconnect CTA. Kept as a
  * structural check (no class import) so it works uniformly across every domain
  * error type without coupling this util to the accounts/calendar/gmail modules.
  */
-const AUTH_HANDOFF_CODES = new Set(['AUTH_REQUIRED', 'HOST_ORCHESTRATED_AUTH_REQUIRED']);
+const AUTH_HANDOFF_CODES = new Set(['AUTH_REQUIRED', 'HOST_ORCHESTRATED_AUTH_REQUIRED', 'TEMPORARY_AUTH_ERROR']);
 
 /**
  * True when `error` is a thrown value that signals the account needs
