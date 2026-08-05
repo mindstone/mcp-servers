@@ -34,6 +34,19 @@ export interface TranscriptResponse {
   transcript: TranscriptEntry[];
 }
 
+export interface ActionItem {
+  description: string;
+  user_generated?: boolean;
+  completed?: boolean;
+  recording_timestamp?: string;
+  recording_playback_url?: string;
+  assignee?: {
+    name?: string;
+    email?: string;
+    team?: string | null;
+  };
+}
+
 export interface MeetingItem {
   title: string;
   meeting_title: string | null;
@@ -63,16 +76,7 @@ export interface MeetingItem {
     template_name?: string;
     markdown_formatted?: string;
   } | null;
-  action_items?: Array<{
-    description: string;
-    user_generated?: boolean;
-    completed?: boolean;
-    recording_timestamp?: string;
-    assignee?: {
-      name?: string;
-      email?: string;
-    };
-  }> | null;
+  action_items?: ActionItem[] | null;
 }
 
 export interface MeetingsListResponse {

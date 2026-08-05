@@ -27,10 +27,16 @@ export function createFathomHandlers(expectedKey = 'test-fathom-key') {
     http.get(`${BASE}/meetings`, ({ request }) => {
       const authError = checkAuth(request);
       if (authError) return authError;
+      // Mirror the real API: action_items are only present when requested.
+      const includeActionItems =
+        new URL(request.url).searchParams.get('include_action_items') === 'true';
+      const items = mockMeetings.map((meeting) =>
+        includeActionItems ? meeting : { ...meeting, action_items: undefined },
+      );
       return HttpResponse.json({
         limit: 25,
         next_cursor: null,
-        items: mockMeetings,
+        items,
       });
     }),
 
