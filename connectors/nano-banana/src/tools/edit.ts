@@ -295,6 +295,16 @@ export function registerEditTools(server: McpServer): void {
         } catch (saveError) {
           const errMsg = saveError instanceof Error ? saveError.message : String(saveError);
           console.error(`[NanoBanana] Failed to save: ${errMsg}`);
+          // The image was edited but the requested save failed — surface
+          // that as an error instead of silently reporting success. The image
+          // is still returned inline so the edit is not lost.
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify({ ok: false, error: `Image edited but could not be saved to ${resolveResult.path}: ${errMsg}`, code: 'SAVE_FAILED', resolution: 'Check that the save path is inside the workspace and writable, then try again. The edited image is included inline in this result.' }, null, 2) },
+              { type: 'image', data: imageData, mimeType: imageMimeType },
+            ],
+            isError: true,
+          };
         }
       }
 

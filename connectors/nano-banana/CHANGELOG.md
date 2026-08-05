@@ -17,6 +17,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 - Tool descriptions no longer advertise "4K" as a default trait of the default model — output resolution defaults to ~1K unless `image_size` is set explicitly.
+- `nano_banana_generate` / `nano_banana_edit`: a failed `save_path` write no longer reports silent success — the tool now returns a structured `SAVE_FAILED` error (with the generated image still included inline, so the result is not lost).
 
 ## [0.3.2] - 2026-05-14
 ### Added
