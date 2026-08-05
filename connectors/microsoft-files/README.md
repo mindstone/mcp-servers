@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-microsoft-files.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-files)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Microsoft 365 OneDrive Files MCP server — list, search, get, download, upload, delete, move, copy, share files, and read text contents via the Microsoft Graph API.
+Microsoft 365 OneDrive Files MCP server — list, search, get, download, upload, delete, move, copy, share files, manage sharing permissions and version history, review file activity, and read text and Office document contents via the Microsoft Graph API.
 
 *Cohort-style Microsoft 365 OneDrive MCP. Reuses the OAuth surface owned by [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/), so the host signs in once and gets files plus mail plus calendar plus Teams plus SharePoint from the same credentials.*
 
@@ -11,7 +11,7 @@ Microsoft 365 OneDrive Files MCP server — list, search, get, download, upload,
 
 - **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-files)
 - **Auth:** OAuth (host-orchestrated, shared with [`mcp-server-microsoft-mail`](../microsoft-mail/)) ([`MS_CLIENT_ID`](./server.json))
-- **Tools:** [13](./src/tools.ts) (files, folders, sharing)
+- **Tools:** [20](./src/tools.ts) (files, folders, sharing, permissions, versions, activity)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 - **Shared library:** [`@mindstone/mcp-server-microsoft-shared`](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-shared)
@@ -166,7 +166,7 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 }
 ```
 
-## Tools (13)
+## Tools (20)
 
 | Tool | Description |
 | ---- | ----------- |
@@ -174,7 +174,7 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 | `get_file` | Get metadata for a specific file or folder. |
 | `download_file` | Get a short-lived download URL for a file. |
 | `search_files` | Search for files in OneDrive by name or content. |
-| `upload_file` | Upload a text file to OneDrive (max 4 MB). |
+| `upload_file` | Upload a file to OneDrive (text up to 4 MB; binary as base64 up to 10 MB via a resumable upload session). |
 | `create_folder` | Create a new folder in OneDrive. |
 | `delete_file` | Delete a file or folder. |
 | `move_file` | Move a file or folder to a new location. |
@@ -183,12 +183,21 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 | `get_shared` | List files shared with you by others. |
 | `share_file` | Create a sharing link for a file or folder. |
 | `read_text_file` | Read the contents of a text file. |
+| `invite_to_file` | Share a file or folder with specific people by email (read or write). |
+| `list_file_permissions` | List the sharing permissions granted on a file or folder. |
+| `revoke_file_permission` | Revoke a sharing permission by ID. |
+| `list_file_versions` | List the version history of a file. |
+| `restore_file_version` | Restore a previous version, replacing the current content. |
+| `list_file_activities` | List recent file activity (drive-wide or per item; OneDrive for Business / SharePoint only). |
+| `read_document` | Extract the text of a Word (.docx) or PowerPoint (.pptx) file directly. |
 
 ## Security notes
 
 - No authentication tool of its own; sign-in is delegated to [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/) so the cohort has a single OAuth surface.
 - Token-provider refresh failures map to the structured `auth_required` response so the host can drive reauth without crashing.
 - `upload_file` enforces empty-content validation in line with the bundled connector to reject zero-byte uploads as a misuse.
+- Binary uploads chunk to the preauthenticated upload-session URL **without** the Graph access token, as Graph requires.
+- Content authored in Microsoft 365 (file names, grantee identities, activity actors, extracted document text) is returned inside `<untrusted-content>` envelopes; Graph responses on the permission/version/activity/upload/document paths are Zod-validated at the boundary.
 - Per-tool Graph calls run under a composed caller + cohort timeout signal.
 
 ## Licence
