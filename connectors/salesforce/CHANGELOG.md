@@ -23,10 +23,18 @@ are maintained manually as part of the PR review checklist.
 ### Changed
 
 - The Salesforce API version is now pinned to v66.0 (Spring '26) via `SALESFORCE_API_VERSION` instead of riding jsforce's bundled default (v50.0), so the connector talks to a deliberate, tested API version.
+- All record-creation and lead-conversion tools now carry `destructiveHint: true` so hosts can gate them behind explicit approval.
+- `salesforce_search` returns a `truncated` flag: the tool probes with one extra record so a clipped result is distinguishable from a complete one (SOSL exposes no total count).
+- `salesforce_create_note` no longer leaves an orphaned note behind when attaching to the parent record fails — it rolls the note back, and if the rollback itself fails the error reports the orphaned note ID for manual cleanup.
+
+### Fixed
+
+- Record sanitization no longer passes whole `attributes` objects or arbitrary `*Id`-keyed strings through raw: `attributes` values are sanitized recursively, and only values actually shaped like a Salesforce ID (15/18-character alphanumeric) stay raw for copy-paste into follow-up calls.
 
 ### Security
 
 - Envelope every record field returned by `salesforce_query`, `salesforce_get_records`, and all `salesforce_get_*` tools in `<untrusted-content>` tags so org-authored text (names, emails, descriptions, subjects) is treated as data, not instructions (FOX-3490). Record IDs stay raw so they can be reused in follow-up calls. Org-authored labels in `salesforce_describe_object` and `salesforce_list_objects` are enveloped too.
+- Vendor-authored error output (Salesforce validation-rule messages and API error bodies surfaced by jsforce) is now enveloped in `<untrusted-content>` instead of returned raw, and unexpected runtime errors return a generic `INTERNAL_ERROR` message — the raw detail goes to local logs only, so response-body fragments and environment details (e.g. tokens embedded in ad-hoc error text) cannot reach model-visible output.
 
 ## [0.1.3] - 2026-06-12
 
