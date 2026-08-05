@@ -415,7 +415,7 @@ export function registerAdminTools(server: McpServer): void {
     'ga_search_change_history_events',
     {
       description:
-        'Search the change history (created/updated/deleted) for a GA4 property. Uses the v1alpha admin API; structure may evolve over time.',
+        'Search the change history (created/updated/deleted) for a GA4 property. Follows all result pages automatically, so large histories are returned in full. Uses the v1alpha admin API; structure may evolve over time.',
       inputSchema: requiredPropertyId.shape,
       annotations: READ_ONLY,
     },
@@ -431,34 +431,46 @@ export function registerAdminTools(server: McpServer): void {
         );
       }
 
-      const response = await googleApi<{
-        changeHistoryEvents?: Array<{
-          id?: string;
-          changeTime?: string;
-          actorType?: string;
-          userActorEmail?: string;
-          changes?: Array<{
-            action?: string;
-            resource?: string;
-            resourceAfterChange?: unknown;
-          }>;
+      interface ChangeHistoryEvent {
+        id?: string;
+        changeTime?: string;
+        actorType?: string;
+        userActorEmail?: string;
+        changes?: Array<{
+          action?: string;
+          resource?: string;
+          resourceAfterChange?: unknown;
         }>;
-      }>(`/${accountPath(parentAccount)}:searchChangeHistoryEvents`, {
-        method: 'POST',
-        body: {
-          resourceType: ['PROPERTY'],
-          action: ['CREATED', 'UPDATED', 'DELETED'],
-          property,
-          pageSize: 100,
-        },
-        baseUrl: Bases.adminAlpha,
-      });
+      }
+
+      // Follow every page — the previous single-shot request silently
+      // truncated the history at the first 100 events.
+      const events: ChangeHistoryEvent[] = [];
+      let pageToken: string | undefined;
+      do {
+        const response = await googleApi<{
+          changeHistoryEvents?: ChangeHistoryEvent[];
+          nextPageToken?: string;
+        }>(`/${accountPath(parentAccount)}:searchChangeHistoryEvents`, {
+          method: 'POST',
+          body: {
+            resourceType: ['PROPERTY'],
+            action: ['CREATED', 'UPDATED', 'DELETED'],
+            property,
+            pageSize: 100,
+            pageToken,
+          },
+          baseUrl: Bases.adminAlpha,
+        });
+        events.push(...(response.changeHistoryEvents || []));
+        pageToken = response.nextPageToken || undefined;
+      } while (pageToken);
 
       return JSON.stringify({
         ok: true,
         property,
         account: parentAccount,
-        changeHistoryEvents: (response.changeHistoryEvents || []).map((event) => ({
+        changeHistoryEvents: events.map((event) => ({
           id: event.id || null,
           changeTime: event.changeTime || null,
           actorType: event.actorType || null,

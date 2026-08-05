@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect, afterAll } from 'vitest';
+import { http, HttpResponse } from 'msw';
 import './helpers/mock-auth.js';
 import { mswServer } from './helpers/setup.js';
 import { createGoogleHandlers } from './helpers/google-mock-server.js';
@@ -90,6 +91,50 @@ describe('audience export tools', () => {
     const exports = parsed.audienceExports as Array<Record<string, unknown>>;
     expect(exports).toHaveLength(1);
     expect(exports[0].state).toBe('ACTIVE');
+  });
+
+  it('ga_list_audience_exports follows nextPageToken across pages', async () => {
+    mswServer.use(...createGoogleHandlers());
+    mswServer.use(
+      http.get(
+        new RegExp(
+          `^${'https://analyticsdata.googleapis.com/v1beta'.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/properties/[^/]+/audienceExports$`,
+        ),
+        ({ request }) => {
+          const pageToken = new URL(request.url).searchParams.get('pageToken');
+          if (!pageToken) {
+            return HttpResponse.json({
+              audienceExports: [
+                { name: 'properties/200/audienceExports/700', state: 'ACTIVE' },
+              ],
+              nextPageToken: 'page-2',
+            });
+          }
+          return HttpResponse.json({
+            audienceExports: [
+              { name: 'properties/200/audienceExports/701', state: 'CREATING' },
+            ],
+          });
+        },
+      ),
+    );
+    testClient = await createTestClient({
+      env: {
+        GOOGLE_APPLICATION_CREDENTIALS: FIXTURE_ADC,
+        GA4_PROPERTY_ID: '200',
+      },
+    });
+    const result = await testClient.client.callTool({
+      name: 'ga_list_audience_exports',
+      arguments: { property_id: '200' },
+    });
+    const parsed = parseToolResult(result);
+    expect(parsed.ok).toBe(true);
+    const exports = parsed.audienceExports as Array<{ name: string }>;
+    expect(exports.map((entry) => entry.name)).toEqual([
+      'properties/200/audienceExports/700',
+      'properties/200/audienceExports/701',
+    ]);
   });
 
   it('ga_query_audience_export maps rows by dimension name with enveloped values', async () => {

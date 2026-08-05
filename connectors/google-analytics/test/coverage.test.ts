@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect, afterAll } from 'vitest';
+import { http, HttpResponse } from 'msw';
 import './helpers/mock-auth.js';
 import { mswServer } from './helpers/setup.js';
 import { createGoogleHandlers } from './helpers/google-mock-server.js';
@@ -206,5 +207,45 @@ describe('per-tool happy-path coverage', () => {
     const parsed = await callOk('ga_search_change_history_events', { property_id: '200' });
     expect(parsed.account).toBe('accounts/100');
     expect(parsed.changeHistoryEvents).toEqual([]);
+  });
+
+  it('ga_search_change_history_events follows every page instead of truncating at 100', async () => {
+    mswServer.use(...createGoogleHandlers());
+    const pageOneEvents = Array.from({ length: 100 }, (_, index) => ({
+      id: String(index + 1),
+      changeTime: '2026-01-01T00:00:00Z',
+      actorType: 'USER',
+    }));
+    mswServer.use(
+      http.post(
+        new RegExp(
+          `^${'https://analyticsadmin.googleapis.com/v1alpha'.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/accounts/[^/]+:searchChangeHistoryEvents$`,
+        ),
+        async ({ request }) => {
+          const body = (await request.json()) as { pageToken?: string };
+          if (!body.pageToken) {
+            return HttpResponse.json({
+              changeHistoryEvents: pageOneEvents,
+              nextPageToken: 'page-2',
+            });
+          }
+          return HttpResponse.json({
+            changeHistoryEvents: [
+              { id: '101', changeTime: '2026-01-02T00:00:00Z', actorType: 'USER' },
+            ],
+          });
+        },
+      ),
+    );
+    testClient = await createTestClient({
+      env: {
+        GOOGLE_APPLICATION_CREDENTIALS: FIXTURE_ADC,
+        GA4_PROPERTY_ID: '200',
+      },
+    });
+    const parsed = await callOk('ga_search_change_history_events', { property_id: '200' });
+    const events = parsed.changeHistoryEvents as Array<{ id: string }>;
+    expect(events).toHaveLength(101);
+    expect(events[100].id).toBe('101');
   });
 });
