@@ -101,4 +101,54 @@ export function registerChangeTools(server: McpServer): void {
       });
     }),
   );
+
+  // ── create_servicenow_change_request ──────────────────────────
+
+  server.registerTool(
+    'create_servicenow_change_request',
+    {
+      description:
+        'Create a new change request in ServiceNow. ' +
+        'Provide at minimum a short_description. ' +
+        'Type values: "normal", "standard", "emergency".',
+      inputSchema: z.object({
+        short_description: z.string().min(1).describe('Brief description of the change'),
+        description: z.string().optional().describe('Detailed description of the change'),
+        type: z
+          .string()
+          .optional()
+          .describe('Change type: "normal", "standard", or "emergency" (default: "normal")'),
+        assignment_group: z.string().optional().describe('Assignment group name'),
+        category: z.string().optional().describe('Change category'),
+        risk: z
+          .string()
+          .optional()
+          .describe('Risk: "1" (High), "2" (Medium), "3" (Low)'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      const body: Record<string, string> = {};
+      if (args.short_description) body.short_description = args.short_description;
+      if (args.description) body.description = args.description;
+      if (args.type) body.type = args.type;
+      if (args.assignment_group) body.assignment_group = args.assignment_group;
+      if (args.category) body.category = args.category;
+      if (args.risk) body.risk = args.risk;
+
+      const params = buildQueryParams({ sysparm_display_value: 'true' });
+      const changeRequest = await servicenowFetch<Record<string, unknown>>(
+        `/change_request${params}`,
+        {
+          method: 'POST',
+          body: JSON.stringify(body),
+        },
+      );
+      return JSON.stringify({
+        ok: true,
+        message: 'Change request created.',
+        change_request: sanitizeRecord(changeRequest, CHANGE_SOURCE),
+      });
+    }),
+  );
 }

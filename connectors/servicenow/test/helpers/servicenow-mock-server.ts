@@ -147,6 +147,22 @@ export function createServiceNowHandlers(
       return HttpResponse.json({ result: cr });
     }),
 
+    // POST /change_request (create)
+    http.post(`${BASE}/change_request`, async ({ request }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+
+      const body = (await request.json()) as Record<string, string>;
+      const created = {
+        ...mockChangeRequestDetail,
+        number: 'CHG0010099',
+        sys_id: 'new-change-sys-id',
+        short_description: body.short_description || 'No description',
+        type: body.type || 'normal',
+      };
+      return HttpResponse.json({ result: created });
+    }),
+
     // ── Knowledge ─────────────────────────────────────────────────
 
     // GET /kb_knowledge (search/list)

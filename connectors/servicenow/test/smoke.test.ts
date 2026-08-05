@@ -14,7 +14,7 @@ describe('Smoke test — tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 10 tools with correct names', async () => {
+  it('registers exactly 11 tools with correct names', async () => {
     mswServer.use(...createServiceNowHandlers());
 
     testClient = await createTestClient({
@@ -29,9 +29,10 @@ describe('Smoke test — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(10);
+    expect(toolsResult.tools).toHaveLength(11);
     expect(toolNames).toEqual([
       'configure_servicenow',
+      'create_servicenow_change_request',
       'create_servicenow_incident',
       'get_servicenow_change_request',
       'get_servicenow_incident',

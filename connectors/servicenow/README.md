@@ -9,7 +9,7 @@ ServiceNow ITSM MCP server for Model Context Protocol hosts. Manage incidents, c
 
 - **Version:** [0.2.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-servicenow)
 - **Auth:** Basic auth (username + password) ([`SERVICENOW_PASSWORD`](./server.json))
-- **Tools:** [10](./src/tools/) (incidents, change-requests, users, knowledge)
+- **Tools:** [11](./src/tools/) (incidents, change-requests, users, knowledge)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -122,7 +122,7 @@ node dist/index.js
 }
 ```
 
-## Tools (10)
+## Tools (11)
 
 ### Configuration
 - `configure_servicenow` — Configure ServiceNow instance credentials
@@ -136,6 +136,7 @@ node dist/index.js
 ### Change requests
 - `list_servicenow_change_requests` — List or search change requests
 - `get_servicenow_change_request` — Get a single change request by number or sys_id
+- `create_servicenow_change_request` — Create a new change request
 
 ### Users
 - `list_servicenow_users` — List or search users

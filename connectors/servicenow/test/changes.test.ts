@@ -1,6 +1,9 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mswServer } from './helpers/setup.js';
-import { createServiceNowHandlers } from './helpers/servicenow-mock-server.js';
+import {
+  createServiceNowHandlers,
+  createServiceNowUnauthorizedHandlers,
+} from './helpers/servicenow-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
 
 const TEST_ENV = {
@@ -77,5 +80,53 @@ describe('ServiceNow change request tools', () => {
     const json = result.json as { ok: boolean; error: string };
     expect(json.ok).toBe(false);
     expect(json.error).toContain('not found');
+  });
+
+  // ── create_servicenow_change_request ──────────────────────────
+
+  it('create_servicenow_change_request returns created change with number and sys_id', async () => {
+    mswServer.use(...createServiceNowHandlers());
+    testClient = await createTestClient({ env: TEST_ENV });
+
+    const result = await testClient.callTool('create_servicenow_change_request', {
+      short_description: 'Replace core router',
+      type: 'normal',
+      risk: '2',
+    });
+    const json = result.json as {
+      ok: boolean;
+      message: string;
+      change_request: { number: string; sys_id: string; short_description: string };
+    };
+    expect(json.ok).toBe(true);
+    expect(json.message).toBe('Change request created.');
+    expect(json.change_request.number).toBe('CHG0010099');
+    expect(json.change_request.sys_id).toBe('new-change-sys-id');
+    // Free text echoed back is enveloped (invariant #6)
+    expect(json.change_request.short_description).toBe(
+      '<untrusted-content source="servicenow:change-request:short_description">Replace core router</untrusted-content>',
+    );
+  });
+
+  it('create_servicenow_change_request rejects empty short_description via Zod', async () => {
+    mswServer.use(...createServiceNowHandlers());
+    testClient = await createTestClient({ env: TEST_ENV });
+
+    const result = await testClient.callTool('create_servicenow_change_request', {
+      short_description: '',
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  it('create_servicenow_change_request surfaces API errors without secrets', async () => {
+    mswServer.use(...createServiceNowUnauthorizedHandlers());
+    testClient = await createTestClient({ env: TEST_ENV });
+
+    const result = await testClient.callTool('create_servicenow_change_request', {
+      short_description: 'Replace core router',
+    });
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('Authentication failed');
+    expect(result.text).not.toContain('test-pass');
   });
 });

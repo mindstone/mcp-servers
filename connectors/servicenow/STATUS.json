@@ -10,7 +10,7 @@
     ]
   },
   "tools": {
-    "count": 10,
+    "count": 11,
     "domains": [
       "incidents",
       "change-requests",
