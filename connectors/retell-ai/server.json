@@ -26,6 +26,13 @@
           "isRequired": true,
           "isSecret": true,
           "format": "string"
+        },
+        {
+          "name": "MCP_WORKSPACE_PATH",
+          "description": "Optional workspace directory for local files uploaded as knowledge-base sources. File reads are sandboxed to this directory (defaults to the system temp directory when unset).",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
         }
       ]
     }

@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+- **Chat read-side tools** — `list_chat_agents`, `list_chats`, and `get_chat`: read-only access to Retell's chat feature area. `list_chats` supports agent and start-time filters (mapped to Retell's typed operator objects; date strings coerce to epoch ms like `list_calls`). Chat transcripts, per-message content, and chat analysis are end-user-authored text and are wrapped in untrusted-content envelopes.
+- **`get_concurrency`** — read the account's current/limit call concurrency (`GET /get-concurrency`) plus a derived `available_concurrency`, so the agent can sanity-check capacity before proposing a batch campaign or call burst.
+- **Delete lifecycle tools** — `delete_agent`, `delete_retell_llm`, and `delete_phone_number`: permanent cleanup of agents, LLM configs (each deleting all versions), and phone numbers (releasing the number). All three are marked `destructiveHint: true`, and `delete_phone_number` E.164-validates locally before any request.
+- **Knowledge base tools** — `list_knowledge_bases`, `get_knowledge_base`, `create_knowledge_base`, and `add_knowledge_base_sources`: ground voice agents on documents, URLs, and inline texts via Retell's RAG knowledge bases. Local file uploads (`file_paths`) are sandboxed to `MCP_WORKSPACE_PATH` (or the system temp directory when unset) with canonical-prefix containment — paths outside the sandbox, including symlinks that escape it, are rejected before any disk read. Knowledge-base names and source titles/filenames are wrapped in untrusted-content envelopes; source URLs are surfaced raw for the user.
+- **`create_batch_call`** — schedule or start an outbound calling campaign (`POST /create-batch-call`): one `from_number` to a list of recipient tasks, each with optional per-call dynamic variables, metadata, and agent/version overrides. Supports `trigger_timestamp` scheduling (accepts epoch ms or a date string), `reserved_concurrency`, and `call_time_window` business-hours restrictions. Every recipient number is E.164-validated locally before any request reaches Retell's billing surface, and the tool is marked `destructiveHint: true` because every task is a real, billed phone call.
+
+### Fixed
+- **`list_agents` migrated off the deprecated endpoint**: Retell deprecated the legacy `GET /list-agents` in favour of the unified `POST /v2/list-agents` (voice + chat). The tool now calls `POST /v2/list-agents` with a voice-channel filter and returns paginated agent summaries (`pagination_key`, `has_more`), with optional `limit`, `sort_order`, and `pagination_key` parameters. Summary items also expose `voice_name` and `tags` (both wrapped in untrusted-content envelopes).
+
+### Changed
+- README: new tool groups documented (batch calls, knowledge bases, chats, delete lifecycle tools), a "Vendor deprecation watch" section covering Retell's breaking-change cadence, and security notes for batch-call confirmation, workspace-sandboxed knowledge-base file uploads (`MCP_WORKSPACE_PATH`), and permanent delete tools.
+
 ## [0.2.4] - 2026-06-11
 
 ### Changed

@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-retell-ai.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-retell-ai)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Voice agent phone calls, call management, agent configuration, LLM prompt management, and voice discovery via [Retell AI](https://www.retellai.com/) API.
+Voice agent phone calls, batch calling campaigns, call management, agent configuration, LLM prompt management, knowledge bases, chat history, and voice discovery via [Retell AI](https://www.retellai.com/) API.
 
 *Best for MCP hosts that want a local voice-operations connector for placing calls, checking call history, and adjusting agent prompts with user confirmation.*
 
@@ -11,7 +11,7 @@ Voice agent phone calls, call management, agent configuration, LLM prompt manage
 
 - **Version:** [0.2.4](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-retell-ai)
 - **Auth:** API key ([`RETELL_API_KEY`](./server.json))
-- **Tools:** [20](./src/tools/) (calls, agents, llms, voices)
+- **Tools:** [32](./src/tools/) (calls, agents, llms, voices, knowledge bases, chats)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -112,6 +112,7 @@ Set the following environment variable:
 | Variable | Required | Description |
 |---|---|---|
 | `RETELL_API_KEY` | Yes | Retell AI API key. Get one at [retellai.com/dashboard](https://www.retellai.com/dashboard) |
+| `MCP_WORKSPACE_PATH` | No | Workspace directory for local files uploaded as knowledge-base sources (`create_knowledge_base` / `add_knowledge_base_sources` `file_paths`). File reads are sandboxed to this directory; defaults to the system temp directory. |
 
 ### MCP Host Configuration
 
@@ -157,11 +158,36 @@ Hosts integrating this connector are required to:
 Malformed numbers are rejected locally with a structured
 `INVALID_PHONE_NUMBER` error and are never sent upstream.
 
+### Batch calls multiply the blast radius
+
+`create_batch_call` places one real, billed phone call per task. The same
+confirmation rules as `create_phone_call` apply to the whole batch: the host
+MUST surface the full recipient list (`from_number` plus every `to_number`)
+and get explicit user confirmation before invoking it. Consider checking
+`get_concurrency` first so a campaign does not starve inbound capacity.
+
+### Knowledge-base file uploads are workspace-sandboxed
+
+`create_knowledge_base` and `add_knowledge_base_sources` accept local
+`file_paths`. Reads are constrained to `MCP_WORKSPACE_PATH` (or the system
+temp directory when unset) using canonical-prefix containment: `..`
+traversal, absolute paths outside the sandbox, and symlinks that escape it
+are rejected before any disk read. Retell limits uploads to 25 files, 50MB
+each.
+
+### Delete tools are permanent
+
+`delete_agent`, `delete_retell_llm`, and `delete_phone_number` are
+irreversible: agent and LLM deletion removes ALL versions, and a deleted
+phone number is released (you may not get the same number back). Hosts
+should require explicit confirmation and encourage checking bindings first
+(`list_phone_numbers`, `get_agent`).
+
 ### Configuration changes also need review
 
 The connector also marks agent creation/updates, agent publishing, LLM prompt creation/updates, phone-number updates, web-call creation, active-call stopping, and API-key configuration as reviewable actions. Hosts should treat them carefully because they can alter live call behaviour, costs, or credentials.
 
-## Tools (20)
+## Tools (32)
 
 ### Phone Calls
 - **create_phone_call** — Create an outbound phone call using a Retell AI voice agent
@@ -169,29 +195,58 @@ The connector also marks agent creation/updates, agent publishing, LLM prompt cr
 - **get_call** — Get details about a specific call (status, transcript, recording)
 - **list_calls** — List and filter calls by agent, time range, or status
 - **stop_call** — Terminate an active call
+- **get_concurrency** — Check account call-capacity headroom before a batch or burst
+
+### Batch Calls
+- **create_batch_call** — Schedule or start an outbound calling campaign (one from_number, many recipients)
 
 ### Agents
 - **get_agent** — Get full configuration of a voice agent
-- **list_agents** — List all configured voice agents
+- **list_agents** — List configured voice agents (paginated)
 - **create_agent** — Create a new voice agent
 - **update_agent** — Update an existing agent's configuration
 - **publish_agent** — Publish an agent draft to make it callable
 - **get_agent_versions** — List version history for an agent
+- **delete_agent** — Permanently delete an agent and all its versions
 
 ### LLM Configuration
 - **update_retell_llm** — Update the LLM configuration (prompt, greeting, model)
 - **get_retell_llm** — Get the full LLM configuration
 - **create_retell_llm** — Create a new LLM configuration
 - **list_retell_llms** — List all LLM configurations
+- **delete_retell_llm** — Permanently delete an LLM configuration and all its versions
+
+### Knowledge Bases
+- **list_knowledge_bases** — List knowledge bases and their processing status
+- **get_knowledge_base** — Get a knowledge base's sources and status
+- **create_knowledge_base** — Create a knowledge base from texts, URLs, and/or sandboxed local files
+- **add_knowledge_base_sources** — Add texts, URLs, or files to an existing knowledge base
+
+### Chats
+- **list_chat_agents** — List configured chat agents (paginated)
+- **list_chats** — List and filter chat sessions by agent or time range
+- **get_chat** — Get a chat's full transcript and analysis
 
 ### Discovery
 - **list_voices** — List available text-to-speech voices
 - **list_phone_numbers** — List registered phone numbers
 - **get_phone_number** — Get details of a specific phone number
 - **update_phone_number** — Update a phone number's agent assignment
+- **delete_phone_number** — Permanently release a phone number
 
 ### Configuration
 - **configure_retell_api_key** — Save your Retell AI API key
+
+## Vendor deprecation watch
+
+Retell ships breaking endpoint changes on short notice — this connector has
+already migrated twice (the v2/v3 call-endpoint round in 0.2.0, and
+`list_agents` moving to the unified `POST /v2/list-agents` after the 2026-07-31
+deprecation). Maintainers: re-check the [Retell deprecation
+notices](https://docs.retellai.com/deprecation-notice/overview) before each
+release and after any unexplained 404/410 from a previously working tool.
+Known upcoming: "Update Call restricted to ended calls" (2026-08-31) — this
+connector does not expose update-call, so no action is needed today.
 
 ## Licence
 

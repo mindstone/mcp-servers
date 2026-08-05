@@ -62,9 +62,12 @@ export async function retellFetch<T>(
   requireApiKey();
 
   const url = `${RETELL_API_BASE}${urlPath}`;
+  // Multipart bodies (knowledge-base file uploads) must NOT carry a manual
+  // Content-Type — fetch sets it with the correct boundary itself.
+  const isMultipart = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const headers: Record<string, string> = {
     'Authorization': `Bearer ${apiKey}`,
-    'Content-Type': 'application/json',
+    ...(isMultipart ? {} : { 'Content-Type': 'application/json' }),
     ...(options.headers as Record<string, string> || {}),
   };
 

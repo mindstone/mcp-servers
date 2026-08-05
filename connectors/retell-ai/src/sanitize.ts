@@ -151,6 +151,9 @@ export function sanitizeAgent(agent: unknown, source: string): unknown {
     agent_name: wrapStr(agent.agent_name, `${source}:agent_name`),
     version_description: wrapStr(agent.version_description, `${source}:version_description`),
     assigned_tags: wrapArrayItems(agent.assigned_tags, `${source}:assigned_tags`),
+    // POST /v2/list-agents summary items carry these extra display fields.
+    voice_name: wrapStr(agent.voice_name, `${source}:voice_name`),
+    tags: wrapJsonStrings(agent.tags, `${source}:tags`),
     backchannel_words: wrapArrayItems(agent.backchannel_words, `${source}:backchannel_words`),
     boosted_keywords: wrapArrayItems(agent.boosted_keywords, `${source}:boosted_keywords`),
     pronunciation_dictionary: sanitizePronunciationDictionary(agent.pronunciation_dictionary, source),
@@ -235,6 +238,83 @@ export function sanitizeVoice(voice: unknown, source: string): unknown {
 export function sanitizePhoneNumber(num: unknown, source: string): unknown {
   if (!isObj(num)) return num;
   return { ...num, nickname: wrapStr(num.nickname, `${source}:nickname`) };
+}
+
+/** Wrap the analysis text fields a chat user can influence. */
+function sanitizeChatAnalysis(analysis: unknown, source: string): unknown {
+  if (!isObj(analysis)) return analysis;
+  const out: Obj = { ...analysis };
+  out.chat_summary = wrapStr(out.chat_summary, `${source}:chat_analysis.chat_summary`);
+  out.custom_analysis_data = wrapJsonStrings(
+    out.custom_analysis_data,
+    `${source}:chat_analysis.custom_analysis_data`,
+  );
+  return out;
+}
+
+/**
+ * Wrap the external-text fields on a Retell chat object. A chat `transcript`
+ * is written by the end user chatting with the agent — the same trust level
+ * as a phone caller — so transcript / message content / chat analysis get the
+ * same envelope treatment as call objects.
+ */
+export function sanitizeChat(chat: unknown, source: string): unknown {
+  if (!isObj(chat)) return chat;
+  const out: Obj = { ...chat };
+
+  out.agent_name = wrapStr(out.agent_name, `${source}:agent_name`);
+  out.transcript = wrapStr(out.transcript, `${source}:transcript`);
+  out.message_with_tool_calls = sanitizeTranscriptTurns(
+    out.message_with_tool_calls,
+    'message_with_tool_calls',
+    source,
+  );
+  out.chat_analysis = sanitizeChatAnalysis(out.chat_analysis, source);
+  out.metadata = wrapJsonStrings(out.metadata, `${source}:metadata`);
+  out.retell_llm_dynamic_variables = wrapJsonStrings(
+    out.retell_llm_dynamic_variables,
+    `${source}:retell_llm_dynamic_variables`,
+  );
+  out.collected_dynamic_variables = wrapJsonStrings(
+    out.collected_dynamic_variables,
+    `${source}:collected_dynamic_variables`,
+  );
+  out.custom_attributes = wrapJsonStrings(out.custom_attributes, `${source}:custom_attributes`);
+
+  return out;
+}
+
+/** Wrap external-text fields on a batch-call object (`name`). */
+export function sanitizeBatchCall(batch: unknown, source: string): unknown {
+  if (!isObj(batch)) return batch;
+  return { ...batch, name: wrapStr(batch.name, `${source}:name`) };
+}
+
+function sanitizeKnowledgeBaseSources(sources: unknown, source: string): unknown {
+  if (!Array.isArray(sources)) return sources;
+  return sources.map((item) => {
+    if (!isObj(item)) return item;
+    return {
+      ...item,
+      filename: wrapStr(item.filename, `${source}:knowledge_base_sources.filename`),
+      title: wrapStr(item.title, `${source}:knowledge_base_sources.title`),
+    };
+  });
+}
+
+/**
+ * Wrap external-text fields on a knowledge-base object (`knowledge_base_name`,
+ * source `filename`/`title`). Source URLs (`url`, `file_url`, `content_url`)
+ * are deliberately NOT enveloped: they are URLs surfaced for the user, not
+ * prose (same rationale as call recording URLs).
+ */
+export function sanitizeKnowledgeBase(kb: unknown, source: string): unknown {
+  if (!isObj(kb)) return kb;
+  return {
+    ...kb,
+    knowledge_base_name: wrapStr(kb.knowledge_base_name, `${source}:knowledge_base_name`),
+    knowledge_base_sources: sanitizeKnowledgeBaseSources(kb.knowledge_base_sources, source),
+  };
 }
 
 /**
