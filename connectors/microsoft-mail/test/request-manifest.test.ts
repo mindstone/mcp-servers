@@ -112,6 +112,18 @@ const MANIFEST: ManifestRow[] = [
     pathname: '/v1.0/me/messages/:id',
     args: { id: 'draft-1', subject: 'x' },
   },
+  {
+    tool: 'mark_email_read',
+    method: 'PATCH',
+    pathname: '/v1.0/me/messages/:id',
+    args: { id: 'msg-1', isRead: true },
+  },
+  {
+    tool: 'set_email_flag',
+    method: 'PATCH',
+    pathname: '/v1.0/me/messages/:id',
+    args: { id: 'msg-1', flag: 'flagged' },
+  },
 ];
 
 function matchPath(actual: string, pattern: string): boolean {

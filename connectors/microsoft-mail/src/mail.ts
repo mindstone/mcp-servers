@@ -647,3 +647,59 @@ export async function updateDraft(
     message: 'Draft updated',
   };
 }
+
+export interface MarkEmailReadArgs {
+  id: string;
+  isRead?: boolean;
+}
+
+export async function markEmailRead(
+  client: Client,
+  args: MarkEmailReadArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const isRead = args.isRead ?? true;
+
+  const response = await client
+    .api(`/me/messages/${args.id}`)
+    .options({ signal })
+    .patch({ isRead });
+  const updated = GraphMessageMutationSchema.parse(response);
+
+  return {
+    success: true,
+    id: updated.id,
+    isRead: updated.isRead ?? isRead,
+    message: isRead ? 'Email marked as read' : 'Email marked as unread',
+  };
+}
+
+export interface SetEmailFlagArgs {
+  id: string;
+  flag: 'flagged' | 'complete' | 'notFlagged';
+}
+
+export async function setEmailFlag(
+  client: Client,
+  args: SetEmailFlagArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const response = await client
+    .api(`/me/messages/${args.id}`)
+    .options({ signal })
+    .patch({ flag: { flagStatus: args.flag } });
+  const updated = GraphMessageMutationSchema.parse(response);
+
+  const messages: Record<SetEmailFlagArgs['flag'], string> = {
+    flagged: 'Email flagged for follow-up',
+    complete: 'Email follow-up flag marked complete',
+    notFlagged: 'Email follow-up flag cleared',
+  };
+
+  return {
+    success: true,
+    id: updated.id,
+    flag: updated.flag?.flagStatus ?? args.flag,
+    message: messages[args.flag],
+  };
+}

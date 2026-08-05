@@ -19,11 +19,13 @@ import {
   listAttachments,
   listEmails,
   listFolders,
+  markEmailRead,
   moveEmail,
   replyToEmail,
   searchEmails,
   sendDraft,
   sendEmail,
+  setEmailFlag,
   updateDraft,
 } from './mail.js';
 
@@ -587,6 +589,83 @@ sign-in, Microsoft 365 tools become available.`,
           },
           signal,
         ),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // mark_email_read
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'mark_email_read',
+    {
+      description: 'Mark an email as read or unread.',
+      inputSchema: z.object({
+        id: z.string().optional().describe('Email message ID'),
+        isRead: z
+          .boolean()
+          .optional()
+          .describe('true to mark as read, false to mark as unread (default: true)'),
+      }).shape,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.id) {
+        return errorResponse({
+          error:
+            'Missing required parameter: "id" (the email message ID). Example: { "id": "AAMkAGI2...", "isRead": true }',
+          action_required: 'Provide the message ID.',
+          next_step: 'list_emails',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        markEmailRead(c, { id: args.id!, isRead: args.isRead }, signal),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // set_email_flag
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'set_email_flag',
+    {
+      description:
+        'Flag an email for follow-up, mark a follow-up complete, or clear the flag.',
+      inputSchema: z.object({
+        id: z.string().optional().describe('Email message ID'),
+        flag: z
+          .enum(['flagged', 'complete', 'notFlagged'])
+          .optional()
+          .describe(
+            'Follow-up state: "flagged" (flag for follow-up), "complete" (mark done), "notFlagged" (clear the flag)',
+          ),
+      }).shape,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.id || !args.flag) {
+        return errorResponse({
+          error:
+            'Missing required parameters: "id" (email message ID) and "flag" ("flagged", "complete", or "notFlagged"). Example: { "id": "AAMkAGI2...", "flag": "flagged" }',
+          action_required: 'Provide both id and flag.',
+          next_step: 'set_email_flag',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        setEmailFlag(c, { id: args.id!, flag: args.flag! }, signal),
       );
       return successJson(result);
     }),

@@ -13,6 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - `MCP_WORKSPACE_PATH` optional environment variable declared in `server.json`.
 - `send_draft` tool: sends an existing draft (`POST /me/messages/{id}/send`), completing the draft lifecycle that previously dead-ended after `create_draft`/`create_reply_draft`.
 - `update_draft` tool: patches a draft's subject, body, to/cc recipients, or importance before sending.
+- `mark_email_read` tool: marks an email read or unread.
+- `set_email_flag` tool: flags an email for follow-up, marks it complete, or clears the flag.
 
 ## [0.2.0] - 2026-07-29
 

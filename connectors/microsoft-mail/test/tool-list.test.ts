@@ -19,6 +19,8 @@ const EXPECTED_TOOLS = [
   'create_draft',
   'send_draft',
   'update_draft',
+  'mark_email_read',
+  'set_email_flag',
 ];
 
 const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
@@ -53,6 +55,18 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
     idempotentHint: true,
     openWorldHint: true,
   },
+  mark_email_read: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
+  set_email_flag: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
 };
 
 describe('microsoft-mail tools/list', () => {
@@ -74,7 +88,7 @@ describe('microsoft-mail tools/list', () => {
     if (cfg) cfg.cleanup();
   });
 
-  it('registers exactly the 17 mail tools in the locked surface', async () => {
+  it('registers exactly the 19 mail tools in the locked surface', async () => {
     const response = await client.client.listTools();
     const names = response.tools.map((tool) => tool.name).sort();
     expect(names).toEqual([...EXPECTED_TOOLS].sort());

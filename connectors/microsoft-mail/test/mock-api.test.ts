@@ -443,4 +443,53 @@ describe('microsoft-mail mock-API integration', () => {
     expect(json.ok).toBe(false);
     expect(json.error).toContain('Nothing to update');
   });
+
+  it('mark_email_read patches isRead (default true)', async () => {
+    const result = await client.callTool('mark_email_read', { id: 'msg-1' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; isRead: boolean };
+    expect(json.ok).toBeUndefined();
+    expect(json.isRead).toBe(true);
+    const call = state.requests.find(
+      (r) => r.method === 'PATCH' && r.pathname.endsWith('/me/messages/msg-1'),
+    );
+    expect(call?.body).toMatchObject({ isRead: true });
+  });
+
+  it('mark_email_read with isRead=false marks the email unread', async () => {
+    await client.callTool('mark_email_read', { id: 'msg-1', isRead: false });
+    const call = state.requests.find(
+      (r) => r.method === 'PATCH' && r.pathname.endsWith('/me/messages/msg-1'),
+    );
+    expect(call?.body).toMatchObject({ isRead: false });
+  });
+
+  it('mark_email_read returns an error envelope when id is missing', async () => {
+    const result = await client.callTool('mark_email_read', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Missing required parameter');
+  });
+
+  it('set_email_flag patches the follow-up flag', async () => {
+    const result = await client.callTool('set_email_flag', { id: 'msg-1', flag: 'flagged' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; flag: string };
+    expect(json.ok).toBeUndefined();
+    expect(json.flag).toBe('flagged');
+    const call = state.requests.find(
+      (r) => r.method === 'PATCH' && r.pathname.endsWith('/me/messages/msg-1'),
+    );
+    expect(call?.body).toMatchObject({ flag: { flagStatus: 'flagged' } });
+  });
+
+  it('set_email_flag returns an error envelope when flag is missing', async () => {
+    const result = await client.callTool('set_email_flag', { id: 'msg-1' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Missing required parameters');
+    expect(json.next_step).toBe('set_email_flag');
+  });
 });
