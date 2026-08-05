@@ -15,7 +15,7 @@ Vanta compliance MCP server — read and write vulnerabilities, tests, controls,
 |-------|-------|
 | Version | 0.2.0 |
 | Auth | OAuth (`VANTA_CLIENT_SECRET`) |
-| Tools | 17 (vulnerabilities, tests, controls, people, vendors, documents, compliance summary) |
+| Tools | 25 (vulnerabilities, tests, controls, frameworks, policies, integrations, risk scenarios, event logs, people, vendors, documents, compliance summary) |
 | Surface | cloud API |
 
 ## Evidence

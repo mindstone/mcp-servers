@@ -5,7 +5,7 @@ title: microsoft-teams — mcp-servers catalogue
 
 # microsoft-teams
 
-Microsoft 365 Teams MCP server — list and read Teams chats, send chat messages, list teams and channels, and read presence via the Microsoft Graph API.
+Microsoft 365 Teams MCP server — list and read Teams chats and channel messages, send messages and replies, start new chats, look up colleagues, search messages, and read or set presence via the Microsoft Graph API.
 
 *Cohort-style Microsoft 365 Teams MCP. Reuses the OAuth surface owned by &#91;&#96;@mindstone/mcp-server-microsoft-mail&#96;&#93;&#40;../microsoft-mail/&#41; so the host signs in once and gets Teams plus mail plus calendar plus files plus SharePoint from the same credentials.*
 
@@ -15,7 +15,7 @@ Microsoft 365 Teams MCP server — list and read Teams chats, send chat messages
 |-------|-------|
 | Version | 0.2.0 |
 | Auth | OAuth (host-orchestrated) (`MS_CLIENT_ID`) |
-| Tools | 8 (chats, messages, teams, channels, presence) |
+| Tools | 17 (chats, messages, teams, channels, users, search, presence) |
 | Surface | cloud API |
 
 ## Evidence

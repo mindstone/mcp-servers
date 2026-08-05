@@ -5,7 +5,7 @@ title: replit-ssh — mcp-servers catalogue
 
 # replit-ssh
 
-Replit SSH MCP server — read, write, list, and check files on Replit projects over SSH/SFTP, plus one-shot generation of the local SSH key and &#96;~/.ssh/config&#96; block.
+Replit SSH MCP server — read, write, list, search, stat, move, and delete files on Replit projects over SSH/SFTP, plus one-shot generation of the local SSH key and &#96;~/.ssh/config&#96; block.
 
 *Local Replit SSH MCP. Connects from the operator's machine to &#96;*.replit.dev&#96; hosts only, writes are atomic with SHA-256 read-back, and the &#96;~/.ssh/config&#96; rewrite parses via AST rather than &#96;Match exec&#96; shell evaluation.*
 
@@ -15,7 +15,7 @@ Replit SSH MCP server — read, write, list, and check files on Replit projects 
 |-------|-------|
 | Version | 0.1.2 |
 | Auth | None (—) |
-| Tools | 5 (connection, files, ssh-setup) |
+| Tools | 9 (connection, files, ssh-setup) |
 | Surface | local protocol |
 
 ## Evidence

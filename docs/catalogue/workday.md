@@ -5,7 +5,7 @@ title: workday — mcp-servers catalogue
 
 # workday
 
-Workday HCM MCP server for Model Context Protocol hosts. Query workers, profiles, and organizations in Workday through a standardised MCP interface using OAuth 2.0 authentication.
+Workday HCM MCP server for Model Context Protocol hosts. Query workers, profiles, direct reports, organizations, locations, jobs, time off, and job requisitions in Workday through a standardised MCP interface using OAuth 2.0 authentication.
 
 
 
@@ -15,7 +15,7 @@ Workday HCM MCP server for Model Context Protocol hosts. Query workers, profiles
 |-------|-------|
 | Version | 0.2.2 |
 | Auth | OAuth (`WORKDAY_CLIENT_SECRET`, `WORKDAY_REFRESH_TOKEN`) |
-| Tools | 4 (workers, organizations) |
+| Tools | 9 (workers, organizations, time-off, recruiting, locations, jobs) |
 | Surface | cloud API |
 
 ## Evidence

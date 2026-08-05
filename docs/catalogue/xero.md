@@ -9,21 +9,23 @@ This is a Model Context Protocol &#40;MCP&#41; server implementation for Xero. I
 
 
 
-> **Status: pending.** This connector does not yet have a `STATUS.json`. The values below are derived from `package.json` and `server.json` and have not been editorially reviewed.
-
 ## Status
 
 | Field | Value |
 |-------|-------|
 | Version | 0.0.17 |
-| Auth | Unknown (`XERO_CLIENT_ID`, `XERO_CLIENT_SECRET`, `XERO_CLIENT_BEARER_TOKEN`) |
-| Tools | — (—) |
-| Surface | — |
+| Auth | OAuth (`XERO_CLIENT_ID`, `XERO_CLIENT_SECRET`, `XERO_CLIENT_BEARER_TOKEN`) |
+| Tools | 70 (invoices, contacts, reports, payroll) |
+| Surface | cloud API |
 
 ## Evidence
 
 | Artefact | Location |
 |----------|----------|
+| Changelog | [`CHANGELOG.md`](https://github.com/mindstone/mcp-servers/blob/main/connectors/xero/CHANGELOG.md) |
+| Tools source | [`connectors/xero/src/tools/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/xero/src/tools/) |
+| Tests | [`connectors/xero/test/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/xero/test/) |
+| Machine-readable status | [`STATUS.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/xero/STATUS.json) |
 | MCP server manifest | [`server.json`](https://github.com/mindstone/mcp-servers/blob/main/connectors/xero/server.json) |
 | npm package | [@mindstone/mcp-server-xero](https://www.npmjs.com/package/@mindstone/mcp-server-xero) |
 | Source directory | [`connectors/xero/`](https://github.com/mindstone/mcp-servers/tree/main/connectors/xero) |

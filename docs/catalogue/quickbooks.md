@@ -15,7 +15,7 @@ QuickBooks Online MCP server for Model Context Protocol hosts. Manage invoices, 
 |-------|-------|
 | Version | 0.3.1 |
 | Auth | OAuth (`QUICKBOOKS_CLIENT_SECRET`, `QUICKBOOKS_REFRESH_TOKEN`) |
-| Tools | 13 (customers, vendors, invoices, bills) |
+| Tools | 21 (customers, vendors, invoices, bills, estimates, reports) |
 | Surface | cloud API |
 
 ## Evidence

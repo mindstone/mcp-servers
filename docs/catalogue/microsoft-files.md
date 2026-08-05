@@ -5,7 +5,7 @@ title: microsoft-files — mcp-servers catalogue
 
 # microsoft-files
 
-Microsoft 365 OneDrive Files MCP server — list, search, get, download, upload, delete, move, copy, share files, and read text contents via the Microsoft Graph API.
+Microsoft 365 OneDrive Files MCP server — list, search, get, download, upload, delete, move, copy, share files, manage sharing permissions and version history, review file activity, and read text and Office document contents via the Microsoft Graph API.
 
 *Cohort-style Microsoft 365 OneDrive MCP. Reuses the OAuth surface owned by &#91;&#96;@mindstone/mcp-server-microsoft-mail&#96;&#93;&#40;../microsoft-mail/&#41;, so the host signs in once and gets files plus mail plus calendar plus Teams plus SharePoint from the same credentials.*
 
@@ -15,7 +15,7 @@ Microsoft 365 OneDrive Files MCP server — list, search, get, download, upload,
 |-------|-------|
 | Version | 0.1.2 |
 | Auth | OAuth (host-orchestrated) (`MS_CLIENT_ID`) |
-| Tools | 13 (files, folders, sharing) |
+| Tools | 20 (files, folders, sharing, permissions, versions, activity) |
 | Surface | cloud API |
 
 ## Evidence

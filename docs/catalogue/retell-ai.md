@@ -5,7 +5,7 @@ title: retell-ai — mcp-servers catalogue
 
 # retell-ai
 
-Voice agent phone calls, call management, agent configuration, LLM prompt management, and voice discovery via &#91;Retell AI&#93;&#40;https://www.retellai.com/&#41; API.
+Voice agent phone calls, batch calling campaigns, call management, agent configuration, LLM prompt management, knowledge bases, chat history, and voice discovery via &#91;Retell AI&#93;&#40;https://www.retellai.com/&#41; API.
 
 *Best for MCP hosts that want a local voice-operations connector for placing calls, checking call history, and adjusting agent prompts with user confirmation.*
 
@@ -15,7 +15,7 @@ Voice agent phone calls, call management, agent configuration, LLM prompt manage
 |-------|-------|
 | Version | 0.2.4 |
 | Auth | API key (`RETELL_API_KEY`) |
-| Tools | 20 (calls, agents, llms, voices) |
+| Tools | 32 (calls, agents, llms, voices, knowledge-bases, chats) |
 | Surface | cloud API |
 
 ## Evidence

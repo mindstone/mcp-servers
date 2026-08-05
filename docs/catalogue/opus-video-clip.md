@@ -15,7 +15,7 @@ OpusClip MCP server for Model Context Protocol hosts. Turn long-form videos into
 |-------|-------|
 | Version | 0.1.0 |
 | Auth | API key (`OPUS_API_KEY`) |
-| Tools | 21 (configure, brand-templates, projects, upload, censor, collections, social-posting) |
+| Tools | 22 (configure, brand-templates, projects, upload, downloads, censor, collections, social-posting) |
 | Surface | cloud API |
 
 ## Evidence

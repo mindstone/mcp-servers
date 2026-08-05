@@ -5,7 +5,7 @@ title: mixmax — mcp-servers catalogue
 
 # mixmax
 
-Mixmax email productivity MCP server for Model Context Protocol hosts. Manage sequences, send tracked emails, use email templates &#40;snippets&#41;, view meeting links, and monitor message engagement through a standardised MCP interface.
+Mixmax email productivity MCP server for Model Context Protocol hosts. Manage sequences, send tracked emails, use email templates &#40;snippets&#41;, view meeting links, recall scheduled sends, and pull engagement analytics through a standardised MCP interface.
 
 
 
@@ -15,7 +15,7 @@ Mixmax email productivity MCP server for Model Context Protocol hosts. Manage se
 |-------|-------|
 | Version | 0.2.2 |
 | Auth | API key (`MIXMAX_API_TOKEN`) |
-| Tools | 10 (sequences, messages, snippets, meetings) |
+| Tools | 13 (sequences, messages, snippets, meetings, reports) |
 | Surface | cloud API |
 
 ## Evidence

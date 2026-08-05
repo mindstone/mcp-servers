@@ -5,7 +5,7 @@ title: kling — mcp-servers catalogue
 
 # kling
 
-Kling AI video generation MCP server for Model Context Protocol hosts. Generate AI videos from text descriptions or images, and manage video generation tasks through a standardised MCP interface.
+Kling AI video and image generation MCP server for Model Context Protocol hosts. Generate AI videos from text or images, extend them, add lip-sync, generate images, and manage generation tasks through a standardised MCP interface.
 
 
 
@@ -15,7 +15,7 @@ Kling AI video generation MCP server for Model Context Protocol hosts. Generate 
 |-------|-------|
 | Version | 0.3.2 |
 | Auth | API key (`KLING_ACCESS_KEY`, `KLING_SECRET_KEY`) |
-| Tools | 4 (video-generation, tasks) |
+| Tools | 10 (video-generation, image-generation, tasks, account, downloads) |
 | Surface | cloud API |
 
 ## Evidence

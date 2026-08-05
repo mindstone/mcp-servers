@@ -5,7 +5,7 @@ title: microsoft-mail — mcp-servers catalogue
 
 # microsoft-mail
 
-Microsoft 365 Outlook Mail MCP server — list, search, read, send, reply, forward, draft, move, and delete email via the Microsoft Graph API.
+Microsoft 365 Outlook Mail MCP server — list, search, read, send, reply, forward, draft, move, and delete email, download attachments, read threads, triage &#40;read/flag&#41;, and manage out-of-office replies via the Microsoft Graph API.
 
 *Cohort-style Microsoft 365 mail MCP. Host owns the OAuth flow, this server reads per-account tokens off disk, and each tool fails closed with a structured &#96;auth_required&#96; envelope so the host can drive reauth.*
 
@@ -15,7 +15,7 @@ Microsoft 365 Outlook Mail MCP server — list, search, read, send, reply, forwa
 |-------|-------|
 | Version | 0.2.0 |
 | Auth | OAuth (host-orchestrated) (`MS_CLIENT_ID`) |
-| Tools | 13 (messages, folders, drafts) |
+| Tools | 22 (messages, folders, drafts, attachments, conversations, settings) |
 | Surface | cloud API |
 
 ## Evidence

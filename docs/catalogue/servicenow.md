@@ -14,8 +14,8 @@ ServiceNow ITSM MCP server for Model Context Protocol hosts. Manage incidents, c
 | Field | Value |
 |-------|-------|
 | Version | 0.2.2 |
-| Auth | Basic auth (`SERVICENOW_PASSWORD`) |
-| Tools | 10 (incidents, change-requests, users, knowledge) |
+| Auth | Hybrid (`SERVICENOW_PASSWORD`, `SERVICENOW_CLIENT_SECRET`) |
+| Tools | 13 (incidents, change-requests, users, knowledge, service-catalog) |
 | Surface | cloud API |
 
 ## Evidence
@@ -33,9 +33,9 @@ ServiceNow ITSM MCP server for Model Context Protocol hosts. Manage incidents, c
 
 ## Install
 
-[![Add to Cursor](https://img.shields.io/badge/Add_to_Cursor-black?style=for-the-badge&logo=cursor&logoColor=white)](cursor://anysphere.cursor-deeplink/mcp/install?name=ServiceNow&config=eyJ0eXBlIjoic3RkaW8iLCJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBtaW5kc3RvbmUvbWNwLXNlcnZlci1zZXJ2aWNlbm93Il0sImVudiI6eyJTRVJWSUNFTk9XX0lOU1RBTkNFIjoiIiwiU0VSVklDRU5PV19VU0VSTkFNRSI6IiIsIlNFUlZJQ0VOT1dfUEFTU1dPUkQiOiIifX0)
-[![Add to VS Code](https://img.shields.io/badge/Add_to_VS_Code-007ACC?style=for-the-badge&logo=visual-studio-code&logoColor=white)](vscode:mcp/install?%7B%22name%22%3A%22ServiceNow%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40mindstone%2Fmcp-server-servicenow%22%5D%2C%22env%22%3A%7B%22SERVICENOW_INSTANCE%22%3A%22%22%2C%22SERVICENOW_USERNAME%22%3A%22%22%2C%22SERVICENOW_PASSWORD%22%3A%22%22%7D%7D)
-[![Add to VS Code Insiders](https://img.shields.io/badge/Add_to_VS_Code_Insiders-24bfa5?style=for-the-badge&logo=visual-studio-code&logoColor=white)](vscode-insiders:mcp/install?%7B%22name%22%3A%22ServiceNow%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40mindstone%2Fmcp-server-servicenow%22%5D%2C%22env%22%3A%7B%22SERVICENOW_INSTANCE%22%3A%22%22%2C%22SERVICENOW_USERNAME%22%3A%22%22%2C%22SERVICENOW_PASSWORD%22%3A%22%22%7D%7D)
+[![Add to Cursor](https://img.shields.io/badge/Add_to_Cursor-black?style=for-the-badge&logo=cursor&logoColor=white)](cursor://anysphere.cursor-deeplink/mcp/install?name=ServiceNow&config=eyJ0eXBlIjoic3RkaW8iLCJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBtaW5kc3RvbmUvbWNwLXNlcnZlci1zZXJ2aWNlbm93Il0sImVudiI6eyJTRVJWSUNFTk9XX0lOU1RBTkNFIjoiIiwiU0VSVklDRU5PV19VU0VSTkFNRSI6IiIsIlNFUlZJQ0VOT1dfUEFTU1dPUkQiOiIiLCJTRVJWSUNFTk9XX0NMSUVOVF9TRUNSRVQiOiIifX0)
+[![Add to VS Code](https://img.shields.io/badge/Add_to_VS_Code-007ACC?style=for-the-badge&logo=visual-studio-code&logoColor=white)](vscode:mcp/install?%7B%22name%22%3A%22ServiceNow%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40mindstone%2Fmcp-server-servicenow%22%5D%2C%22env%22%3A%7B%22SERVICENOW_INSTANCE%22%3A%22%22%2C%22SERVICENOW_USERNAME%22%3A%22%22%2C%22SERVICENOW_PASSWORD%22%3A%22%22%2C%22SERVICENOW_CLIENT_SECRET%22%3A%22%22%7D%7D)
+[![Add to VS Code Insiders](https://img.shields.io/badge/Add_to_VS_Code_Insiders-24bfa5?style=for-the-badge&logo=visual-studio-code&logoColor=white)](vscode-insiders:mcp/install?%7B%22name%22%3A%22ServiceNow%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40mindstone%2Fmcp-server-servicenow%22%5D%2C%22env%22%3A%7B%22SERVICENOW_INSTANCE%22%3A%22%22%2C%22SERVICENOW_USERNAME%22%3A%22%22%2C%22SERVICENOW_PASSWORD%22%3A%22%22%2C%22SERVICENOW_CLIENT_SECRET%22%3A%22%22%7D%7D)
 
 Or via npx:
 

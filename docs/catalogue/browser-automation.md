@@ -15,7 +15,7 @@ Browser control you can watch: open pages, sign in, click around, fill forms, ta
 |-------|-------|
 | Version | 0.1.8 |
 | Auth | None (—) |
-| Tools | 18 (navigation, observation, interaction, sessions) |
+| Tools | 21 (navigation, observation, interaction, sessions, files) |
 | Surface | browser automation |
 
 ## Evidence

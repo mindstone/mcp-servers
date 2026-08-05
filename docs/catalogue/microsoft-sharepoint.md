@@ -15,7 +15,7 @@ Microsoft 365 SharePoint MCP server — discover sites, browse document librarie
 |-------|-------|
 | Version | 0.1.2 |
 | Auth | OAuth (host-orchestrated) (`MS_CLIENT_ID`) |
-| Tools | 36 (sharepoint-sites, document-libraries, pages, lists, metadata, search) |
+| Tools | 46 (sharepoint-sites, document-libraries, pages, lists, metadata, search) |
 | Surface | cloud API |
 
 ## Evidence

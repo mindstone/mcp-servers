@@ -5,7 +5,7 @@ title: talentlms — mcp-servers catalogue
 
 # talentlms
 
-TalentLMS MCP server for Model Context Protocol hosts. Manage users, courses, groups, branches, enrolments, reporting, and assessments in TalentLMS through a standardised MCP interface.
+TalentLMS MCP server for Model Context Protocol hosts. Manage users, courses, groups, branches, categories, enrolments, reporting, and assessments in TalentLMS through a standardised MCP interface.
 
 
 
@@ -15,7 +15,7 @@ TalentLMS MCP server for Model Context Protocol hosts. Manage users, courses, gr
 |-------|-------|
 | Version | 0.3.0 |
 | Auth | API key (`TALENTLMS_API_KEY`) |
-| Tools | 24 (users, courses, groups, reporting, assessments) |
+| Tools | 28 (users, courses, groups, categories, reporting, assessments) |
 | Surface | cloud API |
 
 ## Evidence

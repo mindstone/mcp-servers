@@ -15,7 +15,7 @@ List and search meetings, view details, read transcripts, and manage teams via F
 |-------|-------|
 | Version | 0.2.3 |
 | Auth | API key (`FATHOM_API_KEY`) |
-| Tools | 7 (meetings, transcripts, teams) |
+| Tools | 12 (meetings, transcripts, action-items, recordings, teams, webhooks) |
 | Surface | cloud API |
 
 ## Evidence
