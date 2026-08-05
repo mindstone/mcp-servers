@@ -11,6 +11,9 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Security
+- All external text returned by ServiceNow (incident/change-request/knowledge/user records, including fields added by instance customisation) is now wrapped in `<untrusted-content>` envelopes with close-tag breakout escaping, per the repo's untrusted-content invariant. Identifiers, timestamps, and choice-list display values stay literal so they can be copied into follow-up tool calls.
+
 ## [0.2.2] - 2026-05-14
 ### Added
 - **registry**: Cohort B + C backfill — 13 OSS connectors get server.json (12 also get mcpName). google-analytics, hubspot, outreach, quickbooks, salesforce, servicenow, slack, workday, zendesk, office (5-service consolidator), apple-shortcuts, browser-automation, email-imap each gain a registry-shaped server.json validated against registry.modelcontextprotocol.io. mcpName added to 12 of 13 package.json files; browser-automation deferred due to a concurrent agent's uncommitted 0.1.5→0.1.6 version bump in the same file.

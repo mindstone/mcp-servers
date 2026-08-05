@@ -30,8 +30,13 @@ describe('ServiceNow user tools', () => {
     };
     expect(json.ok).toBe(true);
     expect(json.users).toHaveLength(2);
-    expect(json.users[0].user_name).toBe('john.smith');
-    expect(json.users[1].email).toBe('jane.doe@example.com');
+    // Directory fields are user-authored text and arrive enveloped (invariant #6)
+    expect(json.users[0].user_name).toBe(
+      '<untrusted-content source="servicenow:user:user_name">john.smith</untrusted-content>',
+    );
+    expect(json.users[1].email).toBe(
+      '<untrusted-content source="servicenow:user:email">jane.doe@example.com</untrusted-content>',
+    );
     expect(json.count).toBe(2);
   });
 });

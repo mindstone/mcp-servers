@@ -47,7 +47,9 @@ describe('ServiceNow change request tools', () => {
     };
     expect(json.ok).toBe(true);
     expect(json.change_request.number).toBe('CHG0010001');
-    expect(json.change_request.short_description).toBe('Upgrade database server');
+    expect(json.change_request.short_description).toBe(
+      '<untrusted-content source="servicenow:change-request:short_description">Upgrade database server</untrusted-content>',
+    );
   });
 
   it('get_servicenow_change_request by sys_id returns change request', async () => {

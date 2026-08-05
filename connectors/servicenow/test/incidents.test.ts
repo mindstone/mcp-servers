@@ -50,7 +50,10 @@ describe('ServiceNow incident tools', () => {
     const json = result.json as { ok: boolean; incident: { number: string; short_description: string } };
     expect(json.ok).toBe(true);
     expect(json.incident.number).toBe('INC0010001');
-    expect(json.incident.short_description).toBe('VPN not connecting');
+    // Free-text fields arrive in the untrusted-content envelope (invariant #6)
+    expect(json.incident.short_description).toBe(
+      '<untrusted-content source="servicenow:incident:short_description">VPN not connecting</untrusted-content>',
+    );
   });
 
   it('get_servicenow_incident by sys_id returns incident', async () => {
@@ -128,7 +131,9 @@ describe('ServiceNow incident tools', () => {
     expect(json.ok).toBe(true);
     expect(json.message).toBe('Incident updated.');
     expect(json.incident.state).toBe('2');
-    expect(json.incident.assigned_to).toBe('jane.doe');
+    expect(json.incident.assigned_to).toBe(
+      '<untrusted-content source="servicenow:incident:assigned_to">jane.doe</untrusted-content>',
+    );
   });
 
   // ── Basic auth header ─────────────────────────────────────────

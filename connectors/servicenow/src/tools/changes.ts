@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { servicenowFetch, buildQueryParams } from '../client.js';
+import { sanitizeRecord, sanitizeRecords } from '../sanitize.js';
 import { withErrorHandling } from '../utils.js';
+
+const CHANGE_SOURCE = 'servicenow:change-request';
 
 export function registerChangeTools(server: McpServer): void {
   // ── list_servicenow_change_requests ───────────────────────────
@@ -46,7 +49,7 @@ export function registerChangeTools(server: McpServer): void {
       );
       return JSON.stringify({
         ok: true,
-        change_requests: changeRequests,
+        change_requests: sanitizeRecords(changeRequests, CHANGE_SOURCE),
         count: changeRequests.length,
       });
     }),
@@ -84,12 +87,18 @@ export function registerChangeTools(server: McpServer): void {
             error: `Change request ${args.identifier} not found.`,
           });
         }
-        return JSON.stringify({ ok: true, change_request: results[0] });
+        return JSON.stringify({
+          ok: true,
+          change_request: sanitizeRecord(results[0], CHANGE_SOURCE),
+        });
       }
       const changeRequest = await servicenowFetch<Record<string, unknown>>(
         `/change_request/${encodeURIComponent(args.identifier)}?sysparm_display_value=true`,
       );
-      return JSON.stringify({ ok: true, change_request: changeRequest });
+      return JSON.stringify({
+        ok: true,
+        change_request: sanitizeRecord(changeRequest, CHANGE_SOURCE),
+      });
     }),
   );
 }

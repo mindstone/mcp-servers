@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { servicenowFetch, buildQueryParams } from '../client.js';
+import { sanitizeRecord, sanitizeRecords } from '../sanitize.js';
 import { withErrorHandling } from '../utils.js';
+
+const INCIDENT_SOURCE = 'servicenow:incident';
 
 export function registerIncidentTools(server: McpServer): void {
   // ── list_servicenow_incidents ─────────────────────────────────
@@ -44,7 +47,11 @@ export function registerIncidentTools(server: McpServer): void {
       const incidents = await servicenowFetch<Array<Record<string, unknown>>>(
         `/incident${params}`,
       );
-      return JSON.stringify({ ok: true, incidents, count: incidents.length });
+      return JSON.stringify({
+        ok: true,
+        incidents: sanitizeRecords(incidents, INCIDENT_SOURCE),
+        count: incidents.length,
+      });
     }),
   );
 
@@ -80,13 +87,13 @@ export function registerIncidentTools(server: McpServer): void {
             error: `Incident ${args.identifier} not found.`,
           });
         }
-        return JSON.stringify({ ok: true, incident: results[0] });
+        return JSON.stringify({ ok: true, incident: sanitizeRecord(results[0], INCIDENT_SOURCE) });
       }
       // Treat as sys_id
       const incident = await servicenowFetch<Record<string, unknown>>(
         `/incident/${encodeURIComponent(args.identifier)}?sysparm_display_value=true`,
       );
-      return JSON.stringify({ ok: true, incident });
+      return JSON.stringify({ ok: true, incident: sanitizeRecord(incident, INCIDENT_SOURCE) });
     }),
   );
 
@@ -135,7 +142,11 @@ export function registerIncidentTools(server: McpServer): void {
           body: JSON.stringify(body),
         },
       );
-      return JSON.stringify({ ok: true, message: 'Incident created.', incident });
+      return JSON.stringify({
+        ok: true,
+        message: 'Incident created.',
+        incident: sanitizeRecord(incident, INCIDENT_SOURCE),
+      });
     }),
   );
 
@@ -207,7 +218,11 @@ export function registerIncidentTools(server: McpServer): void {
           body: JSON.stringify(body),
         },
       );
-      return JSON.stringify({ ok: true, message: 'Incident updated.', incident });
+      return JSON.stringify({
+        ok: true,
+        message: 'Incident updated.',
+        incident: sanitizeRecord(incident, INCIDENT_SOURCE),
+      });
     }),
   );
 }

@@ -144,6 +144,10 @@ node dist/index.js
 - `search_servicenow_knowledge` — Search knowledge base articles
 - `get_servicenow_knowledge_article` — Get a full knowledge base article
 
+## Security
+
+All external text returned by ServiceNow (record descriptions, work notes, user names, article bodies, and any custom fields) is wrapped in `<untrusted-content source="servicenow:...">...</untrusted-content>` envelopes with close-tag breakout escaping before it reaches the model, so third-party content is treated as data, not instructions. Identifiers (`sys_id`, `number`), timestamps, and choice-list display values are left literal so they can be copied into follow-up tool calls.
+
 ## Licence
 
 [FSL-1.1-MIT](./LICENSE) — Functional Source License, Version 1.1, with MIT future licence. The software converts to MIT licence on 2030-04-08.

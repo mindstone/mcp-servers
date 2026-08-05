@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { servicenowFetch, buildQueryParams } from '../client.js';
+import { sanitizeRecord, sanitizeRecords } from '../sanitize.js';
 import { withErrorHandling } from '../utils.js';
+
+const KNOWLEDGE_SOURCE = 'servicenow:knowledge-article';
 
 export function registerKnowledgeTools(server: McpServer): void {
   // ── search_servicenow_knowledge ───────────────────────────────
@@ -51,7 +54,11 @@ export function registerKnowledgeTools(server: McpServer): void {
       const articles = await servicenowFetch<Array<Record<string, unknown>>>(
         `/kb_knowledge${params}`,
       );
-      return JSON.stringify({ ok: true, articles, count: articles.length });
+      return JSON.stringify({
+        ok: true,
+        articles: sanitizeRecords(articles, KNOWLEDGE_SOURCE),
+        count: articles.length,
+      });
     }),
   );
 
@@ -87,12 +94,15 @@ export function registerKnowledgeTools(server: McpServer): void {
             error: `Knowledge article ${args.identifier} not found.`,
           });
         }
-        return JSON.stringify({ ok: true, article: results[0] });
+        return JSON.stringify({
+          ok: true,
+          article: sanitizeRecord(results[0], KNOWLEDGE_SOURCE),
+        });
       }
       const article = await servicenowFetch<Record<string, unknown>>(
         `/kb_knowledge/${encodeURIComponent(args.identifier)}?sysparm_display_value=true`,
       );
-      return JSON.stringify({ ok: true, article });
+      return JSON.stringify({ ok: true, article: sanitizeRecord(article, KNOWLEDGE_SOURCE) });
     }),
   );
 }
