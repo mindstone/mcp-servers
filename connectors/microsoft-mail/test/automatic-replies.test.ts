@@ -168,11 +168,17 @@ describe('automatic replies with MailboxSettings permission', () => {
     const json = result.json as { ok: boolean; error: string; action_required?: string };
     expect(json.ok).toBe(false);
     expect(json.error).toContain('Access is denied');
-    // A 403 here is a permissions problem on the Graph side; the envelope must
-    // not blindly prescribe re-authentication as the fix for every failure.
-    expect(json.action_required ?? '').not.toContain(
-      'If it continues to fail, run authenticate_microsoft_account',
-    );
+    // The upstream detail is attacker-influenceable text: it must arrive
+    // inside an untrusted-content envelope.
+    expect(json.error).toContain('<untrusted-content source="microsoft-mail:graph-error">');
+    // A 403 here is a permissions problem on the Graph side; nothing in the
+    // response may prescribe re-authentication or reconnection as the fix.
+    const fullText = `${json.error} ${json.action_required ?? ''}`;
+    expect(fullText).not.toMatch(/run authenticate_microsoft_account/i);
+    expect(fullText).not.toContain('disconnecting and reconnecting');
+    expect(fullText).not.toContain('please reconnect');
+    // It must instead say plainly that re-authenticating will not help.
+    expect(json.error).toContain('re-authenticating the same account will not change that');
   });
 
   it('set_automatic_replies scheduled without a window returns guidance', async () => {

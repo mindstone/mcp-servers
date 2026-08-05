@@ -8,6 +8,7 @@ import {
 } from '@mindstone/mcp-server-microsoft-shared';
 import type { AuthRequiredReason } from '@mindstone/mcp-server-microsoft-shared';
 import { AUTH_TOOL_NAME, REQUEST_TIMEOUT_MS, getMsPackageId } from './types.js';
+import { wrapUntrusted } from './untrusted-content.js';
 
 const log = createLogger('microsoft-mail-mcp');
 
@@ -187,6 +188,64 @@ function isInefficientFilterError(err: unknown): boolean {
 }
 
 /**
+ * Extract the upstream Graph error-body message, mirroring the shared
+ * formatGraphError() body parsing. Kept local because the 403 text below must
+ * drop the shared package's reconnect advice without forking the formatter.
+ */
+function extractUpstreamErrorMessage(err: Error): string {
+  const graphErr = err as Error & { body?: string };
+  if (graphErr.body) {
+    try {
+      const inner = (JSON.parse(graphErr.body) as { error?: { message?: unknown } })?.error
+        ?.message;
+      if (typeof inner === 'string' && inner.length > 0) return inner;
+    } catch {
+      // body is not JSON — fall back to the top-level message
+    }
+  }
+  return err.message;
+}
+
+/**
+ * Connector-local error text for model-visible non-auth failures.
+ *
+ * The shared formatGraphError() is not usable as-is on this path:
+ *  - it interpolates the upstream Graph error-body message raw, and that text
+ *    is attacker-influenceable (invariant #6 requires an untrusted-content
+ *    envelope around it), and
+ *  - for every HTTP 403 it advises disconnecting and reconnecting the
+ *    account. A permissions denial is not repaired by re-authenticating the
+ *    same account, and the auth-required branch above already covers the
+ *    failures where re-authentication genuinely helps (token expiry, consent,
+ *    tenant blocks).
+ *
+ * Connector-authored messages (plain Errors without a Graph statusCode/body,
+ * e.g. the download_attachment validation errors, which already envelope
+ * their attacker-controlled fields) pass through untouched so their
+ * envelopes stay singular.
+ */
+function formatGenericGraphError(err: unknown): string {
+  if (err instanceof Error) {
+    const graphErr = err as Error & { statusCode?: number; code?: string; body?: string };
+    if (graphErr.statusCode === 403) {
+      const detail = wrapUntrusted(extractUpstreamErrorMessage(err), 'microsoft-mail:graph-error');
+      return (
+        `${detail} (HTTP 403${graphErr.code ? `: ${graphErr.code}` : ''}). ` +
+        'The connected account does not have permission for this operation, or a tenant policy blocks it — ' +
+        're-authenticating the same account will not change that. ' +
+        'An administrator may need to grant the permission or adjust the policy.'
+      );
+    }
+    if (graphErr.statusCode !== undefined || graphErr.body !== undefined) {
+      // Graph SDK error: the formatted text embeds the upstream error-body
+      // message, so the whole string is enveloped before it reaches the model.
+      return wrapUntrusted(formatGraphError(err), 'microsoft-mail:graph-error') ?? 'Unknown error';
+    }
+  }
+  return formatGraphError(err);
+}
+
+/**
  * Map a Microsoft Graph error / shared TokenProvider error into the right
  * tool response. Returns `auth_required` for token-related failures, the
  * generic recovery-guidance envelope otherwise.
@@ -217,7 +276,7 @@ export function buildErrorResponse(err: unknown): CallToolResult {
   }
   if (isInefficientFilterError(err)) {
     return errorResponse({
-      error: formatGraphError(err),
+      error: formatGenericGraphError(err),
       action_required:
         'Simplify or remove the $filter argument and retry. Microsoft Graph cannot service this filter (for example when combined with a sort order), so retrying as-is or re-authenticating will not help.',
       next_step: 'list_emails',
@@ -241,16 +300,17 @@ export function buildErrorResponse(err: unknown): CallToolResult {
     });
   }
   // Generic non-auth failure: re-authentication cannot fix filesystem,
-  // validation, or unexpected Graph failures, so do not send the user (or
-  // the model) down that path — say what actually helps.
+  // validation, permission, or unexpected Graph failures, so the guidance
+  // must not send the user (or the model) down that path at all — the
+  // auth-required branch above handles every case where it genuinely helps.
   return {
     content: [
       {
         type: 'text',
         text: errorJson({
-          error: formatGraphError(err),
+          error: formatGenericGraphError(err),
           action_required:
-            'Check the error details and retry the call. Run authenticate_microsoft_account only if the error mentions an expired token, authentication, or permissions.',
+            'Check the error details and retry the call. If it keeps failing, verify the request arguments and that the mailbox item still exists. Authentication and permission problems are reported separately with their own guidance.',
         }),
       },
     ],
