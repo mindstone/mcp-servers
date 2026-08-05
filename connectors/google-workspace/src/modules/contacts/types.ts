@@ -71,3 +71,41 @@ export class ContactsError extends Error {
     this.details = details;
   }
 }
+
+/**
+ * Fields accepted when creating or updating a contact.
+ * All fields are optional at the type level; handlers enforce that at least
+ * one is provided (and that create has a name or email).
+ */
+export interface ContactWriteFields {
+  givenName?: string;
+  familyName?: string;
+  emailAddress?: string;
+  emailType?: string; // e.g. 'home', 'work'
+  phoneNumber?: string;
+  phoneType?: string; // e.g. 'mobile', 'home', 'work'
+  organization?: string;
+  jobTitle?: string;
+  notes?: string; // maps to biographies
+}
+
+export interface CreateContactParams extends ContactWriteFields {
+  email: string; // The user account email
+}
+
+export interface UpdateContactParams extends ContactWriteFields {
+  email: string; // The user account email
+  resourceName: string; // e.g. 'people/c1234567890'
+}
+
+/**
+ * Compact summary of a written contact, returned to the caller.
+ */
+export interface ContactWriteResult {
+  resourceName: string;
+  etag?: string;
+  displayName?: string;
+  email?: string;
+  phone?: string;
+  organization?: string;
+}

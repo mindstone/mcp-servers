@@ -92,7 +92,13 @@ import {
 } from './drive-handlers.js';
 
 // Import contact handlers
-import { handleGetContacts, handleSearchContacts } from './contacts-handlers.js';
+import {
+  handleGetContacts,
+  handleSearchContacts,
+  handleCreateContact,
+  handleUpdateContact,
+  ContactWriteToolParams
+} from './contacts-handlers.js';
 
 // Import docs handlers
 import {
@@ -669,6 +675,14 @@ export class GSuiteServer {
           case 'search_workspace_contacts':
             assertBaseToolArguments(args);
             result = await handleSearchContacts(args as { email: string; query: string; max_results?: number; maxResults?: number; returnJson?: boolean });
+            break;
+          case 'create_workspace_contact':
+            assertBaseToolArguments(args);
+            result = await handleCreateContact(args as ContactWriteToolParams);
+            break;
+          case 'update_workspace_contact':
+            assertBaseToolArguments(args);
+            result = await handleUpdateContact(args as ContactWriteToolParams);
             break;
 
           // Google Docs Operations

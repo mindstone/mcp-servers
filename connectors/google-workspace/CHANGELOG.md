@@ -7,6 +7,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- Contacts write support: new `create_workspace_contact` and `update_workspace_contact` tools (name, email, phone, organization, job title, notes). Updates replace only the fields you pass and leave the rest of the contact untouched. Both carry `destructiveHint` and require the full Contacts permission — accounts that only granted read access get reconnect guidance. Write results are wrapped in `<untrusted-content>` envelopes like the existing read tools.
+
 ### Fixed
 
 - `server.json` now declares every environment variable the connector reads: `GOOGLE_WORKSPACE_DISABLE_REFRESH` and `MCP_WORKSPACE_PATH` (previously undocumented despite being load-bearing for token refresh and attachment-path containment), plus the legacy `WORKSPACE_BASE_PATH` and `GAUTH_FILE` fallbacks, marked as deprecated in favour of their modern counterparts.

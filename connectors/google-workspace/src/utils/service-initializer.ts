@@ -36,6 +36,7 @@ export const TASKS_FORMS_ENABLED = process.env.ENABLE_GOOGLE_TASKS_FORMS === 'tr
 // Function to register contacts scopes
 function registerContactsScopes(): void {
   scopeRegistry.registerScope("contacts", CONTACTS_SCOPES.READONLY);
+  scopeRegistry.registerScope("contacts", CONTACTS_SCOPES.CONTACTS);
   logger.info('Contacts scopes registered');
 }
 

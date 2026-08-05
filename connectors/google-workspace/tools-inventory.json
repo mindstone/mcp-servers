@@ -497,6 +497,22 @@
       }
     },
     {
+      "name": "create_workspace_contact",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "update_workspace_contact",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
       "name": "read_workspace_document",
       "annotations": {
         "readOnlyHint": true,
