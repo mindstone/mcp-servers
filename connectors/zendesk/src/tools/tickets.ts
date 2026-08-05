@@ -17,23 +17,7 @@ import {
   wrapCommentBodyFields,
   wrapUntrustedTicketContent,
 } from '../formatters.js';
-import { withErrorHandling, resolveTempOutputPath } from '../utils.js';
-
-async function writeToStream(stream: fs.WriteStream, data: string): Promise<void> {
-  if (!stream.write(data)) {
-    await new Promise<void>((resolve, reject) => {
-      stream.once('drain', resolve);
-      stream.once('error', reject);
-    });
-  }
-}
-
-async function finishStream(stream: fs.WriteStream): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    stream.once('error', reject);
-    stream.end(() => resolve());
-  });
-}
+import { withErrorHandling, resolveTempOutputPath, createExclusiveFileWriter } from '../utils.js';
 
 export function registerTicketTools(server: McpServer): void {
   server.registerTool(
@@ -175,14 +159,14 @@ If rate limited or the cursor expires mid-pagination, returns partial results co
       inputSchema: {
         query: z.string().describe('Zendesk search query (e.g., "status:open priority:high")'),
         subdomain: z.string().optional().describe('Zendesk subdomain (optional if only one account connected)'),
-        page_size: z.number().optional().describe('Results per cursor page, max 100 (default: 100)'),
-        max_results: z.number().optional().describe('Maximum total results to fetch (default: 10000). Safety cap to prevent runaway pagination.'),
+        page_size: z.number().int().min(1).max(100).optional().describe('Results per cursor page, max 100 (default: 100)'),
+        max_results: z.number().int().positive().optional().describe('Maximum total results to fetch (default: 10000). Safety cap to prevent runaway pagination.'),
         response_format: z.enum(['concise', 'detailed']).optional().describe('Response format: "concise" (default) for summary, "detailed" for full ticket data'),
         save_to_file: z.boolean().optional().describe('Write results to a JSON file instead of returning in context. Recommended for bulk analysis (>100 tickets). Returns a summary with file path instead of ticket data.'),
-        output_path: z.string().optional().describe('Custom file path for export (only used when save_to_file is true). Default: <temp-dir>/zendesk-export-<timestamp>.json'),
+        output_path: z.string().optional().describe('Custom file path for export (only used when save_to_file is true). Must be inside the system temp directory and must not already exist — exports never overwrite. Default: <temp-dir>/zendesk-export-<timestamp>.json'),
         include_comments: z.boolean().optional().describe('Fetch and include comments for each exported ticket (default: false). WARNING: Makes 1 additional API call per ticket.'),
       },
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = await getAccount(args.subdomain);
@@ -215,14 +199,15 @@ If rate limited or the cursor expires mid-pagination, returns partial results co
       };
 
       if (saveToFile) {
-        fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-        const writeStream = fs.createWriteStream(outputPath, { mode: 0o600 });
-        let streamError: Error | null = null;
-        writeStream.on('error', (err) => { streamError = err; });
+        // Open-once with exclusive create: the containment-checked path is
+        // opened atomically (O_EXCL) and all writes go through that single
+        // fd, so pre-existing files/symlinks fail closed instead of being
+        // overwritten.
+        const writer = await createExclusiveFileWriter(outputPath);
 
         let sigTermHandler: (() => void) | null = null;
         sigTermHandler = () => {
-          try { writeStream.write('\n]'); writeStream.end(); } catch { /* best effort */ }
+          writer.write('\n]').then(() => writer.close()).catch(() => { /* best effort */ });
         };
         process.on('SIGTERM', sigTermHandler);
         process.on('SIGINT', sigTermHandler);
@@ -237,7 +222,7 @@ If rate limited or the cursor expires mid-pagination, returns partial results co
         let commentErrors = 0;
 
         try {
-          await writeToStream(writeStream, '[\n');
+          await writer.write('[\n');
           const firstResponse = await zendeskFetch<{
             results: ZendeskTicket[];
             meta: { has_more: boolean; after_cursor: string };
@@ -249,9 +234,7 @@ If rate limited or the cursor expires mid-pagination, returns partial results co
           let hasMorePages = true;
 
           while (hasMorePages) {
-            if (streamError) throw streamError;
             for (const ticket of currentResults) {
-              if (streamError) throw streamError;
               if (totalCount >= maxResults) {
                 truncated = true;
                 truncationReason = `Results capped at max_results limit (${maxResults})`;
@@ -269,7 +252,7 @@ If rate limited or the cursor expires mid-pagination, returns partial results co
               }
 
               const prefix = isFirstTicket ? '' : ',\n';
-              await writeToStream(writeStream, prefix + JSON.stringify(ticketToWrite));
+              await writer.write(prefix + JSON.stringify(ticketToWrite));
               isFirstTicket = false;
               totalCount++;
 
@@ -301,12 +284,12 @@ If rate limited or the cursor expires mid-pagination, returns partial results co
             }
           }
 
-          await writeToStream(writeStream, '\n]');
-          await finishStream(writeStream);
+          await writer.write('\n]');
+          await writer.close();
         } catch (error) {
           try {
-            writeStream.write('\n]');
-            await finishStream(writeStream);
+            await writer.write('\n]');
+            await writer.close();
           } catch { /* best effort */ }
 
           if (totalCount > 0) {
@@ -494,14 +477,14 @@ Use include_comments to also fetch comments for each ticket. WARNING: This makes
 Example: Get tickets 101, 102, 103 with their comments:
 { "ids": [101, 102, 103], "include_comments": true }`,
       inputSchema: {
-        ids: z.array(z.number()).describe('Array of ticket IDs to fetch'),
+        ids: z.array(z.number().int().positive()).describe('Array of ticket IDs to fetch'),
         subdomain: z.string().optional().describe('Zendesk subdomain (optional if only one account connected)'),
         include_comments: z.boolean().optional().describe('Fetch comments for each ticket (default: false). WARNING: Makes one API call per ticket'),
         save_to_file: z.boolean().optional().describe('Write results to a JSON file instead of returning in context. Required when fetching more than 100 tickets.'),
-        output_path: z.string().optional().describe('Custom file path for output (only used when save_to_file is true).'),
+        output_path: z.string().optional().describe('Custom file path for output (only used when save_to_file is true). Must be inside the system temp directory and must not already exist — exports never overwrite.'),
         response_format: z.enum(['concise', 'detailed']).optional().describe('Response format: "concise" (default) for summary, "detailed" for full ticket data'),
       },
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = await getAccount(args.subdomain);
@@ -571,12 +554,14 @@ Example: Get tickets 101, 102, 103 with their comments:
       }
 
       if (saveToFile) {
-        const dir = path.dirname(outputPath);
-        fs.mkdirSync(dir, { recursive: true });
         const outputData = commentsMap
           ? allTickets.map(t => ({ ...t, comments: commentsMap![t.id] ?? [] }))
           : allTickets;
-        fs.writeFileSync(outputPath, JSON.stringify(outputData, null, 2), { mode: 0o600 });
+        // Open-once with exclusive create: atomic existence check + open,
+        // written through a single fd — never overwrites an existing file.
+        const writer = await createExclusiveFileWriter(outputPath);
+        await writer.write(JSON.stringify(outputData, null, 2));
+        await writer.close();
         const stats = fs.statSync(outputPath);
         return JSON.stringify({
           ok: true,
