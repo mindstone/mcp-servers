@@ -8,6 +8,8 @@ import {
   makeOrganization,
   makeMacro,
   makeComment,
+  makeArticle,
+  makeSatisfactionRating,
 } from '../fixtures/zendesk-data.js';
 
 export interface ZendeskMockOptions {
@@ -31,6 +33,10 @@ export interface ZendeskMockOptions {
   macros?: Array<Record<string, unknown>>;
   /** Custom comments to return for ticket comments endpoint */
   comments?: Array<Record<string, unknown>>;
+  /** Custom Help Center articles to return */
+  articles?: Array<Record<string, unknown>>;
+  /** Custom satisfaction ratings to return */
+  satisfactionRatings?: Array<Record<string, unknown>>;
 }
 
 /**
@@ -52,6 +58,8 @@ export function createZendeskHandlers(subdomain: string, options: ZendeskMockOpt
   const defaultOrganizations = options.empty ? [] : (options.organizations ?? [makeOrganization()]);
   const defaultMacros = options.empty ? [] : (options.macros ?? [makeMacro()]);
   const defaultComments = options.empty ? [] : (options.comments ?? [makeComment()]);
+  const defaultArticles = options.empty ? [] : (options.articles ?? [makeArticle()]);
+  const defaultRatings = options.empty ? [] : (options.satisfactionRatings ?? [makeSatisfactionRating()]);
 
   return [
     // Search (used by search_zendesk_tickets, search_zendesk_users)
@@ -125,6 +133,18 @@ export function createZendeskHandlers(subdomain: string, options: ZendeskMockOpt
       return HttpResponse.json({ user });
     }),
 
+    // Create or update user
+    http.post(`${base}/users/create_or_update.json`, async ({ request }) => {
+      const body = await request.json() as { user: Record<string, unknown> };
+      const user = makeUser({
+        id: 101,
+        name: body.user?.name as string ?? 'New User',
+        email: body.user?.email as string ?? 'new@example.com',
+        organization_id: body.user?.organization_id as number | undefined,
+      });
+      return HttpResponse.json({ user }, { status: 201 });
+    }),
+
     // Show many users
     http.get(`${base}/users/show_many.json`, ({ request }) => {
       const url = new URL(request.url);
@@ -151,6 +171,15 @@ export function createZendeskHandlers(subdomain: string, options: ZendeskMockOpt
       return HttpResponse.json({ views: defaultViews });
     }),
 
+    // View tickets (used by list_zendesk_view_tickets)
+    http.get(`${base}/views/:viewId/tickets.json`, () => {
+      return HttpResponse.json({
+        tickets: defaultTickets,
+        count: defaultTickets.length,
+        next_page: null,
+      });
+    }),
+
     // Organizations
     http.get(`${base}/organizations.json`, () => {
       return HttpResponse.json({
@@ -158,6 +187,15 @@ export function createZendeskHandlers(subdomain: string, options: ZendeskMockOpt
         count: defaultOrganizations.length,
         next_page: null,
       });
+    }),
+
+    // Get single organization
+    http.get(`${base}/organizations/:organizationId.json`, ({ params }) => {
+      const organizationId = Number(params.organizationId);
+      const organization =
+        defaultOrganizations.find(o => (o as { id: number }).id === organizationId)
+        ?? makeOrganization({ id: organizationId });
+      return HttpResponse.json({ organization });
     }),
 
     // Macros - list
@@ -195,6 +233,31 @@ export function createZendeskHandlers(subdomain: string, options: ZendeskMockOpt
             comment: { body: 'Macro applied', public: true },
           },
         },
+      });
+    }),
+
+    // Help Center article search (used by search_zendesk_help_center_articles)
+    http.get(`${base}/help_center/articles/search.json`, () => {
+      return HttpResponse.json({
+        results: defaultArticles,
+        count: defaultArticles.length,
+        next_page: null,
+      });
+    }),
+
+    // Get single Help Center article
+    http.get(`${base}/help_center/articles/:articleId.json`, ({ params }) => {
+      const articleId = Number(params.articleId);
+      const article = defaultArticles.find(a => (a as { id: number }).id === articleId) ?? makeArticle({ id: articleId });
+      return HttpResponse.json({ article });
+    }),
+
+    // Satisfaction ratings (used by list_zendesk_satisfaction_ratings)
+    http.get(`${base}/satisfaction_ratings.json`, () => {
+      return HttpResponse.json({
+        satisfaction_ratings: defaultRatings,
+        count: defaultRatings.length,
+        next_page: null,
       });
     }),
 

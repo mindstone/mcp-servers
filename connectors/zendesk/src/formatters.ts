@@ -6,33 +6,37 @@ import type {
   ZendeskGroup,
   ZendeskTicketField,
   ZendeskMacro,
+  ZendeskOrganization,
+  ZendeskHelpCenterArticle,
+  ZendeskSatisfactionRating,
 } from './types.js';
+import { wrapUntrusted } from './untrusted-content.js';
 
 // ---------------------------------------------------------------------------
 // Untrusted-content envelope helpers (M3.5b)
 //
-// Body content returned by Zendesk (ticket descriptions, comment bodies,
-// search-result subjects/descriptions) is third-party text that an end-user
-// or external requester wrote. We wrap it in <untrusted-content
-// source="external-ticket">...</untrusted-content> so the host LLM can
+// Body content returned by Zendesk (ticket subjects/descriptions, comment
+// bodies, user names, organisation names, macro titles) is third-party text
+// that an end-user or external requester wrote. We wrap it in
+// <untrusted-content source="...">...</untrusted-content> so the host LLM can
 // recognise it as data, not instructions. Connector-controlled metadata
 // (ids, statuses, priorities, requester ids, timestamps) is NEVER wrapped.
+//
+// All wrapping delegates to the canonical envelope helper in
+// `src/untrusted-content.ts` (vendored from connectors/_template, per
+// AGENTS.md security invariant #6) — the close-tag breakout escaping lives
+// there and must not be re-implemented here.
 // ---------------------------------------------------------------------------
 
-export const UNTRUSTED_TICKET_OPEN = '<untrusted-content source="external-ticket">';
+export const UNTRUSTED_TICKET_SOURCE = 'external-ticket';
+export const UNTRUSTED_USER_SOURCE = 'external-user';
+export const UNTRUSTED_ORG_SOURCE = 'external-organization';
+export const UNTRUSTED_MACRO_SOURCE = 'external-macro';
+export const UNTRUSTED_ARTICLE_SOURCE = 'external-help-center';
+export const UNTRUSTED_SATISFACTION_SOURCE = 'external-satisfaction-rating';
+
+export const UNTRUSTED_TICKET_OPEN = `<untrusted-content source="${UNTRUSTED_TICKET_SOURCE}">`;
 export const UNTRUSTED_TICKET_CLOSE = '</untrusted-content>';
-
-// Match any close-tag variant of the `<untrusted-content>` envelope:
-// case-insensitive, optional whitespace (space or tab) before `>`. Used to
-// neutralise attacker-supplied close tags inside body content before
-// concatenation with the open/close sentinels — see VAL-ZENDESK-009 /
-// VAL-CROSS-011 / VAL-CROSS-012.
-const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content[ \t]*>/gi;
-const ESCAPED_UNTRUSTED_CLOSE_TAG = '<\\/untrusted-content>';
-
-function escapeCloseTagSentinels(s: string): string {
-  return s.replace(UNTRUSTED_CLOSE_TAG_VARIANT, ESCAPED_UNTRUSTED_CLOSE_TAG);
-}
 
 /**
  * Wrap a body string in the external-ticket envelope. Returns `undefined`
@@ -40,58 +44,97 @@ function escapeCloseTagSentinels(s: string): string {
  * entirely rather than emit an empty envelope.
  *
  * Any `</untrusted-content>` (and case / whitespace variants) embedded in
- * `s` is rewritten to a benign textual form before concatenation, so an
+ * `s` is rewritten to a benign textual form by the canonical helper, so an
  * attacker controlling ticket content cannot break out of the envelope.
- *
- * Idempotent: when `s` is already a properly-shaped envelope (starts with
- * OPEN, ends with CLOSE, and contains no internal close-tag variants),
- * the original string is returned unchanged so `wrap(wrap(s)) === wrap(s)`.
+ * Idempotent for the same source: `wrap(wrap(s)) === wrap(s)`.
  */
 export function wrapUntrustedTicketContent(s: string | null | undefined): string | undefined {
-  if (s === null || s === undefined) return undefined;
-  if (typeof s !== 'string') return undefined;
-  if (s.length === 0) return undefined;
-  if (
-    s.startsWith(UNTRUSTED_TICKET_OPEN) &&
-    s.endsWith(UNTRUSTED_TICKET_CLOSE)
-  ) {
-    const inner = s.slice(
-      UNTRUSTED_TICKET_OPEN.length,
-      s.length - UNTRUSTED_TICKET_CLOSE.length,
-    );
-    if (!/<\/untrusted-content[ \t]*>/i.test(inner)) {
-      return s;
-    }
-  }
-  return `${UNTRUSTED_TICKET_OPEN}${escapeCloseTagSentinels(s)}${UNTRUSTED_TICKET_CLOSE}`;
+  if (typeof s !== 'string' || s.length === 0) return undefined;
+  return wrapUntrusted(s, UNTRUSTED_TICKET_SOURCE);
 }
 
 /**
- * Return a shallow clone of the ticket with the `description` field wrapped.
- * Used by `get_zendesk_ticket` (where the LLM-facing surface is the ticket
- * body rather than the subject, which the connector may itself reference).
- * Metadata (id, status, priority, requester_id, timestamps, tags...) is left
- * untouched.
+ * Return a shallow clone of the ticket with the attacker-controlled text
+ * fields wrapped: `subject` (end-users set subjects, e.g. via email) and
+ * `description`. Metadata (id, status, priority, requester_id, timestamps,
+ * tags...) is left untouched.
  */
 export function wrapTicketBodyFields(ticket: ZendeskTicket): ZendeskTicket {
   const wrapped: ZendeskTicket = { ...ticket };
+  const ws = wrapUntrustedTicketContent(ticket.subject);
+  if (ws !== undefined) wrapped.subject = ws;
   const wd = wrapUntrustedTicketContent(ticket.description);
   if (wd !== undefined) wrapped.description = wd;
   return wrapped;
 }
 
 /**
- * Return a shallow clone of the ticket with the body fields wrapped for
- * consumption by `search_zendesk_tickets`. Subjects are wrapped because
- * search results carry attacker-controlled subject text directly (e.g.
- * matches on `subject:` queries). Descriptions are wrapped where present.
+ * Return a shallow clone of the user with the user-authored text fields
+ * wrapped: `name` and `email`. Role, ids, and timestamps are left untouched.
  */
-export function wrapTicketBodyFieldsForSearch(ticket: ZendeskTicket): ZendeskTicket {
-  const wrapped: ZendeskTicket = { ...ticket };
-  const ws = wrapUntrustedTicketContent(ticket.subject);
-  if (ws !== undefined) wrapped.subject = ws;
-  const wd = wrapUntrustedTicketContent(ticket.description);
+export function wrapUserFields(user: ZendeskUser): ZendeskUser {
+  const wrapped: ZendeskUser = { ...user };
+  const wn = wrapUntrusted(user.name, UNTRUSTED_USER_SOURCE);
+  if (wn !== undefined) wrapped.name = wn;
+  const we = wrapUntrusted(user.email, UNTRUSTED_USER_SOURCE);
+  if (we !== undefined) wrapped.email = we;
+  return wrapped;
+}
+
+/**
+ * Return a shallow clone of the organization with the externally-authored
+ * text fields wrapped: `name`, `details`, and `notes`.
+ */
+export function wrapOrganizationFields(org: ZendeskOrganization): ZendeskOrganization {
+  const wrapped: ZendeskOrganization = { ...org };
+  const wn = wrapUntrusted(org.name, UNTRUSTED_ORG_SOURCE);
+  if (wn !== undefined) wrapped.name = wn;
+  const wd = wrapUntrusted(org.details, UNTRUSTED_ORG_SOURCE);
+  if (wd !== undefined) wrapped.details = wd;
+  const wno = wrapUntrusted(org.notes, UNTRUSTED_ORG_SOURCE);
+  if (wno !== undefined) wrapped.notes = wno;
+  return wrapped;
+}
+
+/**
+ * Return a shallow clone of the macro with the admin-authored `title` and
+ * `description` wrapped. Action values are left untouched (they are
+ * structured field updates authored by admins, not end-user text).
+ */
+export function wrapMacroFields(macro: ZendeskMacro): ZendeskMacro {
+  const wrapped: ZendeskMacro = { ...macro };
+  const wt = wrapUntrusted(macro.title, UNTRUSTED_MACRO_SOURCE);
+  if (wt !== undefined) wrapped.title = wt;
+  const wd = wrapUntrusted(macro.description ?? undefined, UNTRUSTED_MACRO_SOURCE);
   if (wd !== undefined) wrapped.description = wd;
+  return wrapped;
+}
+
+/**
+ * Return a shallow clone of the Help Center article with the externally
+ * authored text fields wrapped: `title`, `body`, and `snippet`.
+ */
+export function wrapArticleFields(article: ZendeskHelpCenterArticle): ZendeskHelpCenterArticle {
+  const wrapped: ZendeskHelpCenterArticle = { ...article };
+  const wt = wrapUntrusted(article.title, UNTRUSTED_ARTICLE_SOURCE);
+  if (wt !== undefined) wrapped.title = wt;
+  const wb = wrapUntrusted(article.body, UNTRUSTED_ARTICLE_SOURCE);
+  if (wb !== undefined) wrapped.body = wb;
+  const ws = wrapUntrusted(article.snippet, UNTRUSTED_ARTICLE_SOURCE);
+  if (ws !== undefined) wrapped.snippet = ws;
+  return wrapped;
+}
+
+/**
+ * Return a shallow clone of the satisfaction rating with the end-user-authored
+ * `comment` wrapped. Scores, ids, and timestamps are left untouched.
+ */
+export function wrapSatisfactionRatingFields(rating: ZendeskSatisfactionRating): ZendeskSatisfactionRating {
+  const wrapped: ZendeskSatisfactionRating = { ...rating };
+  if (typeof rating.comment === 'string' && rating.comment.length > 0) {
+    const wc = wrapUntrusted(rating.comment, UNTRUSTED_SATISFACTION_SOURCE);
+    if (wc !== undefined) wrapped.comment = wc;
+  }
   return wrapped;
 }
 

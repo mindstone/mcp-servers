@@ -11,7 +11,7 @@ Zendesk Support MCP server — tickets, users, comments, macros, account setup, 
 
 - **Version:** [0.3.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-zendesk)
 - **Auth:** Hybrid (API token or OAuth) ([`ZENDESK_CLIENT_SECRET`](./server.json))
-- **Tools:** [20](./src/tools/) (tickets, users, comments, macros)
+- **Tools:** [26](./src/tools/) (tickets, users, comments, macros, views, help center, satisfaction)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -185,7 +185,7 @@ EOF
 }
 ```
 
-## Tools (20)
+## Tools (26)
 
 ### Account management
 - `list_zendesk_accounts` — List connected accounts with auth status
@@ -203,6 +203,7 @@ EOF
 ### Users
 - `search_zendesk_users` — Search by name, email, or query
 - `get_zendesk_user` — Get user by ID
+- `create_or_update_zendesk_user` — Create a user or update the one with the same email
 
 ### Comments
 - `list_zendesk_ticket_comments` — List conversation thread with author resolution
@@ -212,12 +213,21 @@ EOF
 - `list_zendesk_groups` — List agent groups
 - `list_zendesk_ticket_fields` — List ticket fields including custom fields
 - `list_zendesk_views` — List saved ticket views
+- `list_zendesk_view_tickets` — Execute a view and list its tickets
 - `list_zendesk_organizations` — List organizations
+- `get_zendesk_organization` — Get a single organization by ID
 
 ### Macros
 - `list_zendesk_macros` — List or search macros
 - `get_zendesk_macro` — Get macro details
 - `apply_zendesk_macro` — Preview and apply macro to ticket
+
+### Help Center
+- `search_zendesk_help_center_articles` — Search knowledge-base articles
+- `get_zendesk_help_center_article` — Read a full Help Center article
+
+### Satisfaction
+- `list_zendesk_satisfaction_ratings` — List CSAT ratings with score/date filters
 
 ## Security notes
 

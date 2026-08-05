@@ -73,7 +73,64 @@ describe('User tools', () => {
       const data = result.json as any;
       expect(data.ok).toBe(true);
       expect(data.user.id).toBe(100);
-      expect(data.user.name).toBe('Test User');
+      // User names are end-user-authored: returned inside an envelope.
+      expect(data.user.name).toBe(
+        '<untrusted-content source="external-user">Test User</untrusted-content>',
+      );
+    });
+  });
+
+  describe('create_or_update_zendesk_user', () => {
+    it('should create a user and return the wrapped identity', async () => {
+      let capturedBody: any;
+      mswServer.use(
+        http.post(`${base}/users/create_or_update.json`, async ({ request }) => {
+          capturedBody = await request.json();
+          return HttpResponse.json(
+            { user: makeUser({ id: 555, name: 'Jane Doe', email: 'jane@example.com' }) },
+            { status: 201 },
+          );
+        }),
+      );
+
+      const result = await testClient.callTool('create_or_update_zendesk_user', {
+        name: 'Jane Doe',
+        email: 'jane@example.com',
+        organization_id: 500,
+      });
+      expect(result.isError).toBeFalsy();
+      const data = result.json as any;
+      expect(data.ok).toBe(true);
+      expect(data.user.id).toBe(555);
+      expect(data.user.name).toBe(
+        '<untrusted-content source="external-user">Jane Doe</untrusted-content>',
+      );
+      // Payload sent to Zendesk carries the raw values, not envelopes.
+      expect(capturedBody.user.name).toBe('Jane Doe');
+      expect(capturedBody.user.email).toBe('jane@example.com');
+      expect(capturedBody.user.organization_id).toBe(500);
+    });
+
+    it('should return a structured error on validation failure', async () => {
+      mswServer.use(
+        http.post(`${base}/users/create_or_update.json`, () => {
+          return HttpResponse.json({ error: 'RecordInvalid' }, { status: 422 });
+        }),
+      );
+      const result = await testClient.callTool('create_or_update_zendesk_user', {
+        name: 'Jane Doe',
+        email: 'not-an-email',
+      });
+      const data = result.json as any;
+      expect(data.ok).toBe(false);
+      expect(data.code).toBe('API_ERROR');
+    });
+
+    it('should be annotated as a destructive write', async () => {
+      const tools = await testClient.client.listTools();
+      const tool = tools.tools.find(t => t.name === 'create_or_update_zendesk_user');
+      expect(tool?.annotations?.destructiveHint).toBe(true);
+      expect(tool?.annotations?.readOnlyHint).toBe(false);
     });
   });
 });

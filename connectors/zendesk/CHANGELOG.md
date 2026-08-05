@@ -11,6 +11,16 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Security
+- Migrated the untrusted-content envelope from the connector-local hand-rolled implementation to the canonical shared helper (`src/untrusted-content.ts`, vendored from the connector template per security invariant #6) and extended coverage: ticket subjects are now enveloped in every read path (previously only search results), and user names/emails, organization names, and macro titles are enveloped as well.
+
+### Added
+- `list_zendesk_satisfaction_ratings` — list customer satisfaction (CSAT) ratings with score/date filters for support-quality reporting. Customer comments are enveloped as untrusted content.
+- `create_or_update_zendesk_user` — create a user or update the existing one with the same email (`POST /api/v2/users/create_or_update.json`), enabling "add this new customer contact" flows. Marked `destructiveHint: true` per security invariant #7.
+- `get_zendesk_organization` — fetch a single organization by ID for customer context.
+- `search_zendesk_help_center_articles` and `get_zendesk_help_center_article` — search and read Zendesk Help Center (Guide) articles so support replies can be grounded in the company's own knowledge base. Titles, snippets, and bodies are enveloped as untrusted content.
+- `list_zendesk_view_tickets` — execute a Zendesk view and list its tickets (`GET /api/v2/views/{id}/tickets.json`), closing the gap where `list_zendesk_views` advertised finding tickets by view but no tool could run one.
+
 ### Changed
 - Reworked `README.md` to explain when to choose this local Zendesk connector, what support workflows it helps with, and how it handles customer-authored ticket content.
 
