@@ -98,6 +98,33 @@ export const SUPPORTED_ASPECT_RATIOS = [
 
 export type SupportedAspectRatio = (typeof SUPPORTED_ASPECT_RATIOS)[number];
 
+export const SUPPORTED_IMAGE_SIZES = ['1K', '2K', '4K'] as const;
+
+export type SupportedImageSize = (typeof SUPPORTED_IMAGE_SIZES)[number];
+
+/**
+ * The legacy model ignores/rejects `imageConfig.imageSize` — it always
+ * produces ~1K output. Callers must refuse an explicit image_size for it
+ * rather than silently shipping a request the API cannot honour.
+ */
+export function supportsImageSize(model: SupportedModel): boolean {
+  return model !== 'gemini-2.5-flash-image';
+}
+
+/**
+ * Structured refusal for an image_size the chosen model cannot honour.
+ * Shared by generate/edit so both tools emit the identical contract.
+ */
+export function unsupportedImageSizePayload(model: SupportedModel, imageSize: string) {
+  return {
+    ok: false as const,
+    error: `image_size "${imageSize}" is not supported by ${model} — that model always produces ~1K output.`,
+    code: 'UNSUPPORTED_IMAGE_SIZE',
+    resolution:
+      'Use "gemini-3.1-flash-image-preview" or "gemini-3-pro-image-preview" for 2K/4K output, or omit image_size.',
+  };
+}
+
 export interface GeminiApiErrorData {
   error?: {
     message?: string;
@@ -128,7 +155,8 @@ export interface GeminiResponse {
 }
 
 export interface ImageConfig {
-  aspectRatio: string;
+  aspectRatio?: string;
+  imageSize?: string;
 }
 
 export interface GenerationConfig {

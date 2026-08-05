@@ -128,6 +128,10 @@ node dist/index.js
 - `nano_banana_generate` — Generate images from text descriptions
 - `nano_banana_edit` — Edit an existing image using AI
 
+### Output resolution
+
+Both image tools accept an optional `image_size` parameter (`"1K"`, `"2K"`, or `"4K"`; default `"1K"` ≈ 1024px). Higher resolutions are only honoured by the Gemini 3 image models (`gemini-3.1-flash-image-preview`, `gemini-3-pro-image-preview`); the legacy `gemini-2.5-flash-image` always produces ~1K output and rejects an explicit `image_size`.
+
 ## Licence
 
 [FSL-1.1-MIT](./LICENSE) — Functional Source License, Version 1.1, with MIT future licence. The software converts to MIT licence on 2030-04-08.

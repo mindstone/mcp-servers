@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+- `nano_banana_generate` / `nano_banana_edit`: new optional `image_size` parameter (`"1K"` / `"2K"` / `"4K"`, default `"1K"`), forwarded as `generationConfig.imageConfig.imageSize`. An explicit `image_size` is refused with a structured `UNSUPPORTED_IMAGE_SIZE` error on `gemini-2.5-flash-image`, which only produces ~1K output.
+
+### Fixed
+- Tool descriptions no longer advertise "4K" as a default trait of the default model — output resolution defaults to ~1K unless `image_size` is set explicitly.
+
 ## [0.3.2] - 2026-05-14
 ### Added
 - **registry**: Cohort A backfill — 12 API-key OSS connectors get server.json + mcpName. fathom, humaans, kling, mixmax, nano-banana, napkin, pandadoc, freshdesk, elevenlabs, retell-ai, runway, talentlms each gain a registry-shaped server.json (validated against registry.modelcontextprotocol.io) and an mcpName field on package.json under the io.github.mindstone namespace.
