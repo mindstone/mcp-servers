@@ -57,6 +57,14 @@ export const JOB_REQUISITION_FIELDS = [
   'href',
 ] as const;
 
+// Locations/jobs: identity and classification fields only — address lines and
+// other free-text fields are deliberately excluded from the allowlists.
+export const LOCATION_FIELDS = ['id', 'descriptor', 'name', 'inactive', 'isActive', 'href'] as const;
+
+export const JOB_FIELDS = ['id', 'descriptor', 'businessTitle', 'jobType', 'href'] as const;
+
+export const PAYROLL_FAMILY = 'payroll/v2';
+
 // ── Field allowlisting ──
 
 export function pickFields<T extends readonly string[]>(

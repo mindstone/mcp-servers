@@ -11,12 +11,15 @@ import {
   API_BASE,
   ABSENCE_API_BASE,
   RECRUITING_API_BASE,
+  PAYROLL_API_BASE,
   createTokenResponse,
   createWorkersListResponse,
   createOrgsListResponse,
   createDirectReportsResponse,
   createTimeOffListResponse,
   createJobRequisitionsListResponse,
+  createLocationsListResponse,
+  createJobsListResponse,
   createWorker,
 } from '../fixtures/workday-data.js';
 
@@ -127,6 +130,34 @@ export function createWorkdayHandlers(options: MockServerOptions = {}): HttpHand
       }
 
       return HttpResponse.json(createJobRequisitionsListResponse());
+    }),
+
+    // Locations
+    http.get(`${API_BASE}/locations`, async ({ request }) => {
+      const authHeader = request.headers.get('Authorization');
+      if (!authHeader?.startsWith('Bearer ')) {
+        return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
+      if (options.apiErrorStatus) {
+        return HttpResponse.json({ error: 'Mock API error' }, { status: options.apiErrorStatus });
+      }
+
+      return HttpResponse.json(createLocationsListResponse());
+    }),
+
+    // Jobs (payroll family)
+    http.get(`${PAYROLL_API_BASE}/jobs`, async ({ request }) => {
+      const authHeader = request.headers.get('Authorization');
+      if (!authHeader?.startsWith('Bearer ')) {
+        return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
+      if (options.apiErrorStatus) {
+        return HttpResponse.json({ error: 'Mock API error' }, { status: options.apiErrorStatus });
+      }
+
+      return HttpResponse.json(createJobsListResponse());
     }),
   ];
 }
