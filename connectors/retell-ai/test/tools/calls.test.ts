@@ -89,4 +89,23 @@ describe('Call tools — Retell AI', () => {
     expect(parsed.calls).toBeInstanceOf(Array);
     expect(parsed.count).toBeGreaterThan(0);
   });
+
+  it('get_concurrency returns limits and derived headroom', async () => {
+    mswServer.use(...createRetellHandlers());
+    testClient = await createTestClient({
+      env: { RETELL_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.client.callTool({
+      name: 'get_concurrency',
+      arguments: {},
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const parsed = JSON.parse(text);
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.current_concurrency).toBe(2);
+    expect(parsed.concurrency_limit).toBe(20);
+    expect(parsed.available_concurrency).toBe(18);
+  });
 });

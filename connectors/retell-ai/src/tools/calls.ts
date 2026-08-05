@@ -378,6 +378,53 @@ RETURNS: calls, count, pagination_key, has_more. Each call includes call_id, sta
   );
 
   server.registerTool(
+    'get_concurrency',
+    {
+      description: `Get your account's current call concurrency and limits.
+
+WHEN TO USE:
+- Before create_batch_call or a burst of create_phone_call calls, to check capacity headroom
+- To decide reserved_concurrency for a batch call (leave room for inbound traffic)
+- To diagnose 429/rate-limit or call-queuing issues
+
+HOW TO READ: concurrency_limit is the max simultaneous calls (base + purchased). current_concurrency is how many calls are live right now. Headroom = concurrency_limit - current_concurrency. If concurrency_burst_enabled, the account may exceed the normal limit up to concurrency_burst_limit with a surcharge.
+
+ERROR RECOVERY:
+- 401: API key is missing or invalid → configure_retell_api_key
+
+RELATED TOOLS:
+- create_batch_call: Check headroom before sizing a campaign
+- list_calls: See which calls are currently occupying capacity
+
+RETURNS: current_concurrency, concurrency_limit, base_concurrency, purchased_concurrency, concurrency_purchase_limit, remaining_purchase_limit, reserved_inbound_concurrency, concurrency_burst_enabled, concurrency_burst_limit.`,
+      inputSchema: {},
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async () => {
+      requireApiKey();
+      const result = await retellFetch<Record<string, unknown>>(
+        '/get-concurrency',
+        { method: 'GET' },
+      );
+      const current = typeof result.current_concurrency === 'number' ? result.current_concurrency : undefined;
+      const limit = typeof result.concurrency_limit === 'number' ? result.concurrency_limit : undefined;
+      return JSON.stringify({
+        ok: true,
+        ...result,
+        available_concurrency: current !== undefined && limit !== undefined ? limit - current : undefined,
+        message: current !== undefined && limit !== undefined
+          ? `${current} of ${limit} concurrency slots in use (${limit - current} available).`
+          : 'Concurrency info retrieved.',
+      });
+    }),
+  );
+
+  server.registerTool(
     'stop_call',
     {
       description: `Stop an ongoing call immediately.

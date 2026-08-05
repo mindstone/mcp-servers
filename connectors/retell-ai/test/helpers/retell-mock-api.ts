@@ -248,6 +248,23 @@ export function createRetellHandlers() {
       });
     }),
 
+    // --- Account ---
+    http.get(`${RETELL_API_BASE}/get-concurrency`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      return HttpResponse.json({
+        current_concurrency: 2,
+        concurrency_limit: 20,
+        base_concurrency: 20,
+        purchased_concurrency: 0,
+        concurrency_purchase_limit: 180,
+        remaining_purchase_limit: 180,
+        reserved_inbound_concurrency: 0,
+        concurrency_burst_enabled: false,
+        concurrency_burst_limit: 0,
+      });
+    }),
+
     // --- LLMs ---
     http.get(`${RETELL_API_BASE}/v2/list-retell-llms`, ({ request }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
