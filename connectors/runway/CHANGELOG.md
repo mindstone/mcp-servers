@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-05
+
+### Changed
+
+- Replace sunset model IDs with aleph2, add upscale_video, negative_prompt, eleven_v3, voice envelopes, and fail-closed voice validation
+
 ### Added
 - **runway**: `negative_prompt` parameter on `generate_video_from_text` and `generate_video_from_image` for veo models (`veo3`, `veo3.1`, `veo3.1_fast`) — sent upstream as `negativePrompt` (max 1000 chars); omitted for models that don't support it.
 - **runway**: `model` parameter on `generate_speech` with `eleven_v3` support (expressive speech with audio tags like `[laughs]` / `[whispers]`, text up to 5000 chars). `eleven_v3` accepts preset voices only; combining it with a custom voice ID returns a structured `INVALID_INPUT` error.
