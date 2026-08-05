@@ -247,6 +247,62 @@ describe('Batch call tools — Retell AI', () => {
     expect(order.indexOf('precall-check')).toBeLessThan(order.indexOf('create'));
   });
 
+  it('create_batch_call does not merge colliding (agent_id, version) group keys', async () => {
+    // Regression: the grouping key used to be plain concatenation, so
+    // (agent_1, 23) and (agent_12, 3) both mapped to "agent_123" — the second
+    // task would be validated against the first task's agent prompt.
+    const requestedUrls: string[] = [];
+    mswServer.use(
+      http.get(`${RETELL_API_BASE}/get-agent/:agentId`, ({ request, params }) => {
+        const url = new URL(request.url);
+        requestedUrls.push(`${url.pathname}${url.search}`);
+        const version = url.searchParams.get('version');
+        return HttpResponse.json({
+          agent_id: params.agentId,
+          ...(version !== null ? { version: Number(version) } : {}),
+          response_engine: { type: 'retell-llm', llm_id: `llm_${params.agentId}` },
+        });
+      }),
+      http.get(`${RETELL_API_BASE}/get-retell-llm/:llmId`, ({ params }) =>
+        HttpResponse.json({
+          llm_id: params.llmId,
+          general_prompt: `Hi {{customer_name}}. (${String(params.llmId)})`,
+        })),
+      ...createRetellHandlers(),
+    );
+    testClient = await createTestClient({
+      env: { RETELL_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.client.callTool({
+      name: 'create_batch_call',
+      arguments: {
+        from_number: '+14155551234',
+        tasks: [
+          {
+            to_number: '+14155555678',
+            override_agent_id: 'agent_1',
+            override_agent_version: 23,
+            retell_llm_dynamic_variables: { customer_name: 'Jane' },
+          },
+          {
+            to_number: '+14155559876',
+            override_agent_id: 'agent_12',
+            override_agent_version: 3,
+            retell_llm_dynamic_variables: { customer_name: 'John' },
+          },
+        ],
+      },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const parsed = JSON.parse(text);
+
+    expect(parsed.ok).toBe(true);
+    // Each distinct (agent_id, version) tuple was fetched and validated on its own.
+    expect(requestedUrls).toContain('/get-agent/agent_1?version=23');
+    expect(requestedUrls).toContain('/get-agent/agent_12?version=3');
+  });
+
   it('create_batch_call validates each (agent_id, agent_version) pair against its own prompt', async () => {
     // Two tasks share override_agent_id but pin different versions. The same
     // agent ID at two versions can have different prompts, so the check must

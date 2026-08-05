@@ -114,7 +114,13 @@ COST: Each task uses phone minutes from your Retell AI plan.`,
       }>();
       for (const task of args.tasks) {
         if (!task.retell_llm_dynamic_variables) continue;
-        const groupKey = `${task.override_agent_id ?? ''}${task.override_agent_version ?? ''}`;
+        // Structured tuple key: plain concatenation is not injective
+        // ("agent_1"+23 vs "agent_12"+3 collide), which would let a task be
+        // validated against the wrong agent's prompt.
+        const groupKey = JSON.stringify([
+          task.override_agent_id ?? null,
+          task.override_agent_version ?? null,
+        ]);
         const entry = varsByAgentVersion.get(groupKey) ?? {
           overrideAgentId: task.override_agent_id || undefined,
           overrideAgentVersion: task.override_agent_version,
