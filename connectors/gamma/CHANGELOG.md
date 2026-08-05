@@ -12,10 +12,19 @@ are maintained manually as part of the PR review checklist.
 ## [Unreleased]
 
 ### Security
-- `gamma_list_themes` and `gamma_list_folders` now return workspace-authored theme and folder names inside `<untrusted-content>` envelopes with close-tag breakout escaping (repo security invariant #6). IDs, cursors, and keywords remain raw.
-- Export downloads now validate the URL before fetching: HTTPS only, no userinfo, private/loopback/reserved hosts rejected, and hosts restricted to `gamma.app` and its subdomains (mirrors napkin's `validateDownloadUrl`). A rejected URL degrades gracefully in `gamma_get_status` — the generation result is returned and the refusal is surfaced in the message.
+- `gamma_list_themes` and `gamma_list_folders` now return workspace-authored theme and folder names inside `<untrusted-content>` envelopes with close-tag breakout escaping (repo security invariant #6). Theme `colorKeywords`/`toneKeywords` are enveloped too; IDs, cursors, and the theme type stay raw, and response fields are enumerated explicitly so vendor-added unknown fields cannot pass through.
+- Re-vendored the canonical strong `<untrusted-content>` envelope helper: close-tag breakout escaping now neutralises every case/whitespace variant (including newline, carriage-return, and form-feed before `>`), not just space/tab.
+- `gamma_get_status` now envelopes the vendor-authored failure text (`error`) and the `gamma_url` / `pdf_url` / `pptx_url` values before they reach the model; the export download path continues to use the raw internal URL.
+- All Gamma API responses are validated fail-closed with Zod before use. A malformed JSON body or unexpected response shape surfaces as a generic `INVALID_RESPONSE` error — raw parser messages (which can embed a fragment of the vendor response) and unexpected internal errors no longer reach model-visible output; details remain in the connector logs.
+- Vendor error bodies are no longer written to the logs; only the HTTP status code is logged.
+- Export downloads now validate the URL before fetching: HTTPS only, no userinfo, private/loopback/reserved hosts rejected, and hosts restricted to `gamma.app` and its subdomains (mirrors napkin's `validateDownloadUrl`). A rejected URL degrades gracefully in `gamma_get_status` — the generation result is returned and the refusal is surfaced in the message. Redirects are followed manually with every hop re-validated against the same checks (max 5 hops), so an allowed export URL cannot bounce the download to an arbitrary or private host.
+- Export temp files are created atomically: unpredictable filename, `O_CREAT|O_EXCL|O_NOFOLLOW` open, fstat-verified regular file, written through the open descriptor with mode `0600`, and unlinked on failure — a pre-planted or raced symlink at the temp path is refused instead of written through.
+- Bridge state loading opens the state file once, fstat-verifies it through the descriptor (regular file, size-capped), reads through the same descriptor, and validates the `{ port, token }` shape before use; every rejection logs a specific stderr warning instead of failing silently.
 
 ### Fixed
+- `gamma_generate` and `gamma_create_from_template` now declare `destructiveHint: true` — they create workspace content and may consume credits (repo security invariant #7).
+- `num_cards` is now validated as an integer in the documented 1–75 range before any outbound request.
+- Export-URL polling failures are no longer silently skipped: when polling exhausts, the response reports how many status checks failed (`export_polling_failures`) instead of presenting it as a plain export timeout.
 - Removed a duplicated `### Changed` heading in the 0.3.3 entry.
 
 ## [0.3.3] - 2026-07-01
