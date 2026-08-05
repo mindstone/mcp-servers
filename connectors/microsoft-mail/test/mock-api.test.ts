@@ -242,6 +242,64 @@ describe('microsoft-mail mock-API integration', () => {
     expect(state.requests.some((r) => r.pathname.includes('/forward'))).toBe(false);
   });
 
+  it('send_email rejects malformed cc and bcc recipients before calling Graph', async () => {
+    for (const field of ['cc', 'bcc'] as const) {
+      const result = await client.callTool('send_email', {
+        to: 'alice@example.com',
+        subject: 'Hi',
+        body: 'Hello there',
+        [field]: 'not-an-address',
+      });
+      expect(result.isError, `${field} should be rejected`).toBe(true);
+    }
+    expect(state.requests.some((r) => r.pathname.endsWith('/me/sendMail'))).toBe(false);
+  });
+
+  it('send_email enforces the recipient-count boundary (500 allowed, 501 rejected)', async () => {
+    const build = (count: number) =>
+      Array.from({ length: count }, (_, i) => `user${i}@example.com`);
+
+    const over = await client.callTool('send_email', {
+      to: build(501),
+      subject: 'Hi',
+      body: 'Hello there',
+    });
+    expect(over.isError).toBe(true);
+    expect(state.requests.some((r) => r.pathname.endsWith('/me/sendMail'))).toBe(false);
+
+    const atLimit = await client.callTool('send_email', {
+      to: build(500),
+      subject: 'Hi',
+      body: 'Hello there',
+    });
+    expect(atLimit.isError).not.toBe(true);
+    const call = state.requests.find((r) => r.pathname.endsWith('/me/sendMail'));
+    expect(call).toBeDefined();
+  });
+
+  it('send_email enforces the 254-character address boundary', async () => {
+    const atLimit = `${'a'.repeat(242)}@example.com`; // exactly 254 chars
+    expect(atLimit.length).toBe(254);
+    const overLimit = `${'a'.repeat(243)}@example.com`; // 255 chars
+
+    const ok = await client.callTool('send_email', {
+      to: atLimit,
+      subject: 'Hi',
+      body: 'Hello there',
+    });
+    expect(ok.isError).not.toBe(true);
+
+    const over = await client.callTool('send_email', {
+      to: overLimit,
+      subject: 'Hi',
+      body: 'Hello there',
+    });
+    expect(over.isError).toBe(true);
+    expect(
+      state.requests.filter((r) => r.pathname.endsWith('/me/sendMail')).length,
+    ).toBe(1);
+  });
+
   it('send_email rejects "message"/"content"/"text" aliases with explicit guidance', async () => {
     for (const alias of ['message', 'content', 'text']) {
       const result = await client.callTool('send_email', {
