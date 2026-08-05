@@ -246,6 +246,33 @@ export function sanitizeBatchCall(batch: unknown, source: string): unknown {
   return { ...batch, name: wrapStr(batch.name, `${source}:name`) };
 }
 
+function sanitizeKnowledgeBaseSources(sources: unknown, source: string): unknown {
+  if (!Array.isArray(sources)) return sources;
+  return sources.map((item) => {
+    if (!isObj(item)) return item;
+    return {
+      ...item,
+      filename: wrapStr(item.filename, `${source}:knowledge_base_sources.filename`),
+      title: wrapStr(item.title, `${source}:knowledge_base_sources.title`),
+    };
+  });
+}
+
+/**
+ * Wrap external-text fields on a knowledge-base object (`knowledge_base_name`,
+ * source `filename`/`title`). Source URLs (`url`, `file_url`, `content_url`)
+ * are deliberately NOT enveloped: they are URLs surfaced for the user, not
+ * prose (same rationale as call recording URLs).
+ */
+export function sanitizeKnowledgeBase(kb: unknown, source: string): unknown {
+  if (!isObj(kb)) return kb;
+  return {
+    ...kb,
+    knowledge_base_name: wrapStr(kb.knowledge_base_name, `${source}:knowledge_base_name`),
+    knowledge_base_sources: sanitizeKnowledgeBaseSources(kb.knowledge_base_sources, source),
+  };
+}
+
 /**
  * Wrap external-text fields on an agent-version item returned by
  * get_agent_versions. `version_description`/`description` are user-authored

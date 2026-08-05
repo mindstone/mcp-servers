@@ -59,6 +59,20 @@ const mockAgentVersion = {
   last_modification_timestamp: 1704067200000,
 };
 
+const mockKnowledgeBase = {
+  knowledge_base_id: 'kb_test_123',
+  knowledge_base_name: 'Support FAQ',
+  status: 'complete',
+  max_chunk_size: 2000,
+  min_chunk_size: 400,
+  knowledge_base_sources: [
+    { type: 'text', source_id: 'src_text_1', title: 'Refund policy', content_url: 'https://example.com/stored/refund.txt' },
+    { type: 'url', source_id: 'src_url_1', url: 'https://example.com/faq' },
+    { type: 'document', source_id: 'src_doc_1', filename: 'policy.pdf', file_url: 'https://example.com/stored/policy.pdf', file_size: 12345 },
+  ],
+  enable_auto_refresh: false,
+};
+
 function requireAuth(authHeader: string | null): HttpResponse | null {
   if (!authHeader || !authHeader.startsWith('Bearer ') || authHeader.split(' ')[1] !== MOCK_API_KEY) {
     return HttpResponse.json(
@@ -268,6 +282,50 @@ export function createRetellHandlers() {
       const body = await request.json() as Record<string, unknown>;
       const phoneNumber = decodeURIComponent(params.phoneNumber as string);
       return HttpResponse.json({ ...mockPhoneNumber, phone_number: phoneNumber, ...body });
+    }),
+
+    // --- Knowledge bases ---
+    http.get(`${RETELL_API_BASE}/list-knowledge-bases`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      return HttpResponse.json([mockKnowledgeBase]);
+    }),
+
+    http.get(`${RETELL_API_BASE}/get-knowledge-base/:kbId`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      if (params.kbId === 'nonexistent') {
+        return HttpResponse.json({ error_message: 'Knowledge base not found' }, { status: 404 });
+      }
+      return HttpResponse.json({ ...mockKnowledgeBase, knowledge_base_id: params.kbId });
+    }),
+
+    http.post(`${RETELL_API_BASE}/create-knowledge-base`, async ({ request }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      const form = await request.formData();
+      const files = form.getAll('knowledge_base_files')
+        .map((f) => (f instanceof File ? f.name : String(f)));
+      return HttpResponse.json({
+        knowledge_base_id: 'kb_new_001',
+        knowledge_base_name: form.get('knowledge_base_name'),
+        status: 'in_progress',
+        uploaded_files: files,
+      }, { status: 201 });
+    }),
+
+    http.post(`${RETELL_API_BASE}/add-knowledge-base-sources/:kbId`, async ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      const form = await request.formData();
+      const files = form.getAll('knowledge_base_files')
+        .map((f) => (f instanceof File ? f.name : String(f)));
+      return HttpResponse.json({
+        ...mockKnowledgeBase,
+        knowledge_base_id: params.kbId,
+        status: 'refreshing_in_progress',
+        uploaded_files: files,
+      });
     }),
 
   ];

@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- **Knowledge base tools** — `list_knowledge_bases`, `get_knowledge_base`, `create_knowledge_base`, and `add_knowledge_base_sources`: ground voice agents on documents, URLs, and inline texts via Retell's RAG knowledge bases. Local file uploads (`file_paths`) are sandboxed to `MCP_WORKSPACE_PATH` (or the system temp directory when unset) with canonical-prefix containment — paths outside the sandbox, including symlinks that escape it, are rejected before any disk read. Knowledge-base names and source titles/filenames are wrapped in untrusted-content envelopes; source URLs are surfaced raw for the user.
 - **`create_batch_call`** — schedule or start an outbound calling campaign (`POST /create-batch-call`): one `from_number` to a list of recipient tasks, each with optional per-call dynamic variables, metadata, and agent/version overrides. Supports `trigger_timestamp` scheduling (accepts epoch ms or a date string), `reserved_concurrency`, and `call_time_window` business-hours restrictions. Every recipient number is E.164-validated locally before any request reaches Retell's billing surface, and the tool is marked `destructiveHint: true` because every task is a real, billed phone call.
 
 ### Fixed

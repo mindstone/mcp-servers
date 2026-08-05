@@ -4,19 +4,23 @@ import { createRetellHandlers, MOCK_API_KEY } from './helpers/retell-mock-api.js
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
 
 const EXPECTED_TOOLS = [
+  'add_knowledge_base_sources',
   'configure_retell_api_key',
   'create_agent',
   'create_batch_call',
+  'create_knowledge_base',
   'create_phone_call',
   'create_retell_llm',
   'create_web_call',
   'get_agent',
   'get_agent_versions',
   'get_call',
+  'get_knowledge_base',
   'get_phone_number',
   'get_retell_llm',
   'list_agents',
   'list_calls',
+  'list_knowledge_bases',
   'list_phone_numbers',
   'list_retell_llms',
   'list_voices',
@@ -38,7 +42,7 @@ describe('Smoke test — Retell AI MCP server', () => {
     if (testClient) await testClient.close();
   });
 
-  it('should register all 21 tools via MCP protocol', async () => {
+  it('should register all 25 tools via MCP protocol', async () => {
     mswServer.use(...createRetellHandlers());
 
     testClient = await createTestClient({
@@ -51,7 +55,7 @@ describe('Smoke test — Retell AI MCP server', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map(t => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(21);
+    expect(toolsResult.tools).toHaveLength(25);
     expect(toolNames).toEqual(EXPECTED_TOOLS);
   });
 
@@ -88,6 +92,7 @@ describe('Smoke test — Retell AI MCP server', () => {
       'get_agent', 'list_agents', 'get_call', 'list_calls',
       'get_retell_llm', 'list_retell_llms', 'list_voices', 'list_phone_numbers',
       'get_agent_versions', 'get_phone_number',
+      'list_knowledge_bases', 'get_knowledge_base',
     ];
 
     const destructiveTools = [
@@ -97,6 +102,7 @@ describe('Smoke test — Retell AI MCP server', () => {
       'configure_retell_api_key',
       'stop_call', 'publish_agent', 'update_phone_number',
       'create_batch_call',
+      'create_knowledge_base', 'add_knowledge_base_sources',
     ];
 
     for (const tool of toolsResult.tools) {
