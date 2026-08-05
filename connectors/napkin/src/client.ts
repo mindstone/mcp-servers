@@ -203,7 +203,7 @@ async function napkinFetch<T>(
     throw new NapkinError(
       'Access forbidden',
       'AUTH_FAILED',
-      'Your API key does not have permission for this operation.',
+      'Your API key is invalid or does not have permission for this operation. Check it at https://app.napkin.ai → Account Settings → Developers.',
     );
   }
 

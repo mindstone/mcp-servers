@@ -16,6 +16,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 - **napkin**: Map HTTP 410 responses (status/file URLs expire 30 minutes after generation) to a structured `EXPIRED` error with an actionable regenerate-and-download-promptly resolution, instead of generic `API_ERROR`/`DOWNLOAD_ERROR`.
+- **napkin**: Broaden the 403 `AUTH_FAILED` resolution — the vendor returns 403 ("user not found") for invalid keys too, not only for missing permissions, so the message now points at checking the key.
 
 ## [0.3.2] - 2026-05-14
 ### Added
