@@ -83,6 +83,10 @@ No credentials are required. One optional environment variable tunes runtime beh
 |---|---|---|
 | `APPLE_SHORTCUTS_TIMEOUT_MS` | `120000` | Maximum time in milliseconds a `shortcuts` CLI invocation may run before the connector terminates it (SIGTERM, then SIGKILL after a 5s grace period). Raise this for shortcuts that legitimately take longer than two minutes. |
 
+## Output trust model
+
+Shortcut names (`apple_shortcuts_list`) and shortcut stdout (`apple_shortcuts_run`, `apple_shortcuts_view`) are user-authored text returned by the local `shortcuts` CLI. The connector wraps all such output in `<untrusted-content source="apple-shortcuts:...">` envelopes so the model treats it as data, not instructions.
+
 ## Register in Rebel
 
 Add the connector in **Settings → Connectors** with:

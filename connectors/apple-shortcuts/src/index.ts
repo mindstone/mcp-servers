@@ -16,6 +16,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import * as logger from "./logger.js";
+import { wrapUntrusted } from "./untrusted-content.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
@@ -131,6 +132,22 @@ export const runShortcuts: ShortcutsRunner = (argv) => {
 };
 
 // =============================================================================
+// Shared result helpers
+// =============================================================================
+
+/** Envelope sources: everything the `shortcuts` CLI prints is user-authored. */
+const SOURCES = {
+  list: "apple-shortcuts:list",
+  run: "apple-shortcuts:run",
+  view: "apple-shortcuts:view",
+} as const;
+
+/** `wrapUntrusted` narrowed to defined input; CLI output here is never undefined. */
+function envelope(text: string, source: string): string {
+  return wrapUntrusted(text, source) ?? text;
+}
+
+// =============================================================================
 // Tool: apple_shortcuts_list
 // =============================================================================
 
@@ -160,7 +177,8 @@ Args:
   - show_identifiers (boolean, default: false): Include internal identifiers in the output.
 
 Returns:
-  A formatted list of shortcut names (and optionally identifiers).
+  A formatted list of shortcut names (and optionally identifiers). Shortcut names
+  are user-authored text and are returned inside an untrusted-content envelope.
 
 Example:
   - "List all my shortcuts" -> {}
@@ -191,7 +209,7 @@ Example:
         content: [
           {
             type: "text",
-            text: `Failed to list shortcuts (exit ${result.exitCode}): ${result.stderr || result.stdout}`,
+            text: `Failed to list shortcuts (exit ${result.exitCode}): ${envelope(result.stderr || result.stdout, SOURCES.list)}`,
           },
         ],
       };
@@ -209,7 +227,7 @@ Example:
       content: [
         {
           type: "text",
-          text: `Shortcuts (${lines.length}):\n${formatted}`,
+          text: `Shortcuts (${lines.length}):\n${envelope(formatted, SOURCES.list)}`,
         },
       ],
     };
@@ -268,6 +286,7 @@ export function createRunShortcutHandler(runner: ShortcutsRunner = runShortcuts)
       const result = await runner(argv);
 
       if (result.timedOut) {
+        const partial = result.stdout.trim();
         return {
           isError: true as const,
           content: [
@@ -275,7 +294,10 @@ export function createRunShortcutHandler(runner: ShortcutsRunner = runShortcuts)
               type: "text" as const,
               text:
                 `Shortcut "${params.name}" did not finish within ${resolveTimeoutMs()}ms and was terminated. ` +
-                `Set APPLE_SHORTCUTS_TIMEOUT_MS to allow longer runs.`,
+                `Set APPLE_SHORTCUTS_TIMEOUT_MS to allow longer runs.` +
+                (partial
+                  ? `\nPartial output before termination:\n${envelope(partial, SOURCES.run)}`
+                  : ""),
             },
           ],
         };
@@ -287,7 +309,7 @@ export function createRunShortcutHandler(runner: ShortcutsRunner = runShortcuts)
           content: [
             {
               type: "text" as const,
-              text: `Failed to run shortcut "${params.name}" (exit ${result.exitCode}): ${result.stderr || result.stdout}`,
+              text: `Failed to run shortcut "${params.name}" (exit ${result.exitCode}): ${envelope(result.stderr || result.stdout, SOURCES.run)}`,
             },
           ],
         };
@@ -306,7 +328,7 @@ export function createRunShortcutHandler(runner: ShortcutsRunner = runShortcuts)
       }
 
       return {
-        content: [{ type: "text" as const, text: output }],
+        content: [{ type: "text" as const, text: envelope(output, SOURCES.run) }],
       };
     } finally {
       if (tempPath !== undefined) {
@@ -344,7 +366,8 @@ Args:
     receive the path as text after the temp-file step.
 
 Returns:
-  The stdout output from the shortcut, if any.
+  The stdout output from the shortcut, if any, inside an untrusted-content
+  envelope (shortcut output is user-authored text).
 
 Caveats:
   - Runs are terminated after APPLE_SHORTCUTS_TIMEOUT_MS milliseconds (default 120000);
