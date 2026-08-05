@@ -10,12 +10,13 @@
     ]
   },
   "tools": {
-    "count": 11,
+    "count": 13,
     "domains": [
       "incidents",
       "change-requests",
       "users",
-      "knowledge"
+      "knowledge",
+      "service-catalog"
     ]
   },
   "surface": "cloud-api",

@@ -6,6 +6,7 @@ import {
   registerChangeTools,
   registerKnowledgeTools,
   registerUserTools,
+  registerCatalogTools,
 } from './tools/index.js';
 
 const require = createRequire(import.meta.url);
@@ -22,6 +23,7 @@ export function createServer(): McpServer {
   registerChangeTools(server);
   registerKnowledgeTools(server);
   registerUserTools(server);
+  registerCatalogTools(server);
 
   return server;
 }

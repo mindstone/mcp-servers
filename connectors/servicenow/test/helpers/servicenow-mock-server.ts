@@ -7,6 +7,8 @@ import {
   mockKnowledgeArticles,
   mockKnowledgeArticleDetail,
   mockUsers,
+  mockCatalogItems,
+  mockCatalogItemDetail,
 } from '../fixtures/servicenow-data.js';
 
 const INSTANCE = 'test-instance';
@@ -216,6 +218,45 @@ export function createServiceNowHandlers(
       if (authError) return authError;
 
       return HttpResponse.json({ result: mockUsers });
+    }),
+
+    // ── Service Catalog ───────────────────────────────────────────
+
+    // GET /sc_cat_item (list/search)
+    http.get(`${BASE}/sc_cat_item`, ({ request }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+
+      const url = new URL(request.url);
+      const query = url.searchParams.get('sysparm_query') || '';
+
+      let filtered = mockCatalogItems;
+      if (query.includes('LIKE')) {
+        const likeMatch = query.match(/nameLIKE([^^]+)/);
+        if (likeMatch) {
+          const keyword = likeMatch[1].toLowerCase();
+          filtered = mockCatalogItems.filter((i) =>
+            i.name.toLowerCase().includes(keyword),
+          );
+        }
+      }
+
+      return HttpResponse.json({ result: filtered });
+    }),
+
+    // GET /sc_cat_item/:sys_id (get by sys_id)
+    http.get(`${BASE}/sc_cat_item/:sysId`, ({ request, params }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+
+      const sysId = params.sysId as string;
+      if (sysId === mockCatalogItemDetail.sys_id) {
+        return HttpResponse.json({ result: mockCatalogItemDetail });
+      }
+      return HttpResponse.json(
+        { error: { message: 'Record not found' } },
+        { status: 404 },
+      );
     }),
   ];
 }
