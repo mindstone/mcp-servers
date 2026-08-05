@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { execAgentBrowser } from '../browser-client.js';
 import { withErrorHandling, withErrorHandlingRaw } from '../utils.js';
 import { SNAPSHOT_TIMEOUT_MS, SCREENSHOT_TIMEOUT_MS } from '../types.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 
 export function registerObservationTools(server: McpServer): void {
   server.registerTool(
@@ -27,7 +28,7 @@ Use the -i flag (default) to see only interactive elements, keeping output focus
     withErrorHandling(async (args) => {
       const cliArgs = args.full ? ['snapshot'] : ['snapshot', '-i'];
       const result = await execAgentBrowser(cliArgs, { timeoutMs: SNAPSHOT_TIMEOUT_MS });
-      return JSON.stringify({ ok: true, snapshot: result.stdout });
+      return JSON.stringify({ ok: true, snapshot: wrapUntrusted(result.stdout, 'browser-automation:snapshot') });
     }),
   );
 
@@ -88,8 +89,8 @@ Use the -i flag (default) to see only interactive elements, keeping output focus
       const titleResult = await execAgentBrowser(['get', 'title']);
       return JSON.stringify({
         ok: true,
-        url: urlResult.stdout.trim(),
-        title: titleResult.stdout.trim(),
+        url: wrapUntrusted(urlResult.stdout.trim(), 'browser-automation:page-url'),
+        title: wrapUntrusted(titleResult.stdout.trim(), 'browser-automation:page-title'),
       });
     }),
   );

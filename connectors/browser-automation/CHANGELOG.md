@@ -11,6 +11,9 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Security
+- All page-authored text returned to the model — accessibility snapshots, page titles, URLs, tab lists, and `browser_evaluate` output — is now wrapped in `<untrusted-content source="…">` envelopes with close-tag breakout escaping (security invariant #6; FOX-3490 remediation).
+
 ## [0.1.8] - 2026-07-01
 
 ### Changed

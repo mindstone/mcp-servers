@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { execAgentBrowser } from '../browser-client.js';
 import { validateUrlScheme, withErrorHandling } from '../utils.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 
 // URL scheme deny-list applied to browser_authenticate (validated by
 // `validateUrlScheme` in utils.ts): only http: and https: URLs are
@@ -32,7 +33,7 @@ export function registerSessionTools(server: McpServer): void {
       }
       const cliAction = args.action ?? 'list';
       const result = await execAgentBrowser(['tab', cliAction]);
-      return JSON.stringify({ ok: true, tabs: result.stdout.trim() });
+      return JSON.stringify({ ok: true, tabs: wrapUntrusted(result.stdout.trim(), 'browser-automation:tabs') });
     }),
   );
 

@@ -110,8 +110,10 @@ describe('Interaction tools — Browser Automation', () => {
     const parsed = JSON.parse(text);
 
     expect(parsed.ok).toBe(true);
-    expect(parsed.url).toBe('https://example.com');
-    expect(parsed.title).toBe('Example Page');
+    // URL and title are page-authored text and arrive in untrusted-content
+    // envelopes (security invariant #6).
+    expect(parsed.url).toBe('<untrusted-content source="browser-automation:page-url">https://example.com</untrusted-content>');
+    expect(parsed.title).toBe('<untrusted-content source="browser-automation:page-title">Example Page</untrusted-content>');
   });
 
   it('browser_press_key returns success', async () => {
