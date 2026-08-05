@@ -12,6 +12,8 @@ import {
   listEvents,
   respondToEvent,
   updateEvent,
+  RecurrenceSchema,
+  type RecurrenceInput,
 } from './calendar.js';
 
 const ShowAsEnum = z.enum(['free', 'tentative', 'busy', 'oof', 'workingElsewhere', 'unknown']);
@@ -35,6 +37,9 @@ const CreateEventSchema = z
     isAllDay: z.boolean().optional().describe('All-day event (default: false)'),
     showAs: ShowAsEnum.optional().describe(
       'How this event should appear in availability (free/busy) views',
+    ),
+    recurrence: RecurrenceSchema.optional().describe(
+      'Recurrence for a repeating event, as a Microsoft Graph recurrence object: { "pattern": { "type": "weekly", "interval": 1, "daysOfWeek": ["monday"] }, "range": { "type": "endDate", "startDate": "2026-05-20", "endDate": "2026-08-20" } }',
     ),
     deviceTimezone: z
       .string()
@@ -191,6 +196,7 @@ export function registerCalendarTools(server: McpServer): void {
               | 'workingElsewhere'
               | 'unknown'
               | undefined,
+            recurrence: args.recurrence as RecurrenceInput | undefined,
             deviceTimezone: args.deviceTimezone as string | undefined,
           },
           signal,
@@ -214,6 +220,9 @@ export function registerCalendarTools(server: McpServer): void {
         end: z.string().optional().describe('New end date/time'),
         location: z.string().optional().describe('New location'),
         body: z.string().optional().describe('New description'),
+        recurrence: RecurrenceSchema.optional().describe(
+          'New recurrence for the event (Graph pattern/range object). When changing recurrence, also pass start and end so the series stays consistent.',
+        ),
         deviceTimezone: z
           .string()
           .optional()
@@ -247,6 +256,7 @@ export function registerCalendarTools(server: McpServer): void {
             end: args.end,
             location: args.location,
             body: args.body,
+            recurrence: args.recurrence,
             deviceTimezone: args.deviceTimezone,
           },
           signal,

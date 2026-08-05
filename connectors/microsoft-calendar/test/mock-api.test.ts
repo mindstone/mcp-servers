@@ -187,6 +187,34 @@ describe('microsoft-calendar mock-API integration', () => {
     expect(json.next_step).toBe('create_event');
   });
 
+  it('create_event passes a recurrence object through to the Graph body', async () => {
+    const recurrence = {
+      pattern: { type: 'weekly', interval: 1, daysOfWeek: ['monday'] },
+      range: { type: 'endDate', startDate: '2026-05-20', endDate: '2026-08-20' },
+    };
+    const result = await client.callTool('create_event', {
+      subject: 'Weekly Sync',
+      start: '2026-05-20T09:00:00',
+      end: '2026-05-20T09:30:00',
+      recurrence,
+    });
+    expect(result.isError).not.toBe(true);
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.endsWith('/me/events'),
+    );
+    expect(call?.body).toMatchObject({ recurrence });
+  });
+
+  it('create_event rejects a malformed recurrence object', async () => {
+    const result = await client.callTool('create_event', {
+      subject: 'Weekly Sync',
+      start: '2026-05-20T09:00:00',
+      end: '2026-05-20T09:30:00',
+      recurrence: { pattern: { type: 'everyFullMoon' }, range: { type: 'noEnd', startDate: '2026-05-20' } },
+    });
+    expect(result.isError).toBe(true);
+  });
+
   // -------------------------------------------------------------------------
   // update_event
   // -------------------------------------------------------------------------
@@ -224,6 +252,19 @@ describe('microsoft-calendar mock-API integration', () => {
     const json = result.json as { ok: boolean; error: string; next_step: string };
     expect(json.ok).toBe(false);
     expect(json.next_step).toBe('list_events');
+  });
+
+  it('update_event passes recurrence through to the PATCH body', async () => {
+    const recurrence = {
+      pattern: { type: 'daily', interval: 2 },
+      range: { type: 'numbered', startDate: '2026-05-20', numberOfOccurrences: 10 },
+    };
+    const result = await client.callTool('update_event', { id: 'event-1', recurrence });
+    expect(result.isError).not.toBe(true);
+    const patch = state.requests.find(
+      (r) => r.method === 'PATCH' && r.pathname.endsWith('/me/events/event-1'),
+    );
+    expect(patch?.body).toMatchObject({ recurrence });
   });
 
   // -------------------------------------------------------------------------

@@ -4,6 +4,7 @@ import {
   type CalendarEvent,
   type Client,
 } from '@mindstone/mcp-server-microsoft-shared';
+import { z } from 'zod';
 import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
 
 /**
@@ -24,6 +25,54 @@ export class CalendarBusinessError extends Error {
     this.nextStep = nextStep;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Recurrence input schema — a Graph-shaped `recurrence` object
+// (`pattern` + `range`) validated here and passed through to Graph verbatim.
+// Shared by create_event and update_event.
+// ---------------------------------------------------------------------------
+
+const RecurrenceWeekdaySchema = z.enum([
+  'sunday',
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+]);
+
+export const RecurrenceSchema = z.object({
+  pattern: z
+    .object({
+      type: z.enum([
+        'daily',
+        'weekly',
+        'absoluteMonthly',
+        'absoluteYearly',
+        'relativeMonthly',
+        'relativeYearly',
+      ]),
+      interval: z.number().int().min(1).optional(),
+      daysOfWeek: z.array(RecurrenceWeekdaySchema).optional(),
+      dayOfMonth: z.number().int().min(1).max(31).optional(),
+      month: z.number().int().min(1).max(12).optional(),
+      firstDayOfWeek: RecurrenceWeekdaySchema.optional(),
+      index: z.enum(['first', 'second', 'third', 'fourth', 'last']).optional(),
+    })
+    .passthrough(),
+  range: z
+    .object({
+      type: z.enum(['endDate', 'noEnd', 'numbered']),
+      startDate: z.string(),
+      endDate: z.string().optional(),
+      numberOfOccurrences: z.number().int().positive().optional(),
+      recurrenceTimeZone: z.string().optional(),
+    })
+    .passthrough(),
+});
+
+export type RecurrenceInput = z.infer<typeof RecurrenceSchema>;
 
 // ---------------------------------------------------------------------------
 // Timezone helpers (ported 1:1 from bundled microsoft-calendar)
@@ -239,6 +288,7 @@ export interface CreateEventArgs {
   isOnlineMeeting?: boolean;
   isAllDay?: boolean;
   showAs?: 'free' | 'tentative' | 'busy' | 'oof' | 'workingElsewhere' | 'unknown';
+  recurrence?: RecurrenceInput;
   deviceTimezone?: string;
 }
 
@@ -249,6 +299,7 @@ export interface UpdateEventArgs {
   end?: string;
   location?: string;
   body?: string;
+  recurrence?: RecurrenceInput;
   deviceTimezone?: string;
 }
 
@@ -470,6 +521,10 @@ export async function createEvent(
     event.onlineMeetingProvider = 'teamsForBusiness';
   }
 
+  if (args.recurrence) {
+    event.recurrence = args.recurrence;
+  }
+
   const response = await client.api('/me/events').options({ signal }).post(event);
 
   return {
@@ -519,10 +574,13 @@ export async function updateEvent(
       content: args.body,
     };
   }
+  if (args.recurrence) {
+    update.recurrence = args.recurrence;
+  }
 
   if (Object.keys(update).length === 0) {
     throw new CalendarBusinessError(
-      'At least one field to update is required: subject, start, end, location, or body. Example: { "id": "AAMkAGI2...", "subject": "New Title", "location": "Room 101" }',
+      'At least one field to update is required: subject, start, end, location, body, or recurrence. Example: { "id": "AAMkAGI2...", "subject": "New Title", "location": "Room 101" }',
       'update_event',
     );
   }
