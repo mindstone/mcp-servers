@@ -4,7 +4,8 @@ import { mixmaxFetch } from '../client.js';
 import { withErrorHandling, parseApiResponse } from '../utils.js';
 import { isConfigured } from '../auth.js';
 import { messagesResponseSchema } from '../types.js';
-import { sanitizeMessages } from '../sanitize.js';
+import { sanitizeMessages, sanitizeVendorBlob } from '../sanitize.js';
+import { unwrapUntrusted, wrapUntrusted } from '../untrusted-content.js';
 
 function noApiTokenError(): string {
   return JSON.stringify({
@@ -46,7 +47,9 @@ PAGINATION: Cursor-based. If hasNext is true, pass the "next" value as the next 
       if (!isConfigured()) return noApiTokenError();
 
       let path = `/messages?limit=${args.limit}`;
-      if (args.next) path += `&next=${encodeURIComponent(args.next)}`;
+      // Cursors are enveloped on output (they are vendor strings); accept the
+      // wrapped form back and unwrap before sending it to the API.
+      if (args.next) path += `&next=${encodeURIComponent(unwrapUntrusted(args.next))}`;
 
       const data = parseApiResponse(
         messagesResponseSchema,
@@ -59,7 +62,7 @@ PAGINATION: Cursor-based. If hasNext is true, pass the "next" value as the next 
         messages: sanitizeMessages(data.results),
         count: data.results.length,
         hasNext: data.hasNext ?? false,
-        ...(data.next ? { next: data.next } : {}),
+        ...(data.next ? { next: wrapUntrusted(data.next, 'mixmax:messages.next') } : {}),
       });
     }),
   );
@@ -103,7 +106,7 @@ NOTE: This sends through Mixmax, not raw Gmail. The email will appear in the use
       return JSON.stringify({
         ok: true,
         message: `Email sent to ${args.to.join(', ')}.`,
-        result: data,
+        result: sanitizeVendorBlob(data, 'send.result'),
       });
     }),
   );

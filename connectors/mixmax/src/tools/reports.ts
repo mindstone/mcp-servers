@@ -4,7 +4,7 @@ import { mixmaxFetch } from '../client.js';
 import { withErrorHandling, parseApiResponse } from '../utils.js';
 import { isConfigured } from '../auth.js';
 import { reportResponseSchema } from '../types.js';
-import { sanitizeReportBuckets } from '../sanitize.js';
+import { sanitizeReportBuckets, sanitizeVendorBlob } from '../sanitize.js';
 
 function noApiTokenError(): string {
   return JSON.stringify({
@@ -79,8 +79,8 @@ Returns buckets (one per group), aggregate totals, and pagination info in extra 
         type: args.type,
         buckets: sanitizeReportBuckets(data.buckets),
         count: data.buckets.length,
-        ...(data.totals ? { totals: data.totals } : {}),
-        ...(data.extra ? { extra: data.extra } : {}),
+        ...(data.totals ? { totals: sanitizeVendorBlob(data.totals, 'report.totals') } : {}),
+        ...(data.extra ? { extra: sanitizeVendorBlob(data.extra, 'report.extra') } : {}),
       });
     }),
   );

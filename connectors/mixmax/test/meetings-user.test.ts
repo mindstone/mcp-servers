@@ -56,7 +56,9 @@ describe('Mixmax meeting types and user tools', () => {
     expect(json.user.email).toBe(
       '<untrusted-content source="mixmax:user.email">testuser@acme.com</untrusted-content>',
     );
-    expect(json.user.plan).toBe('Growth');
+    expect(json.user.plan).toBe(
+      '<untrusted-content source="mixmax:user.plan">Growth</untrusted-content>',
+    );
   });
 
   it('returns not-configured error for meeting types when no API token', async () => {

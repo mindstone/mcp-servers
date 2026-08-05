@@ -41,9 +41,11 @@ export function registerConfigureTools(server: McpServer): void {
           );
         } catch (error) {
           if (error instanceof MixmaxError) throw error;
-          // Bridge request failed (network, timeout, etc.) — surface as error
+          // Bridge request failed (network, timeout, etc.) — surface a fixed
+          // message; raw exception text can embed environment details.
+          console.error('[mixmax] bridge request failed:', error);
           throw new MixmaxError(
-            `Bridge request failed: ${error instanceof Error ? error.message : String(error)}`,
+            'Bridge request failed',
             'BRIDGE_ERROR',
             'Could not reach the host app bridge. Ensure the host app is running.',
           );

@@ -88,9 +88,21 @@ export function withErrorHandling<T>(
           isError: true,
         };
       }
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      // Unknown errors: NEVER surface the raw message — exception text can
+      // embed attacker-controlled response fragments or environment details.
+      // Log the real error to stderr (ops-visible) and return a fixed message.
+      console.error('[mixmax] unexpected error in tool handler:', error);
       return {
-        content: [{ type: 'text', text: JSON.stringify({ ok: false, error: errorMessage }) }],
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              ok: false,
+              error: 'An unexpected error occurred while processing the request.',
+              code: 'INTERNAL_ERROR',
+            }),
+          },
+        ],
         isError: true,
       };
     }
