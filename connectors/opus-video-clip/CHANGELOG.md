@@ -15,6 +15,9 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   `opus_create_project` (`curationPref`, `renderPref`, `importPref`,
   `uploadedVideoAttr`, `conclusionActions`) instead of untyped
   `z.record(z.unknown())` passthroughs.
+- `opus_publish_post` and `opus_schedule_post` are now annotated
+  `destructiveHint: true` — publishing to a connected social account is a
+  production-impacting write.
 
 ### Security
 - `opus_upload_video` previously accepted ANY absolute filesystem path and

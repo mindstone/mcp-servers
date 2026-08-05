@@ -156,8 +156,8 @@ before uploading.
 - `opus_get_social_accounts` — List connected social accounts
 - `opus_create_social_copy_job` — Generate platform-specific social copy for a clip
 - `opus_get_social_copy_job` — Retrieve the result of a social-copy job
-- `opus_publish_post` — Publish a clip to a connected social account immediately
-- `opus_schedule_post` — Schedule a clip for future publishing
+- `opus_publish_post` — Publish a clip to a connected social account immediately (marked destructive)
+- `opus_schedule_post` — Schedule a clip for future publishing (marked destructive)
 - `opus_cancel_scheduled_post` — Cancel a scheduled social post
 
 External text returned by the Opus API (project/clip titles, template and

@@ -196,7 +196,9 @@ export function registerSocialPostingTools(server: McpServer): void {
         'For X (formerly Twitter) each post costs 1 credit. ' +
         'Returns a `postId`. The clip is queued for upload by Opus to the destination platform.',
       inputSchema: PostBaseSchema,
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      // destructiveHint: an immediate public post to a connected social
+      // account is a production-impacting, hard-to-reverse write.
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       requireApiKey();
@@ -228,7 +230,10 @@ export function registerSocialPostingTools(server: McpServer): void {
           .string()
           .describe('Future publish time in UTC ISO 8601, e.g. "2026-06-01T16:00:00.000Z".'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      // destructiveHint: scheduling a public post to a connected social
+      // account is a production-impacting write (cancellable only until
+      // publishAt).
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       requireApiKey();
