@@ -44,6 +44,26 @@ function buildDriveItemEndpoint(path: string, suffix = ''): string {
   return `/me/drive/items/${path}${suffix}`;
 }
 
+/**
+ * Fail-closed guard for numeric limits. The tool input schemas already reject
+ * non-positive/non-integer values, but these functions are also reachable
+ * directly, and an invalid limit must be rejected BEFORE any network call —
+ * never discovered indirectly after a fetch.
+ */
+function assertPositiveIntegerLimit(
+  value: number | undefined,
+  name: string,
+  nextStep: string,
+): void {
+  if (value === undefined) return;
+  if (!Number.isFinite(value) || !Number.isInteger(value) || value < 1) {
+    throw new FilesBusinessError(
+      `"${name}" must be a positive integer. Got: ${String(value)}`,
+      nextStep,
+    );
+  }
+}
+
 // Simple PUT /content is capped at 4 MiB by Graph; larger payloads go through
 // a resumable upload session. Chunks must be a multiple of 320 KiB.
 const SIMPLE_UPLOAD_MAX_BYTES = 4 * 1024 * 1024;
@@ -353,6 +373,7 @@ export async function listFiles(
   args: ListFilesArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
+  assertPositiveIntegerLimit(args.top, 'top', 'list_files');
   const top = Math.min(args.top ?? 50, 200);
   let endpoint: string;
 
@@ -429,6 +450,7 @@ export async function searchFiles(
   args: SearchFilesArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
+  assertPositiveIntegerLimit(args.top, 'top', 'search_files');
   const top = Math.min(args.top ?? 25, 100);
 
   const response = await client
@@ -686,6 +708,7 @@ export async function getRecent(
   args: GetRecentArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
+  assertPositiveIntegerLimit(args.top, 'top', 'get_recent');
   const top = Math.min(args.top ?? 25, 100);
 
   const response = await client
@@ -708,6 +731,7 @@ export async function getShared(
   args: GetSharedArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
+  assertPositiveIntegerLimit(args.top, 'top', 'get_shared');
   const top = Math.min(args.top ?? 25, 100);
 
   const response = await client
@@ -751,6 +775,7 @@ export async function readTextFile(
   args: ReadTextFileArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
+  assertPositiveIntegerLimit(args.maxSize, 'maxSize', 'read_text_file');
   const maxSize = args.maxSize ?? 100 * 1024;
 
   const endpoint = buildDriveItemEndpoint(args.path);
@@ -980,6 +1005,8 @@ export async function readDocument(
   args: ReadDocumentArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
+  assertPositiveIntegerLimit(args.maxSize, 'maxSize', 'read_document');
+  assertPositiveIntegerLimit(args.maxChars, 'maxChars', 'read_document');
   const maxSize = args.maxSize ?? DEFAULT_READ_DOCUMENT_MAX_BYTES;
   const maxChars = args.maxChars ?? DEFAULT_READ_DOCUMENT_MAX_CHARS;
 

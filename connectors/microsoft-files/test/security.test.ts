@@ -311,3 +311,108 @@ describe('vendor-derived display strings are enveloped', () => {
     expect(json.versions[0]?.id).toBe('2.0');
   });
 });
+
+describe('numeric input bounds', () => {
+  let client: McpTestClient;
+  let cfg: MicrosoftTestConfig;
+  let state: MockApiState;
+
+  beforeAll(async () => {
+    cfg = createMicrosoftConfigDir();
+    client = await createTestClient({
+      env: {
+        MS_CLIENT_ID: 'mock-client-id',
+        MS_CONFIG_DIR: cfg.configPath,
+      },
+    });
+  });
+
+  beforeEach(() => {
+    const mock = createMockApi();
+    state = mock.state;
+    mswServer.use(...mock.handlers);
+  });
+
+  afterAll(async () => {
+    if (client) await client.close();
+    if (cfg) cfg.cleanup();
+  });
+
+  it.each([
+    ['read_document', { path: 'item-docx', maxSize: -1 }],
+    ['read_document', { path: 'item-docx', maxSize: 0 }],
+    ['read_document', { path: 'item-docx', maxChars: -100 }],
+    ['read_document', { path: 'item-docx', maxChars: 2.5 }],
+    ['read_text_file', { path: 'item-text', maxSize: -1 }],
+    ['list_files', { top: 0 }],
+    ['list_files', { top: -5 }],
+    ['list_files', { top: 1.5 }],
+    ['search_files', { query: 'report', top: -1 }],
+    ['get_recent', { top: 0 }],
+    ['get_shared', { top: -3 }],
+  ])('%s rejects %o with zero network requests', async (tool, args) => {
+    const result = await client.callTool(tool, args as Record<string, unknown>);
+    expect(result.isError).toBe(true);
+    // A failed precondition must not produce ANY outbound request.
+    expect(state.requests).toHaveLength(0);
+  });
+});
+
+describe('numeric input bounds (function-level, pre-network)', () => {
+  it('readDocument rejects an invalid maxSize before touching the client', async () => {
+    const { readDocument } = await import('../src/files.js');
+    let apiCalls = 0;
+    const stubClient = {
+      api: () => {
+        apiCalls += 1;
+        throw new Error('client must not be called');
+      },
+    };
+    await expect(
+      readDocument(
+        stubClient as never,
+        { path: 'item-docx', maxSize: Number.POSITIVE_INFINITY },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ name: 'FilesBusinessError' });
+    expect(apiCalls).toBe(0);
+  });
+
+  it('readDocument rejects a fractional maxChars before touching the client', async () => {
+    const { readDocument } = await import('../src/files.js');
+    let apiCalls = 0;
+    const stubClient = {
+      api: () => {
+        apiCalls += 1;
+        throw new Error('client must not be called');
+      },
+    };
+    await expect(
+      readDocument(
+        stubClient as never,
+        { path: 'item-docx', maxChars: 2.5 },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ name: 'FilesBusinessError' });
+    expect(apiCalls).toBe(0);
+  });
+
+  it('readTextFile rejects a negative maxSize before touching the client', async () => {
+    const { readTextFile } = await import('../src/files.js');
+    let apiCalls = 0;
+    const stubClient = {
+      api: () => {
+        apiCalls += 1;
+        throw new Error('client must not be called');
+      },
+    };
+    await expect(
+      readTextFile(
+        stubClient as never,
+        { path: 'item-text', maxSize: -1 },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ name: 'FilesBusinessError' });
+    expect(apiCalls).toBe(0);
+  });
+});
