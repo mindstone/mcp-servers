@@ -282,13 +282,13 @@ Until the host has written `${HUBSPOT_CONFIG_DIR}/credentials/you@example.com.to
 ### Engagements (calls, meetings & emails)
 - `search_hubspot_calls` — Search logged calls with filters.
 - `search_hubspot_meetings` — Search logged meetings with filters.
-- `search_hubspot_emails` — Search logged 1:1 sales emails (bodies require the `sales-email-read` scope; a `notes` warning flags redaction).
+- `search_hubspot_emails` — Search logged 1:1 sales emails (bodies require the `sales-email-read` scope; a `notes` warning flags redaction — or an unverifiable scope check).
 - `get_hubspot_call` — Get a single call by ID.
 - `get_hubspot_meeting` — Get a single meeting by ID.
 - `get_hubspot_email` — Get a single email engagement by ID.
 - `create_hubspot_call` — Log a call and optionally link it to records (destructive).
 - `create_hubspot_meeting` — Log a meeting and optionally link it to records (destructive).
-- `get_contact_engagements` — Get recent calls and meetings for a contact.
+- `get_contact_engagements` — Get recent calls, emails, and meetings for a contact.
 
 ### Products
 - `search_hubspot_products` — Search the product catalog.
@@ -350,7 +350,8 @@ Until the host has written `${HUBSPOT_CONFIG_DIR}/credentials/you@example.com.to
 - Local credentials are read from host-managed files; account selection is pinned by `HUBSPOT_ACCOUNT_EMAIL`.
 - This server does not run a local OAuth callback server; OAuth is host-orchestrated.
 - Source attribution labels are applied only to new writes. Existing HubSpot record content is never retroactively rewritten.
-- All text returned by HubSpot (record properties, note/engagement bodies, conversation messages, KB articles, form submissions, names/labels) is wrapped in `<untrusted-content source="hubspot:…">` envelopes with close-tag breakout escaping, so a model consuming tool output treats third-party-authored text as data, not instructions. Identifiers, enums, URLs, timestamps, and pagination cursors stay literal so tool round-trips keep working.
+- All text returned by HubSpot (record properties, note/engagement bodies, conversation messages, KB articles, form submissions, names/labels) is wrapped in `<untrusted-content source="hubspot:…">` envelopes with close-tag breakout escaping, so a model consuming tool output treats third-party-authored text as data, not instructions. Identifiers, enums, URLs, timestamps, and pagination cursors stay literal so tool round-trips keep working — except inside a record's `properties` bag, where every value is enveloped regardless of property name (custom property names are tenant-defined and untrusted; record IDs round-trip via the top-level `id`). Per-surface exceptions (property-schema `name`/`groupName`/option `value`, form field bindings) are scoped to their documented response shapes.
+- The OAuth access token is redacted from all request logging and error summaries, including the token-info endpoint whose path is addressed by the token itself.
 
 ## Licence
 

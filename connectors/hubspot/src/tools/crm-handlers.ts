@@ -1,4 +1,4 @@
-import { getHubSpotClientAsync, SearchFilter, SearchRequest, HubSpotApiError, assertHubSpotObjectType } from '../api/hubspot-client.js';
+import { getHubSpotClientAsync, SearchFilter, SearchRequest, HubSpotApiError, assertHubSpotObjectType, assertHubSpotObjectId } from '../api/hubspot-client.js';
 import { injectHostMetadata } from '../utils/user-context.js';
 import {
   buildHubSpotCapabilityDeniedError,
@@ -8,7 +8,7 @@ import {
 } from '../utils/error-parser.js';
 import logger from '../utils/logger.js';
 import {
-  PROPERTY_SCHEMA_LITERAL_KEYS,
+  PROPERTY_SCHEMA_LITERAL_RULES,
   sanitizeHubSpotResponse,
 } from '../sanitize.js';
 import {
@@ -19,6 +19,7 @@ import {
   attachPropertyValidation,
   validateRequestedProperties,
 } from './property-validation.js';
+import { attachSalesEmailScopeNote } from './sales-email-scope.js';
 
 interface SearchArgs {
   query?: string;
@@ -598,7 +599,7 @@ export async function handleListProperties(args: { objectType: string }) {
   try {
     const client = await getHubSpotClientAsync();
     const result = await client.listProperties(args.objectType);
-    return sanitizeHubSpotResponse(result, 'hubspot:properties', PROPERTY_SCHEMA_LITERAL_KEYS);
+    return sanitizeHubSpotResponse(result, 'hubspot:properties', PROPERTY_SCHEMA_LITERAL_RULES);
   } catch (error) {
     const parsed = parseSharedHubSpotError(error, { objectType: args.objectType, operation: 'list_properties', args });
     logger.error(`List properties for ${args.objectType} failed:`, parsed);
@@ -798,55 +799,19 @@ export async function handleCreateCall(args: EngagementCreateArgs) {
 
 // Email handlers
 //
-// HubSpot redacts 1:1 sales email bodies (hs_email_body / hs_email_html /
-// hs_email_text) unless the connected app holds the `sales-email-read` scope —
-// and it does so SILENTLY (200 with empty body fields). Silent redaction would
-// violate the connector's no-silent-degradation rule, so the email read tools
-// introspect the token once per process and attach a model-visible `notes`
-// warning when the scope is definitively absent. Subjects, timestamps, and
-// direction are returned either way.
-const SALES_EMAIL_READ_SCOPE = 'sales-email-read';
-const SALES_EMAIL_READ_NOTE =
-  'Email bodies are redacted by HubSpot because the connected app does not have the sales-email-read scope. Subjects, senders, and timestamps are complete. To read bodies, enable sales-email-read on the HubSpot app and reconnect the account.';
-
-let salesEmailReadScope: boolean | undefined;
-let salesEmailReadScopeCheck: Promise<boolean | undefined> | undefined;
-
-async function checkSalesEmailReadScope(): Promise<boolean | undefined> {
-  if (salesEmailReadScope !== undefined) return salesEmailReadScope;
-  if (!salesEmailReadScopeCheck) {
-    salesEmailReadScopeCheck = (async () => {
-      try {
-        const client = await getHubSpotClientAsync();
-        const info = await client.getTokenInfo();
-        if (!Array.isArray(info.scopes)) return undefined; // introspection didn't say — stay silent
-        return info.scopes.includes(SALES_EMAIL_READ_SCOPE);
-      } catch (error) {
-        logger.warn('Token introspection for sales-email-read scope check failed:', error);
-        return undefined;
-      }
-    })();
-    const result = await salesEmailReadScopeCheck;
-    salesEmailReadScopeCheck = undefined;
-    // Only a definitive answer is memoised; an inconclusive check retries next call.
-    if (result !== undefined) salesEmailReadScope = result;
-    return result;
-  }
-  return salesEmailReadScopeCheck;
-}
-
-async function attachSalesEmailScopeNote<T extends object>(result: T): Promise<T & { notes?: string[] }> {
-  const granted = await checkSalesEmailReadScope();
-  if (granted !== false) return result;
-  return { ...result, notes: [SALES_EMAIL_READ_NOTE] };
-}
+// HubSpot silently redacts 1:1 sales email bodies without the sales-email-read
+// scope (200 with empty body fields). The scope check lives in
+// sales-email-scope.ts: it introspects the token, memoises per access token
+// (never per process), and produces a model-visible `notes` warning both when
+// the scope is definitively absent AND when the check is inconclusive — no
+// silent degradation either way.
 
 export async function handleSearchEmails(args: EngagementSearchArgs) {
-  return attachSalesEmailScopeNote(await searchEngagement('emails', args));
+  return attachSalesEmailScopeNote(await searchEngagement('emails', args), getHubSpotClientAsync);
 }
 
 export async function handleGetEmail(args: { emailId: string; properties?: string[] }) {
-  return attachSalesEmailScopeNote(await getEngagement('emails', args.emailId, args.properties));
+  return attachSalesEmailScopeNote(await getEngagement('emails', args.emailId, args.properties), getHubSpotClientAsync);
 }
 
 export async function handleCreateEmail(args: EngagementCreateArgs) {
@@ -871,41 +836,72 @@ export async function handleGetContactEngagements(args: { contactId: string; lim
   try {
     const client = await getHubSpotClientAsync();
     const limit = args.limit || 5;
-    
-    // Get associations for the contact to find related engagements
+
+    // Get associations for the contact to find related engagements. A single
+    // failing association type degrades to an empty list — the timeline is
+    // best-effort — but the degradation is logged, never silent.
+    const associationsOrEmpty = async (engagementType: 'calls' | 'emails' | 'meetings') => {
+      try {
+        return await client.getAssociations('contacts', args.contactId, engagementType);
+      } catch (error) {
+        logger.warn(`Contact engagement associations for ${engagementType} failed:`, error);
+        return { results: [] as Array<{ id: string; type: string }> };
+      }
+    };
     const [callAssocs, emailAssocs, meetingAssocs] = await Promise.all([
-      client.getAssociations('contacts', args.contactId, 'calls').catch(() => ({ results: [] })),
-      client.getAssociations('contacts', args.contactId, 'emails').catch(() => ({ results: [] })),
-      client.getAssociations('contacts', args.contactId, 'meetings').catch(() => ({ results: [] }))
+      associationsOrEmpty('calls'),
+      associationsOrEmpty('emails'),
+      associationsOrEmpty('meetings'),
     ]);
-    
+
     // Fetch details for each engagement type (limited)
     const callIds = callAssocs.results.slice(0, limit).map(a => a.id);
     const emailIds = emailAssocs.results.slice(0, limit).map(a => a.id);
     const meetingIds = meetingAssocs.results.slice(0, limit).map(a => a.id);
-    
+
     const defaultProps = ['hs_timestamp', 'hubspot_owner_id'];
     const callProps = [...defaultProps, 'hs_call_title', 'hs_call_body', 'hs_call_direction', 'hs_call_status', 'hs_call_duration'];
     const emailProps = [...defaultProps, 'hs_email_subject', 'hs_email_text', 'hs_email_direction', 'hs_email_status'];
     const meetingProps = [...defaultProps, 'hs_meeting_title', 'hs_meeting_body', 'hs_meeting_start_time', 'hs_meeting_end_time', 'hs_meeting_outcome'];
-    
+
+    // Per-engagement failures degrade to an omitted entry (logged, not
+    // silent); surviving engagements are envelope-wrapped like every other
+    // engagement read — bodies and subjects are external text.
+    const fetchEngagements = async (
+      engagementType: 'calls' | 'emails' | 'meetings',
+      ids: string[],
+      properties: string[],
+    ) => {
+      const fetched = await Promise.all(
+        ids.map(id =>
+          client.getEngagement(engagementType, id, properties).catch((error) => {
+            logger.warn(`Contact engagement fetch for ${engagementType} ${id} failed:`, error);
+            return null;
+          })
+        )
+      );
+      return sanitizeHubSpotResponse(
+        fetched.filter((entry) => entry !== null),
+        `hubspot:engagements/${engagementType}`,
+      );
+    };
     const [calls, emails, meetings] = await Promise.all([
-      Promise.all(callIds.map(id => client.getEngagement('calls', id, callProps).catch(() => null))),
-      Promise.all(emailIds.map(id => client.getEngagement('emails', id, emailProps).catch(() => null))),
-      Promise.all(meetingIds.map(id => client.getEngagement('meetings', id, meetingProps).catch(() => null)))
+      fetchEngagements('calls', callIds, callProps),
+      fetchEngagements('emails', emailIds, emailProps),
+      fetchEngagements('meetings', meetingIds, meetingProps),
     ]);
-    
+
     return attachSalesEmailScopeNote({
       contactId: args.contactId,
-      calls: calls.filter(Boolean),
-      emails: emails.filter(Boolean),
-      meetings: meetings.filter(Boolean),
+      calls,
+      emails,
+      meetings,
       summary: {
         totalCalls: callAssocs.results.length,
         totalEmails: emailAssocs.results.length,
         totalMeetings: meetingAssocs.results.length
       }
-    });
+    }, getHubSpotClientAsync);
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType: 'contact_engagements', operation: 'get', args });
     logger.error(`Get contact engagements failed:`, parsed);
@@ -1008,6 +1004,9 @@ export async function handleSearchCustomObjects(args: CustomObjectSearchArgs) {
 
 export async function handleGetCustomObject(args: { objectType: string; objectId: string } & GetArgs) {
   assertHubSpotObjectType(args.objectType, 'objectType');
+  // objectId is raw path material too — validate before any client work so a
+  // traversal/query payload can't reroute the authenticated GET.
+  assertHubSpotObjectId(args.objectId, 'objectId');
   return getObject(args.objectType, args.objectId, args);
 }
 

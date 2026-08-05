@@ -2,8 +2,9 @@
  * Email engagement read tools (search/get_hubspot_email) — happy path, and the
  * sales-email-read redaction warning: HubSpot silently empties email bodies
  * when the connected app lacks the scope, so the connector introspects the
- * token once per process and attaches a model-visible `notes` warning when the
- * scope is definitively absent (no silent degradation).
+ * token (memoised per access token) and attaches a model-visible `notes`
+ * warning both when the scope is definitively absent and when the check is
+ * inconclusive — no silent degradation in either direction.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs';
@@ -51,6 +52,8 @@ const EMAIL = {
   archived: false,
 };
 
+const INTROSPECTION_PATH = '/oauth/v1/access-tokens/fake-access-token-for-testing';
+
 function emailRoutes(scopes: string[]): MockRoute[] {
   return [
     {
@@ -65,7 +68,7 @@ function emailRoutes(scopes: string[]): MockRoute[] {
     },
     {
       method: 'GET' as const,
-      path: '/oauth/v1/access-tokens/fake-access-token-for-testing',
+      path: INTROSPECTION_PATH,
       handler: () => ({
         body: { user: 'test@example.com', hub_id: 12345678, user_id: 1001, scopes },
       }),
@@ -73,12 +76,20 @@ function emailRoutes(scopes: string[]): MockRoute[] {
   ];
 }
 
-async function startClient(scopes: string[], configDir: string) {
+/** Same email object routes, with a failing/introspection-degraded token endpoint. */
+function emailRoutesWithIntrospection(introspection: MockRoute['handler']): MockRoute[] {
+  return [
+    ...emailRoutes(['oauth']).filter((r) => r.path !== INTROSPECTION_PATH),
+    { method: 'GET' as const, path: INTROSPECTION_PATH, handler: introspection },
+  ];
+}
+
+async function startClient(routes: MockRoute[], configDir: string) {
   return createMcpTestClientWithMockApi({
     name: 'hubspot-emails',
     serverScript: resolveServerScript('hubspot'),
     interceptDomains: ['api.hubapi.com'],
-    routes: emailRoutes(scopes),
+    routes,
     env: {
       HUBSPOT_CONFIG_DIR: configDir,
       HUBSPOT_CLIENT_ID: 'fake-client-id',
@@ -107,7 +118,7 @@ describe('HubSpot MCP - email engagement tools', () => {
 
     beforeAll(async () => {
       configDir = createHubSpotConfigDir();
-      const result = await startClient(['oauth', 'crm.objects.contacts.read'], configDir);
+      const result = await startClient(emailRoutes(['oauth', 'crm.objects.contacts.read']), configDir);
       client = result.client;
       mockApi = result.mockApi;
     }, 30_000);
@@ -151,7 +162,7 @@ describe('HubSpot MCP - email engagement tools', () => {
 
     beforeAll(async () => {
       configDir = createHubSpotConfigDir();
-      const result = await startClient(['oauth', 'crm.objects.contacts.read', 'sales-email-read'], configDir);
+      const result = await startClient(emailRoutes(['oauth', 'crm.objects.contacts.read', 'sales-email-read']), configDir);
       client = result.client;
       mockApi = result.mockApi;
     }, 30_000);
@@ -170,6 +181,74 @@ describe('HubSpot MCP - email engagement tools', () => {
 
       expect(result.results).toHaveLength(1);
       expect(result.notes).toBeUndefined();
+    });
+  });
+
+  describe('when token introspection fails', () => {
+    let client: McpTestClient;
+    let mockApi: MockApiServer;
+    let configDir: string;
+
+    beforeAll(async () => {
+      configDir = createHubSpotConfigDir();
+      const result = await startClient(
+        emailRoutesWithIntrospection(() => ({ status: 500, body: { message: 'introspection down' } })),
+        configDir,
+      );
+      client = result.client;
+      mockApi = result.mockApi;
+    }, 30_000);
+
+    afterAll(async () => {
+      await client?.close();
+      await mockApi?.close();
+      if (configDir) rmSync(configDir, { recursive: true, force: true });
+    });
+
+    it('attaches an unverified warning instead of degrading silently', async () => {
+      const result = await client.callToolJson<{
+        results: Array<{ id: string }>;
+        notes?: string[];
+      }>('search_hubspot_emails', { limit: 5 });
+
+      expect(result.results).toHaveLength(1);
+      expect(result.notes).toBeDefined();
+      expect(result.notes![0]).toContain('Could not verify');
+      expect(result.notes![0]).toContain('sales-email-read');
+    });
+  });
+
+  describe('when introspection omits the scope list', () => {
+    let client: McpTestClient;
+    let mockApi: MockApiServer;
+    let configDir: string;
+
+    beforeAll(async () => {
+      configDir = createHubSpotConfigDir();
+      const result = await startClient(
+        emailRoutesWithIntrospection(() => ({
+          body: { user: 'test@example.com', hub_id: 12345678, user_id: 1001 },
+        })),
+        configDir,
+      );
+      client = result.client;
+      mockApi = result.mockApi;
+    }, 30_000);
+
+    afterAll(async () => {
+      await client?.close();
+      await mockApi?.close();
+      if (configDir) rmSync(configDir, { recursive: true, force: true });
+    });
+
+    it('attaches the same unverified warning', async () => {
+      const result = await client.callToolJson<{
+        id: string;
+        notes?: string[];
+      }>('get_hubspot_email', { emailId: 'email-1' });
+
+      expect(result.id).toBe('email-1');
+      expect(result.notes?.[0]).toContain('Could not verify');
     });
   });
 });

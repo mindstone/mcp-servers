@@ -334,7 +334,7 @@ describe('HubSpot MCP - mock API tests', () => {
 
     expect(result.results).toHaveLength(2);
     expect(result.results[0].id).toBe('101');
-    expect(result.results[0].properties.email).toBe('alice@acme.com');
+    expect(result.results[0].properties.email).toBe(env('hubspot:crm/contacts', 'alice@acme.com'));
     expect(result.results[1].properties.firstname).toBe(env('hubspot:crm/contacts', 'Bob'));
 
     // Verify search request was posted
@@ -358,7 +358,7 @@ describe('HubSpot MCP - mock API tests', () => {
     });
 
     expect(result.id).toBe('101');
-    expect(result.properties.email).toBe('alice@acme.com');
+    expect(result.properties.email).toBe(env('hubspot:crm/contacts', 'alice@acme.com'));
     expect(result.properties.jobtitle).toBe(env('hubspot:crm/contacts', 'VP of Sales'));
   });
 
@@ -799,7 +799,7 @@ describe('HubSpot MCP - lists/segments tools', () => {
 
     expect(result.contacts).toHaveLength(2);
     expect(result.contacts[0].id).toBe('101');
-    expect(result.contacts[0].properties.email).toBe('alice@acme.com');
+    expect(result.contacts[0].properties.email).toBe(env('hubspot:crm/contacts', 'alice@acme.com'));
     expect(result.contacts[1].properties.firstname).toBe(env('hubspot:crm/contacts', 'Bob'));
 
     const batchReq = mockApi.requestLog.find(
@@ -1821,7 +1821,7 @@ describe('HubSpot MCP - leads tools (FOX-2755)', () => {
 
     expect(result.id).toBe('901');
     expect(result.properties.hs_lead_name).toBe(env('hubspot:crm/leads', 'Jane Doe'));
-    expect(result.properties.hubspot_owner_id).toBe('5001');
+    expect(result.properties.hubspot_owner_id).toBe(env('hubspot:crm/leads', '5001'));
   });
 
   it('create_hubspot_lead creates with required contact association', async () => {
