@@ -172,6 +172,8 @@ Inputs:
 - `quality` (`low | medium | high | auto`, optional) — defaults to `high`. Medium is usually about 50 seconds and $0.04; high can take up to 3 minutes and cost about $0.21. Lower quality is dramatically cheaper.
 - `count` (integer 1–8, optional) — defaults to 1. Cost scales linearly with count.
 - `moderation` (`auto | low`, optional) — content moderation strictness.
+- `output_format` (`png | jpeg | webp`, optional) — output file format, defaults to `png`. The saved filename extension and inline preview MIME type follow the chosen format (`.png` / `.jpg` / `.webp`).
+- `output_compression` (integer 0–100, optional) — compression level; only valid with `jpeg` or `webp` output. Combining it with `png` fails fast with a structured `INVALID_INPUT` error before any API call.
 
 Returns a text content block with the saved path(s) plus up to 5 inline `image` content blocks. On failure, returns a structured `{ ok: false, code, error, resolution }` response. The tool is annotated `destructiveHint: true, openWorldHint: true, idempotentHint: false`.
 
@@ -181,7 +183,7 @@ Inputs:
 - `prompt` (string, required) — what to change about the input images.
 - `image_paths` (array of 1–4 absolute file paths, required) — source images. Each path is validated: it must resolve lexically inside `MCP_WORKSPACE_PATH`, and its canonical `realpath` must land inside the canonical workspace **or** one of the declared roots in `MCP_ALLOWED_SYMLINK_ROOTS` (matching the host's built-in file-tool containment). Paths outside both are rejected with `WORKSPACE_FENCE_VIOLATION` before any read.
 - `mask_path` (PNG path, optional) — alpha-channel mask indicating which area to edit.
-- `size`, `quality`, `count`, `moderation` — same shape as `generate_image`.
+- `size`, `quality`, `count`, `moderation`, `output_format`, `output_compression` — same shape as `generate_image`.
 
 Returns the same content shape as `generate_image`. Same `destructiveHint` / `openWorldHint` / `idempotentHint` annotations.
 
@@ -192,7 +194,7 @@ Every tool error is returned as structured JSON with these fields:
 ```json
 {
   "ok": false,
-  "code": "NOT_CONFIGURED | INVALID_API_KEY | RATE_LIMITED | CONTENT_POLICY | WORKSPACE_FENCE_VIOLATION | MODEL_UNAVAILABLE | NETWORK_ERROR | TIMEOUT | WRITE_FAILED | INVALID_IMAGE_DATA",
+  "code": "NOT_CONFIGURED | INVALID_API_KEY | RATE_LIMITED | CONTENT_POLICY | WORKSPACE_FENCE_VIOLATION | MODEL_UNAVAILABLE | NETWORK_ERROR | TIMEOUT | WRITE_FAILED | INVALID_INPUT | INVALID_IMAGE_DATA",
   "error": "Human-readable message",
   "resolution": "Concrete next step for the operator"
 }

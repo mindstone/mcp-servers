@@ -53,7 +53,20 @@ export type ToolErrorCode =
   | 'NETWORK_ERROR'
   | 'TIMEOUT'
   | 'WRITE_FAILED'
+  | 'INVALID_INPUT'
   | 'INVALID_IMAGE_DATA';
+
+const OUTPUT_FORMAT_EXTENSIONS: Record<string, string> = {
+  png: 'png',
+  jpeg: 'jpg',
+  webp: 'webp',
+};
+
+const OUTPUT_FORMAT_MIME: Record<string, string> = {
+  png: 'image/png',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+};
 
 interface ToolErrorPayload {
   ok: false;
@@ -468,12 +481,13 @@ export const generateFilename = (
   _prompt: string,
   index: number,
   count: number,
+  extension: string = 'png',
 ): string => {
   const suffix = crypto.randomBytes(8).toString('hex');
   if (count > 1) {
-    return `${Date.now()}-${index + 1}-${suffix}.png`;
+    return `${Date.now()}-${index + 1}-${suffix}.${extension}`;
   }
-  return `${Date.now()}-${suffix}.png`;
+  return `${Date.now()}-${suffix}.${extension}`;
 };
 
 export const validateBase64ImageData = (
@@ -505,13 +519,14 @@ export const saveImageToDisk = async (
   b64: string,
   index: number,
   count: number,
+  extension: string = 'png',
 ): Promise<string> => {
   await ensureOutputDirectoryIsAllowed(saveDir);
   await fs.promises.mkdir(saveDir, { recursive: true });
   const buffer = validateBase64ImageData(b64);
 
   const writeAttempt = async (): Promise<string> => {
-    const filename = generateFilename(prompt, index, count);
+    const filename = generateFilename(prompt, index, count, extension);
     const savePath = path.join(saveDir, filename);
     await fs.promises.writeFile(savePath, buffer, { flag: 'wx', mode: 0o600 });
     const stats = await fs.promises.stat(savePath);
@@ -1050,6 +1065,35 @@ const postOpenAIMultipart = async (
   return (await response.json()) as OpenAIImageResponse;
 };
 
+interface ImageOutputOptions {
+  output_format?: 'png' | 'jpeg' | 'webp' | undefined;
+  output_compression?: number | undefined;
+}
+
+interface ResolvedOutputOptions {
+  outputFormat: 'png' | 'jpeg' | 'webp';
+  outputExtension: string;
+  outputMime: string;
+  outputCompression?: number | undefined;
+}
+
+const resolveOutputOptions = (input: ImageOutputOptions): ResolvedOutputOptions => {
+  const outputFormat = input.output_format ?? 'png';
+  if (input.output_compression !== undefined && outputFormat === 'png') {
+    throw new OpenAIImageToolError(
+      'INVALID_INPUT',
+      'output_compression only applies when output_format is jpeg or webp.',
+      "Set output_format to 'jpeg' or 'webp', or omit output_compression.",
+    );
+  }
+  return {
+    outputFormat,
+    outputExtension: OUTPUT_FORMAT_EXTENSIONS[outputFormat] ?? 'png',
+    outputMime: OUTPUT_FORMAT_MIME[outputFormat] ?? 'image/png',
+    outputCompression: input.output_compression,
+  };
+};
+
 const generateImageSchema = z.object({
   prompt: z
     .string()
@@ -1080,6 +1124,21 @@ const generateImageSchema = z.object({
     .enum(['auto', 'low'])
     .optional()
     .describe('Content moderation strictness.'),
+  output_format: z
+    .enum(['png', 'jpeg', 'webp'])
+    .optional()
+    .describe(
+      "Output file format (defaults to png). jpeg and webp produce smaller files; only png and webp support transparency.",
+    ),
+  output_compression: z
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe(
+      'Compression level 0-100 (higher = better quality, larger file). Only applies when output_format is jpeg or webp.',
+    ),
 });
 
 const editImageSchema = z.object({
@@ -1123,6 +1182,21 @@ const editImageSchema = z.object({
     .enum(['auto', 'low'])
     .optional()
     .describe('Content moderation strictness.'),
+  output_format: z
+    .enum(['png', 'jpeg', 'webp'])
+    .optional()
+    .describe(
+      'Output file format (defaults to png). jpeg and webp produce smaller files; only png and webp support transparency.',
+    ),
+  output_compression: z
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe(
+      'Compression level 0-100 (higher = better quality, larger file). Only applies when output_format is jpeg or webp.',
+    ),
 });
 
 const toolSuccessText = (
@@ -1161,6 +1235,7 @@ const mapResponseImages = async (
   saveDir: string,
   prompt: string,
   requestedCount: number,
+  extension: string = 'png',
 ): Promise<Array<{ path: string; b64: string }>> => {
   if (!images || images.length === 0) {
     throw new OpenAIImageToolError(
@@ -1184,6 +1259,7 @@ const mapResponseImages = async (
       b64,
       index,
       requestedCount,
+      extension,
     );
     saved.push({ path: savedPath, b64 });
   }
@@ -1222,6 +1298,8 @@ const registerTools = (targetServer: McpServer): void => {
         const quality = input.quality ?? 'high';
         const count = input.count ?? 1;
         const moderation = input.moderation ?? 'auto';
+        const { outputFormat, outputExtension, outputMime, outputCompression } =
+          resolveOutputOptions(input);
 
         const body: Record<string, unknown> = {
           model,
@@ -1234,12 +1312,19 @@ const registerTools = (targetServer: McpServer): void => {
         if (modelSupportsModeration(model)) {
           body.moderation = moderation;
         }
+        if (input.output_format) {
+          body.output_format = outputFormat;
+        }
+        if (outputCompression !== undefined) {
+          body.output_compression = outputCompression;
+        }
 
         logger.info('[openai-image] Sending generate request.', {
           size,
           quality,
           count,
           model,
+          outputFormat,
         });
 
         const data = await postOpenAIJson(
@@ -1255,6 +1340,7 @@ const registerTools = (targetServer: McpServer): void => {
           saveDir,
           input.prompt,
           count,
+          outputExtension,
         );
 
         const textMessage = toolSuccessText(
@@ -1267,7 +1353,7 @@ const registerTools = (targetServer: McpServer): void => {
           .map(({ b64 }) => ({
             type: 'image' as const,
             data: b64,
-            mimeType: 'image/png' as const,
+            mimeType: outputMime,
           }));
 
         return {
@@ -1298,6 +1384,8 @@ const registerTools = (targetServer: McpServer): void => {
         const quality = input.quality ?? 'high';
         const count = input.count ?? 1;
         const moderation = input.moderation ?? 'auto';
+        const { outputFormat, outputExtension, outputMime, outputCompression } =
+          resolveOutputOptions(input);
 
         const referenceImages: LoadedLocalImage[] = [];
         for (const imagePath of input.image_paths) {
@@ -1335,12 +1423,19 @@ const registerTools = (targetServer: McpServer): void => {
         if (modelSupportsModeration(model)) {
           form.append('moderation', moderation);
         }
+        if (input.output_format) {
+          form.append('output_format', outputFormat);
+        }
+        if (outputCompression !== undefined) {
+          form.append('output_compression', String(outputCompression));
+        }
 
         logger.info('[openai-image] Sending edit request.', {
           size,
           quality,
           count,
           model,
+          outputFormat,
           referenceCount: referenceImages.length,
           hasMask: !!maskImage,
         });
@@ -1358,6 +1453,7 @@ const registerTools = (targetServer: McpServer): void => {
           saveDir,
           input.prompt,
           count,
+          outputExtension,
         );
 
         const textMessage = toolSuccessText(
@@ -1370,7 +1466,7 @@ const registerTools = (targetServer: McpServer): void => {
           .map(({ b64 }) => ({
             type: 'image' as const,
             data: b64,
-            mimeType: 'image/png' as const,
+            mimeType: outputMime,
           }));
 
         return {

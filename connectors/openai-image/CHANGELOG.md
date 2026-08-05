@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `output_format` (`png | jpeg | webp`) and `output_compression` (0–100, jpeg/webp only) options on `generate_image` and `edit_image`. Saved filename extensions (`.png` / `.jpg` / `.webp`) and inline preview MIME types follow the chosen format. `output_compression` combined with `png` output fails fast with a structured `INVALID_INPUT` error before any API call.
+
 ## [0.2.0] - 2026-07-25
 
 ### Changed
