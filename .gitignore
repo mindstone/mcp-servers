@@ -32,3 +32,6 @@ credentials/
 
 # Test coverage output
 coverage/
+
+# Nested git worktrees (improve/<connector>-* sessions) — never commit
+.worktrees/
