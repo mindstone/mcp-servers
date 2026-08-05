@@ -802,3 +802,25 @@ export function createAddAgentToolCapturingHandler() {
 
   return { handler, captured };
 }
+
+/**
+ * Reflects the sent tool_config back the way the real API does: the
+ * `advanced_config` key itself was flattened into `tool_config` by the
+ * client-side deep-merge before sending, so the reflection carries no
+ * `advanced_config` ancestor name for the response sanitizer to key off.
+ */
+export function createAddAgentToolEchoHandler() {
+  const captured: { body?: JsonBody } = {};
+
+  const handler = http.post(`${BASE_V1}/convai/tools`, async ({ request }) => {
+    const authErr = requireAuth(request.headers.get('xi-api-key'));
+    if (authErr) return authErr;
+    captured.body = (await request.json()) as JsonBody;
+    return HttpResponse.json({
+      id: 'tool_test_123',
+      tool_config: (captured.body as Record<string, unknown>).tool_config,
+    });
+  });
+
+  return { handler, captured };
+}

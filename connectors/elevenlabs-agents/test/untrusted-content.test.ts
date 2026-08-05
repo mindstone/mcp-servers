@@ -981,11 +981,15 @@ describe('structural exemptions are value-shape-aware, not just key-name-based',
   });
 
   it('envelopes every string inside arbitrary collaborator maps, however structural it looks', () => {
-    // Inside request_headers / advanced_config / JSON-Schema fragments, key names are
-    // data, not schema: a property named `status` holding a genuine-looking enum, or
-    // `tool_id` holding a genuine-looking id, is still collaborator-authored text and
-    // must be enveloped. The structural-literal exemption switches off for the whole
-    // subtree, so even values that would pass the trusted-path grammar are wrapped.
+    // Inside request_headers / JSON-Schema fragments, key names are data, not schema:
+    // a property named `status` holding a genuine-looking enum, or `tool_id` holding a
+    // genuine-looking id, is still collaborator-authored text and must be enveloped.
+    // The structural-literal exemption switches off for the whole subtree, so even
+    // values that would pass the trusted-path grammar are wrapped. The `custom` block
+    // is what a merged `advanced_config` fragment actually looks like on reflection:
+    // the merge flattens it into `tool_config` before sending, so no `advanced_config`
+    // ancestor name survives for the walk to key off — the trusted-path skeleton is
+    // what envelopes it (covered end-to-end in the flattened-reflection tests below).
     const tool = sanitizeAgentTool(
       {
         id: 'tool_test_123',
@@ -995,7 +999,7 @@ describe('structural exemptions are value-shape-aware, not just key-name-based',
             url: 'https://example.com/hook',
             request_headers: { status: 'active', tool_id: `tool_${SENTINEL.toLowerCase()}_123` },
           },
-          advanced_config: {
+          custom: {
             nested: { status: 'active', type: 'webhook' },
             dependent_tool_ids: [`tool_${SENTINEL.toLowerCase()}_456`],
           },
@@ -1014,13 +1018,13 @@ describe('structural exemptions are value-shape-aware, not just key-name-based',
     expectEnveloped(headers.status, 'elevenlabs-agents:test_tool_openmaps:tool_config:api_schema:request_headers:status');
     expectEnveloped(headers.tool_id, 'elevenlabs-agents:test_tool_openmaps:tool_config:api_schema:request_headers:tool_id');
 
-    const advanced = config.advanced_config as Record<string, unknown>;
-    const nested = advanced.nested as Record<string, unknown>;
-    expectEnveloped(nested.status, 'elevenlabs-agents:test_tool_openmaps:tool_config:advanced_config:nested:status');
-    expectEnveloped(nested.type, 'elevenlabs-agents:test_tool_openmaps:tool_config:advanced_config:nested:type');
-    const advancedIds = advanced.dependent_tool_ids as string[];
-    expect(advancedIds).toHaveLength(1);
-    expectEnveloped(advancedIds[0], 'elevenlabs-agents:test_tool_openmaps:tool_config:advanced_config:dependent_tool_ids[0]');
+    const custom = config.custom as Record<string, unknown>;
+    const nested = custom.nested as Record<string, unknown>;
+    expectEnveloped(nested.status, 'elevenlabs-agents:test_tool_openmaps:tool_config:custom:nested:status');
+    expectEnveloped(nested.type, 'elevenlabs-agents:test_tool_openmaps:tool_config:custom:nested:type');
+    const customIds = custom.dependent_tool_ids as string[];
+    expect(customIds).toHaveLength(1);
+    expectEnveloped(customIds[0], 'elevenlabs-agents:test_tool_openmaps:tool_config:custom:dependent_tool_ids[0]');
 
     const parameters = config.parameters as Record<string, unknown>;
     expectEnveloped(parameters.type, 'elevenlabs-agents:test_tool_openmaps:tool_config:parameters:type');
@@ -1031,6 +1035,86 @@ describe('structural exemptions are value-shape-aware, not just key-name-based',
     assertSentinelOnlyInsideEnvelopes(tool);
   });
 
+  it('envelopes flattened advanced_config subtrees that reflect without their reserved ancestor name', () => {
+    // advanced_config deep-merges into the config body before it is sent upstream,
+    // so the reflected shape carries the fragment at the config root (or nested under
+    // known ancestors) with no `advanced_config` marker on the path. Two-word,
+    // alphabet-conforming, non-denylisted strings such as DELETE_DATA pass the
+    // trusted-path value grammar, so ancestor-name trust alone left them literal.
+    // The trusted-path skeleton must envelope every one of them: none of `custom`,
+    // `profile`, or `api_schema.custom` is a known schema position.
+    const TWO_WORD_DIRECTIVES = ['DELETE_DATA', 'RUN_COMMAND', 'SEND_CREDENTIALS', 'ERASE_RECORDS'];
+
+    const tool = sanitizeAgentTool(
+      {
+        id: 'tool_test_123',
+        tool_config: {
+          type: 'webhook',
+          api_schema: {
+            url: 'https://example.com/hook',
+            method: 'POST',
+            custom: { status: TWO_WORD_DIRECTIVES[1] },
+          },
+          custom: { status: TWO_WORD_DIRECTIVES[0] },
+          profile: { status: TWO_WORD_DIRECTIVES[2], tool_id: `tool_${SENTINEL.toLowerCase()}_123` },
+          settings: { status: TWO_WORD_DIRECTIVES[3] },
+        },
+      },
+      'elevenlabs-agents:test_tool_flattened',
+    ) as Record<string, unknown>;
+
+    expect(tool.id).toBe('tool_test_123');
+    const config = tool.tool_config as Record<string, unknown>;
+    expect(config.type).toBe('webhook');
+    const apiSchema = config.api_schema as Record<string, unknown>;
+    // `method` is not a structural key name, so it is enveloped on any path;
+    // the skeleton assertion is that the flattened fragments are enveloped too.
+    expectEnveloped(apiSchema.method, 'elevenlabs-agents:test_tool_flattened:tool_config:api_schema:method');
+    expectEnveloped((apiSchema.custom as Record<string, unknown>).status, 'elevenlabs-agents:test_tool_flattened:tool_config:api_schema:custom:status');
+    expectEnveloped((config.custom as Record<string, unknown>).status, 'elevenlabs-agents:test_tool_flattened:tool_config:custom:status');
+    const profile = config.profile as Record<string, unknown>;
+    expectEnveloped(profile.status, 'elevenlabs-agents:test_tool_flattened:tool_config:profile:status');
+    expectEnveloped(profile.tool_id, 'elevenlabs-agents:test_tool_flattened:tool_config:profile:tool_id');
+    expectEnveloped((config.settings as Record<string, unknown>).status, 'elevenlabs-agents:test_tool_flattened:tool_config:settings:status');
+    assertSentinelOnlyInsideEnvelopes(tool);
+
+    // The agent authoring surface merges advanced_config the same way, into the
+    // agent config body — the same skeleton discipline applies at its root and at
+    // every nested known container.
+    const agent = sanitizeAgent(
+      {
+        agent_id: 'agent_test_123',
+        custom: { status: TWO_WORD_DIRECTIVES[0] },
+        conversation_config: {
+          agent: {
+            language: 'en',
+            custom: { status: TWO_WORD_DIRECTIVES[1] },
+          },
+          tts: {
+            voice_id: 'voice_test_123',
+            custom: { status: TWO_WORD_DIRECTIVES[3] },
+          },
+          turn: { type: 'silence' },
+          experimental: { voice_id: `voice_${SENTINEL.toLowerCase()}_456` },
+        },
+      },
+      'elevenlabs-agents:test_agent_flattened',
+    ) as Record<string, unknown>;
+
+    expect(agent.agent_id).toBe('agent_test_123');
+    expectEnveloped((agent.custom as Record<string, unknown>).status, 'elevenlabs-agents:test_agent_flattened:custom:status');
+    const conversationConfig = agent.conversation_config as Record<string, unknown>;
+    const agentSection = conversationConfig.agent as Record<string, unknown>;
+    // `language` is not a structural key name, so it is enveloped on any path.
+    expectEnveloped(agentSection.language, 'elevenlabs-agents:test_agent_flattened:conversation_config:agent:language');
+    expectEnveloped((agentSection.custom as Record<string, unknown>).status, 'elevenlabs-agents:test_agent_flattened:conversation_config:agent:custom:status');
+    const tts = conversationConfig.tts as Record<string, unknown>;
+    expect(tts.voice_id).toBe('voice_test_123');
+    expectEnveloped((tts.custom as Record<string, unknown>).status, 'elevenlabs-agents:test_agent_flattened:conversation_config:tts:custom:status');
+    expect((conversationConfig.turn as Record<string, unknown>).type).toBe('silence');
+    expectEnveloped((conversationConfig.experimental as Record<string, unknown>).voice_id, 'elevenlabs-agents:test_agent_flattened:conversation_config:experimental:voice_id');
+    assertSentinelOnlyInsideEnvelopes(agent);
+  });
   it('keeps single-word enums, two-word statuses, and digit-bearing ids literal on trusted paths', () => {
     const tool = sanitizeAgentTool(
       {
@@ -1356,6 +1440,18 @@ describe('malformed transcript containers are enveloped, not passed through', ()
  * at once — a fifth omission (or a ninth sanitizer) is covered the day it lands.
  */
 describe('object roots are deny-by-default on every surface', () => {
+  /**
+   * Surfaces whose entry points pass a trusted-path skeleton
+   * (`AGENT_TRUSTED_PATHS` / `AGENT_TOOL_TRUSTED_PATHS`): of the generic hostile
+   * root's structural-looking keys, only the ones that are known schema positions
+   * stay literal; the rest must be enveloped by name.
+   */
+  const SKELETON_MODELLED_ROOTS = new Map<string, { literal: readonly string[]; enveloped: readonly string[] }>([
+    ['sanitizeAgent', { literal: ['agent_id'], enveloped: ['status', 'type', 'phone_number'] }],
+    ['sanitizeAgentSummary', { literal: ['agent_id'], enveloped: ['status', 'type', 'phone_number'] }],
+    ['sanitizeAgentTool', { literal: ['id'], enveloped: ['agent_id', 'status', 'type', 'phone_number'] }],
+  ]);
+
   const HOSTILE_OBJECT_ROOT = {
     id: 'object_root_test_123',
     agent_id: 'agent_test_123',
@@ -1383,13 +1479,28 @@ describe('object roots are deny-by-default on every surface', () => {
   }
 
   it.each(rootSanitizers)('%s envelopes unknown prose keys on an object root', (name, sanitize) => {
-    const out = sanitize(HOSTILE_OBJECT_ROOT, `elevenlabs-agents:${name}:object_root`) as Record<string, unknown>;
+    const source = `elevenlabs-agents:${name}:object_root`;
+    const out = sanitize(HOSTILE_OBJECT_ROOT, source) as Record<string, unknown>;
 
     // Structural literals still survive, so this is a policy assertion, not "wrap everything".
-    expect(out.agent_id).toBe('agent_test_123');
-    expect(out.status).toBe('queued');
-    expect(out.type).toBe('text');
-    expect(out.phone_number).toBe('+14155551234');
+    // On skeleton-modelled surfaces (agent configs, workspace tool configs) they survive
+    // only at positions the trusted-path skeleton knows: every other structural-looking
+    // key is exactly where a flattened advanced_config fragment lands after the merge,
+    // and is enveloped however genuine its key name and value shape look.
+    const skeleton = SKELETON_MODELLED_ROOTS.get(name);
+    if (skeleton) {
+      for (const key of skeleton.literal) {
+        expect(out[key]).toBe(HOSTILE_OBJECT_ROOT[key as keyof typeof HOSTILE_OBJECT_ROOT]);
+      }
+      for (const key of skeleton.enveloped) {
+        expectEnveloped(out[key], `${source}:${key}`);
+      }
+    } else {
+      expect(out.agent_id).toBe('agent_test_123');
+      expect(out.status).toBe('queued');
+      expect(out.type).toBe('text');
+      expect(out.phone_number).toBe('+14155551234');
+    }
     assertSentinelOnlyInsideEnvelopes(out);
   });
 

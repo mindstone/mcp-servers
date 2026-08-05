@@ -18,10 +18,19 @@
  * is marked inline. A structural key *name* is not enough on its own: the value must
  * also match its context's strict grammar (id/enum, ISO-8601 timestamp, or E.164
  * phone number — see `isStructuralLiteralValue`), and the key must sit on a *trusted
- * path* — inside arbitrary collaborator-authored maps (`request_headers`,
- * `advanced_config`, JSON-Schema fragments) key names are data, not schema, so the
- * exemption switches off for the whole subtree (see `ARBITRARY_MAP_KEYS`). Even on
- * trusted paths the grammar rejects phrase-shaped and instruction-token values:
+ * path*. Two mechanisms define trusted paths. First, inside arbitrary
+ * collaborator-authored maps (`request_headers`, `advanced_config`, JSON-Schema
+ * fragments) key names are data, not schema, so the exemption switches off for the
+ * whole subtree (see `ARBITRARY_MAP_KEYS`). Second, on the two surfaces that reflect
+ * merged `advanced_config` passthroughs — agent configs and workspace tool configs —
+ * the reserved `advanced_config` ancestor name does not survive: it is deep-merged
+ * into the config body *before* being sent upstream, so the reflected shape carries
+ * the fragment's keys at the config root with no marker ancestor at all. There the
+ * exemption additionally requires every ancestor key from the surface root to be a
+ * known schema position (see `AGENT_TRUSTED_PATHS` / `AGENT_TOOL_TRUSTED_PATHS`):
+ * descending into a key the skeleton does not know — exactly where a merged
+ * passthrough fragment lands — switches the exemption off for that whole subtree.
+ * Even on trusted paths the grammar rejects phrase-shaped and instruction-token values:
  * alphabet shape alone cannot distinguish an identifier from whitespace-free authored
  * instructions (`IGNORE_PRIOR_INSTRUCTIONS` satisfies `^[A-Za-z0-9_+@.-]+$`), so
  * multi-word all-letter phrases and known instruction-shaping tokens lose the
@@ -88,6 +97,65 @@ const ARBITRARY_MAP_KEYS = new Set([
 function isArbitraryMapKey(key: string): boolean {
   return ARBITRARY_MAP_KEYS.has(key.toLowerCase());
 }
+
+/**
+ * Trusted-path skeletons for the surfaces that reflect merged `advanced_config`
+ * passthroughs (agent configs and workspace tool configs). The merge flattens
+ * `advanced_config` into the config body before it is sent upstream, so the
+ * reflected shape carries the fragment's keys with no `advanced_config` ancestor
+ * to key off: `{advanced_config: {custom: {status: …}}}` comes back as
+ * `{custom: {status: …}}` at the config root, where neither the reserved name nor
+ * any arbitrary-map marker appears on the path. Trust must therefore follow the
+ * schema, not ancestor names: a string keeps the structural-literal exemption
+ * only when every ancestor key from the surface root down is a position the
+ * skeleton knows. Descending into an unknown key — exactly where a merged
+ * passthrough fragment (or upstream drift) lands — switches the exemption off
+ * for the whole subtree, failing closed the same way `ARBITRARY_MAP_KEYS` does.
+ * The skeletons list only positions whose key names can claim the exemption at
+ * all (structural id/enum/timestamp/phone key names — everything else is
+ * enveloped by the deny-by-default walk regardless), plus the containers leading
+ * to them; a genuine structural field upstream adds later fails closed
+ * (enveloped — cosmetic), never open.
+ */
+type TrustedPathNode = { readonly [key: string]: TrustedPathNode };
+
+/** A known schema position with no known structural positions beneath it. */
+const TRUSTED_PATH_LEAF: TrustedPathNode = {};
+
+/** Workspace tool objects (GET/POST /convai/tools), reflected under `tool_config`. */
+const AGENT_TOOL_TRUSTED_PATHS: TrustedPathNode = {
+  id: TRUSTED_PATH_LEAF,
+  tool_id: TRUSTED_PATH_LEAF,
+  dependent_tool_ids: TRUSTED_PATH_LEAF,
+  tool_config: {
+    type: TRUSTED_PATH_LEAF,
+  },
+};
+
+/** Agent summaries and full agent configs (list/get/create/update agent). */
+const AGENT_TRUSTED_PATHS: TrustedPathNode = {
+  agent_id: TRUSTED_PATH_LEAF,
+  access_info: { role: TRUSTED_PATH_LEAF },
+  conversation_config: {
+    agent: {
+      prompt: {
+        knowledge_base_document_ids: TRUSTED_PATH_LEAF,
+        tool_ids: TRUSTED_PATH_LEAF,
+      },
+    },
+    tts: { voice_id: TRUSTED_PATH_LEAF, model_id: TRUSTED_PATH_LEAF },
+    turn: { type: TRUSTED_PATH_LEAF },
+  },
+};
+
+/**
+ * Surfaces without a trusted-path skeleton (conversations, calls, phone numbers,
+ * knowledge base) carry no `advanced_config` passthrough and keep the
+ * ancestor-name-only policy, so the walk takes the model as an opt-in parameter
+ * rather than a global.
+ */
+const NO_TRUSTED_PATH_MODEL = Symbol('no-trusted-path-model');
+type TrustedPathModel = TrustedPathNode | typeof NO_TRUSTED_PATH_MODEL;
 
 /**
  * Instruction-shaping tokens, matched as whole separator-delimited words
@@ -338,6 +406,7 @@ function sanitizeStringsByDefault(
   key: string | undefined,
   literalStringKeys: ReadonlySet<string>,
   structuralKeysTrusted: boolean,
+  trustedPaths: TrustedPathModel = NO_TRUSTED_PATH_MODEL,
 ): unknown {
   if (typeof value === 'string') {
     // JUSTIFIED LITERAL (no-passthrough rule): the key names a structural value — an
@@ -351,7 +420,9 @@ function sanitizeStringsByDefault(
     // name-only exemption would pass it through raw. And the exemption only exists on
     // a trusted path at all: `structuralKeysTrusted` is false for the whole subtree
     // under an arbitrary collaborator map (`ARBITRARY_MAP_KEYS`), where key names are
-    // data rather than schema.
+    // data rather than schema, and — on surfaces with a trusted-path skeleton —
+    // beneath any key the skeleton does not know, where merged `advanced_config`
+    // passthrough fragments land (`AGENT_TRUSTED_PATHS` / `AGENT_TOOL_TRUSTED_PATHS`).
     return structuralKeysTrusted
         && (isStructuralLiteralStringKey(key) || (key ? literalStringKeys.has(key) : false))
         && isStructuralLiteralValue(key, value)
@@ -363,12 +434,14 @@ function sanitizeStringsByDefault(
     // path is the plural of the structural predicate above, with the same value-shape
     // gate per member. A copy, not the input array, and any non-string or
     // non-structural member drops the whole collection into the walk below.
+    // `trustedPaths` at an array's position describes the *element* objects'
+    // children, so it passes through to the items unchanged.
     if (structuralKeysTrusted
       && isStructuralLiteralStringCollectionKey(key)
       && value.every((item) => typeof item === 'string' && isStructuralLiteralCollectionItem(key, item))) {
       return [...value];
     }
-    return value.map((item, index) => sanitizeStringsByDefault(item, `${source}[${index}]`, undefined, literalStringKeys, structuralKeysTrusted));
+    return value.map((item, index) => sanitizeStringsByDefault(item, `${source}[${index}]`, undefined, literalStringKeys, structuralKeysTrusted, trustedPaths));
   }
   // Not a passthrough: strings and arrays are handled above and objects below, so this
   // branch only ever sees a non-string primitive (number / boolean / null / undefined),
@@ -387,12 +460,24 @@ function sanitizeStringsByDefault(
       out[childKey] = wrapUntrustedJsonStrings(childValue, `${source}:${childKey}`);
       continue;
     }
+    // On skeleton-modelled surfaces a child key the skeleton does not know is not a
+    // schema position: the subtree beneath it is arbitrary authored/drift text, so
+    // the structural-literal exemption switches off there (fail-closed, same
+    // direction as `ARBITRARY_MAP_KEYS`). Trust never re-enables deeper down.
+    let childTrusted = structuralKeysTrusted && !isArbitraryMapKey(childKey);
+    let childPaths: TrustedPathModel = NO_TRUSTED_PATH_MODEL;
+    if (trustedPaths !== NO_TRUSTED_PATH_MODEL) {
+      const childNode = trustedPaths[childKey];
+      childTrusted = childTrusted && childNode !== undefined;
+      childPaths = childNode ?? TRUSTED_PATH_LEAF;
+    }
     out[childKey] = sanitizeStringsByDefault(
       childValue,
       `${source}:${childKey}`,
       childKey,
       literalStringKeys,
-      structuralKeysTrusted && !isArbitraryMapKey(childKey),
+      childTrusted,
+      childPaths,
     );
   }
   return out;
@@ -435,8 +520,13 @@ export function sanitizeConversationValue(value: unknown, source: string, key?: 
   return sanitizeStringsByDefault(value, source, key, CONVERSATION_LITERAL_STRING_KEYS, true);
 }
 
-export function sanitizeAgentOrKbValue(value: unknown, source: string, key?: string): unknown {
-  return sanitizeStringsByDefault(value, source, key, AGENT_AND_KB_LITERAL_STRING_KEYS, true);
+export function sanitizeAgentOrKbValue(
+  value: unknown,
+  source: string,
+  key?: string,
+  trustedPaths: TrustedPathModel = NO_TRUSTED_PATH_MODEL,
+): unknown {
+  return sanitizeStringsByDefault(value, source, key, AGENT_AND_KB_LITERAL_STRING_KEYS, true, trustedPaths);
 }
 
 export function sanitizeCallValue(value: unknown, source: string, key?: string): unknown {
@@ -498,7 +588,7 @@ function truncateUtf8(text: string, maxBytes: number): { text: string; truncated
 
 export function sanitizeAgentSummary(agent: unknown, source: string): unknown {
   if (!isObj(agent)) return sanitizeNonObjectRoot(agent, source, sanitizeAgentSummary);
-  return sanitizeAgentOrKbValue(agent, source);
+  return sanitizeAgentOrKbValue(agent, source, undefined, AGENT_TRUSTED_PATHS);
 }
 
 /**
@@ -509,17 +599,20 @@ export function sanitizeAgentSummary(agent: unknown, source: string): unknown {
  */
 export function sanitizeAgent(agent: unknown, source: string): unknown {
   if (!isObj(agent)) return sanitizeNonObjectRoot(agent, source, sanitizeAgent);
-  return sanitizeAgentOrKbValue(agent, source);
+  return sanitizeAgentOrKbValue(agent, source, undefined, AGENT_TRUSTED_PATHS);
 }
 
 /**
  * Workspace tool configs (GET/POST /convai/tools). Tool names, descriptions,
  * webhook URLs and header values are all workspace-collaborator-authored, so the
- * same deny-by-default agent/KB walk applies with no key-specific exceptions.
+ * same deny-by-default agent/KB walk applies with no key-specific exceptions —
+ * plus the tool trusted-path skeleton, because `add_agent_tool`'s
+ * `advanced_config` deep-merges into `tool_config` before it is sent upstream
+ * and the reflected shape carries no `advanced_config` marker to key off.
  */
 export function sanitizeAgentTool(tool: unknown, source: string): unknown {
   if (!isObj(tool)) return sanitizeNonObjectRoot(tool, source, sanitizeAgentTool);
-  return sanitizeAgentOrKbValue(tool, source);
+  return sanitizeAgentOrKbValue(tool, source, undefined, AGENT_TOOL_TRUSTED_PATHS);
 }
 
 /**
