@@ -10,10 +10,13 @@
     ]
   },
   "tools": {
-    "count": 9,
+    "count": 15,
     "domains": [
       "documents",
-      "templates"
+      "templates",
+      "folders",
+      "contacts",
+      "content-library"
     ]
   },
   "surface": "cloud-api",
