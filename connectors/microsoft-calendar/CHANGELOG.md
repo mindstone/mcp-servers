@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ## [Unreleased]
 
 ### Added
+- `get_event` gains `includeAttachments` to list attachment metadata (id, name, contentType, size).
 - `cancel_event` tool: organizer-side cancellation with an optional message to attendees (distinct from `delete_event`, which gives no message).
 - `update_event` now supports `addAttendees` / `removeAttendees`, merged against the event's current attendee list (Graph PATCH replaces the whole collection, so the connector reads it first).
 - `create_event` / `update_event` accept a `recurrence` object (Graph `pattern`/`range`, Zod-validated and passed through) for recurring events.

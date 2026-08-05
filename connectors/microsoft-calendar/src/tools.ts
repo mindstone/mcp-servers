@@ -109,6 +109,10 @@ export function registerCalendarTools(server: McpServer): void {
       description: 'Get detailed information about a specific calendar event.',
       inputSchema: z.object({
         id: z.string().optional().describe('Event ID'),
+        includeAttachments: z
+          .boolean()
+          .optional()
+          .describe('Also list attachment metadata (id, name, contentType, size) (default: false)'),
       }).shape,
       annotations: {
         readOnlyHint: true,
@@ -125,7 +129,9 @@ export function registerCalendarTools(server: McpServer): void {
           next_step: 'list_events',
         });
       }
-      const result = await callGraph(extra, (c, signal) => getEvent(c, { id: args.id! }, signal));
+      const result = await callGraph(extra, (c, signal) =>
+        getEvent(c, { id: args.id!, includeAttachments: args.includeAttachments }, signal),
+      );
       return successJson(result);
     }),
   );

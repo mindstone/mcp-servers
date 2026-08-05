@@ -276,6 +276,7 @@ export interface ListEventsArgs {
 
 export interface GetEventArgs {
   id: string;
+  includeAttachments?: boolean;
 }
 
 export interface CreateEventArgs {
@@ -453,6 +454,27 @@ export async function getEvent(
     .select('id,subject,start,end,location,body,organizer,attendees,isAllDay,webLink,onlineMeeting')
     .get();
 
+  let attachments: unknown;
+  if (args.includeAttachments) {
+    const attachmentsResponse = await client
+      .api(`/me/events/${args.id}/attachments`)
+      .options({ signal })
+      .select('id,name,contentType,size')
+      .get();
+    const parsedAttachments = (attachmentsResponse.value ?? []) as Array<{
+      id: string;
+      name?: string;
+      contentType?: string;
+      size?: number;
+    }>;
+    attachments = parsedAttachments.map((a) => ({
+      id: a.id,
+      name: wrapUntrusted(a.name, 'microsoft-calendar:get_event:attachments.name'),
+      contentType: a.contentType,
+      size: a.size,
+    }));
+  }
+
   return {
     id: event.id,
     subject: wrapUntrusted(event.subject, 'microsoft-calendar:get_event:subject'),
@@ -475,6 +497,7 @@ export async function getEvent(
     isAllDay: event.isAllDay,
     webLink: event.webLink,
     onlineMeetingUrl: event.onlineMeeting?.joinUrl,
+    ...(attachments ? { attachments } : {}),
   };
 }
 

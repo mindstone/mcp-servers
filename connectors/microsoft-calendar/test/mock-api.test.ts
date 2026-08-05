@@ -118,6 +118,30 @@ describe('microsoft-calendar mock-API integration', () => {
     expect(json.next_step).toBe('list_events');
   });
 
+  it('get_event with includeAttachments lists enveloped attachment metadata', async () => {
+    const result = await client.callTool('get_event', { id: 'event-1', includeAttachments: true });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      attachments?: Array<{ id: string; name: string; contentType: string; size: number }>;
+    };
+    expect(json.attachments).toHaveLength(2);
+    expect(json.attachments?.[0]?.id).toBe('att-1');
+    expect(json.attachments?.[0]?.name).toContain('<untrusted-content');
+    expect(json.attachments?.[0]?.name).toContain('Agenda.docx');
+    expect(json.attachments?.[0]?.size).toBe(12345);
+    const call = state.requests.find((r) => r.pathname.endsWith('/me/events/event-1/attachments'));
+    expect(call).toBeDefined();
+  });
+
+  it('get_event without includeAttachments does not call the attachments endpoint', async () => {
+    const result = await client.callTool('get_event', { id: 'event-1' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { attachments?: unknown };
+    expect(json.attachments).toBeUndefined();
+    const call = state.requests.find((r) => r.pathname.endsWith('/attachments'));
+    expect(call).toBeUndefined();
+  });
+
   // -------------------------------------------------------------------------
   // create_event
   // -------------------------------------------------------------------------

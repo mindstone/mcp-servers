@@ -143,6 +143,29 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
       });
     }),
 
+    // /me/events/{id}/attachments (GET) — get_event with includeAttachments
+    http.get(`${GRAPH_BASE}/me/events/:id/attachments`, async ({ request }) => {
+      const url = new URL(request.url);
+      await capture(request, url.pathname, url.search);
+      return HttpResponse.json({
+        value: [
+          {
+            id: 'att-1',
+            name: 'Agenda.docx',
+            contentType:
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            size: 12345,
+          },
+          {
+            id: 'att-2',
+            name: 'Budget.xlsx',
+            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            size: 23456,
+          },
+        ],
+      });
+    }),
+
     // /me/events (POST) — create_event
     http.post(`${GRAPH_BASE}/me/events`, async ({ request }) => {
       const url = new URL(request.url);
