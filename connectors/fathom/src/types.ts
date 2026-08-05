@@ -130,3 +130,21 @@ export interface RecordingDownload {
   audio?: RecordingDownloadFile;
   failure_reason?: 'generation_failed' | 'generation_timeout';
 }
+
+export type WebhookTrigger =
+  | 'my_recordings'
+  | 'shared_external_recordings'
+  | 'my_shared_with_team_recordings'
+  | 'shared_team_recordings';
+
+export interface Webhook {
+  id: string;
+  url: string;
+  secret: string;
+  created_at?: string;
+  include_transcript?: boolean;
+  include_crm_matches?: boolean;
+  include_summary?: boolean;
+  include_action_items?: boolean;
+  triggered_for?: WebhookTrigger[];
+}

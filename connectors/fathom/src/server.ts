@@ -5,6 +5,7 @@ import {
   registerMeetingTools,
   registerTeamTools,
   registerRecordingTools,
+  registerWebhookTools,
 } from './tools/index.js';
 
 const require = createRequire(import.meta.url);
@@ -20,6 +21,7 @@ export function createServer(): McpServer {
   registerMeetingTools(server);
   registerTeamTools(server);
   registerRecordingTools(server);
+  registerWebhookTools(server);
 
   return server;
 }

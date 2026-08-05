@@ -105,6 +105,34 @@ export function createFathomHandlers(expectedKey = 'test-fathom-key') {
       return HttpResponse.json({ error: 'Not found' }, { status: 404 });
     }),
 
+    // POST /webhooks — create a webhook
+    http.post(`${BASE}/webhooks`, async ({ request }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+      const body = (await request.json()) as Record<string, unknown>;
+      return HttpResponse.json({
+        id: 'wh_test123',
+        url: body.destination_url,
+        secret: 'whsec_test_secret',
+        created_at: '2026-01-16T10:00:00Z',
+        include_transcript: body.include_transcript,
+        include_summary: body.include_summary,
+        include_action_items: body.include_action_items,
+        include_crm_matches: body.include_crm_matches,
+        triggered_for: body.triggered_for,
+      });
+    }),
+
+    // DELETE /webhooks/:id — delete a webhook
+    http.delete(`${BASE}/webhooks/:id`, ({ request, params }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+      if (params.id === 'wh_test123') {
+        return new HttpResponse(null, { status: 204 });
+      }
+      return HttpResponse.json({ error: 'Not found' }, { status: 404 });
+    }),
+
     // GET /teams
     http.get(`${BASE}/teams`, ({ request }) => {
       const authError = checkAuth(request);
