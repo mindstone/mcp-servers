@@ -25,6 +25,17 @@ are maintained manually as part of the PR review checklist.
 - `nano_banana_generate` / `nano_banana_edit`: network-level failures (no HTTP response at all) now return the same structured error contract as API errors — `NETWORK_ERROR` with a `resolution` hint — instead of a bare `{ ok: false, error }`.
 - Gemini API responses (success and error bodies) are now structurally validated with Zod instead of blind-cast; malformed 200 payloads fail with a structured `UNEXPECTED_RESPONSE` error rather than undefined-field behaviour downstream.
 
+### Security
+- Vendored `src/untrusted-content.ts` is now byte-for-byte the canonical strong helper: whitespace/case close-tag variants such as `</UNTRUSTED-CONTENT\n>` are neutralised, and `wrapUntrustedJsonStrings` also envelopes object keys.
+- All remaining external-text paths are enveloped or sanitised: `promptFeedback.blockReason` is wrapped in an `<untrusted-content source="gemini">` envelope; Gemini error bodies and `Response.statusText` no longer reach model-visible error messages; a remote URL's `Content-Type` value is no longer echoed in `REMOTE_IMAGE_NOT_IMAGE` errors; and `inlineData.mimeType` is allow-listed (PNG/JPEG/WebP, logged fallback) instead of being forwarded verbatim.
+- Remote source-image SSRF guard closed: hostnames are resolved via DNS and every resolved address is re-checked against the full non-public range list (now covering CGNAT 100.64.0.0/10, 192.0.0.0/24, benchmarking/documentation/multicast ranges, and IPv4-mapped IPv6 in both dotted and hex forms); unresolvable hosts fail closed, and every redirect hop is DNS-re-validated.
+- Local source-image reads no longer have a check-then-use race: the validated canonical path is opened once, `fstat`-verified, re-checked for inode identity, and read through the same descriptor, so a symlink/file swap between validation and read fails closed.
+- `save_path` writes are canonically contained (an in-workspace symlinked directory pointing outside the workspace is refused), the no-`MCP_WORKSPACE_PATH` write fallback is `os.tmpdir()` rather than the server process's cwd, and saves use `wx` (O_EXCL) — an existing file is never silently overwritten; the tool returns `SAVE_EXISTS` with the image still included inline.
+- `nano_banana_generate` / `nano_banana_edit` now advertise `destructiveHint: true` (both can write files), and every source image is security-validated before the first network fetch — a mixed input like `[validRemoteUrl, "http://invalid"]` fails closed without any fetch.
+
+### Changed
+- `nano_banana_edit`: combined source images per call are now capped at 40MB total (`SOURCE_IMAGES_TOO_LARGE`), bounding per-call memory for multi-image requests.
+
 ## [0.3.2] - 2026-05-14
 ### Added
 - **registry**: Cohort A backfill — 12 API-key OSS connectors get server.json + mcpName. fathom, humaans, kling, mixmax, nano-banana, napkin, pandadoc, freshdesk, elevenlabs, retell-ai, runway, talentlms each gain a registry-shaped server.json (validated against registry.modelcontextprotocol.io) and an mcpName field on package.json under the io.github.mindstone namespace.
