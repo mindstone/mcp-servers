@@ -6,4 +6,5 @@ export { registerAccountTools } from './accounts.js';
 export { registerTaskTools } from './tasks.js';
 export { registerMailingTools } from './mailings.js';
 export { registerCallTools } from './calls.js';
+export { registerMailboxTools } from './mailboxes.js';
 export { registerUserTools } from './users.js';

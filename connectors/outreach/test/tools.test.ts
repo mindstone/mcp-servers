@@ -526,6 +526,32 @@ describe('Tool tests — Outreach MCP server', () => {
     );
   });
 
+  // --- Mailboxes ---
+
+  it('outreach_list_mailboxes returns mailboxes', async () => {
+    mswServer.use(...createOutreachHandlers());
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('outreach_list_mailboxes', {});
+    expect(result.isError).toBeFalsy();
+    expect(result.json).toHaveProperty('ok', true);
+    const records = (result.json as Record<string, unknown>).records as Record<string, unknown>[];
+    expect(records.length).toBeGreaterThan(0);
+    expect(records[0].email).toBe(
+      '<untrusted-content source="outreach:mailbox:email">john@company.com</untrusted-content>',
+    );
+    expect(records[0].user_id).toBe('601');
+  });
+
   // --- Users ---
 
   it('outreach_list_users returns users', async () => {

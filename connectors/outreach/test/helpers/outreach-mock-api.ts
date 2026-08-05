@@ -99,6 +99,19 @@ const mockCall = {
   },
 };
 
+const mockMailbox = {
+  id: '1301',
+  type: 'mailbox',
+  attributes: {
+    email: 'john@company.com',
+    sendDisabled: false,
+    syncActive: true,
+  },
+  relationships: {
+    user: { data: { id: '601', type: 'user' } },
+  },
+};
+
 const mockSequenceState = {
   id: '701',
   type: 'sequenceState',
@@ -348,6 +361,13 @@ export function createOutreachHandlers() {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;
       return HttpResponse.json(jsonApiList([mockCall]));
+    }),
+
+    // --- Mailboxes ---
+    http.get(`${OUTREACH_API_BASE}/mailboxes`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      return HttpResponse.json(jsonApiList([mockMailbox]));
     }),
 
     // --- Users ---

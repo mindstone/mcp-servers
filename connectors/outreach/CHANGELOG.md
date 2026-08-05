@@ -19,6 +19,7 @@ are maintained manually as part of the PR review checklist.
 - `outreach_create_task` — create a task (note, optional action type, due date, prospect, owner).
 - `outreach_complete_task` — mark a task completed (`destructiveHint: true`, matching the connector's mutate-existing-record convention).
 - `outreach_list_calls` — list calls with direction, outcome, notes, and linked call-disposition ID, filterable by prospect or user.
+- `outreach_list_mailboxes` — list connected sender mailboxes, feeding the `mailbox_id` parameter on `outreach_add_prospect_to_sequence`.
 
 ### Security
 - Envelope all external, user-authored text returned by the Outreach API (names, emails, subjects, bodies, notes, tags, custom fields) in `<untrusted-content>` envelopes with close-tag breakout escaping, via the single `formatResource` chokepoint (FOX-3490). Vendor-generated structure (ids, timestamps, lifecycle enums) is left raw; every other attribute is enveloped fail-closed.

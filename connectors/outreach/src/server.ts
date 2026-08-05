@@ -10,6 +10,7 @@ import {
   registerTaskTools,
   registerMailingTools,
   registerCallTools,
+  registerMailboxTools,
   registerUserTools,
 } from './tools/index.js';
 
@@ -30,6 +31,7 @@ export function createServer(): McpServer {
   registerTaskTools(server);
   registerMailingTools(server);
   registerCallTools(server);
+  registerMailboxTools(server);
   registerUserTools(server);
 
   return server;
