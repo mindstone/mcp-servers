@@ -58,10 +58,25 @@ export function registerVideoTools(server: McpServer): void {
           .enum(['std', 'pro'])
           .optional()
           .describe('std=standard (faster), pro=professional (higher quality). Default: std'),
+        callback_url: z
+          .string()
+          .url()
+          .optional()
+          .describe(
+            'HTTPS URL that Kling POSTs the task result to when the task status changes. Optional — polling with check_kling_task works without it.',
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
+      if (args.callback_url && !args.callback_url.startsWith('https://')) {
+        return JSON.stringify({
+          ok: false,
+          error: 'callback_url must use HTTPS',
+          code: 'INVALID_URL',
+        });
+      }
+
       const model = args.model || 'kling-v2-6';
       const body: Record<string, unknown> = {
         prompt: args.prompt,
@@ -72,6 +87,9 @@ export function registerVideoTools(server: McpServer): void {
       };
       if (args.negative_prompt) {
         body.negative_prompt = args.negative_prompt;
+      }
+      if (args.callback_url) {
+        body.callback_url = args.callback_url;
       }
 
       const result = await klingFetch<VideoGenerationResponse>('/videos/text2video', {
@@ -132,6 +150,13 @@ export function registerVideoTools(server: McpServer): void {
           .enum(['std', 'pro'])
           .optional()
           .describe('std=standard, pro=professional quality. Default: std'),
+        callback_url: z
+          .string()
+          .url()
+          .optional()
+          .describe(
+            'HTTPS URL that Kling POSTs the task result to when the task status changes. Optional — polling with check_kling_task works without it.',
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
@@ -149,6 +174,13 @@ export function registerVideoTools(server: McpServer): void {
           ok: false,
           error: 'Provide an image: either image_url (public HTTPS URL) or image_path (local file).',
           code: 'INVALID_INPUT',
+        });
+      }
+      if (args.callback_url && !args.callback_url.startsWith('https://')) {
+        return JSON.stringify({
+          ok: false,
+          error: 'callback_url must use HTTPS',
+          code: 'INVALID_URL',
         });
       }
 
@@ -181,6 +213,9 @@ export function registerVideoTools(server: McpServer): void {
       };
       if (args.negative_prompt) {
         body.negative_prompt = args.negative_prompt;
+      }
+      if (args.callback_url) {
+        body.callback_url = args.callback_url;
       }
 
       const result = await klingFetch<VideoGenerationResponse>('/videos/image2video', {

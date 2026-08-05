@@ -339,3 +339,74 @@ describe('Kling error handling', () => {
     expect(result.text).toContain('AUTH_REQUIRED');
   });
 });
+
+
+describe('callback_url support', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('generate_kling_video forwards callback_url', async () => {
+    let capturedBody: Record<string, unknown> | null = null;
+    mswServer.use(
+      http.post('https://api-singapore.klingai.com/v1/videos/text2video', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ code: 0, message: 'success', data: { task_id: mockTaskId } });
+      }),
+    );
+    testClient = await createTestClient({
+      env: { KLING_ACCESS_KEY: ACCESS_KEY, KLING_SECRET_KEY: SECRET_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('generate_kling_video', {
+      prompt: 'timelapse',
+      callback_url: 'https://example.com/webhook',
+    });
+
+    const json = result.json as { ok: boolean };
+    expect(json.ok).toBe(true);
+    expect(capturedBody!.callback_url).toBe('https://example.com/webhook');
+  });
+
+  it('generate_kling_video rejects a non-HTTPS callback_url', async () => {
+    mswServer.use(...createKlingHandlers());
+    testClient = await createTestClient({
+      env: { KLING_ACCESS_KEY: ACCESS_KEY, KLING_SECRET_KEY: SECRET_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('generate_kling_video', {
+      prompt: 'timelapse',
+      callback_url: 'http://example.com/webhook',
+    });
+
+    const json = result.json as { ok: boolean; code: string };
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('INVALID_URL');
+  });
+
+  it('generate_kling_image_to_video forwards callback_url', async () => {
+    let capturedBody: Record<string, unknown> | null = null;
+    mswServer.use(
+      http.post('https://api-singapore.klingai.com/v1/videos/image2video', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ code: 0, message: 'success', data: { task_id: mockI2vTaskId } });
+      }),
+    );
+    testClient = await createTestClient({
+      env: { KLING_ACCESS_KEY: ACCESS_KEY, KLING_SECRET_KEY: SECRET_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('generate_kling_image_to_video', {
+      image_url: 'https://example.com/photo.jpg',
+      prompt: 'zoom in',
+      callback_url: 'https://example.com/webhook',
+    });
+
+    const json = result.json as { ok: boolean };
+    expect(json.ok).toBe(true);
+    expect(capturedBody!.callback_url).toBe('https://example.com/webhook');
+  });
+});
