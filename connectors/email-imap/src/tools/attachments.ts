@@ -3,12 +3,11 @@
  */
 
 import { z } from 'zod';
-import * as fs from 'node:fs';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { withErrorHandling } from '../utils.js';
 import { unwrapUntrusted } from '../untrusted-content.js';
 import { getConnection, getMailboxLock } from '../imap-client.js';
-import { resolveDownloadPath } from '../path-safety.js';
+import { resolveDownloadDir, writeDownloadExclusive } from '../path-safety.js';
 import {
   ensureInitialized,
   collectMessageParts,
@@ -101,8 +100,15 @@ export function registerAttachmentTools(server: McpServer): void {
           chunks.push(buffer);
         }
 
-        const targetPath = resolveDownloadPath(args.filename ?? attachment.filename);
-        await fs.promises.writeFile(targetPath, Buffer.concat(chunks));
+        // Exclusive-create write with collision retry: an entry planted
+        // (or concurrently downloaded) after the filename was chosen is
+        // never overwritten.
+        const downloadDir = await resolveDownloadDir();
+        const targetPath = await writeDownloadExclusive(
+          downloadDir,
+          args.filename ?? attachment.filename ?? 'attachment',
+          Buffer.concat(chunks),
+        );
 
         return JSON.stringify({
           ok: true,
