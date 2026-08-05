@@ -352,8 +352,10 @@ describe('microsoft-sharepoint mock-API integration', () => {
       itemId: 'item-1',
     });
     expect(getResult.isError).not.toBe(true);
-    const getJson = getResult.json as { fields: { Department: string } };
-    expect(getJson.fields.Department).toContain('Marketing');
+    const getJson = getResult.json as { fields: Record<string, unknown> };
+    // Field keys are tenant-controlled column names, so they are enveloped too.
+    const departmentKey = '<untrusted-content source="microsoft-sharepoint:get_file_metadata:fields">Department</untrusted-content>';
+    expect(String(getJson.fields[departmentKey])).toContain('Marketing');
 
     const updateResult = await client.callTool('update_file_metadata', {
       driveId: 'drive-1',
@@ -361,8 +363,9 @@ describe('microsoft-sharepoint mock-API integration', () => {
       fields: { Status: 'Updated' },
     });
     expect(updateResult.isError).not.toBe(true);
-    const updateJson = updateResult.json as { updatedFields: { Status: string } };
-    expect(updateJson.updatedFields.Status).toContain('Updated');
+    const updateJson = updateResult.json as { updatedFields: Record<string, unknown> };
+    const statusKey = '<untrusted-content source="microsoft-sharepoint:update_file_metadata:updatedFields">Status</untrusted-content>';
+    expect(String(updateJson.updatedFields[statusKey])).toContain('Updated');
   });
 
   it('get_site_by_path and get_sites_delta return site discovery payloads', async () => {
