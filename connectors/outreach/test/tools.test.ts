@@ -169,6 +169,75 @@ describe('Tool tests — Outreach MCP server', () => {
     expect(result.json).toHaveProperty('status', 'enrolled');
   });
 
+  // --- Sequence content ---
+
+  it('outreach_list_sequence_steps returns steps for a sequence', async () => {
+    mswServer.use(...createOutreachHandlers());
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('outreach_list_sequence_steps', { sequence_id: '301' });
+    expect(result.isError).toBeFalsy();
+    expect(result.json).toHaveProperty('ok', true);
+    const records = (result.json as Record<string, unknown>).records as Record<string, unknown>[];
+    expect(records.length).toBeGreaterThan(0);
+    expect(records[0].stepType).toBe('auto_email');
+    expect(records[0].sequenceTemplates_ids).toEqual(['901']);
+  });
+
+  it('outreach_get_sequence_template resolves the linked template copy', async () => {
+    mswServer.use(...createOutreachHandlers());
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('outreach_get_sequence_template', { id: '901' });
+    expect(result.isError).toBeFalsy();
+    expect(result.json).toHaveProperty('ok', true);
+    expect(result.json).toHaveProperty('template_id', '1001');
+    const template = (result.json as Record<string, unknown>).template as Record<string, unknown>;
+    expect(template).toBeDefined();
+    // Email copy is external text: enveloped by formatResource.
+    expect(template.subject).toBe(
+      '<untrusted-content source="outreach:template:subject">Hello from Acme</untrusted-content>',
+    );
+    expect(template.bodyHtml).toContain('<untrusted-content source="outreach:template:bodyHtml">');
+  });
+
+  it('outreach_get_sequence_template returns structured error for unknown ID', async () => {
+    mswServer.use(...createOutreachHandlers());
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('outreach_get_sequence_template', { id: 'nonexistent' });
+    expect(result.isError).toBe(true);
+    expect(result.json).toHaveProperty('ok', false);
+    expect(result.json).toHaveProperty('code', 'HTTP_404');
+  });
+
   // --- Accounts ---
 
   it('outreach_list_accounts returns accounts', async () => {

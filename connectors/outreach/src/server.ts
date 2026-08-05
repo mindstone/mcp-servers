@@ -5,6 +5,7 @@ import {
   registerAuthTools,
   registerProspectTools,
   registerSequenceTools,
+  registerSequenceContentTools,
   registerAccountTools,
   registerTaskTools,
   registerMailingTools,
@@ -23,6 +24,7 @@ export function createServer(): McpServer {
   registerAuthTools(server);
   registerProspectTools(server);
   registerSequenceTools(server);
+  registerSequenceContentTools(server);
   registerAccountTools(server);
   registerTaskTools(server);
   registerMailingTools(server);

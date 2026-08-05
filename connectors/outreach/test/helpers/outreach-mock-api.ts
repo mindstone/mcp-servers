@@ -92,6 +92,42 @@ const mockSequenceState = {
   },
 };
 
+const mockSequenceStep = {
+  id: '801',
+  type: 'sequenceStep',
+  attributes: {
+    stepType: 'auto_email',
+    interval: 120,
+    order: 1,
+  },
+  relationships: {
+    sequence: { data: { id: '301', type: 'sequence' } },
+    sequenceTemplates: { data: [{ id: '901', type: 'sequenceTemplate' }] },
+  },
+};
+
+const mockSequenceTemplate = {
+  id: '901',
+  type: 'sequenceTemplate',
+  attributes: {
+    enabled: true,
+  },
+  relationships: {
+    sequenceStep: { data: { id: '801', type: 'sequenceStep' } },
+    template: { data: { id: '1001', type: 'template' } },
+  },
+};
+
+const mockTemplate = {
+  id: '1001',
+  type: 'template',
+  attributes: {
+    name: 'Intro email',
+    subject: 'Hello from Acme',
+    bodyHtml: '<p>Hi {{first_name}}, following up on our conversation.</p>',
+  },
+};
+
 function requireAuth(authHeader: string | null): HttpResponse | null {
   if (!authHeader || !authHeader.startsWith('Bearer ') || authHeader.split(' ')[1] !== MOCK_ACCESS_TOKEN) {
     return HttpResponse.json(
@@ -182,6 +218,31 @@ export function createOutreachHandlers() {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;
       return HttpResponse.json({ data: mockSequenceState });
+    }),
+
+    // --- Sequence content ---
+    http.get(`${OUTREACH_API_BASE}/sequenceSteps`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      return HttpResponse.json(jsonApiList([mockSequenceStep]));
+    }),
+
+    http.get(`${OUTREACH_API_BASE}/sequenceTemplates/:id`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      if (params.id === 'nonexistent') {
+        return HttpResponse.json(
+          { errors: [{ title: 'Not Found', detail: 'Sequence template not found' }] },
+          { status: 404 },
+        );
+      }
+      return HttpResponse.json({ data: { ...mockSequenceTemplate, id: params.id } });
+    }),
+
+    http.get(`${OUTREACH_API_BASE}/templates/:id`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      return HttpResponse.json({ data: { ...mockTemplate, id: params.id } });
     }),
 
     // --- Accounts ---

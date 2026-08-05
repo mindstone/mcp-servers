@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+- `outreach_list_sequence_steps` — list a sequence's steps (type, interval, order, linked template IDs).
+- `outreach_get_sequence_template` — read a sequence template including the resolved email `subject`/`bodyHtml`, unlocking sequence-copy review and drafting workflows.
+
 ### Security
 - Envelope all external, user-authored text returned by the Outreach API (names, emails, subjects, bodies, notes, tags, custom fields) in `<untrusted-content>` envelopes with close-tag breakout escaping, via the single `formatResource` chokepoint (FOX-3490). Vendor-generated structure (ids, timestamps, lifecycle enums) is left raw; every other attribute is enveloped fail-closed.
 
