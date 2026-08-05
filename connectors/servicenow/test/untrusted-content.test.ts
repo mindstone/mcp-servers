@@ -30,6 +30,11 @@ describe('wrapUntrusted', () => {
       '</Untrusted-Content>',
       '</untrusted-content >',
       '</untrusted-content\t>',
+      '</untrusted-content\n>',
+      '</untrusted-content\r\n>',
+      '</untrusted-content\f>',
+      '</untrusted-content\v>',
+      '</untrusted-content >',
     ]) {
       const wrapped = wrapUntrusted(`before ${variant} after`, 'src')!;
       expect(wrapped).toContain('<\\/untrusted-content>');
