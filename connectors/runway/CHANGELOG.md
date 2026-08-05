@@ -16,6 +16,9 @@ are maintained manually as part of the PR review checklist.
 - **runway**: `model` parameter on `generate_speech` with `eleven_v3` support (expressive speech with audio tags like `[laughs]` / `[whispers]`, text up to 5000 chars). `eleven_v3` accepts preset voices only; combining it with a custom voice ID returns a structured `INVALID_INPUT` error.
 - **runway**: New `upscale_video` tool — upscale a video (max 30s input) to 720p/1k/2k/4k via the Magnific Video Upscaler (`magnific_video_upscaler_creative`), with optional `creativity`, `sharpen`, `smart_grain`, `flavor`, and `fps_boost` controls. Billed per output frame.
 
+### Security
+- **runway**: Envelope user-authored voice `name`/`description` returned by `list_custom_voices` in `<untrusted-content>` wrappers (with close-tag breakout escaping) via the shared `wrapUntrusted` helper, vendored at `src/untrusted-content.ts`, and validate the upstream response with a Zod schema. Previously these attacker-controllable strings reached model-visible output raw.
+
 ### Fixed
 - **runway**: Replace sunset model identifiers. The Runway API retired `gen3a_turbo` and `gen4_aleph` on 2026-07-30 and requests using them now fail. `generate_video_from_image` no longer offers `gen3a_turbo` (use `gen4_turbo` or `gen4.5` instead), and `generate_video_from_video` now submits with `aleph2` (Aleph 2.0) at 28 credits/sec (56 credit minimum); an optional `reference_image` is sent as a keyframe at second 0.
 
