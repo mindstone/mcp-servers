@@ -268,6 +268,31 @@ describe('microsoft-sharepoint mock-API integration', () => {
     expect(json.note).toContain('OneDrive');
   });
 
+  it('list_file_versions returns version history with enveloped names', async () => {
+    const result = await client.callTool('list_file_versions', {
+      driveId: 'drive-1',
+      itemId: 'item-1',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      ok?: unknown;
+      count: number;
+      versions: Array<{ id: string; modifiedBy?: string }>;
+    };
+    expect(json.ok).toBeUndefined();
+    expect(json.count).toBe(2);
+    expect(json.versions[0]?.id).toBe('1.0');
+    expect(json.versions[0]?.modifiedBy).toContain('<untrusted-content');
+  });
+
+  it('list_file_versions rejects missing arguments with guidance', async () => {
+    const result = await client.callTool('list_file_versions', { driveId: 'drive-1' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('itemId');
+  });
+
   it('list_item_permissions returns grants with enveloped display names', async () => {
     const result = await client.callTool('list_item_permissions', {
       driveId: 'drive-1',

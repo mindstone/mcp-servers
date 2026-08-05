@@ -25,6 +25,7 @@ import {
   getSiteList,
   getSitesDelta,
   inviteItemCollaborators,
+  listFileVersions,
   listItemPermissions,
   listLibraryFiles,
   listListItems,
@@ -465,6 +466,18 @@ const TOOL_SPECS: SharePointToolSpec[] = [
     }),
     annotations: WRITE_ANNOTATIONS,
     handler: createSharingLink as SharePointHandler,
+  },
+  {
+    name: 'list_file_versions',
+    description:
+      'List the version history of a file in a SharePoint document library (version ID, size, modified date, and who modified it).',
+    inputSchema: z.object({
+      driveId: z.string().optional().describe('Document library (drive) ID'),
+      itemId: z.string().optional().describe('File item ID'),
+      top: z.number().optional().describe('Max versions to return (default: 50)'),
+    }),
+    annotations: READ_ONLY_ANNOTATIONS,
+    handler: listFileVersions as SharePointHandler,
   },
   {
     name: 'list_item_permissions',

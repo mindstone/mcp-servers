@@ -48,6 +48,17 @@ const GraphPermissionSchema = z.object({
 type GraphPermission = z.infer<typeof GraphPermissionSchema>;
 type GraphIdentity = z.infer<typeof GraphIdentitySchema>;
 
+const GraphDriveItemVersionSchema = z.object({
+  id: z.string(),
+  size: z.number().optional(),
+  lastModifiedDateTime: z.string().optional(),
+  lastModifiedBy: z
+    .object({
+      user: GraphIdentitySchema.optional(),
+    })
+    .optional(),
+});
+
 function extractPermissionIdentities(permission: GraphPermission): GraphIdentity[] {
   const sets = [
     ...(permission.grantedToV2 ? [permission.grantedToV2] : []),
@@ -1194,6 +1205,47 @@ export async function createSharingLink(
     scope: response.link?.scope,
     id: response.id,
     roles: response.roles,
+  });
+}
+
+// -- File version history tool implementation --
+
+interface ListFileVersionsArgs {
+  driveId?: string;
+  itemId?: string;
+  top?: number;
+}
+
+export async function listFileVersions(
+  client: Client,
+  args: ListFileVersionsArgs,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (!args.driveId || !args.itemId) {
+    return errorResult(
+      'Missing required parameters: "driveId" (document library ID) and "itemId" (file ID). ' +
+      'Example: { "driveId": "b!abc123...", "itemId": "01ABCDEF..." }',
+    );
+  }
+
+  const top = Math.min(args.top ?? 50, 200);
+  const endpoint = `${buildDriveEndpoint(args.driveId, args.itemId)}/versions`;
+  const response = await client.api(endpoint).options({ signal }).top(top).get();
+  const versions = parseGraphCollection(GraphDriveItemVersionSchema, response);
+
+  return successResult({
+    driveId: args.driveId,
+    itemId: args.itemId,
+    count: versions.length,
+    versions: versions.map((version) => ({
+      id: version.id,
+      size: formatSize(version.size),
+      modifiedAt: version.lastModifiedDateTime,
+      modifiedBy: wrapUntrusted(
+        version.lastModifiedBy?.user?.displayName,
+        'microsoft-sharepoint:list_file_versions:modifiedBy',
+      ),
+    })),
   });
 }
 

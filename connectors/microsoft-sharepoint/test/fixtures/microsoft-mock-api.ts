@@ -384,6 +384,25 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
         });
       }
 
+      if (method === 'GET' && /^\/v1\.0\/drives\/[^/]+\/items\/[^/]+\/versions$/.test(pathname)) {
+        return HttpResponse.json({
+          value: [
+            {
+              id: '1.0',
+              size: 42,
+              lastModifiedDateTime: '2026-05-18T10:00:00Z',
+              lastModifiedBy: { user: { displayName: 'Alice Example' } },
+            },
+            {
+              id: '2.0',
+              size: 52,
+              lastModifiedDateTime: '2026-05-19T10:00:00Z',
+              lastModifiedBy: { user: { displayName: 'Bob Example' } },
+            },
+          ],
+        });
+      }
+
       if (method === 'GET' && /^\/v1\.0\/drives\/[^/]+\/items\/[^/]+\/permissions$/.test(pathname)) {
         return HttpResponse.json({ value: [permission] });
       }

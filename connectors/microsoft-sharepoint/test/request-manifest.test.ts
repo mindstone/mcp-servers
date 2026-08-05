@@ -41,6 +41,7 @@ const MANIFEST: ManifestRow[] = [
   { tool: 'rename_library_item', method: 'PATCH', pathname: '/v1.0/drives/:driveId/items/:itemId', args: { driveId: 'drive-1', itemId: 'item-1', newName: 'renamed.txt' } },
   { tool: 'create_sharing_link', method: 'POST', pathname: '/v1.0/drives/:driveId/items/:itemId/createLink', args: { driveId: 'drive-1', itemId: 'item-1', type: 'view', scope: 'organization' } },
   { tool: 'list_item_permissions', method: 'GET', pathname: '/v1.0/drives/:driveId/items/:itemId/permissions', args: { driveId: 'drive-1', itemId: 'item-1' } },
+  { tool: 'list_file_versions', method: 'GET', pathname: '/v1.0/drives/:driveId/items/:itemId/versions', args: { driveId: 'drive-1', itemId: 'item-1', top: 5 } },
   { tool: 'invite_item_collaborators', method: 'POST', pathname: '/v1.0/drives/:driveId/items/:itemId/invite', args: { driveId: 'drive-1', itemId: 'item-1', recipients: ['jane@example.com'] } },
   { tool: 'revoke_item_permission', method: 'DELETE', pathname: '/v1.0/drives/:driveId/items/:itemId/permissions/:permissionId', args: { driveId: 'drive-1', itemId: 'item-1', permissionId: 'perm-1' } },
   { tool: 'list_subsites', method: 'GET', pathname: '/v1.0/sites/:siteId/sites', args: { siteId: 'site-1', top: 1 } },
