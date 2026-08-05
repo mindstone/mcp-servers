@@ -87,18 +87,28 @@ export const pronunciationDictionaryWithRulesSchema = pronunciationDictionaryMet
 
 // ── Speech-to-text ────────────────────────────────────────────────────────
 
+/**
+ * Closed grammars for API-authored identifier fields (fail-closed alternative
+ * to enveloping): anything outside the documented shape is rejected as
+ * INVALID_RESPONSE, so instruction-shaped text can never flow through them.
+ */
+/** Diarization speaker labels are documented as "speaker_0", "speaker_1", ... */
+const speakerIdSchema = z.string().regex(/^speaker_\d+$/);
+/** BCP-47-style language code ("en", "eng", "zh-CN"); no whitespace/underscores. */
+const languageCodeSchema = z.string().regex(/^[a-z]{2,3}(-[a-zA-Z0-9]{2,8})*$/);
+
 export const transcriptionWordSchema = z.object({
   text: z.string(),
   start: z.number().finite(),
   end: z.number().finite(),
   type: z.string().optional(),
-  speaker_id: z.string().optional(),
+  speaker_id: speakerIdSchema.optional(),
 });
 
 export const transcriptionResponseSchema = z.object({
   text: z.string(),
   words: z.array(transcriptionWordSchema).optional(),
-  language_code: z.string().optional(),
+  language_code: languageCodeSchema.optional(),
   language_probability: z.number().optional(),
 });
 
