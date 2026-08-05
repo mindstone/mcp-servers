@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { stringifyToolResult, toToolErrorResponse, type VantaApiClient } from '../api.js';
+import { sanitizeExternalText } from '../sanitize.js';
 
 export const listPeopleSchema = z.object({
   email_or_name: z.string().optional().describe('Filter people by email address, first name, or last name'),
@@ -25,7 +26,7 @@ export async function vantaListPeople(client: VantaApiClient, args: ListPeopleAr
 
     return stringifyToolResult({
       ok: true,
-      people: result.data,
+      people: sanitizeExternalText(result.data),
       count: result.data.length,
       pageInfo: result.pageInfo,
     });

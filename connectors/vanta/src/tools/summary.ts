@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { stringifyToolResult, toToolErrorResponse, type VantaApiClient } from '../api.js';
+import { sanitizeExternalText } from '../sanitize.js';
 
 const MAX_SUMMARY_PAGES = 5;
 const SUMMARY_PAGE_SIZE = 100;
@@ -99,7 +100,10 @@ export async function vantaGetComplianceSummary(
 
       for (const framework of result.data) {
         if (!isRecord(framework) || !matchesFramework(framework, args.framework)) continue;
-        const summary = summarizeFramework(framework);
+        // Envelope external text (displayName, shorthandName) before it enters
+        // the summary payload; connector-authored keys (note, totals) are
+        // assembled later and never pass through the sanitizer.
+        const summary = summarizeFramework(sanitizeExternalText(framework));
         const key = summary.id ?? summary.displayName ?? `framework-${totalFrameworks + 1}`;
         frameworks[key] = summary;
         totalFrameworks++;

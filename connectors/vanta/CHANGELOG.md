@@ -6,6 +6,22 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Added `vanta_list_frameworks` and `vanta_get_framework` (`GET /v1/frameworks`, `GET /v1/frameworks/{frameworkId}`), exposing per-framework control, document, and test counters — and requirement categories with mapped controls on the detail view — without parsing the aggregate compliance summary.
+- Added `vanta_list_policies` and `vanta_get_policy` (`GET /v1/policies`, `GET /v1/policies/{policyId}`) for policy approval and review-status questions (which policies are out of review, expired, or pending approval).
+- Added `vanta_list_integrations` (`GET /v1/integrations`) reporting each connected integration's resource kinds and per-connection health (disabled flag and connection error message).
+- Added `vanta_list_risk_scenarios` (search string, include-ignored filter, pagination) and `vanta_get_risk_scenario` (`GET /v1/risk-scenarios`, `GET /v1/risk-scenarios/{riskScenarioId}`) for risk-register reads; the get-by-ID fallback scan now also matches on `riskId`.
+- Added `vanta_list_event_logs` (`GET /v1/event-logs`) with the documented `startDate` filter for audit-trail reads (actor, action, targets, date).
+
+### Changed
+
+- The `getById` fallback scan (used when a direct GET-by-ID returns 404) now cursor-paginates the collection until the item is found or the collection is exhausted, instead of scanning only the first 100 records. The scan is bounded at 50 pages (5,000 records — one minute of the shared rate-limit budget), and hitting the bound reports a partial scan rather than a false not-found.
+
+### Security
+
+- Every Vanta API response now passes through an untrusted-content sanitize layer (FOX-3490): text fields authored inside the Vanta tenant (names, descriptions, notes, remediation text, integration connection error messages, people directory entries, risk custom-field values) are wrapped in `<untrusted-content>` envelopes with close-tag breakout escaping before they reach the model. Identifiers, statuses, dates, URLs, and pagination cursors are deliberately left verbatim so the model can quote them into follow-up tool calls.
+
 ## [0.2.0] - 2026-07-30
 
 ### Changed

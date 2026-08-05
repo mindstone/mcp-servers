@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { VantaApiError, stringifyToolResult, toToolErrorResponse, type VantaApiClient } from '../api.js';
 import { buildUploadForm, fetchRemoteDocument } from '../remote-document.js';
+import { sanitizeExternalText } from '../sanitize.js';
 
 export const listVendorsSchema = z.object({
   name: z.string().optional().describe('Filter vendors by name (case-insensitive partial match)'),
@@ -71,7 +72,7 @@ export async function vantaListVendors(
 
     return stringifyToolResult({
       ok: true,
-      vendors: result.data,
+      vendors: sanitizeExternalText(result.data),
       count: result.data.length,
       pageInfo: result.pageInfo,
     });
@@ -86,7 +87,7 @@ export async function vantaGetVendor(
 ): Promise<string> {
   try {
     const vendor = await client.getById('/v1/vendors', args.vendor_id);
-    return stringifyToolResult({ ok: true, vendor });
+    return stringifyToolResult({ ok: true, vendor: sanitizeExternalText(vendor) });
   } catch (error) {
     return toToolErrorResponse(error);
   }
@@ -108,7 +109,7 @@ export async function vantaCreateVendor(
     if (args.risk_level !== undefined) body.inherentRiskLevel = args.risk_level;
 
     const vendor = await client.post('/v1/vendors', body);
-    return stringifyToolResult({ ok: true, vendor });
+    return stringifyToolResult({ ok: true, vendor: sanitizeExternalText(vendor) });
   } catch (error) {
     return toToolErrorResponse(error);
   }
@@ -139,7 +140,7 @@ export async function vantaUpdateVendor(
     }
 
     const vendor = await client.patch(`/v1/vendors/${encodeURIComponent(args.vendor_id)}`, body);
-    return stringifyToolResult({ ok: true, vendor });
+    return stringifyToolResult({ ok: true, vendor: sanitizeExternalText(vendor) });
   } catch (error) {
     return toToolErrorResponse(error);
   }
@@ -164,7 +165,7 @@ export async function vantaAttachVendorDocument(
     );
     return stringifyToolResult({
       ok: true,
-      document,
+      document: sanitizeExternalText(document),
       file_name: file.fileName,
       content_type: file.contentType,
       size_bytes: file.bytes.byteLength,

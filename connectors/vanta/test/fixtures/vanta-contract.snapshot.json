@@ -13,10 +13,17 @@
       "https://developer.vanta.com/api-reference/controls/list-controls.md",
       "https://developer.vanta.com/api-reference/controls/get-control-by-an-id.md",
       "https://developer.vanta.com/api-reference/frameworks/list-available-frameworks.md",
+      "https://developer.vanta.com/api-reference/frameworks/get-framework-by-id.md",
+      "https://developer.vanta.com/api-reference/policies/list-policies.md",
+      "https://developer.vanta.com/api-reference/policies/get-policy-by-id.md",
       "https://developer.vanta.com/api-reference/people/list-people.md",
       "https://developer.vanta.com/api-reference/vendors/list-vendors.md",
       "https://developer.vanta.com/api-reference/vendors/get-vendor-by-id.md",
       "https://developer.vanta.com/api-reference/integrations/list-resources.md",
+      "https://developer.vanta.com/api-reference/integrations/list-connected-integrations.md",
+      "https://developer.vanta.com/api-reference/risk-scenarios/list-risk-scenarios.md",
+      "https://developer.vanta.com/api-reference/risk-scenarios/get-risk-scenario-by-id.md",
+      "https://developer.vanta.com/api-reference/event-logs/list-event-logs.md",
       "https://developer.vanta.com/api-reference/vendors/create-a-vendor.md",
       "https://developer.vanta.com/api-reference/vendors/update-vendor-by-id.md",
       "https://developer.vanta.com/api-reference/vulnerabilities/deactivate-vulnerability-monitoring-for-a-vulnerability.md",
@@ -26,7 +33,7 @@
       "https://developer.vanta.com/docs/guides/upload-a-document.md",
       "https://developer.vanta.com/docs/guides/create-vendors-and-attach-documentation.md"
     ],
-    "fetchDate": "2026-07-29",
+    "fetchDate": "2026-08-05",
     "provenance": "Trimmed contract snapshot derived from Vanta's generated Manage Vanta reference and endpoint pages; this is not a full OpenAPI copy."
   },
   "token": {
@@ -125,6 +132,72 @@
       "queryParams": [
         "pageSize",
         "pageCursor"
+      ],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/frameworks/{frameworkId}",
+      "queryParams": [],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/policies",
+      "queryParams": [
+        "pageSize",
+        "pageCursor"
+      ],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/policies/{policyId}",
+      "queryParams": [],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/integrations",
+      "queryParams": [
+        "pageSize",
+        "pageCursor"
+      ],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/risk-scenarios",
+      "queryParams": [
+        "pageSize",
+        "pageCursor",
+        "searchString",
+        "includeIgnored",
+        "ownerMatchesAny",
+        "categoryMatchesAny",
+        "ciaCategoryMatchesAny",
+        "treatmentTypeMatchesAny",
+        "inherentScoreGroupMatchesAny",
+        "residualScoreGroupMatchesAny",
+        "reviewStatusMatchesAny",
+        "type",
+        "orderBy"
+      ],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/risk-scenarios/{riskScenarioId}",
+      "queryParams": [],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/event-logs",
+      "queryParams": [
+        "pageSize",
+        "pageCursor",
+        "startDate"
       ],
       "requiredBodyFields": []
     },

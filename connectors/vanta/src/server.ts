@@ -9,7 +9,26 @@ import {
   vantaGetControl,
   vantaListControls,
 } from './tools/controls.js';
+import {
+  getFrameworkSchema,
+  listFrameworksSchema,
+  vantaGetFramework,
+  vantaListFrameworks,
+} from './tools/frameworks.js';
+import { listIntegrationsSchema, vantaListIntegrations } from './tools/integrations.js';
+import {
+  getRiskScenarioSchema,
+  listRiskScenariosSchema,
+  vantaGetRiskScenario,
+  vantaListRiskScenarios,
+} from './tools/risks.js';
 import { listPeopleSchema, vantaListPeople } from './tools/people.js';
+import {
+  getPolicySchema,
+  listPoliciesSchema,
+  vantaGetPolicy,
+  vantaListPolicies,
+} from './tools/policies.js';
 import { queryTestResultsSchema, vantaQueryTestResults } from './tools/query-results.js';
 import { complianceSummarySchema, vantaGetComplianceSummary } from './tools/summary.js';
 import {
@@ -19,6 +38,7 @@ import {
   vantaListTests,
 } from './tools/tests.js';
 import { uploadDocumentSchema, vantaUploadDocument } from './tools/documents.js';
+import { listEventLogsSchema, vantaListEventLogs } from './tools/event-logs.js';
 import {
   attachVendorDocumentSchema,
   createVendorSchema,
@@ -149,6 +169,62 @@ RETURNS:
     annotations: readOnlyAnnotations,
     inputSchema: complianceSummarySchema,
   }, async (input) => textResult(await vantaGetComplianceSummary(client, input)));
+
+  server.registerTool('vanta_list_frameworks', {
+    title: 'List Vanta Frameworks',
+    description: 'List available compliance frameworks in Vanta with per-framework control, document, and test counters.',
+    annotations: readOnlyAnnotations,
+    inputSchema: listFrameworksSchema,
+  }, async (input) => textResult(await vantaListFrameworks(client, input)));
+
+  server.registerTool('vanta_get_framework', {
+    title: 'Get Vanta Framework',
+    description: 'Get details for one Vanta framework by ID, including requirement categories and mapped controls.',
+    annotations: readOnlyAnnotations,
+    inputSchema: getFrameworkSchema,
+  }, async (input) => textResult(await vantaGetFramework(client, input)));
+
+  server.registerTool('vanta_list_policies', {
+    title: 'List Vanta Policies',
+    description: 'List policies in Vanta with their approval/review status — e.g. which policies are out of review.',
+    annotations: readOnlyAnnotations,
+    inputSchema: listPoliciesSchema,
+  }, async (input) => textResult(await vantaListPolicies(client, input)));
+
+  server.registerTool('vanta_get_policy', {
+    title: 'Get Vanta Policy',
+    description: 'Get details for one Vanta policy by ID, including its latest version status and approved document links.',
+    annotations: readOnlyAnnotations,
+    inputSchema: getPolicySchema,
+  }, async (input) => textResult(await vantaGetPolicy(client, input)));
+
+  server.registerTool('vanta_list_integrations', {
+    title: 'List Vanta Integrations',
+    description: 'List integrations connected to Vanta with per-connection health (disabled flag and connection error message).',
+    annotations: readOnlyAnnotations,
+    inputSchema: listIntegrationsSchema,
+  }, async (input) => textResult(await vantaListIntegrations(client, input)));
+
+  server.registerTool('vanta_list_risk_scenarios', {
+    title: 'List Vanta Risk Scenarios',
+    description: 'List risk scenarios from the Vanta risk register with optional search and include-ignored filters.',
+    annotations: readOnlyAnnotations,
+    inputSchema: listRiskScenariosSchema,
+  }, async (input) => textResult(await vantaListRiskScenarios(client, input)));
+
+  server.registerTool('vanta_get_risk_scenario', {
+    title: 'Get Vanta Risk Scenario',
+    description: 'Get details for one Vanta risk scenario by risk ID, including scores, treatment, and review status.',
+    annotations: readOnlyAnnotations,
+    inputSchema: getRiskScenarioSchema,
+  }, async (input) => textResult(await vantaGetRiskScenario(client, input)));
+
+  server.registerTool('vanta_list_event_logs', {
+    title: 'List Vanta Event Logs',
+    description: 'List audit event logs from the Vanta account (actor, action, targets, date) with an optional start-date filter.',
+    annotations: readOnlyAnnotations,
+    inputSchema: listEventLogsSchema,
+  }, async (input) => textResult(await vantaListEventLogs(client, input)));
 
   server.registerTool('vanta_list_vendors', {
     title: 'List Vanta Vendors',

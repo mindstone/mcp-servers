@@ -5,9 +5,13 @@ import { mswServer } from './helpers/setup.js';
 import { VantaApiClient, buildQueryParams, setDnsLookupForTesting } from '../src/api.js';
 import { vantaListControls, vantaGetControl } from '../src/tools/controls.js';
 import { vantaUploadDocument } from '../src/tools/documents.js';
+import { vantaListFrameworks, vantaGetFramework } from '../src/tools/frameworks.js';
+import { vantaListEventLogs } from '../src/tools/event-logs.js';
+import { vantaListIntegrations } from '../src/tools/integrations.js';
+import { vantaListRiskScenarios, vantaGetRiskScenario } from '../src/tools/risks.js';
 import { vantaListPeople } from '../src/tools/people.js';
+import { vantaListPolicies, vantaGetPolicy } from '../src/tools/policies.js';
 import { vantaQueryTestResults } from '../src/tools/query-results.js';
-import { vantaGetComplianceSummary } from '../src/tools/summary.js';
 import { vantaListTests, vantaGetTest } from '../src/tools/tests.js';
 import { vantaListVendors, vantaGetVendor, vantaCreateVendor, vantaUpdateVendor, vantaAttachVendorDocument } from '../src/tools/vendors.js';
 import { vantaListVulnerabilities, vantaGetVulnerability, vantaDeactivateVulnerabilityMonitoring, vantaReactivateVulnerabilityMonitoring } from '../src/tools/vulnerabilities.js';
@@ -114,6 +118,9 @@ const normalizeContractPath = (endpoint: string): string => {
   normalized = normalized.replace(/\/tests\/[^/]+\/entities$/, '/tests/{testId}/entities');
   normalized = normalized.replace(/\/tests\/[^/]+$/, '/tests/{testId}');
   normalized = normalized.replace(/\/controls\/[^/]+$/, '/controls/{controlId}');
+  normalized = normalized.replace(/\/frameworks\/[^/]+$/, '/frameworks/{frameworkId}');
+  normalized = normalized.replace(/\/policies\/[^/]+$/, '/policies/{policyId}');
+  normalized = normalized.replace(/\/risk-scenarios\/[^/]+$/, '/risk-scenarios/{riskScenarioId}');
   normalized = normalized.replace(/\/vendors\/[^/]+$/, '/vendors/{vendorId}');
   if (!normalized.endsWith('/deactivate') && !normalized.endsWith('/reactivate')) {
     normalized = normalized.replace(/\/vulnerabilities\/[^/]+$/, '/vulnerabilities/{vulnerabilityId}');
@@ -133,7 +140,17 @@ const documentedButUnexercisedQueryParams: Record<string, string[]> = {
     'vulnerableAssetId',
   ],
   'GET /tests': ['integrationFilter', 'controlFilter', 'ownerFilter', 'categoryFilter', 'isInRollout'],
-  'GET /frameworks': ['pageCursor'],
+  'GET /risk-scenarios': [
+    'ownerMatchesAny',
+    'categoryMatchesAny',
+    'ciaCategoryMatchesAny',
+    'treatmentTypeMatchesAny',
+    'inherentScoreGroupMatchesAny',
+    'residualScoreGroupMatchesAny',
+    'reviewStatusMatchesAny',
+    'type',
+    'orderBy',
+  ],
   'GET /people': [
     'tasksSummaryStatusMatchesAny',
     'taskTypeMatchesAny',
@@ -210,7 +227,26 @@ describe('Vanta contract snapshot', () => {
       page_size: 10,
       page_cursor: 'cursor-entities',
     });
-    await vantaGetComplianceSummary(client, { framework: 'SOC 2' });
+    // vanta_get_compliance_summary also calls GET /frameworks, but always
+    // without a page cursor, so the list tool owns this endpoint's contract
+    // coverage (both calls must send identical query params).
+    await vantaListFrameworks(client, { page_size: 10, page_cursor: 'cursor-frameworks' });
+    await vantaGetFramework(client, { framework_id: 'soc2' });
+    await vantaListPolicies(client, { page_size: 10, page_cursor: 'cursor-policies' });
+    await vantaGetPolicy(client, { policy_id: 'code-of-conduct-bsi' });
+    await vantaListIntegrations(client, { page_size: 10, page_cursor: 'cursor-integrations' });
+    await vantaListRiskScenarios(client, {
+      search_string: 'data',
+      include_ignored: false,
+      page_size: 10,
+      page_cursor: 'cursor-risks',
+    });
+    await vantaGetRiskScenario(client, { risk_id: 'assets-not-identified-and-protected' });
+    await vantaListEventLogs(client, {
+      start_date: '2026-05-03T00:00:00Z',
+      page_size: 10,
+      page_cursor: 'cursor-events',
+    });
     await vantaListVendors(client, {
       name: 'Acme',
       status: 'MANAGED',

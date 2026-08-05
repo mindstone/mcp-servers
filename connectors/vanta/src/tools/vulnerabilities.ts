@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { VantaApiError, stringifyToolResult, toToolErrorResponse, type VantaApiClient } from '../api.js';
+import { sanitizeExternalText } from '../sanitize.js';
 
 export const listVulnerabilitiesSchema = z.object({
   severity: z.string().optional().describe('Filter by documented severity: CRITICAL, HIGH, MEDIUM, or LOW'),
@@ -47,7 +48,7 @@ export async function vantaListVulnerabilities(
 
     return stringifyToolResult({
       ok: true,
-      vulnerabilities: result.data,
+      vulnerabilities: sanitizeExternalText(result.data),
       count: result.data.length,
       pageInfo: result.pageInfo,
     });
@@ -64,7 +65,7 @@ export async function vantaGetVulnerability(
     const vulnerability = await client.getById('/v1/vulnerabilities', args.vulnerability_id);
     return stringifyToolResult({
       ok: true,
-      vulnerability,
+      vulnerability: sanitizeExternalText(vulnerability),
     });
   } catch (error) {
     return toToolErrorResponse(error);
@@ -88,7 +89,7 @@ export async function vantaDeactivateVulnerabilityMonitoring(
     };
 
     const result = await client.post('/v1/vulnerabilities/deactivate', body);
-    return stringifyToolResult({ ok: true, result });
+    return stringifyToolResult({ ok: true, result: sanitizeExternalText(result) });
   } catch (error) {
     return toToolErrorResponse(error);
   }
@@ -109,7 +110,7 @@ export async function vantaReactivateVulnerabilityMonitoring(
     };
 
     const result = await client.post('/v1/vulnerabilities/reactivate', body);
-    return stringifyToolResult({ ok: true, result });
+    return stringifyToolResult({ ok: true, result: sanitizeExternalText(result) });
   } catch (error) {
     return toToolErrorResponse(error);
   }

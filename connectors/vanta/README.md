@@ -41,7 +41,7 @@ After clicking the button, your host will prompt you to fill: `VANTA_CLIENT_ID`,
 
 - **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-vanta)
 - **Auth:** OAuth client-credentials grant (`VANTA_CLIENT_ID` + `VANTA_CLIENT_SECRET`)
-- **Tools:** 17 (11 read + 6 write across vulnerabilities, tests, controls, people, vendors, documents, compliance summary)
+- **Tools:** 25 (19 read + 6 write across vulnerabilities, tests, controls, frameworks, policies, integrations, risk scenarios, event logs, people, vendors, documents, compliance summary)
 - **Surface:** cloud-api
 - **Regions:** `VANTA_REGION` is accepted for backward compatibility; all standard tenants (US, EU, AU) share one API host (`api.vanta.com`). The knob routes nothing in this package.
 
@@ -81,6 +81,11 @@ vanta-api.all:read vanta-api.all:write vanta-api.documents:upload
 - `vanta_list_vulnerabilities` / `vanta_get_vulnerability`
 - `vanta_list_tests` / `vanta_get_test`
 - `vanta_list_controls` / `vanta_get_control`
+- `vanta_list_frameworks` / `vanta_get_framework`
+- `vanta_list_policies` / `vanta_get_policy`
+- `vanta_list_integrations`
+- `vanta_list_risk_scenarios` / `vanta_get_risk_scenario`
+- `vanta_list_event_logs`
 - `vanta_list_people`
 - `vanta_query_test_results`
 - `vanta_get_compliance_summary`
@@ -108,12 +113,13 @@ Vanta accepts `.pdf`, `.docx`, `.jpg`, `.png`, and `.xlsx` files.
 
 - **Uploads land as drafts.** Vanta files an API upload against a document as a draft; the document must be submitted for review in Vanta before auditors can see the evidence. The tool result says so via `submission_required`, but the connector has no tool that submits.
 - **No document creation.** `vanta_upload_document` attaches a file to a document that already exists in Vanta; it cannot create the document.
-- **Single-page ID fallback.** When a direct `GET` by ID returns 404, the connector scans only the first 100 records before reporting not-found.
+- **Bounded ID fallback scan.** When a direct `GET` by ID returns 404, the connector cursor-paginates the collection looking for the ID, up to 50 pages (5,000 records). Beyond that bound it reports not-found with a partial-scan note instead of silently giving up at the first page.
 
 ## Safety
 
 This server enforces:
 
+- External text authored inside the Vanta tenant (names, descriptions, notes, remediation text, integration connection errors, people directory entries, risk custom fields) is wrapped in `<untrusted-content>` envelopes — with close-tag breakout escaping — before it reaches the model. Identifiers, statuses, dates, URLs, and pagination cursors stay verbatim so they can be quoted back into follow-up tool calls.
 - HTTPS-only URL validation on both upload tools (rejects `file:`, `localhost`, RFC1918, link-local incl. cloud metadata addresses, IPv6 loopback/ULA, and hostnames whose DNS records resolve to any of those).
 - Bounded document fetching: at most 3 redirects, **each hop re-validated** through the same URL guard, a 30-second timeout, and a 25 MB size cap enforced while streaming (a source cannot lie its way past the cap with a false `Content-Length`).
 - Content-Type handling is header sanitization, not byte-level MIME sniffing: untrustworthy source labels are replaced with `application/octet-stream`.
