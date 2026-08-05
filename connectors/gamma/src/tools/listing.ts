@@ -3,10 +3,13 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey, hasApiKey } from '../auth.js';
 import { listThemes, listFolders } from '../client.js';
 import { GammaError } from '../types.js';
-// SECURITY (AGENTS.md invariant #6): theme and folder names are authored in the
-// user's Gamma workspace, so they are untrusted external text and MUST be
-// enveloped before reaching the LLM. IDs and cursors are connector-consumed
-// metadata and stay raw.
+// SECURITY (AGENTS.md invariant #6): theme/folder names and theme keyword
+// arrays are authored in the user's Gamma workspace, so they are untrusted
+// external text and MUST be enveloped before reaching the LLM. IDs, cursors,
+// and the theme type are connector-consumed metadata and stay raw. Response
+// fields are enumerated explicitly (no object spread) so nothing
+// unanticipated can pass through — the client's Zod schemas strip unknown
+// fields as a second layer.
 import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
@@ -49,8 +52,15 @@ export function registerListingTools(server: McpServer): void {
       return JSON.stringify(
         {
           themes: result.data.map((theme) => ({
-            ...theme,
+            id: theme.id,
             name: wrapUntrusted(theme.name, 'gamma:theme.name'),
+            type: theme.type,
+            colorKeywords: theme.colorKeywords?.map((keyword) =>
+              wrapUntrusted(keyword, 'gamma:theme.colorKeywords'),
+            ),
+            toneKeywords: theme.toneKeywords?.map((keyword) =>
+              wrapUntrusted(keyword, 'gamma:theme.toneKeywords'),
+            ),
           })),
           has_more: result.hasMore,
           next_cursor: result.nextCursor,
@@ -87,7 +97,7 @@ export function registerListingTools(server: McpServer): void {
       return JSON.stringify(
         {
           folders: result.data.map((folder) => ({
-            ...folder,
+            id: folder.id,
             name: wrapUntrusted(folder.name, 'gamma:folder.name'),
           })),
           has_more: result.hasMore,

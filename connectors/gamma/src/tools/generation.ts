@@ -19,6 +19,11 @@ import {
   type CardSplit,
   type AccessLevel,
 } from '../types.js';
+// SECURITY (AGENTS.md invariant #6): status payload strings (error text and
+// the gamma/pdf/pptx URLs) are authored by the external Gamma API and MUST be
+// enveloped before reaching the LLM. The download path keeps using the raw
+// internal values — envelopes are applied only at the model-visible boundary.
+import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -257,7 +262,7 @@ export function registerGenerationTools(server: McpServer): void {
 
       if (status.status === 'failed') {
         exportRequests.delete(args.generation_id);
-        response.error = status.error;
+        response.error = wrapUntrusted(status.error, 'gamma:generation.error');
         response.message = 'Generation failed. Please try again.';
       } else if (status.status === 'completed') {
         const exportFormat = exportRequests.get(args.generation_id);
@@ -287,7 +292,7 @@ export function registerGenerationTools(server: McpServer): void {
 
             if (status.status === 'failed') {
               response.status = 'failed';
-              response.error = status.error;
+              response.error = wrapUntrusted(status.error, 'gamma:generation.error');
               response.message = 'Generation failed. Please try again.';
               return JSON.stringify(response, null, 2);
             }
@@ -300,9 +305,11 @@ export function registerGenerationTools(server: McpServer): void {
           // After polling: check if URL appeared
           const exportUrl = status[exportUrlKey] as string | undefined;
           if (exportUrl) {
-            response.gamma_url = status.gammaUrl;
-            if (status.pdfUrl) response.pdf_url = status.pdfUrl;
-            if (status.pptxUrl) response.pptx_url = status.pptxUrl;
+            response.gamma_url = wrapUntrusted(status.gammaUrl, 'gamma:generation.url');
+            if (status.pdfUrl)
+              response.pdf_url = wrapUntrusted(status.pdfUrl, 'gamma:generation.url');
+            if (status.pptxUrl)
+              response.pptx_url = wrapUntrusted(status.pptxUrl, 'gamma:generation.url');
             if (status.credits) response.credits = status.credits;
             try {
               const filePath = await downloadExportFile(exportUrl, args.generation_id, exportFormat);
@@ -315,18 +322,20 @@ export function registerGenerationTools(server: McpServer): void {
             }
           } else {
             // Timeout — URL never appeared
-            response.gamma_url = status.gammaUrl;
+            response.gamma_url = wrapUntrusted(status.gammaUrl, 'gamma:generation.url');
             if (status.credits) response.credits = status.credits;
-            response.message = `Export file (${exportFormat}) was requested but the URL was not available after polling. The presentation was created successfully — you can export manually at: ${status.gammaUrl}`;
+            response.message = `Export file (${exportFormat}) was requested but the URL was not available after polling. The presentation was created successfully — you can export manually at: ${wrapUntrusted(status.gammaUrl, 'gamma:generation.url')}`;
           }
         } else {
           // No export requested, or export URL already present
           if (exportFormat) {
             exportRequests.delete(args.generation_id);
           }
-          response.gamma_url = status.gammaUrl;
-          if (status.pdfUrl) response.pdf_url = status.pdfUrl;
-          if (status.pptxUrl) response.pptx_url = status.pptxUrl;
+          response.gamma_url = wrapUntrusted(status.gammaUrl, 'gamma:generation.url');
+          if (status.pdfUrl)
+            response.pdf_url = wrapUntrusted(status.pdfUrl, 'gamma:generation.url');
+          if (status.pptxUrl)
+            response.pptx_url = wrapUntrusted(status.pptxUrl, 'gamma:generation.url');
           if (status.credits) response.credits = status.credits;
 
           // Auto-download if export URL is present
