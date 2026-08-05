@@ -488,13 +488,28 @@ describe('microsoft-sharepoint mock-API integration', () => {
     const json = result.json as {
       ok?: unknown;
       count: number;
-      permissions: Array<{ id: string; roles: string[]; grantedTo: Array<{ displayName?: string; email?: string }> }>;
+      permissions: Array<{
+        id: string;
+        roles: Array<string | undefined>;
+        shareId?: string;
+        link?: { type?: string; scope?: string; webUrl?: string };
+        grantedTo: Array<{ displayName?: string; email?: string }>;
+      }>;
     };
     expect(json.ok).toBeUndefined();
     expect(json.count).toBe(1);
     expect(json.permissions[0]?.id).toBe('perm-1');
     expect(json.permissions[0]?.grantedTo[0]?.displayName).toContain('<untrusted-content');
     expect(json.permissions[0]?.grantedTo[0]?.displayName).toContain('Alice Example');
+    // Every Graph-controlled string field is enveloped, not just displayName.
+    expect(json.permissions[0]?.roles[0]).toContain('<untrusted-content');
+    expect(json.permissions[0]?.roles[0]).toContain('read');
+    expect(json.permissions[0]?.shareId).toContain('<untrusted-content');
+    expect(json.permissions[0]?.link?.type).toContain('<untrusted-content');
+    expect(json.permissions[0]?.link?.scope).toContain('<untrusted-content');
+    expect(json.permissions[0]?.link?.webUrl).toContain('<untrusted-content');
+    expect(json.permissions[0]?.grantedTo[0]?.email).toContain('<untrusted-content');
+    expect(json.permissions[0]?.grantedTo[0]?.email).toContain('alice@example.com');
   });
 
   it('invite_item_collaborators POSTs to /invite with safe defaults', async () => {

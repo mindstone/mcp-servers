@@ -187,14 +187,24 @@ function extractPermissionIdentities(permission: GraphPermission): GraphIdentity
 }
 
 function formatPermission(permission: GraphPermission, sourceTool: string) {
+  // Every string here is Graph/tenant-controlled text (roles, share IDs, link
+  // metadata, grantee emails) and must be enveloped before it reaches the model.
   return {
     id: permission.id,
-    roles: permission.roles,
-    shareId: permission.shareId,
-    link: permission.link,
+    roles: permission.roles.map((role) =>
+      wrapUntrusted(role, `microsoft-sharepoint:${sourceTool}:roles`),
+    ),
+    shareId: wrapUntrusted(permission.shareId, `microsoft-sharepoint:${sourceTool}:shareId`),
+    link: permission.link
+      ? {
+          type: wrapUntrusted(permission.link.type, `microsoft-sharepoint:${sourceTool}:link.type`),
+          scope: wrapUntrusted(permission.link.scope, `microsoft-sharepoint:${sourceTool}:link.scope`),
+          webUrl: wrapUntrusted(permission.link.webUrl, `microsoft-sharepoint:${sourceTool}:link.webUrl`),
+        }
+      : undefined,
     grantedTo: extractPermissionIdentities(permission).map((identity) => ({
       displayName: wrapUntrusted(identity.displayName, `microsoft-sharepoint:${sourceTool}:displayName`),
-      email: identity.email,
+      email: wrapUntrusted(identity.email, `microsoft-sharepoint:${sourceTool}:email`),
     })),
   };
 }
@@ -1032,7 +1042,10 @@ export async function readSitePage(
     name: wrapUntrusted(page.name, 'microsoft-sharepoint:read_site_page:name'),
     webUrl: page.webUrl,
     description: wrapUntrusted(page.description, 'microsoft-sharepoint:read_site_page:description'),
-    pageLayout: page.pageLayout,
+    pageLayout: wrapUntrusted(
+      typeof page.pageLayout === 'string' ? page.pageLayout : undefined,
+      'microsoft-sharepoint:read_site_page:pageLayout',
+    ),
     createdAt: page.createdDateTime,
     modifiedAt: page.lastModifiedDateTime,
     contentHtml: contentParts.length > 0
@@ -1116,7 +1129,10 @@ export async function createSitePage(
     name: wrapUntrusted(page.name, 'microsoft-sharepoint:create_site_page:name'),
     title: wrapUntrusted(page.title, 'microsoft-sharepoint:create_site_page:title'),
     webUrl: page.webUrl,
-    publishingState: page.publishingState?.level,
+    publishingState: wrapUntrusted(
+      page.publishingState?.level,
+      'microsoft-sharepoint:create_site_page:publishingState',
+    ),
     message: 'Page created as a draft. Call publish_site_page to make it visible to readers.',
   });
 }
@@ -1161,7 +1177,10 @@ export async function updateSitePage(
     id: page.id,
     title: wrapUntrusted(page.title, 'microsoft-sharepoint:update_site_page:title'),
     webUrl: page.webUrl,
-    publishingState: page.publishingState?.level,
+    publishingState: wrapUntrusted(
+      page.publishingState?.level,
+      'microsoft-sharepoint:update_site_page:publishingState',
+    ),
     message: 'Page updated successfully. If the page was already published, call publish_site_page to publish the new version.',
   });
 }
@@ -1467,7 +1486,7 @@ export async function listListColumns(
     count: columns.length,
     columns: columns.map((column) => ({
       id: column.id,
-      name: column.name,
+      name: wrapUntrusted(column.name, 'microsoft-sharepoint:list_list_columns:name'),
       displayName: wrapUntrusted(column.displayName, 'microsoft-sharepoint:list_list_columns:displayName'),
       description: wrapUntrusted(column.description, 'microsoft-sharepoint:list_list_columns:description'),
       type: COLUMN_TYPE_FACETS.find((facet) => column[facet] !== undefined) ?? 'unknown',
@@ -1557,7 +1576,7 @@ export async function createSiteList(
     id: created.id,
     displayName: wrapUntrusted(created.displayName, 'microsoft-sharepoint:create_site_list:displayName'),
     webUrl: created.webUrl,
-    template: created.list?.template,
+    template: wrapUntrusted(created.list?.template, 'microsoft-sharepoint:create_site_list:template'),
     message: 'List created successfully',
   });
 }
@@ -2113,7 +2132,10 @@ export async function getSiteList(
     name: wrapUntrusted(list.name, 'microsoft-sharepoint:get_site_list:name'),
     description: wrapUntrusted(list.description, 'microsoft-sharepoint:get_site_list:description'),
     webUrl: list.webUrl,
-    template: list.list?.template,
+    template: wrapUntrusted(
+      typeof list.list?.template === 'string' ? list.list.template : undefined,
+      'microsoft-sharepoint:get_site_list:template',
+    ),
     hidden: list.list?.hidden,
     contentTypesEnabled: list.list?.contentTypesEnabled,
     createdAt: list.createdDateTime,
