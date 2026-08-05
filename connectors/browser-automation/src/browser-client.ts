@@ -65,8 +65,12 @@ function resolveHeaded(optionHeaded: boolean | undefined, env: Record<string, st
  * Why pinned: keeps fallback behavior reproducible. Bump when verified against
  * a newer release. Do not use `latest` — npx caches by spec, and an unpinned
  * spec produces flaky behavior across machines.
+ *
+ * 0.33.2 verified 2026-08-05 against the connector's full command surface
+ * (open, snapshot -i, screenshot, pdf, get url/title/text, tab, click/fill/
+ * type/press/scroll/select/hover, eval, back/forward, wait, close).
  */
-const NPX_FALLBACK_VERSION = '0.26.0';
+const NPX_FALLBACK_VERSION = '0.33.2';
 
 /**
  * Execute an agent-browser CLI command.

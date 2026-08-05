@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { execAgentBrowser } from '../browser-client.js';
 import { withErrorHandling } from '../utils.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 
 export function registerInteractionTools(server: McpServer): void {
   server.registerTool(
@@ -181,7 +182,7 @@ WORKFLOW: browser_snapshot → find input @ref → browser_fill`,
       },
       withErrorHandling(async (args) => {
         const result = await execAgentBrowser(['eval', args.script]);
-        return JSON.stringify({ ok: true, result: result.stdout.trim() });
+        return JSON.stringify({ ok: true, result: wrapUntrusted(result.stdout.trim(), 'browser-automation:evaluate') });
       }),
     );
   }

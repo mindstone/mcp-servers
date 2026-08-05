@@ -11,13 +11,22 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+- `browser_get_text` — clean page-text extraction (whole page or a single element) for reading and summarising workflows.
+- `browser_pdf` — save the current page as a PDF. Output paths are constrained to the workspace directory (`MCP_WORKSPACE_PATH`, or the system temp directory when unset) with canonical containment that refuses `..` traversal, out-of-workspace absolutes, and symlink escapes.
+- `browser_upload` — upload files to a page file input. Source paths are constrained to the same workspace sandbox as `browser_pdf`.
+
+### Changed
+- Bumped the `agent-browser` npx fallback pin from 0.26.0 to 0.33.2 (verified against the connector's full command surface).
+
+### Security
+- All page-authored text returned to the model — accessibility snapshots, page text, titles, URLs, tab lists, and `browser_evaluate` output — is now wrapped in `<untrusted-content source="…">` envelopes with close-tag breakout escaping (security invariant #6; FOX-3490 remediation).
+
 ## [0.1.8] - 2026-07-01
 
 ### Changed
 
 - Rework README to explain when to choose this connector, what browser tasks it helps with, and how the visible-by-default session model helps users follow and trust the automation.
-
-### Changed
 - Reworked `README.md` to explain when to choose this connector, what browser tasks it is useful for, and how its visible-by-default session model helps users follow and trust the automation.
 
 ## [0.1.7] - 2026-05-14

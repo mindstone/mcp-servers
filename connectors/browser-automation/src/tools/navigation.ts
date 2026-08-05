@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { execAgentBrowser } from '../browser-client.js';
 import { validateUrlScheme, withErrorHandling } from '../utils.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 
 // URL scheme deny-list (validated by `validateUrlScheme` in utils.ts):
 // only http: and https: are permitted; about:blank is special-cased.
@@ -34,7 +35,7 @@ IMPORTANT: After navigating, call browser_snapshot to see the page content befor
       return JSON.stringify({
         ok: true,
         message: `Navigated to ${args.url}`,
-        title: titleResult.stdout.trim(),
+        title: wrapUntrusted(titleResult.stdout.trim(), 'browser-automation:page-title'),
         hint: 'Call browser_snapshot to see page elements before interacting.',
       });
     }),

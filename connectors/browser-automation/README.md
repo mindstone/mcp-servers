@@ -11,7 +11,7 @@ Browser control you can watch: open pages, sign in, click around, fill forms, ta
 
 - **Version:** [0.1.8](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-browser-automation)
 - **Auth:** None ([`server.json`](./server.json))
-- **Tools:** [18](./src/tools/) (navigation, observation, interaction, sessions)
+- **Tools:** [21](./src/tools/) (navigation, observation, interaction, sessions, files)
 - **Surface:** browser-automation
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -99,7 +99,7 @@ This server requires the `agent-browser` CLI binary to control the browser.
 ### Binary Resolution
 
 1. **PATH lookup** (preferred): If `agent-browser` is on your PATH, it is used directly.
-2. **npx fallback**: If the binary is not found, the server automatically falls back to `npx -y agent-browser@0.26.0`.
+2. **npx fallback**: If the binary is not found, the server automatically falls back to `npx -y agent-browser@0.33.2`.
 
 ### Installing agent-browser
 
@@ -118,6 +118,7 @@ No API keys or credentials are required. The server communicates with the browse
 | `AGENT_BROWSER_SESSION_NAME` | No | Session name for browser persistence (default: `mcp`) |
 | `AGENT_BROWSER_SHOW_WINDOW` | No | Set to `false` to run without a visible browser window. Default is visible (`true`). |
 | `BROWSER_AUTOMATION_ALLOW_EVAL` | No | Set to `1` to register the `browser_evaluate` tool. Off by default. See [Security notes](#security-notes). |
+| `MCP_WORKSPACE_PATH` | No | Workspace directory that `browser_pdf` writes into and `browser_upload` reads from. Defaults to the system temp directory. See [Security notes](#security-notes). |
 
 ### MCP Host Configuration
 
@@ -132,7 +133,7 @@ No API keys or credentials are required. The server communicates with the browse
 }
 ```
 
-## Available Tools (17 by default; +1 when `BROWSER_AUTOMATION_ALLOW_EVAL=1`)
+## Available Tools (20 by default; +1 when `BROWSER_AUTOMATION_ALLOW_EVAL=1`)
 
 ### Navigation
 - **browser_navigate** — Navigate to a URL
@@ -144,6 +145,8 @@ No API keys or credentials are required. The server communicates with the browse
 - **browser_snapshot** — Get the page accessibility tree with interactive element references
 - **browser_screenshot** — Take a screenshot of the current page
 - **browser_get_page_info** — Get the current page URL and title
+- **browser_get_text** — Get the text content of the page or a single element
+- **browser_pdf** — Save the current page as a PDF inside the workspace directory
 
 ### Interaction
 - **browser_click** — Click an element using @ref or CSS selector
@@ -153,6 +156,7 @@ No API keys or credentials are required. The server communicates with the browse
 - **browser_scroll** — Scroll the page in a direction
 - **browser_select** — Select an option from a dropdown
 - **browser_hover** — Hover over an element
+- **browser_upload** — Upload workspace files to a file input
 - **browser_evaluate** — Execute JavaScript in the page context (gated; see [Security notes](#security-notes))
 
 ### Session Management
@@ -205,7 +209,11 @@ To override the session name (for example, to keep separate profiles per project
 - **Run the connector against a separate browser profile** — a dedicated `AGENT_BROWSER_SESSION_NAME` per MCP host. Do not reuse your daily browser profile: the connector reads and overwrites cookies in whichever profile it is pointed at, and a malicious page can ride the existing session of any site you are logged into.
 - **Leave `browser_evaluate` disabled** unless the host implements user confirmation for every call. The default (off) is the safe choice.
 - **Require host confirmation** for `browser_authenticate` and any flow that may navigate to authenticated sites — otherwise prompt injection in fetched content can drive the browser at sites the user is logged into.
-- **Treat returned page content as untrusted** — accessibility snapshots, screenshots, and JavaScript-evaluation outputs come from arbitrary websites and may contain prompt-injection attempts.
+- **Returned page content is enveloped as untrusted** — accessibility snapshots, page text, titles, URLs, tab lists, and `browser_evaluate` outputs come from arbitrary websites and may contain prompt-injection attempts. The connector wraps them in `<untrusted-content source="…">` envelopes (with close-tag breakout escaping) so hosts and models treat them as data, not instructions. Keep that treatment on your side: don't strip the envelopes, and don't let page text alone trigger irreversible actions.
+
+### Workspace sandbox for file tools
+
+`browser_pdf` writes PDF files and `browser_upload` reads files, and both are constrained to a workspace directory: `MCP_WORKSPACE_PATH` when set, otherwise the system temp directory. Paths are canonicalised before use, so `..` traversal, absolute paths outside the workspace, and in-workspace symlinks pointing outside it are all refused before the `agent-browser` CLI runs. Set `MCP_WORKSPACE_PATH` explicitly to control exactly where page captures land and which files the model can attach to a page.
 
 ## Licence
 
