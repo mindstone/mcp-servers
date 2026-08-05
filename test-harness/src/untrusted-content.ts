@@ -11,17 +11,16 @@
  * each connector carried its own copy and they DRIFTED into two families:
  *
  *   - a weak `replaceAll('</untrusted-content>', …)` family (slack,
- *     google-workspace, replit-ssh) that misses whitespace / case close-tag
- *     variants such as `</untrusted-content >` or `</UNTRUSTED-CONTENT>`; and
+ *     google-workspace, replit-ssh carried it — all migrated 2026-08-05) that
+ *     misses whitespace / case close-tag variants such as
+ *     `</untrusted-content >` or `</UNTRUSTED-CONTENT>`; and
  *   - a stronger regex family (freshdesk, zendesk, email-imap) that is
  *     idempotent and neutralises every case/whitespace variant of the close
  *     tag.
  *
- * This helper adopts the STRONGER family. The weaker copies are a latent
- * correctness bug, not just cosmetic drift. Migrating the existing enveloped
- * connectors onto this shared helper is a deliberate follow-up (one connector
- * per change, per the repo's one-connector-per-change rule) — this module is
- * the home they migrate to.
+ * This helper adopts the STRONGER family. The 2026-08-05 hardening program
+ * migrated every connector onto this canonical implementation (or a
+ * byte-for-byte vendored copy of it).
  *
  * It also lives in `test-harness/` (already a `file:`-linked dependency of every
  * connector) specifically so a grep / import audit — and the
