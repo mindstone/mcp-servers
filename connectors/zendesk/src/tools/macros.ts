@@ -3,7 +3,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ZendeskMacro, ZendeskMacroApplyResult, ZendeskTicket } from '../types.js';
 import { getAccount } from '../auth.js';
 import { zendeskFetch, noAccountError } from '../client.js';
-import { formatMacro, wrapMacroFields, wrapUntrustedTicketContent } from '../formatters.js';
+import { formatMacro, wrapMacroFields, wrapUntrustedTicketContent, UNTRUSTED_TICKET_SOURCE } from '../formatters.js';
+import { wrapUntrustedJsonStrings } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
 export function registerMacroTools(server: McpServer): void {
@@ -98,9 +99,6 @@ Use list_zendesk_macros to find macro IDs.`,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      const account = await getAccount(args.subdomain);
-      if (!account) return noAccountError();
-
       if (!args.macro_id) {
         return JSON.stringify({
           ok: false,
@@ -108,6 +106,9 @@ Use list_zendesk_macros to find macro IDs.`,
           resolution: 'Provide the numeric ID of the macro. Use list_zendesk_macros to find macro IDs.',
         });
       }
+
+      const account = await getAccount(args.subdomain);
+      if (!account) return noAccountError();
 
       const response = await zendeskFetch<{ macro: ZendeskMacro }>(account, `/macros/${args.macro_id}.json`);
       const macro = wrapMacroFields(response.macro);
@@ -145,9 +146,6 @@ Example:
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      const account = await getAccount(args.subdomain);
-      if (!account) return noAccountError();
-
       if (!args.ticket_id || !args.macro_id) {
         return JSON.stringify({
           ok: false,
@@ -156,6 +154,9 @@ Example:
         });
       }
 
+      const account = await getAccount(args.subdomain);
+      if (!account) return noAccountError();
+
       const preview = await zendeskFetch<ZendeskMacroApplyResult>(
         account,
         `/tickets/${args.ticket_id}/macros/${args.macro_id}/apply.json`
@@ -163,22 +164,14 @@ Example:
       const previewTicket = preview.result.ticket;
 
       if (args.preview_only === true) {
-        // The preview ticket is external content: wrap the free-text fields
-        // for display. This wrapped copy is never sent back to Zendesk — the
-        // apply path below builds its payload from the raw preview ticket.
-        const previewForDisplay: Record<string, unknown> = { ...previewTicket };
-        if (typeof previewForDisplay.subject === 'string') {
-          previewForDisplay.subject = wrapUntrustedTicketContent(previewForDisplay.subject);
-        }
-        if (typeof previewForDisplay.description === 'string') {
-          previewForDisplay.description = wrapUntrustedTicketContent(previewForDisplay.description);
-        }
-        if (previewForDisplay.comment && typeof previewForDisplay.comment === 'object') {
-          const comment = previewForDisplay.comment as Record<string, unknown>;
-          if (typeof comment.body === 'string') {
-            previewForDisplay.comment = { ...comment, body: wrapUntrustedTicketContent(comment.body) };
-          }
-        }
+        // The preview ticket is entirely vendor-supplied (Zendesk's response,
+        // including macro-authored action values), so EVERY string in it is
+        // external content — recursively envelope all of them, not just the
+        // known free-text fields: tags, string custom-field values, and any
+        // future nested property would otherwise reach the model raw.
+        // This wrapped copy is never sent back to Zendesk — the apply path
+        // below builds its payload from the raw preview ticket.
+        const previewForDisplay = wrapUntrustedJsonStrings(previewTicket, UNTRUSTED_TICKET_SOURCE);
         return JSON.stringify({
           ok: true,
           preview: true,

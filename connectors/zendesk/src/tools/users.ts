@@ -77,12 +77,12 @@ Returns full user details including name, email, role, phone, organization, and 
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      const account = await getAccount(args.subdomain);
-      if (!account) return noAccountError();
-
       if (!args.user_id) {
         return JSON.stringify({ ok: false, error: 'user_id is required' });
       }
+
+      const account = await getAccount(args.subdomain);
+      if (!account) return noAccountError();
 
       const response = await zendeskFetch<{ user: ZendeskUser }>(account, `/users/${args.user_id}.json`);
       const user = wrapUserFields(response.user);
@@ -123,12 +123,12 @@ Example:
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      const account = await getAccount(args.subdomain);
-      if (!account) return noAccountError();
-
       if (!args.name || !args.email) {
         return JSON.stringify({ ok: false, error: 'name and email are required' });
       }
+
+      const account = await getAccount(args.subdomain);
+      if (!account) return noAccountError();
 
       const user: Record<string, unknown> = {
         name: args.name,

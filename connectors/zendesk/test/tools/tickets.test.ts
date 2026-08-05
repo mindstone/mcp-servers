@@ -203,6 +203,7 @@ describe('Ticket tools', () => {
       );
 
       const outputPath = path.join(os.tmpdir(), `zendesk-export-test-${process.pid}-${Date.now()}.json`);
+      let filePath: string | undefined;
       try {
         const result = await testClient.callTool('export_zendesk_tickets', {
           query: 'status:open',
@@ -214,16 +215,23 @@ describe('Ticket tools', () => {
         expect(data.ok).toBe(true);
         expect(data.exported).toBe(true);
         expect(data.count).toBe(1);
-        const written = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
+        // Only the file name is honoured: the export lands inside a fresh
+        // private directory under the temp root, reported as file_path.
+        filePath = data.file_path;
+        expect(path.basename(filePath!)).toBe(path.basename(outputPath));
+        expect(fs.existsSync(outputPath)).toBe(false);
+        expect(path.dirname(path.dirname(filePath!))).toBe(fs.realpathSync(os.tmpdir()));
+        const written = JSON.parse(fs.readFileSync(filePath!, 'utf8'));
         expect(written).toHaveLength(1);
         expect(written[0].id).toBe(10);
-        expect(fs.statSync(outputPath).mode & 0o777).toBe(0o600);
+        expect(fs.statSync(filePath!).mode & 0o777).toBe(0o600);
       } finally {
+        if (filePath) fs.rmSync(path.dirname(filePath), { recursive: true, force: true });
         fs.rmSync(outputPath, { force: true });
       }
     });
 
-    it('should refuse to overwrite an existing export file', async () => {
+    it('should never overwrite an existing file at the requested path', async () => {
       const base = `https://${API_TOKEN_ACCOUNT.subdomain}.zendesk.com/api/v2`;
       mswServer.use(
         http.get(`${base}/search/export.json`, () => {
@@ -237,6 +245,7 @@ describe('Ticket tools', () => {
 
       const outputPath = path.join(os.tmpdir(), `zendesk-export-existing-${process.pid}.json`);
       fs.writeFileSync(outputPath, 'do not clobber');
+      let filePath: string | undefined;
       try {
         const result = await testClient.callTool('export_zendesk_tickets', {
           query: 'status:open',
@@ -244,10 +253,15 @@ describe('Ticket tools', () => {
           output_path: outputPath,
         });
         const data = result.json as any;
-        expect(data.ok).toBe(false);
-        expect(data.code).toBe('OUTPUT_EXISTS');
+        expect(data.ok).toBe(true);
+        expect(data.exported).toBe(true);
+        // The pre-existing file is untouched; the export went to file_path.
         expect(fs.readFileSync(outputPath, 'utf8')).toBe('do not clobber');
+        filePath = data.file_path;
+        expect(filePath).not.toBe(outputPath);
+        expect(JSON.parse(fs.readFileSync(filePath!, 'utf8'))).toHaveLength(1);
       } finally {
+        if (filePath) fs.rmSync(path.dirname(filePath), { recursive: true, force: true });
         fs.rmSync(outputPath, { force: true });
       }
     });
@@ -305,7 +319,7 @@ describe('Ticket tools', () => {
       expect(data.tickets.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('should write batch results to a new file and refuse overwrite', async () => {
+    it('should write batch results to private export files without touching the requested path', async () => {
       const base = `https://${API_TOKEN_ACCOUNT.subdomain}.zendesk.com/api/v2`;
       mswServer.use(
         http.get(`${base}/tickets/show_many.json`, () => {
@@ -314,6 +328,7 @@ describe('Ticket tools', () => {
       );
 
       const outputPath = path.join(os.tmpdir(), `zendesk-byids-test-${process.pid}-${Date.now()}.json`);
+      const filePaths: string[] = [];
       try {
         const result = await testClient.callTool('get_zendesk_tickets_by_ids', {
           ids: [1],
@@ -323,17 +338,26 @@ describe('Ticket tools', () => {
         const data = result.json as any;
         expect(data.ok).toBe(true);
         expect(data.exported).toBe(true);
-        expect(JSON.parse(fs.readFileSync(outputPath, 'utf8'))[0].id).toBe(1);
+        filePaths.push(data.file_path);
+        expect(fs.existsSync(outputPath)).toBe(false);
+        expect(JSON.parse(fs.readFileSync(data.file_path, 'utf8'))[0].id).toBe(1);
 
+        // A repeat export to the same requested path also succeeds: each
+        // export gets its own private directory, nothing is ever clobbered.
         const second = await testClient.callTool('get_zendesk_tickets_by_ids', {
           ids: [1],
           save_to_file: true,
           output_path: outputPath,
         });
         const secondData = second.json as any;
-        expect(secondData.ok).toBe(false);
-        expect(secondData.code).toBe('OUTPUT_EXISTS');
+        expect(secondData.ok).toBe(true);
+        filePaths.push(secondData.file_path);
+        expect(secondData.file_path).not.toBe(data.file_path);
+        expect(JSON.parse(fs.readFileSync(secondData.file_path, 'utf8'))[0].id).toBe(1);
+        // First export is untouched.
+        expect(JSON.parse(fs.readFileSync(data.file_path, 'utf8'))[0].id).toBe(1);
       } finally {
+        for (const fp of filePaths) fs.rmSync(path.dirname(fp), { recursive: true, force: true });
         fs.rmSync(outputPath, { force: true });
       }
     });

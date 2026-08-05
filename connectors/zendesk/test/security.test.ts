@@ -111,48 +111,110 @@ describe('Security — resolveTempOutputPath', () => {
 });
 
 describe('Security — createExclusiveFileWriter', () => {
-  it('should write through a single fd and produce a 0o600 file', async () => {
+  it('should write through a single fd into a fresh private staging directory', async () => {
     const tmpDir = os.tmpdir();
-    const filePath = resolveTempOutputPath(path.join(tmpDir, `zendesk-writer-${process.pid}.json`));
-    const writer = await createExclusiveFileWriter(filePath);
+    const requested = resolveTempOutputPath(path.join(tmpDir, `zendesk-writer-${process.pid}.json`));
+    const writer = await createExclusiveFileWriter(requested);
     await writer.write('[1,');
     await writer.write('2]');
     await writer.close();
-    expect(fs.readFileSync(filePath, 'utf8')).toBe('[1,2]');
-    expect((fs.statSync(filePath).mode & 0o777)).toBe(0o600);
-    fs.unlinkSync(filePath);
+
+    // The write does NOT land at the requested path…
+    expect(fs.existsSync(requested)).toBe(false);
+    // …it lands inside a fresh per-export private directory directly under
+    // the canonical temp root, preserving the requested file name.
+    const tmpRoot = fs.realpathSync(tmpDir);
+    const stagingDir = path.dirname(writer.filePath);
+    expect(path.basename(writer.filePath)).toBe(`zendesk-writer-${process.pid}.json`);
+    expect(path.dirname(stagingDir)).toBe(tmpRoot);
+    expect(path.basename(stagingDir)).toMatch(/^zendesk-export-/);
+    expect(fs.lstatSync(stagingDir).isSymbolicLink()).toBe(false);
+    expect(fs.lstatSync(stagingDir).mode & 0o777).toBe(0o700);
+    expect(fs.readFileSync(writer.filePath, 'utf8')).toBe('[1,2]');
+    expect(fs.statSync(writer.filePath).mode & 0o777).toBe(0o600);
+    fs.rmSync(stagingDir, { recursive: true, force: true });
   });
 
-  it('should refuse to overwrite an existing file (EEXIST fails closed)', async () => {
+  it('should never overwrite or follow a pre-existing file at the requested path', async () => {
     const tmpDir = os.tmpdir();
-    const filePath = path.join(tmpDir, `zendesk-existing-${process.pid}.json`);
-    fs.writeFileSync(filePath, 'original');
+    const requested = path.join(tmpDir, `zendesk-existing-${process.pid}.json`);
+    fs.writeFileSync(requested, 'original');
     try {
-      await expect(createExclusiveFileWriter(filePath)).rejects.toMatchObject({
-        code: 'OUTPUT_EXISTS',
-      });
-      // The existing file is untouched.
-      expect(fs.readFileSync(filePath, 'utf8')).toBe('original');
+      const writer = await createExclusiveFileWriter(requested);
+      await writer.write('export');
+      await writer.close();
+      // The pre-existing file is untouched and the export went elsewhere.
+      expect(fs.readFileSync(requested, 'utf8')).toBe('original');
+      expect(fs.readFileSync(writer.filePath, 'utf8')).toBe('export');
+      fs.rmSync(path.dirname(writer.filePath), { recursive: true, force: true });
     } finally {
-      fs.unlinkSync(filePath);
+      fs.unlinkSync(requested);
     }
   });
 
-  it('should refuse a final-component symlink instead of following it', async () => {
+  it('should never follow a final-component symlink at the requested path', async () => {
     const tmpDir = os.tmpdir();
     const target = path.join(tmpDir, `zendesk-symlink-target-${process.pid}.json`);
     const linkPath = path.join(tmpDir, `zendesk-symlink-leaf-${process.pid}.json`);
     fs.writeFileSync(target, 'sensitive');
     fs.symlinkSync(target, linkPath);
     try {
-      await expect(createExclusiveFileWriter(linkPath)).rejects.toMatchObject({
-        code: 'OUTPUT_EXISTS',
-      });
+      const writer = await createExclusiveFileWriter(linkPath);
+      await writer.write('export');
+      await writer.close();
       expect(fs.readFileSync(target, 'utf8')).toBe('sensitive');
+      expect(fs.readFileSync(writer.filePath, 'utf8')).toBe('export');
+      fs.rmSync(path.dirname(writer.filePath), { recursive: true, force: true });
     } finally {
       fs.unlinkSync(linkPath);
       fs.unlinkSync(target);
     }
+  });
+
+  it('should be immune to a parent-directory swap between validation and write', async () => {
+    // Adversarial regression: the checked parent directory is replaced by a
+    // symlink (pointing at an attacker-controlled dir inside the temp root)
+    // after resolveTempOutputPath validated the path. The write must not be
+    // redirected through the symlink.
+    const tmpDir = os.tmpdir();
+    const attackerDir = fs.mkdtempSync(path.join(tmpDir, 'zendesk-attacker-'));
+    const parent = path.join(tmpDir, `zendesk-parent-${process.pid}`);
+    fs.mkdirSync(parent);
+    const requested = path.join(parent, 'export.json');
+
+    // Validation happens against the real parent directory…
+    expect(() => resolveTempOutputPath(requested)).not.toThrow();
+    // …then the attacker swaps it for a symlink before the write.
+    fs.rmdirSync(parent);
+    fs.symlinkSync(attackerDir, parent);
+
+    try {
+      const writer = await createExclusiveFileWriter(requested);
+      await writer.write('confidential-export');
+      await writer.close();
+
+      // Nothing was written through the swapped parent…
+      expect(fs.readdirSync(attackerDir)).toEqual([]);
+      // …and the content is only inside the private staging directory.
+      expect(fs.readFileSync(writer.filePath, 'utf8')).toBe('confidential-export');
+      const tmpRoot = fs.realpathSync(tmpDir);
+      expect(fs.realpathSync(writer.filePath).startsWith(tmpRoot + path.sep)).toBe(true);
+      fs.rmSync(path.dirname(writer.filePath), { recursive: true, force: true });
+    } finally {
+      fs.unlinkSync(parent);
+      fs.rmdirSync(attackerDir);
+    }
+  });
+
+  it('discard() should remove the file and its private staging directory', async () => {
+    const tmpDir = os.tmpdir();
+    const requested = resolveTempOutputPath(path.join(tmpDir, `zendesk-discard-${process.pid}.json`));
+    const writer = await createExclusiveFileWriter(requested);
+    await writer.write('partial');
+    const stagingDir = path.dirname(writer.filePath);
+    await writer.discard();
+    expect(fs.existsSync(writer.filePath)).toBe(false);
+    expect(fs.existsSync(stagingDir)).toBe(false);
   });
 });
 

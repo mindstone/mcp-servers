@@ -11,9 +11,10 @@ import { ZendeskError } from './types.js';
  * existing ancestor are canonicalised (symlinks resolved) so a symlinked
  * parent directory cannot smuggle the write outside the temp root.
  *
- * Returns the lexical resolved path; the returned value is only ever used
- * together with exclusive-create writes (see createExclusiveFileWriter), so
- * a check-then-use swap of the final component fails closed with EEXIST.
+ * The returned path expresses the *requested* destination only. It is never
+ * opened: createExclusiveFileWriter derives just the file name from it and
+ * creates the real file inside a fresh private staging directory, so no
+ * check-then-use swap of any path component can redirect the write.
  */
 export function resolveTempOutputPath(outputPath: string): string {
   const resolved = path.resolve(outputPath);
@@ -43,37 +44,43 @@ export function resolveTempOutputPath(outputPath: string): string {
 }
 
 export interface ExclusiveFileWriter {
-  /** The resolved, containment-checked path that was opened. */
+  /** The actual path of the created file, inside the private staging directory. */
   filePath: string;
   write(chunk: string): Promise<void>;
   close(): Promise<void>;
+  /** Best-effort removal of the file and its private staging directory. */
+  discard(): Promise<void>;
 }
 
 /**
- * Open `resolvedPath` for exclusive creation (O_CREAT|O_EXCL|O_WRONLY) and
- * return a writer that writes through the single open file descriptor.
- * Validation (existence) and open are one atomic syscall, so a pre-existing
- * file or final-component symlink fails closed with EEXIST — exports never
- * overwrite. The fd is fstat-checked to be a regular file before use.
+ * Create the export file for `requestedPath` and return a writer for it.
+ *
+ * The write never touches `requestedPath` itself: a fresh, unpredictable
+ * staging directory is created atomically with `fs.mkdtempSync` directly
+ * under the canonical temp root (mode 0700), and only the requested file
+ * *name* is carried over. Another local principal cannot pre-create, rename,
+ * or symlink-swap any component of that path, so the construction is immune
+ * to the parent-directory TOCTOU race that a "validate then open by
+ * pathname" scheme leaves open — no post-validation pathname trust remains.
+ * The caller reports `writer.filePath` to the user as the export location.
+ *
+ * The file itself is opened with O_CREAT|O_EXCL|O_WRONLY (mode 0600) and
+ * fstat-checked to be a regular file; all writes go through the single fd.
  */
-export async function createExclusiveFileWriter(resolvedPath: string): Promise<ExclusiveFileWriter> {
-  fs.mkdirSync(path.dirname(resolvedPath), { recursive: true });
+export async function createExclusiveFileWriter(requestedPath: string): Promise<ExclusiveFileWriter> {
+  const tmpRoot = fs.realpathSync(os.tmpdir());
+  const stagingDir = fs.mkdtempSync(path.join(tmpRoot, 'zendesk-export-'));
+
+  const requestedBase = path.basename(requestedPath);
+  const fileName =
+    requestedBase === '' || requestedBase === '.' || requestedBase === '..'
+      ? 'zendesk-export.json'
+      : requestedBase;
+  const filePath = path.join(stagingDir, fileName);
 
   let fd: number;
   try {
-    fd = fs.openSync(resolvedPath, 'wx', 0o600);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-      throw new ZendeskError(
-        'Output file already exists — refusing to overwrite',
-        'OUTPUT_EXISTS',
-        'Choose a different output_path or delete the existing file first.'
-      );
-    }
-    throw error;
-  }
-
-  try {
+    fd = fs.openSync(filePath, 'wx', 0o600);
     const stat = fs.fstatSync(fd);
     if (!stat.isFile()) {
       throw new ZendeskError(
@@ -83,13 +90,15 @@ export async function createExclusiveFileWriter(resolvedPath: string): Promise<E
       );
     }
   } catch (error) {
-    fs.closeSync(fd);
+    try {
+      fs.rmSync(stagingDir, { recursive: true, force: true });
+    } catch { /* best effort */ }
     throw error;
   }
 
   let failed: Error | null = null;
   return {
-    filePath: resolvedPath,
+    filePath,
     write(chunk: string): Promise<void> {
       if (failed) return Promise.reject(failed);
       return new Promise<void>((resolve, reject) => {
@@ -106,6 +115,16 @@ export async function createExclusiveFileWriter(resolvedPath: string): Promise<E
     close(): Promise<void> {
       return new Promise<void>((resolve, reject) => {
         fs.close(fd, (err) => (err ? reject(err) : resolve()));
+      });
+    },
+    discard(): Promise<void> {
+      return new Promise<void>((resolve) => {
+        fs.close(fd, () => {
+          try {
+            fs.rmSync(stagingDir, { recursive: true, force: true });
+          } catch { /* best effort */ }
+          resolve();
+        });
       });
     },
   };
