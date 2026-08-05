@@ -11,7 +11,7 @@ Read and edit Word documents, Excel workbooks, and PowerPoint presentations from
 
 - **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-office)
 - **Auth:** None ([`server.json`](./server.json))
-- **Tools:** [53](./src/) (word, excel, powerpoint, setup)
+- **Tools:** [62](./src/) (word, excel, powerpoint, setup)
 - **Surface:** desktop-addin
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -173,13 +173,13 @@ Claude Desktop is possible but the host must provide a writable
 }
 ```
 
-## Tools (53)
+## Tools (62)
 
 ### Setup
 - `rebel_office_setup` — Install or repair (or uninstall) the Office add-in.
 - `rebel_office_status` — Check Office connection status for Word, Excel, PowerPoint.
 
-### Word (17)
+### Word (20)
 - `rebel_office_word_read_document` — Read the active Word document body, paginated by paragraph.
 - `rebel_office_word_get_document_structure` — Get the heading/section outline of the document.
 - `rebel_office_word_get_selection` — Get the currently selected text and location.
@@ -187,7 +187,10 @@ Claude Desktop is possible but the host must provide a writable
 - `rebel_office_word_insert_text` — Insert text at a location or replace the selection (destructive).
 - `rebel_office_word_replace_text` — Find-and-replace text in the document (destructive).
 - `rebel_office_word_format_text` — Apply font, color, highlight, or alignment formatting (destructive).
+- `rebel_office_word_apply_style` — Apply a named paragraph style (e.g. "Heading 1", "Quote") to existing paragraphs (destructive).
 - `rebel_office_word_insert_table` — Insert a table with headers and rows (destructive).
+- `rebel_office_word_read_table` — Read a table's cell values as a 2D array.
+- `rebel_office_word_update_table_cell` — Replace the text of a single table cell (destructive).
 - `rebel_office_word_insert_image` — Insert an image from a file path or base64 data (destructive).
 - `rebel_office_word_insert_break` — Insert a page or section break (destructive).
 - `rebel_office_word_set_header_footer` — Set header or footer text and alignment (destructive).
@@ -198,7 +201,7 @@ Claude Desktop is possible but the host must provide a writable
 - `rebel_office_word_get_tracked_changes` — Read tracked changes (revisions).
 - `rebel_office_word_accept_reject_changes` — Accept or reject tracked changes in bulk or by ID (destructive).
 
-### Excel (22)
+### Excel (25)
 - `rebel_office_excel_read_range` — Read cell values from an A1 range or named range.
 - `rebel_office_excel_write_range` — Write a 2D array of values to a range (destructive).
 - `rebel_office_excel_get_worksheets` — List worksheets with positions and used ranges.
@@ -221,16 +224,22 @@ Claude Desktop is possible but the host must provide a writable
 - `rebel_office_excel_add_data_validation` — Add input validation rules to a range (destructive).
 - `rebel_office_excel_get_comments` — Read threaded cell comments.
 - `rebel_office_excel_add_comment` — Add a comment or reply on a cell (destructive).
+- `rebel_office_excel_get_pivot_tables` — List pivot tables and the worksheets they live on.
+- `rebel_office_excel_create_pivot_table` — Create a pivot table from a source range (destructive).
+- `rebel_office_excel_refresh_pivot_table` — Refresh one pivot table, or all of them.
 
-### PowerPoint (12)
+### PowerPoint (15)
 - `rebel_office_powerpoint_get_slides` — List slides with layout, title, and shape counts.
 - `rebel_office_powerpoint_get_slide_content` — Get all shapes and text on a specific slide.
 - `rebel_office_powerpoint_add_slide` — Add a new slide with a layout and optional content (destructive).
+- `rebel_office_powerpoint_apply_layout` — Change the layout of an existing slide (destructive).
 - `rebel_office_powerpoint_delete_slide` — Delete a slide by index (destructive).
 - `rebel_office_powerpoint_reorder_slides` — Move a slide to a new position (destructive).
 - `rebel_office_powerpoint_add_text_box` — Add a positioned text box to a slide (destructive).
 - `rebel_office_powerpoint_add_image` — Add an image to a slide from path or base64 (destructive).
 - `rebel_office_powerpoint_add_shape` — Add a geometric shape with optional text and fill (destructive).
+- `rebel_office_powerpoint_delete_shape` — Delete a shape from a slide by ID or name (destructive).
+- `rebel_office_powerpoint_format_shape` — Format a shape's fill, line, position, size, or name (destructive).
 - `rebel_office_powerpoint_update_text` — Update text in a shape or layout placeholder (destructive).
 - `rebel_office_powerpoint_get_speaker_notes` — Read speaker notes for one or all slides.
 - `rebel_office_powerpoint_set_speaker_notes` — Set or replace speaker notes for a slide (destructive).

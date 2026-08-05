@@ -26,9 +26,24 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
+import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Single source of truth for the server-reported version — a hardcoded
+// literal here drifted a full release behind package.json once already.
+// dist/index.js and src/index.ts both resolve '../package.json' to the
+// connector root.
+const PACKAGE_VERSION = (() => {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+    return typeof pkg.version === 'string' ? pkg.version : 'unknown';
+  } catch (err) {
+    console.error('[RebelOffice] Could not read package.json for server version:', err?.message ?? err);
+    return 'unknown';
+  }
+})();
 
 // The sidecar uses HTTPS with a trusted localhost cert (via office-addin-dev-certs).
 // Office requires HTTPS for SourceLocation URLs. Since this MCP process connects
@@ -653,7 +668,7 @@ const sidecarRequest = async (app, action, params = {}) => {
       };
     }
 
-    return await response.json();
+    return stampUntrustedSource(await response.json(), app);
   } catch (err) {
     const msg = err && err.message ? err.message : String(err);
     if (msg.includes('ECONNREFUSED') || msg.includes('fetch failed')) {
@@ -674,18 +689,52 @@ const sidecarRequest = async (app, action, params = {}) => {
 /**
  * Wrap a sidecar response into MCP tool result format.
  * Success → text content. Error → text content with isError flag.
+ *
+ * AGENTS.md security invariant #6: document/spreadsheet/slide content returned
+ * by the add-in is authored inside Office files — attacker-influenced whenever
+ * the file came from somewhere else. `sidecarRequest` stamps each add-in
+ * payload with its source app; here every string in the payload (and any
+ * add-in-relayed error message) is wrapped in the canonical
+ * `<untrusted-content>` envelope before it reaches the model. Locally
+ * generated errors (sidecar unreachable, etc.) carry no stamp and pass
+ * through unwrapped.
  */
+const UNTRUSTED_SOURCE = Symbol('officeUntrustedSource');
+
+const untrustedSourceForApp = (app) => `microsoft-office-${app}`;
+
+/**
+ * Stamp a sidecar JSON payload with its source app. The stamp is a
+ * non-enumerable Symbol-keyed property, so it never appears in
+ * JSON.stringify output or in `wrapUntrustedJsonStrings`' object walk.
+ */
+const stampUntrustedSource = (payload, app) => {
+  if (payload && typeof payload === 'object') {
+    Object.defineProperty(payload, UNTRUSTED_SOURCE, {
+      value: untrustedSourceForApp(app),
+      enumerable: false,
+      configurable: true,
+    });
+  }
+  return payload;
+};
+
 const toMcpResult = (result) => {
+  const source =
+    result && typeof result === 'object' && typeof result[UNTRUSTED_SOURCE] === 'string'
+      ? result[UNTRUSTED_SOURCE]
+      : null;
   if (result.success === false) {
+    const message = result.error || 'Unknown error';
     return {
-      content: [{ type: 'text', text: result.error || 'Unknown error' }],
+      content: [{ type: 'text', text: source ? wrapUntrusted(message, source) : message }],
       isError: true,
     };
   }
   // Return the data payload as formatted JSON text
   const data = result.data !== undefined ? result.data : result;
   return {
-    content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+    content: [{ type: 'text', text: JSON.stringify(source ? wrapUntrustedJsonStrings(data, source) : data, null, 2) }],
   };
 };
 
@@ -705,7 +754,10 @@ const TOOL_NAMES = {
   insertText: 'rebel_office_word_insert_text',
   replaceText: 'rebel_office_word_replace_text',
   formatText: 'rebel_office_word_format_text',
+  applyStyle: 'rebel_office_word_apply_style',
   insertTable: 'rebel_office_word_insert_table',
+  readTable: 'rebel_office_word_read_table',
+  updateTableCell: 'rebel_office_word_update_table_cell',
   insertImage: 'rebel_office_word_insert_image',
   insertBreak: 'rebel_office_word_insert_break',
   setHeaderFooter: 'rebel_office_word_set_header_footer',
@@ -739,16 +791,22 @@ const TOOL_NAMES = {
   excelAddDataValidation: 'rebel_office_excel_add_data_validation',
   excelGetComments: 'rebel_office_excel_get_comments',
   excelAddComment: 'rebel_office_excel_add_comment',
+  excelGetPivotTables: 'rebel_office_excel_get_pivot_tables',
+  excelCreatePivotTable: 'rebel_office_excel_create_pivot_table',
+  excelRefreshPivotTable: 'rebel_office_excel_refresh_pivot_table',
 
   // PowerPoint tools
   pptGetSlides: 'rebel_office_powerpoint_get_slides',
   pptGetSlideContent: 'rebel_office_powerpoint_get_slide_content',
   pptAddSlide: 'rebel_office_powerpoint_add_slide',
+  pptApplyLayout: 'rebel_office_powerpoint_apply_layout',
   pptDeleteSlide: 'rebel_office_powerpoint_delete_slide',
   pptReorderSlides: 'rebel_office_powerpoint_reorder_slides',
   pptAddTextBox: 'rebel_office_powerpoint_add_text_box',
   pptAddImage: 'rebel_office_powerpoint_add_image',
   pptAddShape: 'rebel_office_powerpoint_add_shape',
+  pptDeleteShape: 'rebel_office_powerpoint_delete_shape',
+  pptFormatShape: 'rebel_office_powerpoint_format_shape',
   pptUpdateText: 'rebel_office_powerpoint_update_text',
   pptGetSpeakerNotes: 'rebel_office_powerpoint_get_speaker_notes',
   pptSetSpeakerNotes: 'rebel_office_powerpoint_set_speaker_notes',
@@ -761,7 +819,7 @@ const TOOL_NAMES = {
 
 const server = new McpServer({
   name: 'RebelOffice',
-  version: '0.1.1',
+  version: PACKAGE_VERSION,
 });
 
 const EMPTY_OBJECT_SCHEMA = {
@@ -782,7 +840,13 @@ const createToolError = (errorMessage) => ({
   isError: true,
 });
 
-server.registerTool = (name, config, handler) => {
+/**
+ * Register a tool into the local registry that backs the ListTools/CallTool
+ * request handlers below. This is deliberately a plain function, not the SDK's
+ * `McpServer#registerTool` — this server manages its own registry (see the
+ * file header for why the SDK's Zod-based registration is not used here).
+ */
+const registerTool = (name, config, handler) => {
   if (registeredTools.has(name)) {
     throw new Error(`Tool ${name} is already registered`);
   }
@@ -972,7 +1036,7 @@ const uninstallManifest = () => {
 // ---------------------------------------------------------------------------
 
 // 0a. rebel_office_setup — (Re-)install or uninstall the Office add-in
-server.registerTool(TOOL_NAMES.setup, {
+registerTool(TOOL_NAMES.setup, {
   title: 'Install or repair Office add-in',
   description:
     'Re-installs or uninstalls the Rebel add-in in Microsoft Office (Word, Excel, PowerPoint).\n\n' +
@@ -1072,7 +1136,7 @@ server.registerTool(TOOL_NAMES.setup, {
 });
 
 // 0b. rebel_office_status — Check connection status
-server.registerTool(TOOL_NAMES.status, {
+registerTool(TOOL_NAMES.status, {
   title: 'Check Office connection status',
   description:
     'Check which Office applications are currently connected to Rebel. Returns connection ' +
@@ -1125,7 +1189,7 @@ server.registerTool(TOOL_NAMES.status, {
 });
 
 // 1. rebel_office_word_read_document
-server.registerTool(TOOL_NAMES.readDocument, {
+registerTool(TOOL_NAMES.readDocument, {
   title: 'Read Word document',
   description:
     'Read the content of the currently open Word document. Returns the full text organized by ' +
@@ -1176,7 +1240,7 @@ server.registerTool(TOOL_NAMES.readDocument, {
 });
 
 // 2. rebel_office_word_get_document_structure
-server.registerTool(TOOL_NAMES.getDocumentStructure, {
+registerTool(TOOL_NAMES.getDocumentStructure, {
   title: 'Get document outline',
   description:
     'Get the outline structure of the currently open Word document — headings, sections, and ' +
@@ -1209,7 +1273,7 @@ server.registerTool(TOOL_NAMES.getDocumentStructure, {
 });
 
 // 3. rebel_office_word_get_selection
-server.registerTool(TOOL_NAMES.getSelection, {
+registerTool(TOOL_NAMES.getSelection, {
   title: 'Get selected text',
   description:
     'Get the currently selected text in the Word document. Returns the text content and location ' +
@@ -1235,7 +1299,7 @@ server.registerTool(TOOL_NAMES.getSelection, {
 });
 
 // 4. rebel_office_word_find_text
-server.registerTool(TOOL_NAMES.findText, {
+registerTool(TOOL_NAMES.findText, {
   title: 'Find text in document',
   description:
     'Search for text occurrences in the document. Returns matching locations with surrounding ' +
@@ -1291,7 +1355,7 @@ server.registerTool(TOOL_NAMES.findText, {
 });
 
 // 5. rebel_office_word_insert_text
-server.registerTool(TOOL_NAMES.insertText, {
+registerTool(TOOL_NAMES.insertText, {
   title: 'Insert text',
   description:
     'Insert text into the document at a specified location. Can insert at the beginning, end, ' +
@@ -1353,7 +1417,7 @@ server.registerTool(TOOL_NAMES.insertText, {
 });
 
 // 6. rebel_office_word_replace_text
-server.registerTool(TOOL_NAMES.replaceText, {
+registerTool(TOOL_NAMES.replaceText, {
   title: 'Find and replace text',
   description:
     'Find and replace text throughout the document. Supports case-sensitive and whole-word matching.\n\n' +
@@ -1413,7 +1477,7 @@ server.registerTool(TOOL_NAMES.replaceText, {
 });
 
 // 7. rebel_office_word_format_text
-server.registerTool(TOOL_NAMES.formatText, {
+registerTool(TOOL_NAMES.formatText, {
   title: 'Format text',
   description:
     'Apply formatting to text at a specified location — a paragraph range, the current selection, ' +
@@ -1547,7 +1611,7 @@ server.registerTool(TOOL_NAMES.formatText, {
 });
 
 // 8. rebel_office_word_insert_table
-server.registerTool(TOOL_NAMES.insertTable, {
+registerTool(TOOL_NAMES.insertTable, {
   title: 'Insert table',
   description:
     'Insert a table into the document. Provide headers and rows of data. The table is inserted ' +
@@ -1618,7 +1682,7 @@ server.registerTool(TOOL_NAMES.insertTable, {
 });
 
 // 9. rebel_office_word_insert_image
-server.registerTool(TOOL_NAMES.insertImage, {
+registerTool(TOOL_NAMES.insertImage, {
   title: 'Insert image',
   description:
     'Insert an image into the document from a file path or base64 data. The image is inserted ' +
@@ -1705,7 +1769,7 @@ server.registerTool(TOOL_NAMES.insertImage, {
 });
 
 // 10. rebel_office_word_insert_break
-server.registerTool(TOOL_NAMES.insertBreak, {
+registerTool(TOOL_NAMES.insertBreak, {
   title: 'Insert page/section break',
   description:
     'Insert a page break or section break into the document. Page breaks start a new page; ' +
@@ -1749,7 +1813,7 @@ server.registerTool(TOOL_NAMES.insertBreak, {
 });
 
 // 11. rebel_office_word_set_header_footer
-server.registerTool(TOOL_NAMES.setHeaderFooter, {
+registerTool(TOOL_NAMES.setHeaderFooter, {
   title: 'Set header or footer',
   description:
     'Set the header or footer text for the document. Can target the first page, odd pages, or ' +
@@ -1816,7 +1880,7 @@ server.registerTool(TOOL_NAMES.setHeaderFooter, {
 });
 
 // 12. rebel_office_word_get_properties
-server.registerTool(TOOL_NAMES.getProperties, {
+registerTool(TOOL_NAMES.getProperties, {
   title: 'Get document properties',
   description:
     "Get the document's metadata properties — title, author, creation date, last modified, " +
@@ -1839,7 +1903,7 @@ server.registerTool(TOOL_NAMES.getProperties, {
 });
 
 // 13. rebel_office_word_get_comments
-server.registerTool(TOOL_NAMES.getComments, {
+registerTool(TOOL_NAMES.getComments, {
   title: 'Read comments',
   description:
     'Read all comments in the document. Returns each comment with its author, date, associated ' +
@@ -1871,7 +1935,7 @@ server.registerTool(TOOL_NAMES.getComments, {
 });
 
 // 14. rebel_office_word_add_comment
-server.registerTool(TOOL_NAMES.addComment, {
+registerTool(TOOL_NAMES.addComment, {
   title: 'Add comment',
   description:
     'Add a comment to the document at a specified location — the current selection, a paragraph, ' +
@@ -1941,7 +2005,7 @@ server.registerTool(TOOL_NAMES.addComment, {
 });
 
 // 15. rebel_office_word_resolve_comment
-server.registerTool(TOOL_NAMES.resolveComment, {
+registerTool(TOOL_NAMES.resolveComment, {
   title: 'Resolve or delete comment',
   description:
     'Resolve or delete a comment by its ID. Resolving marks a comment as addressed without ' +
@@ -1985,7 +2049,7 @@ server.registerTool(TOOL_NAMES.resolveComment, {
 });
 
 // 16. rebel_office_word_get_tracked_changes
-server.registerTool(TOOL_NAMES.getTrackedChanges, {
+registerTool(TOOL_NAMES.getTrackedChanges, {
   title: 'Read tracked changes',
   description:
     'Read tracked changes (revisions) in the document. Returns each change with its type ' +
@@ -2018,7 +2082,7 @@ server.registerTool(TOOL_NAMES.getTrackedChanges, {
 });
 
 // 17. rebel_office_word_accept_reject_changes
-server.registerTool(TOOL_NAMES.acceptRejectChanges, {
+registerTool(TOOL_NAMES.acceptRejectChanges, {
   title: 'Accept or reject tracked changes',
   description:
     'Accept or reject tracked changes in the document. Can target specific changes by ID, all ' +
@@ -2086,12 +2150,151 @@ server.registerTool(TOOL_NAMES.acceptRejectChanges, {
   return toMcpResult(result);
 });
 
+// 18. rebel_office_word_read_table
+registerTool(TOOL_NAMES.readTable, {
+  title: 'Read Word table',
+  description:
+    'Read a table in the document as a 2D array of cell text. Tables are indexed 0-based in ' +
+    'document order; omit `tableIndex` to read the first table.\n\n' +
+    'Use this to see what a table contains before editing it with ' +
+    '`rebel_office_word_update_table_cell`. Create new tables with `rebel_office_word_insert_table`.',
+  inputSchema: {
+    "type": "object",
+    "properties": {
+      "tableIndex": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Which table to read (0-based — the first table in the document is 0). Defaults to 0."
+      }
+    }
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async (input) => {
+  const result = await sidecarRequest('word', 'read_table', {
+    tableIndex: input.tableIndex,
+  });
+  return toMcpResult(result);
+});
+
+// 19. rebel_office_word_update_table_cell
+registerTool(TOOL_NAMES.updateTableCell, {
+  title: 'Update Word table cell',
+  description:
+    'Replace the text of a single cell in an existing table. Row and column indexes are 0-based ' +
+    '(the top-left cell is row 0, column 0). Pass an empty `text` to clear a cell.\n\n' +
+    'Use `rebel_office_word_read_table` first to see the current contents and dimensions.',
+  inputSchema: {
+    "type": "object",
+    "properties": {
+      "tableIndex": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Which table to edit (0-based). Defaults to 0."
+      },
+      "rowIndex": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Row of the cell (0-based)."
+      },
+      "columnIndex": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Column of the cell (0-based)."
+      },
+      "text": {
+        "type": "string",
+        "description": "New cell text. May be empty to clear the cell."
+      }
+    },
+    "required": [
+      "rowIndex",
+      "columnIndex",
+      "text"
+    ]
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async (input) => {
+  const result = await sidecarRequest('word', 'update_table_cell', {
+    tableIndex: input.tableIndex,
+    rowIndex: input.rowIndex,
+    columnIndex: input.columnIndex,
+    text: input.text,
+  });
+  return toMcpResult(result);
+});
+
+// 20. rebel_office_word_apply_style
+registerTool(TOOL_NAMES.applyStyle, {
+  title: 'Apply Word style to paragraphs',
+  description:
+    'Apply a named paragraph style to existing paragraphs — built-in styles like "Heading 1", ' +
+    '"Title", or "Quote", or any custom style defined in the document. Target the current ' +
+    'selection, a range of paragraphs, or every paragraph containing a search text.\n\n' +
+    'Styles are how Word documents stay consistent — prefer this over manual font formatting ' +
+    '(`rebel_office_word_format_text`) when making headings, quotes, or other structural text ' +
+    'look intentional. To style new text at insertion time, use `rebel_office_word_insert_text` ' +
+    'with its `style` parameter.',
+  inputSchema: {
+    "type": "object",
+    "properties": {
+      "style": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Style name, e.g. \"Heading 1\", \"Title\", \"Subtitle\", \"Quote\", \"Intense Quote\", \"No Spacing\", or a custom style defined in the document."
+      },
+      "target": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "selection",
+              "paragraphRange",
+              "searchText"
+            ],
+            "description": "Which paragraphs to style: the current selection, a range of paragraphs, or paragraphs containing a search text."
+          },
+          "startParagraph": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Start paragraph index, 0-based (for paragraphRange)."
+          },
+          "endParagraph": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "End paragraph index, 0-based, inclusive (for paragraphRange; defaults to startParagraph)."
+          },
+          "searchText": {
+            "type": "string",
+            "description": "Style every paragraph containing this text (for searchText)."
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "description": "Which paragraphs to style."
+      }
+    },
+    "required": [
+      "style",
+      "target"
+    ]
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async (input) => {
+  const result = await sidecarRequest('word', 'apply_style', {
+    style: input.style,
+    target: input.target,
+  });
+  return toMcpResult(result);
+});
+
 // ---------------------------------------------------------------------------
 // Excel tool definitions (22 tools)
 // ---------------------------------------------------------------------------
 
-// 18. rebel_office_excel_read_range
-server.registerTool(TOOL_NAMES.excelReadRange, {
+// 21. rebel_office_excel_read_range
+registerTool(TOOL_NAMES.excelReadRange, {
   title: 'Read Excel range',
   description:
     'Read cell values from a range in the active workbook. Returns data as a 2D array with ' +
@@ -2143,8 +2346,8 @@ server.registerTool(TOOL_NAMES.excelReadRange, {
   return toMcpResult(result);
 });
 
-// 19. rebel_office_excel_write_range
-server.registerTool(TOOL_NAMES.excelWriteRange, {
+// 22. rebel_office_excel_write_range
+registerTool(TOOL_NAMES.excelWriteRange, {
   title: 'Write Excel range',
   description:
     'Write values to cells in the active workbook. Provide data as a 2D array of values. ' +
@@ -2202,8 +2405,8 @@ server.registerTool(TOOL_NAMES.excelWriteRange, {
   return toMcpResult(result);
 });
 
-// 20. rebel_office_excel_get_worksheets
-server.registerTool(TOOL_NAMES.excelGetWorksheets, {
+// 23. rebel_office_excel_get_worksheets
+registerTool(TOOL_NAMES.excelGetWorksheets, {
   title: 'List worksheets',
   description:
     'List all worksheets in the active workbook with their names, positions, visibility, and ' +
@@ -2220,8 +2423,8 @@ server.registerTool(TOOL_NAMES.excelGetWorksheets, {
   return toMcpResult(result);
 });
 
-// 21. rebel_office_excel_add_worksheet
-server.registerTool(TOOL_NAMES.excelAddWorksheet, {
+// 24. rebel_office_excel_add_worksheet
+registerTool(TOOL_NAMES.excelAddWorksheet, {
   title: 'Add worksheet',
   description:
     'Add a new worksheet to the workbook. Optionally specify a name and position. Returns the ' +
@@ -2258,8 +2461,8 @@ server.registerTool(TOOL_NAMES.excelAddWorksheet, {
   return toMcpResult(result);
 });
 
-// 22. rebel_office_excel_delete_worksheet
-server.registerTool(TOOL_NAMES.excelDeleteWorksheet, {
+// 25. rebel_office_excel_delete_worksheet
+registerTool(TOOL_NAMES.excelDeleteWorksheet, {
   title: 'Delete worksheet',
   description:
     'Delete a worksheet from the workbook. **This permanently removes the sheet and all its ' +
@@ -2283,8 +2486,8 @@ server.registerTool(TOOL_NAMES.excelDeleteWorksheet, {
   return toMcpResult(result);
 });
 
-// 23. rebel_office_excel_read_table
-server.registerTool(TOOL_NAMES.excelReadTable, {
+// 26. rebel_office_excel_read_table
+registerTool(TOOL_NAMES.excelReadTable, {
   title: 'Read Excel table',
   description:
     'Read data from a named Excel table (ListObject). Returns headers and rows with type ' +
@@ -2330,8 +2533,8 @@ server.registerTool(TOOL_NAMES.excelReadTable, {
   return toMcpResult(result);
 });
 
-// 24. rebel_office_excel_create_table
-server.registerTool(TOOL_NAMES.excelCreateTable, {
+// 27. rebel_office_excel_create_table
+registerTool(TOOL_NAMES.excelCreateTable, {
   title: 'Create Excel table',
   description:
     'Convert a cell range into a named Excel table with headers. Tables enable structured ' +
@@ -2371,8 +2574,8 @@ server.registerTool(TOOL_NAMES.excelCreateTable, {
   return toMcpResult(result);
 });
 
-// 25. rebel_office_excel_set_formula
-server.registerTool(TOOL_NAMES.excelSetFormula, {
+// 28. rebel_office_excel_set_formula
+registerTool(TOOL_NAMES.excelSetFormula, {
   title: 'Set formula',
   description:
     'Set a formula in one or more cells. Supports standard Excel formulas (SUM, VLOOKUP, IF, etc.), ' +
@@ -2416,8 +2619,8 @@ server.registerTool(TOOL_NAMES.excelSetFormula, {
   return toMcpResult(result);
 });
 
-// 26. rebel_office_excel_get_formulas
-server.registerTool(TOOL_NAMES.excelGetFormulas, {
+// 29. rebel_office_excel_get_formulas
+registerTool(TOOL_NAMES.excelGetFormulas, {
   title: 'Read formulas',
   description:
     'Read the formulas (not computed values) from a range of cells. Returns the formula strings ' +
@@ -2449,8 +2652,8 @@ server.registerTool(TOOL_NAMES.excelGetFormulas, {
   return toMcpResult(result);
 });
 
-// 27. rebel_office_excel_create_chart
-server.registerTool(TOOL_NAMES.excelCreateChart, {
+// 30. rebel_office_excel_create_chart
+registerTool(TOOL_NAMES.excelCreateChart, {
   title: 'Create chart',
   description:
     'Create a chart from data in the workbook. Supports bar, column, line, pie, area, scatter, ' +
@@ -2539,8 +2742,8 @@ server.registerTool(TOOL_NAMES.excelCreateChart, {
   return toMcpResult(result);
 });
 
-// 28. rebel_office_excel_format_range
-server.registerTool(TOOL_NAMES.excelFormatRange, {
+// 31. rebel_office_excel_format_range
+registerTool(TOOL_NAMES.excelFormatRange, {
   title: 'Format Excel range',
   description:
     'Apply formatting to a cell range — font, colors, borders, number format, alignment, and fill.\n\n' +
@@ -2664,8 +2867,8 @@ server.registerTool(TOOL_NAMES.excelFormatRange, {
   return toMcpResult(result);
 });
 
-// 29. rebel_office_excel_add_conditional_formatting
-server.registerTool(TOOL_NAMES.excelAddConditionalFormatting, {
+// 32. rebel_office_excel_add_conditional_formatting
+registerTool(TOOL_NAMES.excelAddConditionalFormatting, {
   title: 'Add conditional formatting',
   description:
     'Add conditional formatting rules to a range. Supports color scales, data bars, icon sets, ' +
@@ -2793,8 +2996,8 @@ server.registerTool(TOOL_NAMES.excelAddConditionalFormatting, {
   return toMcpResult(result);
 });
 
-// 30. rebel_office_excel_sort_range
-server.registerTool(TOOL_NAMES.excelSortRange, {
+// 33. rebel_office_excel_sort_range
+registerTool(TOOL_NAMES.excelSortRange, {
   title: 'Sort range or table',
   description:
     'Sort a range or table by one or more columns. Supports ascending/descending order and ' +
@@ -2851,8 +3054,8 @@ server.registerTool(TOOL_NAMES.excelSortRange, {
   return toMcpResult(result);
 });
 
-// 31. rebel_office_excel_filter_table
-server.registerTool(TOOL_NAMES.excelFilterTable, {
+// 34. rebel_office_excel_filter_table
+registerTool(TOOL_NAMES.excelFilterTable, {
   title: 'Filter table',
   description:
     'Apply or clear auto-filter on an Excel table or range. Filter by specific values, ' +
@@ -2939,8 +3142,8 @@ server.registerTool(TOOL_NAMES.excelFilterTable, {
   return toMcpResult(result);
 });
 
-// 32. rebel_office_excel_get_named_ranges
-server.registerTool(TOOL_NAMES.excelGetNamedRanges, {
+// 35. rebel_office_excel_get_named_ranges
+registerTool(TOOL_NAMES.excelGetNamedRanges, {
   title: 'List named ranges and tables',
   description:
     'List all named ranges and tables in the workbook. Returns name, scope (workbook or worksheet), ' +
@@ -2958,8 +3161,8 @@ server.registerTool(TOOL_NAMES.excelGetNamedRanges, {
   return toMcpResult(result);
 });
 
-// 33. rebel_office_excel_insert_rows_columns
-server.registerTool(TOOL_NAMES.excelInsertRowsColumns, {
+// 36. rebel_office_excel_insert_rows_columns
+registerTool(TOOL_NAMES.excelInsertRowsColumns, {
   title: 'Insert rows or columns',
   description:
     'Insert new rows or columns into a worksheet. Existing data shifts to accommodate the insertion.\n\n' +
@@ -3004,8 +3207,8 @@ server.registerTool(TOOL_NAMES.excelInsertRowsColumns, {
   return toMcpResult(result);
 });
 
-// 34. rebel_office_excel_delete_rows_columns
-server.registerTool(TOOL_NAMES.excelDeleteRowsColumns, {
+// 37. rebel_office_excel_delete_rows_columns
+registerTool(TOOL_NAMES.excelDeleteRowsColumns, {
   title: 'Delete rows or columns',
   description:
     'Delete rows or columns from a worksheet. **This permanently removes the data in those ' +
@@ -3050,8 +3253,8 @@ server.registerTool(TOOL_NAMES.excelDeleteRowsColumns, {
   return toMcpResult(result);
 });
 
-// 35. rebel_office_excel_merge_cells
-server.registerTool(TOOL_NAMES.excelMergeCells, {
+// 38. rebel_office_excel_merge_cells
+registerTool(TOOL_NAMES.excelMergeCells, {
   title: 'Merge or unmerge cells',
   description:
     'Merge or unmerge cells in a range. Merged cells combine into a single cell displaying the ' +
@@ -3091,8 +3294,8 @@ server.registerTool(TOOL_NAMES.excelMergeCells, {
   return toMcpResult(result);
 });
 
-// 36. rebel_office_excel_auto_fit
-server.registerTool(TOOL_NAMES.excelAutoFit, {
+// 39. rebel_office_excel_auto_fit
+registerTool(TOOL_NAMES.excelAutoFit, {
   title: 'Auto-fit columns or rows',
   description:
     'Auto-fit column widths or row heights to fit content. Makes data readable without manual ' +
@@ -3128,8 +3331,8 @@ server.registerTool(TOOL_NAMES.excelAutoFit, {
   return toMcpResult(result);
 });
 
-// 37. rebel_office_excel_add_data_validation
-server.registerTool(TOOL_NAMES.excelAddDataValidation, {
+// 40. rebel_office_excel_add_data_validation
+registerTool(TOOL_NAMES.excelAddDataValidation, {
   title: 'Add data validation',
   description:
     'Add data validation rules to a cell range. Restricts what values can be entered — dropdown ' +
@@ -3237,8 +3440,8 @@ server.registerTool(TOOL_NAMES.excelAddDataValidation, {
   return toMcpResult(result);
 });
 
-// 38. rebel_office_excel_get_comments
-server.registerTool(TOOL_NAMES.excelGetComments, {
+// 41. rebel_office_excel_get_comments
+registerTool(TOOL_NAMES.excelGetComments, {
   title: 'Read Excel comments',
   description:
     'Read all comments in the workbook or a specific worksheet. Returns each comment with its ' +
@@ -3267,8 +3470,8 @@ server.registerTool(TOOL_NAMES.excelGetComments, {
   return toMcpResult(result);
 });
 
-// 39. rebel_office_excel_add_comment
-server.registerTool(TOOL_NAMES.excelAddComment, {
+// 42. rebel_office_excel_add_comment
+registerTool(TOOL_NAMES.excelAddComment, {
   title: 'Add Excel comment',
   description:
     'Add a comment to a specific cell. Comments appear as threaded discussions anchored to cells. ' +
@@ -3310,12 +3513,106 @@ server.registerTool(TOOL_NAMES.excelAddComment, {
   return toMcpResult(result);
 });
 
+// 43. rebel_office_excel_get_pivot_tables
+registerTool(TOOL_NAMES.excelGetPivotTables, {
+  title: 'List pivot tables',
+  description:
+    'List every pivot table in the workbook with its name and the worksheet it lives on.\n\n' +
+    'Use this to discover existing pivot tables before refreshing them with ' +
+    '`rebel_office_excel_refresh_pivot_table`.',
+  inputSchema: {
+    "type": "object",
+    "properties": {}
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async () => {
+  const result = await sidecarRequest('excel', 'get_pivot_tables', {});
+  return toMcpResult(result);
+});
+
+// 44. rebel_office_excel_create_pivot_table
+registerTool(TOOL_NAMES.excelCreatePivotTable, {
+  title: 'Create pivot table',
+  description:
+    'Create a pivot table from a source data range. By default the pivot table is placed on a ' +
+    'new worksheet named after it; pass `destinationWorksheet` to place it on an existing sheet.\n\n' +
+    'The pivot table is created without arranged fields — row, column, and value fields are ' +
+    'arranged in Excel afterwards (the pivot table API cannot arrange fields).\n\n' +
+    'Requires an Excel version supporting the pivot table API (ExcelApi 1.8+).',
+  inputSchema: {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Name for the new pivot table."
+      },
+      "sourceRange": {
+        "type": "string",
+        "minLength": 1,
+        "description": "A1-style range of the source data, e.g. \"A1:D100\". The first row should be headers."
+      },
+      "sourceWorksheet": {
+        "type": "string",
+        "description": "Worksheet holding the source range. Defaults to the active worksheet."
+      },
+      "destinationWorksheet": {
+        "type": "string",
+        "description": "Existing worksheet to place the pivot table on. When omitted, a new worksheet named after the pivot table is created (it must not already exist)."
+      },
+      "destinationCell": {
+        "type": "string",
+        "description": "Top-left cell of the pivot table on the destination worksheet (default \"A1\")."
+      }
+    },
+    "required": [
+      "name",
+      "sourceRange"
+    ]
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async (input) => {
+  const result = await sidecarRequest('excel', 'create_pivot_table', {
+    name: input.name,
+    sourceRange: input.sourceRange,
+    sourceWorksheet: input.sourceWorksheet,
+    destinationWorksheet: input.destinationWorksheet,
+    destinationCell: input.destinationCell,
+  });
+  return toMcpResult(result);
+});
+
+// 45. rebel_office_excel_refresh_pivot_table
+registerTool(TOOL_NAMES.excelRefreshPivotTable, {
+  title: 'Refresh pivot table',
+  description:
+    'Refresh a pivot table so it reflects the current source data. Pass `name` to refresh one ' +
+    'pivot table, or omit it to refresh every pivot table in the workbook.\n\n' +
+    'Use `rebel_office_excel_get_pivot_tables` to list available names.',
+  inputSchema: {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Name of the pivot table to refresh. Omit to refresh all pivot tables."
+      }
+    }
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async (input) => {
+  const result = await sidecarRequest('excel', 'refresh_pivot_table', {
+    name: input.name,
+  });
+  return toMcpResult(result);
+});
+
 // ---------------------------------------------------------------------------
 // PowerPoint tool definitions (12 tools)
 // ---------------------------------------------------------------------------
 
-// 40. rebel_office_powerpoint_get_slides
-server.registerTool(TOOL_NAMES.pptGetSlides, {
+// 46. rebel_office_powerpoint_get_slides
+registerTool(TOOL_NAMES.pptGetSlides, {
   title: 'List slides',
   description:
     'List all slides in the active presentation with summaries — slide number, layout, title text ' +
@@ -3341,8 +3638,8 @@ server.registerTool(TOOL_NAMES.pptGetSlides, {
   return toMcpResult(result);
 });
 
-// 41. rebel_office_powerpoint_get_slide_content
-server.registerTool(TOOL_NAMES.pptGetSlideContent, {
+// 47. rebel_office_powerpoint_get_slide_content
+registerTool(TOOL_NAMES.pptGetSlideContent, {
   title: 'Get slide content',
   description:
     'Get the full content of a specific slide — all shapes, text boxes, images, and their properties ' +
@@ -3368,14 +3665,17 @@ server.registerTool(TOOL_NAMES.pptGetSlideContent, {
   return toMcpResult(result);
 });
 
-// 42. rebel_office_powerpoint_add_slide
-server.registerTool(TOOL_NAMES.pptAddSlide, {
+// 48. rebel_office_powerpoint_add_slide
+registerTool(TOOL_NAMES.pptAddSlide, {
   title: 'Add slide',
   description:
     'Add a new slide to the presentation. Specify a layout and optional initial content (title, ' +
     'subtitle, body text). The slide is inserted at the specified position or at the end.\n\n' +
-    'Standard PowerPoint layouts: "Title Slide", "Title and Content", "Section Header", ' +
-    '"Two Content", "Comparison", "Title Only", "Blank".',
+    'The layout is resolved by name (case-insensitive) against the presentation\'s slide masters — ' +
+    'theme layouts work, not just the defaults. Standard PowerPoint layouts: "Title Slide", ' +
+    '"Title and Content", "Section Header", "Two Content", "Comparison", "Title Only", "Blank". ' +
+    'Use `rebel_office_powerpoint_get_presentation_properties` to list the available layouts, and ' +
+    '`rebel_office_powerpoint_apply_layout` to change the layout of an existing slide.',
   inputSchema: {
     "type": "object",
     "properties": {
@@ -3412,8 +3712,8 @@ server.registerTool(TOOL_NAMES.pptAddSlide, {
   return toMcpResult(result);
 });
 
-// 43. rebel_office_powerpoint_delete_slide
-server.registerTool(TOOL_NAMES.pptDeleteSlide, {
+// 49. rebel_office_powerpoint_delete_slide
+registerTool(TOOL_NAMES.pptDeleteSlide, {
   title: 'Delete slide',
   description:
     'Delete a slide from the presentation by index. **This permanently removes the slide and all ' +
@@ -3437,8 +3737,8 @@ server.registerTool(TOOL_NAMES.pptDeleteSlide, {
   return toMcpResult(result);
 });
 
-// 44. rebel_office_powerpoint_reorder_slides
-server.registerTool(TOOL_NAMES.pptReorderSlides, {
+// 50. rebel_office_powerpoint_reorder_slides
+registerTool(TOOL_NAMES.pptReorderSlides, {
   title: 'Reorder slides',
   description:
     'Move a slide to a new position in the presentation. Reorders the slide deck without modifying ' +
@@ -3470,8 +3770,8 @@ server.registerTool(TOOL_NAMES.pptReorderSlides, {
   return toMcpResult(result);
 });
 
-// 45. rebel_office_powerpoint_add_text_box
-server.registerTool(TOOL_NAMES.pptAddTextBox, {
+// 51. rebel_office_powerpoint_add_text_box
+registerTool(TOOL_NAMES.pptAddTextBox, {
   title: 'Add text box',
   description:
     'Add a text box to a slide at a specified position. Configure font, size, color, and alignment.\n\n' +
@@ -3571,8 +3871,8 @@ server.registerTool(TOOL_NAMES.pptAddTextBox, {
   return toMcpResult(result);
 });
 
-// 46. rebel_office_powerpoint_add_image
-server.registerTool(TOOL_NAMES.pptAddImage, {
+// 52. rebel_office_powerpoint_add_image
+registerTool(TOOL_NAMES.pptAddImage, {
   title: 'Add image to slide',
   description:
     'Add an image to a slide from a file path or base64 data. Position and size the image ' +
@@ -3657,8 +3957,8 @@ server.registerTool(TOOL_NAMES.pptAddImage, {
   return toMcpResult(result);
 });
 
-// 47. rebel_office_powerpoint_add_shape
-server.registerTool(TOOL_NAMES.pptAddShape, {
+// 53. rebel_office_powerpoint_add_shape
+registerTool(TOOL_NAMES.pptAddShape, {
   title: 'Add shape',
   description:
     'Add a geometric shape to a slide. Supports rectangles, circles, arrows, stars, callouts, ' +
@@ -3737,8 +4037,8 @@ server.registerTool(TOOL_NAMES.pptAddShape, {
   return toMcpResult(result);
 });
 
-// 48. rebel_office_powerpoint_update_text
-server.registerTool(TOOL_NAMES.pptUpdateText, {
+// 54. rebel_office_powerpoint_update_text
+registerTool(TOOL_NAMES.pptUpdateText, {
   title: 'Update text in shape',
   description:
     'Update existing text in a shape or placeholder on a slide. Identify the target by shape ID ' +
@@ -3839,8 +4139,8 @@ server.registerTool(TOOL_NAMES.pptUpdateText, {
   return toMcpResult(result);
 });
 
-// 49. rebel_office_powerpoint_get_speaker_notes
-server.registerTool(TOOL_NAMES.pptGetSpeakerNotes, {
+// 55. rebel_office_powerpoint_get_speaker_notes
+registerTool(TOOL_NAMES.pptGetSpeakerNotes, {
   title: 'Read speaker notes',
   description:
     'Read speaker notes for one or all slides. Returns the notes text for each slide.\n\n' +
@@ -3862,8 +4162,8 @@ server.registerTool(TOOL_NAMES.pptGetSpeakerNotes, {
   return toMcpResult(result);
 });
 
-// 50. rebel_office_powerpoint_set_speaker_notes
-server.registerTool(TOOL_NAMES.pptSetSpeakerNotes, {
+// 56. rebel_office_powerpoint_set_speaker_notes
+registerTool(TOOL_NAMES.pptSetSpeakerNotes, {
   title: 'Set speaker notes',
   description:
     'Set or update the speaker notes for a slide. Replaces any existing notes.\n\n' +
@@ -3896,8 +4196,8 @@ server.registerTool(TOOL_NAMES.pptSetSpeakerNotes, {
   return toMcpResult(result);
 });
 
-// 51. rebel_office_powerpoint_get_presentation_properties
-server.registerTool(TOOL_NAMES.pptGetPresentationProperties, {
+// 57. rebel_office_powerpoint_get_presentation_properties
+registerTool(TOOL_NAMES.pptGetPresentationProperties, {
   title: 'Get presentation properties',
   description:
     "Get the presentation's metadata — title, slide dimensions, slide count, layout names, and " +
@@ -3909,6 +4209,193 @@ server.registerTool(TOOL_NAMES.pptGetPresentationProperties, {
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 }, async () => {
   const result = await sidecarRequest('powerpoint', 'get_presentation_properties', {});
+  return toMcpResult(result);
+});
+
+// 58. rebel_office_powerpoint_apply_layout
+registerTool(TOOL_NAMES.pptApplyLayout, {
+  title: 'Apply layout to slide',
+  description:
+    'Change the layout of an existing slide — e.g. switch a slide from "Title and Content" to ' +
+    '"Two Content". The layout is resolved by name (case-insensitive) against the ' +
+    "presentation's slide masters; theme layouts work, not just the defaults.\n\n" +
+    'Use `rebel_office_powerpoint_get_presentation_properties` to list the available layouts. ' +
+    'Requires a PowerPoint version with layout support (PowerPointApi 1.8+).',
+  inputSchema: {
+    "type": "object",
+    "properties": {
+      "slideIndex": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Slide index (1-based)."
+      },
+      "layout": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Layout name, e.g. \"Title and Content\"."
+      }
+    },
+    "required": [
+      "slideIndex",
+      "layout"
+    ]
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async (input) => {
+  const result = await sidecarRequest('powerpoint', 'apply_layout', {
+    slideIndex: input.slideIndex, layout: input.layout,
+  });
+  return toMcpResult(result);
+});
+
+// 59. rebel_office_powerpoint_delete_shape
+registerTool(TOOL_NAMES.pptDeleteShape, {
+  title: 'Delete shape',
+  description:
+    'Delete a shape from a slide, identified by shape ID or by placeholder/name match.\n\n' +
+    'Use `rebel_office_powerpoint_get_slide_content` to list a slide\'s shapes and their IDs first. ' +
+    'This cannot be undone from the API — delete with care.',
+  inputSchema: {
+    "type": "object",
+    "properties": {
+      "slideIndex": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Slide index (1-based)."
+      },
+      "target": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "shapeId",
+              "placeholder"
+            ],
+            "description": "Identify the shape by its ID, or by placeholder/name (case-insensitive contains-match)."
+          },
+          "shapeId": {
+            "type": "string",
+            "description": "Shape ID (for shapeId)."
+          },
+          "placeholder": {
+            "type": "string",
+            "description": "Placeholder or shape name to match (for placeholder), e.g. \"title\", \"content\"."
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "description": "Which shape to delete."
+      }
+    },
+    "required": [
+      "slideIndex",
+      "target"
+    ]
+  },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+}, async (input) => {
+  const result = await sidecarRequest('powerpoint', 'delete_shape', {
+    slideIndex: input.slideIndex, target: input.target,
+  });
+  return toMcpResult(result);
+});
+
+// 60. rebel_office_powerpoint_format_shape
+registerTool(TOOL_NAMES.pptFormatShape, {
+  title: 'Format shape',
+  description:
+    'Format an existing shape: fill color, line color/width, position (left/top), size ' +
+    '(width/height, in points), or rename it. Shapes are identified by shape ID or by ' +
+    'placeholder/name match.\n\n' +
+    'Use `rebel_office_powerpoint_get_slide_content` to list a slide\'s shapes and their IDs first.',
+  inputSchema: {
+    "type": "object",
+    "properties": {
+      "slideIndex": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Slide index (1-based)."
+      },
+      "target": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "shapeId",
+              "placeholder"
+            ],
+            "description": "Identify the shape by its ID, or by placeholder/name (case-insensitive contains-match)."
+          },
+          "shapeId": {
+            "type": "string",
+            "description": "Shape ID (for shapeId)."
+          },
+          "placeholder": {
+            "type": "string",
+            "description": "Placeholder or shape name to match (for placeholder)."
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "description": "Which shape to format."
+      },
+      "formatting": {
+        "type": "object",
+        "properties": {
+          "fillColor": {
+            "type": "string",
+            "description": "Fill color as HTML color (e.g. \"#4472C4\")."
+          },
+          "lineColor": {
+            "type": "string",
+            "description": "Line (border) color as HTML color."
+          },
+          "lineWidth": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Line (border) width in points."
+          },
+          "left": {
+            "type": "number",
+            "description": "Distance from the left edge of the slide, in points."
+          },
+          "top": {
+            "type": "number",
+            "description": "Distance from the top edge of the slide, in points."
+          },
+          "width": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Shape width in points."
+          },
+          "height": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Shape height in points."
+          },
+          "name": {
+            "type": "string",
+            "description": "Rename the shape."
+          }
+        },
+        "description": "Formatting to apply. At least one property is required."
+      }
+    },
+    "required": [
+      "slideIndex",
+      "target",
+      "formatting"
+    ]
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async (input) => {
+  const result = await sidecarRequest('powerpoint', 'format_shape', {
+    slideIndex: input.slideIndex, target: input.target, formatting: input.formatting,
+  });
   return toMcpResult(result);
 });
 
@@ -3946,6 +4433,9 @@ export const __test = {
   loopbackHttpsAgent,
   loopbackHttpsRequest,
   isLoopbackHostname,
+  toMcpResult,
+  stampUntrustedSource,
+  packageVersion: PACKAGE_VERSION,
   setSpawnSidecarAndWaitForTests(fn: typeof defaultSpawnSidecarAndWait) {
     spawnSidecarAndWait = fn;
   },

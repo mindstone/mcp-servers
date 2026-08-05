@@ -649,3 +649,477 @@ describe('integration: MCP → sidecar → add-in pipeline', () => {
     expect(payload2.data.version).toBe('v2');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Integration tests: Word table tools (read_table / update_table_cell)
+// ---------------------------------------------------------------------------
+
+describe('integration: Word table tools', () => {
+  function captureCommand(socket: WebSocket, responseData: unknown) {
+    const commandReceived = new Promise<{ action: string; params: Record<string, unknown> }>((resolve) => {
+      socket.on('message', (raw) => {
+        const msg = JSON.parse(raw.toString()) as {
+          type?: string; id?: string; action?: string; params?: Record<string, unknown>;
+        };
+        if (msg.type === 'command' && typeof msg.id === 'string') {
+          sendJson(socket, { type: 'response', id: msg.id, success: true, data: responseData });
+          resolve({ action: msg.action ?? '', params: msg.params ?? {} });
+        }
+      });
+    });
+    return commandReceived;
+  }
+
+  it('routes read_table with tableIndex and returns cell values', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'word', baseUrl);
+
+    const commandReceived = captureCommand(socket, {
+      tableIndex: 1,
+      rowCount: 2,
+      columnCount: 2,
+      values: [['Name', 'Role'], ['Ada', 'Eng']],
+    });
+
+    const response = await fetchHttps(`${baseUrl}/word/read_table`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tableIndex: 1 }),
+    });
+
+    const payload = (await response.json()) as { success: boolean; data: { values: string[][] } };
+    const routed = await commandReceived;
+
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(payload.data.values).toEqual([['Name', 'Role'], ['Ada', 'Eng']]);
+    expect(routed.action).toBe('read_table');
+    expect(routed.params).toEqual({ tableIndex: 1 });
+  });
+
+  it('routes update_table_cell with all params', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'word', baseUrl);
+
+    const commandReceived = captureCommand(socket, {
+      success: true, tableIndex: 0, rowIndex: 1, columnIndex: 2,
+    });
+
+    const response = await fetchHttps(`${baseUrl}/word/update_table_cell`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tableIndex: 0, rowIndex: 1, columnIndex: 2, text: 'Updated' }),
+    });
+
+    const payload = (await response.json()) as { success: boolean };
+    const routed = await commandReceived;
+
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(routed.action).toBe('update_table_cell');
+    expect(routed.params).toEqual({ tableIndex: 0, rowIndex: 1, columnIndex: 2, text: 'Updated' });
+  });
+
+  it('propagates table errors (out-of-range index) from the add-in', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'word', baseUrl);
+
+    socket.on('message', (raw) => {
+      const msg = JSON.parse(raw.toString()) as { type?: string; id?: string };
+      if (msg.type === 'command' && typeof msg.id === 'string') {
+        sendJson(socket, {
+          type: 'response', id: msg.id, success: false,
+          error: 'Table index 5 out of range. Document has 1 table(s) (0-based).',
+          code: 'UNKNOWN_ERROR',
+        });
+      }
+    });
+
+    const response = await fetchHttps(`${baseUrl}/word/read_table`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tableIndex: 5 }),
+    });
+
+    const payload = (await response.json()) as { success: boolean; error: string };
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(false);
+    expect(payload.error).toContain('out of range');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Integration tests: Word apply_style tool
+// ---------------------------------------------------------------------------
+
+describe('integration: Word apply_style tool', () => {
+  it('routes apply_style with style and searchText target', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'word', baseUrl);
+
+    const commandReceived = new Promise<{ action: string; params: Record<string, unknown> }>((resolve) => {
+      socket.on('message', (raw) => {
+        const msg = JSON.parse(raw.toString()) as {
+          type?: string; id?: string; action?: string; params?: Record<string, unknown>;
+        };
+        if (msg.type === 'command' && typeof msg.id === 'string') {
+          sendJson(socket, {
+            type: 'response', id: msg.id, success: true,
+            data: { success: true, styledParagraphs: 2, style: 'Heading 1' },
+          });
+          resolve({ action: msg.action ?? '', params: msg.params ?? {} });
+        }
+      });
+    });
+
+    const response = await fetchHttps(`${baseUrl}/word/apply_style`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        style: 'Heading 1',
+        target: { type: 'searchText', searchText: 'Quarterly Report' },
+      }),
+    });
+
+    const payload = (await response.json()) as { success: boolean; data: { styledParagraphs: number } };
+    const routed = await commandReceived;
+
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(payload.data.styledParagraphs).toBe(2);
+    expect(routed.action).toBe('apply_style');
+    expect(routed.params).toEqual({
+      style: 'Heading 1',
+      target: { type: 'searchText', searchText: 'Quarterly Report' },
+    });
+  });
+
+  it('propagates apply_style errors (no matching paragraphs) from the add-in', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'word', baseUrl);
+
+    socket.on('message', (raw) => {
+      const msg = JSON.parse(raw.toString()) as { type?: string; id?: string };
+      if (msg.type === 'command' && typeof msg.id === 'string') {
+        sendJson(socket, {
+          type: 'response', id: msg.id, success: false,
+          error: 'No paragraphs contain "nonexistent phrase".',
+          code: 'UNKNOWN_ERROR',
+        });
+      }
+    });
+
+    const response = await fetchHttps(`${baseUrl}/word/apply_style`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        style: 'Quote',
+        target: { type: 'searchText', searchText: 'nonexistent phrase' },
+      }),
+    });
+
+    const payload = (await response.json()) as { success: boolean; error: string };
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(false);
+    expect(payload.error).toContain('No paragraphs contain');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Integration tests: Excel pivot table tools
+// ---------------------------------------------------------------------------
+
+describe('integration: Excel pivot table tools', () => {
+  it('routes get_pivot_tables and returns the pivot list', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'excel', baseUrl);
+
+    const commandReceived = new Promise<{ action: string; params: Record<string, unknown> }>((resolve) => {
+      socket.on('message', (raw) => {
+        const msg = JSON.parse(raw.toString()) as {
+          type?: string; id?: string; action?: string; params?: Record<string, unknown>;
+        };
+        if (msg.type === 'command' && typeof msg.id === 'string') {
+          sendJson(socket, {
+            type: 'response', id: msg.id, success: true,
+            data: { pivotTables: [{ name: 'SalesPivot', worksheet: 'Pivot' }], count: 1 },
+          });
+          resolve({ action: msg.action ?? '', params: msg.params ?? {} });
+        }
+      });
+    });
+
+    const response = await fetchHttps(`${baseUrl}/excel/get_pivot_tables`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+
+    const payload = (await response.json()) as {
+      success: boolean;
+      data: { pivotTables: Array<{ name: string; worksheet: string }>; count: number };
+    };
+    const routed = await commandReceived;
+
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(payload.data.pivotTables).toEqual([{ name: 'SalesPivot', worksheet: 'Pivot' }]);
+    expect(routed.action).toBe('get_pivot_tables');
+  });
+
+  it('routes create_pivot_table with source and destination params', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'excel', baseUrl);
+
+    const commandReceived = new Promise<{ action: string; params: Record<string, unknown> }>((resolve) => {
+      socket.on('message', (raw) => {
+        const msg = JSON.parse(raw.toString()) as {
+          type?: string; id?: string; action?: string; params?: Record<string, unknown>;
+        };
+        if (msg.type === 'command' && typeof msg.id === 'string') {
+          sendJson(socket, {
+            type: 'response', id: msg.id, success: true,
+            data: { success: true, name: 'SalesPivot', worksheet: 'SalesPivot' },
+          });
+          resolve({ action: msg.action ?? '', params: msg.params ?? {} });
+        }
+      });
+    });
+
+    const response = await fetchHttps(`${baseUrl}/excel/create_pivot_table`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'SalesPivot', sourceRange: 'A1:D100', sourceWorksheet: 'Data' }),
+    });
+
+    const payload = (await response.json()) as { success: boolean };
+    const routed = await commandReceived;
+
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(routed.action).toBe('create_pivot_table');
+    expect(routed.params).toEqual({
+      name: 'SalesPivot', sourceRange: 'A1:D100', sourceWorksheet: 'Data',
+    });
+  });
+
+  it('routes refresh_pivot_table for one pivot and for all', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'excel', baseUrl);
+
+    const received: Array<{ action: string; params: Record<string, unknown> }> = [];
+    socket.on('message', (raw) => {
+      const msg = JSON.parse(raw.toString()) as {
+        type?: string; id?: string; action?: string; params?: Record<string, unknown>;
+      };
+      if (msg.type === 'command' && typeof msg.id === 'string') {
+        received.push({ action: msg.action ?? '', params: msg.params ?? {} });
+        sendJson(socket, {
+          type: 'response', id: msg.id, success: true,
+          data: { success: true, refreshed: msg.params?.['name'] ?? 'all' },
+        });
+      }
+    });
+
+    const named = await fetchHttps(`${baseUrl}/excel/refresh_pivot_table`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'SalesPivot' }),
+    });
+    const all = await fetchHttps(`${baseUrl}/excel/refresh_pivot_table`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+
+    expect(named.status).toBe(200);
+    expect(all.status).toBe(200);
+    expect(received).toEqual([
+      { action: 'refresh_pivot_table', params: { name: 'SalesPivot' } },
+      { action: 'refresh_pivot_table', params: {} },
+    ]);
+  });
+
+  it('propagates create_pivot_table errors (missing source worksheet) from the add-in', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'excel', baseUrl);
+
+    socket.on('message', (raw) => {
+      const msg = JSON.parse(raw.toString()) as { type?: string; id?: string };
+      if (msg.type === 'command' && typeof msg.id === 'string') {
+        sendJson(socket, {
+          type: 'response', id: msg.id, success: false,
+          error: 'The requested item was not found.', code: 'ITEM_NOT_FOUND',
+        });
+      }
+    });
+
+    const response = await fetchHttps(`${baseUrl}/excel/create_pivot_table`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'P', sourceRange: 'A1:D10', sourceWorksheet: 'Missing' }),
+    });
+
+    const payload = (await response.json()) as { success: boolean; error: string; code: string };
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(false);
+    expect(payload.code).toBe('ITEM_NOT_FOUND');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Integration tests: PowerPoint layout & shape tools
+// ---------------------------------------------------------------------------
+
+describe('integration: PowerPoint layout and shape tools', () => {
+  it('routes apply_layout with slideIndex and layout name', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'powerpoint', baseUrl);
+
+    const commandReceived = new Promise<{ action: string; params: Record<string, unknown> }>((resolve) => {
+      socket.on('message', (raw) => {
+        const msg = JSON.parse(raw.toString()) as {
+          type?: string; id?: string; action?: string; params?: Record<string, unknown>;
+        };
+        if (msg.type === 'command' && typeof msg.id === 'string') {
+          sendJson(socket, {
+            type: 'response', id: msg.id, success: true,
+            data: { success: true, slideIndex: 2, layout: 'Two Content' },
+          });
+          resolve({ action: msg.action ?? '', params: msg.params ?? {} });
+        }
+      });
+    });
+
+    const response = await fetchHttps(`${baseUrl}/powerpoint/apply_layout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slideIndex: 2, layout: 'Two Content' }),
+    });
+
+    const payload = (await response.json()) as { success: boolean };
+    const routed = await commandReceived;
+
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(routed.action).toBe('apply_layout');
+    expect(routed.params).toEqual({ slideIndex: 2, layout: 'Two Content' });
+  });
+
+  it('routes delete_shape with a shapeId target', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'powerpoint', baseUrl);
+
+    const commandReceived = new Promise<{ action: string; params: Record<string, unknown> }>((resolve) => {
+      socket.on('message', (raw) => {
+        const msg = JSON.parse(raw.toString()) as {
+          type?: string; id?: string; action?: string; params?: Record<string, unknown>;
+        };
+        if (msg.type === 'command' && typeof msg.id === 'string') {
+          sendJson(socket, {
+            type: 'response', id: msg.id, success: true,
+            data: { success: true, slideIndex: 1, deletedShapeId: 'shape-42' },
+          });
+          resolve({ action: msg.action ?? '', params: msg.params ?? {} });
+        }
+      });
+    });
+
+    const response = await fetchHttps(`${baseUrl}/powerpoint/delete_shape`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slideIndex: 1, target: { type: 'shapeId', shapeId: 'shape-42' } }),
+    });
+
+    const payload = (await response.json()) as { success: boolean };
+    const routed = await commandReceived;
+
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(routed.action).toBe('delete_shape');
+    expect(routed.params).toEqual({ slideIndex: 1, target: { type: 'shapeId', shapeId: 'shape-42' } });
+  });
+
+  it('routes format_shape with formatting payload', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'powerpoint', baseUrl);
+
+    const commandReceived = new Promise<{ action: string; params: Record<string, unknown> }>((resolve) => {
+      socket.on('message', (raw) => {
+        const msg = JSON.parse(raw.toString()) as {
+          type?: string; id?: string; action?: string; params?: Record<string, unknown>;
+        };
+        if (msg.type === 'command' && typeof msg.id === 'string') {
+          sendJson(socket, {
+            type: 'response', id: msg.id, success: true,
+            data: { success: true, slideIndex: 3, shapeId: 'shape-7' },
+          });
+          resolve({ action: msg.action ?? '', params: msg.params ?? {} });
+        }
+      });
+    });
+
+    const response = await fetchHttps(`${baseUrl}/powerpoint/format_shape`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        slideIndex: 3,
+        target: { type: 'placeholder', placeholder: 'title' },
+        formatting: { fillColor: '#4472C4', width: 400 },
+      }),
+    });
+
+    const payload = (await response.json()) as { success: boolean };
+    const routed = await commandReceived;
+
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(routed.action).toBe('format_shape');
+    expect(routed.params).toEqual({
+      slideIndex: 3,
+      target: { type: 'placeholder', placeholder: 'title' },
+      formatting: { fillColor: '#4472C4', width: 400 },
+    });
+  });
+
+  it('propagates apply_layout errors (layout not found) from the add-in', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'powerpoint', baseUrl);
+
+    socket.on('message', (raw) => {
+      const msg = JSON.parse(raw.toString()) as { type?: string; id?: string };
+      if (msg.type === 'command' && typeof msg.id === 'string') {
+        sendJson(socket, {
+          type: 'response', id: msg.id, success: false,
+          error: 'Layout "Fancy" not found. Available layouts: Title Slide, Title and Content, Blank.',
+          code: 'UNKNOWN_ERROR',
+        });
+      }
+    });
+
+    const response = await fetchHttps(`${baseUrl}/powerpoint/apply_layout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slideIndex: 1, layout: 'Fancy' }),
+    });
+
+    const payload = (await response.json()) as { success: boolean; error: string };
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(false);
+    expect(payload.error).toContain('not found');
+    expect(payload.error).toContain('Available layouts');
+  });
+});

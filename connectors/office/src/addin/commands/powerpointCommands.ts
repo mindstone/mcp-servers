@@ -15,11 +15,14 @@ const powerpointCommands: Record<string, PowerpointCommandHandler> = {
   get_slides: getSlides,
   get_slide_content: getSlideContent,
   add_slide: addSlide,
+  apply_layout: applyLayout,
   delete_slide: deleteSlide,
   reorder_slides: reorderSlides,
   add_text_box: addTextBox,
   add_image: addImage,
   add_shape: addShape,
+  delete_shape: deleteShape,
+  format_shape: formatShape,
   update_text: updateText,
   get_speaker_notes: getSpeakerNotes,
   set_speaker_notes: setSpeakerNotes,
@@ -192,7 +195,7 @@ async function getSlideContent(params: Record<string, unknown>): Promise<Command
  *   body     (string, optional)
  */
 async function addSlide(params: Record<string, unknown>): Promise<CommandResult> {
-  const _layout = typeof params['layout'] === 'string' ? params['layout'] : 'Title and Content';
+  const layoutName = typeof params['layout'] === 'string' ? params['layout'] : undefined;
   const position = typeof params['position'] === 'number' ? params['position'] : undefined;
   const title = typeof params['title'] === 'string' ? params['title'] : undefined;
   const subtitle = typeof params['subtitle'] === 'string' ? params['subtitle'] : undefined;
@@ -203,8 +206,20 @@ async function addSlide(params: Record<string, unknown>): Promise<CommandResult>
     slides.load('items');
     await context.sync();
 
+    // Resolve the requested layout against the slide masters (if given)
+    let addOptions: PowerPoint.AddSlideOptions | undefined;
+    if (layoutName) {
+      const { layout, available } = await findLayoutByName(context, layoutName);
+      if (!layout) {
+        throw new Error(
+          `Layout "${layoutName}" not found. Available layouts: ${available.join(', ') || '(none found)'}.`,
+        );
+      }
+      addOptions = { layoutId: layout.id };
+    }
+
     // Add a new slide (Office.js adds to the end by default)
-    slides.add();
+    slides.add(addOptions);
     await context.sync();
 
     // Reload to get the new slide
@@ -876,5 +891,246 @@ async function getPresentationProperties(_params: Record<string, unknown>): Prom
       slideCount: slides.items.length,
       availableLayouts: layoutNames,
     };
+  });
+}
+
+/**
+ * Resolve a slide layout by name (case-insensitive) across all slide masters.
+ * Returns the matching layout (or null) plus the available layout names for
+ * error messages. Throws when the layout API is not supported by this
+ * PowerPoint version.
+ */
+async function findLayoutByName(
+  context: PowerPoint.RequestContext,
+  layoutName: string,
+): Promise<{ layout: PowerPoint.SlideLayout | null; available: string[] }> {
+  const available: string[] = [];
+  let match: PowerPoint.SlideLayout | null = null;
+
+  try {
+    const slideMasters = context.presentation.slideMasters;
+    slideMasters.load('items');
+    await context.sync();
+
+    for (const master of slideMasters.items) {
+      const layouts = master.layouts;
+      layouts.load(['id', 'name']);
+      await context.sync();
+
+      for (const layout of layouts.items) {
+        if (!available.includes(layout.name)) {
+          available.push(layout.name);
+        }
+        if (!match && layout.name.toLowerCase() === layoutName.toLowerCase()) {
+          match = layout;
+        }
+      }
+    }
+  } catch (error) {
+    throw new Error(
+      `Slide layouts are not supported by this version of PowerPoint (${error instanceof Error ? error.message : String(error)}).`,
+    );
+  }
+
+  return { layout: match, available };
+}
+
+/**
+ * Find a shape on a slide by target — `{ type: 'shapeId', shapeId }` or
+ * `{ type: 'placeholder', placeholder }` (name contains, case-insensitive;
+ * mirrors update_text targeting). Throws when the shape is not found.
+ */
+async function findShape(
+  context: PowerPoint.RequestContext,
+  slide: PowerPoint.Slide,
+  target: { type: string; shapeId?: string; placeholder?: string },
+): Promise<PowerPoint.Shape> {
+  const shapes = slide.shapes;
+  shapes.load(['id', 'name']);
+  await context.sync();
+
+  if (target.type === 'shapeId') {
+    if (typeof target.shapeId !== 'string') {
+      throw new Error('The "shapeId" field is required for target type "shapeId".');
+    }
+    const shape = shapes.items.find((s) => s.id === target.shapeId);
+    if (!shape) {
+      throw new Error(`Shape with ID "${target.shapeId}" not found on this slide.`);
+    }
+    return shape;
+  }
+
+  if (target.type === 'placeholder') {
+    if (typeof target.placeholder !== 'string') {
+      throw new Error('The "placeholder" field is required for target type "placeholder".');
+    }
+    const placeholderLower = target.placeholder.toLowerCase();
+    const shape = shapes.items.find((s) => s.name.toLowerCase().includes(placeholderLower));
+    if (!shape) {
+      throw new Error(`Placeholder "${target.placeholder}" not found on this slide.`);
+    }
+    return shape;
+  }
+
+  throw new Error(`Unsupported target type: "${target.type}". Use "shapeId" or "placeholder".`);
+}
+
+/**
+ * apply_layout — Change the layout of an existing slide.
+ * Params:
+ *   slideIndex (number, required) — 1-based
+ *   layout     (string, required) — layout name, e.g. "Title and Content"
+ */
+async function applyLayout(params: Record<string, unknown>): Promise<CommandResult> {
+  const slideIndex = params['slideIndex'];
+  if (typeof slideIndex !== 'number' || slideIndex < 1) {
+    return { success: false, error: 'The "slideIndex" parameter is required.', code: 'INVALID_ARGUMENT' };
+  }
+
+  const layoutName = params['layout'];
+  if (typeof layoutName !== 'string' || layoutName.trim().length === 0) {
+    return {
+      success: false,
+      error: 'The "layout" parameter is required and must be a layout name (e.g. "Title and Content").',
+      code: 'INVALID_ARGUMENT',
+    };
+  }
+
+  return executePowerpointCommand(async (context) => {
+    const slides = context.presentation.slides;
+    slides.load('items');
+    await context.sync();
+
+    if (slideIndex > slides.items.length) {
+      throw new Error(
+        `Slide index ${slideIndex} out of range. Presentation has ${slides.items.length} slides.`,
+      );
+    }
+
+    const { layout, available } = await findLayoutByName(context, layoutName as string);
+    if (!layout) {
+      throw new Error(
+        `Layout "${layoutName}" not found. Available layouts: ${available.join(', ') || '(none found)'}.`,
+      );
+    }
+
+    const slide = getSlideByIndex(slides, slideIndex);
+    slide.applyLayout(layout);
+    await context.sync();
+
+    return { success: true, slideIndex, layout: layout.name };
+  });
+}
+
+/**
+ * delete_shape — Delete a shape from a slide.
+ * Params:
+ *   slideIndex (number, required) — 1-based
+ *   target     (object, required) — { type: 'shapeId', shapeId } or
+ *                                   { type: 'placeholder', placeholder }
+ */
+async function deleteShape(params: Record<string, unknown>): Promise<CommandResult> {
+  const slideIndex = params['slideIndex'];
+  if (typeof slideIndex !== 'number' || slideIndex < 1) {
+    return { success: false, error: 'The "slideIndex" parameter is required.', code: 'INVALID_ARGUMENT' };
+  }
+
+  const target = params['target'] as { type: string; shapeId?: string; placeholder?: string } | undefined;
+  if (!target || typeof target.type !== 'string') {
+    return {
+      success: false,
+      error: 'The "target" parameter with a "type" field ("shapeId" or "placeholder") is required.',
+      code: 'INVALID_ARGUMENT',
+    };
+  }
+
+  return executePowerpointCommand(async (context) => {
+    const slides = context.presentation.slides;
+    slides.load('items');
+    await context.sync();
+
+    if (slideIndex > slides.items.length) {
+      throw new Error(
+        `Slide index ${slideIndex} out of range. Presentation has ${slides.items.length} slides.`,
+      );
+    }
+
+    const slide = getSlideByIndex(slides, slideIndex);
+    const shape = await findShape(context, slide, target);
+    shape.delete();
+    await context.sync();
+
+    return { success: true, slideIndex, deletedShapeId: shape.id };
+  });
+}
+
+/**
+ * format_shape — Format a shape's fill, line, position, size, or name.
+ * Params:
+ *   slideIndex (number, required) — 1-based
+ *   target     (object, required) — { type: 'shapeId', shapeId } or
+ *                                   { type: 'placeholder', placeholder }
+ *   formatting (object, required) — any of:
+ *     fillColor  (string) — HTML color, e.g. "#4472C4"
+ *     lineColor  (string) — HTML color
+ *     lineWidth  (number) — line weight in points
+ *     left / top / width / height (number) — position and size in points
+ *     name       (string) — rename the shape
+ */
+async function formatShape(params: Record<string, unknown>): Promise<CommandResult> {
+  const slideIndex = params['slideIndex'];
+  if (typeof slideIndex !== 'number' || slideIndex < 1) {
+    return { success: false, error: 'The "slideIndex" parameter is required.', code: 'INVALID_ARGUMENT' };
+  }
+
+  const target = params['target'] as { type: string; shapeId?: string; placeholder?: string } | undefined;
+  if (!target || typeof target.type !== 'string') {
+    return {
+      success: false,
+      error: 'The "target" parameter with a "type" field ("shapeId" or "placeholder") is required.',
+      code: 'INVALID_ARGUMENT',
+    };
+  }
+
+  const formatting = params['formatting'] as Record<string, unknown> | undefined;
+  if (!formatting || typeof formatting !== 'object' || Object.keys(formatting).length === 0) {
+    return {
+      success: false,
+      error: 'The "formatting" parameter is required and must set at least one property.',
+      code: 'INVALID_ARGUMENT',
+    };
+  }
+
+  return executePowerpointCommand(async (context) => {
+    const slides = context.presentation.slides;
+    slides.load('items');
+    await context.sync();
+
+    if (slideIndex > slides.items.length) {
+      throw new Error(
+        `Slide index ${slideIndex} out of range. Presentation has ${slides.items.length} slides.`,
+      );
+    }
+
+    const slide = getSlideByIndex(slides, slideIndex);
+    const shape = await findShape(context, slide, target);
+
+    if (typeof formatting['fillColor'] === 'string') {
+      shape.fill.setSolidColor(formatting['fillColor']);
+    }
+    if (typeof formatting['lineColor'] === 'string') {
+      shape.lineFormat.color = formatting['lineColor'];
+    }
+    if (typeof formatting['lineWidth'] === 'number') {
+      shape.lineFormat.weight = formatting['lineWidth'];
+    }
+    if (typeof formatting['left'] === 'number') shape.left = formatting['left'];
+    if (typeof formatting['top'] === 'number') shape.top = formatting['top'];
+    if (typeof formatting['width'] === 'number') shape.width = formatting['width'];
+    if (typeof formatting['height'] === 'number') shape.height = formatting['height'];
+    if (typeof formatting['name'] === 'string') shape.name = formatting['name'];
+
+    await context.sync();
+    return { success: true, slideIndex, shapeId: shape.id };
   });
 }

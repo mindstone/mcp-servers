@@ -11,7 +11,17 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+- **Word tables are no longer write-only**: new `rebel_office_word_read_table` (read a table's cell values as a 2D array) and `rebel_office_word_update_table_cell` (replace the text of a single cell by 0-based row/column) tools.
+- **Word named styles**: new `rebel_office_word_apply_style` tool applies a paragraph style (built-in like "Heading 1"/"Quote", or a document-defined custom style) to existing paragraphs — targeted by selection, paragraph range, or search text.
+- **Excel pivot tables**: new `rebel_office_excel_get_pivot_tables`, `rebel_office_excel_create_pivot_table`, and `rebel_office_excel_refresh_pivot_table` tools. Creation places the pivot on a new worksheet (or a named existing one) and requires an Excel version with pivot table API support (ExcelApi 1.8+); field arrangement stays in Excel — the pivot table API cannot arrange fields.
+- **PowerPoint layouts and shapes**: `rebel_office_powerpoint_add_slide`'s `layout` parameter now actually resolves the named layout against the slide masters (it was previously accepted but ignored), new `rebel_office_powerpoint_apply_layout` changes an existing slide's layout (PowerPointApi 1.8+), and new `rebel_office_powerpoint_delete_shape` / `rebel_office_powerpoint_format_shape` cover shape deletion and fill/line/position/size formatting (shapes addressed by ID or placeholder name, mirroring `update_text` targeting). Tables/charts on slides remain beyond the PowerPoint JavaScript API's reach — a platform limitation, not a connector gap.
+
+### Fixed
+- The MCP server now reports the real `package.json` version instead of a hardcoded literal that had drifted a full release behind (reported `0.1.1` while the package was `0.2.0`).
+
 ### Security
+- Wrap all add-in-returned document/spreadsheet/slide content in `<untrusted-content source="microsoft-office-{app}">` envelopes at the `toMcpResult` boundary, and envelope add-in-relayed error messages (FOX-3490 remediation). Content authored inside Office files is attacker-influenced whenever the file came from somewhere else; the envelope marks it as data, not instructions. Locally generated guidance (sidecar unreachable, setup hints) is not enveloped.
 - Pin `@grpc/grpc-js` to `^1.14.4` via `overrides` to clear high-severity advisories GHSA-5375-pq7m-f5r2 / GHSA-99f4-grh7-6pcq (malformed-request crash) in the transitive OpenTelemetry OTLP-gRPC exporter chain (was 1.14.3).
 
 ## [0.2.0] - 2026-05-19

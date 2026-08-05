@@ -18,7 +18,10 @@ const wordCommands: Record<string, WordCommandHandler> = {
   insert_text: insertText,
   replace_text: replaceText,
   format_text: formatText,
+  apply_style: applyStyle,
   insert_table: insertTable,
+  read_table: readTable,
+  update_table_cell: updateTableCell,
   insert_image: insertImage,
   insert_break: insertBreak,
   set_header_footer: setHeaderFooter,
@@ -1337,5 +1340,223 @@ async function acceptRejectChanges(params: Record<string, unknown>): Promise<Com
 
     await context.sync();
     return { success: true, processedCount: changesToProcess.length, action };
+  });
+}
+
+/**
+ * read_table — Read a table's cell values as a 2D array.
+ * Params:
+ *   tableIndex (number, default 0) — 0-based index into the document's tables
+ */
+async function readTable(params: Record<string, unknown>): Promise<CommandResult> {
+  const tableIndexParam = params['tableIndex'];
+  if (
+    tableIndexParam !== undefined &&
+    (typeof tableIndexParam !== 'number' || !Number.isInteger(tableIndexParam) || tableIndexParam < 0)
+  ) {
+    return {
+      success: false,
+      error: 'The "tableIndex" parameter must be a non-negative integer.',
+      code: 'INVALID_ARGUMENT',
+    };
+  }
+  const tableIndex = typeof tableIndexParam === 'number' ? tableIndexParam : 0;
+
+  return executeWordCommand(async (context) => {
+    const tables = context.document.body.tables;
+    tables.load('items');
+    await context.sync();
+
+    if (tables.items.length === 0) {
+      throw new Error('The document contains no tables.');
+    }
+    if (tableIndex >= tables.items.length) {
+      throw new Error(
+        `Table index ${tableIndex} out of range. Document has ${tables.items.length} table(s) (0-based).`,
+      );
+    }
+
+    const table = tables.items[tableIndex]!;
+    table.load(['values', 'rowCount']);
+    await context.sync();
+
+    const values = table.values;
+    return {
+      tableIndex,
+      rowCount: table.rowCount,
+      columnCount: values[0]?.length ?? 0,
+      values,
+    };
+  });
+}
+
+/**
+ * update_table_cell — Replace the text of a single table cell.
+ * Params:
+ *   tableIndex  (number, default 0) — 0-based table index
+ *   rowIndex    (number, required)  — 0-based row
+ *   columnIndex (number, required)  — 0-based column
+ *   text        (string, required)  — new cell text (may be empty to clear the cell)
+ */
+async function updateTableCell(params: Record<string, unknown>): Promise<CommandResult> {
+  const tableIndexParam = params['tableIndex'];
+  const rowIndex = params['rowIndex'];
+  const columnIndex = params['columnIndex'];
+  const text = params['text'];
+
+  if (
+    tableIndexParam !== undefined &&
+    (typeof tableIndexParam !== 'number' || !Number.isInteger(tableIndexParam) || tableIndexParam < 0)
+  ) {
+    return {
+      success: false,
+      error: 'The "tableIndex" parameter must be a non-negative integer.',
+      code: 'INVALID_ARGUMENT',
+    };
+  }
+  if (typeof rowIndex !== 'number' || !Number.isInteger(rowIndex) || rowIndex < 0) {
+    return {
+      success: false,
+      error: 'The "rowIndex" parameter is required and must be a non-negative integer (0-based).',
+      code: 'INVALID_ARGUMENT',
+    };
+  }
+  if (typeof columnIndex !== 'number' || !Number.isInteger(columnIndex) || columnIndex < 0) {
+    return {
+      success: false,
+      error: 'The "columnIndex" parameter is required and must be a non-negative integer (0-based).',
+      code: 'INVALID_ARGUMENT',
+    };
+  }
+  if (typeof text !== 'string') {
+    return {
+      success: false,
+      error: 'The "text" parameter is required and must be a string (may be empty).',
+      code: 'INVALID_ARGUMENT',
+    };
+  }
+  const tableIndex = typeof tableIndexParam === 'number' ? tableIndexParam : 0;
+
+  return executeWordCommand(async (context) => {
+    const tables = context.document.body.tables;
+    tables.load('items');
+    await context.sync();
+
+    if (tables.items.length === 0) {
+      throw new Error('The document contains no tables.');
+    }
+    if (tableIndex >= tables.items.length) {
+      throw new Error(
+        `Table index ${tableIndex} out of range. Document has ${tables.items.length} table(s) (0-based).`,
+      );
+    }
+
+    const table = tables.items[tableIndex]!;
+    table.load(['values', 'rowCount']);
+    await context.sync();
+
+    const columnCount = table.values[0]?.length ?? 0;
+    if (rowIndex >= table.rowCount || columnIndex >= columnCount) {
+      throw new Error(
+        `Cell (${rowIndex}, ${columnIndex}) out of range. Table ${tableIndex} has ${table.rowCount} row(s) and ${columnCount} column(s) (0-based).`,
+      );
+    }
+
+    const cell = table.getCell(rowIndex, columnIndex);
+    cell.value = text as string;
+    await context.sync();
+
+    return { success: true, tableIndex, rowIndex, columnIndex };
+  });
+}
+
+/**
+ * apply_style — Apply a named paragraph style to existing paragraphs.
+ * Params:
+ *   style  (string, required) — style name: built-in ("Heading 1", "Title",
+ *                               "Quote", …) or a custom style defined in the document
+ *   target (object, required) — which paragraphs to style:
+ *     { type: 'selection' }
+ *     { type: 'paragraphRange', startParagraph, endParagraph }  (0-based, inclusive)
+ *     { type: 'searchText', searchText }  (every paragraph containing the text)
+ */
+async function applyStyle(params: Record<string, unknown>): Promise<CommandResult> {
+  const style = params['style'];
+  if (typeof style !== 'string' || style.trim().length === 0) {
+    return {
+      success: false,
+      error: 'The "style" parameter is required and must be a non-empty string (e.g. "Heading 1", "Quote").',
+      code: 'INVALID_ARGUMENT',
+    };
+  }
+
+  const target = params['target'] as
+    | { type: string; startParagraph?: number; endParagraph?: number; searchText?: string }
+    | undefined;
+  if (!target || typeof target.type !== 'string') {
+    return {
+      success: false,
+      error: 'The "target" parameter with a "type" field is required.',
+      code: 'INVALID_ARGUMENT',
+    };
+  }
+
+  return executeWordCommand(async (context) => {
+    let paragraphsToStyle: Word.Paragraph[] = [];
+
+    switch (target.type) {
+      case 'selection': {
+        const selection = context.document.getSelection();
+        const paragraphs = selection.paragraphs;
+        paragraphs.load('items');
+        await context.sync();
+        if (paragraphs.items.length === 0) {
+          throw new Error('The current selection contains no paragraphs to style.');
+        }
+        paragraphsToStyle = [...paragraphs.items];
+        break;
+      }
+
+      case 'paragraphRange': {
+        const startIdx = typeof target.startParagraph === 'number' ? target.startParagraph : 0;
+        const endIdx = typeof target.endParagraph === 'number' ? target.endParagraph : startIdx;
+        const paragraphs = context.document.body.paragraphs;
+        paragraphs.load('items');
+        await context.sync();
+
+        if (startIdx >= paragraphs.items.length || endIdx >= paragraphs.items.length) {
+          throw new Error(
+            `Paragraph index out of range. Document has ${paragraphs.items.length} paragraphs.`,
+          );
+        }
+        paragraphsToStyle = paragraphs.items.slice(startIdx, endIdx + 1);
+        break;
+      }
+
+      case 'searchText': {
+        if (typeof target.searchText !== 'string' || target.searchText.length === 0) {
+          throw new Error('The "searchText" field is required for target type "searchText".');
+        }
+        const paragraphs = context.document.body.paragraphs;
+        paragraphs.load(['text']);
+        await context.sync();
+
+        paragraphsToStyle = paragraphs.items.filter((p) => p.text.includes(target.searchText!));
+        if (paragraphsToStyle.length === 0) {
+          throw new Error(`No paragraphs contain "${target.searchText}".`);
+        }
+        break;
+      }
+
+      default:
+        throw new Error(`Unsupported target type: "${target.type}".`);
+    }
+
+    for (const paragraph of paragraphsToStyle) {
+      paragraph.style = style as string;
+    }
+    await context.sync();
+
+    return { success: true, styledParagraphs: paragraphsToStyle.length, style };
   });
 }
