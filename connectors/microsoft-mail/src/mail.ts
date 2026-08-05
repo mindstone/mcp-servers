@@ -562,160 +562,54 @@ function sanitizeAttachmentFilename(name: string): string {
 }
 
 /**
- * The validated attachment-directory target: canonical path, the canonical
- * workspace root it must stay contained in, and the directory's dev/ino
- * identity at validation time. The identity pins the directory so a
- * rename-and-replace swap after validation is detectable.
+ * The validated attachment-download target: the canonical (symlink-resolved)
+ * workspace root every attachment write must stay contained in. It is the
+ * only path component trusted at write time — see writeFileExclusive.
  */
 export interface AttachmentDirTarget {
-  dir: string;
   root: string;
-  dev: number;
-  ino: number;
 }
 
 /**
- * Resolve the directory attachments are saved into, honouring the repo's
- * file-write invariant: canonical-prefix containment under
- * `MCP_WORKSPACE_PATH` (or `os.tmpdir()` when unset), with the canonical
- * (symlink-resolved) root as the containment anchor. The parent chain is
- * canonicalised before `mkdir` so a symlinked intermediate cannot trick the
- * connector into even creating a directory outside the workspace.
+ * Resolve the root attachments are saved under, honouring the repo's
+ * file-write invariant: the download root is `MCP_WORKSPACE_PATH` (or
+ * `os.tmpdir()` when unset), canonicalised (symlinks resolved) so the
+ * containment anchor is the real directory, never a symlinked alias, and a
+ * nonexistent or unresolvable root fails closed before any content is
+ * written. This is the intent-validation gate — it decides WHERE downloads
+ * may land; it deliberately returns no user-visible pathname to write to
+ * (see writeFileExclusive).
  *
  * Exported for tests (the guard below is exercised directly).
  */
 export async function resolveAttachmentDir(): Promise<AttachmentDirTarget> {
   const root = process.env.MCP_WORKSPACE_PATH || os.tmpdir();
-  const realRoot = await fs.realpath(root);
-  const dir = path.join(realRoot, 'attachments', 'microsoft-mail');
-  const parentReal = await fs
-    .realpath(path.join(realRoot, 'attachments'))
-    .catch(() => null);
-  if (parentReal !== null) {
-    const parentRelative = path.relative(realRoot, parentReal);
-    if (parentRelative.startsWith('..') || path.isAbsolute(parentRelative)) {
-      throw new Error('Resolved attachment directory escaped its workspace root');
-    }
-  }
-  await fs.mkdir(dir, { recursive: true });
-  const realDir = await fs.realpath(dir);
-  const relative = path.relative(realRoot, realDir);
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw new Error('Resolved attachment directory escaped its workspace root');
-  }
-  const identity = await fs.stat(realDir);
-  return { dir: realDir, root: realRoot, dev: identity.dev, ino: identity.ino };
+  return { root: await fs.realpath(root) };
 }
 
 /**
- * Confirm `fullPath` still names the same file as the open descriptor
- * (dev/ino identity). After a parent-directory swap-and-restore the path
- * would resolve to a different file — or nothing — than the one this
- * connector created, and the write must not proceed.
- */
-async function assertPathMatchesHandle(fullPath: string, handle: fs.FileHandle): Promise<void> {
-  const [viaPath, viaHandle] = await Promise.all([fs.stat(fullPath), handle.stat()]);
-  if (viaPath.dev !== viaHandle.dev || viaPath.ino !== viaHandle.ino) {
-    throw new Error(
-      'Attachment path no longer resolves to the file being written; refusing to continue',
-    );
-  }
-}
-
-/**
- * Pin the validated attachment directory behind an open file descriptor so
- * the leaf create/write/cleanup below can be addressed RELATIVE TO THE
- * DESCRIPTOR — `/proc/self/fd/<fd>/<name>` — instead of the swappable
- * directory path. The kernel resolves that path against the pinned directory
- * inode, so a rename-and-replace swap of `target.dir` (symlink to an outside
- * directory, swap-back before cleanup, …) cannot redirect a single byte
- * outside the workspace or make cleanup touch anything but the leaf we
- * created in the pinned inode.
+ * Write `content` as `filename` inside a fresh, unpredictable staging
+ * directory created atomically with `fs.mkdtemp` directly under the
+ * canonical download root (mode 0700), and report the real path of the
+ * saved file.
  *
- * Linux only: Node exposes no descriptor-relative file ops (no openat /
- * RESOLVE_BENEATH), so `/proc/self/fd` is the only descriptor-relative
- * mechanism available. Returns `undefined` when the mechanism is unavailable
- * (non-Linux platform, or an unmounted /proc) — and that is fatal, not a
- * fallback signal: every path-based create re-resolves its parent chain at
- * syscall time, so without a pinned descriptor a directory swap landing
- * between validation and create can redirect bytes outside the workspace
- * before any post-write check runs. writeFileExclusive therefore fails
- * closed when this returns `undefined`; there is deliberately no path-based
- * write fallback.
+ * No validated user-visible pathname is ever opened: the connector invents
+ * the staging directory name, so there is no pre-existing pathname for a
+ * local attacker to pre-plant, rename, or symlink-swap between validation
+ * and the write syscall — the parent-directory check-then-use (TOCTOU) race
+ * that a "validate a directory, then open a path inside it" scheme leaves
+ * open is removed by construction, with no descriptor-relative APIs, on
+ * every platform. The only path component trusted at write time is the
+ * canonical workspace root itself, which a principal whose write access is
+ * scoped to the workspace's contents cannot swap out.
  *
- * A directory that cannot be opened, or whose live dev/ino no longer matches
- * the validated identity, is a swap signal and fails closed (throws) rather
- * than falling back: on Linux there is no legitimate reason the directory
- * resolveAttachmentDir() just validated cannot be opened.
+ * The file is created with O_CREAT|O_EXCL ('wx', mode 0600) and fstat-checked
+ * to be a regular file, so even a same-named entry planted inside the fresh
+ * staging directory is never written through. A same-named file anywhere
+ * else is simply never touched: overwrite is impossible by construction.
  *
- * Exported for tests.
- */
-export async function pinAttachmentDir(
-  target: AttachmentDirTarget,
-): Promise<fs.FileHandle | undefined> {
-  if (process.platform !== 'linux') return undefined;
-  const procSelfFd = await fs
-    .stat('/proc/self/fd')
-    .then((s) => s.isDirectory())
-    .catch(() => false);
-  if (!procSelfFd) return undefined;
-  let dirHandle: fs.FileHandle;
-  try {
-    dirHandle = await fs.open(target.dir, 'r');
-  } catch {
-    // The directory resolveAttachmentDir() just validated cannot be opened —
-    // treat as a swap and fail closed rather than falling back to a
-    // path-based create.
-    throw new Error('Attachment directory was replaced after validation; refusing to write');
-  }
-  const identity = await dirHandle.stat();
-  if (!identity.isDirectory() || identity.dev !== target.dev || identity.ino !== target.ino) {
-    await dirHandle.close();
-    throw new Error('Attachment directory was replaced after validation; refusing to write');
-  }
-  return dirHandle;
-}
-
-/**
- * The message returned when descriptor-relative writes are unavailable. It is
- * model- and user-visible, so it names the platform limitation and the
- * recovery path without leaking internals.
- */
-const ATTACHMENT_WRITE_UNSUPPORTED_MESSAGE =
-  'Attachment downloads are unavailable on this platform: safe saving requires ' +
-  'descriptor-relative directory writes (Linux with /proc/self/fd), and Node offers ' +
-  'no equivalent elsewhere. Refusing to save the attachment because a directory swap ' +
-  'during the write could redirect it outside the workspace. Open the message in ' +
-  'Outlook to download the attachment instead.';
-
-/**
- * Atomically create `target.dir/filename` and write `content` through the
- * resulting file descriptor. `fs.open(..., 'wx')` (O_CREAT|O_EXCL) fails with
- * EEXIST on any existing entry — including a symlink or hardlink planted
- * after the filename was chosen — so the descriptor we write is provably the
- * file we just created, never a followed symlink target. On EEXIST the next
- * `-<n>` suffix is tried, preserving the no-overwrite contract.
- *
- * O_EXCL protects the leaf entry, not the parent chain: a local attacker who
- * can rename the attachment directory and replace it with a symlink AFTER
- * resolveAttachmentDir() validated it could otherwise redirect the create
- * outside the workspace. The directory is therefore pinned behind an open
- * descriptor (pinAttachmentDir) and the create, the post-write verification,
- * and any cleanup all go through `/proc/self/fd/<fd>/<name>`, which the
- * kernel resolves against the pinned inode — a path swap at any point in the
- * sequence cannot move the write or the cleanup off the validated directory.
- * The user-facing path is additionally confirmed to still resolve to the
- * descriptor after the write, so a rename mid-write fails closed (with
- * descriptor-relative cleanup) instead of reporting success with a dangling
- * `savedTo`.
- *
- * When descriptor-relative writes are unavailable (non-Linux platform, or
- * Linux without /proc/self/fd) this function refuses to write at all: a
- * path-based create re-resolves its parent chain at syscall time, so no
- * amount of pre/post verification can prevent a swap landing between the
- * final check and the write syscall — detect-and-refuse would report the
- * breach only after bytes already landed outside the workspace. Failing
- * closed keeps the containment invariant unconditional.
+ * On failure the whole staging directory is removed, so a rejected write
+ * leaves no residue.
  *
  * Exported for tests.
  */
@@ -724,53 +618,31 @@ export async function writeFileExclusive(
   filename: string,
   content: Buffer,
 ): Promise<string> {
-  const ext = path.extname(filename);
-  const base = path.basename(filename, ext);
-  const pin = await pinAttachmentDir(target);
-  if (!pin) {
-    throw new Error(ATTACHMENT_WRITE_UNSUPPORTED_MESSAGE);
+  const stagingDir = await fs.mkdtemp(path.join(target.root, 'microsoft-mail-attachment-'));
+  const fullPath = path.join(stagingDir, filename);
+  // The filename is separator-free, but keep the canonical containment
+  // check so a future refactor cannot silently weaken the boundary.
+  const relative = path.relative(stagingDir, fullPath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    await fs.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+    throw new Error('Resolved attachment path escaped the staging directory');
   }
+  let handle: fs.FileHandle | undefined;
   try {
-    for (let attempt = 0; ; attempt += 1) {
-      const candidate = attempt === 0 ? filename : `${base}-${attempt}${ext}`;
-      const fullPath = path.join(target.dir, candidate);
-      // The filename is separator-free, but keep the canonical containment
-      // check so a future refactor cannot silently weaken the boundary.
-      const relative = path.relative(target.dir, fullPath);
-      if (relative.startsWith('..') || path.isAbsolute(relative)) {
-        throw new Error('Resolved attachment path escaped the attachment directory');
-      }
-      // The create is addressed relative to the pinned descriptor's inode,
-      // never through the swappable directory path.
-      const createPath = `/proc/self/fd/${pin.fd}/${candidate}`;
-      let handle: fs.FileHandle | undefined;
-      try {
-        handle = await fs.open(createPath, 'wx');
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === 'EEXIST') continue;
-        throw err;
-      }
-      try {
-        await handle.writeFile(content);
-        // Descriptor-relative sanity check, then confirm the user-facing
-        // path still names what we wrote (a rename mid-write must not
-        // surface a dangling savedTo).
-        await assertPathMatchesHandle(createPath, handle);
-        await assertPathMatchesHandle(fullPath, handle);
-        return fullPath;
-      } catch (err) {
-        // We created this leaf (O_EXCL), so it is safe — and required — to
-        // remove it. The unlink is relative to the pinned inode, so it
-        // removes exactly our leaf even if the directory path has been
-        // swapped or restored in the meantime.
-        await fs.unlink(createPath).catch(() => {});
-        throw err;
-      } finally {
-        await handle.close();
-      }
+    handle = await fs.open(fullPath, 'wx', 0o600);
+    const stat = await handle.stat();
+    if (!stat.isFile()) {
+      throw new Error('Attachment path does not resolve to a regular file');
     }
+    await handle.writeFile(content);
+    return fullPath;
+  } catch (err) {
+    // We created the staging directory, so it is safe — and required — to
+    // remove it whole; the write must not leave partial residue behind.
+    await fs.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+    throw err;
   } finally {
-    await pin.close();
+    await handle?.close();
   }
 }
 
