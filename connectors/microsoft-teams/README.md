@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-microsoft-teams.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-teams)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Microsoft 365 Teams MCP server — list and read Teams chats, send chat messages, list teams and channels, and read presence via the Microsoft Graph API.
+Microsoft 365 Teams MCP server — list and read Teams chats and channel messages, send messages and replies, start new chats, look up colleagues, search messages, and read or set presence via the Microsoft Graph API.
 
 *Cohort-style Microsoft 365 Teams MCP. Reuses the OAuth surface owned by [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/) so the host signs in once and gets Teams plus mail plus calendar plus files plus SharePoint from the same credentials.*
 
