@@ -11,7 +11,7 @@ HubSpot MCP server for CRM operations (contacts, companies, deals, tickets, lead
 
 - **Version:** [0.3.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-hubspot)
 - **Auth:** OAuth (host-orchestrated) ([`HUBSPOT_CLIENT_SECRET`](./server.json))
-- **Tools:** [95](./src/tools/) (crm-objects, associations, marketing, files, workflows, conversations)
+- **Tools:** [106](./src/tools/) (crm-objects, associations, marketing, files, workflows, conversations)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -193,7 +193,7 @@ Until the host has written `${HUBSPOT_CONFIG_DIR}/credentials/you@example.com.to
 }
 ```
 
-## Tools (95)
+## Tools (106)
 
 ### Account & authentication
 - `list_hubspot_accounts` — List connected HubSpot accounts and their auth status.
@@ -244,7 +244,16 @@ Until the host has written `${HUBSPOT_CONFIG_DIR}/credentials/you@example.com.to
 - `delete_hubspot_task` — Delete a task (destructive).
 
 ### Notes
+- `search_hubspot_notes` — Search notes by body text or property filters.
+- `get_hubspot_note` — Get a single note by ID.
 - `create_hubspot_note` — Create a note and optionally associate it with records (destructive).
+- `update_hubspot_note` — Update a note's properties, e.g. edit its body (destructive).
+- `delete_hubspot_note` — Permanently delete a note (destructive).
+
+### Custom objects
+- `search_hubspot_object` — Search records of any object type, incl. tenant-defined custom objects (native full-text query).
+- `get_hubspot_object` — Get a single record of any object type by ID.
+- `create_hubspot_object` — Create a record of any object type (destructive). Custom objects need the `crm.objects.custom.write` scope.
 
 ### Associations
 - `create_hubspot_association` — Create an unlabeled association between two records (v3) (destructive).
@@ -270,11 +279,13 @@ Until the host has written `${HUBSPOT_CONFIG_DIR}/credentials/you@example.com.to
 - `list_hubspot_pipelines` — List sales/ticket pipelines and their stages.
 - `get_hubspot_pipeline` — Get a specific pipeline and its stages.
 
-### Engagements (calls & meetings)
+### Engagements (calls, meetings & emails)
 - `search_hubspot_calls` — Search logged calls with filters.
 - `search_hubspot_meetings` — Search logged meetings with filters.
+- `search_hubspot_emails` — Search logged 1:1 sales emails (bodies require the `sales-email-read` scope; a `notes` warning flags redaction).
 - `get_hubspot_call` — Get a single call by ID.
 - `get_hubspot_meeting` — Get a single meeting by ID.
+- `get_hubspot_email` — Get a single email engagement by ID.
 - `create_hubspot_call` — Log a call and optionally link it to records (destructive).
 - `create_hubspot_meeting` — Log a meeting and optionally link it to records (destructive).
 - `get_contact_engagements` — Get recent calls and meetings for a contact.
@@ -307,6 +318,8 @@ Until the host has written `${HUBSPOT_CONFIG_DIR}/credentials/you@example.com.to
 - `list_hubspot_lists` — List contact lists/segments.
 - `get_hubspot_list` — Get details and filter criteria for a list.
 - `list_hubspot_list_members` — Get contact IDs that belong to a list.
+- `add_hubspot_list_members` — Add records to a MANUAL/SNAPSHOT list (destructive; requires `crm.lists.write`).
+- `remove_hubspot_list_members` — Remove records from a MANUAL/SNAPSHOT list (destructive; requires `crm.lists.write`).
 - `batch_read_hubspot_contacts` — Fetch up to 100 contacts by ID in one request.
 
 ### Knowledge base (Service Hub Pro/Enterprise)
@@ -337,6 +350,7 @@ Until the host has written `${HUBSPOT_CONFIG_DIR}/credentials/you@example.com.to
 - Local credentials are read from host-managed files; account selection is pinned by `HUBSPOT_ACCOUNT_EMAIL`.
 - This server does not run a local OAuth callback server; OAuth is host-orchestrated.
 - Source attribution labels are applied only to new writes. Existing HubSpot record content is never retroactively rewritten.
+- All text returned by HubSpot (record properties, note/engagement bodies, conversation messages, KB articles, form submissions, names/labels) is wrapped in `<untrusted-content source="hubspot:…">` envelopes with close-tag breakout escaping, so a model consuming tool output treats third-party-authored text as data, not instructions. Identifiers, enums, URLs, timestamps, and pagination cursors stay literal so tool round-trips keep working.
 
 ## Licence
 

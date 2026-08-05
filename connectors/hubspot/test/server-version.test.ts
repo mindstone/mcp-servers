@@ -5,6 +5,7 @@ import {
   type McpTestClient,
   resolveServerScript,
 } from './fixtures/mcp-test-harness.js';
+import { allTools } from '../src/tools/definitions.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json') as { version: string };
@@ -30,8 +31,10 @@ describe('HubSpot server metadata', () => {
     expect(client.getServerVersion()?.version).toBe(pkg.version);
   });
 
-  it('reports the full 95-tool surface in tools/list', async () => {
+  it('reports the full registered tool surface in tools/list', async () => {
     const tools = await client.listTools();
-    expect(tools).toHaveLength(95);
+    // Derived from the registry rather than hardcoded, so adding a tool only
+    // needs the STATUS.json/README count updates, not a test edit.
+    expect(tools).toHaveLength(allTools.length);
   });
 });
