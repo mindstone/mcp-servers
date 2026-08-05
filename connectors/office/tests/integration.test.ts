@@ -649,3 +649,104 @@ describe('integration: MCP → sidecar → add-in pipeline', () => {
     expect(payload2.data.version).toBe('v2');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Integration tests: Word table tools (read_table / update_table_cell)
+// ---------------------------------------------------------------------------
+
+describe('integration: Word table tools', () => {
+  function captureCommand(socket: WebSocket, responseData: unknown) {
+    const commandReceived = new Promise<{ action: string; params: Record<string, unknown> }>((resolve) => {
+      socket.on('message', (raw) => {
+        const msg = JSON.parse(raw.toString()) as {
+          type?: string; id?: string; action?: string; params?: Record<string, unknown>;
+        };
+        if (msg.type === 'command' && typeof msg.id === 'string') {
+          sendJson(socket, { type: 'response', id: msg.id, success: true, data: responseData });
+          resolve({ action: msg.action ?? '', params: msg.params ?? {} });
+        }
+      });
+    });
+    return commandReceived;
+  }
+
+  it('routes read_table with tableIndex and returns cell values', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'word', baseUrl);
+
+    const commandReceived = captureCommand(socket, {
+      tableIndex: 1,
+      rowCount: 2,
+      columnCount: 2,
+      values: [['Name', 'Role'], ['Ada', 'Eng']],
+    });
+
+    const response = await fetchHttps(`${baseUrl}/word/read_table`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tableIndex: 1 }),
+    });
+
+    const payload = (await response.json()) as { success: boolean; data: { values: string[][] } };
+    const routed = await commandReceived;
+
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(payload.data.values).toEqual([['Name', 'Role'], ['Ada', 'Eng']]);
+    expect(routed.action).toBe('read_table');
+    expect(routed.params).toEqual({ tableIndex: 1 });
+  });
+
+  it('routes update_table_cell with all params', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'word', baseUrl);
+
+    const commandReceived = captureCommand(socket, {
+      success: true, tableIndex: 0, rowIndex: 1, columnIndex: 2,
+    });
+
+    const response = await fetchHttps(`${baseUrl}/word/update_table_cell`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tableIndex: 0, rowIndex: 1, columnIndex: 2, text: 'Updated' }),
+    });
+
+    const payload = (await response.json()) as { success: boolean };
+    const routed = await commandReceived;
+
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(routed.action).toBe('update_table_cell');
+    expect(routed.params).toEqual({ tableIndex: 0, rowIndex: 1, columnIndex: 2, text: 'Updated' });
+  });
+
+  it('propagates table errors (out-of-range index) from the add-in', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'word', baseUrl);
+
+    socket.on('message', (raw) => {
+      const msg = JSON.parse(raw.toString()) as { type?: string; id?: string };
+      if (msg.type === 'command' && typeof msg.id === 'string') {
+        sendJson(socket, {
+          type: 'response', id: msg.id, success: false,
+          error: 'Table index 5 out of range. Document has 1 table(s) (0-based).',
+          code: 'UNKNOWN_ERROR',
+        });
+      }
+    });
+
+    const response = await fetchHttps(`${baseUrl}/word/read_table`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tableIndex: 5 }),
+    });
+
+    const payload = (await response.json()) as { success: boolean; error: string };
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(false);
+    expect(payload.error).toContain('out of range');
+  });
+});

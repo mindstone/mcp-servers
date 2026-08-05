@@ -11,7 +11,7 @@ Read and edit Word documents, Excel workbooks, and PowerPoint presentations from
 
 - **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-office)
 - **Auth:** None ([`server.json`](./server.json))
-- **Tools:** [53](./src/) (word, excel, powerpoint, setup)
+- **Tools:** [55](./src/) (word, excel, powerpoint, setup)
 - **Surface:** desktop-addin
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -173,13 +173,13 @@ Claude Desktop is possible but the host must provide a writable
 }
 ```
 
-## Tools (53)
+## Tools (55)
 
 ### Setup
 - `rebel_office_setup` — Install or repair (or uninstall) the Office add-in.
 - `rebel_office_status` — Check Office connection status for Word, Excel, PowerPoint.
 
-### Word (17)
+### Word (19)
 - `rebel_office_word_read_document` — Read the active Word document body, paginated by paragraph.
 - `rebel_office_word_get_document_structure` — Get the heading/section outline of the document.
 - `rebel_office_word_get_selection` — Get the currently selected text and location.
@@ -188,6 +188,8 @@ Claude Desktop is possible but the host must provide a writable
 - `rebel_office_word_replace_text` — Find-and-replace text in the document (destructive).
 - `rebel_office_word_format_text` — Apply font, color, highlight, or alignment formatting (destructive).
 - `rebel_office_word_insert_table` — Insert a table with headers and rows (destructive).
+- `rebel_office_word_read_table` — Read a table's cell values as a 2D array.
+- `rebel_office_word_update_table_cell` — Replace the text of a single table cell (destructive).
 - `rebel_office_word_insert_image` — Insert an image from a file path or base64 data (destructive).
 - `rebel_office_word_insert_break` — Insert a page or section break (destructive).
 - `rebel_office_word_set_header_footer` — Set header or footer text and alignment (destructive).

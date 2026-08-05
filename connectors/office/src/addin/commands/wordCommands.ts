@@ -19,6 +19,8 @@ const wordCommands: Record<string, WordCommandHandler> = {
   replace_text: replaceText,
   format_text: formatText,
   insert_table: insertTable,
+  read_table: readTable,
+  update_table_cell: updateTableCell,
   insert_image: insertImage,
   insert_break: insertBreak,
   set_header_footer: setHeaderFooter,
@@ -1337,5 +1339,132 @@ async function acceptRejectChanges(params: Record<string, unknown>): Promise<Com
 
     await context.sync();
     return { success: true, processedCount: changesToProcess.length, action };
+  });
+}
+
+/**
+ * read_table — Read a table's cell values as a 2D array.
+ * Params:
+ *   tableIndex (number, default 0) — 0-based index into the document's tables
+ */
+async function readTable(params: Record<string, unknown>): Promise<CommandResult> {
+  const tableIndexParam = params['tableIndex'];
+  if (
+    tableIndexParam !== undefined &&
+    (typeof tableIndexParam !== 'number' || !Number.isInteger(tableIndexParam) || tableIndexParam < 0)
+  ) {
+    return {
+      success: false,
+      error: 'The "tableIndex" parameter must be a non-negative integer.',
+      code: 'INVALID_ARGUMENT',
+    };
+  }
+  const tableIndex = typeof tableIndexParam === 'number' ? tableIndexParam : 0;
+
+  return executeWordCommand(async (context) => {
+    const tables = context.document.body.tables;
+    tables.load('items');
+    await context.sync();
+
+    if (tables.items.length === 0) {
+      throw new Error('The document contains no tables.');
+    }
+    if (tableIndex >= tables.items.length) {
+      throw new Error(
+        `Table index ${tableIndex} out of range. Document has ${tables.items.length} table(s) (0-based).`,
+      );
+    }
+
+    const table = tables.items[tableIndex]!;
+    table.load(['values', 'rowCount']);
+    await context.sync();
+
+    const values = table.values;
+    return {
+      tableIndex,
+      rowCount: table.rowCount,
+      columnCount: values[0]?.length ?? 0,
+      values,
+    };
+  });
+}
+
+/**
+ * update_table_cell — Replace the text of a single table cell.
+ * Params:
+ *   tableIndex  (number, default 0) — 0-based table index
+ *   rowIndex    (number, required)  — 0-based row
+ *   columnIndex (number, required)  — 0-based column
+ *   text        (string, required)  — new cell text (may be empty to clear the cell)
+ */
+async function updateTableCell(params: Record<string, unknown>): Promise<CommandResult> {
+  const tableIndexParam = params['tableIndex'];
+  const rowIndex = params['rowIndex'];
+  const columnIndex = params['columnIndex'];
+  const text = params['text'];
+
+  if (
+    tableIndexParam !== undefined &&
+    (typeof tableIndexParam !== 'number' || !Number.isInteger(tableIndexParam) || tableIndexParam < 0)
+  ) {
+    return {
+      success: false,
+      error: 'The "tableIndex" parameter must be a non-negative integer.',
+      code: 'INVALID_ARGUMENT',
+    };
+  }
+  if (typeof rowIndex !== 'number' || !Number.isInteger(rowIndex) || rowIndex < 0) {
+    return {
+      success: false,
+      error: 'The "rowIndex" parameter is required and must be a non-negative integer (0-based).',
+      code: 'INVALID_ARGUMENT',
+    };
+  }
+  if (typeof columnIndex !== 'number' || !Number.isInteger(columnIndex) || columnIndex < 0) {
+    return {
+      success: false,
+      error: 'The "columnIndex" parameter is required and must be a non-negative integer (0-based).',
+      code: 'INVALID_ARGUMENT',
+    };
+  }
+  if (typeof text !== 'string') {
+    return {
+      success: false,
+      error: 'The "text" parameter is required and must be a string (may be empty).',
+      code: 'INVALID_ARGUMENT',
+    };
+  }
+  const tableIndex = typeof tableIndexParam === 'number' ? tableIndexParam : 0;
+
+  return executeWordCommand(async (context) => {
+    const tables = context.document.body.tables;
+    tables.load('items');
+    await context.sync();
+
+    if (tables.items.length === 0) {
+      throw new Error('The document contains no tables.');
+    }
+    if (tableIndex >= tables.items.length) {
+      throw new Error(
+        `Table index ${tableIndex} out of range. Document has ${tables.items.length} table(s) (0-based).`,
+      );
+    }
+
+    const table = tables.items[tableIndex]!;
+    table.load(['values', 'rowCount']);
+    await context.sync();
+
+    const columnCount = table.values[0]?.length ?? 0;
+    if (rowIndex >= table.rowCount || columnIndex >= columnCount) {
+      throw new Error(
+        `Cell (${rowIndex}, ${columnIndex}) out of range. Table ${tableIndex} has ${table.rowCount} row(s) and ${columnCount} column(s) (0-based).`,
+      );
+    }
+
+    const cell = table.getCell(rowIndex, columnIndex);
+    cell.value = text as string;
+    await context.sync();
+
+    return { success: true, tableIndex, rowIndex, columnIndex };
   });
 }
