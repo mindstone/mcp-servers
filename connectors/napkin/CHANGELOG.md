@@ -17,6 +17,8 @@ are maintained manually as part of the PR review checklist.
 ### Fixed
 - **napkin**: Map HTTP 410 responses (status/file URLs expire 30 minutes after generation) to a structured `EXPIRED` error with an actionable regenerate-and-download-promptly resolution, instead of generic `API_ERROR`/`DOWNLOAD_ERROR`.
 - **napkin**: Broaden the 403 `AUTH_FAILED` resolution — the vendor returns 403 ("user not found") for invalid keys too, not only for missing permissions, so the message now points at checking the key.
+- **napkin**: A failed format-detection pre-check in `napkin_download_visual` now logs an explicit stderr warning before falling back to the default `.svg` extension, instead of failing silently.
+- **napkin**: A `filename` that slugifies to an empty string now falls back to a timestamped name instead of producing a hidden dotfile.
 
 ### Security
 - **napkin**: Harden `napkin_download_visual`'s download target. The output directory is now canonicalised with canonical-prefix containment beneath `MCP_WORKSPACE_PATH` (or the home-directory fallback), so a symlinked `Chief-of-Staff`/`generated-visuals` component fails closed with an observable `OUTPUT_PATH_REJECTED` error instead of redirecting the write. Downloads are written to a fresh private staging directory (mode 0700) and hard-linked into place with exclusive-create semantics: existing files are never overwritten (`FILE_EXISTS` error) and a pre-planted symlink at the destination is never followed.

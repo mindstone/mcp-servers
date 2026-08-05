@@ -15,6 +15,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import { createNapkinHandlers } from './helpers/napkin-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
@@ -544,5 +545,54 @@ describe('VAL-NAPKIN — napkin_download_visual download-target hardening', () =
     const canonicalRealRoot = fs.realpathSync(realRoot);
     expect(data.file_path?.startsWith(canonicalRealRoot)).toBe(true);
     if (data.file_path) downloadedFiles.push(data.file_path);
+  });
+
+  it('VAL-NAPKIN-016 — a filename that slugifies to nothing falls back to a timestamped name', async () => {
+    const ws = makeWorkspace();
+    mswServer.use(...createNapkinHandlers());
+
+    testClient = await createTestClient({ env: clientEnv(ws) });
+
+    const result = await testClient.callTool('napkin_download_visual', {
+      file_url: `https://api.napkin.ai/v1/visual/${mockRequestId}/file/output.svg`,
+      filename: '!!!',
+    });
+
+    expect(result.isError).toBeFalsy();
+    const data = result.json as DownloadResult;
+    expect(path.basename(data.file_path ?? '')).toMatch(/^napkin-\d+\.svg$/);
+    if (data.file_path) downloadedFiles.push(data.file_path);
+  });
+
+  it('VAL-NAPKIN-017 — a failed format-detection pre-check is observable (stderr warning)', async () => {
+    const ws = makeWorkspace();
+    const BASE = 'https://api.napkin.ai/v1';
+    mswServer.use(
+      http.get(`${BASE}/visual/:id/status`, () =>
+        HttpResponse.json({ error: 'boom' }, { status: 500 }),
+      ),
+      http.get(`${BASE}/visual/:id/file/*`, () =>
+        new HttpResponse('<svg>mock</svg>', { headers: { 'Content-Type': 'image/svg+xml' } }),
+      ),
+    );
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    testClient = await createTestClient({ env: clientEnv(ws) });
+
+    const result = await testClient.callTool('napkin_download_visual', {
+      // No recognisable extension → triggers the status-endpoint format probe.
+      file_url: `https://api.napkin.ai/v1/visual/${mockRequestId}/file/output`,
+      filename: 'noext',
+    });
+
+    expect(result.isError).toBeFalsy();
+    const data = result.json as DownloadResult;
+    expect(data.file_path).toContain('noext.svg');
+    if (data.file_path) downloadedFiles.push(data.file_path);
+
+    const warned = errorSpy.mock.calls.some(
+      (call) => typeof call[0] === 'string' && call[0].includes('Format detection'),
+    );
+    expect(warned).toBe(true);
   });
 });

@@ -253,8 +253,13 @@ export function registerDownloadTools(server: McpServer): void {
               }
             }
           }
-        } catch {
-          /* fall through to default .svg */
+        } catch (formatError) {
+          // Best-effort pre-check; a failure must be observable, never
+          // silent. Falls through to the default .svg extension.
+          console.error(
+            '[Napkin] Format detection via status endpoint failed; defaulting to .svg:',
+            formatError instanceof Error ? formatError.message : formatError,
+          );
         }
       }
 
@@ -262,7 +267,10 @@ export function registerDownloadTools(server: McpServer): void {
 
       const outputDir = prepareOutputDir();
 
-      const slug = filename ? slugify(filename) : `napkin-${Date.now()}`;
+      // Slugify strips everything outside [a-z0-9-]; a filename that reduces
+      // to nothing falls back to a timestamped name so the basename can
+      // never be empty or dotfile-like.
+      const slug = (filename ? slugify(filename) : '') || `napkin-${Date.now()}`;
       const outputPath = writeDownloadExclusive(outputDir, `${slug}${extension}`, data);
 
       return JSON.stringify(
