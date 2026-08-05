@@ -38,24 +38,33 @@ function extractReferencedTokens(...prompts: Array<string | undefined>): Set<str
  *
  * Fail-open but OBSERVABLE: a lookup error never blocks placing a call (the
  * call tools are annotated destructive and the user asked for the call), but
- * it never disappears silently either — a failed check produces an explicit
- * "could not run" warning string so the degradation is visible in the tool
- * response.
+ * it never disappears silently either — a failed or indeterminate check
+ * produces an explicit warning string so the degradation is visible in the
+ * tool response. That includes the case where the effective agent/LLM/prompt
+ * cannot be identified at all (no outbound binding, no response_engine.llm_id
+ * on the looked-up agent version).
+ *
+ * Version-aware: when the effective agent version is known (explicit
+ * override_agent_version, or the version from the phone number's outbound
+ * binding), the agent is fetched AT that version so the prompt validated is
+ * the prompt that will actually run.
  *
  * Returns null if no warning is warranted; a non-empty array of
  * human-readable warning strings otherwise (including when the check itself
- * could not run).
+ * could not run or could not identify the prompt).
  */
 export async function checkDynamicVariableReferences(input: {
   fromNumber: string;
   dynamicVariables: Record<string, unknown>;
   overrideAgentId?: string;
+  overrideAgentVersion?: string | number;
 }): Promise<string[] | null> {
   const dynamicKeys = Object.keys(input.dynamicVariables);
   if (dynamicKeys.length === 0) return null;
 
   try {
     let agentId = input.overrideAgentId;
+    let agentVersion: string | number | undefined = input.overrideAgentVersion;
 
     if (!agentId) {
       const phone = await retellFetch<PhoneNumberResponse>(
@@ -69,14 +78,23 @@ export async function checkDynamicVariableReferences(input: {
         ];
       }
       agentId = bound.agent_id;
+      agentVersion = bound.agent_version ?? agentVersion;
     }
 
+    const versionQuery = agentVersion !== undefined
+      ? `?version=${encodeURIComponent(String(agentVersion))}`
+      : '';
+    const versionLabel = agentVersion !== undefined ? ` version ${agentVersion}` : '';
     const agent = await retellFetch<AgentResponse>(
-      `/get-agent/${encodeURIComponent(agentId)}`,
+      `/get-agent/${encodeURIComponent(agentId)}${versionQuery}`,
       { method: 'GET' },
     );
     const llmId = agent.response_engine?.llm_id;
-    if (!llmId) return null;
+    if (!llmId) {
+      return [
+        `Dynamic-variable prompt check could not identify the effective prompt for agent ${agentId}${versionLabel}: the agent lookup returned no response_engine.llm_id (the agent may use a conversation-flow engine this check cannot read, or the version is unpublished). ${dynamicKeys.length} dynamic variable(s) passed WITHOUT validation against the live prompt — unmatched variables are silently dropped. Verify the agent's response engine with get_agent before relying on them.`,
+      ];
+    }
 
     const llm = await retellFetch<LlmResponse>(
       `/get-retell-llm/${encodeURIComponent(llmId)}`,
@@ -89,12 +107,12 @@ export async function checkDynamicVariableReferences(input: {
 
     if (unreferenced.length === dynamicKeys.length) {
       return [
-        `Live prompt on agent ${agentId} (llm_id=${llmId}) does not reference any of the dynamic variable(s) you passed: [${unreferenced.join(', ')}]. Retell only substitutes {{var_name}} tokens that already exist in the prompt — these variables will be silently dropped and the call will run with the previously published prompt. To fix: update_retell_llm on ${llmId} to include {{${unreferenced[0]}}} (and any others), then publish_agent before retrying.`,
+        `Live prompt on agent ${agentId}${versionLabel} (llm_id=${llmId}) does not reference any of the dynamic variable(s) you passed: [${unreferenced.join(', ')}]. Retell only substitutes {{var_name}} tokens that already exist in the prompt — these variables will be silently dropped and the call will run with the previously published prompt. To fix: update_retell_llm on ${llmId} to include {{${unreferenced[0]}}} (and any others), then publish_agent before retrying.`,
       ];
     }
 
     return [
-      `Live prompt on agent ${agentId} (llm_id=${llmId}) does not reference these dynamic variable(s): [${unreferenced.join(', ')}]. They will be silently dropped. Other passed variables [${dynamicKeys.filter((k) => !unreferenced.includes(k)).join(', ')}] are referenced and will substitute. To use all variables, update_retell_llm to add the missing {{var_name}} tokens, then publish_agent.`,
+      `Live prompt on agent ${agentId}${versionLabel} (llm_id=${llmId}) does not reference these dynamic variable(s): [${unreferenced.join(', ')}]. They will be silently dropped. Other passed variables [${dynamicKeys.filter((k) => !unreferenced.includes(k)).join(', ')}] are referenced and will substitute. To use all variables, update_retell_llm to add the missing {{var_name}} tokens, then publish_agent.`,
     ];
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);

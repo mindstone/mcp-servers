@@ -100,29 +100,41 @@ COST: Each task uses phone minutes from your Retell AI plan.`,
       if (args.reserved_concurrency !== undefined) body.reserved_concurrency = args.reserved_concurrency;
       if (args.call_time_window) body.call_time_window = args.call_time_window;
 
-      // Group tasks by the agent that will actually run their prompt: tasks
-      // without an override use from_number's default outbound agent; each
-      // distinct override_agent_id gets its own prompt check. Variable KEYS
-      // are merged per group (the check inspects keys, not values).
-      const varsByAgent = new Map<string | undefined, Record<string, unknown>>();
+      // Group tasks by the exact agent version that will run their prompt:
+      // tasks without an override use from_number's default outbound agent;
+      // each distinct (override_agent_id, override_agent_version) pair gets
+      // its own prompt check — the same agent ID at two different published
+      // versions can have different prompts, so they must not be merged.
+      // Variable KEYS are merged per group (the check inspects keys, not
+      // values).
+      const varsByAgentVersion = new Map<string, {
+        overrideAgentId?: string;
+        overrideAgentVersion?: string | number;
+        dynamicVariables: Record<string, unknown>;
+      }>();
       for (const task of args.tasks) {
         if (!task.retell_llm_dynamic_variables) continue;
-        const agentKey = task.override_agent_id || undefined;
-        const merged = varsByAgent.get(agentKey) ?? {};
-        Object.assign(merged, task.retell_llm_dynamic_variables);
-        varsByAgent.set(agentKey, merged);
+        const groupKey = `${task.override_agent_id ?? ''}${task.override_agent_version ?? ''}`;
+        const entry = varsByAgentVersion.get(groupKey) ?? {
+          overrideAgentId: task.override_agent_id || undefined,
+          overrideAgentVersion: task.override_agent_version,
+          dynamicVariables: {},
+        };
+        Object.assign(entry.dynamicVariables, task.retell_llm_dynamic_variables);
+        varsByAgentVersion.set(groupKey, entry);
       }
 
-      // Run every distinct agent's prompt check BEFORE the create call — the
-      // campaign must not be created while validation is still in flight.
-      // A failed check never blocks the batch (the tool is destructive by
-      // explicit user request) but always surfaces an explicit warning.
+      // Run every distinct agent-version's prompt check BEFORE the create
+      // call — the campaign must not be created while validation is still in
+      // flight. A failed check never blocks the batch (the tool is destructive
+      // by explicit user request) but always surfaces an explicit warning.
       const checkResults = await Promise.all(
-        [...varsByAgent.entries()].map(([overrideAgentId, dynamicVariables]) =>
+        [...varsByAgentVersion.values()].map((entry) =>
           checkDynamicVariableReferences({
             fromNumber: args.from_number,
-            dynamicVariables,
-            overrideAgentId,
+            dynamicVariables: entry.dynamicVariables,
+            overrideAgentId: entry.overrideAgentId,
+            overrideAgentVersion: entry.overrideAgentVersion,
           }),
         ),
       );

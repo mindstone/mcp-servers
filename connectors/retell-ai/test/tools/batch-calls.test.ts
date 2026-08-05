@@ -247,6 +247,126 @@ describe('Batch call tools — Retell AI', () => {
     expect(order.indexOf('precall-check')).toBeLessThan(order.indexOf('create'));
   });
 
+  it('create_batch_call validates each (agent_id, agent_version) pair against its own prompt', async () => {
+    // Two tasks share override_agent_id but pin different versions. The same
+    // agent ID at two versions can have different prompts, so the check must
+    // fetch each version's agent and validate against that version's LLM —
+    // merging them would validate against a prompt that never runs.
+    const requestedUrls: string[] = [];
+    mswServer.use(
+      http.get(`${RETELL_API_BASE}/get-agent/:agentId`, ({ request, params }) => {
+        const url = new URL(request.url);
+        requestedUrls.push(`${url.pathname}${url.search}`);
+        const version = url.searchParams.get('version');
+        return HttpResponse.json({
+          agent_id: params.agentId,
+          ...(version !== null ? { version: Number(version) } : {}),
+          response_engine: { type: 'retell-llm', llm_id: version === '2' ? 'llm_v2' : 'llm_v1' },
+        });
+      }),
+      http.get(`${RETELL_API_BASE}/get-retell-llm/:llmId`, ({ params }) =>
+        HttpResponse.json({
+          llm_id: params.llmId,
+          // v1's prompt references customer_name; v2's references order_id.
+          general_prompt: params.llmId === 'llm_v2' ? 'Order {{order_id}} update.' : 'Hi {{customer_name}}.',
+        })),
+      ...createRetellHandlers(),
+    );
+    testClient = await createTestClient({
+      env: { RETELL_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.client.callTool({
+      name: 'create_batch_call',
+      arguments: {
+        from_number: '+14155551234',
+        tasks: [
+          {
+            to_number: '+14155555678',
+            override_agent_id: 'agent_multi',
+            override_agent_version: 1,
+            retell_llm_dynamic_variables: { customer_name: 'Jane', wrong_for_v1: 'x' },
+          },
+          {
+            to_number: '+14155559876',
+            override_agent_id: 'agent_multi',
+            override_agent_version: 2,
+            retell_llm_dynamic_variables: { order_id: 'A1', wrong_for_v2: 'y' },
+          },
+        ],
+      },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const parsed = JSON.parse(text);
+
+    expect(parsed.ok).toBe(true);
+    // Both versions were fetched explicitly — never an unversioned lookup.
+    expect(requestedUrls).toContain('/get-agent/agent_multi?version=1');
+    expect(requestedUrls).toContain('/get-agent/agent_multi?version=2');
+    expect(requestedUrls).not.toContain('/get-agent/agent_multi');
+    expect(parsed.warnings).toBeInstanceOf(Array);
+    // Each version's warning flags only the variables ITS prompt misses.
+    const v1Warning = parsed.warnings.find((w: string) => w.includes('version 1'));
+    const v2Warning = parsed.warnings.find((w: string) => w.includes('version 2'));
+    expect(v1Warning).toBeDefined();
+    expect(v1Warning).toContain('wrong_for_v1');
+    expect(v1Warning).toContain('llm_v1');
+    expect(v2Warning).toBeDefined();
+    expect(v2Warning).toContain('wrong_for_v2');
+    expect(v2Warning).toContain('llm_v2');
+  });
+
+  it('create_batch_call does not POST until the full phone → agent → LLM chain resolves', async () => {
+    // Stronger than order-recording: the LLM leg of the prompt check is held
+    // open, and the create-batch POST must be absent until it resolves.
+    let createAttempts = 0;
+    let releaseLlm: () => void = () => undefined;
+    const llmGate = new Promise<void>((resolve) => { releaseLlm = resolve; });
+    mswServer.use(
+      http.get(`${RETELL_API_BASE}/get-retell-llm/:llmId`, async ({ params }) => {
+        await llmGate;
+        return HttpResponse.json({
+          llm_id: params.llmId,
+          general_prompt: 'You are a helpful assistant.',
+        });
+      }),
+      http.post(`${RETELL_API_BASE}/create-batch-call`, () => {
+        createAttempts += 1;
+        return HttpResponse.json({
+          batch_call_id: 'batch_call_test_001',
+          from_number: '+14155551234',
+          scheduled_timestamp: 1704067200000,
+          total_task_count: 1,
+        });
+      }),
+      ...createRetellHandlers(),
+    );
+    testClient = await createTestClient({
+      env: { RETELL_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const pending = testClient.client.callTool({
+      name: 'create_batch_call',
+      arguments: {
+        from_number: '+14155551234',
+        tasks: [{ to_number: '+14155555678', retell_llm_dynamic_variables: { customer_name: 'Jane' } }],
+      },
+    });
+
+    // Give the tool time to run the phone → agent legs and reach the held LLM
+    // leg; the batch POST must not have fired yet.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(createAttempts).toBe(0);
+
+    releaseLlm();
+    const result = await pending;
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const parsed = JSON.parse(text);
+
+    expect(parsed.ok).toBe(true);
+    expect(createAttempts).toBe(1);
+  });
+
   it('create_batch_call surfaces an explicit warning when the prompt check cannot run', async () => {
     mswServer.use(
       http.get(`${RETELL_API_BASE}/get-phone-number/:phoneNumber`, () =>
