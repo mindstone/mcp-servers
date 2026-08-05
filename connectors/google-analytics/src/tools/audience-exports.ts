@@ -81,7 +81,11 @@ function mapAudienceExport(audienceExport: AudienceExport) {
     audienceDisplayName:
       wrapUntrusted(audienceExport.audienceDisplayName, UNTRUSTED_SOURCES.audienceExport) ||
       null,
-    dimensions: (audienceExport.dimensions || []).map((dim) => dim.dimensionName || null),
+    // Vendor-echoed audience dimension names — envelope (invariant #6).
+    dimensions: (audienceExport.dimensions || []).map(
+      (dim) =>
+        wrapUntrusted(dim.dimensionName, UNTRUSTED_SOURCES.audienceExport) || null,
+    ),
     state: audienceExport.state || null,
     beginCreatingTime: audienceExport.beginCreatingTime || null,
     creationQuotaTokensCharged: audienceExport.creationQuotaTokensCharged ?? null,
@@ -225,8 +229,11 @@ export function registerAudienceExportTools(server: McpServer): void {
         baseUrl: Bases.data,
       });
 
+      // Vendor-echoed dimension names become structural keys in the row
+      // objects — envelope them like the recursive helper does (invariant #6).
       const dimensionNames = (response.audienceExport?.dimensions || []).map(
-        (dim) => dim.dimensionName || 'unknown',
+        (dim) =>
+          wrapUntrusted(dim.dimensionName, UNTRUSTED_SOURCES.audienceExport) ?? 'unknown',
       );
       const rows = (response.audienceRows || []).map((row) => {
         const item: Record<string, string | null> = {};

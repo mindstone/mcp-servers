@@ -123,9 +123,9 @@ describe('per-tool happy-path coverage', () => {
     });
     expect((parsed.pivots as unknown[]).length).toBe(1);
     const rows = parsed.rows as Array<Record<string, string>>;
-    expect(rows[0].country).toBe(
-      '<untrusted-content source="ga4-report">United Kingdom</untrusted-content>',
-    );
+    expect(
+      rows[0]['<untrusted-content source="ga4-report">country</untrusted-content>'],
+    ).toBe('<untrusted-content source="ga4-report">United Kingdom</untrusted-content>');
   });
 
   it('ga_batch_run_reports runs multiple reports in one call', async () => {

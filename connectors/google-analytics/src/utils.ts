@@ -184,8 +184,16 @@ export function parseOrderBy(
 
 /** Format Data API rows into a flat per-row object map. */
 export function formatRows(response: DataApiResponse) {
-  const dimensionHeaders = (response.dimensionHeaders || []).map((h) => h.name);
-  const metricHeaders = (response.metricHeaders || []).map((h) => h.name);
+  // Header names are vendor-echoed strings (custom dimension/metric names are
+  // authored by property editors) and become structural keys in the output —
+  // envelope them the same way the recursive helper envelopes object keys
+  // (invariant #6).
+  const dimensionHeaders = (response.dimensionHeaders || []).map(
+    (h) => wrapUntrusted(h.name, UNTRUSTED_SOURCES.report) ?? h.name,
+  );
+  const metricHeaders = (response.metricHeaders || []).map(
+    (h) => wrapUntrusted(h.name, UNTRUSTED_SOURCES.report) ?? h.name,
+  );
 
   const rows = (response.rows || []).map((row) => {
     const item: Record<string, string | null> = {};

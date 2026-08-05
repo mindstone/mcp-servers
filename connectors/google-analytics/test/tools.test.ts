@@ -82,8 +82,10 @@ describe('tool calls — happy path', () => {
     expect(parsed.ok).toBe(true);
     const rows = parsed.rows as Array<Record<string, string>>;
     expect(rows).toHaveLength(2);
+    // Vendor-echoed header names are enveloped before becoming row keys.
     expect(rows[0]).toMatchObject({
-      country: '<untrusted-content source="ga4-report">United Kingdom</untrusted-content>',
+      '<untrusted-content source="ga4-report">country</untrusted-content>':
+        '<untrusted-content source="ga4-report">United Kingdom</untrusted-content>',
     });
   });
 

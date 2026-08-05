@@ -90,10 +90,12 @@ describe('report task tools', () => {
     expect(parsed.ok).toBe(true);
     expect(parsed.rowCount).toBe(2);
     const rows = parsed.rows as Array<Record<string, string>>;
-    expect(rows[0].country).toBe(
-      '<untrusted-content source="ga4-report">United Kingdom</untrusted-content>',
-    );
-    expect(rows[0].totalUsers).toBe('634');
+    expect(
+      rows[0]['<untrusted-content source="ga4-report">country</untrusted-content>'],
+    ).toBe('<untrusted-content source="ga4-report">United Kingdom</untrusted-content>');
+    expect(
+      rows[0]['<untrusted-content source="ga4-report">totalUsers</untrusted-content>'],
+    ).toBe('634');
   });
 
   it('envelopes a malicious reportMetadata.errorMessage from the vendor', async () => {

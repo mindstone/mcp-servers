@@ -101,12 +101,13 @@ describe('audience export tools', () => {
     expect(parsed.rowCount).toBe(2);
     const rows = parsed.rows as Array<Record<string, string>>;
     expect(rows).toHaveLength(2);
-    expect(rows[0].userId).toBe(
-      '<untrusted-content source="ga4-audience-export">user-1</untrusted-content>',
-    );
-    expect(rows[1].deviceId).toBe(
-      '<untrusted-content source="ga4-audience-export">device-2</untrusted-content>',
-    );
+    // Vendor-echoed dimension names are enveloped before becoming row keys.
+    expect(
+      rows[0]['<untrusted-content source="ga4-audience-export">userId</untrusted-content>'],
+    ).toBe('<untrusted-content source="ga4-audience-export">user-1</untrusted-content>');
+    expect(
+      rows[1]['<untrusted-content source="ga4-audience-export">deviceId</untrusted-content>'],
+    ).toBe('<untrusted-content source="ga4-audience-export">device-2</untrusted-content>');
   });
 
   it('returns a structured error when export_id is empty', async () => {

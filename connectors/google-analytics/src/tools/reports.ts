@@ -17,8 +17,10 @@ import {
   formatRows,
   parseOrderBy,
   toNameList,
+  UNTRUSTED_SOURCES,
   withErrorHandling,
 } from '../utils.js';
+import { wrapUntrustedJsonStrings } from '../untrusted-content.js';
 
 const READ_ONLY = {
   readOnlyHint: true,
@@ -300,7 +302,9 @@ export function registerReportTools(server: McpServer): void {
         property,
         startDate: args.start_date,
         endDate: args.end_date,
-        pivots: response.pivotHeaders || [],
+        // Vendor-echoed pivot header blob (dimension names/values) — enveloped
+        // wholesale rather than field-enumerated (invariant #6).
+        pivots: wrapUntrustedJsonStrings(response.pivotHeaders || [], UNTRUSTED_SOURCES.report),
         ...formatRows(response),
         propertyQuota: response.propertyQuota || undefined,
       });
