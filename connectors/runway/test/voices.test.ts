@@ -73,6 +73,53 @@ describe('Custom voice tools', () => {
       const realCloseTags = result.text.match(/<\/untrusted-content>/g) || [];
       expect(realCloseTags).toHaveLength(2);
     });
+
+    it('fails closed when the voices response is not the expected shape', async () => {
+      mswServer.use(
+        http.get('https://api.dev.runwayml.com/v1/voices', () =>
+          HttpResponse.json({ data: 'not-an-array', hasMore: false }),
+        ),
+      );
+      testClient = await createTestClient({
+        env: { RUNWAYML_API_SECRET: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('list_custom_voices', {});
+
+      expect(result.isError).toBe(true);
+      const data = JSON.parse(result.text);
+      expect(data.ok).toBe(false);
+      expect(data.voices).toBeUndefined();
+    });
+
+    it('fails closed when a voice item is missing required fields (no raw passthrough)', async () => {
+      mswServer.use(
+        http.get('https://api.dev.runwayml.com/v1/voices', () =>
+          HttpResponse.json({
+            data: [
+              {
+                id: 'voice-evil',
+                name: 'RAW-LEAK-CANARY',
+                // createdAt and status deliberately missing
+              },
+            ],
+            hasMore: false,
+          }),
+        ),
+      );
+      testClient = await createTestClient({
+        env: { RUNWAYML_API_SECRET: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('list_custom_voices', {});
+
+      expect(result.isError).toBe(true);
+      const data = JSON.parse(result.text);
+      expect(data.ok).toBe(false);
+      expect(data.voices).toBeUndefined();
+      // The malformed payload must never reach model-visible output raw.
+      expect(result.text).not.toContain('RAW-LEAK-CANARY');
+    });
   });
 
   describe('create_custom_voice', () => {

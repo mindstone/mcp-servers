@@ -327,6 +327,13 @@ describe('Runway media-input sandbox (VAL-RUNWAY-001..008)', () => {
       extraArgs: (s) => ({ audio: s }),
       upstreamUrlFragment: '/voice_isolation',
     },
+    {
+      label: 'video (upscale_video)',
+      tool: 'upscale_video',
+      field: 'video',
+      extraArgs: (s) => ({ video: s }),
+      upstreamUrlFragment: '/video_upscale',
+    },
   ];
 
   for (const c of symlinkCases) {
