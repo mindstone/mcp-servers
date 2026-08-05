@@ -60,6 +60,12 @@ describe('nano_banana_edit — remote source image URLs', () => {
         MCP_WORKSPACE_PATH: workspaceDir,
       },
     });
+    // The SSRF guard resolves hostnames via DNS; the *.example.com hosts in
+    // these tests don't exist, so point every lookup at a public IP. Must run
+    // AFTER createTestClient — its vi.resetModules() re-imports the module,
+    // and this dynamic import lands on the same fresh instance the server uses.
+    const { setDnsLookupForTesting } = await import('../src/tools/remote-image.js');
+    setDnsLookupForTesting(async () => [{ address: '93.184.216.34', family: 4 }]);
   }
 
   function imageParts(body: Record<string, unknown>): GeminiPart[] {
