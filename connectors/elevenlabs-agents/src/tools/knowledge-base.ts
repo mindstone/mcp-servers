@@ -10,6 +10,7 @@ import { sanitizeAgentOrKbValue, sanitizeKbDoc, sanitizeList } from '../sanitize
 import { ElevenLabsError } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 import { readSandboxedFile, sandboxedFileToBlob } from './file-input.js';
+import { validatePublicHttpsUrl } from '../url-safety.js';
 
 function isObj(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -51,7 +52,8 @@ const addKnowledgeBaseDocumentSchema = z.object({
   text: z.string().min(1).optional().describe('Text content to add to the knowledge base.'),
   file_path: z.string().min(1).optional()
     .describe('Absolute path to a local file inside MCP_WORKSPACE_PATH (or os.tmpdir() when unset).'),
-  url: z.string().url().optional().describe('Public URL that ElevenLabs should fetch server-side.'),
+  url: z.string().url().optional()
+    .describe('Public URL that ElevenLabs should fetch server-side. Must be https on a public host; loopback, private, link-local, and cloud-metadata addresses are rejected.'),
   enable_auto_sync: z.boolean().optional()
     .describe('When true, keep the URL document in sync. Default: false.'),
   auto_remove: z.boolean().optional()
@@ -243,7 +245,7 @@ COST: FREE for the write itself; URL fetches and downstream agent usage may cons
 COMMON MISTAKES:
 - file mode only accepts local paths inside MCP_WORKSPACE_PATH (or os.tmpdir() when unset).
 - Provide exactly one content source field: text, file_path, or url.
-- url mode expects a stable public URL that ElevenLabs can reach server-side.`,
+- url mode expects a stable public https URL that ElevenLabs can reach server-side (loopback, private, link-local, and cloud-metadata addresses are rejected).`,
       inputSchema: addKnowledgeBaseDocumentSchema,
       annotations: {
         readOnlyHint: false,
@@ -293,6 +295,16 @@ COMMON MISTAKES:
           },
         );
       } else {
+        if (typeof args.url !== 'string') {
+          throw new ElevenLabsError(
+            'url is required when adding a knowledge-base document in url mode.',
+            'INVALID_ARGUMENTS',
+            'Provide url and retry.',
+          );
+        }
+        // ElevenLabs fetches this URL server-side, so the same public-https
+        // policy as webhook tools applies (see src/url-safety.ts).
+        validatePublicHttpsUrl('url', args.url);
         result = await elevenLabsJson<unknown>(
           apiKey,
           ENDPOINTS.KNOWLEDGE_BASE_URL,
@@ -443,7 +455,7 @@ RELATED TOOLS:
 
 RETURNS: rag_index (id, model, status, progress_percentage, used bytes).
 
-COST: FREE — indexing consumes workspace compute, and calling this on an already-indexed document just returns the current status.`,
+COST: FREE — indexing consumes workspace compute, and calling this on an already-indexed document just returns the current status. It still initiates production indexing, so destructiveHint is set.`,
       inputSchema: z.object({
         documentation_id: z.string().min(1).describe('Knowledge-base document ID to (re)index.'),
         model: z.enum(['e5_mistral_7b_instruct', 'multilingual_e5_large_instruct']).optional()
@@ -451,7 +463,7 @@ COST: FREE — indexing consumes workspace compute, and calling this on an alrea
       }),
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: true,
         openWorldHint: true,
       },
