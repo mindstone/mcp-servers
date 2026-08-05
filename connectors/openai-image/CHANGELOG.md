@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `output_format` (`png | jpeg | webp`) and `output_compression` (0–100, jpeg/webp only) options on `generate_image` and `edit_image`. Saved filename extensions (`.png` / `.jpg` / `.webp`) and inline preview MIME types follow the chosen format. `output_compression` combined with `png` output fails fast with a structured `INVALID_INPUT` error before any API call.
+- `background` (`transparent | opaque | auto`) option on both tools. `background: 'transparent'` is gated: it fails fast with `INVALID_INPUT` when combined with `jpeg` output (no alpha channel) or with the default `gpt-image-2` model, which rejects transparent backgrounds upstream — the resolution suggests `OPENAI_IMAGE_MODEL=gpt-image-1.5` (or `gpt-image-1`). Unknown model overrides pass through to upstream validation.
+
+### Security
+
+- **MED-1 closed: edit-image file loading is now open-then-validate.** The workspace fence previously validated a reference/mask image's canonical `realpath` and then read the file by path, leaving a check-then-use (TOCTOU) window where a local race could swap the file between fence check and read. `edit_image` now opens a descriptor, confirms via `fstat` that the opened inode (`dev`/`ino`) is the same file the fence validated, re-checks the size bounds against the opened descriptor, and reads through the descriptor — a path swap now fails closed with `WORKSPACE_FENCE_VIOLATION` ("changed while it was being verified") before any bytes leave the workspace.
+
+### Changed
+
+- `server.json` now declares the optional `MCP_HTTP_PORT` environment variable (loopback-only HTTP transport), closing the manifest drift between the code and the registry declaration. `OPENAI_IMAGE_IMPORT_ONLY` remains undeclared by design: it is a test-harness escape hatch, not a runtime configuration knob.
+
 ## [0.2.0] - 2026-07-25
 
 ### Changed

@@ -53,7 +53,20 @@ export type ToolErrorCode =
   | 'NETWORK_ERROR'
   | 'TIMEOUT'
   | 'WRITE_FAILED'
+  | 'INVALID_INPUT'
   | 'INVALID_IMAGE_DATA';
+
+const OUTPUT_FORMAT_EXTENSIONS: Record<string, string> = {
+  png: 'png',
+  jpeg: 'jpg',
+  webp: 'webp',
+};
+
+const OUTPUT_FORMAT_MIME: Record<string, string> = {
+  png: 'image/png',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+};
 
 interface ToolErrorPayload {
   ok: false;
@@ -105,6 +118,12 @@ class WorkspaceFenceToolError extends OpenAIImageToolError {
 }
 
 const modelSupportsModeration = (model: string): boolean =>
+  model.startsWith('gpt-image-2');
+
+// gpt-image-2 rejects background: 'transparent' upstream (OpenAI Images API,
+// verified 2026-08). Unknown models (OPENAI_IMAGE_MODEL overrides) pass
+// through to upstream validation, matching the configuredModel() philosophy.
+const modelKnownToRejectTransparency = (model: string): boolean =>
   model.startsWith('gpt-image-2');
 
 export const configuredModel = (): string =>
@@ -468,12 +487,13 @@ export const generateFilename = (
   _prompt: string,
   index: number,
   count: number,
+  extension: string = 'png',
 ): string => {
   const suffix = crypto.randomBytes(8).toString('hex');
   if (count > 1) {
-    return `${Date.now()}-${index + 1}-${suffix}.png`;
+    return `${Date.now()}-${index + 1}-${suffix}.${extension}`;
   }
-  return `${Date.now()}-${suffix}.png`;
+  return `${Date.now()}-${suffix}.${extension}`;
 };
 
 export const validateBase64ImageData = (
@@ -505,13 +525,14 @@ export const saveImageToDisk = async (
   b64: string,
   index: number,
   count: number,
+  extension: string = 'png',
 ): Promise<string> => {
   await ensureOutputDirectoryIsAllowed(saveDir);
   await fs.promises.mkdir(saveDir, { recursive: true });
   const buffer = validateBase64ImageData(b64);
 
   const writeAttempt = async (): Promise<string> => {
-    const filename = generateFilename(prompt, index, count);
+    const filename = generateFilename(prompt, index, count, extension);
     const savePath = path.join(saveDir, filename);
     await fs.promises.writeFile(savePath, buffer, { flag: 'wx', mode: 0o600 });
     const stats = await fs.promises.stat(savePath);
@@ -860,8 +881,34 @@ const loadLocalEditImage = async (
     );
   }
 
+  // Open-then-validate (closes the MED-1 check-then-use window): the fence
+  // validated the canonical path above, but reading by path afterwards would
+  // let a local race swap the file between check and read. Open a descriptor,
+  // confirm it is the same inode the fence validated, and read through the
+  // descriptor so a path swap cannot redirect the read outside the fence.
+  let handle: fs.promises.FileHandle | undefined;
   try {
-    const data = await fs.promises.readFile(realPath);
+    handle = await fs.promises.open(resolvedPath, 'r');
+    const openedStats = await handle.stat();
+    if (openedStats.dev !== stats.dev || openedStats.ino !== stats.ino) {
+      throw workspaceFenceError(
+        `${imageLabel} changed while it was being verified: ${inputPath}`,
+      );
+    }
+    if (openedStats.size === 0) {
+      throw workspaceFenceError(`${imageLabel} is empty (0 bytes): ${inputPath}`);
+    }
+    if (openedStats.size > MAX_LOCAL_IMAGE_BYTES) {
+      throw workspaceFenceError(`${imageLabel} exceeds 25MB limit: ${inputPath}`);
+    }
+
+    const data = await handle.readFile();
+    if (data.length === 0 || data.length > MAX_LOCAL_IMAGE_BYTES) {
+      throw workspaceFenceError(
+        `${imageLabel} size changed while it was being read: ${inputPath}`,
+      );
+    }
+
     return {
       path: realPath,
       filename: path.basename(resolvedPath),
@@ -869,7 +916,12 @@ const loadLocalEditImage = async (
       data,
     };
   } catch (error) {
+    if (error instanceof OpenAIImageToolError) {
+      throw error;
+    }
     throw workspaceFenceError(getLocalImageReadError(imageLabel, inputPath, error));
+  } finally {
+    await handle?.close().catch(() => undefined);
   }
 };
 
@@ -1050,6 +1102,61 @@ const postOpenAIMultipart = async (
   return (await response.json()) as OpenAIImageResponse;
 };
 
+interface ImageOutputOptions {
+  output_format?: 'png' | 'jpeg' | 'webp' | undefined;
+  output_compression?: number | undefined;
+}
+
+interface ResolvedOutputOptions {
+  outputFormat: 'png' | 'jpeg' | 'webp';
+  outputExtension: string;
+  outputMime: string;
+  outputCompression?: number | undefined;
+}
+
+const resolveOutputOptions = (input: ImageOutputOptions): ResolvedOutputOptions => {
+  const outputFormat = input.output_format ?? 'png';
+  if (input.output_compression !== undefined && outputFormat === 'png') {
+    throw new OpenAIImageToolError(
+      'INVALID_INPUT',
+      'output_compression only applies when output_format is jpeg or webp.',
+      "Set output_format to 'jpeg' or 'webp', or omit output_compression.",
+    );
+  }
+  return {
+    outputFormat,
+    outputExtension: OUTPUT_FORMAT_EXTENSIONS[outputFormat] ?? 'png',
+    outputMime: OUTPUT_FORMAT_MIME[outputFormat] ?? 'image/png',
+    outputCompression: input.output_compression,
+  };
+};
+
+const ensureTransparentBackgroundSupported = (
+  background: 'transparent' | 'opaque' | 'auto' | undefined,
+  outputFormat: string,
+  model: string,
+): void => {
+  if (background !== 'transparent') {
+    return;
+  }
+
+  if (outputFormat === 'jpeg') {
+    throw new OpenAIImageToolError(
+      'INVALID_INPUT',
+      "background: 'transparent' requires an output format that supports transparency.",
+      "Set output_format to 'png' or 'webp', or omit output_format (png is the default).",
+    );
+  }
+
+  if (modelKnownToRejectTransparency(model)) {
+    throw new OpenAIImageToolError(
+      'INVALID_INPUT',
+      `Model ${model} does not support transparent backgrounds.`,
+      'Set OPENAI_IMAGE_MODEL to gpt-image-1.5 (or gpt-image-1), or omit the background option.',
+    );
+  }
+};
+
 const generateImageSchema = z.object({
   prompt: z
     .string()
@@ -1080,6 +1187,27 @@ const generateImageSchema = z.object({
     .enum(['auto', 'low'])
     .optional()
     .describe('Content moderation strictness.'),
+  output_format: z
+    .enum(['png', 'jpeg', 'webp'])
+    .optional()
+    .describe(
+      "Output file format (defaults to png). jpeg and webp produce smaller files; only png and webp support transparency.",
+    ),
+  output_compression: z
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe(
+      'Compression level 0-100 (higher = better quality, larger file). Only applies when output_format is jpeg or webp.',
+    ),
+  background: z
+    .enum(['transparent', 'opaque', 'auto'])
+    .optional()
+    .describe(
+      "Background style. 'transparent' produces a cutout with an alpha channel; it requires png or webp output and a transparency-capable model (gpt-image-1.x — gpt-image-2 rejects it).",
+    ),
 });
 
 const editImageSchema = z.object({
@@ -1123,6 +1251,27 @@ const editImageSchema = z.object({
     .enum(['auto', 'low'])
     .optional()
     .describe('Content moderation strictness.'),
+  output_format: z
+    .enum(['png', 'jpeg', 'webp'])
+    .optional()
+    .describe(
+      'Output file format (defaults to png). jpeg and webp produce smaller files; only png and webp support transparency.',
+    ),
+  output_compression: z
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe(
+      'Compression level 0-100 (higher = better quality, larger file). Only applies when output_format is jpeg or webp.',
+    ),
+  background: z
+    .enum(['transparent', 'opaque', 'auto'])
+    .optional()
+    .describe(
+      "Background style. 'transparent' produces a cutout with an alpha channel; it requires png or webp output and a transparency-capable model (gpt-image-1.x — gpt-image-2 rejects it).",
+    ),
 });
 
 const toolSuccessText = (
@@ -1161,6 +1310,7 @@ const mapResponseImages = async (
   saveDir: string,
   prompt: string,
   requestedCount: number,
+  extension: string = 'png',
 ): Promise<Array<{ path: string; b64: string }>> => {
   if (!images || images.length === 0) {
     throw new OpenAIImageToolError(
@@ -1184,6 +1334,7 @@ const mapResponseImages = async (
       b64,
       index,
       requestedCount,
+      extension,
     );
     saved.push({ path: savedPath, b64 });
   }
@@ -1222,6 +1373,9 @@ const registerTools = (targetServer: McpServer): void => {
         const quality = input.quality ?? 'high';
         const count = input.count ?? 1;
         const moderation = input.moderation ?? 'auto';
+        const { outputFormat, outputExtension, outputMime, outputCompression } =
+          resolveOutputOptions(input);
+        ensureTransparentBackgroundSupported(input.background, outputFormat, model);
 
         const body: Record<string, unknown> = {
           model,
@@ -1234,12 +1388,22 @@ const registerTools = (targetServer: McpServer): void => {
         if (modelSupportsModeration(model)) {
           body.moderation = moderation;
         }
+        if (input.output_format) {
+          body.output_format = outputFormat;
+        }
+        if (outputCompression !== undefined) {
+          body.output_compression = outputCompression;
+        }
+        if (input.background) {
+          body.background = input.background;
+        }
 
         logger.info('[openai-image] Sending generate request.', {
           size,
           quality,
           count,
           model,
+          outputFormat,
         });
 
         const data = await postOpenAIJson(
@@ -1255,6 +1419,7 @@ const registerTools = (targetServer: McpServer): void => {
           saveDir,
           input.prompt,
           count,
+          outputExtension,
         );
 
         const textMessage = toolSuccessText(
@@ -1267,7 +1432,7 @@ const registerTools = (targetServer: McpServer): void => {
           .map(({ b64 }) => ({
             type: 'image' as const,
             data: b64,
-            mimeType: 'image/png' as const,
+            mimeType: outputMime,
           }));
 
         return {
@@ -1298,6 +1463,9 @@ const registerTools = (targetServer: McpServer): void => {
         const quality = input.quality ?? 'high';
         const count = input.count ?? 1;
         const moderation = input.moderation ?? 'auto';
+        const { outputFormat, outputExtension, outputMime, outputCompression } =
+          resolveOutputOptions(input);
+        ensureTransparentBackgroundSupported(input.background, outputFormat, model);
 
         const referenceImages: LoadedLocalImage[] = [];
         for (const imagePath of input.image_paths) {
@@ -1335,12 +1503,22 @@ const registerTools = (targetServer: McpServer): void => {
         if (modelSupportsModeration(model)) {
           form.append('moderation', moderation);
         }
+        if (input.output_format) {
+          form.append('output_format', outputFormat);
+        }
+        if (outputCompression !== undefined) {
+          form.append('output_compression', String(outputCompression));
+        }
+        if (input.background) {
+          form.append('background', input.background);
+        }
 
         logger.info('[openai-image] Sending edit request.', {
           size,
           quality,
           count,
           model,
+          outputFormat,
           referenceCount: referenceImages.length,
           hasMask: !!maskImage,
         });
@@ -1358,6 +1536,7 @@ const registerTools = (targetServer: McpServer): void => {
           saveDir,
           input.prompt,
           count,
+          outputExtension,
         );
 
         const textMessage = toolSuccessText(
@@ -1370,7 +1549,7 @@ const registerTools = (targetServer: McpServer): void => {
           .map(({ b64 }) => ({
             type: 'image' as const,
             data: b64,
-            mimeType: 'image/png' as const,
+            mimeType: outputMime,
           }));
 
         return {

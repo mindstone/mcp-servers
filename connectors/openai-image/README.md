@@ -122,6 +122,7 @@ node dist/index.js
 - `OPENAI_IMAGE_MODEL` — optional model override. Defaults to `gpt-image-2`.
 - `OPENAI_IMAGE_REQUEST_TIMEOUT_MS` — optional override (positive integer ms, max 30 min) for the OpenAI image API timeout. Default: `180000` (3 min). Sized for `quality: 'high'` generation, which OpenAI documents as taking up to ~2 min for complex prompts; lower for tighter bounds.
 - `MCP_ALLOWED_SYMLINK_ROOTS` — optional JSON array of absolute paths. The connector reads (and writes generated images) through in-workspace symlinks whose canonical targets land inside `MCP_WORKSPACE_PATH` **or** one of these declared roots — the same roots the host's built-in file tools trust for declared Spaces. Fail-closed: if the value is missing, empty, malformed JSON, not an array, or **any** entry is non-string / empty / relative, the whole value is rejected and the connector falls back to strict workspace-only containment with one structured stderr warning. Standalone OSS users omit it; Rebel's host injects it automatically from your declared Spaces.
+- `MCP_HTTP_PORT` — optional. When set, the server speaks MCP over HTTP on this port bound to `127.0.0.1` (loopback only, non-loopback `Host` headers are rejected) instead of stdio. Intended for host-managed local deployments; stdio hosts omit it.
 
 ## Host configuration examples
 
@@ -172,6 +173,9 @@ Inputs:
 - `quality` (`low | medium | high | auto`, optional) — defaults to `high`. Medium is usually about 50 seconds and $0.04; high can take up to 3 minutes and cost about $0.21. Lower quality is dramatically cheaper.
 - `count` (integer 1–8, optional) — defaults to 1. Cost scales linearly with count.
 - `moderation` (`auto | low`, optional) — content moderation strictness.
+- `output_format` (`png | jpeg | webp`, optional) — output file format, defaults to `png`. The saved filename extension and inline preview MIME type follow the chosen format (`.png` / `.jpg` / `.webp`).
+- `output_compression` (integer 0–100, optional) — compression level; only valid with `jpeg` or `webp` output. Combining it with `png` fails fast with a structured `INVALID_INPUT` error before any API call.
+- `background` (`transparent | opaque | auto`, optional) — background style. `transparent` produces a cutout with an alpha channel and requires `png`/`webp` output plus a transparency-capable model: `gpt-image-2` rejects transparent backgrounds upstream, so the tool fails fast with `INVALID_INPUT` and a resolution pointing at `OPENAI_IMAGE_MODEL=gpt-image-1.5` (or `gpt-image-1`). Unknown model overrides are passed through to upstream validation, matching the connector's existing `OPENAI_IMAGE_MODEL` philosophy.
 
 Returns a text content block with the saved path(s) plus up to 5 inline `image` content blocks. On failure, returns a structured `{ ok: false, code, error, resolution }` response. The tool is annotated `destructiveHint: true, openWorldHint: true, idempotentHint: false`.
 
@@ -181,7 +185,7 @@ Inputs:
 - `prompt` (string, required) — what to change about the input images.
 - `image_paths` (array of 1–4 absolute file paths, required) — source images. Each path is validated: it must resolve lexically inside `MCP_WORKSPACE_PATH`, and its canonical `realpath` must land inside the canonical workspace **or** one of the declared roots in `MCP_ALLOWED_SYMLINK_ROOTS` (matching the host's built-in file-tool containment). Paths outside both are rejected with `WORKSPACE_FENCE_VIOLATION` before any read.
 - `mask_path` (PNG path, optional) — alpha-channel mask indicating which area to edit.
-- `size`, `quality`, `count`, `moderation` — same shape as `generate_image`.
+- `size`, `quality`, `count`, `moderation`, `output_format`, `output_compression`, `background` — same shape as `generate_image`.
 
 Returns the same content shape as `generate_image`. Same `destructiveHint` / `openWorldHint` / `idempotentHint` annotations.
 
@@ -192,7 +196,7 @@ Every tool error is returned as structured JSON with these fields:
 ```json
 {
   "ok": false,
-  "code": "NOT_CONFIGURED | INVALID_API_KEY | RATE_LIMITED | CONTENT_POLICY | WORKSPACE_FENCE_VIOLATION | MODEL_UNAVAILABLE | NETWORK_ERROR | TIMEOUT | WRITE_FAILED | INVALID_IMAGE_DATA",
+  "code": "NOT_CONFIGURED | INVALID_API_KEY | RATE_LIMITED | CONTENT_POLICY | WORKSPACE_FENCE_VIOLATION | MODEL_UNAVAILABLE | NETWORK_ERROR | TIMEOUT | WRITE_FAILED | INVALID_INPUT | INVALID_IMAGE_DATA",
   "error": "Human-readable message",
   "resolution": "Concrete next step for the operator"
 }
@@ -203,6 +207,7 @@ The structured shape lets agentic hosts route to recovery flows rather than surf
 ## Security notes
 
 - Tool inputs that name local files (`edit_image.image_paths`, `edit_image.mask_path`) pass through a two-gate fence before any read: a lexical workspace pre-gate (the path must resolve lexically inside `MCP_WORKSPACE_PATH`), then a canonical containment gate (the path's `realpath` must land inside the canonical workspace **or** one of the declared roots in `MCP_ALLOWED_SYMLINK_ROOTS`, judged by `path.relative` segment semantics — never `startsWith`). Paths outside both are rejected with `WORKSPACE_FENCE_VIOLATION` to prevent symlink-escape and traversal. The same containment is applied to the generated-image output directory before any write, matching the host's built-in `Write` tool.
+- Reads are open-then-validate: after the fence approves the canonical path, the connector opens a descriptor, verifies via `fstat` that the opened inode is the same file the fence validated, and reads through the descriptor — closing the check-then-use race between fence check and read. A mid-flight swap fails closed with `WORKSPACE_FENCE_VIOLATION`.
 - Fence errors name the model-supplied input path and the workspace root only — never the canonical `realpath` of a symlink target — so the agent can self-correct without leaking the linked-Space destination.
 - Generated files are written with mode `0o600`.
 - `OPENAI_API_KEY` values are scrubbed from logs, structured error payloads, and stack traces — see `src/index.ts` `sanitizeUserFacingText`.
