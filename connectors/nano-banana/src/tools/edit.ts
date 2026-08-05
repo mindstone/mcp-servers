@@ -19,6 +19,7 @@ import {
 } from '../types.js';
 import { resolveSavePath, resolveSourcePath } from './path-safety.js';
 import { fetchRemoteImage, isRemoteImageUrl } from './remote-image.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 
 const MODEL_DESCRIPTION =
   'Model to use: "gemini-3.1-flash-image-preview" (Nano Banana 2, default — pro-quality at flash speed), ' +
@@ -288,7 +289,13 @@ export function registerEditTools(server: McpServer): void {
       }
 
       if (!imageData) {
-        const responseText = textResponse || 'No edited image was generated. The model may not support this type of edit.';
+        // The model's free-text part is external, model-authored content —
+        // envelope it (invariant #6) rather than returning it raw.
+        const responseText = textResponse
+          // wrapUntrusted only passes `undefined` through for undefined input;
+          // the fallback keeps the type narrow without a non-null assertion.
+          ? wrapUntrusted(textResponse, 'gemini') ?? textResponse
+          : 'No edited image was generated. The model may not support this type of edit.';
         return {
           content: [{ type: 'text', text: responseText }],
           isError: true,

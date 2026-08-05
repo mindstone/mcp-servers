@@ -17,6 +17,7 @@ import {
   type ImageConfig,
 } from '../types.js';
 import { resolveSavePath } from './path-safety.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 
 const MODEL_DESCRIPTION =
   'Model to use: "gemini-3.1-flash-image-preview" (Nano Banana 2, default — pro-quality at flash speed), ' +
@@ -140,7 +141,13 @@ export function registerGenerateTools(server: McpServer): void {
       }
 
       if (!imageData) {
-        const responseText = textResponse || 'No image was generated. The model may not support image generation for this prompt.';
+        // The model's free-text part is external, model-authored content —
+        // envelope it (invariant #6) rather than returning it raw.
+        const responseText = textResponse
+          // wrapUntrusted only passes `undefined` through for undefined input;
+          // the fallback keeps the type narrow without a non-null assertion.
+          ? wrapUntrusted(textResponse, 'gemini') ?? textResponse
+          : 'No image was generated. The model may not support image generation for this prompt.';
         return {
           content: [{ type: 'text', text: responseText }],
           isError: true,

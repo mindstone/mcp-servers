@@ -16,6 +16,9 @@ are maintained manually as part of the PR review checklist.
 - `nano_banana_edit`: multi-image input via the new `source_image_paths` array (up to 14 reference images, combinable with the legacy `source_image_path`) for multi-image composition/fusion. Every local source path stays sandboxed under `MCP_WORKSPACE_PATH` exactly as before.
 - `nano_banana_edit`: source images may now be `https://` URLs (previously they fell through to a not-found error). Remote fetches are hardened: HTTPS only, userinfo refused, private/loopback/link-local hosts refused, redirects followed manually with every hop re-validated, a 20MB size cap enforced on both the Content-Length header and the streamed body, and a PNG/JPEG/WebP Content-Type check.
 
+### Security
+- `nano_banana_generate` / `nano_banana_edit`: the model's free-text part (returned when no image is produced) is now wrapped in an `<untrusted-content source="gemini">` envelope (canonical shared helper, vendored at `src/untrusted-content.ts`) instead of being returned raw — model-authored text reaches the host as data, not instructions. The connector's "returns only IDs/status/asset URLs" exemption in `scripts/untrusted-coverage-baseline.json` is now stale and can be dropped.
+
 ### Fixed
 - Tool descriptions no longer advertise "4K" as a default trait of the default model — output resolution defaults to ~1K unless `image_size` is set explicitly.
 - `nano_banana_generate` / `nano_banana_edit`: a failed `save_path` write no longer reports silent success — the tool now returns a structured `SAVE_FAILED` error (with the generated image still included inline, so the result is not lost).
