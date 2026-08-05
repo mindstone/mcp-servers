@@ -107,7 +107,7 @@ export function authRequiredJson(): string {
 export interface ErrorPayload {
   error: string;
   action_required: string;
-  next_step: string;
+  next_step?: string;
   reason?: string;
   [key: string]: unknown;
 }
@@ -226,8 +226,7 @@ export function buildErrorResponse(err: unknown): CallToolResult {
         text: errorJson({
           error: formatGraphError(err),
           action_required:
-            'Retry the call. If it continues to fail, run authenticate_microsoft_account to refresh the connection.',
-          next_step: AUTH_TOOL_NAME,
+            'Check the error details and retry the call. Run authenticate_microsoft_account only if the error mentions an expired token, authentication, or permissions.',
         }),
       },
     ],
