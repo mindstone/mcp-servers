@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, formatSOQLDate, checkSaveResult, sanitizeRecords } from '../utils.js';
+import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, formatSOQLDate, checkSaveResult, formatVendorErrors, sanitizeRecords } from '../utils.js';
 import { withConnection } from '../client.js';
 import { ConnectorError, type SaveResult } from '../types.js';
 
@@ -53,7 +53,7 @@ export function registerOpportunityTools(server: McpServer): void {
         description: z.string().optional().describe('Description'),
         fields: z.record(z.unknown()).optional().describe('Additional/custom fields as key-value pairs'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       formatSOQLDate(args.close_date, 'close_date');
@@ -64,7 +64,7 @@ export function registerOpportunityTools(server: McpServer): void {
         if (args.description) data.Description = args.description;
         if (args.fields) validateAndMergeCustomFields(data, args.fields);
         const result = await conn.sobject('Opportunity').create(data);
-        if (!result.success) throw new ConnectorError('Failed to create opportunity', 'CREATE_ERROR', JSON.stringify(result.errors));
+        if (!result.success) throw new ConnectorError('Failed to create opportunity', 'CREATE_ERROR', formatVendorErrors(result.errors));
         return JSON.stringify({ ok: true, status: 'success', object: 'Opportunity', id: result.id, name: args.name });
       });
     }),

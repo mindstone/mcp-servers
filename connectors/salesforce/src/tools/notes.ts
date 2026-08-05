@@ -1,8 +1,9 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeSOQL, sanitizeRecords, checkSaveResult } from '../utils.js';
+import { withErrorHandling, escapeSOQL, sanitizeRecords, formatVendorErrors } from '../utils.js';
 import { withConnection } from '../client.js';
 import { ConnectorError, type SaveResult } from '../types.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 
 export function registerNoteTools(server: McpServer): void {
   server.registerTool(
@@ -56,7 +57,7 @@ export function registerNoteTools(server: McpServer): void {
         body: z.string().min(1).describe('Note body text (required)'),
         parent_id: z.string().optional().describe('Record ID to attach the note to'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       return withConnection(undefined, async (conn) => {
@@ -64,16 +65,57 @@ export function registerNoteTools(server: McpServer): void {
           Title: args.title,
           Content: Buffer.from(args.body, 'utf8').toString('base64'),
         });
-        if (!noteResult.success) throw new ConnectorError('Failed to create note', 'CREATE_ERROR', JSON.stringify(noteResult.errors));
+        if (!noteResult.success) throw new ConnectorError('Failed to create note', 'CREATE_ERROR', formatVendorErrors(noteResult.errors));
 
         let linkedTo: string | undefined;
         if (args.parent_id) {
-          const linkResult = await conn.sobject('ContentDocumentLink').create({
-            ContentDocumentId: noteResult.id,
-            LinkedEntityId: args.parent_id,
-            ShareType: 'V',
-          }) as unknown as SaveResult;
-          checkSaveResult(linkResult, 'Note created but failed to attach it to the parent record');
+          // jsforce throws (HttpApiError) when the link create is rejected — a
+          // SaveResult with success:false only surfaces for non-error statuses.
+          // Either way the note already exists at this point, and a failed link
+          // must not leave an orphaned, unattached note behind.
+          let linkResult: SaveResult | undefined;
+          let linkError: unknown;
+          try {
+            linkResult = await conn.sobject('ContentDocumentLink').create({
+              ContentDocumentId: noteResult.id,
+              LinkedEntityId: args.parent_id,
+              ShareType: 'V',
+            }) as unknown as SaveResult;
+          } catch (error) {
+            // Session expiry is handled by withConnection — don't misreport it
+            // as a link failure.
+            if (
+              error instanceof Error &&
+              (error.message.includes('INVALID_SESSION_ID') || error.message.includes('Session expired'))
+            ) {
+              throw error;
+            }
+            linkError = error;
+          }
+          if (linkError !== undefined || !linkResult?.success) {
+            // Best-effort rollback; if the delete also fails, surface the
+            // orphan Id so the caller can clean it up manually.
+            let rolledBack = false;
+            try {
+              const deleteResult = await conn.sobject('ContentNote').destroy(noteResult.id) as unknown as SaveResult;
+              rolledBack = deleteResult.success;
+            } catch {
+              // Fall through: the error below reports the orphan Id.
+            }
+            const linkDetail =
+              linkError instanceof Error
+                ? wrapUntrusted(linkError.message, 'salesforce:vendor_errors')
+                : formatVendorErrors(linkResult?.errors);
+            throw new ConnectorError(
+              rolledBack
+                ? 'Failed to attach the note to the parent record; the unattached note was rolled back'
+                : 'Failed to attach the note to the parent record, and cleanup of the unattached note failed',
+              'LINK_ERROR',
+              rolledBack
+                ? `Link error: ${linkDetail}`
+                : `Delete the orphaned note manually (Id: ${noteResult.id}). Link error: ${linkDetail}`,
+            );
+          }
           linkedTo = args.parent_id;
         }
 

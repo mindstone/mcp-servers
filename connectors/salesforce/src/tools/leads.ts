@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, checkSaveResult, sanitizeRecords } from '../utils.js';
+import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, checkSaveResult, formatVendorErrors, sanitizeRecords } from '../utils.js';
 import { withConnection } from '../client.js';
 import { ConnectorError, type SaveResult } from '../types.js';
 
@@ -55,7 +55,7 @@ export function registerLeadTools(server: McpServer): void {
         status: z.string().optional().describe('Lead status'),
         fields: z.record(z.unknown()).optional().describe('Additional/custom fields'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       return withConnection(undefined, async (conn) => {
@@ -67,7 +67,7 @@ export function registerLeadTools(server: McpServer): void {
         if (args.status) data.Status = args.status;
         if (args.fields) validateAndMergeCustomFields(data, args.fields);
         const result = await conn.sobject('Lead').create(data);
-        if (!result.success) throw new ConnectorError('Failed to create lead', 'CREATE_ERROR', JSON.stringify(result.errors));
+        if (!result.success) throw new ConnectorError('Failed to create lead', 'CREATE_ERROR', formatVendorErrors(result.errors));
         return JSON.stringify({ ok: true, status: 'success', object: 'Lead', id: result.id, name: `${args.first_name || ''} ${args.last_name}`.trim() });
       });
     }),
@@ -82,7 +82,7 @@ export function registerLeadTools(server: McpServer): void {
         create_opportunity: z.boolean().optional().describe('Create opportunity (default: true)'),
         opportunity_name: z.string().optional().describe('Name for new opportunity'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       return withConnection(undefined, async (conn) => {

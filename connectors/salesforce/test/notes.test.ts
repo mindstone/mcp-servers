@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import { createSalesforceHandlers, MOCK_ACCESS_TOKEN, MOCK_INSTANCE_URL } from './helpers/salesforce-mock-api.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
@@ -102,6 +103,69 @@ describe('Note tools — Salesforce MCP server', () => {
     });
     expect(result.json).toHaveProperty('ok', true);
     expect(result.json.linked_to).toBeUndefined();
+  });
+
+  it('salesforce_create_note rolls back the note when linking fails', async () => {
+    const deletedIds: string[] = [];
+    mswServer.use(
+      http.post('*/services/data/*/sobjects/ContentDocumentLink', () =>
+        HttpResponse.json(
+          [{ message: 'Invalid cross-reference id XINJECTX', errorCode: 'INVALID_ID_FIELD' }],
+          { status: 400 },
+        ),
+      ),
+      http.delete('*/services/data/*/sobjects/ContentNote/:id', ({ params }) => {
+        deletedIds.push(params.id as string);
+        return new HttpResponse(null, { status: 204 });
+      }),
+      ...createSalesforceHandlers(),
+    );
+    tempConfig = createConfigWithToken();
+    testClient = await createTestClient({ env: createAuthEnv(tempConfig.configPath) });
+
+    const result = await testClient.callTool('salesforce_create_note', {
+      title: 'Meeting notes',
+      body: 'Follow up on pricing.',
+      parent_id: '001000000000001AAA',
+    });
+    expect(result.json).toHaveProperty('ok', false);
+    expect(result.json.code).toBe('LINK_ERROR');
+    expect(result.json.error).toContain('rolled back');
+    // The created note was deleted again — no orphan left behind.
+    expect(deletedIds).toEqual(['mock-contentnote-001']);
+    // The vendor link error is enveloped, not raw.
+    expect(result.json.resolution).toContain('<untrusted-content source="salesforce:vendor_errors">');
+  });
+
+  it('salesforce_create_note surfaces the orphan Id when rollback also fails', async () => {
+    mswServer.use(
+      http.post('*/services/data/*/sobjects/ContentDocumentLink', () =>
+        HttpResponse.json(
+          [{ message: 'Invalid cross-reference id', errorCode: 'INVALID_ID_FIELD' }],
+          { status: 400 },
+        ),
+      ),
+      http.delete('*/services/data/*/sobjects/ContentNote/:id', () =>
+        HttpResponse.json(
+          [{ message: 'Entity is deleted', errorCode: 'ENTITY_IS_DELETED' }],
+          { status: 400 },
+        ),
+      ),
+      ...createSalesforceHandlers(),
+    );
+    tempConfig = createConfigWithToken();
+    testClient = await createTestClient({ env: createAuthEnv(tempConfig.configPath) });
+
+    const result = await testClient.callTool('salesforce_create_note', {
+      title: 'Meeting notes',
+      body: 'Follow up on pricing.',
+      parent_id: '001000000000001AAA',
+    });
+    expect(result.json).toHaveProperty('ok', false);
+    expect(result.json.code).toBe('LINK_ERROR');
+    expect(result.json.error).toContain('cleanup of the unattached note failed');
+    // The caller can clean the orphan up manually.
+    expect(result.json.resolution).toContain('mock-contentnote-001');
   });
 
   it('salesforce_get_notes fails with structured error when unconfigured', async () => {

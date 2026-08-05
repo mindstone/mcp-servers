@@ -178,11 +178,11 @@ Then call `salesforce_connect_account` to start the OAuth flow.
 - `salesforce_create_event` — Create a calendar event
 
 ### Search
-- `salesforce_search` — Cross-object full-text search (SOSL)
+- `salesforce_search` — Cross-object full-text search (SOSL); the response's `truncated` flag tells you whether more matches exist beyond the limit
 
 ### Notes
 - `salesforce_get_notes` — Get notes attached to a record
-- `salesforce_create_note` — Create a note, optionally attached to a record
+- `salesforce_create_note` — Create a note, optionally attached to a record (a failed attach rolls the note back, or reports the orphaned note ID)
 
 ### Campaigns
 - `salesforce_get_campaigns` — Get marketing campaigns with filters

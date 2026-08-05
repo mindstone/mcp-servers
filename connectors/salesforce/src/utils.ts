@@ -31,9 +31,44 @@ export function withErrorHandling<T>(
           isError: true,
         };
       }
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      // Unexpected errors: log the raw detail locally for diagnostics, then
+      // decide what the model may see.
+      console.error('[Salesforce MCP] Unexpected error while handling tool call:', error);
+      // jsforce API errors (HttpApiError shape: string errorCode): the message
+      // is authored by the vendor API (validation-rule text, error bodies) and
+      // stays actionable for the caller, but it is org-controlled text, so it
+      // MUST be enveloped before it reaches model-visible output (invariant #6).
+      const vendorCode = (error as { errorCode?: unknown }).errorCode;
+      if (error instanceof Error && typeof vendorCode === 'string') {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                ok: false,
+                error: wrapUntrusted(error.message, 'salesforce:vendor_errors'),
+                code: 'VENDOR_ERROR',
+                vendor_code: vendorCode,
+              }),
+            },
+          ],
+          isError: true,
+        };
+      }
+      // Anything else (runtime failures, network errors, …): return a
+      // sanitised message — ad-hoc error text can embed environment details
+      // such as tokens or file paths.
       return {
-        content: [{ type: 'text', text: JSON.stringify({ ok: false, error: errorMessage }) }],
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              ok: false,
+              error: 'Unexpected internal error while handling the request',
+              code: 'INTERNAL_ERROR',
+            }),
+          },
+        ],
         isError: true,
       };
     }
@@ -206,14 +241,35 @@ export function validateAndMergeCustomFields(
 export const ALLOWED_FILTER_OPERATORS = new Set(['=', '!=', '<', '>', '<=', '>=', 'LIKE']);
 
 /**
- * Keys whose values are structural identifiers, not user-authored text: record
- * IDs are copied verbatim into follow-up tool calls (update, convert, link), so
- * enveloping them would corrupt that flow. Everything else reachable inside a
- * Salesforce record (names, emails, descriptions, subjects, …) is authored in
- * the external system and MUST be enveloped (AGENTS.md invariant #6, FOX-3490).
+ * Vendor error payloads (e.g. `SaveResult.errors`) are org-authored text:
+ * validation-rule messages and error bodies are defined in the customer's
+ * Salesforce org and can carry arbitrary content. Envelope them before they
+ * reach model-visible output (AGENTS.md invariant #6, FOX-3490).
  */
-function isStructuralRecordKey(key: string): boolean {
-  return key === 'Id' || key === 'attributes' || key.endsWith('Id');
+export function formatVendorErrors(errors: unknown): string {
+  const detail = typeof errors === 'string' ? errors : JSON.stringify(errors);
+  return wrapUntrusted(detail ?? 'Unknown vendor error', 'salesforce:vendor_errors')!;
+}
+
+/**
+ * 15- or 18-character alphanumeric Salesforce record ID.
+ */
+const SALESFORCE_ID_SHAPE = /^[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?$/;
+
+/**
+ * The structural exemption applies ONLY when a `*Id`-keyed value actually has
+ * the shape of a Salesforce ID: record IDs are copied verbatim into follow-up
+ * tool calls (update, convert, link), so enveloping them would corrupt that
+ * flow. An org-authored string under an Id-named key that is not a valid ID
+ * is external text and is enveloped like any other. `attributes` is not
+ * exempt as a whole either — its nested values (type, url) are sanitized
+ * recursively. Everything else reachable inside a Salesforce record (names,
+ * emails, descriptions, subjects, …) is authored in the external system and
+ * MUST be enveloped (AGENTS.md invariant #6, FOX-3490).
+ */
+function isStructuralRecordValue(key: string, value: unknown): boolean {
+  if (key !== 'Id' && !key.endsWith('Id')) return false;
+  return typeof value === 'string' && SALESFORCE_ID_SHAPE.test(value);
 }
 
 function wrapRecordValue(value: unknown, source: string): unknown {
@@ -223,7 +279,7 @@ function wrapRecordValue(value: unknown, source: string): unknown {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([key, item]) => [
         key,
-        isStructuralRecordKey(key) ? item : wrapRecordValue(item, source),
+        isStructuralRecordValue(key, item) ? item : wrapRecordValue(item, source),
       ]),
     );
   }
@@ -232,8 +288,9 @@ function wrapRecordValue(value: unknown, source: string): unknown {
 
 /**
  * Envelope every external-text field in a list of Salesforce records before
- * they are returned to the LLM. Structural keys (Id, *Id, attributes) pass
- * through raw so downstream tool calls can use them as identifiers.
+ * they are returned to the LLM. Only values under `Id`/`*Id` keys that are
+ * actually shaped like Salesforce IDs pass through raw, so downstream tool
+ * calls can use them as identifiers.
  */
 export function sanitizeRecords(records: unknown[], source: string): unknown[] {
   return records.map((record) => wrapRecordValue(record, source));
@@ -241,7 +298,7 @@ export function sanitizeRecords(records: unknown[], source: string): unknown[] {
 
 /**
  * Envelope every string inside an arbitrary external-data blob (report
- * results, metadata payloads), leaving structural keys (Id, *Id, attributes)
+ * results, metadata payloads), leaving only shape-validated Salesforce IDs
  * raw. Use for non-record response shapes where every value is org-authored.
  */
 export function sanitizeExternalData<T>(value: T, source: string): T {
@@ -254,6 +311,6 @@ export function checkSaveResult(
 ): void {
   const res = Array.isArray(result) ? result[0] : result;
   if (!res.success) {
-    throw new ConnectorError(errorMessage, 'UPDATE_ERROR', JSON.stringify(res.errors));
+    throw new ConnectorError(errorMessage, 'UPDATE_ERROR', formatVendorErrors(res.errors));
   }
 }

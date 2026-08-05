@@ -24,7 +24,7 @@ export function registerSearchTools(server: McpServer): void {
   server.registerTool(
     'salesforce_search',
     {
-      description: `Cross-object full-text search (SOSL). Use for "find anything mentioning X" requests — searches names, emails, and other indexed text fields at once. Defaults to Account, Contact, Lead, Opportunity; pass objects to widen or narrow. Max 200 results.`,
+      description: `Cross-object full-text search (SOSL). Use for "find anything mentioning X" requests — searches names, emails, and other indexed text fields at once. Defaults to Account, Contact, Lead, Opportunity; pass objects to widen or narrow. Max 200 results; the response's "truncated" flag is true when more matches exist beyond the limit.`,
       inputSchema: z.object({
         search_term: z.string().min(2).describe('Text to search for (min 2 characters); reserved SOSL characters are escaped automatically'),
         objects: z
@@ -40,13 +40,18 @@ export function registerSearchTools(server: McpServer): void {
         const objects = (args.objects && args.objects.length > 0 ? args.objects : DEFAULT_OBJECTS) as SearchableObject[];
         const returning = objects.map((o) => SEARCHABLE_OBJECTS[o]).join(', ');
         const limit = Math.min(Math.max(1, args.limit ?? 200), 200);
-        const sosl = `FIND {${escapeSOSL(args.search_term)}} IN ALL FIELDS RETURNING ${returning} LIMIT ${limit}`;
+        // Probe with one extra record so the caller can tell a complete result
+        // apart from one clipped at the limit — SOSL returns no total count.
+        const sosl = `FIND {${escapeSOSL(args.search_term)}} IN ALL FIELDS RETURNING ${returning} LIMIT ${limit + 1}`;
         const result = await conn.search(sosl);
-        const records = result.searchRecords ?? [];
+        const allRecords = result.searchRecords ?? [];
+        const truncated = allRecords.length > limit;
+        const records = truncated ? allRecords.slice(0, limit) : allRecords;
         return JSON.stringify({
           ok: true,
           records: sanitizeRecords(records, 'salesforce:search:records'),
           count: records.length,
+          truncated,
         });
       });
     }),
