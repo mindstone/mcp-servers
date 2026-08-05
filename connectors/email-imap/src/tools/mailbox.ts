@@ -147,11 +147,13 @@ export function registerMailboxTools(server: McpServer): void {
   server.registerTool(
     'email_create_mailbox',
     {
-      description: 'Create a new mailbox/folder.',
+      description:
+        'Create a new mailbox/folder. This mutates the remote account: hosts MUST require ' +
+        'explicit user confirmation before each invocation.',
       inputSchema: z.object({
         name: z.string().min(1).describe('Name of the mailbox/folder to create'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       ensureInitialized();
@@ -177,12 +179,14 @@ export function registerMailboxTools(server: McpServer): void {
     'email_rename_mailbox',
     {
       description:
-        'Rename a mailbox/folder. All messages inside move with it. INBOX cannot be renamed.',
+        'Rename a mailbox/folder. All messages inside move with it. INBOX cannot be renamed. ' +
+        'This mutates the remote account: hosts MUST require explicit user confirmation before ' +
+        'each invocation.',
       inputSchema: z.object({
         old_name: z.string().min(1).describe('Current mailbox/folder name'),
         new_name: z.string().min(1).describe('New mailbox/folder name'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       ensureInitialized();

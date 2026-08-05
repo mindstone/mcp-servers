@@ -115,12 +115,13 @@ export function registerDraftTools(server: McpServer): void {
       description:
         'Replace a draft\'s content: appends the updated message to the Drafts mailbox first, ' +
         'then removes the old draft only after the new one is saved. Provide the full new ' +
-        'content — fields not supplied are dropped from the replacement.',
+        'content — fields not supplied are dropped from the replacement. This mutates the ' +
+        'remote account: hosts MUST require explicit user confirmation before each invocation.',
       inputSchema: z.object({
         uid: z.number().int().positive().describe('UID of the draft to replace (from email_list_drafts)'),
         ...draftFieldsSchema,
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const config = ensureInitialized();

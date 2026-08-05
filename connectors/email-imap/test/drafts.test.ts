@@ -118,6 +118,15 @@ describe('Draft tools', () => {
       });
       expect(result.isError).toBe(true);
     });
+
+    it('is annotated destructiveHint: true (replaces and expunges a draft)', async () => {
+      await setupClient();
+
+      const tools = await testClient.client.listTools();
+      const entry = tools.tools.find((t) => t.name === 'email_update_draft');
+      expect(entry, 'email_update_draft must be registered').toBeDefined();
+      expect(entry!.annotations?.destructiveHint).toBe(true);
+    });
   });
 
   describe('email_delete_draft', () => {

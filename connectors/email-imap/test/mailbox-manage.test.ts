@@ -75,6 +75,15 @@ describe('Mailbox management tools', () => {
       expect(result.isError).toBe(true);
     });
 
+    it('is annotated destructiveHint: true (remote mailbox mutation)', async () => {
+      await setupClient();
+
+      const tools = await testClient.client.listTools();
+      const entry = tools.tools.find((t) => t.name === 'email_create_mailbox');
+      expect(entry, 'email_create_mailbox must be registered').toBeDefined();
+      expect(entry!.annotations?.destructiveHint).toBe(true);
+    });
+
     it('validates name is required', async () => {
       await setupClient();
 
@@ -116,6 +125,15 @@ describe('Mailbox management tools', () => {
         new_name: 'INBOX',
       });
       expect(result.isError).toBe(true);
+    });
+
+    it('is annotated destructiveHint: true (remote mailbox mutation)', async () => {
+      await setupClient();
+
+      const tools = await testClient.client.listTools();
+      const entry = tools.tools.find((t) => t.name === 'email_rename_mailbox');
+      expect(entry, 'email_rename_mailbox must be registered').toBeDefined();
+      expect(entry!.annotations?.destructiveHint).toBe(true);
     });
   });
 

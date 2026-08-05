@@ -337,8 +337,10 @@ export function registerSendTools(server: McpServer): void {
     'email_save_draft',
     {
       description:
-        'Save a draft email to the Drafts folder. Attachment paths must resolve inside the ' +
-        'workspace sandbox (MCP_WORKSPACE_PATH, or the system temp directory when unset).',
+        'Save a draft email to the Drafts folder. This mutates the remote account: hosts MUST ' +
+        'require explicit user confirmation before each invocation. Attachment paths must ' +
+        'resolve inside the workspace sandbox (MCP_WORKSPACE_PATH, or the system temp directory ' +
+        'when unset).',
       inputSchema: z.object({
         to: z
           .union([z.string().min(1), z.array(z.string().min(1)).min(1)])
@@ -353,7 +355,7 @@ export function registerSendTools(server: McpServer): void {
           .describe('Message-ID of the original email when drafting a reply'),
         attachments: attachmentsSchema,
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const config = ensureInitialized();
