@@ -102,14 +102,6 @@ export interface HistoryResponse {
   last_history_item_id?: string;
 }
 
-/** Tabular response from POST /v1/workspace/analytics/query/usage-by-product-over-time. */
-export interface WorkspaceUsageResponse {
-  columns: string[];
-  column_types?: string[];
-  column_units?: Array<string | null>;
-  rows: Array<Array<string | number | boolean | null>>;
-}
-
 export interface PronunciationDictionaryRule {
   string_to_replace: string;
   type: 'alias' | 'phoneme';

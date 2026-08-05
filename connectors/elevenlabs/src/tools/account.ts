@@ -3,13 +3,13 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
 import { elevenLabsJson } from '../client.js';
 import { ENDPOINTS } from '../endpoints.js';
+import { parseApiResponse, workspaceUsageResponseSchema } from '../api-schemas.js';
 import {
   ElevenLabsError,
   type ModelInfo,
   type SubscriptionResponse,
-  type WorkspaceUsageResponse,
 } from '../types.js';
-import { wrapUntrusted } from '../untrusted-content.js';
+import { wrapUntrusted, wrapUntrustedJsonStrings } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
 const USAGE_INTERVAL_SECONDS = {
@@ -98,7 +98,7 @@ RELATED TOOLS:
 - check_subscription: current-period character balance and next reset (simpler point-in-time answer)
 - list_history: browse individual past generations instead of aggregate spend
 
-RETURNS: rows[] of column-keyed records plus totals_by_group and total_credits_used (the credits-denominated column is identified via the API's column_units, e.g. total_usage). Uses the workspace analytics API (POST /v1/workspace/analytics/query/usage-by-product-over-time); requires an API key with usage-metrics permission.
+RETURNS: rows[] of column-keyed records plus totals_by_group and total_credits_used (the credits-denominated column is identified ONLY via the API's column_units, e.g. total_usage; external strings are enveloped). Fails closed with a structured error when no column — or several — is explicitly credits-denominated, or when rows are malformed. Uses the workspace analytics API (POST /v1/workspace/analytics/query/usage-by-product-over-time); requires an API key with usage-metrics permission.
 
 COST: FREE — analytics read only.`,
       inputSchema: z.object({
@@ -125,57 +125,104 @@ COST: FREE — analytics read only.`,
       const endTime = Date.now();
       const startTime = endTime - daysBack * 86_400_000;
 
-      const data = await elevenLabsJson<WorkspaceUsageResponse>(
-        apiKey,
-        ENDPOINTS.WORKSPACE_USAGE_BY_PRODUCT,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            start_time: startTime,
-            end_time: endTime,
-            interval_seconds: intervalSeconds,
-            group_by: [groupBy],
-          }),
-        },
+      const data = parseApiResponse(
+        workspaceUsageResponseSchema,
+        await elevenLabsJson<unknown>(
+          apiKey,
+          ENDPOINTS.WORKSPACE_USAGE_BY_PRODUCT,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              start_time: startTime,
+              end_time: endTime,
+              interval_seconds: intervalSeconds,
+              group_by: [groupBy],
+            }),
+          },
+        ),
+        'usage analytics',
       );
 
-      // Tabular API: columns + rows. Zip into records. Values are API enum
-      // strings (product types) or IDs — no free-text fields to envelope.
-      const columns = data.columns ?? [];
-      const rows = (data.rows ?? []).map((row) =>
-        Object.fromEntries(columns.map((col, i) => [col, row[i] ?? null])),
-      );
-
-      // The credits column is not name-stable — the docs example calls it
-      // `credits_used` while the live API returns `total_usage`. Identify it
-      // by its `credits` unit in column_units, with name fallbacks.
+      // Tabular API: columns + rows. The credits column is identified ONLY by
+      // an explicit 'credits' entry in column_units — never by name. A column
+      // named `total_usage` whose declared unit is `minutes` is minutes, and
+      // reporting it as credits would be a silent unit-confusion bug.
+      const columns = data.columns;
       const units = data.column_units ?? [];
-      let creditsColumn = columns.find((_, i) => units[i] === 'credits');
-      if (!creditsColumn) {
-        creditsColumn = ['credits_used', 'total_usage'].find((name) => columns.includes(name));
+      const creditsIndexes = columns.flatMap((_, i) => (units[i] === 'credits' ? [i] : []));
+      if (creditsIndexes.length === 0) {
+        throw new ElevenLabsError(
+          'Usage response has no column explicitly denominated in credits (column_units).',
+          'USAGE_NO_CREDITS_COLUMN',
+          'The analytics API did not label any column as credits-denominated. Do not infer one by name; retry later or inspect the raw response in the ElevenLabs dashboard.',
+        );
+      }
+      if (creditsIndexes.length > 1) {
+        throw new ElevenLabsError(
+          `Usage response has ${creditsIndexes.length} credits-denominated columns; refusing to pick one.`,
+          'USAGE_AMBIGUOUS_CREDITS_COLUMN',
+          'The analytics API returned multiple credits columns. Retry with a different group_by, or inspect usage in the ElevenLabs dashboard.',
+        );
+      }
+      const creditsIndex = creditsIndexes[0];
+      const creditsColumn = columns[creditsIndex];
+
+      const groupIndex = columns.indexOf(groupBy);
+      if (groupIndex === -1) {
+        throw new ElevenLabsError(
+          `Usage response is missing the requested group column "${groupBy}".`,
+          'USAGE_MISSING_GROUP_COLUMN',
+          'The analytics API did not return the requested grouping dimension. Retry with a different group_by.',
+        );
       }
 
       const totalsByGroup: Record<string, number> = {};
-      for (const row of rows) {
-        const group = String(row[groupBy] ?? 'unknown');
-        const raw = creditsColumn ? row[creditsColumn] : null;
-        const credits = typeof raw === 'number' ? raw : 0;
-        totalsByGroup[group] = (totalsByGroup[group] ?? 0) + credits;
-      }
+      const rows = data.rows.map((row, rowIndex) => {
+        if (row.length !== columns.length) {
+          throw new ElevenLabsError(
+            `Usage response row ${rowIndex} has ${row.length} values for ${columns.length} columns.`,
+            'USAGE_MALFORMED_ROW',
+            'The analytics API returned a malformed row. Retry the request.',
+          );
+        }
+        const groupValue = row[groupIndex];
+        if (typeof groupValue !== 'string' || groupValue.length === 0) {
+          throw new ElevenLabsError(
+            `Usage response row ${rowIndex} has no usable "${groupBy}" group value.`,
+            'USAGE_MALFORMED_ROW',
+            'The analytics API returned a row without a group value. Retry the request.',
+          );
+        }
+        const creditsValue = row[creditsIndex];
+        if (
+          typeof creditsValue !== 'number' ||
+          !Number.isFinite(creditsValue) ||
+          creditsValue < 0
+        ) {
+          throw new ElevenLabsError(
+            `Usage response row ${rowIndex} has a non-numeric or out-of-range credits value.`,
+            'USAGE_INVALID_VALUE',
+            'The analytics API returned a credits value that is not a finite, non-negative number. Retry the request.',
+          );
+        }
+        totalsByGroup[groupValue] = (totalsByGroup[groupValue] ?? 0) + creditsValue;
+        return Object.fromEntries(columns.map((col, i) => [col, row[i]]));
+      });
       const totalCredits = Object.values(totalsByGroup).reduce((sum, v) => sum + v, 0);
 
+      // Column names, group values, and row strings are API-authored —
+      // envelope them before they reach model-visible output (invariant #6).
+      const envelopeSource = 'elevenlabs:get_usage_stats';
       return JSON.stringify({
         ok: true,
         window: { days_back: daysBack, interval: args.interval ?? 'day', group_by: groupBy },
-        credits_column: creditsColumn ?? null,
+        credits_column: wrapUntrusted(creditsColumn, `${envelopeSource}:credits_column`),
         total_credits_used: totalCredits,
-        totals_by_group: totalsByGroup,
-        rows,
+        totals_by_group: wrapUntrustedJsonStrings(totalsByGroup, `${envelopeSource}:group_total`),
+        rows: wrapUntrustedJsonStrings(rows, `${envelopeSource}:row`),
         row_count: rows.length,
         cost: 'FREE — analytics read only',
-        message: creditsColumn
-          ? `Usage over the last ${daysBack} day${daysBack === 1 ? '' : 's'}: ${totalCredits.toLocaleString()} credits across ${rows.length} ${args.interval ?? 'day'} bucket${rows.length === 1 ? '' : 's'}, grouped by ${groupBy}.`
-          : `Usage over the last ${daysBack} day${daysBack === 1 ? '' : 's'}: ${rows.length} row${rows.length === 1 ? '' : 's'} grouped by ${groupBy} (no credits-denominated column in the response; see rows for raw values).`,
+        message: `Usage over the last ${daysBack} day${daysBack === 1 ? '' : 's'}: ${totalCredits.toLocaleString()} credits across ${rows.length} ${args.interval ?? 'day'} bucket${rows.length === 1 ? '' : 's'}, grouped by ${groupBy}.`,
       });
     }),
   );

@@ -14,6 +14,10 @@ are maintained manually as part of the PR review checklist.
 ### Security
 - Generated and downloaded artifacts (speech/sound-effect/dialogue audio, history and dubbing downloads, with-timestamps audio/alignment/SRT, voice-design previews) now write inside the canonical `MCP_WORKSPACE_PATH` root — falling back to `os.tmpdir()` only when it is unset — via the same canonical-prefix containment used for file reads, instead of always landing in the host temp directory.
 - Artifact writes use exclusive creation (`O_EXCL`, no symlink follow): a pre-existing destination — regular file or symlink — is rejected rather than overwritten, and multi-artifact writes (`generate_speech_with_timestamps` audio + alignment + SRT) remove earlier artifacts if a later write fails, so no partial set survives.
+- `get_usage_stats` identifies the credits-denominated column ONLY via an explicit `credits` entry in the API's `column_units` (never by column-name fallback), envelopes usage column names, group values, and row strings, and fails closed with a structured error — never `ok` with a zeroed total — when no column or several columns are credits-denominated, the requested group column is missing, a row is malformed, or a credits value is non-numeric, non-finite, or negative.
+
+### Fixed
+- `get_usage_stats` no longer reports a minutes-denominated `total_usage` column as credits, silently zeroes numeric-string values, pads short rows with nulls, or labels missing group values as `unknown`.
 
 ### Added
 - `transcribe_audio` gains speaker diarization (`diarize`, `num_speakers`, `diarization_threshold`) and word-level timestamps (`timestamps_granularity`, `include_word_timestamps`), plus the `scribe_v2` model option. Diarized output is grouped into per-speaker `utterances[]` with enveloped text.
