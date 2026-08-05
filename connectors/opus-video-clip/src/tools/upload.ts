@@ -1,10 +1,10 @@
 import * as fs from 'fs';
-import * as path from 'path';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { requireApiKey } from '../auth.js';
 import { opusFetch, opusFetchUnauthenticated } from '../client.js';
 import { OpusError, getUploadTimeoutMs } from '../types.js';
+import { resolveUploadSourcePath } from '../path-safety.js';
 import { withErrorHandling } from '../utils.js';
 
 /**
@@ -288,7 +288,10 @@ export function registerUploadTools(server: McpServer): void {
         file_path: z
           .string()
           .min(1)
-          .describe('Absolute path to a local video file (MP4 recommended, up to 10GB).'),
+          .describe(
+            'Absolute path to a local video file (MP4 recommended, up to 10GB). ' +
+              'The file MUST live inside the workspace sandbox: MCP_WORKSPACE_PATH when set, otherwise the system temp directory. Paths outside the sandbox are refused.',
+          ),
         brandTemplateId: z.string().optional(),
         curationPref: z.record(z.unknown()).optional(),
         renderPref: z.record(z.unknown()).optional(),
@@ -300,14 +303,10 @@ export function registerUploadTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       requireApiKey();
-      const filePath = path.resolve(args.file_path);
-      if (!fs.existsSync(filePath)) {
-        throw new OpusError(
-          `File not found: ${filePath}`,
-          'VALIDATION_ERROR',
-          'Pass an absolute path to an existing local video file.',
-        );
-      }
+      // Invariant #5 — confine reads to MCP_WORKSPACE_PATH / os.tmpdir().
+      // Throws a structured OpusError (PATH_OUTSIDE_WORKSPACE) on any path
+      // outside the sandbox, including symlink escapes, before any byte is read.
+      const filePath = resolveUploadSourcePath(args.file_path);
       const result = await performUpload({
         filePath,
         brandTemplateId: args.brandTemplateId,

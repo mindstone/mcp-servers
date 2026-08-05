@@ -7,6 +7,16 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+- `MCP_WORKSPACE_PATH` declared in `server.json` (optional).
+
+### Security
+- `opus_upload_video` previously accepted ANY absolute filesystem path and
+  uploaded it to Opus/GCS. Reads are now confined to `MCP_WORKSPACE_PATH`
+  (or the system temp directory when unset) with canonical-prefix
+  containment, symlink-escape rejection, and a structured
+  `PATH_OUTSIDE_WORKSPACE` error. (AGENTS.md invariant #5.)
+
 ## [0.1.0] - 2026-05-19
 
 ### Added

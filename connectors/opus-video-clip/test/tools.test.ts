@@ -1,5 +1,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { mswServer } from './helpers/setup.js';
 import { createOpusHandlers } from './helpers/opus-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
@@ -344,6 +347,59 @@ describe('Opus tool behaviour (MSW-mocked)', () => {
       expect(data.title).toBe('Demo Title');
       expect(data.description).toContain('Demo');
       expect(data.hashtags).toContain('#Demo');
+    });
+  });
+
+  describe('opus_upload_video workspace sandbox (invariant #5)', () => {
+    it('refuses a file outside MCP_WORKSPACE_PATH before any network call', async () => {
+      let networkTouched = false;
+      mswServer.use(
+        http.post(`${BASE}/api/upload-links`, () => {
+          networkTouched = true;
+          return HttpResponse.json({});
+        }),
+      );
+      const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'opus-upload-ws-'));
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'opus-upload-outside-'));
+      try {
+        const secretFile = path.join(outside, 'secret.mp4');
+        fs.writeFileSync(secretFile, 'fake-bytes');
+        testClient = await createTestClient({
+          env: { OPUS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '', MCP_WORKSPACE_PATH: workspace },
+        });
+        const result = await testClient.callTool('opus_upload_video', { file_path: secretFile });
+        expect(result.isError).toBe(true);
+        expect(result.text).toContain('PATH_OUTSIDE_WORKSPACE');
+        expect(networkTouched).toBe(false);
+      } finally {
+        fs.rmSync(workspace, { recursive: true, force: true });
+        fs.rmSync(outside, { recursive: true, force: true });
+      }
+    });
+
+    it('uploads a file inside the workspace and creates a project (happy path)', async () => {
+      mswServer.use(...createOpusHandlers());
+      const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'opus-upload-ws-'));
+      try {
+        const videoFile = path.join(workspace, 'demo.mp4');
+        fs.writeFileSync(videoFile, Buffer.alloc(1024, 7));
+        testClient = await createTestClient({
+          env: { OPUS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '', MCP_WORKSPACE_PATH: workspace },
+        });
+        const result = await testClient.callTool('opus_upload_video', {
+          file_path: videoFile,
+          curationPref: { model: 'ClipBasic', topicKeywords: ['demo'] },
+        });
+        expect(result.isError).toBeFalsy();
+        const data = result.json as { ok: boolean; projectId: string; uploadId: string };
+        expect(data.ok).toBe(true);
+        expect(data.projectId).toBe(mockProjectId);
+        expect(data.uploadId).toBeTruthy();
+      } finally {
+        // Let the GCS PUT read-stream finish releasing the file before cleanup.
+        await new Promise((r) => setTimeout(r, 100));
+        fs.rmSync(workspace, { recursive: true, force: true });
+      }
     });
   });
 

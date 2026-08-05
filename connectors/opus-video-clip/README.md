@@ -77,6 +77,15 @@ node dist/index.js
 - `OPUS_API_TIMEOUT_MS` — outbound HTTP timeout for general Opus API calls (default `120000` ms, max 30 min)
 - `OPUS_UPLOAD_TIMEOUT_MS` — per-chunk HTTP timeout for GCS resumable upload (default `600000` ms, max 30 min)
 - `OPUS_BRIDGE_TIMEOUT_MS` — HTTP timeout for the optional host-app bridge (default `30000` ms, max 30 min)
+- `MCP_WORKSPACE_PATH` — workspace directory for local-file access (see below)
+
+### Local-file sandbox
+
+`opus_upload_video` reads are confined to a workspace sandbox:
+`MCP_WORKSPACE_PATH` when set, otherwise the system temp directory. Paths
+outside the sandbox — including `..` traversal and symlinks that escape it —
+are refused. Place source videos inside the workspace (or temp) directory
+before uploading.
 
 ## Host configuration examples
 
