@@ -21,114 +21,127 @@ export class MixmaxError extends Error {
 
 /**
  * Response schemas. Mixmax responses are validated at the boundary per repo
- * convention; schemas are `.passthrough()` so new vendor fields flow through
- * instead of breaking the connector.
+ * convention. Schemas are STRICT (no `.passthrough()`): unrecognised vendor
+ * fields are stripped rather than flowing to the model unwrapped — a
+ * passthrough field would bypass the untrusted-content envelope sanitizers
+ * (AGENTS.md security invariant #6). List collections (`results`, `buckets`,
+ * `recipients`) are REQUIRED, not defaulted to `[]`: a missing collection
+ * means the vendor changed the response shape (or returned an error-shaped
+ * HTTP-200 body), and silently reporting an empty success would be silent
+ * data loss. Those surface as `INVALID_API_RESPONSE` instead.
  */
 
-const addressSchema = z
-  .object({
-    email: z.string().optional(),
-    name: z.string().optional(),
-  })
-  .passthrough();
+const addressSchema = z.object({
+  email: z.string().optional(),
+  name: z.string().optional(),
+});
 
-export const messageItemSchema = z
-  .object({
-    _id: z.string(),
-    subject: z.string().optional(),
-    body: z.string().optional(),
-    from: addressSchema.optional(),
-    to: z.array(addressSchema).optional(),
-    cc: z.array(addressSchema).optional(),
-    bcc: z.array(addressSchema).optional(),
-    sent: z.number().optional(),
-    scheduled: z.number().optional(),
-  })
-  .passthrough();
+export const messageItemSchema = z.object({
+  _id: z.string(),
+  subject: z.string().optional(),
+  body: z.string().optional(),
+  from: addressSchema.optional(),
+  to: z.array(addressSchema).optional(),
+  cc: z.array(addressSchema).optional(),
+  bcc: z.array(addressSchema).optional(),
+  sent: z.number().optional(),
+  scheduled: z.number().optional(),
+  trackingEnabled: z.boolean().optional(),
+  linkTrackingEnabled: z.boolean().optional(),
+});
 export type MessageItem = z.infer<typeof messageItemSchema>;
 
-export const messagesResponseSchema = z
-  .object({
-    results: z.array(messageItemSchema).default([]),
-    hasNext: z.boolean().optional(),
-    next: z.string().optional(),
-  })
-  .passthrough();
+export const messagesResponseSchema = z.object({
+  results: z.array(messageItemSchema),
+  hasNext: z.boolean().optional(),
+  next: z.string().optional(),
+});
 export type MessagesResponse = z.infer<typeof messagesResponseSchema>;
 
-export const sequenceItemSchema = z
-  .object({
-    _id: z.string(),
-    name: z.string().optional(),
-    isPaused: z.boolean().optional(),
-    createdAt: z.string().optional(),
-  })
-  .passthrough();
+export const sequenceItemSchema = z.object({
+  _id: z.string(),
+  name: z.string().optional(),
+  isPaused: z.boolean().optional(),
+  createdAt: z.string().optional(),
+  timezone: z.string().optional(),
+  variables: z.array(z.string()).optional(),
+});
 export type SequenceItem = z.infer<typeof sequenceItemSchema>;
 
-export const sequencesResponseSchema = z
-  .object({
-    results: z.array(sequenceItemSchema).default([]),
-    hasNext: z.boolean().optional(),
-    next: z.string().optional(),
-  })
-  .passthrough();
+export const sequencesResponseSchema = z.object({
+  results: z.array(sequenceItemSchema),
+  hasNext: z.boolean().optional(),
+  next: z.string().optional(),
+});
 export type SequencesResponse = z.infer<typeof sequencesResponseSchema>;
 
-export const sequenceStageSchema = z
-  .object({
-    _id: z.string().optional(),
-    subject: z.string().optional(),
-    body: z.string().optional(),
-    type: z.string().optional(),
-  })
-  .passthrough();
+const scheduleBetweenSchema = z.object({
+  start: z.string().optional(),
+  end: z.string().optional(),
+});
 
-export const sequenceDetailSchema = z
-  .object({
-    _id: z.string(),
-    name: z.string().optional(),
-    stages: z.array(sequenceStageSchema).optional(),
-  })
-  .passthrough();
+export const sequenceStageSchema = z.object({
+  _id: z.string().optional(),
+  subject: z.string().optional(),
+  body: z.string().optional(),
+  type: z.string().optional(),
+  scheduleBetween: scheduleBetweenSchema.optional(),
+});
+
+export const sequenceDetailSchema = z.object({
+  _id: z.string(),
+  name: z.string().optional(),
+  variables: z.array(z.string()).optional(),
+  stages: z.array(sequenceStageSchema).optional(),
+});
 export type SequenceDetail = z.infer<typeof sequenceDetailSchema>;
 
 /** Response of POST /sequences/:id/cancel — the exited recipient emails. */
-export const cancelSequenceResponseSchema = z
-  .object({
-    recipients: z.array(z.string()).optional(),
-  })
-  .passthrough();
+export const cancelSequenceResponseSchema = z.object({
+  recipients: z.array(z.string()),
+});
 export type CancelSequenceResponse = z.infer<typeof cancelSequenceResponseSchema>;
 
-export const snippetItemSchema = z
-  .object({
-    _id: z.string(),
-    name: z.string().optional(),
-    title: z.string().optional(),
-    subject: z.string().optional(),
-    body: z.string().optional(),
-  })
-  .passthrough();
+export const snippetItemSchema = z.object({
+  _id: z.string(),
+  name: z.string().optional(),
+  title: z.string().optional(),
+  subject: z.string().optional(),
+  body: z.string().optional(),
+  isInline: z.boolean().optional(),
+  source: z.string().optional(),
+  createdAt: z.string().optional(),
+});
 export type SnippetItem = z.infer<typeof snippetItemSchema>;
 
-export const snippetsResponseSchema = z
-  .object({
-    results: z.array(snippetItemSchema).default([]),
-    hasNext: z.boolean().optional(),
-    next: z.string().optional(),
-  })
-  .passthrough();
+export const snippetsResponseSchema = z.object({
+  results: z.array(snippetItemSchema),
+  hasNext: z.boolean().optional(),
+  next: z.string().optional(),
+});
 export type SnippetsResponse = z.infer<typeof snippetsResponseSchema>;
 
-export const meetingTypeSchema = z
-  .object({
-    _id: z.string().optional(),
-    name: z.string().optional(),
-    durationMin: z.number().optional(),
-    link: z.string().optional(),
-  })
-  .passthrough();
+const meetingDaySchema = z.object({
+  enabled: z.boolean().optional(),
+  timeslots: z
+    .array(z.object({ startTime: z.string().optional(), endTime: z.string().optional() }))
+    .optional(),
+});
+
+export const meetingTypeSchema = z.object({
+  _id: z.string().optional(),
+  name: z.string().optional(),
+  durationMin: z.number().optional(),
+  link: z.string().optional(),
+  daysFromNow: z.number().optional(),
+  day0: meetingDaySchema.optional(),
+  day1: meetingDaySchema.optional(),
+  day2: meetingDaySchema.optional(),
+  day3: meetingDaySchema.optional(),
+  day4: meetingDaySchema.optional(),
+  day5: meetingDaySchema.optional(),
+  day6: meetingDaySchema.optional(),
+});
 export type MeetingType = z.infer<typeof meetingTypeSchema>;
 
 /**
@@ -136,29 +149,29 @@ export type MeetingType = z.infer<typeof meetingTypeSchema>;
  * (the connector previously passed `data.results || data` through raw).
  */
 export const meetingTypesResponseSchema = z.union([
-  z.object({ results: z.array(meetingTypeSchema).default([]) }).passthrough(),
+  z.object({ results: z.array(meetingTypeSchema) }),
   z.array(meetingTypeSchema),
 ]);
 
-export const userSchema = z
-  .object({
-    _id: z.string().optional(),
-    name: z.string().optional(),
-    email: z.string().optional(),
-  })
-  .passthrough();
+export const userSchema = z.object({
+  _id: z.string().optional(),
+  name: z.string().optional(),
+  email: z.string().optional(),
+  plan: z.string().optional(),
+  integrations: z.array(z.string()).optional(),
+});
 export type MixmaxUser = z.infer<typeof userSchema>;
 
 /**
  * POST /reports/data/table response. Buckets/totals are flexible aggregation
  * shapes (they vary by report type), so they are typed as records; the `aggs`
  * key (raw search-engine internals) is deliberately not surfaced to the model.
+ * Every string key and value inside them is third-party data and is enveloped
+ * by the report sanitizer before reaching the model.
  */
-export const reportResponseSchema = z
-  .object({
-    buckets: z.array(z.record(z.unknown())).default([]),
-    totals: z.record(z.unknown()).optional(),
-    extra: z.record(z.unknown()).optional(),
-  })
-  .passthrough();
+export const reportResponseSchema = z.object({
+  buckets: z.array(z.record(z.unknown())),
+  totals: z.record(z.unknown()).optional(),
+  extra: z.record(z.unknown()).optional(),
+});
 export type ReportResponse = z.infer<typeof reportResponseSchema>;
