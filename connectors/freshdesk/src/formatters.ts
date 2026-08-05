@@ -18,6 +18,7 @@ import type {
   FreshdeskGroup,
   FreshdeskContact,
   FreshdeskCompany,
+  FreshdeskSolutionArticle,
 } from './types.js';
 import { statusToString, priorityToString, sourceToString } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
@@ -30,6 +31,7 @@ const AGENT_SOURCE = 'external-agent';
 const GROUP_SOURCE = 'external-group';
 const CONTACT_SOURCE = 'external-contact';
 const COMPANY_SOURCE = 'external-company';
+const ARTICLE_SOURCE = 'external-kb-article';
 
 /**
  * Wrap an optional external-text field in an `<untrusted-content>` envelope.
@@ -243,6 +245,53 @@ export function wrapCompanyUntrustedFields(company: FreshdeskCompany): Freshdesk
   const wrapped: FreshdeskCompany = { ...company };
   for (const key of ['name', 'description', 'note'] as const) {
     const value = wrapField(company[key], COMPANY_SOURCE);
+    if (value !== undefined) wrapped[key] = value;
+  }
+  return wrapped;
+}
+
+export function articleStatusToString(status: number | undefined): string {
+  if (status === 1) return 'Draft';
+  if (status === 2) return 'Published';
+  return status === undefined ? 'Unknown' : `Status ${status}`;
+}
+
+export function formatArticleConcise(article: FreshdeskSolutionArticle): string {
+  const title = wrapField(article.title, ARTICLE_SOURCE) ?? '(untitled)';
+  return `#${article.id}: ${title} [${articleStatusToString(article.status)}]`;
+}
+
+export function formatArticleDetailed(article: FreshdeskSolutionArticle): string {
+  const title = wrapField(article.title, ARTICLE_SOURCE);
+  const wrappedHtml = wrapField(article.description, ARTICLE_SOURCE);
+  const wrappedText = wrapField(article.description_text, ARTICLE_SOURCE);
+  return [
+    `Article #${article.id}`,
+    `Title: ${title ?? '(untitled)'}`,
+    `Status: ${articleStatusToString(article.status)}`,
+    article.folder_id ? `Folder ID: ${article.folder_id}` : '',
+    article.category_id ? `Category ID: ${article.category_id}` : '',
+    article.tags && article.tags.length > 0 ? `Tags: ${article.tags.join(', ')}` : '',
+    article.created_at ? `Created: ${article.created_at}` : '',
+    article.updated_at ? `Updated: ${article.updated_at}` : '',
+    wrappedHtml ? `Description (HTML):\n${wrappedHtml}` : '',
+    wrappedText ? `Description (text):\n${wrappedText}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+/**
+ * Return a shallow clone of the article with external-text fields (title,
+ * HTML and text descriptions) enveloped; ids and timestamps are left
+ * untouched.
+ */
+export function wrapArticleUntrustedFields(
+  article: FreshdeskSolutionArticle,
+): FreshdeskSolutionArticle {
+  const wrapped: FreshdeskSolutionArticle = { ...article };
+  for (const key of ['title', 'description', 'description_text'] as const) {
+    const value = wrapField(article[key], ARTICLE_SOURCE);
     if (value !== undefined) wrapped[key] = value;
   }
   return wrapped;

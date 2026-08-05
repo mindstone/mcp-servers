@@ -14,6 +14,7 @@ are maintained manually as part of the PR review checklist.
 ### Added
 - `list_freshdesk_agents` and `list_freshdesk_groups` tools — discover valid agent and group IDs for the existing `responder_id`/`group_id` assignment parameters on ticket create/update. Names and descriptions are returned inside untrusted-content envelopes.
 - Contact and company read tools: `list_freshdesk_contacts` (email/company filters), `search_freshdesk_contacts` (Freshdesk query syntax), `get_freshdesk_contact`, `list_freshdesk_companies`, `get_freshdesk_company`. Names, job titles, addresses, descriptions, and notes are returned inside untrusted-content envelopes.
+- Knowledge base read tools: `search_freshdesk_solutions` (keyword search via `/search/solutions`) and `get_freshdesk_solution_article` (full article body). Titles and bodies are returned inside untrusted-content envelopes.
 
 ### Changed
 - Ticket subjects are now wrapped in untrusted-content envelopes in every output path (previously only search results wrapped them), and the envelope implementation now delegates to the canonical shared `wrapUntrusted` helper instead of a hand-rolled copy.

@@ -6,6 +6,7 @@ import type {
   FreshdeskGroup,
   FreshdeskContact,
   FreshdeskCompany,
+  FreshdeskSolutionArticle,
 } from '../../src/types.js';
 
 export function makeTicket(id: number, overrides: Partial<FreshdeskTicket> = {}): FreshdeskTicket {
@@ -167,4 +168,31 @@ export const mockContacts: FreshdeskContact[] = [
 export const mockCompanies: FreshdeskCompany[] = [
   makeCompany(900, { name: 'Acme Corp', domains: ['acme.example.com'] }),
   makeCompany(901, { name: 'TechCorp' }),
+];
+
+export function makeArticle(
+  id: number,
+  overrides: Partial<FreshdeskSolutionArticle> = {},
+): FreshdeskSolutionArticle {
+  return {
+    id,
+    title: `Article ${id}: Resetting your password`,
+    description: '<p>Go to Settings and click Reset password.</p>',
+    description_text: 'Go to Settings and click Reset password.',
+    status: 2,
+    folder_id: 50,
+    category_id: 10,
+    thumbs_up: 12,
+    thumbs_down: 1,
+    hits: 340,
+    tags: ['password', 'account'],
+    created_at: '2025-09-01T09:00:00Z',
+    updated_at: '2026-01-10T09:00:00Z',
+    ...overrides,
+  };
+}
+
+export const mockArticles: FreshdeskSolutionArticle[] = [
+  makeArticle(500),
+  makeArticle(501, { title: 'Article 501: Billing FAQ', status: 1 }),
 ];

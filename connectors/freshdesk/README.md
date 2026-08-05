@@ -9,7 +9,7 @@ Freshdesk Support MCP server for Model Context Protocol hosts. Manage helpdesk t
 
 - **Version:** [0.2.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-freshdesk)
 - **Auth:** API key (per-account, on disk via [`FRESHDESK_CONFIG_PATH`](./server.json))
-- **Tools:** [18](./src/tools/) (accounts, tickets, contacts, companies, discovery)
+- **Tools:** [20](./src/tools/) (accounts, tickets, contacts, companies, knowledge base, discovery)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -114,7 +114,7 @@ node dist/index.js
 }
 ```
 
-## Tools (18)
+## Tools (20)
 
 ### Account management
 - `configure_freshdesk` — Connect a Freshdesk account using subdomain and API key
@@ -141,6 +141,10 @@ node dist/index.js
 - `get_freshdesk_contact` — Get a single contact by ID
 - `list_freshdesk_companies` — List customer organisations
 - `get_freshdesk_company` — Get a single company by ID
+
+### Knowledge base
+- `search_freshdesk_solutions` — Search solution articles by keyword
+- `get_freshdesk_solution_article` — Get a full solution article by ID
 
 ## Licence
 

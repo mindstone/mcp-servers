@@ -7,9 +7,11 @@ import {
   mockGroups,
   mockContacts,
   mockCompanies,
+  mockArticles,
   makeTicket,
   makeContact,
   makeCompany,
+  makeArticle,
 } from '../fixtures/freshdesk-data.js';
 
 const DOMAIN = 'testacme';
@@ -263,6 +265,26 @@ export function createFreshdeskHandlers(
       }
       const company = mockCompanies.find((c) => c.id === id) || makeCompany(id);
       return HttpResponse.json(company);
+    }),
+
+    // ── Solutions (knowledge base) ────────────────────────────────
+
+    http.get(`${base}/search/solutions`, ({ request }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+      return HttpResponse.json(mockArticles);
+    }),
+
+    http.get(`${base}/solutions/articles/:id`, ({ request, params }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+
+      const id = parseInt(params.id as string, 10);
+      if (id === 404) {
+        return HttpResponse.json({ message: 'Resource not found' }, { status: 404 });
+      }
+      const article = mockArticles.find((a) => a.id === id) || makeArticle(id);
+      return HttpResponse.json(article);
     }),
   ];
 }

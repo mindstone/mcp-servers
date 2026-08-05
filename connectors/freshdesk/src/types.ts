@@ -152,6 +152,22 @@ export interface FreshdeskCompany {
   updated_at?: string;
 }
 
+export interface FreshdeskSolutionArticle {
+  id: number;
+  title: string;
+  description?: string;
+  description_text?: string;
+  status?: number; // 1 = draft, 2 = published
+  folder_id?: number;
+  category_id?: number;
+  thumbs_up?: number;
+  thumbs_down?: number;
+  hits?: number;
+  tags?: string[];
+  created_at?: string;
+  updated_at?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Status / Priority / Source maps
 // ---------------------------------------------------------------------------

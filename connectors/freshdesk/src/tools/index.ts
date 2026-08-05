@@ -3,3 +3,4 @@ export { registerTicketTools } from './tickets.js';
 export { registerFieldTools } from './fields.js';
 export { registerAgentTools } from './agents.js';
 export { registerContactTools } from './contacts.js';
+export { registerSolutionTools } from './solutions.js';
