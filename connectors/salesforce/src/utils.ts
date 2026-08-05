@@ -252,14 +252,24 @@ export function formatVendorErrors(errors: unknown): string {
 }
 
 /**
- * Keys whose values are structural identifiers, not user-authored text: record
- * IDs are copied verbatim into follow-up tool calls (update, convert, link), so
- * enveloping them would corrupt that flow. Everything else reachable inside a
- * Salesforce record (names, emails, descriptions, subjects, …) is authored in
- * the external system and MUST be enveloped (AGENTS.md invariant #6, FOX-3490).
+ * 15- or 18-character alphanumeric Salesforce record ID.
  */
-function isStructuralRecordKey(key: string): boolean {
-  return key === 'Id' || key === 'attributes' || key.endsWith('Id');
+const SALESFORCE_ID_SHAPE = /^[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?$/;
+
+/**
+ * The structural exemption applies ONLY when a `*Id`-keyed value actually has
+ * the shape of a Salesforce ID: record IDs are copied verbatim into follow-up
+ * tool calls (update, convert, link), so enveloping them would corrupt that
+ * flow. An org-authored string under an Id-named key that is not a valid ID
+ * is external text and is enveloped like any other. `attributes` is not
+ * exempt as a whole either — its nested values (type, url) are sanitized
+ * recursively. Everything else reachable inside a Salesforce record (names,
+ * emails, descriptions, subjects, …) is authored in the external system and
+ * MUST be enveloped (AGENTS.md invariant #6, FOX-3490).
+ */
+function isStructuralRecordValue(key: string, value: unknown): boolean {
+  if (key !== 'Id' && !key.endsWith('Id')) return false;
+  return typeof value === 'string' && SALESFORCE_ID_SHAPE.test(value);
 }
 
 function wrapRecordValue(value: unknown, source: string): unknown {
@@ -269,7 +279,7 @@ function wrapRecordValue(value: unknown, source: string): unknown {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([key, item]) => [
         key,
-        isStructuralRecordKey(key) ? item : wrapRecordValue(item, source),
+        isStructuralRecordValue(key, item) ? item : wrapRecordValue(item, source),
       ]),
     );
   }
@@ -278,8 +288,9 @@ function wrapRecordValue(value: unknown, source: string): unknown {
 
 /**
  * Envelope every external-text field in a list of Salesforce records before
- * they are returned to the LLM. Structural keys (Id, *Id, attributes) pass
- * through raw so downstream tool calls can use them as identifiers.
+ * they are returned to the LLM. Only values under `Id`/`*Id` keys that are
+ * actually shaped like Salesforce IDs pass through raw, so downstream tool
+ * calls can use them as identifiers.
  */
 export function sanitizeRecords(records: unknown[], source: string): unknown[] {
   return records.map((record) => wrapRecordValue(record, source));
@@ -287,7 +298,7 @@ export function sanitizeRecords(records: unknown[], source: string): unknown[] {
 
 /**
  * Envelope every string inside an arbitrary external-data blob (report
- * results, metadata payloads), leaving structural keys (Id, *Id, attributes)
+ * results, metadata payloads), leaving only shape-validated Salesforce IDs
  * raw. Use for non-record response shapes where every value is org-authored.
  */
 export function sanitizeExternalData<T>(value: T, source: string): T {

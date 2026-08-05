@@ -9,8 +9,9 @@
  * numbers, descriptions, subjects — all attacker-controllable when records
  * originate from web-to-lead forms, inbound email, or integrations).
  * `sanitizeRecords` in src/utils.ts envelopes every such string while leaving
- * structural identifiers (Id, *Id, attributes) raw so agents can still copy
- * IDs into follow-up tool calls.
+ * only shape-validated Salesforce IDs (15/18-char alphanumeric) raw so agents
+ * can still copy IDs into follow-up tool calls; `attributes` values are
+ * sanitized recursively.
  *
  * These tests assert (a) the vendored wrapper is correct, (b) sanitizeRecords
  * wraps text fields but not IDs, (c) end-to-end tool paths reach the envelope,
@@ -127,13 +128,13 @@ describe('wrapUntrusted (vendored helper)', () => {
 });
 
 describe('sanitizeRecords', () => {
-  it('envelopes text fields but leaves Id, *Id, and attributes raw', () => {
+  it('envelopes text fields but leaves shape-valid Id and *Id values raw', () => {
     const records = [
       {
         Id: '001000000000001AAA',
         Name: ATTACK_PAYLOAD,
         AccountId: '001000000000002AAA',
-        attributes: { type: 'Contact' },
+        attributes: { type: 'Contact', url: '/services/data/v66.0/sobjects/Contact/003' },
         Amount: 50000,
         IsActive: true,
         Profile: { Name: ATTACK_PAYLOAD },
@@ -142,11 +143,35 @@ describe('sanitizeRecords', () => {
     const [record] = sanitizeRecords(records, 'salesforce:test:records') as Record<string, unknown>[];
     expect(record.Id).toBe('001000000000001AAA');
     expect(record.AccountId).toBe('001000000000002AAA');
-    expect(record.attributes).toEqual({ type: 'Contact' });
     expect(record.Amount).toBe(50000);
     expect(record.IsActive).toBe(true);
     expectEnvelopedAndDefanged(record.Name, 'salesforce:test:records');
     expectEnvelopedAndDefanged((record.Profile as Record<string, unknown>).Name, 'salesforce:test:records');
+  });
+
+  it('recursively sanitizes attributes values instead of passing the object through raw', () => {
+    const records = [
+      {
+        Id: '001000000000001AAA',
+        attributes: { type: ATTACK_PAYLOAD, url: ATTACK_PAYLOAD },
+      },
+    ];
+    const [record] = sanitizeRecords(records, 'salesforce:test:records') as Record<string, unknown>[];
+    const attributes = record.attributes as Record<string, unknown>;
+    expectEnvelopedAndDefanged(attributes.type, 'salesforce:test:records');
+    expectEnvelopedAndDefanged(attributes.url, 'salesforce:test:records');
+  });
+
+  it('envelopes an Id-keyed value that is not shaped like a Salesforce ID', () => {
+    // An org-authored string under an Id-named key (e.g. a formula field or
+    // external-ID text) is external text, not a structural identifier.
+    const records = [{ Id: '001000000000001AAA', ExternalId: ATTACK_PAYLOAD, OwnerId: 'not-an-id' }];
+    const [record] = sanitizeRecords(records, 'salesforce:test:records') as Record<string, unknown>[];
+    expect(record.Id).toBe('001000000000001AAA');
+    expectEnvelopedAndDefanged(record.ExternalId, 'salesforce:test:records');
+    expect(record.OwnerId).toBe(
+      '<untrusted-content source="salesforce:test:records">not-an-id</untrusted-content>',
+    );
   });
 });
 
