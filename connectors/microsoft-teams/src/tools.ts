@@ -63,9 +63,11 @@ const WRITE_ANNOTATIONS = {
  * and several are admin-consent-gated under Microsoft's managed consent
  * policy. When the connected account's token lacks the scope, return an
  * actionable error up front instead of letting Graph 403 — same pattern as
- * the SharePoint connector's Sites.Read.All gate. When the scope cannot be
- * introspected (no token on disk yet), fall through to the real call so the
- * standard auth_required envelope handles it.
+ * the SharePoint connector's Sites.Read.All gate. When there is no token on
+ * disk yet, fall through to the real call so the standard auth_required
+ * envelope handles it. A token that fails to LOAD (corrupt file, unreadable
+ * disk, provider error) is different from "no token": fail closed with
+ * observable guidance instead of silently skipping the permission gate.
  */
 async function requireScopesGranted(
   requiredScopes: string[],
@@ -76,8 +78,13 @@ async function requireScopesGranted(
     const tokenData = await getTokenProvider().loadToken();
     if (!tokenData) return null;
     tokenScope = tokenData.scope;
-  } catch {
-    return null;
+  } catch (err) {
+    return errorResponse({
+      error: `${feature} could not verify the Microsoft Graph permissions granted to the connected account: ${err instanceof Error ? err.message : String(err)}`,
+      action_required:
+        'Reconnect the Microsoft account so the granted permissions can be verified. In many organizations an administrator must approve these permissions first.',
+      next_step: AUTH_TOOL_NAME,
+    });
   }
   const missing = requiredScopes.filter((scope) => !hasScope(tokenScope, scope));
   if (missing.length === 0) return null;

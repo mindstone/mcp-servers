@@ -1,3 +1,5 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { mswServer } from './fixtures/setup.js';
 import { createMockApi, type MockApiState } from './fixtures/microsoft-mock-api.js';
@@ -118,6 +120,35 @@ describe('scope gating for admin-consent Graph permissions', () => {
     expect(json.missing_scopes).toEqual(['Presence.ReadWrite']);
     const call = state.requests.find((r) => r.pathname.includes('setUserPreferredPresence'));
     expect(call).toBeUndefined();
+  });
+
+  it('fails closed with observable guidance when the token cannot be loaded', async () => {
+    // A corrupt/unreadable token file is not "no token": the scope gate must
+    // surface an explicit error instead of silently proceeding to Graph.
+    const tokenPath = join(cfg.configPath, 'credentials', `${cfg.sanitisedEmail}.token.json`);
+    const original = await readFile(tokenPath, 'utf-8');
+    await writeFile(tokenPath, '{ this is not valid json', 'utf-8');
+    try {
+      const result = await client.callTool('list_channel_messages', {
+        teamId: 'team-1',
+        channelId: 'channel-1',
+      });
+      expect(result.isError).toBe(true);
+      const json = result.json as {
+        ok: boolean;
+        error: string;
+        action_required: string;
+        next_step: string;
+      };
+      expect(json.ok).toBe(false);
+      expect(json.error).toMatch(/could not verify/i);
+      expect(json.action_required).toMatch(/reconnect/i);
+      expect(json.next_step).toBe('authenticate_microsoft_account');
+      const call = state.requests.find((r) => r.pathname.includes('/channels/channel-1/messages'));
+      expect(call).toBeUndefined();
+    } finally {
+      await writeFile(tokenPath, original, 'utf-8');
+    }
   });
 
   it('ungated chat tools still work under the base scope set', async () => {
