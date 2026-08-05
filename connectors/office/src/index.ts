@@ -654,18 +654,23 @@ const sidecarRequest = async (app, action, params = {}) => {
     }
 
     if (!response.ok) {
+      // The error body is authored by the sidecar (or an add-in relayed through
+      // it) — external, attacker-influenced text. Stamp it so `toMcpResult`
+      // wraps it in the untrusted-content envelope instead of emitting it
+      // verbatim (AGENTS.md security invariant #6).
       let detail;
       try {
         const payload = await response.json();
-        detail = payload?.error;
+        if (typeof payload?.error === 'string') detail = payload.error;
       } catch {
-        detail = await response.text();
+        const body = await response.text();
+        if (body) detail = body;
       }
-      return {
+      return stampUntrustedSource({
         success: false,
         error: detail || `Office sidecar request failed (HTTP ${response.status}).`,
         code: 'SIDECAR_ERROR',
-      };
+      }, app);
     }
 
     return stampUntrustedSource(await response.json(), app);
@@ -4435,6 +4440,7 @@ export const __test = {
   isLoopbackHostname,
   toMcpResult,
   stampUntrustedSource,
+  sidecarRequest,
   packageVersion: PACKAGE_VERSION,
   setSpawnSidecarAndWaitForTests(fn: typeof defaultSpawnSidecarAndWait) {
     spawnSidecarAndWait = fn;

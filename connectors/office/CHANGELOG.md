@@ -22,6 +22,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Security
 - Wrap all add-in-returned document/spreadsheet/slide content in `<untrusted-content source="microsoft-office-{app}">` envelopes at the `toMcpResult` boundary, and envelope add-in-relayed error messages (FOX-3490 remediation). Content authored inside Office files is attacker-influenced whenever the file came from somewhere else; the envelope marks it as data, not instructions. Locally generated guidance (sidecar unreachable, setup hints) is not enveloped.
+- Envelope non-2xx sidecar error bodies the same way: a failed sidecar/add-in response's `error` field or raw body is external, attacker-influenced text, and previously reached the model verbatim — including any embedded `</untrusted-content>` breakout payload.
 - Close-tag breakout escaping now neutralises every whitespace variant of `</untrusted-content>` (newline/CR/tab, not just spaces/tabs), so a wrapped payload cannot terminate its envelope early with e.g. `</untrusted-content\n>`.
 - Pin `@grpc/grpc-js` to `^1.14.4` via `overrides` to clear high-severity advisories GHSA-5375-pq7m-f5r2 / GHSA-99f4-grh7-6pcq (malformed-request crash) in the transitive OpenTelemetry OTLP-gRPC exporter chain (was 1.14.3).
 
