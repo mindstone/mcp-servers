@@ -12,6 +12,7 @@ const EXPECTED_TOOLS = [
   'salesforce_create_contact',
   'salesforce_create_event',
   'salesforce_create_lead',
+  'salesforce_create_note',
   'salesforce_create_opportunity',
   'salesforce_create_record',
   'salesforce_create_task',
@@ -22,6 +23,7 @@ const EXPECTED_TOOLS = [
   'salesforce_get_contacts',
   'salesforce_get_events',
   'salesforce_get_leads',
+  'salesforce_get_notes',
   'salesforce_get_opportunities',
   'salesforce_get_records',
   'salesforce_get_tasks',
@@ -49,7 +51,7 @@ describe('Smoke test — Salesforce MCP server', () => {
     vi.unstubAllEnvs();
   });
 
-  it('should register all 32 tools via MCP protocol', async () => {
+  it('should register all 34 tools via MCP protocol', async () => {
     mswServer.use(...createSalesforceHandlers());
     tempConfig = createTempConfig({
       accounts: [{ id: 'test-user', username: 'test@example.com', connected_at: new Date().toISOString() }],
@@ -79,7 +81,7 @@ describe('Smoke test — Salesforce MCP server', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(32);
+    expect(toolsResult.tools).toHaveLength(34);
     expect(toolNames).toEqual(EXPECTED_TOOLS);
   });
 
@@ -126,6 +128,7 @@ describe('Smoke test — Salesforce MCP server', () => {
       'salesforce_get_events',
       'salesforce_get_opportunities',
       'salesforce_get_leads',
+      'salesforce_get_notes',
       'salesforce_get_tasks',
       'salesforce_get_users',
       'salesforce_query',

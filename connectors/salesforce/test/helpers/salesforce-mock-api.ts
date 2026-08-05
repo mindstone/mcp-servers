@@ -114,6 +114,21 @@ export function createSalesforceHandlers() {
           records: [{ Id: '00U000000000001', Subject: 'Quarterly review', StartDateTime: '2026-08-10T14:00:00.000Z', EndDateTime: '2026-08-10T15:00:00.000Z', attributes: { type: 'Event' } }],
         });
       }
+      if (soql.includes('FROM ContentNote')) {
+        return HttpResponse.json({
+          totalSize: 1,
+          done: true,
+          records: [{
+            Id: '069000000000001',
+            Title: 'Discovery call notes',
+            TextPreview: 'Discussed renewal pricing.',
+            Content: Buffer.from('Discussed renewal pricing.', 'utf8').toString('base64'),
+            CreatedDate: '2026-08-01T10:00:00.000Z',
+            OwnerId: '005000000000001',
+            attributes: { type: 'ContentNote' },
+          }],
+        });
+      }
       if (soql.includes('FROM User')) {
         return HttpResponse.json({
           totalSize: 1,

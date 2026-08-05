@@ -16,6 +16,7 @@ are maintained manually as part of the PR review checklist.
 - New Case tools: `salesforce_get_cases`, `salesforce_create_case`, `salesforce_update_case` for support/customer-success workflows.
 - New Event tools: `salesforce_get_events`, `salesforce_create_event` for calendar/meeting-prep workflows. Date filters accept plain dates or ISO 8601 datetimes.
 - New `salesforce_search` tool: cross-object full-text search (SOSL) across Account, Contact, Lead, Opportunity, Case, Task, and Event. Search terms are escaped against SOSL reserved characters.
+- New Note tools: `salesforce_get_notes` and `salesforce_create_note` (ContentNote, linked to a record via ContentDocumentLink) for meeting-notes-into-CRM workflows. Note bodies are base64-decoded and enveloped on read.
 
 ### Security
 

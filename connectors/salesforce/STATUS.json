@@ -11,7 +11,7 @@
     ]
   },
   "tools": {
-    "count": 32,
+    "count": 34,
     "domains": [
       "accounts",
       "contacts",
@@ -21,6 +21,7 @@
       "cases",
       "events",
       "search",
+      "notes",
       "query"
     ]
   },
