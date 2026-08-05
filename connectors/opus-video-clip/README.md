@@ -160,6 +160,11 @@ before uploading.
 - `opus_schedule_post` — Schedule a clip for future publishing
 - `opus_cancel_scheduled_post` — Cancel a scheduled social post
 
+External text returned by the Opus API (project/clip titles, template and
+collection names, social account display names, generated social copy,
+upstream error strings) is wrapped in `<untrusted-content>` envelopes so the
+model treats it as data, not instructions.
+
 ## Licence
 
 [FSL-1.1-MIT](./LICENSE) — Functional Source License, Version 1.1, with MIT future licence. The software converts to MIT licence on 2030-05-19.

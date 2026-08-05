@@ -5,6 +5,7 @@ import { requireApiKey } from '../auth.js';
 import { opusFetch, opusFetchUnauthenticated } from '../client.js';
 import { OpusError, getUploadTimeoutMs } from '../types.js';
 import { resolveUploadSourcePath } from '../path-safety.js';
+import { sanitizeProject } from '../sanitize.js';
 import { withErrorHandling } from '../utils.js';
 import {
   ConclusionActionSchema,
@@ -331,7 +332,7 @@ export function registerUploadTools(server: McpServer): void {
           resumed: result.resumed,
           message:
             'Video uploaded and clip project created. Poll opus_get_project with this projectId until stage="COMPLETE", then call opus_get_clips.',
-          project: result.project,
+          project: sanitizeProject(result.project, 'opus:upload_video'),
         },
         null,
         2,

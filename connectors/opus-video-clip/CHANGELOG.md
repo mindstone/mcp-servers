@@ -22,6 +22,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   (or the system temp directory when unset) with canonical-prefix
   containment, symlink-escape rejection, and a structured
   `PATH_OUTSIDE_WORKSPACE` error. (AGENTS.md invariant #5.)
+- External text returned by the Opus API — project/clip titles, brand
+  template and collection names, social account display names, generated
+  social copy (`title`/`description`/`hashtags`), upstream `error`/`message`
+  strings, and raw debug dumps — is now wrapped in
+  `<untrusted-content source="…">` envelopes with close-tag breakout
+  escaping (AGENTS.md invariant #6).
 
 ## [0.1.0] - 2026-05-19
 

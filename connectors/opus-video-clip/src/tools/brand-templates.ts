@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { requireApiKey } from '../auth.js';
 import { opusFetch } from '../client.js';
+import { sanitizeBrandTemplate, sanitizeList, wrapRawDump } from '../sanitize.js';
 import { withErrorHandling } from '../utils.js';
 
 interface BrandTemplate {
@@ -52,8 +53,8 @@ export function registerBrandTemplateTools(server: McpServer): void {
         {
           ok: true,
           count: templates.length,
-          brand_templates: templates,
-          raw: result,
+          brand_templates: sanitizeList(templates, sanitizeBrandTemplate, 'opus:get_brand_templates'),
+          raw: wrapRawDump(result, 'opus:get_brand_templates:raw'),
         },
         null,
         2,

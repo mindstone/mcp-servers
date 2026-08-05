@@ -3,6 +3,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { requireApiKey } from '../auth.js';
 import { opusFetch } from '../client.js';
 import { OpusError, SHARE_VISIBILITY } from '../types.js';
+import { sanitizeClip, sanitizeList, sanitizeProject } from '../sanitize.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
 interface ClipProjectRepresentation {
@@ -123,7 +125,7 @@ export function registerProjectTools(server: McpServer): void {
           stage: result.stage,
           message:
             'Project created. Poll opus_get_project with this projectId until stage="COMPLETE", then call opus_get_clips.',
-          project: result,
+          project: sanitizeProject(result, 'opus:create_project'),
         },
         null,
         2,
@@ -156,8 +158,8 @@ export function registerProjectTools(server: McpServer): void {
           projectId: result.id ?? result.projectId,
           stage: result.stage,
           model: result.model,
-          error: result.error ?? null,
-          project: result,
+          error: wrapUntrusted(result.error ?? undefined, 'opus:get_project:error') ?? null,
+          project: sanitizeProject(result, 'opus:get_project'),
         },
         null,
         2,
@@ -227,7 +229,7 @@ export function registerProjectTools(server: McpServer): void {
         {
           ok: true,
           count: clips.length,
-          clips,
+          clips: sanitizeList(clips, sanitizeClip, 'opus:get_clips'),
         },
         null,
         2,
@@ -270,7 +272,7 @@ export function registerProjectTools(server: McpServer): void {
           ok: true,
           projectId: result.id ?? result.projectId,
           visibility: args.visibility,
-          project: result,
+          project: sanitizeProject(result, 'opus:share_project'),
         },
         null,
         2,
