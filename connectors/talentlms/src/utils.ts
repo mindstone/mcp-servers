@@ -38,7 +38,9 @@ export function paginatedPath(base: string, args: PaginationArgs): string {
  *
  * - On success: returns the string result as a text content block.
  * - On TalentLMSError: returns a structured JSON error with code and resolution.
- * - On unknown error: returns a generic error message.
+ * - On unknown error: logs the detail to server stderr and returns a generic,
+ *   connector-authored message — an unexpected error's `.message` may embed
+ *   third-party text, so it never reaches model output unsanitised.
  *
  * Secrets are never exposed in error messages.
  */
@@ -66,9 +68,17 @@ export function withErrorHandling<T>(
           isError: true,
         };
       }
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('[talentlms] Unexpected tool error:', error);
       return {
-        content: [{ type: 'text', text: JSON.stringify({ ok: false, error: errorMessage }) }],
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              ok: false,
+              error: 'Unexpected error processing the request. Details were logged to the server console.',
+            }),
+          },
+        ],
         isError: true,
       };
     }
