@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
+import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import { z } from 'zod';
 import type { Client, EmailMessage, MailFolder } from '@mindstone/mcp-server-microsoft-shared';
 import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
@@ -517,8 +519,10 @@ export async function listAttachments(
   };
 }
 
-// Mail attachment bodies can be large; Graph inlines contentBytes on the
-// single-attachment GET, so cap what we are willing to decode and write.
+// Mail attachment bodies can be large. The download path fetches metadata
+// without contentBytes and streams the bytes from the $value endpoint with
+// this hard cap, so an oversized response is cut off before it is fully
+// materialized in memory.
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
 /**
@@ -553,32 +557,105 @@ function sanitizeAttachmentFilename(name: string): string {
  * Resolve the directory attachments are saved into, honouring the repo's
  * file-write invariant: canonical-prefix containment under
  * `MCP_WORKSPACE_PATH` (or `os.tmpdir()` when unset), with the canonical
- * (symlink-resolved) root as the containment anchor.
+ * (symlink-resolved) root as the containment anchor. The parent chain is
+ * canonicalised before `mkdir` so a symlinked intermediate cannot trick the
+ * connector into even creating a directory outside the workspace.
  */
 async function resolveAttachmentDir(): Promise<string> {
   const root = process.env.MCP_WORKSPACE_PATH || os.tmpdir();
-  const dir = path.join(root, 'attachments', 'microsoft-mail');
+  const realRoot = await fs.realpath(root);
+  const dir = path.join(realRoot, 'attachments', 'microsoft-mail');
+  const parentReal = await fs
+    .realpath(path.join(realRoot, 'attachments'))
+    .catch(() => null);
+  if (parentReal !== null) {
+    const parentRelative = path.relative(realRoot, parentReal);
+    if (parentRelative.startsWith('..') || path.isAbsolute(parentRelative)) {
+      throw new Error('Resolved attachment directory escaped its workspace root');
+    }
+  }
   await fs.mkdir(dir, { recursive: true });
   const realDir = await fs.realpath(dir);
-  const relative = path.relative(await fs.realpath(root), realDir);
+  const relative = path.relative(realRoot, realDir);
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new Error('Resolved attachment directory escaped its workspace root');
   }
   return realDir;
 }
 
-async function uniqueAttachmentPath(dir: string, filename: string): Promise<string> {
+/**
+ * Atomically create `dir/filename` and write `content` through the resulting
+ * file descriptor. `fs.open(..., 'wx')` (O_CREAT|O_EXCL) fails with EEXIST on
+ * any existing entry — including a symlink or hardlink planted after the
+ * filename was chosen — so the descriptor we write is provably the file we
+ * just created, never a followed symlink target. On EEXIST the next
+ * `-<n>` suffix is tried, preserving the no-overwrite contract.
+ */
+async function writeFileExclusive(
+  dir: string,
+  filename: string,
+  content: Buffer,
+): Promise<string> {
   const ext = path.extname(filename);
   const base = path.basename(filename, ext);
   for (let attempt = 0; ; attempt += 1) {
     const candidate = attempt === 0 ? filename : `${base}-${attempt}${ext}`;
     const fullPath = path.join(dir, candidate);
+    // The filename is separator-free, but keep the canonical containment
+    // check so a future refactor cannot silently weaken the boundary.
+    const relative = path.relative(dir, fullPath);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+      throw new Error('Resolved attachment path escaped the attachment directory');
+    }
+    let handle: fs.FileHandle | undefined;
     try {
-      await fs.lstat(fullPath);
-    } catch {
+      handle = await fs.open(fullPath, 'wx');
+      await handle.writeFile(content);
       return fullPath;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EEXIST') continue;
+      throw err;
+    } finally {
+      await handle?.close();
     }
   }
+}
+
+/**
+ * Read a response body stream with a hard byte cap, aborting the stream the
+ * moment the cap is exceeded. The body is never fully materialized beyond
+ * `maxBytes`, so a malicious or unexpectedly large Graph response cannot
+ * exhaust connector memory. Handles both Node Readable (node-fetch) and web
+ * ReadableStream (undici/native fetch) bodies.
+ */
+async function readStreamWithCap(
+  body: unknown,
+  maxBytes: number,
+  onExceeded: () => Error,
+): Promise<Buffer> {
+  const readable =
+    body instanceof Readable
+      ? body
+      : body && typeof (body as { getReader?: unknown }).getReader === 'function'
+        ? Readable.fromWeb(body as WebReadableStream<Uint8Array>)
+        : null;
+  if (!readable) {
+    throw new Error('Attachment download returned no readable content stream.');
+  }
+  const chunks: Buffer[] = [];
+  let total = 0;
+  try {
+    for await (const chunk of readable) {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
+      total += buf.byteLength;
+      if (total > maxBytes) throw onExceeded();
+      chunks.push(buf);
+    }
+  } catch (err) {
+    readable.destroy();
+    throw err;
+  }
+  return Buffer.concat(chunks);
 }
 
 export interface DownloadAttachmentArgs {
@@ -591,49 +668,49 @@ export async function downloadAttachment(
   args: DownloadAttachmentArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
-  const response = await client
+  // Fetch metadata first, explicitly excluding contentBytes so this response
+  // is small and bounded; the bytes themselves are streamed (and capped)
+  // below via the $value endpoint instead of an unbounded inline base64 JSON.
+  const metaResponse = await client
     .api(`/me/messages/${args.id}/attachments/${args.attachmentId}`)
     .options({ signal })
+    .select('id,name,contentType,size,isInline')
     .get();
-  const attachment = GraphAttachmentSchema.parse(response);
+  const attachment = GraphAttachmentSchema.parse(metaResponse);
+
+  // The attachment name is attacker-controlled; every error path below must
+  // carry it inside an untrusted-content envelope (invariant #6), never raw.
+  const displayName =
+    wrapUntrusted(attachment.name, 'microsoft-mail:download_attachment:name') ??
+    args.attachmentId;
+  const sizeLimitMessage = `Attachment "${displayName}" exceeds the ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB download limit.`;
 
   if (attachment['@odata.type'] && !attachment['@odata.type'].endsWith('fileAttachment')) {
     throw new Error(
-      `Attachment "${attachment.name ?? args.attachmentId}" is not a file attachment ` +
+      `Attachment "${displayName}" is not a file attachment ` +
         `(${attachment['@odata.type'].replace('#microsoft.graph.', '')}); inline download is not ` +
         'supported for embedded-message or reference attachments. Open the message in Outlook to access it.',
     );
   }
-  if (!attachment.contentBytes) {
-    throw new Error(
-      `Attachment "${attachment.name ?? args.attachmentId}" has no inline content. ` +
-        'Open the message in Outlook to access it.',
-    );
+
+  // Reject non-plain filenames before any content is fetched or written.
+  const filename = sanitizeAttachmentFilename(attachment.name?.trim() || 'attachment');
+
+  // Cheap early reject on the declared size so oversized attachments fail
+  // without a content fetch; the streaming cap below is the hard guard for a
+  // server that understates it.
+  if (typeof attachment.size === 'number' && attachment.size > MAX_ATTACHMENT_BYTES) {
+    throw new Error(sizeLimitMessage);
   }
 
-  // ~4/3 expansion when decoding; reject before allocating the buffer.
-  if (attachment.contentBytes.length > Math.ceil((MAX_ATTACHMENT_BYTES * 4) / 3)) {
-    throw new Error(
-      `Attachment "${attachment.name ?? args.attachmentId}" exceeds the ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB download limit.`,
-    );
-  }
-  const content = Buffer.from(attachment.contentBytes, 'base64');
-  if (content.byteLength > MAX_ATTACHMENT_BYTES) {
-    throw new Error(
-      `Attachment "${attachment.name ?? args.attachmentId}" exceeds the ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB download limit.`,
-    );
-  }
+  const body = await client
+    .api(`/me/messages/${args.id}/attachments/${args.attachmentId}/$value`)
+    .options({ signal })
+    .getStream();
+  const content = await readStreamWithCap(body, MAX_ATTACHMENT_BYTES, () => new Error(sizeLimitMessage));
 
   const dir = await resolveAttachmentDir();
-  const filename = sanitizeAttachmentFilename(attachment.name?.trim() || 'attachment');
-  const fullPath = await uniqueAttachmentPath(dir, filename);
-  // The filename is separator-free, but keep the canonical containment check
-  // so a future refactor cannot silently weaken the boundary.
-  const relative = path.relative(dir, fullPath);
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw new Error('Resolved attachment path escaped the attachment directory');
-  }
-  await fs.writeFile(fullPath, content);
+  const fullPath = await writeFileExclusive(dir, filename, content);
 
   return {
     success: true,
