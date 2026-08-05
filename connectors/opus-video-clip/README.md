@@ -77,6 +77,15 @@ node dist/index.js
 - `OPUS_API_TIMEOUT_MS` — outbound HTTP timeout for general Opus API calls (default `120000` ms, max 30 min)
 - `OPUS_UPLOAD_TIMEOUT_MS` — per-chunk HTTP timeout for GCS resumable upload (default `600000` ms, max 30 min)
 - `OPUS_BRIDGE_TIMEOUT_MS` — HTTP timeout for the optional host-app bridge (default `30000` ms, max 30 min)
+- `MCP_WORKSPACE_PATH` — workspace directory for local-file access (see below)
+
+### Local-file sandbox
+
+`opus_upload_video` (reads) and `opus_download_clip` (writes) are confined to a
+workspace sandbox: `MCP_WORKSPACE_PATH` when set, otherwise the system temp
+directory. Paths outside the sandbox — including `..` traversal and symlinks
+that escape it — are refused. Place source videos inside the workspace (or
+temp) directory before uploading, and pick download targets inside it.
 
 ## Host configuration examples
 
@@ -112,7 +121,7 @@ node dist/index.js
 }
 ```
 
-## Tools (21)
+## Tools (22)
 
 ### Configuration
 - `configure_opus_api_key` — Configure the OpusClip API key
@@ -127,7 +136,10 @@ node dist/index.js
 - `opus_share_project` — Update a project's sharing visibility
 
 ### Upload
-- `opus_upload_video` — Upload a local video file and create a clip project (orchestrates the 4-step GCS resumable upload)
+- `opus_upload_video` — Upload a local video file and create a clip project (orchestrates the 4-step GCS resumable upload; reads confined to the workspace sandbox)
+
+### Downloads
+- `opus_download_clip` — Download an exported clip MP4 to a local file inside the workspace sandbox
 
 ### Censor jobs
 - `opus_create_censor_job` — Create a censor job for a clip
@@ -147,9 +159,14 @@ node dist/index.js
 - `opus_get_social_accounts` — List connected social accounts
 - `opus_create_social_copy_job` — Generate platform-specific social copy for a clip
 - `opus_get_social_copy_job` — Retrieve the result of a social-copy job
-- `opus_publish_post` — Publish a clip to a connected social account immediately
-- `opus_schedule_post` — Schedule a clip for future publishing
+- `opus_publish_post` — Publish a clip to a connected social account immediately (marked destructive)
+- `opus_schedule_post` — Schedule a clip for future publishing (marked destructive)
 - `opus_cancel_scheduled_post` — Cancel a scheduled social post
+
+External text returned by the Opus API (project/clip titles, template and
+collection names, social account display names, generated social copy,
+upstream error strings) is wrapped in `<untrusted-content>` envelopes so the
+model treats it as data, not instructions.
 
 ## Licence
 

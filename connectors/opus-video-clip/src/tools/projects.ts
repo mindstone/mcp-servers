@@ -3,6 +3,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { requireApiKey } from '../auth.js';
 import { opusFetch } from '../client.js';
 import { OpusError, SHARE_VISIBILITY } from '../types.js';
+import { sanitizeClip, sanitizeList, sanitizeProject } from '../sanitize.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
 interface ClipProjectRepresentation {
@@ -25,7 +27,7 @@ interface ExportableClipRepresentation {
   [key: string]: unknown;
 }
 
-const ConclusionActionSchema = z
+export const ConclusionActionSchema = z
   .object({
     type: z.enum(['EMAIL', 'WEBHOOK']),
     notifyFailure: z.boolean().optional(),
@@ -43,7 +45,7 @@ const RangeSchema = z
   })
   .optional();
 
-const CurationPreferenceSchema = z
+export const CurationPreferenceSchema = z
   .object({
     model: z.enum(['ClipBasic', 'ClipAnything']).optional(),
     clipDurations: z.array(z.array(z.number().nonnegative())).optional(),
@@ -53,18 +55,16 @@ const CurationPreferenceSchema = z
     range: RangeSchema,
     skipCurate: z.boolean().optional(),
   })
-  .optional()
   .describe(
     'Curation preferences. Use `model: "ClipBasic"` for talking-head videos with `topicKeywords`, or `model: "ClipAnything"` with `customPrompt` for any video type. Set `skipCurate: true` to upload without clipping.',
   );
 
-const ImportPreferenceSchema = z
+export const ImportPreferenceSchema = z
   .object({
     sourceLang: z.string().optional().describe('ISO-639 language code, e.g. "en", "de", "auto".'),
-  })
-  .optional();
+  });
 
-const RenderPreferenceSchema = z
+export const RenderPreferenceSchema = z
   .object({
     layoutAspectRatio: z.enum(['portrait', 'landscape', 'square']).optional(),
     quickstartConfig: z
@@ -73,14 +73,12 @@ const RenderPreferenceSchema = z
       })
       .optional(),
   })
-  .passthrough()
-  .optional();
+  .passthrough();
 
-const UploadedVideoAttrSchema = z
+export const UploadedVideoAttrSchema = z
   .object({
     title: z.string().optional(),
-  })
-  .optional();
+  });
 
 export const CreateProjectInputSchema = z.object({
   videoUrl: z
@@ -93,10 +91,10 @@ export const CreateProjectInputSchema = z.object({
     .string()
     .optional()
     .describe('Brand template ID from opus_get_brand_templates (e.g. "preset-fancy-Karaoke")'),
-  curationPref: CurationPreferenceSchema,
-  renderPref: RenderPreferenceSchema,
-  importPref: ImportPreferenceSchema,
-  uploadedVideoAttr: UploadedVideoAttrSchema,
+  curationPref: CurationPreferenceSchema.optional(),
+  renderPref: RenderPreferenceSchema.optional(),
+  importPref: ImportPreferenceSchema.optional(),
+  uploadedVideoAttr: UploadedVideoAttrSchema.optional(),
   conclusionActions: z.array(ConclusionActionSchema).optional(),
 });
 
@@ -127,7 +125,7 @@ export function registerProjectTools(server: McpServer): void {
           stage: result.stage,
           message:
             'Project created. Poll opus_get_project with this projectId until stage="COMPLETE", then call opus_get_clips.',
-          project: result,
+          project: sanitizeProject(result, 'opus:create_project'),
         },
         null,
         2,
@@ -160,8 +158,8 @@ export function registerProjectTools(server: McpServer): void {
           projectId: result.id ?? result.projectId,
           stage: result.stage,
           model: result.model,
-          error: result.error ?? null,
-          project: result,
+          error: wrapUntrusted(result.error ?? undefined, 'opus:get_project:error') ?? null,
+          project: sanitizeProject(result, 'opus:get_project'),
         },
         null,
         2,
@@ -231,7 +229,7 @@ export function registerProjectTools(server: McpServer): void {
         {
           ok: true,
           count: clips.length,
-          clips,
+          clips: sanitizeList(clips, sanitizeClip, 'opus:get_clips'),
         },
         null,
         2,
@@ -274,7 +272,7 @@ export function registerProjectTools(server: McpServer): void {
           ok: true,
           projectId: result.id ?? result.projectId,
           visibility: args.visibility,
-          project: result,
+          project: sanitizeProject(result, 'opus:share_project'),
         },
         null,
         2,

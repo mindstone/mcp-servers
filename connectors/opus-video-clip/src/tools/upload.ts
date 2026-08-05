@@ -1,11 +1,19 @@
 import * as fs from 'fs';
-import * as path from 'path';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { requireApiKey } from '../auth.js';
 import { opusFetch, opusFetchUnauthenticated } from '../client.js';
 import { OpusError, getUploadTimeoutMs } from '../types.js';
+import { resolveUploadSourcePath } from '../path-safety.js';
+import { sanitizeProject } from '../sanitize.js';
 import { withErrorHandling } from '../utils.js';
+import {
+  ConclusionActionSchema,
+  CurationPreferenceSchema,
+  ImportPreferenceSchema,
+  RenderPreferenceSchema,
+  UploadedVideoAttrSchema,
+} from './projects.js';
 
 /**
  * Cache of completed uploadId → projectId so a network glitch between
@@ -183,11 +191,11 @@ async function putUploadBytes(
 async function performUpload(args: {
   filePath: string;
   brandTemplateId?: string;
-  curationPref?: unknown;
-  renderPref?: unknown;
-  importPref?: unknown;
-  uploadedVideoAttr?: unknown;
-  conclusionActions?: unknown;
+  curationPref?: z.infer<typeof CurationPreferenceSchema>;
+  renderPref?: z.infer<typeof RenderPreferenceSchema>;
+  importPref?: z.infer<typeof ImportPreferenceSchema>;
+  uploadedVideoAttr?: z.infer<typeof UploadedVideoAttrSchema>;
+  conclusionActions?: z.infer<typeof ConclusionActionSchema>[];
 }): Promise<{ uploadId: string; project: ClipProjectResponse; resumed: boolean }> {
   const stat = fs.statSync(args.filePath);
   if (!stat.isFile()) {
@@ -288,26 +296,25 @@ export function registerUploadTools(server: McpServer): void {
         file_path: z
           .string()
           .min(1)
-          .describe('Absolute path to a local video file (MP4 recommended, up to 10GB).'),
+          .describe(
+            'Absolute path to a local video file (MP4 recommended, up to 10GB). ' +
+              'The file MUST live inside the workspace sandbox: MCP_WORKSPACE_PATH when set, otherwise the system temp directory. Paths outside the sandbox are refused.',
+          ),
         brandTemplateId: z.string().optional(),
-        curationPref: z.record(z.unknown()).optional(),
-        renderPref: z.record(z.unknown()).optional(),
-        importPref: z.record(z.unknown()).optional(),
-        uploadedVideoAttr: z.record(z.unknown()).optional(),
-        conclusionActions: z.array(z.record(z.unknown())).optional(),
+        curationPref: CurationPreferenceSchema.optional(),
+        renderPref: RenderPreferenceSchema.optional(),
+        importPref: ImportPreferenceSchema.optional(),
+        uploadedVideoAttr: UploadedVideoAttrSchema.optional(),
+        conclusionActions: z.array(ConclusionActionSchema).optional(),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       requireApiKey();
-      const filePath = path.resolve(args.file_path);
-      if (!fs.existsSync(filePath)) {
-        throw new OpusError(
-          `File not found: ${filePath}`,
-          'VALIDATION_ERROR',
-          'Pass an absolute path to an existing local video file.',
-        );
-      }
+      // Invariant #5 — confine reads to MCP_WORKSPACE_PATH / os.tmpdir().
+      // Throws a structured OpusError (PATH_OUTSIDE_WORKSPACE) on any path
+      // outside the sandbox, including symlink escapes, before any byte is read.
+      const filePath = resolveUploadSourcePath(args.file_path);
       const result = await performUpload({
         filePath,
         brandTemplateId: args.brandTemplateId,
@@ -325,7 +332,7 @@ export function registerUploadTools(server: McpServer): void {
           resumed: result.resumed,
           message:
             'Video uploaded and clip project created. Poll opus_get_project with this projectId until stage="COMPLETE", then call opus_get_clips.',
-          project: result.project,
+          project: sanitizeProject(result.project, 'opus:upload_video'),
         },
         null,
         2,

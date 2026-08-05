@@ -47,6 +47,12 @@
           "isRequired": false,
           "default": "30000",
           "format": "number"
+        },
+        {
+          "name": "MCP_WORKSPACE_PATH",
+          "description": "Workspace directory the connector may read upload sources from and write downloaded clips to (defaults to the system temp directory)",
+          "isRequired": false,
+          "format": "filepath"
         }
       ]
     }

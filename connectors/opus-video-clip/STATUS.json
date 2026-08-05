@@ -10,12 +10,13 @@
     ]
   },
   "tools": {
-    "count": 21,
+    "count": 22,
     "domains": [
       "configure",
       "brand-templates",
       "projects",
       "upload",
+      "downloads",
       "censor",
       "collections",
       "social-posting"

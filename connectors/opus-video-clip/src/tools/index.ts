@@ -5,4 +5,5 @@ export { registerUploadTools } from './upload.js';
 export { registerCensorTools } from './censor.js';
 export { registerCollectionTools } from './collections.js';
 export { registerCollectionContentTools } from './collection-contents.js';
+export { registerDownloadTools } from './download.js';
 export { registerSocialPostingTools } from './social-posting.js';

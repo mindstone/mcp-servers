@@ -2,6 +2,8 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { requireApiKey } from '../auth.js';
 import { opusFetch, classifyJobStatus, computeNextPollAfterSeconds } from '../client.js';
+import { wrapRawDump } from '../sanitize.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
 interface CensorJobResponse {
@@ -47,7 +49,10 @@ export function registerCensorTools(server: McpServer): void {
         body: JSON.stringify(args),
       });
       const jobId = result.jobId ?? result.data?.jobId;
-      const message = result.message ?? result.data?.message;
+      const upstreamMessage = wrapUntrusted(
+        result.message ?? result.data?.message,
+        'opus:create_censor_job:message',
+      );
       if (!jobId) {
         // Opus's degenerate-success path: no profanity → no job created.
         // We surface this transparently rather than pretending a job exists.
@@ -57,7 +62,7 @@ export function registerCensorTools(server: McpServer): void {
             jobId: null,
             category: 'completed',
             status: 'NO_CENSORED_WORDS',
-            message: message ?? 'Opus found no censored words; no job was queued.',
+            message: upstreamMessage ?? 'Opus found no censored words; no job was queued.',
           },
           null,
           2,
@@ -68,7 +73,7 @@ export function registerCensorTools(server: McpServer): void {
           ok: true,
           jobId,
           message:
-            message ??
+            upstreamMessage ??
             `Censor job created. Poll opus_get_censor_job_status with jobId="${jobId}" every 5-10 seconds until status is "CONCLUDED" or "FAILED".`,
         },
         null,
@@ -118,14 +123,14 @@ export function registerCensorTools(server: McpServer): void {
         category: classification.category,
         next_poll_after_seconds,
         retry_after_header: retryAfterHeader,
-        raw: body,
+        raw: wrapRawDump(body, 'opus:get_censor_job_status:raw'),
       };
       if (classification.category === 'unknown') {
         payload.error_code = 'UPSTREAM_STATUS_UNKNOWN';
         payload.message =
           'Opus returned a status the connector does not recognise. Surface to the user instead of treating as pending.';
       } else if (classification.category === 'failed') {
-        payload.error = body.error ?? null;
+        payload.error = wrapUntrusted(body.error, 'opus:get_censor_job_status:error') ?? null;
       }
       return JSON.stringify(payload, null, 2);
     }),

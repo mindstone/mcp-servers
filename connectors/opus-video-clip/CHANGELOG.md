@@ -7,6 +7,37 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+- `opus_download_clip` — download an exported clip MP4 (`uriForExport` URL)
+  to a local file, with SSRF validation (HTTPS only, no private/loopback
+  hosts, manual redirect handling with per-hop re-validation) and a
+  workspace-confined write target.
+- `MCP_WORKSPACE_PATH` declared in `server.json` (optional).
+
+### Changed
+- `opus_upload_video` now accepts the same typed preference schemas as
+  `opus_create_project` (`curationPref`, `renderPref`, `importPref`,
+  `uploadedVideoAttr`, `conclusionActions`) instead of untyped
+  `z.record(z.unknown())` passthroughs.
+- `opus_publish_post` and `opus_schedule_post` are now annotated
+  `destructiveHint: true` — publishing to a connected social account is a
+  production-impacting write.
+
+### Security
+- `opus_upload_video` previously accepted ANY absolute filesystem path and
+  uploaded it to Opus/GCS. Reads are now confined to `MCP_WORKSPACE_PATH`
+  (or the system temp directory when unset) with canonical-prefix
+  containment, symlink-escape rejection, and a structured
+  `PATH_OUTSIDE_WORKSPACE` error. (AGENTS.md invariant #5.)
+- External text returned by the Opus API — project/clip titles, brand
+  template and collection names, social account display names, generated
+  social copy (`title`/`description`/`hashtags`), upstream `error`/`message`
+  strings, and raw debug dumps — is now wrapped in
+  `<untrusted-content source="…">` envelopes with close-tag breakout
+  escaping (AGENTS.md invariant #6).
+- `opus_download_clip` writes are confined to the same workspace sandbox and
+  never write through a symlink at the target path.
+
 ## [0.1.0] - 2026-05-19
 
 ### Added

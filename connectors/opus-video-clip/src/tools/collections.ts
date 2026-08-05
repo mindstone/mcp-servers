@@ -2,6 +2,8 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { requireApiKey } from '../auth.js';
 import { opusFetch } from '../client.js';
+import { sanitizeCollection, sanitizeList } from '../sanitize.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
 interface OpusSuccessResponse<T> {
@@ -44,8 +46,8 @@ export function registerCollectionTools(server: McpServer): void {
         {
           ok: true,
           collectionId: collection.collectionId,
-          collectionName: collection.collectionName,
-          collection,
+          collectionName: wrapUntrusted(collection.collectionName, 'opus:create_collection:collectionName'),
+          collection: sanitizeCollection(collection, 'opus:create_collection'),
         },
         null,
         2,
@@ -93,7 +95,7 @@ export function registerCollectionTools(server: McpServer): void {
           count: data.list?.length ?? 0,
           total: data.total,
           next: data.next,
-          collections: data.list ?? [],
+          collections: sanitizeList(data.list ?? [], sanitizeCollection, 'opus:get_collections'),
         },
         null,
         2,
