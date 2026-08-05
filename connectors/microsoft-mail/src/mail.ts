@@ -608,29 +608,6 @@ export async function resolveAttachmentDir(): Promise<AttachmentDirTarget> {
 }
 
 /**
- * Re-verify, against the live filesystem, that the attachment directory is
- * still the directory resolveAttachmentDir() validated: same dev/ino identity
- * (a rename-and-replace with a symlink or a different directory changes it)
- * and still canonically contained in the workspace root. Called after the
- * leaf file is created and again after its content is written, so a
- * parent-directory swap in between fails closed instead of silently
- * redirecting the write outside the workspace.
- *
- * Exported for tests.
- */
-export async function assertAttachmentDirIntact(target: AttachmentDirTarget): Promise<void> {
-  const realDir = await fs.realpath(target.dir);
-  const relative = path.relative(target.root, realDir);
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw new Error('Resolved attachment directory escaped its workspace root');
-  }
-  const current = await fs.stat(target.dir);
-  if (current.dev !== target.dev || current.ino !== target.ino) {
-    throw new Error('Attachment directory was replaced after validation; refusing to write');
-  }
-}
-
-/**
  * Confirm `fullPath` still names the same file as the open descriptor
  * (dev/ino identity). After a parent-directory swap-and-restore the path
  * would resolve to a different file — or nothing — than the one this
@@ -653,14 +630,18 @@ async function assertPathMatchesHandle(fullPath: string, handle: fs.FileHandle):
  * inode, so a rename-and-replace swap of `target.dir` (symlink to an outside
  * directory, swap-back before cleanup, …) cannot redirect a single byte
  * outside the workspace or make cleanup touch anything but the leaf we
- * created in the pinned inode. This closes the race window that the
- * path-based detect-and-refuse fallback can only report after the fact.
+ * created in the pinned inode.
  *
  * Linux only: Node exposes no descriptor-relative file ops (no openat /
  * RESOLVE_BENEATH), so `/proc/self/fd` is the only descriptor-relative
  * mechanism available. Returns `undefined` when the mechanism is unavailable
- * (non-Linux platform, or an unmounted /proc) so the caller falls back to
- * path-based create with pre/post identity checks.
+ * (non-Linux platform, or an unmounted /proc) — and that is fatal, not a
+ * fallback signal: every path-based create re-resolves its parent chain at
+ * syscall time, so without a pinned descriptor a directory swap landing
+ * between validation and create can redirect bytes outside the workspace
+ * before any post-write check runs. writeFileExclusive therefore fails
+ * closed when this returns `undefined`; there is deliberately no path-based
+ * write fallback.
  *
  * A directory that cannot be opened, or whose live dev/ino no longer matches
  * the validated identity, is a swap signal and fails closed (throws) rather
@@ -696,6 +677,18 @@ export async function pinAttachmentDir(
 }
 
 /**
+ * The message returned when descriptor-relative writes are unavailable. It is
+ * model- and user-visible, so it names the platform limitation and the
+ * recovery path without leaking internals.
+ */
+const ATTACHMENT_WRITE_UNSUPPORTED_MESSAGE =
+  'Attachment downloads are unavailable on this platform: safe saving requires ' +
+  'descriptor-relative directory writes (Linux with /proc/self/fd), and Node offers ' +
+  'no equivalent elsewhere. Refusing to save the attachment because a directory swap ' +
+  'during the write could redirect it outside the workspace. Open the message in ' +
+  'Outlook to download the attachment instead.';
+
+/**
  * Atomically create `target.dir/filename` and write `content` through the
  * resulting file descriptor. `fs.open(..., 'wx')` (O_CREAT|O_EXCL) fails with
  * EEXIST on any existing entry — including a symlink or hardlink planted
@@ -706,7 +699,7 @@ export async function pinAttachmentDir(
  * O_EXCL protects the leaf entry, not the parent chain: a local attacker who
  * can rename the attachment directory and replace it with a symlink AFTER
  * resolveAttachmentDir() validated it could otherwise redirect the create
- * outside the workspace. On Linux the directory is pinned behind an open
+ * outside the workspace. The directory is therefore pinned behind an open
  * descriptor (pinAttachmentDir) and the create, the post-write verification,
  * and any cleanup all go through `/proc/self/fd/<fd>/<name>`, which the
  * kernel resolves against the pinned inode — a path swap at any point in the
@@ -716,21 +709,13 @@ export async function pinAttachmentDir(
  * descriptor-relative cleanup) instead of reporting success with a dangling
  * `savedTo`.
  *
- * On platforms without descriptor-relative creates (macOS, Windows) the
- * parent chain is instead re-verified against the pinned directory identity
- * after the create (before any bytes are written) and again after the write,
- * and the path is confirmed to still name the opened descriptor. A detected
- * swap fails closed and the misplaced file is removed (unlink never follows
- * symlinks, so cleanup cannot delete an attacker file through a swapped
- * path).
- *
- * Irreducible residual (non-Linux only): a swap landing between the
- * post-create verification and the write syscall itself can still place
- * bytes outside the workspace; the post-write verification detects that
- * state and removes the file, so the tool reports failure rather than
- * success — on those platforms the guarantee is detect-and-refuse, not
- * prevention. Closing that last window would require descriptor-relative
- * opens, which Node only makes reachable through Linux `/proc/self/fd`.
+ * When descriptor-relative writes are unavailable (non-Linux platform, or
+ * Linux without /proc/self/fd) this function refuses to write at all: a
+ * path-based create re-resolves its parent chain at syscall time, so no
+ * amount of pre/post verification can prevent a swap landing between the
+ * final check and the write syscall — detect-and-refuse would report the
+ * breach only after bytes already landed outside the workspace. Failing
+ * closed keeps the containment invariant unconditional.
  *
  * Exported for tests.
  */
@@ -742,6 +727,9 @@ export async function writeFileExclusive(
   const ext = path.extname(filename);
   const base = path.basename(filename, ext);
   const pin = await pinAttachmentDir(target);
+  if (!pin) {
+    throw new Error(ATTACHMENT_WRITE_UNSUPPORTED_MESSAGE);
+  }
   try {
     for (let attempt = 0; ; attempt += 1) {
       const candidate = attempt === 0 ? filename : `${base}-${attempt}${ext}`;
@@ -752,9 +740,9 @@ export async function writeFileExclusive(
       if (relative.startsWith('..') || path.isAbsolute(relative)) {
         throw new Error('Resolved attachment path escaped the attachment directory');
       }
-      // With a pinned directory descriptor the create is addressed relative
-      // to the pinned inode; without one it is path-based and re-verified.
-      const createPath = pin ? `/proc/self/fd/${pin.fd}/${candidate}` : fullPath;
+      // The create is addressed relative to the pinned descriptor's inode,
+      // never through the swappable directory path.
+      const createPath = `/proc/self/fd/${pin.fd}/${candidate}`;
       let handle: fs.FileHandle | undefined;
       try {
         handle = await fs.open(createPath, 'wx');
@@ -763,29 +751,18 @@ export async function writeFileExclusive(
         throw err;
       }
       try {
-        if (!pin) {
-          await assertAttachmentDirIntact(target);
-          await assertPathMatchesHandle(fullPath, handle);
-        }
         await handle.writeFile(content);
-        if (pin) {
-          // Descriptor-relative sanity check, then confirm the user-facing
-          // path still names what we wrote (a rename mid-write must not
-          // surface a dangling savedTo).
-          await assertPathMatchesHandle(createPath, handle);
-          await assertPathMatchesHandle(fullPath, handle);
-        } else {
-          await assertAttachmentDirIntact(target);
-          await assertPathMatchesHandle(fullPath, handle);
-        }
+        // Descriptor-relative sanity check, then confirm the user-facing
+        // path still names what we wrote (a rename mid-write must not
+        // surface a dangling savedTo).
+        await assertPathMatchesHandle(createPath, handle);
+        await assertPathMatchesHandle(fullPath, handle);
         return fullPath;
       } catch (err) {
         // We created this leaf (O_EXCL), so it is safe — and required — to
-        // remove it. With a pinned descriptor the unlink is relative to the
-        // pinned inode, so it removes exactly our leaf even if the directory
-        // path has been swapped or restored in the meantime; without one,
-        // unlink never follows symlinks, so cleanup cannot delete an
-        // attacker file through a swapped path.
+        // remove it. The unlink is relative to the pinned inode, so it
+        // removes exactly our leaf even if the directory path has been
+        // swapped or restored in the meantime.
         await fs.unlink(createPath).catch(() => {});
         throw err;
       } finally {
@@ -793,7 +770,7 @@ export async function writeFileExclusive(
       }
     }
   } finally {
-    await pin?.close();
+    await pin.close();
   }
 }
 

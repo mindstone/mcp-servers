@@ -276,7 +276,7 @@ sign-in, Microsoft 365 tools become available.`,
     'download_attachment',
     {
       description:
-        'Download an email attachment and save it into the workspace (MCP_WORKSPACE_PATH, or the OS temp directory when unset). Use list_attachments to find attachment IDs.',
+        'Download an email attachment and save it into the workspace (MCP_WORKSPACE_PATH, or the OS temp directory when unset). Use list_attachments to find attachment IDs. Saving requires descriptor-pinned directory writes (Linux); on other platforms the tool refuses to save rather than risk the file landing outside the workspace.',
       inputSchema: z.object({
         id: z.string().optional().describe('Email message ID'),
         attachmentId: z

@@ -5,7 +5,6 @@ import path from 'node:path';
 import { mswServer } from './fixtures/setup.js';
 import { createMockApi, type MockApiState } from './fixtures/microsoft-mock-api.js';
 import {
-  assertAttachmentDirIntact,
   pinAttachmentDir,
   resolveAttachmentDir,
   writeFileExclusive,
@@ -63,7 +62,14 @@ describe('download_attachment adversarial cases', () => {
     return result.json as { ok: boolean; error: string };
   };
 
-  it('writes through an exclusive create: a pre-existing file is never clobbered', async () => {
+  // Successful downloads require descriptor-pinned directory writes, which
+  // only exist on Linux (/proc/self/fd); other platforms fail closed by
+  // design. The success-path cases below therefore run on Linux only, and the
+  // final case in this block asserts the fail-closed behavior everywhere
+  // else.
+  const itOnLinux = it.runIf(process.platform === 'linux');
+
+  itOnLinux('writes through an exclusive create: a pre-existing file is never clobbered', async () => {
     const dir = path.join(workspace, 'attachments', 'microsoft-mail');
     await fs.mkdir(dir, { recursive: true });
     const sentinel = path.join(dir, 'report.pdf');
@@ -78,7 +84,7 @@ describe('download_attachment adversarial cases', () => {
     await expect(fs.readFile(json.savedTo, 'utf8')).resolves.toBe('hello attachment');
   });
 
-  it('never writes through a pre-existing symlink at the destination path', async () => {
+  itOnLinux('never writes through a pre-existing symlink at the destination path', async () => {
     const dir = path.join(workspace, 'attachments', 'microsoft-mail');
     await fs.mkdir(dir, { recursive: true });
     const outside = path.join(workspace, 'outside-target.txt');
@@ -93,7 +99,7 @@ describe('download_attachment adversarial cases', () => {
     await expect(fs.readFile(outside, 'utf8')).resolves.toBe('sensitive');
   });
 
-  it('never writes through a destination symlink whose target is outside the workspace', async () => {
+  itOnLinux('never writes through a destination symlink whose target is outside the workspace', async () => {
     const dir = path.join(workspace, 'attachments', 'microsoft-mail');
     await fs.mkdir(dir, { recursive: true });
     const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-leaf-out-'));
@@ -148,7 +154,7 @@ describe('download_attachment adversarial cases', () => {
     }
   });
 
-  it('accepts an attachment exactly at the 25 MB boundary', async () => {
+  itOnLinux('accepts an attachment exactly at the 25 MB boundary', async () => {
     const result = await callDownload('att-exact-limit');
     expect(result.isError).not.toBe(true);
     const json = result.json as { savedTo: string; size: number };
@@ -196,15 +202,29 @@ describe('download_attachment adversarial cases', () => {
     expect(json.error).toContain('schema validation');
     expect(json.error).not.toContain('broken.pdf');
   });
+
+  // On platforms without descriptor-pinned directory writes the tool must
+  // refuse to save — after fetching nothing is written anywhere — rather
+  // than fall back to a path-based create a directory swap could redirect.
+  it.runIf(process.platform !== 'linux')(
+    'refuses to save on platforms without descriptor-pinned writes',
+    async () => {
+      const json = errorJson(await callDownload('att-1'));
+      expect(json.error).toContain('unavailable on this platform');
+      expect(json.error).toContain('Refusing to save');
+      expect(await fs.readdir(workspace)).toEqual([]);
+    },
+  );
 });
 
 // The parent-directory replacement guard: a local attacker who swaps the
 // validated attachment directory (rename + symlink/directory replacement)
-// between canonicalization and the exclusive create must be detected, not
-// followed. These exercise assertAttachmentDirIntact directly (the fallback
-// path used where descriptor-relative creates are unavailable); the
-// integration paths above cover the pre-validation cases, and the describe
-// below exercises the real write path under adversarial swap timing.
+// between canonicalization and the exclusive create must fail the write
+// closed, never redirect it. On Linux the pinned descriptor rejects the swap
+// outright; on platforms without descriptor-relative writes there is no
+// path-based fallback — writeFileExclusive refuses to write at all. The
+// describe below then exercises the real write path under adversarial swap
+// timing.
 describe('attachment directory replacement guard', () => {
   let workspace: string;
 
@@ -218,47 +238,47 @@ describe('attachment directory replacement guard', () => {
     await fs.rm(workspace, { recursive: true, force: true });
   });
 
-  it('passes when the validated directory is untouched', async () => {
-    const target = await resolveAttachmentDir();
-    await expect(assertAttachmentDirIntact(target)).resolves.toBeUndefined();
-  });
-
-  it('detects the directory being replaced by a symlink escaping the workspace', async () => {
-    const target = await resolveAttachmentDir();
-    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-swap-out-'));
-    try {
-      await fs.rm(target.dir, { recursive: true });
-      await fs.symlink(outside, target.dir);
-      await expect(assertAttachmentDirIntact(target)).rejects.toThrow('escaped');
-    } finally {
-      await fs.rm(outside, { recursive: true, force: true });
-    }
-  });
-
-  it('detects the directory being replaced by a different in-workspace directory', async () => {
-    const target = await resolveAttachmentDir();
-    // Containment still holds after this swap, so only the pinned dev/ino
-    // identity can catch it.
-    const renamed = path.join(path.dirname(target.dir), 'microsoft-mail-moved');
-    await fs.rename(target.dir, renamed);
-    await fs.mkdir(target.dir, { recursive: true });
-    await expect(assertAttachmentDirIntact(target)).rejects.toThrow('replaced');
-  });
-
   it('fails closed with nothing written outside when the directory is swapped to a symlink before the write', async () => {
     const target = await resolveAttachmentDir();
     const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-swap-out-'));
     try {
       await fs.rm(target.dir, { recursive: true });
       await fs.symlink(outside, target.dir);
-      await expect(
-        writeFileExclusive(target, 'probe.txt', Buffer.from('mailbox bytes')),
-      ).rejects.toThrow(/replaced|escaped/);
-      // Whether the pinned descriptor rejected the swap (linux) or the
-      // fallback detected it after the create, nothing may be left outside.
+      if (process.platform === 'linux') {
+        // The pinned descriptor's dev/ino no longer matches the validated
+        // identity — the swap itself is the rejection.
+        await expect(
+          writeFileExclusive(target, 'probe.txt', Buffer.from('mailbox bytes')),
+        ).rejects.toThrow('replaced');
+      } else {
+        // No descriptor-relative create exists: the write is refused before
+        // any path is touched.
+        await expect(
+          writeFileExclusive(target, 'probe.txt', Buffer.from('mailbox bytes')),
+        ).rejects.toThrow('unavailable on this platform');
+      }
+      // Either way, nothing may be left outside the workspace.
       expect(await fs.readdir(outside)).toEqual([]);
     } finally {
       await fs.rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses to write when the platform offers no descriptor-relative create, and creates nothing', async () => {
+    // Simulate a platform without /proc/self/fd traversal by masking
+    // process.platform; pinAttachmentDir consults it at call time.
+    const descriptor = Object.getOwnPropertyDescriptor(process, 'platform');
+    expect(descriptor?.configurable).toBe(true);
+    const target = await resolveAttachmentDir();
+    Object.defineProperty(process, 'platform', { ...descriptor, value: 'darwin' });
+    try {
+      await expect(
+        writeFileExclusive(target, 'probe.txt', Buffer.from('mailbox bytes')),
+      ).rejects.toThrow('unavailable on this platform');
+      // Fail-closed means closed: no leaf, no staging residue, nothing.
+      expect(await fs.readdir(target.dir)).toEqual([]);
+    } finally {
+      Object.defineProperty(process, 'platform', descriptor);
     }
   });
 });

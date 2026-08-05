@@ -472,7 +472,11 @@ describe('microsoft-mail mock-API integration', () => {
     expect(json.next_step).toBe('list_emails');
   });
 
-  it('download_attachment saves the file inside MCP_WORKSPACE_PATH', async () => {
+  // Success-path download requires descriptor-pinned writes (Linux); other
+  // platforms fail closed by design — see download-attachment-security.test.ts.
+  it.runIf(process.platform === 'linux')(
+    'download_attachment saves the file inside MCP_WORKSPACE_PATH',
+    async () => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-attach-test-'));
     vi.stubEnv('MCP_WORKSPACE_PATH', workspace);
     try {
@@ -504,7 +508,8 @@ describe('microsoft-mail mock-API integration', () => {
     } finally {
       await fs.rm(workspace, { recursive: true, force: true });
     }
-  });
+    },
+  );
 
   it('download_attachment refuses embedded-message attachments with guidance', async () => {
     const result = await client.callTool('download_attachment', {
