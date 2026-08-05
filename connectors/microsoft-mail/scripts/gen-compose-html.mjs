@@ -18,15 +18,15 @@ const previewPath = path.join(root, 'src/resources/compose-email.html');
  * of truth for the connector-specific knobs; the parity test asserts that
  * building with it reproduces the committed template byte-for-byte.
  *
- * bcc is off because send_email has no BCC parameter, and deepLink is 'none'
- * because the Graph sendMail endpoint returns no message id to link to.
+ * deepLink is 'none' because the Graph sendMail endpoint returns no message id
+ * to link to.
  */
 export const OUTLOOK_COMPOSE_APP_CONFIG = Object.freeze({
   resourceUri: 'ui://microsoft-mail/compose-email',
   sendToolName: 'send_email',
   fromMissingHelperText:
     'Rebel could not confirm the sending account. Cancel and ask Rebel to recreate the draft before sending.',
-  fields: Object.freeze({ cc: true, bcc: false }),
+  fields: Object.freeze({ cc: true, bcc: true }),
   deepLink: Object.freeze({ kind: 'none' }),
 });
 

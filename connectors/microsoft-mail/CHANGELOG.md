@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- `list_attachments` tool: lists attachment metadata (ID, name, type, size) for a message, so agents can act on `hasAttachments` instead of dead-ending.
+- `download_attachment` tool: saves a file attachment into `MCP_WORKSPACE_PATH` (or the OS temp directory when unset) with canonical-prefix containment, filename sanitization, a 25 MB cap, and clear guidance for embedded-message/reference attachments that Graph does not inline.
+- `MCP_WORKSPACE_PATH` optional environment variable declared in `server.json`.
+- `send_draft` tool: sends an existing draft (`POST /me/messages/{id}/send`), completing the draft lifecycle that previously dead-ended after `create_draft`/`create_reply_draft`.
+- `update_draft` tool: patches a draft's subject, body, to/cc recipients, or importance before sending.
+- `mark_email_read` tool: marks an email read or unread.
+- `set_email_flag` tool: flags an email for follow-up, marks it complete, or clears the flag.
+- `get_conversation` tool: lists every message in a thread (oldest first) from a message ID or conversationId.
+- `bcc` parameter on `send_email`, `compose_email`, and `create_draft`; the compose view now renders a BCC row (regenerated from `@mindstone/mcp-app-compose`).
+- `get_automatic_replies` and `set_automatic_replies` tools: read and set the out-of-office configuration via `mailboxSettings`, including scheduled windows. Both require the `MailboxSettings.Read`/`MailboxSettings.ReadWrite` Graph permissions; when the connected account lacks them the tools return an admin-consent-aware guidance envelope instead of a raw Graph 403.
+
+### Changed
+
+- Graph responses for the new tools (and `create_draft`) are validated with Zod at the boundary instead of cast, per the planned tightening noted in 0.1.1; pre-existing read tools still cast and remain tracked as planned debt.
+
 ## [0.2.0] - 2026-07-29
 
 ### Changed

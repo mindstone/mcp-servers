@@ -103,6 +103,7 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
       return HttpResponse.json({
         id: String(params.id),
         subject: 'Welcome',
+        conversationId: 'conv-1',
         from: { emailAddress: { address: 'alice@example.com', name: 'Alice' } },
         toRecipients: [{ emailAddress: { address: 'me@example.com' } }],
         ccRecipients: [],
@@ -171,6 +172,71 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
       return new HttpResponse(null, { status: 204 });
     }),
 
+    // /me/messages/{id} (PATCH) — update_draft, mark_email_read, set_email_flag
+    http.patch(`${GRAPH_BASE}/me/messages/:id`, async ({ request, params }) => {
+      const url = new URL(request.url);
+      await capture(request, url.pathname, url.search);
+      const body = (await request.clone().json()) as Record<string, unknown>;
+      return HttpResponse.json({
+        id: String(params.id),
+        subject: (body.subject as string | undefined) ?? 'Welcome',
+        isDraft: true,
+        isRead: (body.isRead as boolean | undefined) ?? true,
+        flag: body.flag,
+      });
+    }),
+
+    // /me/messages/{id}/attachments/{attachmentId} (GET) — download_attachment
+    http.get(`${GRAPH_BASE}/me/messages/:id/attachments/:attachmentId`, async ({ request, params }) => {
+      const url = new URL(request.url);
+      await capture(request, url.pathname, url.search);
+      if (params.attachmentId === 'att-item') {
+        return HttpResponse.json({
+          '@odata.type': '#microsoft.graph.itemAttachment',
+          id: 'att-item',
+          name: 'nested-message.eml',
+          size: 4096,
+          isInline: false,
+        });
+      }
+      return HttpResponse.json({
+        '@odata.type': '#microsoft.graph.fileAttachment',
+        id: String(params.attachmentId),
+        name: 'report.pdf',
+        contentType: 'application/pdf',
+        size: 16,
+        isInline: false,
+        // base64 of "hello attachment"
+        contentBytes: 'aGVsbG8gYXR0YWNobWVudA==',
+      });
+    }),
+
+    // /me/messages/{id}/attachments (GET) — list_attachments
+    http.get(`${GRAPH_BASE}/me/messages/:id/attachments`, async ({ request }) => {
+      const url = new URL(request.url);
+      await capture(request, url.pathname, url.search);
+      return HttpResponse.json({
+        value: [
+          {
+            '@odata.type': '#microsoft.graph.fileAttachment',
+            id: 'att-1',
+            name: 'report.pdf',
+            contentType: 'application/pdf',
+            size: 16,
+            isInline: false,
+          },
+          {
+            '@odata.type': '#microsoft.graph.fileAttachment',
+            id: 'att-2',
+            name: 'photo.jpg',
+            contentType: 'image/jpeg',
+            size: 2048,
+            isInline: true,
+          },
+        ],
+      });
+    }),
+
     // /me/mailFolders — list_folders
     http.get(`${GRAPH_BASE}/me/mailFolders`, async ({ request }) => {
       const url = new URL(request.url);
@@ -193,6 +259,26 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
           },
         ],
       });
+    }),
+
+    // /me/mailboxSettings/automaticRepliesSetting (GET) — get_automatic_replies
+    http.get(`${GRAPH_BASE}/me/mailboxSettings/automaticRepliesSetting`, async ({ request }) => {
+      const url = new URL(request.url);
+      await capture(request, url.pathname, url.search);
+      return HttpResponse.json({
+        status: 'alwaysEnabled',
+        externalAudience: 'contactsOnly',
+        internalReplyMessage: 'I am away this week.',
+        externalReplyMessage: 'I will reply when I return.',
+      });
+    }),
+
+    // /me/mailboxSettings (PATCH) — set_automatic_replies
+    http.patch(`${GRAPH_BASE}/me/mailboxSettings`, async ({ request }) => {
+      const url = new URL(request.url);
+      await capture(request, url.pathname, url.search);
+      const body = (await request.clone().json()) as Record<string, unknown>;
+      return HttpResponse.json(body);
     }),
   ];
 

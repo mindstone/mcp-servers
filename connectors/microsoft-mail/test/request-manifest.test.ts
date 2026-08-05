@@ -35,6 +35,18 @@ const MANIFEST: ManifestRow[] = [
     args: { id: 'AAMkAGI2' },
   },
   {
+    tool: 'list_attachments',
+    method: 'GET',
+    pathname: '/v1.0/me/messages/:id/attachments',
+    args: { id: 'msg-1' },
+  },
+  {
+    tool: 'download_attachment',
+    method: 'GET',
+    pathname: '/v1.0/me/messages/:id/attachments/:attachmentId',
+    args: { id: 'msg-1', attachmentId: 'att-1' },
+  },
+  {
     tool: 'send_email',
     method: 'POST',
     pathname: '/v1.0/me/sendMail',
@@ -88,6 +100,48 @@ const MANIFEST: ManifestRow[] = [
     pathname: '/v1.0/me/messages',
     args: { subject: 'x', body: 'y' },
   },
+  {
+    tool: 'send_draft',
+    method: 'POST',
+    pathname: '/v1.0/me/messages/:id/send',
+    args: { id: 'draft-1' },
+  },
+  {
+    tool: 'update_draft',
+    method: 'PATCH',
+    pathname: '/v1.0/me/messages/:id',
+    args: { id: 'draft-1', subject: 'x' },
+  },
+  {
+    tool: 'mark_email_read',
+    method: 'PATCH',
+    pathname: '/v1.0/me/messages/:id',
+    args: { id: 'msg-1', isRead: true },
+  },
+  {
+    tool: 'set_email_flag',
+    method: 'PATCH',
+    pathname: '/v1.0/me/messages/:id',
+    args: { id: 'msg-1', flag: 'flagged' },
+  },
+  {
+    tool: 'get_conversation',
+    method: 'GET',
+    pathname: '/v1.0/me/messages',
+    args: { conversationId: 'conv-1' },
+  },
+  {
+    tool: 'get_automatic_replies',
+    method: 'GET',
+    pathname: '/v1.0/me/mailboxSettings/automaticRepliesSetting',
+    args: {},
+  },
+  {
+    tool: 'set_automatic_replies',
+    method: 'PATCH',
+    pathname: '/v1.0/me/mailboxSettings',
+    args: { status: 'disabled' },
+  },
 ];
 
 function matchPath(actual: string, pattern: string): boolean {
@@ -116,7 +170,9 @@ describe('request manifest — Graph endpoint contract', () => {
   let state: MockApiState;
 
   beforeAll(async () => {
-    cfg = createMicrosoftConfigDir();
+    cfg = createMicrosoftConfigDir({
+      scope: 'Mail.ReadWrite Mail.Send MailboxSettings.ReadWrite offline_access',
+    });
     client = await createTestClient({
       env: {
         MS_CLIENT_ID: 'mock-client-id',

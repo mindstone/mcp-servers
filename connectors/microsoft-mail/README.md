@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-microsoft-mail.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-mail)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Microsoft 365 Outlook Mail MCP server — list, search, read, send, reply, forward, draft, move, and delete email via the Microsoft Graph API.
+Microsoft 365 Outlook Mail MCP server — list, search, read, send, reply, forward, draft, move, and delete email, download attachments, read threads, triage (read/flag), and manage out-of-office replies via the Microsoft Graph API.
 
 *Cohort-style Microsoft 365 mail MCP. Host owns the OAuth flow, this server reads per-account tokens off disk, and each tool fails closed with a structured `auth_required` envelope so the host can drive reauth.*
 
@@ -11,7 +11,7 @@ Microsoft 365 Outlook Mail MCP server — list, search, read, send, reply, forwa
 
 - **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-mail)
 - **Auth:** OAuth (host-orchestrated) ([`MS_CLIENT_ID`](./server.json))
-- **Tools:** [13](./src/tools.ts) (messages, folders, drafts)
+- **Tools:** [22](./src/tools.ts) (messages, folders, drafts, attachments, threads, settings)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 - **Shared library:** [`@mindstone/mcp-server-microsoft-shared`](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-shared)
@@ -129,6 +129,7 @@ This server runs alongside a host application that owns the Microsoft 365 OAuth 
 | `MS_MCP_PACKAGE_ID` | Logical package ID surfaced in error responses. | `Microsoft365Mail` |
 | `MICROSOFT_REQUEST_TIMEOUT_MS` | Override the upstream Microsoft Graph request timeout (max `300000` ms). | `60000` |
 | `MICROSOFT_DISABLE_REFRESH` | Set to `1` to disable token refresh on this surface. Tools fail closed with the structured `auth_required` response so the host can drive reauth. Cloud surfaces set this to `1`. | unset |
+| `MCP_WORKSPACE_PATH` | Workspace root where `download_attachment` saves files. | OS temp directory |
 
 ## Host configuration examples
 
@@ -168,23 +169,36 @@ Until the host has written `${MS_CONFIG_DIR}/credentials/<account>.token.json` a
 }
 ```
 
-## Tools (13)
+## Tools (22)
 
 | Tool | Description |
 | ---- | ----------- |
 | `authenticate_microsoft_account` | Emit the structured `auth_required` handoff so the host runs the Microsoft 365 OAuth flow. |
 | `list_emails` | List emails in a folder, ordered by most recent. |
 | `get_email` | Read a single email by message ID. |
-| `send_email` | Send a new email message. |
+| `list_attachments` | List attachment metadata (ID, name, type, size) for a message. |
+| `download_attachment` | Save a file attachment into the workspace (or OS temp directory). |
+| `send_email` | Send a new email message (supports CC and BCC). |
 | `compose_email` | Open an editable draft in an interactive compose view; nothing is sent until the user clicks Send. |
 | `search_emails` | Search emails using Microsoft Search syntax. |
+| `get_conversation` | List every message in a thread, oldest first. |
 | `reply_to_email` | Reply (or reply-all) to an existing email. |
 | `forward_email` | Forward an email to additional recipients. |
 | `delete_email` | Move an email to Deleted Items, or hard-delete it. |
 | `list_folders` | List mail folders. |
 | `move_email` | Move an email to a different folder. |
 | `create_reply_draft` | Save a draft reply to an existing email. |
-| `create_draft` | Save a new standalone draft email. |
+| `create_draft` | Save a new standalone draft email (supports CC and BCC). |
+| `send_draft` | Send an existing draft. |
+| `update_draft` | Update a draft's subject, body, recipients, or importance. |
+| `mark_email_read` | Mark an email as read or unread. |
+| `set_email_flag` | Flag an email for follow-up, complete it, or clear the flag. |
+| `get_automatic_replies` | Read the out-of-office configuration (requires `MailboxSettings.Read`). |
+| `set_automatic_replies` | Turn out-of-office replies on/off or schedule them (requires `MailboxSettings.ReadWrite`). |
+
+### Graph permissions
+
+Mail tools run on the `Mail.ReadWrite` + `Mail.Send` delegated grants. The automatic-replies tools additionally need `MailboxSettings.Read` / `MailboxSettings.ReadWrite`; in many organizations an administrator must approve that permission, and the tools return a guidance envelope (rather than a raw Graph 403) when the connected account lacks it.
 
 ## Security notes
 
@@ -192,6 +206,7 @@ Until the host has written `${MS_CONFIG_DIR}/credentials/<account>.token.json` a
 - `MICROSOFT_DISABLE_REFRESH=1` is the default on cloud surfaces so the desktop session remains the sole refresh-token authority and avoids racing for single-use refresh tokens.
 - Successful tool responses drop the OSS-only `ok:true` wrapper to match the bundled `successResult` shape; manual validation/business errors return `isError:true` with a `{ ok:false, error, action_required, next_step }` payload so the host's recovery layer can act on them.
 - Per-tool Graph calls run under a composed caller + cohort timeout signal via `.options({signal})` plus a `Promise.race` wrapper for defence-in-depth.
+- `download_attachment` writes only inside `MCP_WORKSPACE_PATH` (or the OS temp directory when unset) using canonical-prefix containment on the symlink-resolved directory, rejects anything but a plain filename, and caps downloads at 25 MB.
 
 ## Licence
 

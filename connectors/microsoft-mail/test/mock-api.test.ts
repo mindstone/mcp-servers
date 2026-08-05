@@ -1,4 +1,7 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { mswServer } from './fixtures/setup.js';
 import { createMockApi, type MockApiState } from './fixtures/microsoft-mock-api.js';
 import {
@@ -138,6 +141,24 @@ describe('microsoft-mail mock-API integration', () => {
     });
   });
 
+  it('send_email maps bcc to bccRecipients', async () => {
+    await client.callTool('send_email', {
+      to: 'alice@example.com',
+      bcc: ['carol@example.com', 'dan@example.com'],
+      subject: 'Hi',
+      body: 'Hello there',
+    });
+    const call = state.requests.find((r) => r.pathname.endsWith('/me/sendMail'));
+    expect(call?.body).toMatchObject({
+      message: {
+        bccRecipients: [
+          { emailAddress: { address: 'carol@example.com' } },
+          { emailAddress: { address: 'dan@example.com' } },
+        ],
+      },
+    });
+  });
+
   it('send_email rejects calls missing the recipient or subject', async () => {
     const result = await client.callTool('send_email', {
       to: [],
@@ -203,6 +224,20 @@ describe('microsoft-mail mock-API integration', () => {
     expect(call?.body).toMatchObject({
       subject: 'Draft',
       body: { contentType: 'HTML', content: '<p>Draft content</p>' },
+    });
+  });
+
+  it('create_draft maps bcc to bccRecipients', async () => {
+    await client.callTool('create_draft', {
+      subject: 'Draft',
+      body: 'Content',
+      bcc: 'carol@example.com',
+    });
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.endsWith('/me/messages'),
+    );
+    expect(call?.body).toMatchObject({
+      bccRecipients: [{ emailAddress: { address: 'carol@example.com' } }],
     });
   });
 
@@ -295,5 +330,238 @@ describe('microsoft-mail mock-API integration', () => {
       comment: 'FYI',
       toRecipients: [{ emailAddress: { address: 'colleague@example.com' } }],
     });
+  });
+
+  it('list_attachments returns the attachment metadata', async () => {
+    const result = await client.callTool('list_attachments', { id: 'msg-1' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      ok?: unknown;
+      count: number;
+      attachments: Array<{ id: string; name: string; type: string }>;
+    };
+    expect(json.ok).toBeUndefined();
+    expect(json.count).toBe(2);
+    expect(json.attachments[0]).toMatchObject({
+      id: 'att-1',
+      type: 'fileAttachment',
+    });
+    expect(json.attachments[0]!.name).toContain('report.pdf');
+    const call = state.requests.find((r) =>
+      r.pathname.endsWith('/me/messages/msg-1/attachments'),
+    );
+    expect(call?.method).toBe('GET');
+  });
+
+  it('list_attachments returns an error envelope when id is missing', async () => {
+    const result = await client.callTool('list_attachments', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Missing required parameter');
+    expect(json.next_step).toBe('list_emails');
+  });
+
+  it('download_attachment saves the file inside MCP_WORKSPACE_PATH', async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-attach-test-'));
+    vi.stubEnv('MCP_WORKSPACE_PATH', workspace);
+    try {
+      const result = await client.callTool('download_attachment', {
+        id: 'msg-1',
+        attachmentId: 'att-1',
+      });
+      expect(result.isError).not.toBe(true);
+      const json = result.json as {
+        ok?: unknown;
+        savedTo: string;
+        size: number;
+        name: string;
+      };
+      expect(json.ok).toBeUndefined();
+      expect(json.savedTo.startsWith(workspace)).toBe(true);
+      expect(json.size).toBe(16);
+      expect(json.name).toContain('report.pdf');
+      const written = await fs.readFile(json.savedTo);
+      expect(written.toString('utf8')).toBe('hello attachment');
+      const call = state.requests.find((r) =>
+        r.pathname.endsWith('/me/messages/msg-1/attachments/att-1'),
+      );
+      expect(call?.method).toBe('GET');
+    } finally {
+      await fs.rm(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it('download_attachment refuses embedded-message attachments with guidance', async () => {
+    const result = await client.callTool('download_attachment', {
+      id: 'msg-1',
+      attachmentId: 'att-item',
+    });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('itemAttachment');
+  });
+
+  it('download_attachment returns an error envelope when attachmentId is missing', async () => {
+    const result = await client.callTool('download_attachment', { id: 'msg-1' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Missing required parameters');
+    expect(json.next_step).toBe('list_attachments');
+  });
+
+  it('send_draft posts to the /send endpoint', async () => {
+    const result = await client.callTool('send_draft', { id: 'draft-1' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; message: string };
+    expect(json.ok).toBeUndefined();
+    expect(json.message).toContain('sent');
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.endsWith('/me/messages/draft-1/send'),
+    );
+    expect(call).toBeDefined();
+  });
+
+  it('send_draft returns an error envelope when id is missing', async () => {
+    const result = await client.callTool('send_draft', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Missing required parameter');
+    expect(json.next_step).toBe('create_draft');
+  });
+
+  it('update_draft patches only the provided fields', async () => {
+    const result = await client.callTool('update_draft', {
+      id: 'draft-1',
+      subject: 'Updated subject',
+      body: 'Updated content',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; draftId: string };
+    expect(json.ok).toBeUndefined();
+    expect(json.draftId).toBe('draft-1');
+    const call = state.requests.find(
+      (r) => r.method === 'PATCH' && r.pathname.endsWith('/me/messages/draft-1'),
+    );
+    expect(call?.body).toMatchObject({
+      subject: 'Updated subject',
+      body: { contentType: 'Text', content: 'Updated content' },
+    });
+    expect(call?.body).not.toHaveProperty('toRecipients');
+  });
+
+  it('update_draft normalises to/cc recipients into Graph recipient shape', async () => {
+    await client.callTool('update_draft', {
+      id: 'draft-1',
+      to: 'alice@example.com',
+      cc: ['bob@example.com'],
+    });
+    const call = state.requests.find(
+      (r) => r.method === 'PATCH' && r.pathname.endsWith('/me/messages/draft-1'),
+    );
+    expect(call?.body).toMatchObject({
+      toRecipients: [{ emailAddress: { address: 'alice@example.com' } }],
+      ccRecipients: [{ emailAddress: { address: 'bob@example.com' } }],
+    });
+  });
+
+  it('update_draft rejects calls with no fields to update', async () => {
+    const result = await client.callTool('update_draft', { id: 'draft-1' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Nothing to update');
+  });
+
+  it('mark_email_read patches isRead (default true)', async () => {
+    const result = await client.callTool('mark_email_read', { id: 'msg-1' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; isRead: boolean };
+    expect(json.ok).toBeUndefined();
+    expect(json.isRead).toBe(true);
+    const call = state.requests.find(
+      (r) => r.method === 'PATCH' && r.pathname.endsWith('/me/messages/msg-1'),
+    );
+    expect(call?.body).toMatchObject({ isRead: true });
+  });
+
+  it('mark_email_read with isRead=false marks the email unread', async () => {
+    await client.callTool('mark_email_read', { id: 'msg-1', isRead: false });
+    const call = state.requests.find(
+      (r) => r.method === 'PATCH' && r.pathname.endsWith('/me/messages/msg-1'),
+    );
+    expect(call?.body).toMatchObject({ isRead: false });
+  });
+
+  it('mark_email_read returns an error envelope when id is missing', async () => {
+    const result = await client.callTool('mark_email_read', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Missing required parameter');
+  });
+
+  it('set_email_flag patches the follow-up flag', async () => {
+    const result = await client.callTool('set_email_flag', { id: 'msg-1', flag: 'flagged' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; flag: string };
+    expect(json.ok).toBeUndefined();
+    expect(json.flag).toBe('flagged');
+    const call = state.requests.find(
+      (r) => r.method === 'PATCH' && r.pathname.endsWith('/me/messages/msg-1'),
+    );
+    expect(call?.body).toMatchObject({ flag: { flagStatus: 'flagged' } });
+  });
+
+  it('set_email_flag returns an error envelope when flag is missing', async () => {
+    const result = await client.callTool('set_email_flag', { id: 'msg-1' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Missing required parameters');
+    expect(json.next_step).toBe('set_email_flag');
+  });
+
+  it('get_conversation resolves the thread from a message ID', async () => {
+    const result = await client.callTool('get_conversation', { id: 'msg-1' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      ok?: unknown;
+      conversationId: string;
+      count: number;
+      messages: unknown[];
+    };
+    expect(json.ok).toBeUndefined();
+    expect(json.conversationId).toBe('conv-1');
+    expect(json.count).toBe(1);
+    const listCall = state.requests.find(
+      (r) => r.method === 'GET' && r.pathname.endsWith('/me/messages'),
+    );
+    expect(decodeURIComponent(listCall?.search ?? '')).toContain(
+      "conversationId eq 'conv-1'",
+    );
+  });
+
+  it('get_conversation accepts a conversationId directly', async () => {
+    const result = await client.callTool('get_conversation', { conversationId: 'conv-9' });
+    expect(result.isError).not.toBe(true);
+    const listCall = state.requests.find(
+      (r) => r.method === 'GET' && r.pathname.endsWith('/me/messages'),
+    );
+    expect(decodeURIComponent(listCall?.search ?? '')).toContain(
+      "conversationId eq 'conv-9'",
+    );
+  });
+
+  it('get_conversation returns an error envelope when neither id nor conversationId is given', async () => {
+    const result = await client.callTool('get_conversation', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Missing required parameter');
+    expect(json.next_step).toBe('list_emails');
   });
 });

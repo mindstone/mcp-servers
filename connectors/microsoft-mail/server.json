@@ -56,6 +56,13 @@
           "isSecret": false,
           "default": "60000",
           "format": "number"
+        },
+        {
+          "name": "MCP_WORKSPACE_PATH",
+          "description": "Workspace root where download_attachment saves files (falls back to the OS temp directory when unset)",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "filepath"
         }
       ]
     }

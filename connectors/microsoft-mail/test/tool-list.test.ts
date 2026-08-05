@@ -5,6 +5,8 @@ const EXPECTED_TOOLS = [
   'authenticate_microsoft_account',
   'list_emails',
   'get_email',
+  'list_attachments',
+  'download_attachment',
   'send_email',
   'compose_email',
   'search_emails',
@@ -15,6 +17,13 @@ const EXPECTED_TOOLS = [
   'move_email',
   'create_reply_draft',
   'create_draft',
+  'send_draft',
+  'update_draft',
+  'mark_email_read',
+  'set_email_flag',
+  'get_conversation',
+  'get_automatic_replies',
+  'set_automatic_replies',
 ];
 
 const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
@@ -25,6 +34,8 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
   },
   list_emails: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   get_email: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  list_attachments: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  download_attachment: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
   send_email: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
   compose_email: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
   search_emails: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
@@ -40,6 +51,33 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
   },
   create_reply_draft: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
   create_draft: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  send_draft: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  update_draft: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
+  mark_email_read: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
+  set_email_flag: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
+  get_conversation: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  get_automatic_replies: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  set_automatic_replies: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
 };
 
 describe('microsoft-mail tools/list', () => {
@@ -61,7 +99,7 @@ describe('microsoft-mail tools/list', () => {
     if (cfg) cfg.cleanup();
   });
 
-  it('registers exactly the 13 mail tools in the locked surface', async () => {
+  it('registers exactly the 22 mail tools in the locked surface', async () => {
     const response = await client.client.listTools();
     const names = response.tools.map((tool) => tool.name).sort();
     expect(names).toEqual([...EXPECTED_TOOLS].sort());

@@ -1,5 +1,83 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { z } from 'zod';
 import type { Client, EmailMessage, MailFolder } from '@mindstone/mcp-server-microsoft-shared';
 import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
+
+// Graph response payloads are cast by the SDK; the tools added here validate
+// the fields they consume with Zod at the boundary (planned tightening —
+// pre-existing read tools still cast, tracked in the CHANGELOG).
+const GraphAttachmentSchema = z
+  .object({
+    '@odata.type': z.string().optional(),
+    id: z.string(),
+    name: z.string().optional(),
+    contentType: z.string().optional(),
+    size: z.number().optional(),
+    isInline: z.boolean().optional(),
+    contentBytes: z.string().optional(),
+  })
+  .passthrough();
+
+const GraphAttachmentListSchema = z
+  .object({ value: z.array(GraphAttachmentSchema).default([]) })
+  .passthrough();
+
+const GraphMessageMutationSchema = z
+  .object({
+    id: z.string(),
+    subject: z.string().optional(),
+    conversationId: z.string().optional(),
+    isDraft: z.boolean().optional(),
+    isRead: z.boolean().optional(),
+    flag: z.object({ flagStatus: z.string().optional() }).passthrough().optional(),
+  })
+  .passthrough();
+
+const GraphConversationIdSchema = z
+  .object({ conversationId: z.string() })
+  .passthrough();
+
+const GraphConversationMessageSchema = z
+  .object({
+    id: z.string(),
+    subject: z.string().optional(),
+    from: z
+      .object({
+        emailAddress: z
+          .object({ address: z.string().optional(), name: z.string().optional() })
+          .passthrough(),
+      })
+      .passthrough()
+      .optional(),
+    receivedDateTime: z.string().optional(),
+    bodyPreview: z.string().optional(),
+    isRead: z.boolean().optional(),
+    hasAttachments: z.boolean().optional(),
+  })
+  .passthrough();
+
+const GraphConversationListSchema = z
+  .object({ value: z.array(GraphConversationMessageSchema).default([]) })
+  .passthrough();
+
+const AutomaticRepliesSettingSchema = z
+  .object({
+    status: z.enum(['disabled', 'alwaysEnabled', 'scheduled']).optional(),
+    externalAudience: z.enum(['none', 'contactsOnly', 'all']).optional(),
+    internalReplyMessage: z.string().optional(),
+    externalReplyMessage: z.string().optional(),
+    scheduledStartDateTime: z
+      .object({ dateTime: z.string(), timeZone: z.string().optional() })
+      .passthrough()
+      .optional(),
+    scheduledEndDateTime: z
+      .object({ dateTime: z.string(), timeZone: z.string().optional() })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
 
 const WELL_KNOWN_FOLDERS: Record<string, string> = {
   inbox: 'inbox',
@@ -115,6 +193,7 @@ export interface SendEmailArgs {
   subject: string;
   body: string;
   cc?: string | string[];
+  bcc?: string | string[];
   importance?: 'low' | 'normal' | 'high';
 }
 
@@ -125,6 +204,7 @@ export async function sendEmail(
 ): Promise<unknown> {
   const toList = ensureArray(args.to) ?? [];
   const ccList = ensureArray(args.cc);
+  const bccList = ensureArray(args.bcc);
 
   const message = {
     subject: args.subject,
@@ -136,6 +216,9 @@ export async function sendEmail(
       emailAddress: { address: email },
     })),
     ccRecipients: ccList?.map((email) => ({
+      emailAddress: { address: email },
+    })),
+    bccRecipients: bccList?.map((email) => ({
       emailAddress: { address: email },
     })),
     importance: args.importance ?? 'normal',
@@ -356,6 +439,7 @@ export interface CreateDraftArgs {
   subject: string;
   body: string;
   cc?: string | string[];
+  bcc?: string | string[];
 }
 
 export async function createDraft(
@@ -365,6 +449,7 @@ export async function createDraft(
 ): Promise<unknown> {
   const toList = ensureArray(args.to);
   const ccList = ensureArray(args.cc);
+  const bccList = ensureArray(args.bcc);
 
   const draft = {
     subject: args.subject,
@@ -378,13 +463,441 @@ export async function createDraft(
     ccRecipients: ccList?.map((email) => ({
       emailAddress: { address: email },
     })),
+    bccRecipients: bccList?.map((email) => ({
+      emailAddress: { address: email },
+    })),
   };
 
   const response = await client.api('/me/messages').options({ signal }).post(draft);
+  const created = GraphMessageMutationSchema.parse(response);
 
   return {
     success: true,
-    draftId: response.id,
+    draftId: created.id,
     message: 'Draft created successfully',
+  };
+}
+
+export interface ListAttachmentsArgs {
+  id: string;
+}
+
+export async function listAttachments(
+  client: Client,
+  args: ListAttachmentsArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const response = await client
+    .api(`/me/messages/${args.id}/attachments`)
+    .options({ signal })
+    .get();
+  const parsed = GraphAttachmentListSchema.parse(response);
+
+  const attachments = parsed.value.map((attachment) => ({
+    id: attachment.id,
+    name: wrapUntrusted(attachment.name, 'microsoft-mail:list_attachments:name'),
+    contentType: attachment.contentType,
+    size: attachment.size,
+    isInline: attachment.isInline,
+    type: attachment['@odata.type']?.replace('#microsoft.graph.', ''),
+  }));
+
+  return {
+    messageId: args.id,
+    count: attachments.length,
+    attachments,
+  };
+}
+
+// Mail attachment bodies can be large; Graph inlines contentBytes on the
+// single-attachment GET, so cap what we are willing to decode and write.
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Reject anything that is not a plain filename before it is joined onto the
+ * attachment directory (same rule family as the other file-writing
+ * connectors: no separators, no `..`, no dotfiles, no NUL).
+ */
+function sanitizeAttachmentFilename(name: string): string {
+  if (name.trim().length === 0) {
+    throw new Error('Invalid attachment filename: must not be empty');
+  }
+  if (name.includes('\0')) {
+    throw new Error('Invalid attachment filename: must not contain NUL bytes');
+  }
+  if (name.includes('/') || name.includes('\\')) {
+    throw new Error('Invalid attachment filename: must not contain path separators');
+  }
+  if (name.includes('..')) {
+    throw new Error(`Invalid attachment filename: must not contain '..'`);
+  }
+  if (name.startsWith('.')) {
+    throw new Error('Invalid attachment filename: must not start with a dot');
+  }
+  const basename = path.basename(name);
+  if (basename !== name || basename === '.' || basename === '..') {
+    throw new Error('Invalid attachment filename: must be a plain filename');
+  }
+  return basename;
+}
+
+/**
+ * Resolve the directory attachments are saved into, honouring the repo's
+ * file-write invariant: canonical-prefix containment under
+ * `MCP_WORKSPACE_PATH` (or `os.tmpdir()` when unset), with the canonical
+ * (symlink-resolved) root as the containment anchor.
+ */
+async function resolveAttachmentDir(): Promise<string> {
+  const root = process.env.MCP_WORKSPACE_PATH || os.tmpdir();
+  const dir = path.join(root, 'attachments', 'microsoft-mail');
+  await fs.mkdir(dir, { recursive: true });
+  const realDir = await fs.realpath(dir);
+  const relative = path.relative(await fs.realpath(root), realDir);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('Resolved attachment directory escaped its workspace root');
+  }
+  return realDir;
+}
+
+async function uniqueAttachmentPath(dir: string, filename: string): Promise<string> {
+  const ext = path.extname(filename);
+  const base = path.basename(filename, ext);
+  for (let attempt = 0; ; attempt += 1) {
+    const candidate = attempt === 0 ? filename : `${base}-${attempt}${ext}`;
+    const fullPath = path.join(dir, candidate);
+    try {
+      await fs.lstat(fullPath);
+    } catch {
+      return fullPath;
+    }
+  }
+}
+
+export interface DownloadAttachmentArgs {
+  id: string;
+  attachmentId: string;
+}
+
+export async function downloadAttachment(
+  client: Client,
+  args: DownloadAttachmentArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const response = await client
+    .api(`/me/messages/${args.id}/attachments/${args.attachmentId}`)
+    .options({ signal })
+    .get();
+  const attachment = GraphAttachmentSchema.parse(response);
+
+  if (attachment['@odata.type'] && !attachment['@odata.type'].endsWith('fileAttachment')) {
+    throw new Error(
+      `Attachment "${attachment.name ?? args.attachmentId}" is not a file attachment ` +
+        `(${attachment['@odata.type'].replace('#microsoft.graph.', '')}); inline download is not ` +
+        'supported for embedded-message or reference attachments. Open the message in Outlook to access it.',
+    );
+  }
+  if (!attachment.contentBytes) {
+    throw new Error(
+      `Attachment "${attachment.name ?? args.attachmentId}" has no inline content. ` +
+        'Open the message in Outlook to access it.',
+    );
+  }
+
+  // ~4/3 expansion when decoding; reject before allocating the buffer.
+  if (attachment.contentBytes.length > Math.ceil((MAX_ATTACHMENT_BYTES * 4) / 3)) {
+    throw new Error(
+      `Attachment "${attachment.name ?? args.attachmentId}" exceeds the ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB download limit.`,
+    );
+  }
+  const content = Buffer.from(attachment.contentBytes, 'base64');
+  if (content.byteLength > MAX_ATTACHMENT_BYTES) {
+    throw new Error(
+      `Attachment "${attachment.name ?? args.attachmentId}" exceeds the ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB download limit.`,
+    );
+  }
+
+  const dir = await resolveAttachmentDir();
+  const filename = sanitizeAttachmentFilename(attachment.name?.trim() || 'attachment');
+  const fullPath = await uniqueAttachmentPath(dir, filename);
+  // The filename is separator-free, but keep the canonical containment check
+  // so a future refactor cannot silently weaken the boundary.
+  const relative = path.relative(dir, fullPath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('Resolved attachment path escaped the attachment directory');
+  }
+  await fs.writeFile(fullPath, content);
+
+  return {
+    success: true,
+    messageId: args.id,
+    attachmentId: attachment.id,
+    name: wrapUntrusted(attachment.name, 'microsoft-mail:download_attachment:name'),
+    contentType: attachment.contentType,
+    size: content.byteLength,
+    savedTo: fullPath,
+    message: `Attachment saved to ${fullPath}`,
+  };
+}
+
+export interface SendDraftArgs {
+  id: string;
+}
+
+export async function sendDraft(
+  client: Client,
+  args: SendDraftArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  await client.api(`/me/messages/${args.id}/send`).options({ signal }).post({});
+
+  return {
+    success: true,
+    message: 'Draft sent',
+  };
+}
+
+export interface UpdateDraftArgs {
+  id: string;
+  to?: string | string[];
+  cc?: string | string[];
+  subject?: string;
+  body?: string;
+  importance?: 'low' | 'normal' | 'high';
+}
+
+export async function updateDraft(
+  client: Client,
+  args: UpdateDraftArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const toList = ensureArray(args.to);
+  const ccList = ensureArray(args.cc);
+
+  const patch: Record<string, unknown> = {};
+  if (args.subject !== undefined) patch.subject = args.subject;
+  if (args.body !== undefined) {
+    patch.body = {
+      contentType: args.body.includes('<') ? 'HTML' : 'Text',
+      content: args.body,
+    };
+  }
+  if (toList !== undefined) {
+    patch.toRecipients = toList.map((email) => ({ emailAddress: { address: email } }));
+  }
+  if (ccList !== undefined) {
+    patch.ccRecipients = ccList.map((email) => ({ emailAddress: { address: email } }));
+  }
+  if (args.importance !== undefined) patch.importance = args.importance;
+
+  const response = await client
+    .api(`/me/messages/${args.id}`)
+    .options({ signal })
+    .patch(patch);
+  const updated = GraphMessageMutationSchema.parse(response);
+
+  return {
+    success: true,
+    draftId: updated.id,
+    subject: wrapUntrusted(updated.subject, 'microsoft-mail:update_draft:subject'),
+    message: 'Draft updated',
+  };
+}
+
+export interface MarkEmailReadArgs {
+  id: string;
+  isRead?: boolean;
+}
+
+export async function markEmailRead(
+  client: Client,
+  args: MarkEmailReadArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const isRead = args.isRead ?? true;
+
+  const response = await client
+    .api(`/me/messages/${args.id}`)
+    .options({ signal })
+    .patch({ isRead });
+  const updated = GraphMessageMutationSchema.parse(response);
+
+  return {
+    success: true,
+    id: updated.id,
+    isRead: updated.isRead ?? isRead,
+    message: isRead ? 'Email marked as read' : 'Email marked as unread',
+  };
+}
+
+export interface SetEmailFlagArgs {
+  id: string;
+  flag: 'flagged' | 'complete' | 'notFlagged';
+}
+
+export async function setEmailFlag(
+  client: Client,
+  args: SetEmailFlagArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const response = await client
+    .api(`/me/messages/${args.id}`)
+    .options({ signal })
+    .patch({ flag: { flagStatus: args.flag } });
+  const updated = GraphMessageMutationSchema.parse(response);
+
+  const messages: Record<SetEmailFlagArgs['flag'], string> = {
+    flagged: 'Email flagged for follow-up',
+    complete: 'Email follow-up flag marked complete',
+    notFlagged: 'Email follow-up flag cleared',
+  };
+
+  return {
+    success: true,
+    id: updated.id,
+    flag: updated.flag?.flagStatus ?? args.flag,
+    message: messages[args.flag],
+  };
+}
+
+export interface GetConversationArgs {
+  id?: string;
+  conversationId?: string;
+  top?: number;
+}
+
+export async function getConversation(
+  client: Client,
+  args: GetConversationArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  let conversationId = args.conversationId;
+  if (!conversationId && args.id) {
+    const message = await client
+      .api(`/me/messages/${args.id}`)
+      .options({ signal })
+      .select('conversationId')
+      .get();
+    conversationId = GraphConversationIdSchema.parse(message).conversationId;
+  }
+  if (!conversationId) {
+    throw new Error('A message id or conversationId is required to load a conversation.');
+  }
+  // The conversation ID is embedded in an OData $filter literal; refuse values
+  // that could break out of the quoted string.
+  if (conversationId.includes("'")) {
+    throw new Error('Invalid conversationId: must not contain single quotes.');
+  }
+
+  const top = Math.min(args.top ?? 25, 100);
+  const endpoint =
+    '/me/messages?' +
+    [
+      `$filter=conversationId eq '${conversationId}'`,
+      '$orderby=receivedDateTime asc',
+      `$top=${top}`,
+      '$select=id,subject,from,receivedDateTime,bodyPreview,isRead,hasAttachments',
+    ].join('&');
+
+  const response = await client.api(endpoint).options({ signal }).get();
+  const parsed = GraphConversationListSchema.parse(response);
+
+  const formatted = parsed.value.map((email) => ({
+    id: email.id,
+    subject: wrapUntrusted(email.subject, 'microsoft-mail:get_conversation:subject'),
+    from: wrapUntrusted(
+      email.from?.emailAddress?.address,
+      'microsoft-mail:get_conversation:from',
+    ),
+    fromName: wrapUntrusted(
+      email.from?.emailAddress?.name,
+      'microsoft-mail:get_conversation:fromName',
+    ),
+    receivedAt: email.receivedDateTime,
+    preview: wrapUntrusted(
+      email.bodyPreview?.substring(0, 200),
+      'microsoft-mail:get_conversation:preview',
+    ),
+    isRead: email.isRead,
+    hasAttachments: email.hasAttachments,
+  }));
+
+  return {
+    conversationId,
+    count: formatted.length,
+    messages: formatted,
+  };
+}
+
+export async function getAutomaticReplies(
+  client: Client,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const response = await client
+    .api('/me/mailboxSettings/automaticRepliesSetting')
+    .options({ signal })
+    .get();
+  const settings = AutomaticRepliesSettingSchema.parse(response);
+
+  return {
+    status: settings.status,
+    externalAudience: settings.externalAudience,
+    internalReplyMessage: wrapUntrusted(
+      settings.internalReplyMessage,
+      'microsoft-mail:get_automatic_replies:internalReplyMessage',
+    ),
+    externalReplyMessage: wrapUntrusted(
+      settings.externalReplyMessage,
+      'microsoft-mail:get_automatic_replies:externalReplyMessage',
+    ),
+    scheduledStart: settings.scheduledStartDateTime?.dateTime,
+    scheduledEnd: settings.scheduledEndDateTime?.dateTime,
+  };
+}
+
+export interface SetAutomaticRepliesArgs {
+  status: 'disabled' | 'alwaysEnabled' | 'scheduled';
+  internalReplyMessage?: string;
+  externalReplyMessage?: string;
+  externalAudience?: 'none' | 'contactsOnly' | 'all';
+  scheduledStart?: string;
+  scheduledEnd?: string;
+}
+
+export async function setAutomaticReplies(
+  client: Client,
+  args: SetAutomaticRepliesArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const setting: Record<string, unknown> = { status: args.status };
+  if (args.internalReplyMessage !== undefined) {
+    setting.internalReplyMessage = args.internalReplyMessage;
+  }
+  if (args.externalReplyMessage !== undefined) {
+    setting.externalReplyMessage = args.externalReplyMessage;
+  }
+  if (args.externalAudience !== undefined) {
+    setting.externalAudience = args.externalAudience;
+  }
+  if (args.status === 'scheduled') {
+    setting.scheduledStartDateTime = { dateTime: args.scheduledStart, timeZone: 'UTC' };
+    setting.scheduledEndDateTime = { dateTime: args.scheduledEnd, timeZone: 'UTC' };
+  }
+
+  const response = await client
+    .api('/me/mailboxSettings')
+    .options({ signal })
+    .patch({ automaticRepliesSetting: setting });
+  const updated = z
+    .object({ automaticRepliesSetting: AutomaticRepliesSettingSchema })
+    .passthrough()
+    .parse(response);
+
+  return {
+    success: true,
+    status: updated.automaticRepliesSetting.status ?? args.status,
+    message:
+      args.status === 'disabled'
+        ? 'Automatic replies turned off'
+        : 'Automatic replies updated',
   };
 }
