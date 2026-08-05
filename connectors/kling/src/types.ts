@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export const KLING_API_BASE = 'https://api-singapore.klingai.com/v1';
 
 /**
@@ -61,18 +63,27 @@ export class KlingError extends Error {
 }
 
 /**
- * Kling API response wrapper.
- * All responses return code 0 for success.
+ * Kling API response envelope: all responses return code 0 for success.
+ * `data` is validated against a per-endpoint schema by `klingFetch` before it
+ * reaches tool code (fail-closed — a malformed or shape-drifting payload
+ * surfaces as a generic INVALID_RESPONSE error, never as raw vendor text).
  */
-export interface KlingApiResponse<T> {
-  code: number;
-  message: string;
-  data: T;
-}
+export const klingEnvelopeSchema = z.object({
+  code: z.number(),
+  message: z.string().optional(),
+  data: z.unknown(),
+});
 
-export interface VideoGenerationResponse {
-  task_id: string;
-}
+/** Loose shape for vendor error payloads on non-OK HTTP responses. */
+export const klingVendorErrorSchema = z.object({
+  code: z.number(),
+  message: z.string().optional(),
+});
+
+export const taskCreatedResponseSchema = z.object({
+  task_id: z.string(),
+});
+export type VideoGenerationResponse = z.infer<typeof taskCreatedResponseSchema>;
 
 /**
  * Logical task types the connector knows about, mapped to their API paths.
@@ -88,54 +99,67 @@ export const TASK_TYPE_PATHS = {
 
 export type KlingTaskType = keyof typeof TASK_TYPE_PATHS;
 
-export type KlingTaskStatus = 'submitted' | 'processing' | 'succeed' | 'failed';
+export const klingTaskStatusSchema = z.enum(['submitted', 'processing', 'succeed', 'failed']);
+export type KlingTaskStatus = z.infer<typeof klingTaskStatusSchema>;
 
-export interface TaskStatusResponse {
-  task_id: string;
-  task_status: KlingTaskStatus;
-  task_status_msg?: string;
-  task_result?: {
-    videos?: Array<{
-      id?: string;
-      url: string;
-      duration: string;
-      aspect_ratio?: string;
-    }>;
-    images?: Array<{
-      url: string;
-      index?: number;
-    }>;
-  };
-}
+const taskResultSchema = z.object({
+  videos: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        url: z.string(),
+        duration: z.string(),
+        aspect_ratio: z.string().optional(),
+      }),
+    )
+    .optional(),
+  images: z
+    .array(
+      z.object({
+        url: z.string(),
+        index: z.number().optional(),
+      }),
+    )
+    .optional(),
+});
+
+export const taskStatusResponseSchema = z.object({
+  task_id: z.string(),
+  task_status: klingTaskStatusSchema,
+  task_status_msg: z.string().optional(),
+  task_result: taskResultSchema.optional(),
+});
+export type TaskStatusResponse = z.infer<typeof taskStatusResponseSchema>;
 
 /**
  * One entry of a Query Task (List) response. `task_info` (which echoes the
  * caller's prompt) is deliberately not modelled — the connector only
  * surfaces IDs, status, and result URLs.
  */
-export interface TaskListItem {
-  task_id: string;
-  task_status: KlingTaskStatus;
-  task_status_msg?: string;
-  created_at?: number;
-  updated_at?: number;
-  task_result?: TaskStatusResponse['task_result'];
-}
+export const taskListItemSchema = taskStatusResponseSchema.extend({
+  created_at: z.number().optional(),
+  updated_at: z.number().optional(),
+});
+export const taskListResponseSchema = z.array(taskListItemSchema);
+export type TaskListItem = z.infer<typeof taskListItemSchema>;
 
-export interface ResourcePackInfo {
-  resource_pack_name?: string;
-  resource_pack_id?: string;
-  resource_pack_type?: string;
-  total_quantity?: number;
-  remaining_quantity?: number;
-  purchase_time?: number;
-  effective_time?: number;
-  invalid_time?: number;
-  status?: string;
-}
-
-export interface AccountCostsResponse {
-  code?: number;
-  msg?: string;
-  resource_pack_subscribe_infos?: ResourcePackInfo[];
-}
+export const accountCostsResponseSchema = z.object({
+  code: z.number().optional(),
+  msg: z.string().optional(),
+  resource_pack_subscribe_infos: z
+    .array(
+      z.object({
+        resource_pack_name: z.string().optional(),
+        resource_pack_id: z.string().optional(),
+        resource_pack_type: z.string().optional(),
+        total_quantity: z.number().optional(),
+        remaining_quantity: z.number().optional(),
+        purchase_time: z.number().optional(),
+        effective_time: z.number().optional(),
+        invalid_time: z.number().optional(),
+        status: z.string().optional(),
+      }),
+    )
+    .optional(),
+});
+export type AccountCostsResponse = z.infer<typeof accountCostsResponseSchema>;

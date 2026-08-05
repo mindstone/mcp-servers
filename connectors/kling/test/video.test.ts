@@ -3,9 +3,13 @@ import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import { createKlingHandlers, mockTaskId, mockI2vTaskId } from './helpers/kling-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
+import { wrapUntrusted } from '../src/untrusted-content.js';
 
 const ACCESS_KEY = 'test-access-key';
 const SECRET_KEY = 'test-secret-key-at-least-32-chars-long';
+
+/** Vendor-controlled strings reach the model enveloped (invariant #6). */
+const enveloped = (s: string) => wrapUntrusted(s, 'kling-api');
 
 describe('Kling video tools', () => {
   let testClient: McpTestClient;
@@ -27,7 +31,7 @@ describe('Kling video tools', () => {
       });
       const json = result.json as { ok: boolean; task_id: string; task_type: string };
       expect(json.ok).toBe(true);
-      expect(json.task_id).toBe(mockTaskId);
+      expect(json.task_id).toBe(enveloped(mockTaskId));
       expect(json.task_type).toBe('text2video');
     });
 
@@ -127,7 +131,7 @@ describe('Kling video tools', () => {
       });
       const json = result.json as { ok: boolean; task_id: string; task_type: string };
       expect(json.ok).toBe(true);
-      expect(json.task_id).toBe(mockI2vTaskId);
+      expect(json.task_id).toBe(enveloped(mockI2vTaskId));
       expect(json.task_type).toBe('image2video');
     });
 
@@ -157,11 +161,11 @@ describe('Kling video tools', () => {
         task_id: mockTaskId,
         task_type: 'text2video',
       });
-      const json = result.json as { ok: boolean; task_id: string; status: string; video: { url: string; duration: string } };
+      const json = result.json as { ok: boolean; task_id: string; status: string; videos: Array<{ url: string; duration: string }> };
       expect(json.ok).toBe(true);
       expect(json.status).toBe('succeed');
-      expect(json.video).toBeDefined();
-      expect(json.video.url).toContain('klingai.com');
+      expect(json.videos).toHaveLength(1);
+      expect(json.videos[0].url).toContain('klingai.com');
     });
 
     it('returns processing status with poll hint', async () => {

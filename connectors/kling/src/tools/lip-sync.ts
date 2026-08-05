@@ -3,7 +3,11 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { klingFetch } from '../client.js';
 import { encodeLocalAudio } from '../media.js';
 import { withErrorHandling } from '../utils.js';
-import type { VideoGenerationResponse } from '../types.js';
+import { taskCreatedResponseSchema } from '../types.js';
+import { unwrapUntrusted, wrapUntrusted } from '../untrusted-content.js';
+
+/** Envelope source label for vendor-controlled strings in tool output. */
+const KLING_SOURCE = 'kling-api';
 
 export function registerLipSyncTools(server: McpServer): void {
   // ─── generate_kling_lip_sync ────────────────────────────────────
@@ -78,7 +82,7 @@ export function registerLipSyncTools(server: McpServer): void {
             'HTTPS URL that Kling POSTs the task result to when the task status changes. Optional — polling with check_kling_task works without it.',
           ),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       // Exactly one of video_id / video_url.
@@ -104,7 +108,7 @@ export function registerLipSyncTools(server: McpServer): void {
       }
 
       const input: Record<string, unknown> = { mode: args.mode };
-      if (args.video_id) input.video_id = args.video_id;
+      if (args.video_id) input.video_id = unwrapUntrusted(args.video_id);
       if (args.video_url) input.video_url = args.video_url;
 
       if (args.mode === 'text2video') {
@@ -158,17 +162,18 @@ export function registerLipSyncTools(server: McpServer): void {
       const body: Record<string, unknown> = { input };
       if (args.callback_url) body.callback_url = args.callback_url;
 
-      const result = await klingFetch<VideoGenerationResponse>('/videos/lip-sync', {
+      const result = await klingFetch('/videos/lip-sync', taskCreatedResponseSchema, {
         method: 'POST',
         body: JSON.stringify(body),
       });
 
+      const taskId = wrapUntrusted(result.task_id, KLING_SOURCE)!;
       return JSON.stringify({
         ok: true,
-        task_id: result.task_id,
+        task_id: taskId,
         task_type: 'lip-sync',
         status: 'submitted',
-        message: `Lip-sync task started. Use check_kling_task with task_id "${result.task_id}" and task_type "lip-sync" to poll for completion.`,
+        message: `Lip-sync task started. Use check_kling_task with task_id "${taskId}" and task_type "lip-sync" to poll for completion.`,
         nextPollSeconds: 30,
       });
     }),

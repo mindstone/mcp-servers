@@ -3,7 +3,16 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { klingFetch } from '../client.js';
 import { encodeLocalImage } from '../media.js';
 import { withErrorHandling } from '../utils.js';
-import { TASK_TYPE_PATHS, type VideoGenerationResponse, type TaskStatusResponse } from '../types.js';
+import {
+  TASK_TYPE_PATHS,
+  taskCreatedResponseSchema,
+  taskStatusResponseSchema,
+  type TaskStatusResponse,
+} from '../types.js';
+import { unwrapUntrusted, wrapUntrusted } from '../untrusted-content.js';
+
+/** Envelope source label for vendor-controlled strings in tool output. */
+const KLING_SOURCE = 'kling-api';
 
 const MODEL_ENUM = [
   'kling-v2-6',
@@ -66,7 +75,7 @@ export function registerVideoTools(server: McpServer): void {
             'HTTPS URL that Kling POSTs the task result to when the task status changes. Optional — polling with check_kling_task works without it.',
           ),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (args.callback_url && !args.callback_url.startsWith('https://')) {
@@ -92,17 +101,18 @@ export function registerVideoTools(server: McpServer): void {
         body.callback_url = args.callback_url;
       }
 
-      const result = await klingFetch<VideoGenerationResponse>('/videos/text2video', {
+      const result = await klingFetch('/videos/text2video', taskCreatedResponseSchema, {
         method: 'POST',
         body: JSON.stringify(body),
       });
 
+      const taskId = wrapUntrusted(result.task_id, KLING_SOURCE)!;
       return JSON.stringify({
         ok: true,
-        task_id: result.task_id,
+        task_id: taskId,
         task_type: 'text2video',
         status: 'submitted',
-        message: `Video generation started. Use check_kling_task with task_id "${result.task_id}" and task_type "text2video" to poll for completion (typically 2-5 minutes).`,
+        message: `Video generation started. Use check_kling_task with task_id "${taskId}" and task_type "text2video" to poll for completion (typically 2-5 minutes).`,
         nextPollSeconds: 30,
       });
     }),
@@ -158,7 +168,7 @@ export function registerVideoTools(server: McpServer): void {
             'HTTPS URL that Kling POSTs the task result to when the task status changes. Optional — polling with check_kling_task works without it.',
           ),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       // Exactly one of image_url / image_path must be provided.
@@ -218,17 +228,18 @@ export function registerVideoTools(server: McpServer): void {
         body.callback_url = args.callback_url;
       }
 
-      const result = await klingFetch<VideoGenerationResponse>('/videos/image2video', {
+      const result = await klingFetch('/videos/image2video', taskCreatedResponseSchema, {
         method: 'POST',
         body: JSON.stringify(body),
       });
 
+      const taskId = wrapUntrusted(result.task_id, KLING_SOURCE)!;
       return JSON.stringify({
         ok: true,
-        task_id: result.task_id,
+        task_id: taskId,
         task_type: 'image2video',
         status: 'submitted',
-        message: `Image-to-video generation started. Use check_kling_task with task_id "${result.task_id}" and task_type "image2video" to poll for completion.`,
+        message: `Image-to-video generation started. Use check_kling_task with task_id "${taskId}" and task_type "image2video" to poll for completion.`,
         nextPollSeconds: 30,
       });
     }),
@@ -268,10 +279,12 @@ export function registerVideoTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const taskType = args.task_type || 'text2video';
+      // Accept IDs echoed back from this connector's own enveloped output.
+      const taskId = unwrapUntrusted(args.task_id);
 
       let result: TaskStatusResponse;
       try {
-        result = await klingFetch<TaskStatusResponse>(`${TASK_TYPE_PATHS[taskType]}/${args.task_id}`);
+        result = await klingFetch(`${TASK_TYPE_PATHS[taskType]}/${taskId}`, taskStatusResponseSchema);
       } catch (error) {
         // Legacy fallback: if a video task is not found with the given type,
         // try the alternative video type (text2video <-> image2video).
@@ -283,7 +296,7 @@ export function registerVideoTools(server: McpServer): void {
           ((error as { code: string }).code === 'HTTP_404' ||
             (error as { code: string }).code === 'KLING_1201')
         ) {
-          result = await klingFetch<TaskStatusResponse>(`${TASK_TYPE_PATHS[altType]}/${args.task_id}`);
+          result = await klingFetch(`${TASK_TYPE_PATHS[altType]}/${taskId}`, taskStatusResponseSchema);
         } else {
           throw error;
         }
@@ -291,30 +304,33 @@ export function registerVideoTools(server: McpServer): void {
 
       const response: Record<string, unknown> = {
         ok: true,
-        task_id: result.task_id,
+        task_id: wrapUntrusted(result.task_id, KLING_SOURCE),
         status: result.task_status,
       };
 
       if (result.task_status_msg) {
-        response.message = result.task_status_msg;
+        response.message = wrapUntrusted(result.task_status_msg, KLING_SOURCE);
       }
 
       if (result.task_status === 'processing') {
         response.nextPollSeconds = 20;
         response.hint = 'Still processing. Poll again in 20 seconds.';
       } else if (result.task_status === 'succeed' && result.task_result?.videos?.length) {
-        const video = result.task_result.videos[0];
-        response.video = {
-          url: video.url,
-          duration: video.duration,
-        };
-        if (video.id) {
-          (response.video as Record<string, unknown>).id = video.id;
-        }
+        // Surface every video the vendor returned, not just index zero.
+        response.videos = result.task_result.videos.map((video) => {
+          const entry: Record<string, unknown> = {
+            url: wrapUntrusted(video.url, KLING_SOURCE),
+            duration: wrapUntrusted(video.duration, KLING_SOURCE),
+          };
+          if (video.id) entry.id = wrapUntrusted(video.id, KLING_SOURCE);
+          return entry;
+        });
         response.hint =
-          'Video generation complete! URL is valid for 30 days — use download_kling_video to save it locally.';
+          'Video generation complete! URLs are valid for 30 days — use download_kling_video to save them locally.';
       } else if (result.task_status === 'succeed' && result.task_result?.images?.length) {
-        response.images = result.task_result.images.map((img) => ({ url: img.url }));
+        response.images = result.task_result.images.map((img) => ({
+          url: wrapUntrusted(img.url, KLING_SOURCE),
+        }));
         response.hint =
           'Image generation complete! URLs are valid for 30 days — use download_kling_video to save them locally.';
       } else if (result.task_status === 'failed') {

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { assertDownloadPathInRoot, validateDownloadUrl } from '../download-sandbox.js';
 import { KlingError, getRequestTimeoutMs } from '../types.js';
+import { unwrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
 export function registerDownloadTools(server: McpServer): void {
@@ -12,15 +13,18 @@ export function registerDownloadTools(server: McpServer): void {
       description:
         'Download a generated Kling video (or image) to a local file. ' +
         'Use after check_kling_task reports "succeed" — result URLs expire 30 days after generation, so save anything you want to keep. ' +
-        'output_path MUST live inside KLING_DOWNLOAD_ROOT (default ~/Downloads/kling-mcp). ' +
+        'Only Kling result URLs (klingai.com hosts) are accepted. ' +
+        'output_path MUST live inside the download sandbox (default <workspace>/kling-downloads, where the workspace is MCP_WORKSPACE_PATH or the system temp directory; KLING_DOWNLOAD_ROOT may redirect it but only to a directory inside the workspace). ' +
         'Sensitive paths (~/.ssh, ~/.aws, /etc, ~/.bashrc, ~/.zshrc) are refused even when the root would otherwise permit them. ' +
         'By default, refuses to overwrite an existing file — pass overwrite: true to clobber.',
       inputSchema: z.object({
-        url: z.string().describe('Result URL from a completed task (video.url or image url).'),
+        url: z
+          .string()
+          .describe('Result URL from a completed task (video.url or image url). Must be a Kling host (klingai.com).'),
         output_path: z
           .string()
           .describe(
-            'Local file path to save to. Must be inside KLING_DOWNLOAD_ROOT (default ~/Downloads/kling-mcp). Parent directory must exist.',
+            'Local file path to save to. Must be inside the download sandbox (default <workspace>/kling-downloads). Parent directory must exist.',
           ),
         overwrite: z
           .boolean()
@@ -32,7 +36,8 @@ export function registerDownloadTools(server: McpServer): void {
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      const url = args.url;
+      // Accept URLs echoed back from this connector's own enveloped output.
+      const url = unwrapUntrusted(args.url);
       const outputPath = args.output_path;
       const overwrite = args.overwrite === true;
 
@@ -55,13 +60,23 @@ export function registerDownloadTools(server: McpServer): void {
         throw err;
       }
 
-      // Open the output file synchronously with `wx` (or `w` if overwrite) so
-      // the EEXIST refusal is atomic with the open and happens BEFORE any
-      // network request.
-      const writeFlag = overwrite ? 'w' : 'wx';
+      // Open the output file synchronously so the EEXIST/symlink refusal is
+      // atomic with the open and happens BEFORE any network request:
+      //   - create:    O_CREAT|O_EXCL  (refuse any pre-existing path)
+      //   - overwrite: O_CREAT|O_TRUNC (clobber a validated regular file)
+      // O_NOFOLLOW closes the swap race in which a symlink is planted at the
+      // target between the lstat pre-check and this open — with plain 'w'
+      // the open would silently write through it. (O_NOFOLLOW is unavailable
+      // on some platforms, e.g. Windows; there the lstat pre-check remains
+      // the mitigation.) O_NONBLOCK keeps an overwrite open of a raced-in
+      // FIFO from blocking forever; the fstat below then rejects it.
+      const nofollow = fs.constants.O_NOFOLLOW ?? 0;
+      const openFlags = overwrite
+        ? fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | nofollow | (fs.constants.O_NONBLOCK ?? 0)
+        : fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | nofollow;
       let fd: number;
       try {
-        fd = fs.openSync(safe.resolved, writeFlag);
+        fd = fs.openSync(safe.resolved, openFlags);
       } catch (openErr) {
         const e = openErr as NodeJS.ErrnoException;
         if (e && e.code === 'EEXIST') {
@@ -71,11 +86,51 @@ export function registerDownloadTools(server: McpServer): void {
             code: 'EEXIST',
           });
         }
+        if (e && e.code === 'ELOOP') {
+          return JSON.stringify({
+            ok: false,
+            error: `Output path is a symbolic link, refusing to write through it: ${outputPath}`,
+            code: 'OUTPUT_PATH_IS_SYMLINK',
+          });
+        }
         return JSON.stringify({
           ok: false,
           error: `Could not open output_path for writing: ${e?.message || String(openErr)}`,
           code: e?.code || 'OPEN_FAILED',
         });
+      }
+
+      // Validate the OPENED object: a raced-in FIFO/socket/device must not
+      // be written even if it slipped past the lstat pre-check. If we created
+      // the file (no overwrite), remove it again so the failure is atomic.
+      try {
+        const opened = fs.fstatSync(fd);
+        if (!opened.isFile()) {
+          try {
+            fs.closeSync(fd);
+          } catch {
+            /* empty */
+          }
+          if (!overwrite) {
+            try {
+              fs.unlinkSync(safe.resolved);
+            } catch {
+              /* cleanup best-effort */
+            }
+          }
+          return JSON.stringify({
+            ok: false,
+            error: `Output path is not a regular file: ${outputPath}`,
+            code: 'OUTPUT_PATH_NOT_REGULAR_FILE',
+          });
+        }
+      } catch (statErr) {
+        try {
+          fs.closeSync(fd);
+        } catch {
+          /* empty */
+        }
+        throw statErr;
       }
 
       // SSRF-via-redirect defence: fetch with `redirect: 'manual'` and
@@ -123,14 +178,16 @@ export function registerDownloadTools(server: McpServer): void {
             try {
               nextUrl = new URL(location, currentUrl).toString();
             } catch {
-              redirectError = `Refused to follow redirect: invalid Location header (${location}).`;
+              // Do not echo the Location header: signed CDN query strings or
+              // bearer parameters must not be copied into model-visible output.
+              redirectError = 'Refused to follow redirect: the redirect target is not a valid URL.';
               break;
             }
 
             // Re-apply the same SSRF allow-list to every redirect target.
             const validationError = validateDownloadUrl(nextUrl);
             if (validationError) {
-              redirectError = `Refused to follow redirect to ${nextUrl}: ${validationError}`;
+              redirectError = `Refused to follow redirect: the redirect target failed safety validation (${validationError})`;
               break;
             }
 

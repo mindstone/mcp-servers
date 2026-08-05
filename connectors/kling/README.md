@@ -83,7 +83,7 @@ node dist/index.js
 - `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
 - `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
 - `MCP_WORKSPACE_PATH` — optional directory that local media inputs (`image_path`, `audio_path`) must live inside. Defaults to the system temp directory when unset. Files elsewhere are refused before any read.
-- `KLING_DOWNLOAD_ROOT` — optional directory that `download_kling_video` output paths must live inside. Default: `~/Downloads/kling-mcp` (auto-created). Sensitive paths (`~/.ssh`, `~/.aws`, `/etc`, shell rc files) are refused even when the root would otherwise permit them.
+- `KLING_DOWNLOAD_ROOT` — optional directory that `download_kling_video` output paths must live inside. It must itself resolve inside the workspace (`MCP_WORKSPACE_PATH`, or the system temp directory when unset); anything else is refused with guidance. Default: `<workspace>/kling-downloads` (auto-created). Sensitive paths (`~/.ssh`, `~/.aws`, `/etc`, shell rc files) are refused even when the root would otherwise permit them.
 - `KLING_REQUEST_TIMEOUT_MS` — optional override (positive integer ms, max 30 min) for the outbound HTTP request timeout applied to both Kling API and host-bridge calls. Default: `60000` (60s). Raise this if you see `TIMEOUT` errors on slow submits; lower it if you want tighter bounds.
 
 ## Host configuration examples
@@ -139,7 +139,7 @@ node dist/index.js
 ### Task management
 - `check_kling_task` — Check if a generation task is complete (task types: `text2video`, `image2video`, `video-extend`, `lip-sync`, `image`)
 - `list_kling_tasks` — List your generation tasks with pagination
-- `download_kling_video` — Save a generated video or image to a local file (result URLs expire 30 days after generation)
+- `download_kling_video` — Save a generated video or image to a local file (result URLs expire 30 days after generation). Only Kling result URLs (`klingai.com` hosts) are accepted.
 
 ### Account
 - `get_kling_balance` — List resource packages on the account and their remaining quantities
