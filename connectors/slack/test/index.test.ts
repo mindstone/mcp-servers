@@ -53,6 +53,7 @@ const ALL_TOOLS = [
   'list_scheduled_slack_messages',
   'list_slack_bookmarks',
   'list_slack_channels',
+  'list_slack_emoji',
   'list_slack_pins',
   'list_slack_reminders',
   'list_slack_users',
@@ -62,6 +63,7 @@ const ALL_TOOLS = [
   'open_slack_dm',
   'pin_slack_message',
   'post_slack_message',
+  'remove_slack_reaction',
   'reply_to_slack_thread',
   'schedule_slack_message',
   'search_slack_messages',
@@ -80,6 +82,7 @@ const READ_ONLY_TOOLS = [
   'list_slack_pins',
   'list_slack_bookmarks',
   'list_slack_reminders',
+  'list_slack_emoji',
   'get_slack_channel_history',
   'get_slack_thread_replies',
   'list_slack_users',
@@ -93,6 +96,7 @@ const DESTRUCTIVE_TOOLS = [
   'post_slack_message',
   'reply_to_slack_thread',
   'add_slack_reaction',
+  'remove_slack_reaction',
   'create_slack_channel',
   'invite_user_to_channel',
   'schedule_slack_message',
@@ -166,7 +170,7 @@ describe('Slack MCP — smoke & registration', () => {
     if (cfg) cfg.cleanup();
   });
 
-  it('registers all 36 tools', async () => {
+  it('registers all 38 tools', async () => {
     const result = await client.client.listTools();
     const names = result.tools.map((t) => t.name).sort();
     expect(names).toEqual(ALL_TOOLS);

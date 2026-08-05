@@ -38,6 +38,8 @@ export const SLACK_PRODUCTION_API_URLS: string[] = [
   `${SLACK_API_BASE}/pins.add`,
   `${SLACK_API_BASE}/pins.remove`,
   `${SLACK_API_BASE}/reactions.add`,
+  `${SLACK_API_BASE}/reactions.remove`,
+  `${SLACK_API_BASE}/emoji.list`,
   `${SLACK_API_BASE}/reminders.add`,
   `${SLACK_API_BASE}/reminders.list`,
   `${SLACK_API_BASE}/reminders.complete`,
@@ -267,6 +269,16 @@ export function createSlackHandlers() {
       }),
     ),
     http.post(`${SLACK_API_BASE}/reactions.add`, () => HttpResponse.json({ ok: true })),
+    http.post(`${SLACK_API_BASE}/reactions.remove`, () => HttpResponse.json({ ok: true })),
+    http.post(`${SLACK_API_BASE}/emoji.list`, () =>
+      HttpResponse.json({
+        ok: true,
+        emoji: {
+          party_parrot: 'https://emoji.slack-edge.com/T123/party_parrot/abc123.gif',
+          shipit: 'alias:squirrel',
+        },
+      }),
+    ),
     http.post(`${SLACK_API_BASE}/pins.list`, () =>
       HttpResponse.json({
         ok: true,

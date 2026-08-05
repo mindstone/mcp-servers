@@ -13,6 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - `list_slack_pins`, `pin_slack_message`, and `unpin_slack_message` — read and manage a channel's pinned items (`pins.list` / `pins.add` / `pins.remove`). Pinned-message text is enveloped as untrusted content.
 - `list_slack_bookmarks` — read a channel's bookmarks bar (`bookmarks.list`), closing the add-only asymmetry. Bookmark titles are enveloped as untrusted content.
 - `list_slack_reminders`, `complete_slack_reminder`, and `delete_slack_reminder` — inspect and manage reminders (`reminders.list` / `reminders.complete` / `reminders.delete`), closing the add-only asymmetry. All three are marked EXPERIMENTAL like `add_slack_reminder`, since Slack has partially deprecated the reminders API.
+- `remove_slack_reaction` — undo your own reaction (`reactions.remove`).
+- `list_slack_emoji` — list the workspace's custom emoji (`emoji.list`) so agents can react with them by name.
 
 ### Changed
 
