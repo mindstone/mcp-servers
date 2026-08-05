@@ -7,7 +7,153 @@ import {
   type SharePointDrive,
   type Client,
 } from '@mindstone/mcp-server-microsoft-shared';
+import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
+
+// -- Graph response schemas (Zod-validated at the boundary for new tools) --
+
+/** Parse a Graph collection response (`{ value: [...] }`) against an item schema. */
+function parseGraphCollection<S extends z.ZodTypeAny>(itemSchema: S, response: unknown): z.infer<S>[] {
+  return z.object({ value: z.array(itemSchema) }).parse(response).value;
+}
+
+const GraphIdentitySchema = z.object({
+  displayName: z.string().optional(),
+  email: z.string().optional(),
+});
+
+const GraphIdentitySetSchema = z.object({
+  user: GraphIdentitySchema.optional(),
+  siteUser: GraphIdentitySchema.optional(),
+  group: GraphIdentitySchema.optional(),
+  siteGroup: GraphIdentitySchema.optional(),
+  application: GraphIdentitySchema.optional(),
+});
+
+const GraphPermissionSchema = z.object({
+  id: z.string(),
+  roles: z.array(z.string()).optional().default([]),
+  shareId: z.string().optional(),
+  link: z
+    .object({
+      type: z.string().optional(),
+      scope: z.string().optional(),
+      webUrl: z.string().optional(),
+    })
+    .optional(),
+  grantedToV2: GraphIdentitySetSchema.optional(),
+  grantedToIdentitiesV2: z.array(GraphIdentitySetSchema).optional(),
+});
+
+type GraphPermission = z.infer<typeof GraphPermissionSchema>;
+type GraphIdentity = z.infer<typeof GraphIdentitySchema>;
+
+const GraphDriveItemVersionSchema = z.object({
+  id: z.string(),
+  size: z.number().optional(),
+  lastModifiedDateTime: z.string().optional(),
+  lastModifiedBy: z
+    .object({
+      user: GraphIdentitySchema.optional(),
+    })
+    .optional(),
+});
+
+/** columnDefinition facet keys that determine a column's type. */
+const COLUMN_TYPE_FACETS = [
+  'boolean',
+  'calculated',
+  'choice',
+  'currency',
+  'dateTime',
+  'geolocation',
+  'hyperlinkOrPicture',
+  'lookup',
+  'number',
+  'personOrGroup',
+  'text',
+  'term',
+  'thumbnail',
+] as const;
+
+const GraphColumnDefinitionSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().optional(),
+    displayName: z.string().optional(),
+    description: z.string().optional(),
+    required: z.boolean().optional(),
+    hidden: z.boolean().optional(),
+    readOnly: z.boolean().optional(),
+  })
+  .catchall(z.unknown());
+
+const GraphListSchema = z.object({
+  id: z.string(),
+  displayName: z.string().optional(),
+  description: z.string().optional(),
+  webUrl: z.string().optional(),
+  list: z
+    .object({
+      template: z.string().optional(),
+      hidden: z.boolean().optional(),
+    })
+    .optional(),
+});
+
+const GraphUploadSessionSchema = z.object({
+  uploadUrl: z.string(),
+});
+
+const GraphUploadedItemSchema = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  size: z.number().optional(),
+  webUrl: z.string().optional(),
+});
+
+const GraphSitePageSchema = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  webUrl: z.string().optional(),
+  pageLayout: z.string().optional(),
+  promotionKind: z.string().optional(),
+  publishingState: z
+    .object({
+      level: z.string().optional(),
+      versionId: z.string().optional(),
+    })
+    .optional(),
+});
+
+function extractPermissionIdentities(permission: GraphPermission): GraphIdentity[] {
+  const sets = [
+    ...(permission.grantedToV2 ? [permission.grantedToV2] : []),
+    ...(permission.grantedToIdentitiesV2 ?? []),
+  ];
+  const identities: GraphIdentity[] = [];
+  for (const set of sets) {
+    const identity = set.user ?? set.siteUser ?? set.group ?? set.siteGroup ?? set.application;
+    if (identity) identities.push(identity);
+  }
+  return identities;
+}
+
+function formatPermission(permission: GraphPermission, sourceTool: string) {
+  return {
+    id: permission.id,
+    roles: permission.roles,
+    shareId: permission.shareId,
+    link: permission.link,
+    grantedTo: extractPermissionIdentities(permission).map((identity) => ({
+      displayName: wrapUntrusted(identity.displayName, `microsoft-sharepoint:${sourceTool}:displayName`),
+      email: identity.email,
+    })),
+  };
+}
 
 // -- Helpers --
 
@@ -432,6 +578,102 @@ export async function uploadLibraryFile(
   });
 }
 
+// -- Large/binary upload tool implementation --
+
+/** Graph requires every chunk except the last to be a multiple of 320 KiB. */
+const UPLOAD_CHUNK_SIZE = 10 * 320 * 1024;
+const MAX_UPLOAD_SESSION_BYTES = 100 * 1024 * 1024;
+
+interface UploadLibraryFileBinaryArgs {
+  driveId?: string;
+  path?: string;
+  contentBase64?: string;
+  conflictBehavior?: 'fail' | 'rename' | 'replace';
+}
+
+export async function uploadLibraryFileBinary(
+  client: Client,
+  args: UploadLibraryFileBinaryArgs,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (!args.driveId || !args.path || !args.contentBase64) {
+    return errorResult(
+      'Missing required parameters: "driveId", "path" (destination path), and "contentBase64" (base64-encoded file content). ' +
+      'Example: { "driveId": "b!abc123...", "path": "General/report.pdf", "contentBase64": "JVBERi0x..." }',
+    );
+  }
+
+  const base64 = args.contentBase64.replace(/\s+/g, '');
+  if (base64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) {
+    return errorResult('The "contentBase64" parameter is not valid base64.');
+  }
+  const buffer = Buffer.from(base64, 'base64');
+  if (buffer.length === 0) {
+    return errorResult('The decoded content is empty.');
+  }
+  if (buffer.length > MAX_UPLOAD_SESSION_BYTES) {
+    return errorResult(
+      `File too large (${formatSize(buffer.length)}). Max size: ${formatSize(MAX_UPLOAD_SESSION_BYTES)}.`,
+    );
+  }
+
+  const encodedPath = encodeDrivePath(args.path);
+  const sessionResponse = await client
+    .api(`/drives/${args.driveId}/root:/${encodedPath}:/createUploadSession`)
+    .options({ signal })
+    .post({
+      item: {
+        // Default to "rename" so an upload never silently clobbers an existing file.
+        '@microsoft.graph.conflictBehavior': args.conflictBehavior ?? 'rename',
+      },
+    });
+  const { uploadUrl } = GraphUploadSessionSchema.parse(sessionResponse);
+
+  // The uploadUrl is pre-authenticated by Graph; chunks go to it directly
+  // without an Authorization header.
+  let start = 0;
+  let uploaded: z.infer<typeof GraphUploadedItemSchema> | null = null;
+  while (start < buffer.length) {
+    const end = Math.min(start + UPLOAD_CHUNK_SIZE, buffer.length);
+    const response = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Length': String(end - start),
+        'Content-Range': `bytes ${start}-${end - 1}/${buffer.length}`,
+      },
+      body: new Uint8Array(buffer.subarray(start, end)),
+      signal,
+    });
+
+    if (response.status === 202) {
+      start = end;
+      continue;
+    }
+    if (response.status === 200 || response.status === 201) {
+      uploaded = GraphUploadedItemSchema.parse(await response.json());
+      break;
+    }
+    const errorBody = await response.text().catch(() => '');
+    throw new Error(
+      `Upload session failed with HTTP ${response.status}` +
+      (errorBody ? `: ${errorBody.slice(0, 500)}` : ''),
+    );
+  }
+
+  if (!uploaded) {
+    throw new Error('Upload session ended without a completed item');
+  }
+
+  return successResult({
+    success: true,
+    id: uploaded.id,
+    name: wrapUntrusted(uploaded.name, 'microsoft-sharepoint:upload_library_file_binary:name'),
+    size: formatSize(uploaded.size ?? buffer.length),
+    webUrl: uploaded.webUrl,
+    message: 'File uploaded successfully',
+  });
+}
+
 interface CreateLibraryFolderArgs {
   driveId?: string;
   path?: string;
@@ -741,6 +983,158 @@ export async function readSitePage(
   });
 }
 
+// -- Site page authoring tool implementations --
+
+function derivePageName(title: string): string {
+  const slug = title
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return `${slug || 'page'}.aspx`;
+}
+
+/** Single-section, single-column canvas layout holding one text web part. */
+function buildTextCanvasLayout(contentHtml: string): Record<string, unknown> {
+  return {
+    horizontalSections: [
+      {
+        layout: 'oneColumn',
+        id: '1',
+        emphasis: 'none',
+        columns: [
+          {
+            id: '1',
+            width: 12,
+            webparts: [{ id: randomUUID(), innerHtml: contentHtml }],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+interface CreateSitePageArgs {
+  siteId?: string;
+  title?: string;
+  name?: string;
+  description?: string;
+  pageLayout?: 'article' | 'home';
+  promotionKind?: 'page' | 'newsPost';
+  contentHtml?: string;
+}
+
+export async function createSitePage(
+  client: Client,
+  args: CreateSitePageArgs,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (!args.siteId || !args.title) {
+    return errorResult(
+      'Missing required parameters: "siteId" and "title". ' +
+      'Example: { "siteId": "contoso.sharepoint.com,abc123,def456", "title": "Q3 Update", ' +
+      '"contentHtml": "<p>Summary…</p>" }. ' +
+      'The page is created as a draft — call publish_site_page to make it visible.',
+    );
+  }
+
+  const body: Record<string, unknown> = {
+    '@odata.type': '#microsoft.graph.sitePage',
+    title: args.title,
+    name: args.name ?? derivePageName(args.title),
+    pageLayout: args.pageLayout ?? 'article',
+    ...(args.description ? { description: args.description } : {}),
+    ...(args.promotionKind ? { promotionKind: args.promotionKind } : {}),
+    ...(args.contentHtml ? { canvasLayout: buildTextCanvasLayout(args.contentHtml) } : {}),
+  };
+
+  const response = await client.api(`/sites/${args.siteId}/pages`).options({ signal }).post(body);
+  const page = GraphSitePageSchema.parse(response);
+
+  return successResult({
+    success: true,
+    id: page.id,
+    name: wrapUntrusted(page.name, 'microsoft-sharepoint:create_site_page:name'),
+    title: wrapUntrusted(page.title, 'microsoft-sharepoint:create_site_page:title'),
+    webUrl: page.webUrl,
+    publishingState: page.publishingState?.level,
+    message: 'Page created as a draft. Call publish_site_page to make it visible to readers.',
+  });
+}
+
+interface UpdateSitePageArgs {
+  siteId?: string;
+  pageId?: string;
+  title?: string;
+  description?: string;
+  promotionKind?: 'page' | 'newsPost';
+}
+
+export async function updateSitePage(
+  client: Client,
+  args: UpdateSitePageArgs,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (!args.siteId || !args.pageId) {
+    return errorResult(
+      'Missing required parameters: "siteId" and "pageId". ' +
+      'Example: { "siteId": "contoso.sharepoint.com,abc123,def456", "pageId": "abc123", "title": "New title" }',
+    );
+  }
+
+  const updates: Record<string, unknown> = { '@odata.type': '#microsoft.graph.sitePage' };
+  if (args.title !== undefined) updates.title = args.title;
+  if (args.description !== undefined) updates.description = args.description;
+  if (args.promotionKind !== undefined) updates.promotionKind = args.promotionKind;
+
+  if (Object.keys(updates).length === 1) {
+    return errorResult(
+      'Nothing to update. Provide at least one of: "title", "description", "promotionKind".',
+    );
+  }
+
+  const endpoint = `/sites/${args.siteId}/pages/${args.pageId}/microsoft.graph.sitePage`;
+  const response = await client.api(endpoint).options({ signal }).patch(updates);
+  const page = GraphSitePageSchema.parse(response);
+
+  return successResult({
+    success: true,
+    id: page.id,
+    title: wrapUntrusted(page.title, 'microsoft-sharepoint:update_site_page:title'),
+    webUrl: page.webUrl,
+    publishingState: page.publishingState?.level,
+    message: 'Page updated successfully. If the page was already published, call publish_site_page to publish the new version.',
+  });
+}
+
+interface PublishSitePageArgs {
+  siteId?: string;
+  pageId?: string;
+}
+
+export async function publishSitePage(
+  client: Client,
+  args: PublishSitePageArgs,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (!args.siteId || !args.pageId) {
+    return errorResult(
+      'Missing required parameters: "siteId" and "pageId". ' +
+      'Example: { "siteId": "contoso.sharepoint.com,abc123,def456", "pageId": "abc123" }',
+    );
+  }
+
+  const endpoint = `/sites/${args.siteId}/pages/${args.pageId}/microsoft.graph.sitePage/publish`;
+  await client.api(endpoint).options({ signal }).post({});
+
+  return successResult({
+    success: true,
+    message:
+      'Page published successfully. If a page approval flow is active on the page library, ' +
+      'the page becomes visible once the approval completes.',
+  });
+}
+
 // -- SharePoint Lists tool implementations --
 
 interface ListSiteListsArgs {
@@ -982,6 +1376,133 @@ export async function deleteListItem(
   });
 }
 
+// -- List schema tool implementations --
+
+interface ListListColumnsArgs {
+  siteId?: string;
+  listId?: string;
+}
+
+export async function listListColumns(
+  client: Client,
+  args: ListListColumnsArgs,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (!args.siteId || !args.listId) {
+    return errorResult(
+      'Missing required parameters: "siteId" and "listId". ' +
+      'Example: { "siteId": "contoso.sharepoint.com,abc123,def456", "listId": "abc-123-def" }. ' +
+      'Use list_site_lists to find lists first.',
+    );
+  }
+
+  const response = await client
+    .api(`/sites/${args.siteId}/lists/${args.listId}/columns`)
+    .options({ signal })
+    .get();
+  const columns = parseGraphCollection(GraphColumnDefinitionSchema, response);
+
+  return successResult({
+    siteId: args.siteId,
+    listId: args.listId,
+    count: columns.length,
+    columns: columns.map((column) => ({
+      id: column.id,
+      name: column.name,
+      displayName: wrapUntrusted(column.displayName, 'microsoft-sharepoint:list_list_columns:displayName'),
+      description: wrapUntrusted(column.description, 'microsoft-sharepoint:list_list_columns:description'),
+      type: COLUMN_TYPE_FACETS.find((facet) => column[facet] !== undefined) ?? 'unknown',
+      required: column.required ?? false,
+      hidden: column.hidden ?? false,
+      readOnly: column.readOnly ?? false,
+    })),
+  });
+}
+
+type NewListColumnType = 'text' | 'number' | 'dateTime' | 'boolean' | 'choice';
+
+interface NewListColumn {
+  name: string;
+  type: NewListColumnType;
+  required?: boolean;
+  choices?: string[];
+}
+
+function buildColumnDefinition(column: NewListColumn): Record<string, unknown> {
+  const definition: Record<string, unknown> = { name: column.name };
+  if (column.required) definition.required = true;
+  switch (column.type) {
+    case 'text':
+      definition.text = {};
+      break;
+    case 'number':
+      definition.number = {};
+      break;
+    case 'dateTime':
+      definition.dateTime = {};
+      break;
+    case 'boolean':
+      definition.boolean = {};
+      break;
+    case 'choice':
+      definition.choice = { choices: column.choices ?? [] };
+      break;
+  }
+  return definition;
+}
+
+interface CreateSiteListArgs {
+  siteId?: string;
+  displayName?: string;
+  description?: string;
+  template?: string;
+  columns?: NewListColumn[];
+}
+
+export async function createSiteList(
+  client: Client,
+  args: CreateSiteListArgs,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (!args.siteId || !args.displayName) {
+    return errorResult(
+      'Missing required parameters: "siteId" and "displayName". ' +
+      'Example: { "siteId": "contoso.sharepoint.com,abc123,def456", "displayName": "Project Tracker", ' +
+      '"columns": [{ "name": "Status", "type": "choice", "choices": ["Active", "Complete"] }] }',
+    );
+  }
+
+  for (const column of args.columns ?? []) {
+    if (column.type === 'choice' && (!column.choices || column.choices.length === 0)) {
+      return errorResult(
+        `Column "${column.name}" is of type "choice" but has no "choices" array. ` +
+        'Provide at least one choice value.',
+      );
+    }
+  }
+
+  const body: Record<string, unknown> = {
+    displayName: args.displayName,
+    list: { template: args.template ?? 'genericList' },
+    ...(args.description ? { description: args.description } : {}),
+    ...(args.columns && args.columns.length > 0
+      ? { columns: args.columns.map(buildColumnDefinition) }
+      : {}),
+  };
+
+  const response = await client.api(`/sites/${args.siteId}/lists`).options({ signal }).post(body);
+  const created = GraphListSchema.parse(response);
+
+  return successResult({
+    success: true,
+    id: created.id,
+    displayName: wrapUntrusted(created.displayName, 'microsoft-sharepoint:create_site_list:displayName'),
+    webUrl: created.webUrl,
+    template: created.list?.template,
+    message: 'List created successfully',
+  });
+}
+
 // -- Cross-site search tool implementation --
 
 interface SearchSharePointArgs {
@@ -1132,6 +1653,149 @@ export async function createSharingLink(
   });
 }
 
+// -- File version history tool implementation --
+
+interface ListFileVersionsArgs {
+  driveId?: string;
+  itemId?: string;
+  top?: number;
+}
+
+export async function listFileVersions(
+  client: Client,
+  args: ListFileVersionsArgs,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (!args.driveId || !args.itemId) {
+    return errorResult(
+      'Missing required parameters: "driveId" (document library ID) and "itemId" (file ID). ' +
+      'Example: { "driveId": "b!abc123...", "itemId": "01ABCDEF..." }',
+    );
+  }
+
+  const top = Math.min(args.top ?? 50, 200);
+  const endpoint = `${buildDriveEndpoint(args.driveId, args.itemId)}/versions`;
+  const response = await client.api(endpoint).options({ signal }).top(top).get();
+  const versions = parseGraphCollection(GraphDriveItemVersionSchema, response);
+
+  return successResult({
+    driveId: args.driveId,
+    itemId: args.itemId,
+    count: versions.length,
+    versions: versions.map((version) => ({
+      id: version.id,
+      size: formatSize(version.size),
+      modifiedAt: version.lastModifiedDateTime,
+      modifiedBy: wrapUntrusted(
+        version.lastModifiedBy?.user?.displayName,
+        'microsoft-sharepoint:list_file_versions:modifiedBy',
+      ),
+    })),
+  });
+}
+
+// -- Item permission tool implementations --
+
+interface ListItemPermissionsArgs {
+  driveId?: string;
+  itemId?: string;
+}
+
+export async function listItemPermissions(
+  client: Client,
+  args: ListItemPermissionsArgs,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (!args.driveId || !args.itemId) {
+    return errorResult(
+      'Missing required parameters: "driveId" and "itemId". ' +
+      'Example: { "driveId": "b!abc123...", "itemId": "01ABCDEF..." }',
+    );
+  }
+
+  const endpoint = `${buildDriveEndpoint(args.driveId, args.itemId)}/permissions`;
+  const response = await client.api(endpoint).options({ signal }).get();
+  const permissions = parseGraphCollection(GraphPermissionSchema, response);
+
+  return successResult({
+    driveId: args.driveId,
+    itemId: args.itemId,
+    count: permissions.length,
+    permissions: permissions.map((permission) => formatPermission(permission, 'list_item_permissions')),
+  });
+}
+
+interface InviteItemCollaboratorsArgs {
+  driveId?: string;
+  itemId?: string;
+  recipients?: string[];
+  role?: 'read' | 'write';
+  message?: string;
+  sendInvitation?: boolean;
+}
+
+export async function inviteItemCollaborators(
+  client: Client,
+  args: InviteItemCollaboratorsArgs,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (!args.driveId || !args.itemId || !args.recipients || args.recipients.length === 0) {
+    return errorResult(
+      'Missing required parameters: "driveId", "itemId", and "recipients" (non-empty array of email addresses). ' +
+      'Example: { "driveId": "b!abc123...", "itemId": "01ABCDEF...", "recipients": ["jane@example.com"], "role": "read" }',
+    );
+  }
+
+  const endpoint = `${buildDriveEndpoint(args.driveId, args.itemId)}/invite`;
+  const response = await client.api(endpoint).options({ signal }).post({
+    recipients: args.recipients.map((email) => ({ email })),
+    requireSignIn: true,
+    // Default to NOT sending a notification email — a surprise email to an
+    // external recipient is a side effect the caller must opt into.
+    sendInvitation: args.sendInvitation ?? false,
+    roles: [args.role ?? 'read'],
+    ...(args.message ? { message: args.message } : {}),
+  });
+
+  const granted = parseGraphCollection(GraphPermissionSchema, response);
+
+  return successResult({
+    success: true,
+    driveId: args.driveId,
+    itemId: args.itemId,
+    granted: granted.map((permission) => formatPermission(permission, 'invite_item_collaborators')),
+    message: `Granted ${args.role ?? 'read'} access to ${args.recipients.length} recipient(s)`,
+  });
+}
+
+interface RevokeItemPermissionArgs {
+  driveId?: string;
+  itemId?: string;
+  permissionId?: string;
+}
+
+export async function revokeItemPermission(
+  client: Client,
+  args: RevokeItemPermissionArgs,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (!args.driveId || !args.itemId || !args.permissionId) {
+    return errorResult(
+      'Missing required parameters: "driveId", "itemId", and "permissionId". ' +
+      'Example: { "driveId": "b!abc123...", "itemId": "01ABCDEF...", "permissionId": "perm-1" }. ' +
+      'Use list_item_permissions to find permission IDs.',
+    );
+  }
+
+  const endpoint = `${buildDriveEndpoint(args.driveId, args.itemId)}/permissions/${args.permissionId}`;
+  await client.api(endpoint).options({ signal }).delete();
+
+  return successResult({
+    success: true,
+    message: 'Permission revoked successfully',
+  });
+}
+
 // -- Subsites tool implementation --
 
 interface ListSubsitesArgs {
@@ -1220,6 +1884,9 @@ export async function getRecentFiles(
   return successResult({
     count: items.length,
     items,
+    note:
+      'Results come from the current user\'s personal OneDrive (/me/drive/recent), ' +
+      'not from SharePoint site document libraries.',
   });
 }
 

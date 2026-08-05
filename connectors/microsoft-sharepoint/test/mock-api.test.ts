@@ -115,6 +115,57 @@ describe('microsoft-sharepoint mock-API integration', () => {
     expect(call).toBeDefined();
   });
 
+  it('upload_library_file_binary uploads via an upload session in one chunk', async () => {
+    const contentBase64 = Buffer.from('binary-payload').toString('base64');
+    const result = await client.callTool('upload_library_file_binary', {
+      driveId: 'drive-1',
+      path: 'General/report.bin',
+      contentBase64,
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; success: boolean; id: string };
+    expect(json.ok).toBeUndefined();
+    expect(json.success).toBe(true);
+    expect(json.id).toBe('uploaded-bin-1');
+    const sessionCall = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.includes('/createUploadSession'),
+    );
+    expect(sessionCall).toBeDefined();
+    expect((sessionCall?.body as { item: Record<string, unknown> }).item['@microsoft.graph.conflictBehavior']).toBe('rename');
+    const chunkCalls = state.requests.filter(
+      (r) => r.method === 'PUT' && r.pathname.includes('/uploadSessions/'),
+    );
+    expect(chunkCalls).toHaveLength(1);
+  });
+
+  it('upload_library_file_binary chunks large payloads (202 then 201)', async () => {
+    // 5 MB > one 3.2 MB chunk, so the upload must span two PUTs.
+    const contentBase64 = Buffer.alloc(5 * 1024 * 1024, 7).toString('base64');
+    const result = await client.callTool('upload_library_file_binary', {
+      driveId: 'drive-1',
+      path: 'General/big.bin',
+      contentBase64,
+      conflictBehavior: 'replace',
+    });
+    expect(result.isError).not.toBe(true);
+    const chunkCalls = state.requests.filter(
+      (r) => r.method === 'PUT' && r.pathname.includes('/uploadSessions/'),
+    );
+    expect(chunkCalls).toHaveLength(2);
+  });
+
+  it('upload_library_file_binary rejects invalid base64', async () => {
+    const result = await client.callTool('upload_library_file_binary', {
+      driveId: 'drive-1',
+      path: 'General/report.bin',
+      contentBase64: '!!!not-base64!!!',
+    });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('base64');
+  });
+
   it('create_library_folder creates nested folder', async () => {
     const result = await client.callTool('create_library_folder', {
       driveId: 'drive-1',
@@ -144,6 +195,75 @@ describe('microsoft-sharepoint mock-API integration', () => {
     expect(result.isError).not.toBe(true);
     const json = result.json as { contentHtml: string };
     expect(json.contentHtml).toContain('Hello SharePoint');
+  });
+
+  it('create_site_page POSTs a sitePage draft with derived name and text web part', async () => {
+    const result = await client.callTool('create_site_page', {
+      siteId: 'site-1',
+      title: 'Q3 Update',
+      contentHtml: '<p>Summary</p>',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; success: boolean; id: string; message: string };
+    expect(json.ok).toBeUndefined();
+    expect(json.success).toBe(true);
+    expect(json.message).toContain('draft');
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && /\/sites\/site-1\/pages$/.test(r.pathname),
+    );
+    expect(call).toBeDefined();
+    const body = call?.body as {
+      '@odata.type': string;
+      title: string;
+      name: string;
+      pageLayout: string;
+      canvasLayout: { horizontalSections: Array<{ columns: Array<{ webparts: Array<{ innerHtml: string }> }> }> };
+    };
+    expect(body['@odata.type']).toBe('#microsoft.graph.sitePage');
+    expect(body.name).toBe('q3-update.aspx');
+    expect(body.pageLayout).toBe('article');
+    expect(body.canvasLayout.horizontalSections[0]?.columns[0]?.webparts[0]?.innerHtml).toBe('<p>Summary</p>');
+  });
+
+  it('create_site_page rejects a missing title', async () => {
+    const result = await client.callTool('create_site_page', { siteId: 'site-1' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('title');
+  });
+
+  it('update_site_page PATCHes the sitePage cast endpoint', async () => {
+    const result = await client.callTool('update_site_page', {
+      siteId: 'site-1',
+      pageId: 'page-1',
+      title: 'Updated title',
+    });
+    expect(result.isError).not.toBe(true);
+    const call = state.requests.find(
+      (r) => r.method === 'PATCH' && /\/pages\/page-1\/microsoft\.graph\.sitePage$/.test(r.pathname),
+    );
+    expect(call).toBeDefined();
+    const body = call?.body as { '@odata.type': string; title: string };
+    expect(body['@odata.type']).toBe('#microsoft.graph.sitePage');
+    expect(body.title).toBe('Updated title');
+  });
+
+  it('update_site_page rejects a call with nothing to update', async () => {
+    const result = await client.callTool('update_site_page', { siteId: 'site-1', pageId: 'page-1' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Nothing to update');
+  });
+
+  it('publish_site_page POSTs to the publish endpoint', async () => {
+    const result = await client.callTool('publish_site_page', { siteId: 'site-1', pageId: 'page-1' });
+    expect(result.isError).not.toBe(true);
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && /\/pages\/page-1\/microsoft\.graph\.sitePage\/publish$/.test(r.pathname),
+    );
+    expect(call).toBeDefined();
   });
 
   it('list/list-item mutation tools hit expected list endpoints', async () => {
@@ -258,6 +378,168 @@ describe('microsoft-sharepoint mock-API integration', () => {
     expect(delta.isError).not.toBe(true);
     const deltaJson = delta.json as { deltaLink: string };
     expect(deltaJson.deltaLink).toContain('/sites/delta(');
+  });
+
+  it('get_recent_files labels its personal-OneDrive scope', async () => {
+    const result = await client.callTool('get_recent_files', { top: 5 });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; note?: string };
+    expect(json.ok).toBeUndefined();
+    expect(json.note).toContain('OneDrive');
+  });
+
+  it('list_list_columns returns column schema with derived types', async () => {
+    const result = await client.callTool('list_list_columns', {
+      siteId: 'site-1',
+      listId: 'list-1',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      ok?: unknown;
+      count: number;
+      columns: Array<{ name?: string; displayName?: string; type: string; required: boolean }>;
+    };
+    expect(json.ok).toBeUndefined();
+    expect(json.count).toBe(2);
+    expect(json.columns[0]?.type).toBe('text');
+    expect(json.columns[1]?.type).toBe('choice');
+    expect(json.columns[1]?.required).toBe(true);
+    expect(json.columns[1]?.displayName).toContain('<untrusted-content');
+  });
+
+  it('create_site_list POSTs a list with column schema', async () => {
+    const result = await client.callTool('create_site_list', {
+      siteId: 'site-1',
+      displayName: 'Project Tracker',
+      columns: [
+        { name: 'Status', type: 'choice', choices: ['Active', 'Complete'], required: true },
+        { name: 'Notes', type: 'text' },
+      ],
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; success: boolean; id: string };
+    expect(json.ok).toBeUndefined();
+    expect(json.success).toBe(true);
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && /\/sites\/site-1\/lists$/.test(r.pathname),
+    );
+    expect(call).toBeDefined();
+    const body = call?.body as {
+      displayName: string;
+      list: { template: string };
+      columns: Array<Record<string, unknown>>;
+    };
+    expect(body.displayName).toBe('Project Tracker');
+    expect(body.list.template).toBe('genericList');
+    expect(body.columns[0]).toMatchObject({
+      name: 'Status',
+      required: true,
+      choice: { choices: ['Active', 'Complete'] },
+    });
+    expect(body.columns[1]).toMatchObject({ name: 'Notes', text: {} });
+  });
+
+  it('create_site_list rejects a choice column without choices', async () => {
+    const result = await client.callTool('create_site_list', {
+      siteId: 'site-1',
+      displayName: 'Bad List',
+      columns: [{ name: 'Status', type: 'choice' }],
+    });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('choices');
+  });
+
+  it('list_file_versions returns version history with enveloped names', async () => {
+    const result = await client.callTool('list_file_versions', {
+      driveId: 'drive-1',
+      itemId: 'item-1',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      ok?: unknown;
+      count: number;
+      versions: Array<{ id: string; modifiedBy?: string }>;
+    };
+    expect(json.ok).toBeUndefined();
+    expect(json.count).toBe(2);
+    expect(json.versions[0]?.id).toBe('1.0');
+    expect(json.versions[0]?.modifiedBy).toContain('<untrusted-content');
+  });
+
+  it('list_file_versions rejects missing arguments with guidance', async () => {
+    const result = await client.callTool('list_file_versions', { driveId: 'drive-1' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('itemId');
+  });
+
+  it('list_item_permissions returns grants with enveloped display names', async () => {
+    const result = await client.callTool('list_item_permissions', {
+      driveId: 'drive-1',
+      itemId: 'item-1',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      ok?: unknown;
+      count: number;
+      permissions: Array<{ id: string; roles: string[]; grantedTo: Array<{ displayName?: string; email?: string }> }>;
+    };
+    expect(json.ok).toBeUndefined();
+    expect(json.count).toBe(1);
+    expect(json.permissions[0]?.id).toBe('perm-1');
+    expect(json.permissions[0]?.grantedTo[0]?.displayName).toContain('<untrusted-content');
+    expect(json.permissions[0]?.grantedTo[0]?.displayName).toContain('Alice Example');
+  });
+
+  it('invite_item_collaborators POSTs to /invite with safe defaults', async () => {
+    const result = await client.callTool('invite_item_collaborators', {
+      driveId: 'drive-1',
+      itemId: 'item-1',
+      recipients: ['jane@example.com'],
+    });
+    expect(result.isError).not.toBe(true);
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.includes('/drives/drive-1/items/item-1/invite'),
+    );
+    expect(call).toBeDefined();
+    const body = call?.body as {
+      recipients: Array<{ email: string }>;
+      requireSignIn: boolean;
+      sendInvitation: boolean;
+      roles: string[];
+    };
+    expect(body.recipients).toEqual([{ email: 'jane@example.com' }]);
+    expect(body.requireSignIn).toBe(true);
+    expect(body.sendInvitation).toBe(false);
+    expect(body.roles).toEqual(['read']);
+  });
+
+  it('invite_item_collaborators rejects an empty recipient list', async () => {
+    const result = await client.callTool('invite_item_collaborators', {
+      driveId: 'drive-1',
+      itemId: 'item-1',
+      recipients: [],
+    });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('recipients');
+  });
+
+  it('revoke_item_permission deletes the permission', async () => {
+    const result = await client.callTool('revoke_item_permission', {
+      driveId: 'drive-1',
+      itemId: 'item-1',
+      permissionId: 'perm-1',
+    });
+    expect(result.isError).not.toBe(true);
+    const call = state.requests.find(
+      (r) => r.method === 'DELETE' && r.pathname.includes('/drives/drive-1/items/item-1/permissions/perm-1'),
+    );
+    expect(call).toBeDefined();
   });
 
   it('returns explicit guidance when scope-gated tool arguments are missing', async () => {

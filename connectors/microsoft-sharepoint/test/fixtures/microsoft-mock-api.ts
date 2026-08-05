@@ -88,6 +88,18 @@ const listItem = {
   fields: { Title: 'Task A', Status: 'Active' },
 };
 
+const permission = {
+  id: 'perm-1',
+  roles: ['read'],
+  shareId: 's!abc123',
+  link: {
+    type: 'view',
+    scope: 'users',
+    webUrl: 'https://contoso.sharepoint.com/share/perm-1',
+  },
+  grantedToV2: { user: { displayName: 'Alice Example', email: 'alice@example.com' } },
+};
+
 export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState } {
   const state: MockApiState = { requests: [], refreshCalls: 0 };
 
@@ -158,6 +170,35 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
         return HttpResponse.json(drive);
       }
 
+      if (method === 'POST' && /^\/v1\.0\/sites\/[^/]+\/pages$/.test(pathname)) {
+        return HttpResponse.json(
+          {
+            '@odata.type': '#microsoft.graph.sitePage',
+            id: 'page-new',
+            name: 'q3-update.aspx',
+            title: 'Q3 Update',
+            webUrl: 'https://contoso.sharepoint.com/sites/Marketing/SitePages/q3-update.aspx',
+            pageLayout: 'article',
+            publishingState: { level: 'checkout', versionId: '0.1' },
+          },
+          { status: 201 },
+        );
+      }
+
+      if (method === 'POST' && /\/microsoft\.graph\.sitePage\/publish$/.test(pathname)) {
+        return new HttpResponse(null, { status: 204 });
+      }
+
+      if (method === 'PATCH' && /\/microsoft\.graph\.sitePage$/.test(pathname)) {
+        return HttpResponse.json({
+          id: 'page-1',
+          title: 'Updated title',
+          name: 'home.aspx',
+          webUrl: 'https://contoso.sharepoint.com/sites/Marketing/SitePages/home.aspx',
+          publishingState: { level: 'draft', versionId: '1.1' },
+        });
+      }
+
       if (method === 'GET' && /^\/v1\.0\/sites\/[^/]+\/pages$/.test(pathname)) {
         return HttpResponse.json({
           value: [
@@ -193,6 +234,34 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
           createdDateTime: '2026-01-01T10:00:00Z',
           lastModifiedDateTime: '2026-05-19T10:00:00Z',
         });
+      }
+
+      if (method === 'GET' && /^\/v1\.0\/sites\/[^/]+\/lists\/[^/]+\/columns$/.test(pathname)) {
+        return HttpResponse.json({
+          value: [
+            { id: 'col-1', name: 'Title', displayName: 'Title', readOnly: true, text: {} },
+            {
+              id: 'col-2',
+              name: 'Status',
+              displayName: 'Status',
+              description: 'Current status',
+              required: true,
+              choice: { choices: ['Active', 'Complete'] },
+            },
+          ],
+        });
+      }
+
+      if (method === 'POST' && /^\/v1\.0\/sites\/[^/]+\/lists$/.test(pathname)) {
+        return HttpResponse.json(
+          {
+            id: 'list-new',
+            displayName: 'Project Tracker',
+            webUrl: 'https://contoso.sharepoint.com/sites/Marketing/Lists/ProjectTracker',
+            list: { template: 'genericList', hidden: false },
+          },
+          { status: 201 },
+        );
       }
 
       if (method === 'GET' && /^\/v1\.0\/sites\/[^/]+\/lists$/.test(pathname)) {
@@ -304,6 +373,38 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
         return HttpResponse.json({ value: [fileItem] });
       }
 
+      if (method === 'POST' && /^\/v1\.0\/drives\/[^/]+\/root:\/.*:\/createUploadSession$/.test(pathname)) {
+        return HttpResponse.json({
+          uploadUrl: 'https://graph.microsoft.com/v1.0/drives/drive-1/uploadSessions/session-1',
+          expirationDateTime: '2026-05-20T10:00:00Z',
+        });
+      }
+
+      if (method === 'PUT' && /^\/v1\.0\/drives\/[^/]+\/uploadSessions\/[^/]+$/.test(pathname)) {
+        const range = request.headers.get('content-range') ?? '';
+        const match = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(range);
+        if (!match) {
+          return HttpResponse.json({ error: { message: 'Missing or invalid Content-Range' } }, { status: 400 });
+        }
+        const end = Number(match[2]);
+        const total = Number(match[3]);
+        if (end + 1 < total) {
+          return HttpResponse.json(
+            { nextExpectedRanges: [`${end + 1}-`] },
+            { status: 202 },
+          );
+        }
+        return HttpResponse.json(
+          {
+            id: 'uploaded-bin-1',
+            name: 'report.bin',
+            size: total,
+            webUrl: 'https://contoso.sharepoint.com/uploaded-bin-1',
+          },
+          { status: 201 },
+        );
+      }
+
       if (method === 'PUT' && /^\/v1\.0\/drives\/[^/]+\/root:\/.*:\/content$/.test(pathname)) {
         return HttpResponse.json({
           id: 'uploaded-1',
@@ -370,6 +471,45 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
           status: 202,
           headers: { Location: 'https://graph.microsoft.com/v1.0/monitor/copy-1' },
         });
+      }
+
+      if (method === 'GET' && /^\/v1\.0\/drives\/[^/]+\/items\/[^/]+\/versions$/.test(pathname)) {
+        return HttpResponse.json({
+          value: [
+            {
+              id: '1.0',
+              size: 42,
+              lastModifiedDateTime: '2026-05-18T10:00:00Z',
+              lastModifiedBy: { user: { displayName: 'Alice Example' } },
+            },
+            {
+              id: '2.0',
+              size: 52,
+              lastModifiedDateTime: '2026-05-19T10:00:00Z',
+              lastModifiedBy: { user: { displayName: 'Bob Example' } },
+            },
+          ],
+        });
+      }
+
+      if (method === 'GET' && /^\/v1\.0\/drives\/[^/]+\/items\/[^/]+\/permissions$/.test(pathname)) {
+        return HttpResponse.json({ value: [permission] });
+      }
+
+      if (method === 'POST' && /^\/v1\.0\/drives\/[^/]+\/items\/[^/]+\/invite$/.test(pathname)) {
+        return HttpResponse.json({
+          value: [
+            {
+              id: 'perm-2',
+              roles: ['read'],
+              grantedToV2: { user: { displayName: 'Jane Example', email: 'jane@example.com' } },
+            },
+          ],
+        });
+      }
+
+      if (method === 'DELETE' && /^\/v1\.0\/drives\/[^/]+\/items\/[^/]+\/permissions\/[^/]+$/.test(pathname)) {
+        return new HttpResponse(null, { status: 204 });
       }
 
       if (method === 'POST' && /^\/v1\.0\/drives\/[^/]+\/items\/[^/]+\/createLink$/.test(pathname)) {

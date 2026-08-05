@@ -10,6 +10,8 @@ import {
   createLibraryFolder,
   createListItem,
   createSharingLink,
+  createSiteList,
+  createSitePage,
   deleteLibraryItem,
   deleteListItem,
   downloadLibraryFile,
@@ -24,7 +26,11 @@ import {
   getSiteItem,
   getSiteList,
   getSitesDelta,
+  inviteItemCollaborators,
+  listFileVersions,
+  listItemPermissions,
   listLibraryFiles,
+  listListColumns,
   listListItems,
   listSharePointSites,
   listSiteDocumentLibraries,
@@ -33,14 +39,18 @@ import {
   listSitePages,
   listSubsites,
   moveLibraryItem,
+  publishSitePage,
   readLibraryTextFile,
   readSitePage,
   renameLibraryItem,
+  revokeItemPermission,
   searchLibraryFiles,
   searchSharePoint,
   updateFileMetadata,
   updateListItem,
+  updateSitePage,
   uploadLibraryFile,
+  uploadLibraryFileBinary,
 } from './sharepoint.js';
 
 const READ_ONLY_ANNOTATIONS = {
@@ -84,6 +94,16 @@ type SharePointToolSpec = {
 const SearchEntityTypeEnum = z.enum(['driveItem', 'listItem', 'list', 'site']);
 const SharingTypeEnum = z.enum(['view', 'edit']);
 const SharingScopeEnum = z.enum(['anonymous', 'organization']);
+const ListTemplateEnum = z.enum([
+  'genericList',
+  'tasks',
+  'announcements',
+  'contacts',
+  'events',
+  'links',
+  'issueTracking',
+]);
+const ListColumnTypeEnum = z.enum(['text', 'number', 'dateTime', 'boolean', 'choice']);
 
 async function requireSharePointScope(): Promise<CallToolResult | null> {
   try {
@@ -274,6 +294,26 @@ const TOOL_SPECS: SharePointToolSpec[] = [
     handler: uploadLibraryFile as SharePointHandler,
   },
   {
+    name: 'upload_library_file_binary',
+    description:
+      'Upload a binary or large file (base64-encoded content, up to 100MB decoded) to a SharePoint document library using a resumable upload session. ' +
+      'Use upload_library_file instead for small text files.',
+    inputSchema: z.object({
+      driveId: z.string().optional().describe('Document library (drive) ID'),
+      path: z
+        .string()
+        .optional()
+        .describe('Destination path including filename (e.g., "General/report.pdf")'),
+      contentBase64: z.string().optional().describe('File content, base64-encoded'),
+      conflictBehavior: z
+        .enum(['fail', 'rename', 'replace'])
+        .optional()
+        .describe('What to do when a file with the same name exists (default: "rename")'),
+    }),
+    annotations: WRITE_ANNOTATIONS,
+    handler: uploadLibraryFileBinary as SharePointHandler,
+  },
+  {
     name: 'create_library_folder',
     description: 'Create a new folder in a SharePoint document library.',
     inputSchema: z.object({
@@ -346,6 +386,61 @@ const TOOL_SPECS: SharePointToolSpec[] = [
     }),
     annotations: READ_ONLY_ANNOTATIONS,
     handler: readSitePage as SharePointHandler,
+  },
+  {
+    name: 'create_site_page',
+    description:
+      'Create a new SharePoint site page as a draft, optionally with simple HTML body content. ' +
+      'Call publish_site_page afterwards to make it visible. ' +
+      'Requires Sites.ReadWrite.All — an admin may need to approve this permission.',
+    inputSchema: z.object({
+      siteId: z.string().optional().describe('SharePoint site ID'),
+      title: z.string().optional().describe('Page title (e.g., "Q3 Update")'),
+      name: z
+        .string()
+        .optional()
+        .describe('Page file name (e.g., "q3-update.aspx"). Derived from the title when omitted.'),
+      description: z.string().optional().describe('Optional page description'),
+      pageLayout: z.enum(['article', 'home']).optional().describe('Page layout (default: "article")'),
+      promotionKind: z
+        .enum(['page', 'newsPost'])
+        .optional()
+        .describe('Promote as a normal page or a news post (default: page)'),
+      contentHtml: z
+        .string()
+        .optional()
+        .describe('Optional HTML body content, added as a single text web part (e.g., "<p>Summary…</p>")'),
+    }),
+    annotations: WRITE_ANNOTATIONS,
+    handler: createSitePage as SharePointHandler,
+  },
+  {
+    name: 'update_site_page',
+    description:
+      'Update a SharePoint site page\'s metadata (title, description, or promotion kind). Does not edit page body content.',
+    inputSchema: z.object({
+      siteId: z.string().optional().describe('SharePoint site ID'),
+      pageId: z.string().optional().describe('Page ID from list_site_pages or create_site_page'),
+      title: z.string().optional().describe('New page title'),
+      description: z.string().optional().describe('New page description'),
+      promotionKind: z
+        .enum(['page', 'newsPost'])
+        .optional()
+        .describe('Promote as a normal page or a news post'),
+    }),
+    annotations: IDP_WRITE_ANNOTATIONS,
+    handler: updateSitePage as SharePointHandler,
+  },
+  {
+    name: 'publish_site_page',
+    description:
+      'Publish a draft SharePoint site page so it becomes visible to readers. If a page approval flow is active, the page publishes after approval completes.',
+    inputSchema: z.object({
+      siteId: z.string().optional().describe('SharePoint site ID'),
+      pageId: z.string().optional().describe('Page ID from list_site_pages or create_site_page'),
+    }),
+    annotations: WRITE_ANNOTATIONS,
+    handler: publishSitePage as SharePointHandler,
   },
   {
     name: 'list_site_lists',
@@ -425,6 +520,45 @@ const TOOL_SPECS: SharePointToolSpec[] = [
     handler: deleteListItem as SharePointHandler,
   },
   {
+    name: 'list_list_columns',
+    description:
+      'List the column schema of a SharePoint list (column names, types, and required flags). Use this to discover which fields exist before creating or updating list items.',
+    inputSchema: z.object({
+      siteId: z.string().optional().describe('SharePoint site ID'),
+      listId: z.string().optional().describe('List ID from list_site_lists'),
+    }),
+    annotations: READ_ONLY_ANNOTATIONS,
+    handler: listListColumns as SharePointHandler,
+  },
+  {
+    name: 'create_site_list',
+    description:
+      'Create a new SharePoint list in a site, optionally with a column schema. ' +
+      'Requires a write permission (e.g. Sites.ReadWrite.All) — an admin may need to approve it.',
+    inputSchema: z.object({
+      siteId: z.string().optional().describe('SharePoint site ID'),
+      displayName: z.string().optional().describe('Display name for the new list (e.g., "Project Tracker")'),
+      description: z.string().optional().describe('Optional description for the list'),
+      template: ListTemplateEnum.optional().describe('List template (default: "genericList")'),
+      columns: z
+        .array(
+          z.object({
+            name: z.string().describe('Column name (e.g., "Status")'),
+            type: ListColumnTypeEnum.describe('Column type'),
+            required: z.boolean().optional().describe('Whether the column is required'),
+            choices: z
+              .array(z.string())
+              .optional()
+              .describe('Allowed values — required when type is "choice"'),
+          }),
+        )
+        .optional()
+        .describe('Optional column definitions for the new list'),
+    }),
+    annotations: WRITE_ANNOTATIONS,
+    handler: createSiteList as SharePointHandler,
+  },
+  {
     name: 'search_sharepoint',
     description:
       'Search across all SharePoint sites, document libraries, lists, and list items. More powerful than search_library_files which only searches within a single library.',
@@ -464,6 +598,67 @@ const TOOL_SPECS: SharePointToolSpec[] = [
     handler: createSharingLink as SharePointHandler,
   },
   {
+    name: 'list_file_versions',
+    description:
+      'List the version history of a file in a SharePoint document library (version ID, size, modified date, and who modified it).',
+    inputSchema: z.object({
+      driveId: z.string().optional().describe('Document library (drive) ID'),
+      itemId: z.string().optional().describe('File item ID'),
+      top: z.number().optional().describe('Max versions to return (default: 50)'),
+    }),
+    annotations: READ_ONLY_ANNOTATIONS,
+    handler: listFileVersions as SharePointHandler,
+  },
+  {
+    name: 'list_item_permissions',
+    description:
+      'List sharing permissions on a file or folder in a SharePoint document library (links and direct grants).',
+    inputSchema: z.object({
+      driveId: z.string().optional().describe('Document library (drive) ID'),
+      itemId: z.string().optional().describe('File or folder item ID'),
+    }),
+    annotations: READ_ONLY_ANNOTATIONS,
+    handler: listItemPermissions as SharePointHandler,
+  },
+  {
+    name: 'invite_item_collaborators',
+    description:
+      'Grant specific people access to a file or folder in a SharePoint document library by email address. ' +
+      'Defaults to read-only access and does NOT send a notification email unless sendInvitation is true. ' +
+      'Requires a write permission (e.g. Sites.ReadWrite.All) — an admin may need to approve it.',
+    inputSchema: z.object({
+      driveId: z.string().optional().describe('Document library (drive) ID'),
+      itemId: z.string().optional().describe('File or folder item ID'),
+      recipients: z
+        .array(z.string().email())
+        .optional()
+        .describe('Email addresses to grant access to (e.g., ["jane@example.com"])'),
+      role: z.enum(['read', 'write']).optional().describe('Access level to grant (default: "read")'),
+      message: z
+        .string()
+        .optional()
+        .describe('Optional message included in the notification email (only sent when sendInvitation is true)'),
+      sendInvitation: z
+        .boolean()
+        .optional()
+        .describe('Send a sharing notification email to recipients (default: false)'),
+    }),
+    annotations: WRITE_ANNOTATIONS,
+    handler: inviteItemCollaborators as SharePointHandler,
+  },
+  {
+    name: 'revoke_item_permission',
+    description:
+      'Revoke a sharing permission from a file or folder in a SharePoint document library. Use list_item_permissions to find permission IDs.',
+    inputSchema: z.object({
+      driveId: z.string().optional().describe('Document library (drive) ID'),
+      itemId: z.string().optional().describe('File or folder item ID'),
+      permissionId: z.string().optional().describe('Permission ID from list_item_permissions'),
+    }),
+    annotations: WRITE_ANNOTATIONS,
+    handler: revokeItemPermission as SharePointHandler,
+  },
+  {
     name: 'list_subsites',
     description:
       'List subsites of a SharePoint site. Use this to discover nested sites within a site collection.',
@@ -477,7 +672,9 @@ const TOOL_SPECS: SharePointToolSpec[] = [
   {
     name: 'get_recent_files',
     description:
-      "Get recently accessed files from the current user's OneDrive and SharePoint. Useful for finding files the user was recently working on.",
+      "Get recently accessed files from the current user's personal OneDrive (via /me/drive/recent). " +
+      'Note: this does NOT list recent files from SharePoint site document libraries — ' +
+      'use search_library_files or get_library_tree to explore SharePoint content.',
     inputSchema: z.object({
       top: z.number().optional().describe('Max files to return (default: 25)'),
     }),

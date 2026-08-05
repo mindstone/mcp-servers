@@ -17,21 +17,31 @@ const EXPECTED_TOOLS = [
   'search_library_files',
   'read_library_text_file',
   'upload_library_file',
+  'upload_library_file_binary',
   'create_library_folder',
   'delete_library_item',
   'move_library_item',
   'copy_library_item',
   'list_site_pages',
   'read_site_page',
+  'create_site_page',
+  'update_site_page',
+  'publish_site_page',
   'list_site_lists',
   'list_list_items',
   'get_list_item',
   'create_list_item',
   'update_list_item',
   'delete_list_item',
+  'list_list_columns',
+  'create_site_list',
   'search_sharepoint',
   'rename_library_item',
   'create_sharing_link',
+  'list_file_versions',
+  'list_item_permissions',
+  'invite_item_collaborators',
+  'revoke_item_permission',
   'list_subsites',
   'get_recent_files',
   'get_library_tree',
@@ -60,6 +70,7 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
   search_library_files: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   read_library_text_file: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   upload_library_file: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+  upload_library_file_binary: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   create_library_folder: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   delete_library_item: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   move_library_item: {
@@ -71,6 +82,14 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
   copy_library_item: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   list_site_pages: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   read_site_page: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  create_site_page: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+  update_site_page: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    openWorldHint: true,
+    idempotentHint: true,
+  },
+  publish_site_page: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   list_site_lists: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   list_list_items: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   get_list_item: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
@@ -82,6 +101,8 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
     idempotentHint: true,
   },
   delete_list_item: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+  list_list_columns: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  create_site_list: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   search_sharepoint: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   rename_library_item: {
     readOnlyHint: false,
@@ -90,6 +111,10 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
     idempotentHint: true,
   },
   create_sharing_link: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+  list_file_versions: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  list_item_permissions: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  invite_item_collaborators: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+  revoke_item_permission: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   list_subsites: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   get_recent_files: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   get_library_tree: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
@@ -127,7 +152,7 @@ describe('microsoft-sharepoint tools/list', () => {
     if (cfg) cfg.cleanup();
   });
 
-  it('registers exactly the 36 SharePoint tools in the locked surface', async () => {
+  it('registers exactly the locked SharePoint tool surface', async () => {
     const response = await client.client.listTools();
     const names = response.tools.map((tool) => tool.name).sort();
     expect(names).toEqual([...EXPECTED_TOOLS].sort());
