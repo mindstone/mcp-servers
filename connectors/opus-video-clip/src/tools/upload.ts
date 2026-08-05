@@ -39,6 +39,64 @@ interface ClipProjectResponse {
 }
 
 /**
+ * Open the workspace-validated upload source exactly once and bind every
+ * subsequent read to that single file descriptor (open-once + fstat +
+ * read-through-fd). The validated pathname is never re-trusted after
+ * `resolveUploadSourcePath`: O_NOFOLLOW refuses a symlink swapped in at
+ * the final component between validation and open (on platforms that
+ * support it), and fstat on the OPEN descriptor rejects non-regular files
+ * (FIFO/device swaps) on all platforms. A check-then-use swap of the
+ * pathname therefore cannot redirect the upload to a different file — at
+ * worst the open fails.
+ */
+export function openUploadSource(canonicalPath: string): { fd: number; totalBytes: number } {
+  const nofollow = fs.constants.O_NOFOLLOW ?? 0;
+  let fd: number;
+  try {
+    fd = fs.openSync(canonicalPath, fs.constants.O_RDONLY | nofollow);
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException;
+    if (e?.code === 'ELOOP') {
+      throw new OpusError(
+        `file_path is a symbolic link, refusing to read through it: ${canonicalPath}`,
+        'VALIDATION_ERROR',
+        'Pass the path of a regular video file inside the workspace, not a symlink.',
+      );
+    }
+    throw new OpusError(
+      `Could not open file_path for reading: ${e?.message || String(err)}`,
+      'VALIDATION_ERROR',
+      'Pass an absolute path to a readable local video file inside the workspace.',
+    );
+  }
+  try {
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile()) {
+      throw new OpusError(
+        `Not a regular file: ${canonicalPath}`,
+        'VALIDATION_ERROR',
+        'Pass an absolute path to a local video file.',
+      );
+    }
+    if (stat.size <= 0) {
+      throw new OpusError(
+        `File is empty: ${canonicalPath}`,
+        'VALIDATION_ERROR',
+        'Provide a non-empty video file.',
+      );
+    }
+    return { fd, totalBytes: stat.size };
+  } catch (err) {
+    try {
+      fs.closeSync(fd);
+    } catch {
+      /* best-effort */
+    }
+    throw err;
+  }
+}
+
+/**
  * Issue the resumable-upload "start" POST to GCS and return the
  * `Location` header value (the upload session URL). Empty body,
  * `x-goog-resumable: start`.
@@ -113,8 +171,15 @@ async function queryCommittedOffset(sessionUrl: string, totalBytes: number): Pro
 }
 
 /**
- * PUT the bytes of `filePath` starting from `offset` to `sessionUrl` using
- * the standard GCS resumable upload Content-Range format.
+ * PUT the bytes of the already-open upload source starting from `offset`
+ * to `sessionUrl` using the standard GCS resumable upload Content-Range
+ * format.
+ *
+ * All reads go through the single fd handed in by the caller
+ * (read-through-fd): the stream is created on that descriptor with
+ * `autoClose: false` so ownership stays with `performUpload`, and `start`
+ * forces positional reads so sequential resume attempts on the shared fd
+ * cannot interfere. The pathname is never re-opened.
  *
  * For simplicity v0.1 streams the whole remaining file in a single request.
  * GCS supports chunked uploads up to 256KB-aligned boundaries; chunking
@@ -123,14 +188,21 @@ async function queryCommittedOffset(sessionUrl: string, totalBytes: number): Pro
  */
 async function putUploadBytes(
   sessionUrl: string,
-  filePath: string,
+  fd: number,
   offset: number,
   totalBytes: number,
 ): Promise<void> {
   const remaining = totalBytes - offset;
   if (remaining <= 0) return;
 
-  const stream = fs.createReadStream(filePath, { start: offset });
+  // Node ignores the path argument when `fd` is supplied — this stream
+  // cannot re-open the validated pathname.
+  const stream = fs.createReadStream('', {
+    fd,
+    start: offset,
+    end: totalBytes - 1,
+    autoClose: false,
+  });
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/octet-stream',
@@ -167,7 +239,7 @@ async function putUploadBytes(
         'Retry the upload with opus_upload_video; the session may be stale.',
       );
     }
-    return putUploadBytes(sessionUrl, filePath, committed, totalBytes);
+    return putUploadBytes(sessionUrl, fd, committed, totalBytes);
   }
 
   const errText = await response.text().catch(() => '');
@@ -201,89 +273,83 @@ async function performUpload(args: {
   uploadedVideoAttr?: z.infer<typeof UploadedVideoAttrSchema>;
   conclusionActions?: z.infer<typeof ConclusionActionSchema>[];
 }): Promise<{ uploadId: string; project: ClipProjectResponse; resumed: boolean }> {
-  const stat = fs.statSync(args.filePath);
-  if (!stat.isFile()) {
-    throw new OpusError(
-      `Not a regular file: ${args.filePath}`,
-      'VALIDATION_ERROR',
-      'Pass an absolute path to a local video file.',
-    );
-  }
-  const totalBytes = stat.size;
-  if (totalBytes <= 0) {
-    throw new OpusError(
-      `File is empty: ${args.filePath}`,
-      'VALIDATION_ERROR',
-      'Provide a non-empty video file.',
-    );
-  }
-
-  // Step 1 — Generate upload link.
-  const link = await opusFetch<UploadLinkResponse>('/api/upload-links', {
-    method: 'POST',
-    body: JSON.stringify({ video: { usecase: 'LocalUpload' } }),
-  });
-  if (!link.url || !link.uploadId) {
-    throw new OpusError(
-      'Opus upload-links response missing url/uploadId',
-      'UPLOAD_FAILED',
-      'The Opus API returned an unexpected response. Retry the request.',
-    );
-  }
-
-  // Step 2 — Start resumable session.
-  const sessionUrl = await startResumableSession(link.url);
-
-  // Step 3 — Upload bytes with offset-query recovery on ambiguous failure.
-  let resumed = false;
+  // Open the validated source ONCE; every byte read below goes through
+  // this fd, so a path swap after validation cannot change what we upload.
+  const { fd, totalBytes } = openUploadSource(args.filePath);
   try {
-    await putUploadBytes(sessionUrl, args.filePath, 0, totalBytes);
-  } catch (error) {
-    if (error instanceof OpusError) {
-      // Treat UPLOAD_FAILED / TIMEOUT / UPLOAD_TIMEOUT as ambiguous: query
-      // the committed offset and resume from there. URL_REJECTED /
-      // VALIDATION_ERROR / AUTH_* are non-recoverable.
-      const recoverable =
-        error.code === 'UPLOAD_FAILED' ||
-        error.code === 'UPLOAD_TIMEOUT' ||
-        error.code === 'TIMEOUT' ||
-        error.code === 'API_ERROR';
-      if (!recoverable) throw error;
-    } else if (!(error instanceof Error)) {
-      throw error;
+    // Step 1 — Generate upload link.
+    const link = await opusFetch<UploadLinkResponse>('/api/upload-links', {
+      method: 'POST',
+      body: JSON.stringify({ video: { usecase: 'LocalUpload' } }),
+    });
+    if (!link.url || !link.uploadId) {
+      throw new OpusError(
+        'Opus upload-links response missing url/uploadId',
+        'UPLOAD_FAILED',
+        'The Opus API returned an unexpected response. Retry the request.',
+      );
     }
-    const committed = await queryCommittedOffset(sessionUrl, totalBytes);
-    if (committed < totalBytes) {
-      resumed = true;
-      await putUploadBytes(sessionUrl, args.filePath, committed, totalBytes);
-    } else {
-      // Server already has all the bytes — surface as resumed for visibility.
-      resumed = true;
+
+    // Step 2 — Start resumable session.
+    const sessionUrl = await startResumableSession(link.url);
+
+    // Step 3 — Upload bytes with offset-query recovery on ambiguous failure.
+    let resumed = false;
+    try {
+      await putUploadBytes(sessionUrl, fd, 0, totalBytes);
+    } catch (error) {
+      if (error instanceof OpusError) {
+        // Treat UPLOAD_FAILED / TIMEOUT / UPLOAD_TIMEOUT as ambiguous: query
+        // the committed offset and resume from there. URL_REJECTED /
+        // VALIDATION_ERROR / AUTH_* are non-recoverable.
+        const recoverable =
+          error.code === 'UPLOAD_FAILED' ||
+          error.code === 'UPLOAD_TIMEOUT' ||
+          error.code === 'TIMEOUT' ||
+          error.code === 'API_ERROR';
+        if (!recoverable) throw error;
+      } else if (!(error instanceof Error)) {
+        throw error;
+      }
+      const committed = await queryCommittedOffset(sessionUrl, totalBytes);
+      if (committed < totalBytes) {
+        resumed = true;
+        await putUploadBytes(sessionUrl, fd, committed, totalBytes);
+      } else {
+        // Server already has all the bytes — surface as resumed for visibility.
+        resumed = true;
+      }
+    }
+
+    // Step 4 — Create clip project (idempotent on uploadId).
+    if (completedProjectByUploadId.has(link.uploadId)) {
+      const cached = completedProjectByUploadId.get(link.uploadId) as ClipProjectResponse;
+      return { uploadId: link.uploadId, project: cached, resumed };
+    }
+    const projectBody: Record<string, unknown> = {
+      videoUrl: link.uploadId,
+    };
+    if (args.brandTemplateId) projectBody.brandTemplateId = args.brandTemplateId;
+    if (args.curationPref) projectBody.curationPref = args.curationPref;
+    if (args.renderPref) projectBody.renderPref = args.renderPref;
+    if (args.importPref) projectBody.importPref = args.importPref;
+    if (args.uploadedVideoAttr) projectBody.uploadedVideoAttr = args.uploadedVideoAttr;
+    if (args.conclusionActions) projectBody.conclusionActions = args.conclusionActions;
+
+    const project = await opusFetch<ClipProjectResponse>('/api/clip-projects', {
+      method: 'POST',
+      body: JSON.stringify(projectBody),
+    });
+
+    completedProjectByUploadId.set(link.uploadId, project);
+    return { uploadId: link.uploadId, project, resumed };
+  } finally {
+    try {
+      fs.closeSync(fd);
+    } catch {
+      /* best-effort */
     }
   }
-
-  // Step 4 — Create clip project (idempotent on uploadId).
-  if (completedProjectByUploadId.has(link.uploadId)) {
-    const cached = completedProjectByUploadId.get(link.uploadId) as ClipProjectResponse;
-    return { uploadId: link.uploadId, project: cached, resumed };
-  }
-  const projectBody: Record<string, unknown> = {
-    videoUrl: link.uploadId,
-  };
-  if (args.brandTemplateId) projectBody.brandTemplateId = args.brandTemplateId;
-  if (args.curationPref) projectBody.curationPref = args.curationPref;
-  if (args.renderPref) projectBody.renderPref = args.renderPref;
-  if (args.importPref) projectBody.importPref = args.importPref;
-  if (args.uploadedVideoAttr) projectBody.uploadedVideoAttr = args.uploadedVideoAttr;
-  if (args.conclusionActions) projectBody.conclusionActions = args.conclusionActions;
-
-  const project = await opusFetch<ClipProjectResponse>('/api/clip-projects', {
-    method: 'POST',
-    body: JSON.stringify(projectBody),
-  });
-
-  completedProjectByUploadId.set(link.uploadId, project);
-  return { uploadId: link.uploadId, project, resumed };
 }
 
 export function registerUploadTools(server: McpServer): void {
