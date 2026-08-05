@@ -6,10 +6,11 @@ import {
   createInMemoryClientPair,
   extractToolPayload,
   importConnectorModule,
+  makeImageBase64,
 } from './helpers.js';
 
 const cleanupTargets: string[] = [];
-const IMAGE_BASE64 = Buffer.alloc(128, 2).toString('base64');
+const IMAGE_BASE64 = makeImageBase64('png');
 
 const makeTempDir = async (label: string): Promise<string> => {
   const dir = await fs.mkdtemp(path.join('/tmp', `Acme-${label}-`));

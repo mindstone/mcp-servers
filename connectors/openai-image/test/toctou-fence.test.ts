@@ -6,10 +6,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createInMemoryClientPair,
   importConnectorModule,
+  makeImageBase64,
 } from './helpers.js';
 
 const cleanupTargets: string[] = [];
-const IMAGE_BASE64 = Buffer.alloc(128, 1).toString('base64');
+const IMAGE_BASE64 = makeImageBase64('png');
 
 const makeTempDir = async (label: string): Promise<string> => {
   const dir = await fsp.mkdtemp(path.join('/tmp', `Acme-${label}-`));

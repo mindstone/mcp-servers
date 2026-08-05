@@ -82,12 +82,18 @@ interface OpenAIErrorData {
   };
 }
 
-interface OpenAIImageResponse {
-  data?: Array<{
-    b64_json?: string;
-    [key: string]: unknown;
-  }>;
-}
+// External responses are validated with Zod (repo convention) rather than
+// cast: a malformed success body fails closed with an observable NETWORK_ERROR
+// instead of flowing unknown shapes into the image-mapping code.
+const openAIImageResponseSchema = z
+  .object({
+    data: z
+      .array(z.object({ b64_json: z.string().optional() }).passthrough())
+      .optional(),
+  })
+  .passthrough();
+
+type OpenAIImageResponse = z.infer<typeof openAIImageResponseSchema>;
 
 interface LoadedLocalImage {
   path: string;
@@ -549,6 +555,42 @@ export const validateBase64ImageData = (
   return buffer;
 };
 
+// Upstream image bytes must match the format the file extension and inline
+// MIME type will claim — otherwise arbitrary bytes could be persisted as
+// `.png`/`.jpg`/`.webp` and served to downstream consumers under a false type.
+const IMAGE_FORMAT_SIGNATURES: Record<
+  string,
+  Array<{ offset: number; bytes: number[] }>
+> = {
+  png: [{ offset: 0, bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] }],
+  jpg: [{ offset: 0, bytes: [0xff, 0xd8, 0xff] }],
+  webp: [
+    { offset: 0, bytes: [0x52, 0x49, 0x46, 0x46] }, // 'RIFF'
+    { offset: 8, bytes: [0x57, 0x45, 0x42, 0x50] }, // 'WEBP'
+  ],
+};
+
+const ensureBufferMatchesImageFormat = (
+  buffer: Buffer,
+  extension: string,
+): void => {
+  const signatures = IMAGE_FORMAT_SIGNATURES[extension];
+  if (!signatures) {
+    return;
+  }
+
+  const matches = signatures.every(({ offset, bytes }) =>
+    bytes.every((byte, byteIndex) => buffer[offset + byteIndex] === byte),
+  );
+  if (!matches) {
+    throw new OpenAIImageToolError(
+      'INVALID_IMAGE_DATA',
+      'Image data returned by the upstream image API does not match the requested format.',
+      'Try the request again with a simpler prompt.',
+    );
+  }
+};
+
 export const saveImageToDisk = async (
   saveDir: string,
   prompt: string,
@@ -561,6 +603,7 @@ export const saveImageToDisk = async (
   await fs.promises.mkdir(saveDir, { recursive: true });
   const canonicalSaveDir = await canonicalizeAllowedOutputDirectory(saveDir);
   const buffer = validateBase64ImageData(b64);
+  ensureBufferMatchesImageFormat(buffer, extension);
 
   // Open-then-verify (write side of the MED-1 pattern): the fence approved the
   // canonical directory above, but a local race could swap the directory for a
@@ -1160,6 +1203,20 @@ const networkOrTimeoutError = (controller: FetchAbortController): OpenAIImageToo
   );
 };
 
+const parseOpenAIImageResponse = async (
+  response: Response,
+): Promise<OpenAIImageResponse> => {
+  const parsedBody = openAIImageResponseSchema.safeParse(await response.json());
+  if (!parsedBody.success) {
+    throw new OpenAIImageToolError(
+      'NETWORK_ERROR',
+      'OpenAI image API returned an unexpected response.',
+      'Try again in a moment. If this persists, check OpenAI status and your account permissions.',
+    );
+  }
+  return parsedBody.data;
+};
+
 const postOpenAIJson = async (
   endpointPath: string,
   apiKey: string,
@@ -1191,7 +1248,7 @@ const postOpenAIJson = async (
     throw toOpenAIHttpError(response.status, message, model);
   }
 
-  return (await response.json()) as OpenAIImageResponse;
+  return parseOpenAIImageResponse(response);
 };
 
 const postOpenAIMultipart = async (
@@ -1224,7 +1281,7 @@ const postOpenAIMultipart = async (
     throw toOpenAIHttpError(response.status, message, model);
   }
 
-  return (await response.json()) as OpenAIImageResponse;
+  return parseOpenAIImageResponse(response);
 };
 
 interface ImageOutputOptions {
