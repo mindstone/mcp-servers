@@ -6,6 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { withErrorHandling, escapeQboql, validateAlphanumericId, requireProdWritesEnabled } from '../utils.js';
 import { qboFetch, qboQuery } from '../client.js';
+import { QBO_MINOR_VERSION } from '../types.js';
 
 export function registerBillTools(server: McpServer): void {
   server.registerTool(
@@ -73,7 +74,7 @@ WORKFLOW:
       if (args.memo) billBody.PrivateNote = args.memo;
 
       const result = await qboFetch<{ Bill: Record<string, unknown> }>(
-        '/bill?minorversion=65',
+        `/bill?minorversion=${QBO_MINOR_VERSION}`,
         { method: 'POST', body: JSON.stringify(billBody) },
       );
       return JSON.stringify({ ok: true, message: 'Bill created.', bill: result.Bill });

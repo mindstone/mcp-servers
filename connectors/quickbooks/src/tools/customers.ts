@@ -6,6 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { withErrorHandling, escapeQboql, requireProdWritesEnabled } from '../utils.js';
 import { qboFetch, qboQuery } from '../client.js';
+import { QBO_MINOR_VERSION } from '../types.js';
 
 export function registerCustomerTools(server: McpServer): void {
   server.registerTool(
@@ -64,7 +65,7 @@ Example: { "displayName": "Jane Smith", "email": "jane@smith.com", "phone": "555
       if (args.companyName) customerBody.CompanyName = args.companyName;
 
       const result = await qboFetch<{ Customer: Record<string, unknown> }>(
-        '/customer?minorversion=65',
+        `/customer?minorversion=${QBO_MINOR_VERSION}`,
         { method: 'POST', body: JSON.stringify(customerBody) },
       );
       return JSON.stringify({ ok: true, message: 'Customer created.', customer: result.Customer });

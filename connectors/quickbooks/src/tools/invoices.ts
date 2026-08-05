@@ -6,6 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { withErrorHandling, escapeQboql, validateAlphanumericId, requireProdWritesEnabled } from '../utils.js';
 import { qboFetch, qboQuery } from '../client.js';
+import { QBO_MINOR_VERSION } from '../types.js';
 
 export function registerInvoiceTools(server: McpServer): void {
   server.registerTool(
@@ -100,7 +101,7 @@ COMMON MISTAKES:
       if (args.memo) invoiceBody.CustomerMemo = { value: args.memo };
 
       const result = await qboFetch<{ Invoice: Record<string, unknown> }>(
-        '/invoice?minorversion=65',
+        `/invoice?minorversion=${QBO_MINOR_VERSION}`,
         { method: 'POST', body: JSON.stringify(invoiceBody) },
       );
       return JSON.stringify({ ok: true, message: 'Invoice created.', invoice: result.Invoice });

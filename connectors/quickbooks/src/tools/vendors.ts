@@ -6,6 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { withErrorHandling, escapeQboql, requireProdWritesEnabled } from '../utils.js';
 import { qboFetch, qboQuery } from '../client.js';
+import { QBO_MINOR_VERSION } from '../types.js';
 
 export function registerVendorTools(server: McpServer): void {
   server.registerTool(
@@ -63,7 +64,7 @@ Example: { "displayName": "AWS", "email": "billing@aws.amazon.com", "companyName
       if (args.companyName) vendorBody.CompanyName = args.companyName;
 
       const result = await qboFetch<{ Vendor: Record<string, unknown> }>(
-        '/vendor?minorversion=65',
+        `/vendor?minorversion=${QBO_MINOR_VERSION}`,
         { method: 'POST', body: JSON.stringify(vendorBody) },
       );
       return JSON.stringify({ ok: true, message: 'Vendor created.', vendor: result.Vendor });

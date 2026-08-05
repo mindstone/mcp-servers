@@ -6,6 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { withErrorHandling } from '../utils.js';
 import { qboFetch, qboQuery } from '../client.js';
+import { QBO_MINOR_VERSION } from '../types.js';
 
 export function registerQueryTools(server: McpServer): void {
   server.registerTool(
@@ -65,7 +66,7 @@ Supported entity types: Account, Bill, BillPayment, Customer, Employee, Estimate
     withErrorHandling(async (args) => {
       const { entityType, entityId } = args;
       const result = await qboFetch<Record<string, unknown>>(
-        `/${entityType.toLowerCase()}/${encodeURIComponent(entityId)}?minorversion=65`,
+        `/${entityType.toLowerCase()}/${encodeURIComponent(entityId)}?minorversion=${QBO_MINOR_VERSION}`,
       );
       return JSON.stringify({ ok: true, [entityType]: result[entityType] || result });
     }),
