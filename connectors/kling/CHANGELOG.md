@@ -26,6 +26,10 @@ are maintained manually as part of the PR review checklist.
 
 ### Security
 - All Kling API responses are now validated fail-closed with Zod (envelope + per-endpoint `data` schema); malformed JSON or a shape-drifting payload surfaces as a generic `INVALID_RESPONSE` error instead of an unchecked type cast or raw parser text.
+
+### Fixed
+- `list_kling_tasks` no longer silently truncates: the output now includes `has_more` plus `next_page` (and a continuation hint) whenever the returned page is full, so the model can tell that more results exist. The tool description no longer promises an ordering the vendor does not guarantee.
+- Credit-consuming production writes (`generate_kling_video`, `generate_kling_image_to_video`, `extend_kling_video`, `generate_kling_lip_sync`, `generate_kling_image`) now carry `destructiveHint: true` — they create vendor jobs and spend account credits, and were previously annotated `destructiveHint: false`.
 - `klingFetch` no longer sends the bearer JWT to arbitrary absolute URLs: only the exact Kling API origin is accepted (the `/account/costs` endpoint at the domain root keeps working).
 - Vendor-supplied error messages are credential-redacted (access key, secret key, and the live JWT) and wrapped in `<untrusted-content>` envelopes before they can reach model-visible output.
 - Every vendor-controlled string in tool output — task IDs, video IDs, result URLs, durations, `task_status_msg`, and resource-pack name/type/status — is now wrapped in an `<untrusted-content>` envelope with close-tag breakout escaping (invariant #6). Tools unwrap their own enveloped IDs/URLs when passed back as input, so chaining `generate_*` → `check_kling_task` → `download_kling_video` keeps working.

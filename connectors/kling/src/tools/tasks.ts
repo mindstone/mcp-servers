@@ -14,9 +14,10 @@ export function registerTaskListTools(server: McpServer): void {
     'list_kling_tasks',
     {
       description:
-        'List your Kling generation tasks, newest first, with pagination. ' +
+        'List your Kling generation tasks (Kling returns them newest first) with pagination. ' +
         'Use to find a recent task_id (for check_kling_task) or a video id (for extend_kling_video / generate_kling_lip_sync) without having saved it.\n\n' +
         'TASK TYPES: "text2video", "image2video", "video-extend", "lip-sync", "image" (one list per type).\n' +
+        'PAGINATION: when has_more is true, call again with page = next_page to continue.\n' +
         'NOTE: result URLs expire 30 days after generation — use download_kling_video to save outputs you want to keep.',
       inputSchema: z.object({
         task_type: z
@@ -81,12 +82,25 @@ export function registerTaskListTools(server: McpServer): void {
         return entry;
       });
 
+      // Kling's list endpoint returns no total/continuation token, so the
+      // only continuation signal available is "the page came back full".
+      // Surface it explicitly — otherwise a full page is indistinguishable
+      // from the end of the list and results are silently truncated.
+      const hasMore = tasks.length === pageSize;
+
       return JSON.stringify({
         ok: true,
         task_type: taskType,
         page,
         page_size: pageSize,
         count: tasks.length,
+        has_more: hasMore,
+        ...(hasMore
+          ? {
+              next_page: page + 1,
+              hint: `This page is full — more tasks may exist. Call list_kling_tasks again with page=${page + 1} to continue.`,
+            }
+          : {}),
         tasks,
       });
     }),
