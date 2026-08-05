@@ -2,12 +2,13 @@
  * Envelope-wrapping for the free-text fields Humaans returns to the LLM.
  *
  * People responses are field-allowlisted / sensitive-field-denylisted in
- * `tools/people.ts`, but time away entries and job roles come back as raw
- * API objects whose `note` / `reviewNote` fields are free text authored in
- * Humaans (by employees, managers, or admins). Those are attacker-controlled
- * strings, so they reach `wrapUntrusted` here before the object is returned
- * (AGENTS.md security invariant #6). This module is the single, auditable
- * place that enumerates those fields.
+ * `tools/people.ts`, but time away entries, allocations, and job roles come
+ * back as raw API objects whose free-text fields are authored in Humaans (by
+ * employees, managers, or admins): `note` / `reviewNote`, and the `name` of
+ * embedded `timeAwayType` / `timeAwayPolicy` objects. Those are
+ * attacker-controlled strings, so they reach `wrapUntrusted` here before the
+ * object is returned (AGENTS.md security invariant #6). This module is the
+ * single, auditable place that enumerates those fields.
  */
 import { wrapUntrusted } from './untrusted-content.js';
 
@@ -30,9 +31,22 @@ function wrapFields(value: unknown, fields: string[], source: string): unknown {
   return out;
 }
 
-/** Wrap the employee/manager-authored note fields on a time away entry. */
+/** Wrap the `name` of an embedded object (e.g. `timeAwayType` / `timeAwayPolicy`). */
+function wrapNestedName(value: unknown, key: string, source: string): unknown {
+  if (!isObj(value)) return value;
+  const nested = value[key];
+  if (!isObj(nested)) return value;
+  return { ...value, [key]: { ...nested, name: wrapStr(nested.name, `${source}:${key}.name`) } };
+}
+
+/** Wrap the note fields and embedded type name on a time away entry. */
 export function sanitizeTimeAwayEntry(entry: unknown, source: string): unknown {
-  return wrapFields(entry, ['note', 'reviewNote'], source);
+  return wrapNestedName(wrapFields(entry, ['note', 'reviewNote'], source), 'timeAwayType', source);
+}
+
+/** Wrap the embedded policy name on a time away allocation. */
+export function sanitizeTimeAwayAllocation(allocation: unknown, source: string): unknown {
+  return wrapNestedName(allocation, 'timeAwayPolicy', source);
 }
 
 /** Wrap the admin-authored note field on a job role. */

@@ -19,6 +19,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Security
 - Envelope the free-text fields authored in Humaans — `note`/`reviewNote` on time-away entries and `note` on job roles — in `<untrusted-content>` wrappers (with close-tag breakout escaping) before they reach the model. These list/get responses previously returned the raw API objects unenveloped.
+- Envelope the admin-authored `name` of embedded `timeAwayType` / `timeAwayPolicy` objects on time-away entries and allocations — external text that was still returned raw inside otherwise-sanitised responses.
+- Envelope vendor API error bodies (JSON error messages and non-JSON bodies) before they reach the model, cap non-JSON bodies at 500 characters, and stop rendering wrong-shaped error JSON as `undefined (undefined): undefined`.
 
 ## [0.2.2] - 2026-05-14
 ### Added
