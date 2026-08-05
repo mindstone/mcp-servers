@@ -54,6 +54,13 @@
           "isRequired": false,
           "isSecret": true,
           "format": "string"
+        },
+        {
+          "name": "WORKDAY_RECRUITING_API_VERSION",
+          "description": "Optional override for the recruiting REST family version (e.g. v41.2) when the tenant exposes a different Workday platform release",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
         }
       ]
     }

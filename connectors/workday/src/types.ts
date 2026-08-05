@@ -39,6 +39,24 @@ export const TIME_OFF_FIELDS = ['id', 'descriptor', 'startDate', 'endDate', 'qua
 
 export const ABSENCE_MANAGEMENT_FAMILY = 'absenceManagement/v1';
 
+// Workday versions its recruiting REST family by platform release (e.g.
+// v41.2) and retires old versions over time; override via
+// WORKDAY_RECRUITING_API_VERSION when a tenant exposes a different one.
+export const RECRUITING_API_VERSION_DEFAULT = 'v41.2';
+
+// Job requisitions: scalar status/openings fields only — description and
+// other free-text fields are deliberately excluded from the allowlist.
+export const JOB_REQUISITION_FIELDS = [
+  'id',
+  'descriptor',
+  'title',
+  'status',
+  'recruitingStatus',
+  'openings',
+  'numberOfOpenings',
+  'href',
+] as const;
+
 // ── Field allowlisting ──
 
 export function pickFields<T extends readonly string[]>(

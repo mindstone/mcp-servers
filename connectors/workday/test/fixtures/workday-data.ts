@@ -12,6 +12,7 @@ export const MOCK_ACCESS_TOKEN = 'test-access-token-abc123';
 export const TOKEN_URL = `https://${MOCK_HOST}/ccx/oauth2/${MOCK_TENANT}/token`;
 export const API_BASE = `https://${MOCK_HOST}/ccx/api/v1/${MOCK_TENANT}`;
 export const ABSENCE_API_BASE = `https://${MOCK_HOST}/ccx/api/absenceManagement/v1/${MOCK_TENANT}`;
+export const RECRUITING_API_BASE = `https://${MOCK_HOST}/ccx/api/recruiting/v41.2/${MOCK_TENANT}`;
 
 export function createTokenResponse(overrides: Partial<{
   access_token: string;
@@ -124,6 +125,50 @@ export function createTimeOffEntry(overrides: Record<string, unknown> = {}) {
 export function createTimeOffListResponse(count = 2, total = 2) {
   const data = Array.from({ length: count }, (_, i) => createTimeOffEntry({
     id: `timeoff-${String(i + 1).padStart(3, '0')}`,
+  }));
+  return { data, total };
+}
+
+export function createJobRequisition(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'req-001',
+    descriptor: 'Senior Software Engineer',
+    title: 'Senior Software Engineer',
+    status: 'Open',
+    recruitingStatus: 'Open',
+    openings: 2,
+    numberOfOpenings: 2,
+    href: '/jobRequisitions/req-001',
+    supervisoryOrganization: {
+      id: 'org-001',
+      descriptor: 'Engineering',
+      headcount: 50,
+    },
+    hiringManager: {
+      id: 'worker-009',
+      descriptor: 'Jane Manager',
+      salary: 200000,
+    },
+    primaryLocation: {
+      id: 'loc-001',
+      descriptor: 'San Francisco Office',
+      postalCode: '94105',
+    },
+    jobProfile: {
+      id: 'jp-001',
+      descriptor: 'Software Engineer',
+    },
+    // Free-text fields that must never reach the model output
+    jobDescription: 'We are looking for a senior engineer who...',
+    justification: 'Backfill for a departure',
+    ...overrides,
+  };
+}
+
+export function createJobRequisitionsListResponse(count = 2, total = 5) {
+  const data = Array.from({ length: count }, (_, i) => createJobRequisition({
+    id: `req-${String(i + 1).padStart(3, '0')}`,
+    descriptor: `Requisition ${i + 1}`,
   }));
   return { data, total };
 }
