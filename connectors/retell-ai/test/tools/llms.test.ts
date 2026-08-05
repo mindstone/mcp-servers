@@ -93,4 +93,38 @@ describe('LLM tools — Retell AI', () => {
       '<untrusted-content source="retell:update_retell_llm:general_prompt">Updated prompt</untrusted-content>',
     );
   });
+
+  it('delete_retell_llm succeeds with ok:true', async () => {
+    mswServer.use(...createRetellHandlers());
+    testClient = await createTestClient({
+      env: { RETELL_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.client.callTool({
+      name: 'delete_retell_llm',
+      arguments: { llm_id: 'llm_test_789' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const parsed = JSON.parse(text);
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.message).toContain('llm_test_789');
+  });
+
+  it('delete_retell_llm returns structured error for 404', async () => {
+    mswServer.use(...createRetellHandlers());
+    testClient = await createTestClient({
+      env: { RETELL_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.client.callTool({
+      name: 'delete_retell_llm',
+      arguments: { llm_id: 'nonexistent' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const parsed = JSON.parse(text);
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.code).toBe('HTTP_404');
+  });
 });

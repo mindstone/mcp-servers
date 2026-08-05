@@ -4,6 +4,57 @@ import { retellFetch, requireApiKey } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { sanitizeAgent, sanitizeAgentVersion, sanitizeList } from '../sanitize.js';
 
+export interface ListAgentsArgs {
+  limit?: number;
+  sort_order?: 'ascending' | 'descending';
+  pagination_key?: string;
+}
+
+/**
+ * Shared implementation for list_agents / list_chat_agents against the
+ * unified POST /v2/list-agents endpoint (the legacy GET /list-agents and
+ * /list-chat-agents were deprecated by Retell in 2026). `channel` pins the
+ * agent type; `source` is the untrusted-content envelope namespace.
+ */
+export async function listAgentsByChannel(
+  channel: 'voice' | 'chat',
+  args: ListAgentsArgs,
+  source: string,
+): Promise<Record<string, unknown>> {
+  requireApiKey();
+  const params = new URLSearchParams();
+  if (args.limit !== undefined) params.set('limit', String(args.limit));
+  if (args.sort_order) params.set('sort_order', args.sort_order);
+  if (args.pagination_key) params.set('pagination_key', args.pagination_key);
+  const qs = params.toString();
+
+  const result = await retellFetch<unknown>(
+    `/v2/list-agents${qs ? `?${qs}` : ''}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        filter_criteria: { channel: { type: 'string', op: 'eq', value: channel } },
+      }),
+    },
+  );
+
+  const resultObj = (result && typeof result === 'object' && !Array.isArray(result))
+    ? result as Record<string, unknown>
+    : null;
+  const items = resultObj && Array.isArray(resultObj.items)
+    ? (resultObj.items as unknown[])
+    : (Array.isArray(result) ? result as unknown[] : []);
+
+  return {
+    ok: true,
+    agents: sanitizeList(items, sanitizeAgent, source),
+    count: items.length,
+    pagination_key: resultObj?.pagination_key,
+    has_more: resultObj?.has_more,
+    message: `Found ${items.length} ${channel} agent(s).`,
+  };
+}
+
 export function registerAgentTools(server: McpServer): void {
   server.registerTool(
     'get_agent',
@@ -56,27 +107,35 @@ RETURNS: agent_id, agent_name, voice_id, response_engine.llm_id, language, versi
   server.registerTool(
     'list_agents',
     {
-      description: `List all configured voice agents in your Retell account.
+      description: `List configured voice agents in your Retell account (paginated).
 
 WHEN TO USE:
 - Discover available agents before making calls
 - Find agent IDs by name
 - Inventory check
 
+NOTE: Returns summary records (agent_id, agent_name, channel, response_engine_type, voice_id, voice_name, tags, timestamps). Use get_agent for the full configuration of a specific agent. Results are filtered to voice agents; use list_chat_agents for chat agents.
+
 COMMON MISTAKES:
 - Guessing agent IDs from names; use the returned agent_id exactly
-- Choosing an agent without checking its response_engine.llm_id and versions via get_agent
+- Expecting the full agent config here; the list endpoint returns summaries — call get_agent for response_engine.llm_id and version details
+- Not paginating: pass the returned pagination_key while has_more is true
 
 ERROR RECOVERY:
 - 401: API key is missing or invalid → configure_retell_api_key
 
 RELATED TOOLS:
 - get_agent: Inspect full config for a returned agent_id
+- list_chat_agents: List chat agents instead of voice agents
 - get_agent_versions: Check published versions
 - create_phone_call/create_web_call: Use a verified agent_id
 
-RETURNS: agents, count. Each agent usually includes agent_id, agent_name, voice_id, response_engine, and timestamps.`,
-      inputSchema: {},
+RETURNS: agents, count, pagination_key, has_more. Each agent summary includes agent_id, agent_name, channel, response_engine_type, voice_id, voice_name, tags, and user_modified_timestamp.`,
+      inputSchema: {
+        limit: z.number().int().min(1).max(1000).optional().describe('Max results (1-1000). Default: 50.'),
+        sort_order: z.enum(['ascending', 'descending']).optional().describe('Sort by last-modified time. Default: descending (most recently modified first).'),
+        pagination_key: z.string().optional().describe('Pagination key from previous response for the next page.'),
+      },
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -84,18 +143,9 @@ RETURNS: agents, count. Each agent usually includes agent_id, agent_name, voice_
         openWorldHint: true,
       },
     },
-    withErrorHandling(async () => {
-      requireApiKey();
-      const result = await retellFetch<unknown[]>(
-        '/list-agents',
-        { method: 'GET' },
-      );
-      return JSON.stringify({
-        ok: true,
-        agents: sanitizeList(result, sanitizeAgent, 'retell:list_agents'),
-        count: Array.isArray(result) ? result.length : 0,
-        message: `Found ${Array.isArray(result) ? result.length : 0} agent(s).`,
-      });
+    withErrorHandling(async (args) => {
+      const response = await listAgentsByChannel('voice', args, 'retell:list_agents');
+      return JSON.stringify(response);
     }),
   );
 
@@ -312,6 +362,51 @@ RETURNS: ok, message confirming the agent_id and published version.`,
       return JSON.stringify({
         ok: true,
         message: `Agent ${agentId} version ${args.version} published successfully. This version is now live.`,
+      });
+    }),
+  );
+
+  server.registerTool(
+    'delete_agent',
+    {
+      description: `Permanently delete an agent and ALL of its versions.
+
+WHEN TO USE:
+- Removing a test/throwaway agent after experiments
+- Cleaning up agents that are no longer needed
+
+CRITICAL: This permanently deletes the agent and every version — there is no undo. Any phone numbers bound to it lose their agent binding. Confirm the agent_id with list_agents/get_agent first, and prefer deleting only after checking no phone number still routes to it (list_phone_numbers).
+
+ERROR RECOVERY:
+- 401: API key is missing or invalid → configure_retell_api_key
+- 404: agent_id not found → list_agents and retry with a returned ID
+
+RELATED TOOLS:
+- list_agents/get_agent: Confirm the exact agent_id before deleting
+- list_phone_numbers: Check no number still binds the agent
+- create_agent: Create a replacement
+
+RETURNS: ok, message. Retell returns HTTP 204 on success.`,
+      inputSchema: {
+        agent_id: z.string().describe('The agent ID to permanently delete (deletes all versions). Confirm with list_agents/get_agent first.'),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args) => {
+      requireApiKey();
+      const agentId = args.agent_id;
+      await retellFetch<Record<string, unknown>>(
+        `/delete-agent/${encodeURIComponent(agentId)}`,
+        { method: 'DELETE' },
+      );
+      return JSON.stringify({
+        ok: true,
+        message: `Agent ${agentId} deleted permanently (all versions).`,
       });
     }),
   );

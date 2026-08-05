@@ -59,6 +59,41 @@ const mockAgentVersion = {
   last_modification_timestamp: 1704067200000,
 };
 
+const mockKnowledgeBase = {
+  knowledge_base_id: 'kb_test_123',
+  knowledge_base_name: 'Support FAQ',
+  status: 'complete',
+  max_chunk_size: 2000,
+  min_chunk_size: 400,
+  knowledge_base_sources: [
+    { type: 'text', source_id: 'src_text_1', title: 'Refund policy', content_url: 'https://example.com/stored/refund.txt' },
+    { type: 'url', source_id: 'src_url_1', url: 'https://example.com/faq' },
+    { type: 'document', source_id: 'src_doc_1', filename: 'policy.pdf', file_url: 'https://example.com/stored/policy.pdf', file_size: 12345 },
+  ],
+  enable_auto_refresh: false,
+};
+
+const mockChat = {
+  chat_id: 'chat_test_001',
+  agent_id: 'chat_agent_test_321',
+  chat_status: 'ended',
+  chat_type: 'api_chat',
+  start_timestamp: 1704067200000,
+  end_timestamp: 1704067260000,
+  transcript: 'Agent: Hi there!\nUser: Hello, I have a question about my order.',
+  message_with_tool_calls: [
+    { message_id: 'msg_1', role: 'agent', content: 'Hi there!', created_timestamp: 1704067200000 },
+    { message_id: 'msg_2', role: 'user', content: 'Hello, I have a question about my order.', created_timestamp: 1704067210000 },
+  ],
+  metadata: {},
+  chat_analysis: {
+    chat_summary: 'The user asked about their order.',
+    user_sentiment: 'Neutral',
+    chat_successful: true,
+    custom_analysis_data: {},
+  },
+};
+
 function requireAuth(authHeader: string | null): HttpResponse | null {
   if (!authHeader || !authHeader.startsWith('Bearer ') || authHeader.split(' ')[1] !== MOCK_API_KEY) {
     return HttpResponse.json(
@@ -69,13 +104,32 @@ function requireAuth(authHeader: string | null): HttpResponse | null {
   return null;
 }
 
+/** Last request body seen by the POST /v3/list-chats mock (for filter assertions). */
+export let lastListChatsBody: Record<string, unknown> | null = null;
+
 export function createRetellHandlers() {
   return [
     // --- Agents ---
-    http.get(`${RETELL_API_BASE}/list-agents`, ({ request }) => {
+    http.post(`${RETELL_API_BASE}/v2/list-agents`, async ({ request }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;
-      return HttpResponse.json([mockAgent]);
+      const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+      const channel = ((body.filter_criteria as Record<string, Record<string, unknown>> | undefined)
+        ?.channel?.value as string | undefined) ?? 'voice';
+      return HttpResponse.json({
+        items: [{
+          agent_id: channel === 'chat' ? 'chat_agent_test_321' : mockAgent.agent_id,
+          agent_name: channel === 'chat' ? 'Chat Test Agent' : mockAgent.agent_name,
+          channel,
+          response_engine_type: 'retell-llm',
+          voice_id: mockAgent.voice_id,
+          voice_name: 'Sarah',
+          user_modified_timestamp: mockAgent.last_modification_timestamp,
+          tags: {},
+        }],
+        has_more: false,
+        pagination_key: 'page_2',
+      });
     }),
 
     http.get(`${RETELL_API_BASE}/get-agent/:agentId`, ({ request, params }) => {
@@ -126,6 +180,34 @@ export function createRetellHandlers() {
       return HttpResponse.json([{ ...mockAgentVersion, agent_id: params.agentId }]);
     }),
 
+    http.delete(`${RETELL_API_BASE}/delete-agent/:agentId`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      if (params.agentId === 'nonexistent') {
+        return HttpResponse.json({ error_message: 'Agent not found' }, { status: 404 });
+      }
+      return new HttpResponse(null, { status: 204 });
+    }),
+
+    http.delete(`${RETELL_API_BASE}/delete-retell-llm/:llmId`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      if (params.llmId === 'nonexistent') {
+        return HttpResponse.json({ error_message: 'Retell LLM not found' }, { status: 404 });
+      }
+      return new HttpResponse(null, { status: 204 });
+    }),
+
+    http.delete(`${RETELL_API_BASE}/delete-phone-number/:phoneNumber`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      const phoneNumber = decodeURIComponent(params.phoneNumber as string);
+      if (phoneNumber === '+19999999999') {
+        return HttpResponse.json({ error_message: 'Phone number not found' }, { status: 404 });
+      }
+      return new HttpResponse(null, { status: 204 });
+    }),
+
     // --- Calls (v2/v3) ---
     http.post(`${RETELL_API_BASE}/v2/create-phone-call`, async ({ request }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
@@ -172,6 +254,42 @@ export function createRetellHandlers() {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;
       return new HttpResponse(null, { status: 204 });
+    }),
+
+    // --- Batch calls ---
+    http.post(`${RETELL_API_BASE}/create-batch-call`, async ({ request }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      const body = await request.json() as Record<string, unknown>;
+      if (body.from_number === '+14155550000') {
+        return HttpResponse.json({ error_message: 'Payment required' }, { status: 402 });
+      }
+      const tasks = Array.isArray(body.tasks) ? body.tasks : [];
+      return HttpResponse.json({
+        batch_call_id: 'batch_call_test_001',
+        name: body.name ?? 'Batch call',
+        from_number: body.from_number,
+        scheduled_timestamp: body.trigger_timestamp ?? 1704067200000,
+        total_task_count: tasks.length,
+        ...(body.call_time_window ? { call_time_window: body.call_time_window } : {}),
+      });
+    }),
+
+    // --- Account ---
+    http.get(`${RETELL_API_BASE}/get-concurrency`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      return HttpResponse.json({
+        current_concurrency: 2,
+        concurrency_limit: 20,
+        base_concurrency: 20,
+        purchased_concurrency: 0,
+        concurrency_purchase_limit: 180,
+        remaining_purchase_limit: 180,
+        reserved_inbound_concurrency: 0,
+        concurrency_burst_enabled: false,
+        concurrency_burst_limit: 0,
+      });
     }),
 
     // --- LLMs ---
@@ -236,6 +354,72 @@ export function createRetellHandlers() {
       const body = await request.json() as Record<string, unknown>;
       const phoneNumber = decodeURIComponent(params.phoneNumber as string);
       return HttpResponse.json({ ...mockPhoneNumber, phone_number: phoneNumber, ...body });
+    }),
+
+    // --- Knowledge bases ---
+    http.get(`${RETELL_API_BASE}/list-knowledge-bases`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      return HttpResponse.json([mockKnowledgeBase]);
+    }),
+
+    http.get(`${RETELL_API_BASE}/get-knowledge-base/:kbId`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      if (params.kbId === 'nonexistent') {
+        return HttpResponse.json({ error_message: 'Knowledge base not found' }, { status: 404 });
+      }
+      return HttpResponse.json({ ...mockKnowledgeBase, knowledge_base_id: params.kbId });
+    }),
+
+    http.post(`${RETELL_API_BASE}/create-knowledge-base`, async ({ request }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      const form = await request.formData();
+      const files = form.getAll('knowledge_base_files')
+        .map((f) => (f instanceof File ? f.name : String(f)));
+      return HttpResponse.json({
+        knowledge_base_id: 'kb_new_001',
+        knowledge_base_name: form.get('knowledge_base_name'),
+        status: 'in_progress',
+        uploaded_files: files,
+      }, { status: 201 });
+    }),
+
+    http.post(`${RETELL_API_BASE}/add-knowledge-base-sources/:kbId`, async ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      const form = await request.formData();
+      const files = form.getAll('knowledge_base_files')
+        .map((f) => (f instanceof File ? f.name : String(f)));
+      return HttpResponse.json({
+        ...mockKnowledgeBase,
+        knowledge_base_id: params.kbId,
+        status: 'refreshing_in_progress',
+        uploaded_files: files,
+      });
+    }),
+
+    // --- Chats ---
+    http.post(`${RETELL_API_BASE}/v3/list-chats`, async ({ request }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+      lastListChatsBody = body;
+      return HttpResponse.json({
+        items: [mockChat],
+        has_more: false,
+        pagination_key: 'chats_page_2',
+      });
+    }),
+
+    http.get(`${RETELL_API_BASE}/get-chat/:chatId`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      if (params.chatId === 'nonexistent') {
+        return HttpResponse.json({ error_message: 'Chat not found' }, { status: 404 });
+      }
+      return HttpResponse.json({ ...mockChat, chat_id: params.chatId });
     }),
 
   ];

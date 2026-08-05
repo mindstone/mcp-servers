@@ -10,12 +10,14 @@
     ]
   },
   "tools": {
-    "count": 20,
+    "count": 32,
     "domains": [
       "calls",
       "agents",
       "llms",
-      "voices"
+      "voices",
+      "knowledge-bases",
+      "chats"
     ]
   },
   "surface": "cloud-api",

@@ -28,6 +28,15 @@ describe('Agent tools — Retell AI', () => {
     expect(parsed.agents).toBeInstanceOf(Array);
     expect(parsed.agents.length).toBeGreaterThan(0);
     expect(parsed.agents[0].agent_id).toBe('agent_test_123');
+    expect(parsed.has_more).toBe(false);
+    expect(parsed.pagination_key).toBe('page_2');
+    // agent_name is external text → wrapped per AGENTS.md invariant #6 (FOX-3490).
+    expect(parsed.agents[0].agent_name).toBe(
+      '<untrusted-content source="retell:list_agents:agent_name">Test Agent</untrusted-content>',
+    );
+    expect(parsed.agents[0].voice_name).toBe(
+      '<untrusted-content source="retell:list_agents:voice_name">Sarah</untrusted-content>',
+    );
   });
 
   it('get_agent returns agent details', async () => {
@@ -95,5 +104,39 @@ describe('Agent tools — Retell AI', () => {
     expect(parsed.agent_name).toBe(
       '<untrusted-content source="retell:update_agent:agent_name">Updated Agent</untrusted-content>',
     );
+  });
+
+  it('delete_agent succeeds with ok:true', async () => {
+    mswServer.use(...createRetellHandlers());
+    testClient = await createTestClient({
+      env: { RETELL_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.client.callTool({
+      name: 'delete_agent',
+      arguments: { agent_id: 'agent_test_123' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const parsed = JSON.parse(text);
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.message).toContain('agent_test_123');
+  });
+
+  it('delete_agent returns structured error for 404', async () => {
+    mswServer.use(...createRetellHandlers());
+    testClient = await createTestClient({
+      env: { RETELL_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.client.callTool({
+      name: 'delete_agent',
+      arguments: { agent_id: 'nonexistent' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const parsed = JSON.parse(text);
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.code).toBe('HTTP_404');
   });
 });

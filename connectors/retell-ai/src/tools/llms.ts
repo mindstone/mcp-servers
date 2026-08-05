@@ -225,6 +225,51 @@ RETURNS: llm_id, general_prompt, begin_message, model, model_temperature, genera
   );
 
   server.registerTool(
+    'delete_retell_llm',
+    {
+      description: `Permanently delete a Retell LLM response engine and ALL of its versions.
+
+WHEN TO USE:
+- Removing a test/throwaway LLM config after experiments
+- Cleaning up unused LLM configs
+
+CRITICAL: This permanently deletes the LLM and every version — there is no undo. Any agent whose response_engine.llm_id points at it will break (calls will fail). Check which agents reference it via list_agents/get_agent before deleting.
+
+ERROR RECOVERY:
+- 401: API key is missing or invalid → configure_retell_api_key
+- 404: llm_id not found → list_retell_llms and retry with a returned ID
+
+RELATED TOOLS:
+- list_retell_llms/get_retell_llm: Confirm the exact llm_id before deleting
+- list_agents/get_agent: Check no agent still references the LLM
+- create_retell_llm: Create a replacement
+
+RETURNS: ok, message. Retell returns HTTP 204 on success.`,
+      inputSchema: {
+        llm_id: z.string().describe('The Retell LLM config ID to permanently delete (deletes all versions). Confirm with list_retell_llms/get_retell_llm first.'),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args) => {
+      requireApiKey();
+      const llmId = args.llm_id;
+      await retellFetch<Record<string, unknown>>(
+        `/delete-retell-llm/${encodeURIComponent(llmId)}`,
+        { method: 'DELETE' },
+      );
+      return JSON.stringify({
+        ok: true,
+        message: `Retell LLM ${llmId} deleted permanently (all versions).`,
+      });
+    }),
+  );
+
+  server.registerTool(
     'list_retell_llms',
     {
       description: `List all Retell LLM response engine configurations.
