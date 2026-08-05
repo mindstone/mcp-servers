@@ -66,6 +66,8 @@ import {
   handleSearchCalls,
   handleGetCall,
   handleCreateCall,
+  handleSearchEmails,
+  handleGetEmail,
   handleSearchMeetings,
   handleGetMeeting,
   handleCreateMeeting,
@@ -522,6 +524,14 @@ export class HubSpotServer {
             break;
           case 'create_hubspot_call':
             result = await handleCreateCall(args as unknown as Parameters<typeof handleCreateCall>[0]);
+            break;
+
+          // Engagements - Emails (1:1 sales emails; bodies need sales-email-read)
+          case 'search_hubspot_emails':
+            result = await handleSearchEmails(args as unknown as Parameters<typeof handleSearchEmails>[0]);
+            break;
+          case 'get_hubspot_email':
+            result = await handleGetEmail(args as unknown as Parameters<typeof handleGetEmail>[0]);
             break;
 
           // Engagements - Meetings

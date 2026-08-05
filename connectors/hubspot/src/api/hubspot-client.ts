@@ -468,7 +468,7 @@ export class HubSpotClient {
     return response.json() as Promise<T>;
   }
 
-  async getTokenInfo(): Promise<{ user: string; hub_id: number; user_id: number }> {
+  async getTokenInfo(): Promise<{ user: string; hub_id: number; user_id: number; scopes?: string[] }> {
     return this.request('GET', `/oauth/v1/access-tokens/${this.accessToken}`);
   }
 

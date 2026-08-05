@@ -1639,6 +1639,66 @@ PREREQUISITE: Get meetingId from search_hubspot_meetings or get_contact_engageme
     }
   },
   {
+    name: 'search_hubspot_emails',
+    category: 'Engagements',
+    description: `Search logged 1:1 sales email engagements in HubSpot CRM.
+
+USE THIS WHEN:
+- User asks "show the last email thread with this account" or "find emails about [topic]"
+- Meeting prep: recent email activity with a contact or company
+
+RETURNS: Array of email engagements with id, properties
+
+PROPERTIES to request:
+- hs_email_subject, hs_email_direction ("INCOMING_EMAIL"/"OUTGOING_EMAIL"), hs_email_status
+- hs_email_from_email, hs_email_to_email
+- hs_timestamp (Unix ms)
+- hs_email_text / hs_email_html (body — see SCOPE NOTE)
+
+SCOPE NOTE: HubSpot silently redacts email BODIES unless the connected app holds
+the sales-email-read scope. Without it you still get subjects, senders, and
+timestamps, and the response carries a notes field warning that bodies are
+redacted. To unlock bodies, enable sales-email-read on the HubSpot app and
+reconnect the account.
+
+EXAMPLE FILTERS:
+1. Recent: filters=[{propertyName:"hs_timestamp", operator:"GT", value:"1704067200000"}]
+2. By subject: filters=[{propertyName:"hs_email_subject", operator:"CONTAINS_TOKEN", value:"contract"}]`,
+    aliases: ['find_hubspot_emails', 'get_hubspot_emails', 'search_sales_emails'],
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        filters: { type: 'array', items: { type: 'object' }, description: 'Filter criteria' },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' },
+        limit: { type: 'number', description: 'Max results (default 10, max 100)' },
+        ...searchPaginationProperties
+      }
+    }
+  },
+  {
+    name: 'get_hubspot_email',
+    category: 'Engagements',
+    description: `Get full details for a single logged email engagement by ID.
+
+PREREQUISITE: Get emailId from search_hubspot_emails or get_contact_engagements.
+
+SCOPE NOTE: the email body (hs_email_text / hs_email_html) is redacted by HubSpot
+unless the connected app holds the sales-email-read scope; the response carries a
+notes field warning when redaction applies. Subject, sender, recipients, and
+timestamps are always returned.`,
+    aliases: ['view_hubspot_email', 'read_hubspot_email'],
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        emailId: { type: 'string', description: 'HubSpot email engagement ID (numeric string)' },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' }
+      },
+      required: ['emailId']
+    }
+  },
+  {
     name: 'create_hubspot_call',
     category: 'Engagements',
     description: `Log a call in HubSpot CRM.
