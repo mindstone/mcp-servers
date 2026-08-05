@@ -16,16 +16,18 @@
  * (ids / `*_id`, `role` / `type` / `status` / `timestamp`, phone numbers,
  * `*_ids` / `*_numbers` collections) or pass a non-string primitive through, and each
  * is marked inline. A structural key *name* is not enough on its own: the value must
- * also be enum/id-shaped (no whitespace or prose punctuation — see
- * `STRUCTURAL_LITERAL_VALUE_PATTERN`), because arbitrary tool configuration lets a
- * collaborator author prose under a structural-looking key (`request_headers.status`)
- * and a name-only exemption would hand it to the model raw. Strings under
+ * also match its context's strict grammar (id/enum, ISO-8601 timestamp, or E.164
+ * phone number — see `isStructuralLiteralValue`), because arbitrary tool
+ * configuration lets a collaborator author prose under a structural-looking key
+ * (`request_headers.status`) and a name-only exemption would hand it to the model
+ * raw. Strings under
  * credential-shaped keys (`token`, `*_secret`, `sid`, …) are never passed on at
  * all — they are replaced with `[redacted]`.
  * `test/untrusted-content.test.ts` enumerates this module's exports
  * at runtime and fails the day a new one breaks the rule.
  */
 import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
+import { E164_REGEX } from './schema-helpers.js';
 
 type Obj = Record<string, unknown>;
 
@@ -47,15 +49,66 @@ const STRUCTURAL_LITERAL_STRING_COLLECTION_KEYS = new Set([
 ]);
 
 /**
- * A string keeps its structural-literal exemption only when it also *looks*
- * structural: ids, enum values, phone numbers, and ISO timestamps never
- * contain whitespace or prose punctuation. Key names are attacker-controlled
- * inside arbitrary tool configuration (`advanced_config` request headers,
- * parameter schemas), so a bare name check would let
- * `{"status": "SYSTEM: ignore prior instructions"}` through unenveloped —
- * value-shape is what makes the exemption trustworthy.
+ * Ids and enum values (`id` / `*_id` / `*_ids`, `role` / `type` / `status`, and the
+ * per-surface literal keys) never contain `:` or `/`. An earlier shared alphabet
+ * admitted both, so instruction-shaped text without spaces —
+ * `SYSTEM:ignore_prior_instructions`, `ignore/previous/instructions` — passed the
+ * shape gate under a structural key name and reached the model unenveloped. The
+ * envelope's close tag needs `/` and instruction-shaping leans on `:`; neither
+ * belongs in an id or an enum, so this grammar excludes them outright.
  */
-const STRUCTURAL_LITERAL_VALUE_PATTERN = /^[A-Za-z0-9_+@.:/-]{1,128}$/;
+const STRUCTURAL_ID_OR_ENUM_VALUE_PATTERN = /^[A-Za-z0-9_+@.-]{1,128}$/;
+
+/**
+ * ISO-8601 calendar shape. The one structural context where `:` is legitimate is a
+ * timestamp's time component, and only in this exact shape.
+ */
+const ISO_8601_TIMESTAMP_VALUE_PATTERN =
+  /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+
+function isPhoneNumberStringKey(key: string): boolean {
+  return (
+    key === 'phone_number' ||
+    key.endsWith('_phone_number') ||
+    key === 'to_number' ||
+    key === 'from_number'
+  );
+}
+
+function isPhoneNumberCollectionKey(key: string): boolean {
+  return (
+    key === 'numbers' ||
+    key.endsWith('_numbers') ||
+    key.endsWith('_phone_numbers')
+  );
+}
+
+/**
+ * A string keeps its structural-literal exemption only when it also *looks*
+ * structural — per context: phone-shaped keys hold E.164 numbers, `timestamp`
+ * holds an ISO-8601 value (or a plain epoch/numeric string, which the id/enum
+ * grammar already covers), and everything else is an id or enum with no `:` or
+ * `/`. Key names are attacker-controlled inside arbitrary tool configuration
+ * (`advanced_config` request headers, parameter schemas), so a bare name check
+ * would let `{"status": "SYSTEM: ignore prior instructions"}` through
+ * unenveloped — value-shape is what makes the exemption trustworthy, and the
+ * grammars fail toward enveloping, never toward raw passthrough.
+ */
+function isStructuralLiteralValue(key: string | undefined, value: string): boolean {
+  if (!key) return false;
+  if (isPhoneNumberStringKey(key)) return E164_REGEX.test(value);
+  if (key === 'timestamp') {
+    return ISO_8601_TIMESTAMP_VALUE_PATTERN.test(value) || STRUCTURAL_ID_OR_ENUM_VALUE_PATTERN.test(value);
+  }
+  return STRUCTURAL_ID_OR_ENUM_VALUE_PATTERN.test(value);
+}
+
+/** Collection form of `isStructuralLiteralValue`: `*_numbers` members are E.164, `*_ids` members are ids. */
+function isStructuralLiteralCollectionItem(key: string | undefined, item: string): boolean {
+  if (!key) return false;
+  if (isPhoneNumberCollectionKey(key)) return E164_REGEX.test(item);
+  return STRUCTURAL_ID_OR_ENUM_VALUE_PATTERN.test(item);
+}
 
 /**
  * Values under credential-shaped keys never reach the model, whatever
@@ -210,7 +263,7 @@ function sanitizeStringsByDefault(
     // under a structural-looking key name inside arbitrary tool configuration, and a
     // name-only exemption would pass it through raw.
     return (isStructuralLiteralStringKey(key) || (key ? literalStringKeys.has(key) : false))
-        && STRUCTURAL_LITERAL_VALUE_PATTERN.test(value)
+        && isStructuralLiteralValue(key, value)
       ? value
       : wrapUntrusted(value, source);
   }
@@ -220,7 +273,7 @@ function sanitizeStringsByDefault(
     // copy, not the input array, and any non-string or non-structural member drops the
     // whole collection into the walk below.
     if (isStructuralLiteralStringCollectionKey(key)
-      && value.every((item) => typeof item === 'string' && STRUCTURAL_LITERAL_VALUE_PATTERN.test(item))) {
+      && value.every((item) => typeof item === 'string' && isStructuralLiteralCollectionItem(key, item))) {
       return [...value];
     }
     return value.map((item, index) => sanitizeStringsByDefault(item, `${source}[${index}]`, undefined, literalStringKeys));
