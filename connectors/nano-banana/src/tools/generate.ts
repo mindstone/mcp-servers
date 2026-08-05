@@ -171,18 +171,32 @@ export function registerGenerateTools(server: McpServer): void {
         }
         try {
           fs.mkdirSync(path.dirname(resolveResult.path), { recursive: true });
-          fs.writeFileSync(resolveResult.path, Buffer.from(imageData, 'base64'));
+          // 'wx' (O_CREAT|O_EXCL): never truncate an existing file — a
+          // silent overwrite of user content is a data-loss bug.
+          fs.writeFileSync(resolveResult.path, Buffer.from(imageData, 'base64'), { flag: 'wx' });
           savedPath = resolveResult.path;
           console.error(`[NanoBanana] Saved to: ${savedPath}`);
         } catch (saveError) {
-          const errMsg = saveError instanceof Error ? saveError.message : String(saveError);
+          // EEXIST from the 'wx' write means the target file exists (refuse
+          // overwrite); EEXIST can also bubble up from mkdir when a path
+          // segment is a regular file — discriminate on the actual target.
+          const isExists =
+            (saveError as NodeJS.ErrnoException).code === 'EEXIST' &&
+            fs.existsSync(resolveResult.path);
+          const errMsg = isExists
+            ? 'a file already exists at that path'
+            : saveError instanceof Error ? saveError.message : String(saveError);
+          const saveCode = isExists ? 'SAVE_EXISTS' : 'SAVE_FAILED';
+          const saveResolution = isExists
+            ? 'Choose a different save_path (or delete the existing file) and try again. The generated image is included inline in this result.'
+            : 'Check that the save path is inside the workspace and writable, then try again. The generated image is included inline in this result.';
           console.error(`[NanoBanana] Failed to save: ${errMsg}`);
           // The image was generated but the requested save failed — surface
           // that as an error instead of silently reporting success. The image
           // is still returned inline so the generation is not lost.
           return {
             content: [
-              { type: 'text', text: JSON.stringify({ ok: false, error: `Image generated but could not be saved to ${resolveResult.path}: ${errMsg}`, code: 'SAVE_FAILED', resolution: 'Check that the save path is inside the workspace and writable, then try again. The generated image is included inline in this result.' }, null, 2) },
+              { type: 'text', text: JSON.stringify({ ok: false, error: `Image generated but could not be saved to ${resolveResult.path}: ${errMsg}`, code: saveCode, resolution: saveResolution }, null, 2) },
               { type: 'image', data: imageData, mimeType: imageMimeType },
             ],
             isError: true,

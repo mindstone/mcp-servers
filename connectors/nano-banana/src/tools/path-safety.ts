@@ -18,15 +18,29 @@ export type ResolveResult =
 /**
  * Derive the canonical workspace root directory for SAVING outputs.
  *
- * Priority: MCP_WORKSPACE_PATH env var > process.cwd()
- * The result is always resolved to an absolute path.
+ * Priority: MCP_WORKSPACE_PATH env var > os.tmpdir()
+ *
+ * The root is canonicalised through the deepest-existing-ancestor
+ * (`canonicalisePrefix`) so containment checks are stable on platforms where
+ * the workspace or tmpdir is reached through a symlink (e.g. macOS:
+ * /tmp → /private/tmp), even when the workspace directory does not exist
+ * yet — the save-path candidate is canonicalised with the same primitive.
+ *
+ * NOTE: the fallback is `os.tmpdir()`, NOT `process.cwd()` — writes must
+ * stay inside the same sandbox family as reads (AGENTS.md invariant #5:
+ * MCP_WORKSPACE_PATH or os.tmpdir()); silently writing into whatever
+ * directory the server process was launched from is not an acceptable
+ * default.
  */
 export function getWorkspaceRoot(): string {
   const envRoot = process.env.MCP_WORKSPACE_PATH;
-  if (envRoot && envRoot.trim()) {
-    return path.resolve(envRoot.trim());
-  }
-  return path.resolve(process.cwd());
+  const raw = envRoot && envRoot.trim() ? envRoot.trim() : os.tmpdir();
+  // Canonicalise the deepest EXISTING ancestor (not plain realpathSync):
+  // the save root may not exist yet, and the containment check compares
+  // against a candidate canonicalised the same way — both sides must use
+  // the same canonicalisation primitive or a symlinked alias (macOS
+  // /tmp → /private/tmp) produces spurious refusals.
+  return canonicalisePrefix(path.resolve(raw));
 }
 
 /**
@@ -169,7 +183,10 @@ export function resolveSourcePath(sourcePath: string): ResolveResult {
  * - Rejects absolute paths outside the workspace root
  * - Relative paths are resolved against the workspace root
  * - Tilde expansion (~) is NOT allowed — it would escape the workspace boundary
- * - Final path (after extension append) must still be within workspace root
+ * - The FINAL path (after extension append) is canonically contained: the
+ *   deepest EXISTING ancestor is resolved through `fs.realpathSync`, so a
+ *   symlinked directory inside the workspace pointing OUTSIDE it is refused
+ *   (a purely lexical `path.resolve` check would wave it through).
  *
  * Adds appropriate file extension if missing.
  */
@@ -212,8 +229,11 @@ export function resolveSavePath(savePath: string, mimeType: string): ResolveResu
     ? expanded
     : `${expanded}${defaultExt}`;
 
-  // Validate the FINAL path (after extension append) is within workspace root
-  const canonicalFinal = path.resolve(finalPath);
+  // Validate the FINAL path (after extension append) is canonically within
+  // the workspace root: canonicalise the deepest existing ancestor so an
+  // in-workspace symlinked directory cannot redirect the write outside.
+  // `workspaceRoot` is already canonical (getWorkspaceRoot realpaths it).
+  const canonicalFinal = canonicalisePrefix(path.resolve(finalPath));
   if (!canonicalFinal.startsWith(workspaceRoot + path.sep) && canonicalFinal !== workspaceRoot) {
     return {
       ok: false,
@@ -222,4 +242,65 @@ export function resolveSavePath(savePath: string, mimeType: string): ResolveResu
   }
 
   return { ok: true, path: canonicalFinal };
+}
+
+/**
+ * Read a file whose path has ALREADY been validated by `resolveSourcePath`,
+ * closing the check-then-use race: the canonical path is opened ONCE, the
+ * descriptor is `fstat`'d (must be a regular file), the path is re-resolved
+ * and required to still name the same inode, and the bytes are read THROUGH
+ * the descriptor — so a symlink/file swap landing between validation and
+ * read fails closed instead of reading an out-of-sandbox target.
+ *
+ * `root` must be the canonical workspace root from `getSourceWorkspaceRoot()`.
+ */
+export function readSandboxedWorkspaceFile(
+  canonicalPath: string,
+  root: string,
+): { ok: true; content: Buffer } | { ok: false; error: string } {
+  const isInsideRoot = (p: string): boolean =>
+    p === root || p.startsWith(root + path.sep);
+
+  let fd: number;
+  try {
+    fd = fs.openSync(canonicalPath, 'r');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { ok: false, error: `File not found: ${canonicalPath}` };
+    }
+    throw err;
+  }
+
+  try {
+    const fdStat = fs.fstatSync(fd);
+    if (!fdStat.isFile()) {
+      return { ok: false, error: `Source image path is not a file: ${canonicalPath}` };
+    }
+
+    // Post-open re-verification: the path must still canonically resolve
+    // inside the workspace AND name the same inode as the opened descriptor.
+    let recanonical: string;
+    try {
+      recanonical = fs.realpathSync(canonicalPath);
+    } catch {
+      return { ok: false, error: `Source image path changed during validation: ${canonicalPath}` };
+    }
+    if (!isInsideRoot(recanonical)) {
+      return {
+        ok: false,
+        error: `Source image path was swapped to escape the workspace sandbox root (${root}) during validation.`,
+      };
+    }
+    const pathStat = fs.statSync(recanonical);
+    if (pathStat.dev !== fdStat.dev || pathStat.ino !== fdStat.ino) {
+      return {
+        ok: false,
+        error: `Source image path was replaced during validation; refusing to read: ${canonicalPath}`,
+      };
+    }
+
+    return { ok: true, content: fs.readFileSync(fd) };
+  } finally {
+    fs.closeSync(fd);
+  }
 }

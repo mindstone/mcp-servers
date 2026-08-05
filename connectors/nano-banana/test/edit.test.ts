@@ -263,12 +263,19 @@ describe('nano_banana_edit — source-image sandbox (M3.6)', () => {
 
   // ---------------------- STATIC ASSERTIONS ----------------------
 
-  it('VAL-NANO-201 — realpathSync is referenced in src/tools/edit.ts (static)', () => {
+  it('VAL-NANO-201 — local reads go through the open-once descriptor helper (static)', () => {
     const editTs = fs.readFileSync(
       path.resolve(__dirname, '..', 'src', 'tools', 'edit.ts'),
       'utf8',
     );
-    expect(editTs).toMatch(/realpathSync/);
+    const pathSafetyTs = fs.readFileSync(
+      path.resolve(__dirname, '..', 'src', 'tools', 'path-safety.ts'),
+      'utf8',
+    );
+    // The check-then-use race is closed by readSandboxedWorkspaceFile
+    // (open once → fstat → inode re-verify → read through the descriptor).
+    expect(editTs).toMatch(/readSandboxedWorkspaceFile/);
+    expect(pathSafetyTs).toMatch(/fstatSync/);
   });
 
   it('VAL-NANO-202 — MCP_WORKSPACE_PATH is referenced in edit.ts or path-safety.ts (static)', () => {

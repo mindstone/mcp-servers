@@ -18,7 +18,7 @@ import {
   type GenerationConfig,
   type ImageConfig,
 } from '../types.js';
-import { resolveSavePath, resolveSourcePath } from './path-safety.js';
+import { getSourceWorkspaceRoot, readSandboxedWorkspaceFile, resolveSavePath, resolveSourcePath } from './path-safety.js';
 import { fetchRemoteImage, isRemoteImageUrl } from './remote-image.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 
@@ -103,10 +103,11 @@ async function loadRemoteSourceImage(rawSource: string): Promise<LoadSourceResul
  *      inside the workspace pointing OUTSIDE the workspace is
  *      refused.
  *
- * We additionally call `fs.realpathSync` again as defence-in-depth
- * immediately before reading the bytes — if the file was swapped
- * out behind a symlink between the validation and the read, the
- * post-realpath read catches the escape.
+ * The bytes are then read through `readSandboxedWorkspaceFile`, which
+ * opens the canonical path ONCE, `fstat`s the descriptor, re-verifies
+ * the path still names the same inode, and reads THROUGH the descriptor
+ * — a check-then-use swap between validation and read fails closed
+ * instead of reading an out-of-sandbox target.
  * ----------------------------------------------------------------
  */
 function loadLocalSourceImage(rawSource: string): LoadSourceResult {
@@ -124,11 +125,11 @@ function loadLocalSourceImage(rawSource: string): LoadSourceResult {
   }
 
   try {
-    if (!fs.existsSync(sourcePath)) {
-      return { ok: false, errorText: `File not found: ${sourcePath}` };
+    const readResult = readSandboxedWorkspaceFile(sourcePath, getSourceWorkspaceRoot());
+    if (!readResult.ok) {
+      return { ok: false, errorText: JSON.stringify({ ok: false, error: readResult.error }) };
     }
-    const verifiedPath = fs.realpathSync(sourcePath);
-    const imageBuffer = fs.readFileSync(verifiedPath);
+    const imageBuffer = readResult.content;
     console.error(`[NanoBanana] Read source image: ${imageBuffer.length} bytes, type: ${sourceMimeType}`);
     return { ok: true, image: { mimeType: sourceMimeType, base64: imageBuffer.toString('base64') } };
   } catch (readError) {
@@ -319,18 +320,32 @@ export function registerEditTools(server: McpServer): void {
         }
         try {
           fs.mkdirSync(path.dirname(resolveResult.path), { recursive: true });
-          fs.writeFileSync(resolveResult.path, Buffer.from(imageData, 'base64'));
+          // 'wx' (O_CREAT|O_EXCL): never truncate an existing file — a
+          // silent overwrite of user content is a data-loss bug.
+          fs.writeFileSync(resolveResult.path, Buffer.from(imageData, 'base64'), { flag: 'wx' });
           savedPath = resolveResult.path;
           console.error(`[NanoBanana] Saved edited image to: ${savedPath}`);
         } catch (saveError) {
-          const errMsg = saveError instanceof Error ? saveError.message : String(saveError);
+          // EEXIST from the 'wx' write means the target file exists (refuse
+          // overwrite); EEXIST can also bubble up from mkdir when a path
+          // segment is a regular file — discriminate on the actual target.
+          const isExists =
+            (saveError as NodeJS.ErrnoException).code === 'EEXIST' &&
+            fs.existsSync(resolveResult.path);
+          const errMsg = isExists
+            ? 'a file already exists at that path'
+            : saveError instanceof Error ? saveError.message : String(saveError);
+          const saveCode = isExists ? 'SAVE_EXISTS' : 'SAVE_FAILED';
+          const saveResolution = isExists
+            ? 'Choose a different save_path (or delete the existing file) and try again. The edited image is included inline in this result.'
+            : 'Check that the save path is inside the workspace and writable, then try again. The edited image is included inline in this result.';
           console.error(`[NanoBanana] Failed to save: ${errMsg}`);
           // The image was edited but the requested save failed — surface
           // that as an error instead of silently reporting success. The image
           // is still returned inline so the edit is not lost.
           return {
             content: [
-              { type: 'text', text: JSON.stringify({ ok: false, error: `Image edited but could not be saved to ${resolveResult.path}: ${errMsg}`, code: 'SAVE_FAILED', resolution: 'Check that the save path is inside the workspace and writable, then try again. The edited image is included inline in this result.' }, null, 2) },
+              { type: 'text', text: JSON.stringify({ ok: false, error: `Image edited but could not be saved to ${resolveResult.path}: ${errMsg}`, code: saveCode, resolution: saveResolution }, null, 2) },
               { type: 'image', data: imageData, mimeType: imageMimeType },
             ],
             isError: true,
