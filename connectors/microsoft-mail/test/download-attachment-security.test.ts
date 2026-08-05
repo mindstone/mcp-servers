@@ -4,11 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mswServer } from './fixtures/setup.js';
 import { createMockApi, type MockApiState } from './fixtures/microsoft-mock-api.js';
-import {
-  pinAttachmentDir,
-  resolveAttachmentDir,
-  writeFileExclusive,
-} from '../src/mail.js';
+import { resolveAttachmentDir, writeFileExclusive } from '../src/mail.js';
 import {
   createMicrosoftConfigDir,
   createTestClient,
@@ -18,7 +14,10 @@ import {
 
 // Adversarial coverage for download_attachment: workspace containment,
 // symlink/no-overwrite races, size caps, malformed upstream responses, and
-// untrusted-content envelopes on every error path.
+// untrusted-content envelopes on every error path. The write path stages
+// every download in a fresh mkdtemp directory directly under the canonical
+// workspace root, so it behaves identically on every platform — no Linux
+// gating anywhere in this file.
 
 describe('download_attachment adversarial cases', () => {
   let client: McpTestClient;
@@ -62,72 +61,197 @@ describe('download_attachment adversarial cases', () => {
     return result.json as { ok: boolean; error: string };
   };
 
-  // Successful downloads require descriptor-pinned directory writes, which
-  // only exist on Linux (/proc/self/fd); other platforms fail closed by
-  // design. The success-path cases below therefore run on Linux only, and the
-  // final case in this block asserts the fail-closed behavior everywhere
-  // else.
-  const itOnLinux = it.runIf(process.platform === 'linux');
+  it('writes into a fresh private staging directory directly under the canonical root', async () => {
+    const result = await callDownload('att-1');
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { savedTo: string };
 
-  itOnLinux('writes through an exclusive create: a pre-existing file is never clobbered', async () => {
-    const dir = path.join(workspace, 'attachments', 'microsoft-mail');
-    await fs.mkdir(dir, { recursive: true });
-    const sentinel = path.join(dir, 'report.pdf');
+    const canonicalRoot = await fs.realpath(workspace);
+    const stagingDir = path.dirname(json.savedTo);
+    // The staging dir is a fresh, non-symlink mkdtemp child directly under
+    // the canonical root; only the attachment file name is carried over.
+    expect(path.dirname(stagingDir)).toBe(canonicalRoot);
+    expect(path.basename(stagingDir)).toMatch(/^microsoft-mail-attachment-/);
+    expect(path.basename(json.savedTo)).toBe('report.pdf');
+    expect((await fs.lstat(stagingDir)).isSymbolicLink()).toBe(false);
+    expect((await fs.stat(stagingDir)).mode & 0o777).toBe(0o700);
+    // The reported path really holds the bytes.
+    const written = await fs.readFile(json.savedTo);
+    expect(written.toString('utf8')).toBe('hello attachment');
+    expect((await fs.stat(json.savedTo)).mode & 0o777).toBe(0o600);
+  });
+
+  it('never clobbers a pre-existing same-named file', async () => {
+    // No overwrite is possible by construction: the write lands in a fresh
+    // staging directory, so a pre-existing file at the same name is never
+    // touched and no error is raised.
+    const sentinel = path.join(workspace, 'report.pdf');
     await fs.writeFile(sentinel, 'do not touch');
 
     const result = await callDownload('att-1');
     expect(result.isError).not.toBe(true);
     const json = result.json as { savedTo: string };
     expect(json.savedTo).not.toBe(sentinel);
-    expect(path.basename(json.savedTo)).toBe('report-1.pdf');
+    expect(path.basename(json.savedTo)).toBe('report.pdf');
     await expect(fs.readFile(sentinel, 'utf8')).resolves.toBe('do not touch');
     await expect(fs.readFile(json.savedTo, 'utf8')).resolves.toBe('hello attachment');
   });
 
-  itOnLinux('never writes through a pre-existing symlink at the destination path', async () => {
-    const dir = path.join(workspace, 'attachments', 'microsoft-mail');
-    await fs.mkdir(dir, { recursive: true });
-    const outside = path.join(workspace, 'outside-target.txt');
-    await fs.writeFile(outside, 'sensitive');
-    await fs.symlink(outside, path.join(dir, 'report.pdf'));
-
-    const result = await callDownload('att-1');
-    expect(result.isError).not.toBe(true);
-    const json = result.json as { savedTo: string };
-    expect(path.basename(json.savedTo)).toBe('report-1.pdf');
-    // The symlink target must be untouched.
-    await expect(fs.readFile(outside, 'utf8')).resolves.toBe('sensitive');
-  });
-
-  itOnLinux('never writes through a destination symlink whose target is outside the workspace', async () => {
-    const dir = path.join(workspace, 'attachments', 'microsoft-mail');
-    await fs.mkdir(dir, { recursive: true });
+  it('never writes through a pre-existing same-named symlink, inside or outside the workspace', async () => {
     const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-leaf-out-'));
     try {
       const victim = path.join(outside, 'victim.txt');
       await fs.writeFile(victim, 'sensitive');
-      await fs.symlink(victim, path.join(dir, 'report.pdf'));
+      await fs.symlink(victim, path.join(workspace, 'report.pdf'));
 
       const result = await callDownload('att-1');
       expect(result.isError).not.toBe(true);
       const json = result.json as { savedTo: string };
-      expect(path.basename(json.savedTo)).toBe('report-1.pdf');
-      expect(json.savedTo.startsWith(workspace)).toBe(true);
-      // The outside symlink target must be untouched.
+      expect(path.basename(json.savedTo)).toBe('report.pdf');
+      const canonicalRoot = await fs.realpath(workspace);
+      expect((await fs.realpath(json.savedTo)).startsWith(canonicalRoot + path.sep)).toBe(true);
+      // The symlink target must be untouched.
       await expect(fs.readFile(victim, 'utf8')).resolves.toBe('sensitive');
     } finally {
       await fs.rm(outside, { recursive: true, force: true });
     }
   });
 
-  it('refuses a symlinked attachment directory escaping the workspace', async () => {
+  it('is immune to a parent-directory swap between validation and the write', async () => {
+    // Adversarial regression: the directory the legacy write path used is
+    // swapped for a symlink (pointing at an attacker-controlled dir outside
+    // the workspace) after resolveAttachmentDir has validated the root. The
+    // write never traverses a validated user-visible pathname, so nothing
+    // can be redirected through the swapped directory.
+    const target = await resolveAttachmentDir();
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-swap-out-'));
+    const swappedDir = path.join(workspace, 'attachments');
+    await fs.mkdir(path.join(swappedDir, 'microsoft-mail'), { recursive: true });
+    try {
+      // Attacker swaps the formerly-validated directory for a symlink.
+      await fs.rm(swappedDir, { recursive: true });
+      await fs.symlink(outside, swappedDir);
+
+      const savedTo = await writeFileExclusive(target, 'probe.txt', Buffer.from('mailbox bytes'));
+
+      // Nothing landed outside the workspace…
+      expect(await fs.readdir(outside)).toEqual([]);
+      // …and the bytes are only inside the fresh staging directory.
+      await expect(fs.readFile(savedTo, 'utf8')).resolves.toBe('mailbox bytes');
+      const canonicalRoot = await fs.realpath(workspace);
+      expect(path.dirname(path.dirname(savedTo))).toBe(canonicalRoot);
+      expect((await fs.realpath(savedTo)).startsWith(canonicalRoot + path.sep)).toBe(true);
+    } finally {
+      await fs.rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps every byte inside the workspace under a concurrent directory-swap storm', async () => {
+    const target = await resolveAttachmentDir();
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-race-out-'));
+    const swapped = path.join(workspace, 'attachments');
+    const held = `${swapped}-held`;
+    await fs.mkdir(swapped, { recursive: true });
+    // Victims that no write or cleanup may ever touch.
+    const victimOutside = path.join(outside, 'victim-do-not-delete.txt');
+    await fs.writeFile(victimOutside, 'precious');
+
+    // Attacker loop: repeatedly replace a workspace subdirectory with a
+    // symlink to `outside`, then swap the real directory back.
+    let swapping = true;
+    const swapper = (async () => {
+      while (swapping) {
+        await fs.rename(swapped, held).catch(() => {});
+        await fs.symlink(outside, swapped).catch(() => {});
+        await fs.rm(swapped, { force: true }).catch(() => {});
+        await fs.rename(held, swapped).catch(() => {});
+      }
+    })();
+
+    const saved: string[] = [];
+    const content = Buffer.from('mailbox bytes');
+    try {
+      for (let i = 0; i < 40; i += 1) {
+        saved.push(await writeFileExclusive(target, `probe-${i}.txt`, content));
+      }
+    } finally {
+      swapping = false;
+      await swapper;
+    }
+
+    // No connector bytes ever landed outside the workspace, and the outside
+    // victim was never touched.
+    expect(await fs.readdir(outside)).toEqual(['victim-do-not-delete.txt']);
+    await expect(fs.readFile(victimOutside, 'utf8')).resolves.toBe('precious');
+    // Every reported success really holds the bytes at the reported path,
+    // inside the canonical root.
+    const canonicalRoot = await fs.realpath(workspace);
+    for (const p of saved) {
+      expect((await fs.realpath(p)).startsWith(canonicalRoot + path.sep)).toBe(true);
+      await expect(fs.readFile(p)).resolves.toEqual(content);
+    }
+    await fs.rm(outside, { recursive: true, force: true });
+  });
+
+  it('behaves identically on platforms without Linux /proc/self/fd', async () => {
+    // The staging-directory construction uses no descriptor-relative APIs,
+    // so the platform is never consulted. Mask process.platform to prove no
+    // hidden platform branch changes the outcome.
+    const descriptor = Object.getOwnPropertyDescriptor(process, 'platform');
+    expect(descriptor?.configurable).toBe(true);
+    Object.defineProperty(process, 'platform', { ...descriptor, value: 'darwin' });
+    try {
+      const result = await callDownload('att-1');
+      expect(result.isError).not.toBe(true);
+      const json = result.json as { savedTo: string };
+      const canonicalRoot = await fs.realpath(workspace);
+      expect(path.dirname(path.dirname(json.savedTo))).toBe(canonicalRoot);
+      await expect(fs.readFile(json.savedTo, 'utf8')).resolves.toBe('hello attachment');
+    } finally {
+      Object.defineProperty(process, 'platform', descriptor);
+    }
+  });
+
+  it('never traverses a symlink planted where the legacy write path used to go', async () => {
+    // A symlinked `attachments` directory (an attempt to smuggle writes
+    // outside the workspace) is simply never traversed: the write stages
+    // directly under the canonical root.
     const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-escape-'));
     await fs.symlink(outside, path.join(workspace, 'attachments'));
 
-    const json = errorJson(await callDownload('att-1'));
-    expect(json.error).toContain('escaped');
-    await expect(fs.readdir(outside)).resolves.toEqual([]);
+    const result = await callDownload('att-1');
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { savedTo: string };
+    expect(await fs.readdir(outside)).toEqual([]);
+    const canonicalRoot = await fs.realpath(workspace);
+    expect((await fs.realpath(json.savedTo)).startsWith(canonicalRoot + path.sep)).toBe(true);
     await fs.rm(outside, { recursive: true, force: true });
+  });
+
+  it('canonicalises a symlinked MCP_WORKSPACE_PATH before staging', async () => {
+    const real = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-real-root-'));
+    const alias = path.join(os.tmpdir(), `microsoft-mail-alias-${process.pid}`);
+    await fs.symlink(real, alias);
+    vi.stubEnv('MCP_WORKSPACE_PATH', alias);
+    try {
+      const result = await callDownload('att-1');
+      expect(result.isError).not.toBe(true);
+      const json = result.json as { savedTo: string };
+      // The reported path is anchored at the canonical root, not the alias.
+      expect(json.savedTo.startsWith(alias)).toBe(false);
+      expect((await fs.realpath(json.savedTo)).startsWith(real + path.sep)).toBe(true);
+    } finally {
+      await fs.rm(alias, { force: true });
+      await fs.rm(real, { recursive: true, force: true });
+    }
+  });
+
+  it('fails closed when MCP_WORKSPACE_PATH does not exist, writing nothing', async () => {
+    const missing = path.join(workspace, 'does-not-exist');
+    vi.stubEnv('MCP_WORKSPACE_PATH', missing);
+    const result = await callDownload('att-1');
+    expect(result.isError).toBe(true);
+    expect(await pathExists(missing)).toBe(false);
   });
 
   it('rejects traversal filenames without writing anything', async () => {
@@ -148,13 +272,11 @@ describe('download_attachment adversarial cases', () => {
   it('caps an oversized content stream even when the declared size lies', async () => {
     const json = errorJson(await callDownload('att-stream-big'));
     expect(json.error).toContain('25 MB');
-    const dir = path.join(workspace, 'attachments', 'microsoft-mail');
-    if (await pathExists(dir)) {
-      expect(await fs.readdir(dir)).toEqual([]);
-    }
+    // A rejected write leaves no staging residue behind.
+    expect(await fs.readdir(workspace)).toEqual([]);
   });
 
-  itOnLinux('accepts an attachment exactly at the 25 MB boundary', async () => {
+  it('accepts an attachment exactly at the 25 MB boundary', async () => {
     const result = await callDownload('att-exact-limit');
     expect(result.isError).not.toBe(true);
     const json = result.json as { savedTo: string; size: number };
@@ -202,191 +324,6 @@ describe('download_attachment adversarial cases', () => {
     expect(json.error).toContain('schema validation');
     expect(json.error).not.toContain('broken.pdf');
   });
-
-  // On platforms without descriptor-pinned directory writes the tool must
-  // refuse to save — after fetching nothing is written anywhere — rather
-  // than fall back to a path-based create a directory swap could redirect.
-  it.runIf(process.platform !== 'linux')(
-    'refuses to save on platforms without descriptor-pinned writes',
-    async () => {
-      const json = errorJson(await callDownload('att-1'));
-      expect(json.error).toContain('unavailable on this platform');
-      expect(json.error).toContain('Refusing to save');
-      expect(await fs.readdir(workspace)).toEqual([]);
-    },
-  );
-});
-
-// The parent-directory replacement guard: a local attacker who swaps the
-// validated attachment directory (rename + symlink/directory replacement)
-// between canonicalization and the exclusive create must fail the write
-// closed, never redirect it. On Linux the pinned descriptor rejects the swap
-// outright; on platforms without descriptor-relative writes there is no
-// path-based fallback — writeFileExclusive refuses to write at all. The
-// describe below then exercises the real write path under adversarial swap
-// timing.
-describe('attachment directory replacement guard', () => {
-  let workspace: string;
-
-  beforeEach(async () => {
-    workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-dir-guard-'));
-    vi.stubEnv('MCP_WORKSPACE_PATH', workspace);
-  });
-
-  afterEach(async () => {
-    vi.unstubAllEnvs();
-    await fs.rm(workspace, { recursive: true, force: true });
-  });
-
-  it('fails closed with nothing written outside when the directory is swapped to a symlink before the write', async () => {
-    const target = await resolveAttachmentDir();
-    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-swap-out-'));
-    try {
-      await fs.rm(target.dir, { recursive: true });
-      await fs.symlink(outside, target.dir);
-      if (process.platform === 'linux') {
-        // The pinned descriptor's dev/ino no longer matches the validated
-        // identity — the swap itself is the rejection.
-        await expect(
-          writeFileExclusive(target, 'probe.txt', Buffer.from('mailbox bytes')),
-        ).rejects.toThrow('replaced');
-      } else {
-        // No descriptor-relative create exists: the write is refused before
-        // any path is touched.
-        await expect(
-          writeFileExclusive(target, 'probe.txt', Buffer.from('mailbox bytes')),
-        ).rejects.toThrow('unavailable on this platform');
-      }
-      // Either way, nothing may be left outside the workspace.
-      expect(await fs.readdir(outside)).toEqual([]);
-    } finally {
-      await fs.rm(outside, { recursive: true, force: true });
-    }
-  });
-
-  it('refuses to write when the platform offers no descriptor-relative create, and creates nothing', async () => {
-    // Simulate a platform without /proc/self/fd traversal by masking
-    // process.platform; pinAttachmentDir consults it at call time.
-    const descriptor = Object.getOwnPropertyDescriptor(process, 'platform');
-    expect(descriptor?.configurable).toBe(true);
-    const target = await resolveAttachmentDir();
-    Object.defineProperty(process, 'platform', { ...descriptor, value: 'darwin' });
-    try {
-      await expect(
-        writeFileExclusive(target, 'probe.txt', Buffer.from('mailbox bytes')),
-      ).rejects.toThrow('unavailable on this platform');
-      // Fail-closed means closed: no leaf, no staging residue, nothing.
-      expect(await fs.readdir(target.dir)).toEqual([]);
-    } finally {
-      Object.defineProperty(process, 'platform', descriptor);
-    }
-  });
-});
-
-// Descriptor-relative writes (linux): the attachment directory is pinned
-// behind an open descriptor and the create/verify/cleanup are addressed
-// through /proc/self/fd/<fd>/<name>, so a path swap at any point in the
-// sequence cannot move a byte — or a deletion — off the validated inode.
-// These exercise the real write path under adversarial swap timing, not
-// just the static identity check.
-describe('attachment write under adversarial swap timing (linux)', () => {
-  let workspace: string;
-
-  beforeEach(async () => {
-    workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-swap-race-'));
-    vi.stubEnv('MCP_WORKSPACE_PATH', workspace);
-  });
-
-  afterEach(async () => {
-    vi.unstubAllEnvs();
-    await fs.rm(workspace, { recursive: true, force: true });
-  });
-
-  it.runIf(process.platform === 'linux')(
-    'pins the validated inode: a create through the pinned descriptor ignores a swapped path',
-    async () => {
-      const target = await resolveAttachmentDir();
-      const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-pin-out-'));
-      const held = `${target.dir}-held`;
-      const pin = await pinAttachmentDir(target);
-      try {
-        expect(pin).toBeDefined();
-        // Attacker swaps the path: real directory renamed aside, symlink to
-        // an outside directory planted in its place.
-        await fs.rename(target.dir, held);
-        await fs.symlink(outside, target.dir);
-        // A create addressed relative to the pinned descriptor must land in
-        // the pinned inode (now reachable at `held`), never outside.
-        await fs.writeFile(`/proc/self/fd/${pin!.fd}/probe.txt`, 'bytes');
-        expect(await fs.readdir(outside)).toEqual([]);
-        await expect(fs.readFile(path.join(held, 'probe.txt'), 'utf8')).resolves.toBe('bytes');
-      } finally {
-        await pin?.close();
-        const lst = await fs.lstat(target.dir).catch(() => null);
-        if (lst?.isSymbolicLink()) await fs.rm(target.dir, { force: true });
-        await fs.rename(held, target.dir).catch(() => {});
-        await fs.rm(outside, { recursive: true, force: true });
-      }
-    },
-  );
-
-  it.runIf(process.platform === 'linux')(
-    'keeps every byte and every deletion inside the pinned directory under a concurrent swap',
-    async () => {
-      const target = await resolveAttachmentDir();
-      const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-race-out-'));
-      const held = `${target.dir}-held`;
-      // Victims that no cleanup may ever touch.
-      const victimInside = path.join(target.dir, 'victim-do-not-delete.txt');
-      const victimOutside = path.join(outside, 'victim-do-not-delete.txt');
-      await fs.writeFile(victimInside, 'precious');
-      await fs.writeFile(victimOutside, 'precious');
-
-      // Attacker loop: repeatedly replace the validated directory with a
-      // symlink to `outside`, then swap the real directory back.
-      let swapping = true;
-      const swapper = (async () => {
-        while (swapping) {
-          await fs.rename(target.dir, held).catch(() => {});
-          await fs.symlink(outside, target.dir).catch(() => {});
-          await fs.rm(target.dir, { force: true }).catch(() => {});
-          await fs.rename(held, target.dir).catch(() => {});
-        }
-      })();
-
-      const saved: string[] = [];
-      const content = Buffer.from('mailbox bytes');
-      try {
-        for (let i = 0; i < 40; i += 1) {
-          try {
-            saved.push(await writeFileExclusive(target, `probe-${i}.txt`, content));
-          } catch {
-            // Fail-closed is an acceptable outcome under an active swap; a
-            // misplaced write or deletion is not — asserted below.
-          }
-        }
-      } finally {
-        swapping = false;
-        await swapper;
-        // Restore rest state for the invariant checks.
-        const lst = await fs.lstat(target.dir).catch(() => null);
-        if (lst?.isSymbolicLink()) await fs.rm(target.dir, { force: true });
-        await fs.rename(held, target.dir).catch(() => {});
-      }
-
-      // No connector bytes ever landed outside the workspace, and the
-      // outside victim was never deleted by a swapped cleanup.
-      expect(await fs.readdir(outside)).toEqual(['victim-do-not-delete.txt']);
-      await expect(fs.readFile(victimOutside, 'utf8')).resolves.toBe('precious');
-      // The victim inside the real attachment directory survived too.
-      await expect(fs.readFile(victimInside, 'utf8')).resolves.toBe('precious');
-      // Every reported success really holds the bytes at the reported path.
-      for (const p of saved) {
-        await expect(fs.readFile(p)).resolves.toEqual(content);
-      }
-      await fs.rm(outside, { recursive: true, force: true });
-    },
-  );
 });
 
 async function pathExists(p: string): Promise<boolean> {
