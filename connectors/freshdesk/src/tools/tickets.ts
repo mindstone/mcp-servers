@@ -14,6 +14,7 @@ import {
   formatTicketDetailed,
   formatConversation,
   wrapTicketUntrustedFields,
+  wrapUntrustedTicketContent,
 } from '../formatters.js';
 import { withErrorHandling, noAccountError } from '../utils.js';
 
@@ -299,7 +300,7 @@ export function registerTicketTools(server: McpServer): void {
         message: `Created ticket #${ticket.id}`,
         ticket: {
           id: ticket.id,
-          subject: ticket.subject,
+          subject: wrapUntrustedTicketContent(ticket.subject) ?? ticket.subject,
           status: ticket.status,
           priority: ticket.priority,
           url: ticketUrl(account.domain, ticket.id),
@@ -370,7 +371,7 @@ export function registerTicketTools(server: McpServer): void {
         message: `Updated ticket #${args.ticket_id}`,
         ticket: {
           id: ticket.id,
-          subject: ticket.subject,
+          subject: wrapUntrustedTicketContent(ticket.subject) ?? ticket.subject,
           status: ticket.status,
           priority: ticket.priority,
           url: ticketUrl(account.domain, ticket.id),

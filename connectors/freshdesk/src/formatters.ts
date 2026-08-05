@@ -1,13 +1,14 @@
 /**
  * Response formatting helpers for Freshdesk API data.
  *
- * Text returned by Freshdesk (ticket subjects/descriptions, conversation
- * bodies, contact names, KB article content, …) is third-party text that an
- * end-user or external requester may have written. It is wrapped in
+ * EVERY string returned by Freshdesk (ticket subjects/descriptions, tags,
+ * emails, phone numbers, company domains, custom-field keys/values, ticket-
+ * field metadata, KB article content, …) is third-party text that an end-user
+ * or external requester may have written. It is wrapped in
  * `<untrusted-content source="…">…</untrusted-content>` envelopes via the
  * canonical shared helper (vendored at `./untrusted-content.ts`) so the host
- * LLM treats it as data, not instructions. Connector-controlled metadata
- * (ids, statuses, priorities, timestamps, URLs) is NEVER wrapped.
+ * LLM treats it as data, not instructions. Only non-string connector metadata
+ * (numeric ids, statuses, priorities) is left untouched.
  */
 
 import type {
@@ -21,7 +22,7 @@ import type {
   FreshdeskSolutionArticle,
 } from './types.js';
 import { statusToString, priorityToString, sourceToString } from './types.js';
-import { wrapUntrusted } from './untrusted-content.js';
+import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
 
 export const UNTRUSTED_TICKET_OPEN = '<untrusted-content source="external-ticket">';
 export const UNTRUSTED_TICKET_CLOSE = '</untrusted-content>';
@@ -32,6 +33,7 @@ const GROUP_SOURCE = 'external-group';
 const CONTACT_SOURCE = 'external-contact';
 const COMPANY_SOURCE = 'external-company';
 const ARTICLE_SOURCE = 'external-kb-article';
+const FIELD_SOURCE = 'external-ticket-field';
 
 /**
  * Wrap an optional external-text field in an `<untrusted-content>` envelope.
@@ -41,6 +43,37 @@ const ARTICLE_SOURCE = 'external-kb-article';
 function wrapField(s: string | null | undefined, source: string): string | undefined {
   if (typeof s !== 'string' || s.length === 0) return undefined;
   return wrapUntrusted(s, source);
+}
+
+/**
+ * Wrap each entry of a vendor-authored string list (tags, domains, …)
+ * individually and join the envelopes for display.
+ */
+function wrapFieldList(list: string[] | null | undefined, source: string): string | undefined {
+  if (!list || list.length === 0) return undefined;
+  return list.map((item) => wrapUntrusted(item, source)).join(', ');
+}
+
+/**
+ * Recursively wrap every string VALUE reachable inside `value` in an
+ * untrusted-content envelope. Object keys are part of the connector's output
+ * contract and stay raw; free-form maps whose KEYS are also authored in
+ * Freshdesk (e.g. ticket `custom_fields`, ticket-field `choices`) are wrapped
+ * with `wrapUntrustedJsonStrings` instead, which envelopes keys as well.
+ */
+function wrapValuesDeep<T>(value: T, source: string): T {
+  if (typeof value === 'string') {
+    return wrapUntrusted(value, source) as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => wrapValuesDeep(item, source)) as T;
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, wrapValuesDeep(item, source)]),
+    ) as T;
+  }
+  return value;
 }
 
 /**
@@ -58,18 +91,17 @@ export function wrapUntrustedTicketContent(s: string | null | undefined): string
 }
 
 /**
- * Return a shallow clone of the ticket with attacker-controlled text fields
- * (subject, HTML and text descriptions) enveloped; connector-controlled
- * metadata is left untouched.
+ * Return a deep copy of the ticket with EVERY string value enveloped —
+ * subject and body fields, but also type, requester email, tags, and any
+ * unexpected vendor property. `custom_fields` is a free-form vendor map whose
+ * keys are Freshdesk-authored too, so it is enveloped wholesale (keys
+ * included) via `wrapUntrustedJsonStrings`.
  */
 export function wrapTicketUntrustedFields(ticket: FreshdeskTicket): FreshdeskTicket {
-  const wrapped: FreshdeskTicket = { ...ticket };
-  const ws = wrapUntrustedTicketContent(ticket.subject);
-  if (ws !== undefined) wrapped.subject = ws;
-  const wd = wrapUntrustedTicketContent(ticket.description);
-  if (wd !== undefined) wrapped.description = wd;
-  const wdt = wrapUntrustedTicketContent(ticket.description_text);
-  if (wdt !== undefined) wrapped.description_text = wdt;
+  const wrapped = wrapValuesDeep(ticket, TICKET_SOURCE);
+  if (ticket.custom_fields && typeof ticket.custom_fields === 'object') {
+    wrapped.custom_fields = wrapUntrustedJsonStrings(ticket.custom_fields, TICKET_SOURCE);
+  }
   return wrapped;
 }
 
@@ -88,6 +120,9 @@ export function formatTicketDetailed(ticket: FreshdeskTicket, domain: string): s
   const wrappedSubject = wrapUntrustedTicketContent(ticket.subject) ?? ticket.subject;
   const wrappedHtml = wrapUntrustedTicketContent(ticket.description);
   const wrappedText = wrapUntrustedTicketContent(ticket.description_text);
+  const wrappedType = wrapUntrustedTicketContent(ticket.type);
+  const wrappedEmail = wrapUntrustedTicketContent(ticket.email);
+  const wrappedTags = wrapFieldList(ticket.tags, TICKET_SOURCE);
   return [
     `Ticket #${ticket.id}`,
     `URL: ${ticketUrl(domain, ticket.id)}`,
@@ -95,15 +130,15 @@ export function formatTicketDetailed(ticket: FreshdeskTicket, domain: string): s
     `Status: ${statusToString(ticket.status)} (${ticket.status})`,
     `Priority: ${priorityToString(ticket.priority)} (${ticket.priority})`,
     `Source: ${sourceToString(ticket.source)}`,
-    ticket.type ? `Type: ${ticket.type}` : '',
+    wrappedType ? `Type: ${wrappedType}` : '',
     `Requester ID: ${ticket.requester_id}`,
-    ticket.email ? `Requester Email: ${ticket.email}` : '',
+    wrappedEmail ? `Requester Email: ${wrappedEmail}` : '',
     ticket.responder_id ? `Assignee ID: ${ticket.responder_id}` : 'Assignee: unassigned',
     ticket.group_id ? `Group ID: ${ticket.group_id}` : '',
     `Created: ${ticket.created_at}`,
     `Updated: ${ticket.updated_at}`,
     ticket.due_by ? `Due by: ${ticket.due_by}` : '',
-    ticket.tags && ticket.tags.length > 0 ? `Tags: ${ticket.tags.join(', ')}` : '',
+    wrappedTags ? `Tags: ${wrappedTags}` : '',
     wrappedHtml ? `Description (HTML):\n${wrappedHtml}` : '',
     wrappedText ? `Description (text):\n${wrappedText}` : '',
   ]
@@ -124,53 +159,44 @@ export function formatConversation(conv: FreshdeskConversation): string {
 export function formatTicketField(field: FreshdeskTicketField): string {
   const required = field.required_for_agents ? ' [required for agents]' : '';
   const closure = field.required_for_closure ? ' [required for closure]' : '';
-  return `${field.label} (ID: ${field.id}, name: ${field.name}, type: ${field.type})${required}${closure}`;
+  const label = wrapField(field.label, FIELD_SOURCE) ?? '(unlabeled)';
+  const name = wrapField(field.name, FIELD_SOURCE) ?? '(unnamed)';
+  const type = wrapField(field.type, FIELD_SOURCE) ?? 'unknown';
+  return `${label} (ID: ${field.id}, name: ${name}, type: ${type})${required}${closure}`;
 }
 
 export function formatAgentConcise(agent: FreshdeskAgent): string {
   const name = wrapField(agent.contact?.name, AGENT_SOURCE) ?? '(no name)';
-  const email = agent.contact?.email ?? 'no email';
+  const email = wrapField(agent.contact?.email, AGENT_SOURCE) ?? 'no email';
   const availability = agent.available === false ? 'unavailable' : 'available';
   return `#${agent.id}: ${name} <${email}> (${availability})`;
 }
 
 export function formatGroupConcise(group: FreshdeskGroup): string {
   const name = wrapField(group.name, GROUP_SOURCE) ?? '(unnamed)';
-  const type = group.group_type ? `, type: ${group.group_type}` : '';
-  return `#${group.id}: ${name}${type}`;
+  const type = wrapField(group.group_type, GROUP_SOURCE);
+  return `#${group.id}: ${name}${type ? `, type: ${type}` : ''}`;
 }
 
 /**
- * Return a shallow clone of the agent with external-text fields (display
- * name, signature) enveloped; ids and timestamps are left untouched.
+ * Return a deep copy of the agent with every string value enveloped (contact
+ * name/email/phone/mobile, signature, and any unexpected vendor property).
  */
 export function wrapAgentUntrustedFields(agent: FreshdeskAgent): FreshdeskAgent {
-  const wrapped: FreshdeskAgent = { ...agent };
-  if (agent.contact) {
-    const name = wrapField(agent.contact.name, AGENT_SOURCE);
-    wrapped.contact = { ...agent.contact, ...(name !== undefined ? { name } : {}) };
-  }
-  const signature = wrapField(agent.signature, AGENT_SOURCE);
-  if (signature !== undefined) wrapped.signature = signature;
-  return wrapped;
+  return wrapValuesDeep(agent, AGENT_SOURCE);
 }
 
 /**
- * Return a shallow clone of the group with external-text fields (name,
- * description) enveloped; ids and timestamps are left untouched.
+ * Return a deep copy of the group with every string value enveloped (name,
+ * description, group type, and any unexpected vendor property).
  */
 export function wrapGroupUntrustedFields(group: FreshdeskGroup): FreshdeskGroup {
-  const wrapped: FreshdeskGroup = { ...group };
-  const name = wrapField(group.name, GROUP_SOURCE);
-  if (name !== undefined) wrapped.name = name;
-  const description = wrapField(group.description, GROUP_SOURCE);
-  if (description !== undefined) wrapped.description = description;
-  return wrapped;
+  return wrapValuesDeep(group, GROUP_SOURCE);
 }
 
 export function formatContactConcise(contact: FreshdeskContact): string {
   const name = wrapField(contact.name, CONTACT_SOURCE) ?? '(no name)';
-  const email = contact.email ?? 'no email';
+  const email = wrapField(contact.email, CONTACT_SOURCE) ?? 'no email';
   const company = contact.company_id ? ` — company #${contact.company_id}` : '';
   return `#${contact.id}: ${name} <${email}>${company}`;
 }
@@ -180,16 +206,20 @@ export function formatContactDetailed(contact: FreshdeskContact): string {
   const jobTitle = wrapField(contact.job_title, CONTACT_SOURCE);
   const address = wrapField(contact.address, CONTACT_SOURCE);
   const description = wrapField(contact.description, CONTACT_SOURCE);
+  const email = wrapField(contact.email, CONTACT_SOURCE);
+  const phone = wrapField(contact.phone, CONTACT_SOURCE);
+  const mobile = wrapField(contact.mobile, CONTACT_SOURCE);
+  const tags = wrapFieldList(contact.tags, CONTACT_SOURCE);
   return [
     `Contact #${contact.id}`,
     `Name: ${name ?? '(no name)'}`,
-    contact.email ? `Email: ${contact.email}` : '',
-    contact.phone ? `Phone: ${contact.phone}` : '',
-    contact.mobile ? `Mobile: ${contact.mobile}` : '',
+    email ? `Email: ${email}` : '',
+    phone ? `Phone: ${phone}` : '',
+    mobile ? `Mobile: ${mobile}` : '',
     jobTitle ? `Job Title: ${jobTitle}` : '',
     contact.company_id ? `Company ID: ${contact.company_id}` : '',
     address ? `Address: ${address}` : '',
-    contact.tags && contact.tags.length > 0 ? `Tags: ${contact.tags.join(', ')}` : '',
+    tags ? `Tags: ${tags}` : '',
     description ? `Description: ${description}` : '',
     contact.created_at ? `Created: ${contact.created_at}` : '',
     contact.updated_at ? `Updated: ${contact.updated_at}` : '',
@@ -199,35 +229,34 @@ export function formatContactDetailed(contact: FreshdeskContact): string {
 }
 
 /**
- * Return a shallow clone of the contact with external-text fields enveloped;
- * ids, emails, and timestamps are left untouched.
+ * Return a deep copy of the contact with every string value enveloped (name,
+ * email, phone, mobile, tags, … and any unexpected vendor property).
  */
 export function wrapContactUntrustedFields(contact: FreshdeskContact): FreshdeskContact {
-  const wrapped: FreshdeskContact = { ...contact };
-  for (const key of ['name', 'job_title', 'address', 'description'] as const) {
-    const value = wrapField(contact[key], CONTACT_SOURCE);
-    if (value !== undefined) wrapped[key] = value;
-  }
-  return wrapped;
+  return wrapValuesDeep(contact, CONTACT_SOURCE);
 }
 
 export function formatCompanyConcise(company: FreshdeskCompany): string {
   const name = wrapField(company.name, COMPANY_SOURCE) ?? '(unnamed)';
-  const domains = company.domains && company.domains.length > 0 ? ` (${company.domains.join(', ')})` : '';
-  return `#${company.id}: ${name}${domains}`;
+  const domains = wrapFieldList(company.domains, COMPANY_SOURCE);
+  return `#${company.id}: ${name}${domains ? ` (${domains})` : ''}`;
 }
 
 export function formatCompanyDetailed(company: FreshdeskCompany): string {
   const name = wrapField(company.name, COMPANY_SOURCE);
   const description = wrapField(company.description, COMPANY_SOURCE);
   const note = wrapField(company.note, COMPANY_SOURCE);
+  const domains = wrapFieldList(company.domains, COMPANY_SOURCE);
+  const industry = wrapField(company.industry, COMPANY_SOURCE);
+  const tier = wrapField(company.tier, COMPANY_SOURCE);
+  const healthScore = wrapField(company.health_score, COMPANY_SOURCE);
   return [
     `Company #${company.id}`,
     `Name: ${name ?? '(unnamed)'}`,
-    company.domains && company.domains.length > 0 ? `Domains: ${company.domains.join(', ')}` : '',
-    company.industry ? `Industry: ${company.industry}` : '',
-    company.tier ? `Tier: ${company.tier}` : '',
-    company.health_score ? `Health score: ${company.health_score}` : '',
+    domains ? `Domains: ${domains}` : '',
+    industry ? `Industry: ${industry}` : '',
+    tier ? `Tier: ${tier}` : '',
+    healthScore ? `Health score: ${healthScore}` : '',
     description ? `Description: ${description}` : '',
     note ? `Note: ${note}` : '',
     company.created_at ? `Created: ${company.created_at}` : '',
@@ -238,16 +267,12 @@ export function formatCompanyDetailed(company: FreshdeskCompany): string {
 }
 
 /**
- * Return a shallow clone of the company with external-text fields enveloped;
- * ids, domains, and timestamps are left untouched.
+ * Return a deep copy of the company with every string value enveloped (name,
+ * domains, industry, tier, health score, … and any unexpected vendor
+ * property).
  */
 export function wrapCompanyUntrustedFields(company: FreshdeskCompany): FreshdeskCompany {
-  const wrapped: FreshdeskCompany = { ...company };
-  for (const key of ['name', 'description', 'note'] as const) {
-    const value = wrapField(company[key], COMPANY_SOURCE);
-    if (value !== undefined) wrapped[key] = value;
-  }
-  return wrapped;
+  return wrapValuesDeep(company, COMPANY_SOURCE);
 }
 
 export function articleStatusToString(status: number | undefined): string {
@@ -265,13 +290,14 @@ export function formatArticleDetailed(article: FreshdeskSolutionArticle): string
   const title = wrapField(article.title, ARTICLE_SOURCE);
   const wrappedHtml = wrapField(article.description, ARTICLE_SOURCE);
   const wrappedText = wrapField(article.description_text, ARTICLE_SOURCE);
+  const tags = wrapFieldList(article.tags, ARTICLE_SOURCE);
   return [
     `Article #${article.id}`,
     `Title: ${title ?? '(untitled)'}`,
     `Status: ${articleStatusToString(article.status)}`,
     article.folder_id ? `Folder ID: ${article.folder_id}` : '',
     article.category_id ? `Category ID: ${article.category_id}` : '',
-    article.tags && article.tags.length > 0 ? `Tags: ${article.tags.join(', ')}` : '',
+    tags ? `Tags: ${tags}` : '',
     article.created_at ? `Created: ${article.created_at}` : '',
     article.updated_at ? `Updated: ${article.updated_at}` : '',
     wrappedHtml ? `Description (HTML):\n${wrappedHtml}` : '',
@@ -282,17 +308,25 @@ export function formatArticleDetailed(article: FreshdeskSolutionArticle): string
 }
 
 /**
- * Return a shallow clone of the article with external-text fields (title,
- * HTML and text descriptions) enveloped; ids and timestamps are left
- * untouched.
+ * Return a deep copy of the article with every string value enveloped (title,
+ * HTML and text descriptions, tags, and any unexpected vendor property).
  */
 export function wrapArticleUntrustedFields(
   article: FreshdeskSolutionArticle,
 ): FreshdeskSolutionArticle {
-  const wrapped: FreshdeskSolutionArticle = { ...article };
-  for (const key of ['title', 'description', 'description_text'] as const) {
-    const value = wrapField(article[key], ARTICLE_SOURCE);
-    if (value !== undefined) wrapped[key] = value;
+  return wrapValuesDeep(article, ARTICLE_SOURCE);
+}
+
+/**
+ * Return a deep copy of the ticket field with every string value enveloped
+ * (label, name, type, description, …). `choices` is a free-form vendor map
+ * whose keys are Freshdesk-authored too, so it is enveloped wholesale (keys
+ * included) via `wrapUntrustedJsonStrings`.
+ */
+export function wrapTicketFieldUntrustedFields(field: FreshdeskTicketField): FreshdeskTicketField {
+  const wrapped = wrapValuesDeep(field, FIELD_SOURCE);
+  if (field.choices) {
+    wrapped.choices = wrapUntrustedJsonStrings(field.choices, FIELD_SOURCE);
   }
   return wrapped;
 }
