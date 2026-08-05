@@ -59,6 +59,7 @@ const SEARCHABLE_TEXT_FIELDS: Record<string, string[]> = {
   tickets: ['subject', 'content'],
   leads: ['hs_lead_name'],
   tasks: ['hs_task_subject', 'hs_task_body'],
+  notes: ['hs_note_body'],
   products: ['name', 'hs_sku'],
   line_items: ['name']
 };
@@ -451,7 +452,23 @@ export async function handleDeleteTask(args: { taskId: string }) {
   return deleteObject('tasks', args.taskId);
 }
 
-// Note handler
+// Note handlers
+export async function handleSearchNotes(args: SearchArgs) {
+  return searchObjects('notes', args);
+}
+
+export async function handleGetNote(args: { noteId: string } & GetArgs) {
+  return getObject('notes', args.noteId, args);
+}
+
+export async function handleUpdateNote(args: { noteId: string } & UpdateArgs) {
+  return updateObject('notes', args.noteId, args);
+}
+
+export async function handleDeleteNote(args: { noteId: string }) {
+  return deleteObject('notes', args.noteId);
+}
+
 export async function handleCreateNote(args: NoteCreateArgs) {
   assertRecordStringBodySizes(args.properties);
   assertAssociationFanOut(args.associations);

@@ -930,6 +930,94 @@ export const taskTools: ToolMetadata[] = [
 // Note Tools
 export const noteTools: ToolMetadata[] = [
   {
+    name: 'search_hubspot_notes',
+    category: 'Notes',
+    description: `Search for notes in HubSpot CRM.
+
+USE THIS WHEN:
+- User asks "find the note about..." or "what notes are on this deal?"
+- Need to locate a note before reading or updating it
+
+RETURNS: Array of notes with id and properties (hs_note_body, hs_timestamp, hubspot_owner_id)
+
+Text search (query) matches against hs_note_body. Use filters for precise matching
+(e.g. filters=[{propertyName:"hs_lastmodifieddate", operator:"GT", value:"2026-01-01"}]).`,
+    aliases: ['find_notes', 'query_notes'],
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Free-text search across the note body' },
+        filters: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              propertyName: { type: 'string' },
+              operator: { type: 'string', enum: ['EQ', 'NEQ', 'LT', 'LTE', 'GT', 'GTE', 'CONTAINS_TOKEN', 'IN'] },
+              value: { type: 'string' }
+            }
+          },
+          description: 'Filter criteria for precise matching'
+        },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return (default: basic info)' },
+        limit: { type: 'number', description: 'Max results (default 10, max 100)' },
+        ...searchPaginationProperties
+      }
+    }
+  },
+  {
+    name: 'get_hubspot_note',
+    category: 'Notes',
+    description: `Get a single note by ID, including its full body.
+
+PREREQUISITE: Get the noteId from search_hubspot_notes first (or from a
+record's associations via get_hubspot_associations with toObjectType "notes").`,
+    aliases: ['view_note', 'read_note'],
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        noteId: { type: 'string', description: 'HubSpot note ID (numeric string)' },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' },
+        associations: { type: 'array', items: { type: 'string' }, description: 'Associated object types to include (e.g. ["contacts", "deals"])' }
+      },
+      required: ['noteId']
+    }
+  },
+  {
+    name: 'update_hubspot_note',
+    category: 'Notes',
+    description: `Update an existing note's properties (e.g. edit hs_note_body).
+
+PREREQUISITE: Get the noteId from search_hubspot_notes or get_hubspot_note first.
+Only the provided properties are changed; omitted properties are left as-is.`,
+    aliases: ['edit_note'],
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        noteId: { type: 'string', description: 'HubSpot note ID' },
+        properties: { type: 'object', description: 'Properties to update (e.g. hs_note_body)', additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH } }
+      },
+      required: ['noteId', 'properties']
+    }
+  },
+  {
+    name: 'delete_hubspot_note',
+    category: 'Notes',
+    description: `Permanently delete (archive) a note by ID. This cannot be undone from the CRM UI recycle bin for engagements — confirm with the user first.`,
+    aliases: ['remove_note'],
+    annotations: { readOnlyHint: false, destructiveHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        noteId: { type: 'string', description: 'HubSpot note ID' }
+      },
+      required: ['noteId']
+    }
+  },
+  {
     name: 'create_hubspot_note',
     category: 'Notes',
     description: `Create a note in HubSpot and optionally associate it with records.

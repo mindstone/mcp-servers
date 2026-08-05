@@ -50,6 +50,10 @@ import {
   handleCreateTask,
   handleUpdateTask,
   handleDeleteTask,
+  handleSearchNotes,
+  handleGetNote,
+  handleUpdateNote,
+  handleDeleteNote,
   handleCreateNote,
   handleCreateAssociation,
   handleGetAssociations,
@@ -404,6 +408,18 @@ export class HubSpotServer {
             break;
 
           // Notes
+          case 'search_hubspot_notes':
+            result = await handleSearchNotes(args as unknown as Parameters<typeof handleSearchNotes>[0]);
+            break;
+          case 'get_hubspot_note':
+            result = await handleGetNote(args as unknown as Parameters<typeof handleGetNote>[0]);
+            break;
+          case 'update_hubspot_note':
+            result = await handleUpdateNote(args as unknown as Parameters<typeof handleUpdateNote>[0]);
+            break;
+          case 'delete_hubspot_note':
+            result = await handleDeleteNote(args as unknown as Parameters<typeof handleDeleteNote>[0]);
+            break;
           case 'create_hubspot_note':
             result = await handleCreateNote(args as unknown as Parameters<typeof handleCreateNote>[0]);
             break;

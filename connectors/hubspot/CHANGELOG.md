@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+
+- Notes read/update/delete tools: `search_hubspot_notes` (text search matches `hs_note_body`), `get_hubspot_note`, `update_hubspot_note`, and `delete_hubspot_note`. Notes were previously create-only, which dead-ended meeting-note workflows; the full lifecycle is now available. Update/delete are flagged `destructiveHint` per the write-tool convention.
+
 ### Security
 
 - Wrapped all external, attacker-controllable text returned by HubSpot in `<untrusted-content source="hubspot:…">` envelopes with close-tag breakout escaping (FOX-3490 remediation): CRM record property values, note and engagement bodies, conversation thread messages and original content, knowledge-base article content, form submissions, marketing email subjects, list/workflow/property names and labels, and file metadata. Record IDs, enums, URLs, timestamps, and pagination cursors stay literal so tool round-trips (get-by-ID, pagination, schema-driven writes) keep working. Implemented as a deny-by-default walker (`src/sanitize.ts`) over the vendored envelope helper (`src/untrusted-content.ts`): every string is enveloped unless its key is a recognised structural identifier, so prose fields HubSpot adds in the future are safe by default.
