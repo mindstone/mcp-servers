@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SERVER_NAME, SERVER_VERSION } from './types.js';
 import {
   registerCallTools,
+  registerBatchCallTools,
   registerAgentTools,
   registerLlmTools,
   registerVoiceTools,
@@ -35,6 +36,7 @@ export function createServer(): McpServer {
   );
 
   registerCallTools(server);
+  registerBatchCallTools(server);
   registerAgentTools(server);
   registerLlmTools(server);
   registerVoiceTools(server);

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **`create_batch_call`** — schedule or start an outbound calling campaign (`POST /create-batch-call`): one `from_number` to a list of recipient tasks, each with optional per-call dynamic variables, metadata, and agent/version overrides. Supports `trigger_timestamp` scheduling (accepts epoch ms or a date string), `reserved_concurrency`, and `call_time_window` business-hours restrictions. Every recipient number is E.164-validated locally before any request reaches Retell's billing surface, and the tool is marked `destructiveHint: true` because every task is a real, billed phone call.
+
 ### Fixed
 - **`list_agents` migrated off the deprecated endpoint**: Retell deprecated the legacy `GET /list-agents` in favour of the unified `POST /v2/list-agents` (voice + chat). The tool now calls `POST /v2/list-agents` with a voice-channel filter and returns paginated agent summaries (`pagination_key`, `has_more`), with optional `limit`, `sort_order`, and `pagination_key` parameters. Summary items also expose `voice_name` and `tags` (both wrapped in untrusted-content envelopes).
 

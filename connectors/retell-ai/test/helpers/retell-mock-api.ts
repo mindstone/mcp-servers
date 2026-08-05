@@ -187,6 +187,25 @@ export function createRetellHandlers() {
       return new HttpResponse(null, { status: 204 });
     }),
 
+    // --- Batch calls ---
+    http.post(`${RETELL_API_BASE}/create-batch-call`, async ({ request }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      const body = await request.json() as Record<string, unknown>;
+      if (body.from_number === '+14155550000') {
+        return HttpResponse.json({ error_message: 'Payment required' }, { status: 402 });
+      }
+      const tasks = Array.isArray(body.tasks) ? body.tasks : [];
+      return HttpResponse.json({
+        batch_call_id: 'batch_call_test_001',
+        name: body.name ?? 'Batch call',
+        from_number: body.from_number,
+        scheduled_timestamp: body.trigger_timestamp ?? 1704067200000,
+        total_task_count: tasks.length,
+        ...(body.call_time_window ? { call_time_window: body.call_time_window } : {}),
+      });
+    }),
+
     // --- LLMs ---
     http.get(`${RETELL_API_BASE}/v2/list-retell-llms`, ({ request }) => {
       const authErr = requireAuth(request.headers.get('authorization'));

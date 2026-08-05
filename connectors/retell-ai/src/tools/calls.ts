@@ -60,7 +60,10 @@ const epochMsField = () =>
       message: 'Expected epoch milliseconds (number), a 13-digit epoch-ms string, or a parseable date string (e.g. "2026-01-01").',
     });
 
-function validateE164(field: 'from_number' | 'to_number', value: string): void {
+// Exported for reuse by batch-calls.ts (same call-validation rules).
+export { epochMsField };
+
+export function validateE164(field: string, value: string): void {
   if (!E164_REGEX.test(value)) {
     throw new ConnectorError(
       `${field} must be in E.164 format (e.g. +14155551234)`,

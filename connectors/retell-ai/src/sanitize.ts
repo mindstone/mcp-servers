@@ -240,6 +240,12 @@ export function sanitizePhoneNumber(num: unknown, source: string): unknown {
   return { ...num, nickname: wrapStr(num.nickname, `${source}:nickname`) };
 }
 
+/** Wrap external-text fields on a batch-call object (`name`). */
+export function sanitizeBatchCall(batch: unknown, source: string): unknown {
+  if (!isObj(batch)) return batch;
+  return { ...batch, name: wrapStr(batch.name, `${source}:name`) };
+}
+
 /**
  * Wrap external-text fields on an agent-version item returned by
  * get_agent_versions. `version_description`/`description` are user-authored

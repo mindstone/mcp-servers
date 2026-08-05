@@ -6,6 +6,7 @@ import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.
 const EXPECTED_TOOLS = [
   'configure_retell_api_key',
   'create_agent',
+  'create_batch_call',
   'create_phone_call',
   'create_retell_llm',
   'create_web_call',
@@ -37,7 +38,7 @@ describe('Smoke test — Retell AI MCP server', () => {
     if (testClient) await testClient.close();
   });
 
-  it('should register all 20 tools via MCP protocol', async () => {
+  it('should register all 21 tools via MCP protocol', async () => {
     mswServer.use(...createRetellHandlers());
 
     testClient = await createTestClient({
@@ -50,7 +51,7 @@ describe('Smoke test — Retell AI MCP server', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map(t => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(20);
+    expect(toolsResult.tools).toHaveLength(21);
     expect(toolNames).toEqual(EXPECTED_TOOLS);
   });
 
@@ -95,6 +96,7 @@ describe('Smoke test — Retell AI MCP server', () => {
       'create_agent', 'create_retell_llm',
       'configure_retell_api_key',
       'stop_call', 'publish_agent', 'update_phone_number',
+      'create_batch_call',
     ];
 
     for (const tool of toolsResult.tools) {
