@@ -398,7 +398,7 @@ describe('Replit SSH MCP — file operations against a fake SFTP backend', () =>
       );
       expect(res.ok).toBe(true);
       const line = res.matches[0].lineMatches![0].line;
-      expect(line).toContain('<&#47;untrusted-content>');
+      expect(line).toContain('<\\/untrusted-content>');
       expect(line.match(/<\/untrusted-content>/g)).toHaveLength(1); // only the envelope's own close tag
     });
 
