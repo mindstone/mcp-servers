@@ -51,9 +51,13 @@ interface ClipProjectResponse {
  */
 export function openUploadSource(canonicalPath: string): { fd: number; totalBytes: number } {
   const nofollow = fs.constants.O_NOFOLLOW ?? 0;
+  // O_NONBLOCK keeps an open of a swapped-in FIFO from blocking forever;
+  // it has no effect on regular files, and the fstat below rejects
+  // anything that is not a regular file.
+  const nonblock = fs.constants.O_NONBLOCK ?? 0;
   let fd: number;
   try {
-    fd = fs.openSync(canonicalPath, fs.constants.O_RDONLY | nofollow);
+    fd = fs.openSync(canonicalPath, fs.constants.O_RDONLY | nofollow | nonblock);
   } catch (err) {
     const e = err as NodeJS.ErrnoException;
     if (e?.code === 'ELOOP') {

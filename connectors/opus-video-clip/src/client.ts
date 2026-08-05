@@ -92,6 +92,11 @@ async function opusFetchRaw<T>(
   let response: Response;
   try {
     response = await fetch(url, {
+      // Never auto-follow redirects: the connector must see 3xx responses
+      // itself (GCS resumable uploads use 308 Resume Incomplete as a
+      // control signal, and silently following a redirect anywhere else
+      // would bypass the SSRF validation of the new destination).
+      redirect: 'manual',
       ...options,
       signal: fetchSignal,
       headers,
@@ -162,6 +167,15 @@ async function opusFetchRaw<T>(
     );
   }
 
+  // rawResponse callers handle non-2xx statuses themselves (GCS resumable
+  // uploads treat 308 Resume Incomplete as a control signal carrying the
+  // committed offset, and wrap their own error bodies), so hand them the
+  // raw response rather than collapsing every non-2xx into API_ERROR.
+  // Auth/rate-limit/not-found/validation statuses above still throw first.
+  if (options.rawResponse) {
+    return response as unknown as T;
+  }
+
   if (!response.ok) {
     // Consume the body so the connection is released, but never log it:
     // vendor error bodies are not proven secret-free.
@@ -176,10 +190,6 @@ async function opusFetchRaw<T>(
       'API_ERROR',
       'Check the request parameters and try again. If the error persists, report to Opus support.',
     );
-  }
-
-  if (options.rawResponse) {
-    return response as unknown as T;
   }
 
   // 204 No Content / empty body — return an empty object cast as T.
