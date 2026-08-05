@@ -27,8 +27,6 @@ are maintained manually as part of the PR review checklist.
 ### Changed
 
 - Rework README to explain when to choose this connector, what browser tasks it helps with, and how the visible-by-default session model helps users follow and trust the automation.
-
-### Changed
 - Reworked `README.md` to explain when to choose this connector, what browser tasks it is useful for, and how its visible-by-default session model helps users follow and trust the automation.
 
 ## [0.1.7] - 2026-05-14
