@@ -11,6 +11,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { logger, redactSensitiveInLogs } from './logger.js';
+import { wrapUntrusted } from './untrusted-content.js';
 
 const require = createRequire(import.meta.url);
 const packageJson = require('../package.json') as { version: string };
@@ -227,13 +228,42 @@ if (!KNOWN_MODELS.has(configuredModel())) {
   );
 }
 
-const sanitizeUserFacingText = (value: string): string => {
-  const redacted = redactSensitiveInLogs(value);
-  const redactedText = typeof redacted === 'string' ? redacted : String(redacted);
-  return redactedText.replace(
+// AGENTS.md security invariant #6: values a caller controls (tool arguments
+// such as image_paths/mask_path, or env config such as OPENAI_IMAGE_MODEL) are
+// enveloped before they are echoed into model-visible error text, so a crafted
+// value carrying a close-tag variant cannot terminate the result envelope and
+// be re-read as instructions. The raw text stays intact inside the envelope —
+// fence errors deliberately keep the full supplied path so the caller can
+// self-correct.
+const envelopeEchoedValue = (value: string, source: string): string =>
+  wrapUntrusted(value, source) ?? value;
+
+const envelopeToolInput = (value: string): string =>
+  envelopeEchoedValue(value, 'openai-image:tool-input');
+
+const envelopeConfiguredModel = (value: string): string =>
+  envelopeEchoedValue(value, 'openai-image:config:model');
+
+// Splits on whole `<untrusted-content …>…</untrusted-content>` spans so the
+// path-collapsing below never mangles an envelope's own close tag.
+const UNTRUSTED_ENVELOPE_SPAN =
+  /(<untrusted-content source="[^"]*">[\s\S]*?<\/untrusted-content>)/u;
+
+const collapseAbsolutePaths = (text: string): string =>
+  text.replace(
     /(?:[A-Za-z]:\\|\/)[^\s"'`]+/gu,
     (match) => path.basename(match.replace(/[\\/]+$/u, '')) || '<path>',
   );
+
+const sanitizeUserFacingText = (value: string): string => {
+  const redacted = redactSensitiveInLogs(value);
+  const redactedText = typeof redacted === 'string' ? redacted : String(redacted);
+  return redactedText
+    .split(UNTRUSTED_ENVELOPE_SPAN)
+    .map((segment, index) =>
+      index % 2 === 1 ? segment : collapseAbsolutePaths(segment),
+    )
+    .join('');
 };
 
 const toErrorPayload = (error: unknown): ToolErrorPayload => {
@@ -598,17 +628,18 @@ const getLocalImageReadError = (
   inputPath: string,
   error: unknown,
 ): string => {
+  const safeInputPath = envelopeToolInput(inputPath);
   const code = getErrorCode(error);
   if (code === 'ENOENT') {
-    return `${imageLabel} not found: ${inputPath}`;
+    return `${imageLabel} not found: ${safeInputPath}`;
   }
   if (code === 'EACCES' || code === 'EPERM') {
-    return `${imageLabel} permission denied: ${inputPath}`;
+    return `${imageLabel} permission denied: ${safeInputPath}`;
   }
   if (code === 'ELOOP') {
-    return `${imageLabel} path contains a symbolic link loop: ${inputPath}`;
+    return `${imageLabel} path contains a symbolic link loop: ${safeInputPath}`;
   }
-  return `Failed to read ${imageLabel.toLowerCase()}: ${inputPath} — ${getErrorMessage(error)}`;
+  return `Failed to read ${imageLabel.toLowerCase()}: ${safeInputPath} — ${getErrorMessage(error)}`;
 };
 
 const isInsideZone = (realPath: string, zoneRoot: string): boolean => {
@@ -659,8 +690,8 @@ const formatWorkspaceContainmentError = (
 ): WorkspaceFenceToolError => {
   const message =
     reason === 'outside'
-      ? `${subject} is outside your workspace and folders linked as Spaces. Path: ${inputPath}. Workspace: ${workspacePath}.`
-      : `${subject} could not be verified safely. Path: ${inputPath}. Workspace: ${workspacePath}.`;
+      ? `${subject} is outside your workspace and folders linked as Spaces. Path: ${envelopeToolInput(inputPath)}. Workspace: ${workspacePath}.`
+      : `${subject} could not be verified safely. Path: ${envelopeToolInput(inputPath)}. Workspace: ${workspacePath}.`;
   return new WorkspaceFenceToolError(
     message,
     'Move or copy the file into your workspace or a folder linked as a Space, then try again.',
@@ -841,6 +872,7 @@ const loadLocalEditImage = async (
   options?: { pngOnly?: boolean },
 ): Promise<LoadedLocalImage> => {
   const imageLabel = options?.pngOnly ? 'Mask image' : 'Reference image';
+  const safeInputPath = envelopeToolInput(inputPath);
   const resolvedPathResult = await resolveWorkspaceScopedImagePath(
     inputPath,
     imageLabel,
@@ -867,11 +899,11 @@ const loadLocalEditImage = async (
   }
 
   if (stats.size === 0) {
-    throw workspaceFenceError(`${imageLabel} is empty (0 bytes): ${inputPath}`);
+    throw workspaceFenceError(`${imageLabel} is empty (0 bytes): ${safeInputPath}`);
   }
 
   if (stats.size > MAX_LOCAL_IMAGE_BYTES) {
-    throw workspaceFenceError(`${imageLabel} exceeds 25MB limit: ${inputPath}`);
+    throw workspaceFenceError(`${imageLabel} exceeds 25MB limit: ${safeInputPath}`);
   }
 
   const mime = options?.pngOnly ? 'image/png' : getSupportedImageMime(realPath);
@@ -892,20 +924,20 @@ const loadLocalEditImage = async (
     const openedStats = await handle.stat();
     if (openedStats.dev !== stats.dev || openedStats.ino !== stats.ino) {
       throw workspaceFenceError(
-        `${imageLabel} changed while it was being verified: ${inputPath}`,
+        `${imageLabel} changed while it was being verified: ${safeInputPath}`,
       );
     }
     if (openedStats.size === 0) {
-      throw workspaceFenceError(`${imageLabel} is empty (0 bytes): ${inputPath}`);
+      throw workspaceFenceError(`${imageLabel} is empty (0 bytes): ${safeInputPath}`);
     }
     if (openedStats.size > MAX_LOCAL_IMAGE_BYTES) {
-      throw workspaceFenceError(`${imageLabel} exceeds 25MB limit: ${inputPath}`);
+      throw workspaceFenceError(`${imageLabel} exceeds 25MB limit: ${safeInputPath}`);
     }
 
     const data = await handle.readFile();
     if (data.length === 0 || data.length > MAX_LOCAL_IMAGE_BYTES) {
       throw workspaceFenceError(
-        `${imageLabel} size changed while it was being read: ${inputPath}`,
+        `${imageLabel} size changed while it was being read: ${safeInputPath}`,
       );
     }
 
@@ -968,7 +1000,7 @@ const toOpenAIHttpError = (
   if (status === 403) {
     return new OpenAIImageToolError(
       'MODEL_UNAVAILABLE',
-      `This OpenAI account is not verified for model ${model}.`,
+      `This OpenAI account is not verified for model ${envelopeConfiguredModel(model)}.`,
       'Verify your OpenAI organization access for this model, or switch OPENAI_IMAGE_MODEL.',
     );
   }
@@ -1151,7 +1183,7 @@ const ensureTransparentBackgroundSupported = (
   if (modelKnownToRejectTransparency(model)) {
     throw new OpenAIImageToolError(
       'INVALID_INPUT',
-      `Model ${model} does not support transparent backgrounds.`,
+      `Model ${envelopeConfiguredModel(model)} does not support transparent backgrounds.`,
       'Set OPENAI_IMAGE_MODEL to gpt-image-1.5 (or gpt-image-1), or omit the background option.',
     );
   }
