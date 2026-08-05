@@ -19,6 +19,7 @@ import {
   attachPropertyValidation,
   validateRequestedProperties,
 } from './property-validation.js';
+import { attachSalesEmailScopeNote } from './sales-email-scope.js';
 
 interface SearchArgs {
   query?: string;
@@ -798,55 +799,19 @@ export async function handleCreateCall(args: EngagementCreateArgs) {
 
 // Email handlers
 //
-// HubSpot redacts 1:1 sales email bodies (hs_email_body / hs_email_html /
-// hs_email_text) unless the connected app holds the `sales-email-read` scope —
-// and it does so SILENTLY (200 with empty body fields). Silent redaction would
-// violate the connector's no-silent-degradation rule, so the email read tools
-// introspect the token once per process and attach a model-visible `notes`
-// warning when the scope is definitively absent. Subjects, timestamps, and
-// direction are returned either way.
-const SALES_EMAIL_READ_SCOPE = 'sales-email-read';
-const SALES_EMAIL_READ_NOTE =
-  'Email bodies are redacted by HubSpot because the connected app does not have the sales-email-read scope. Subjects, senders, and timestamps are complete. To read bodies, enable sales-email-read on the HubSpot app and reconnect the account.';
-
-let salesEmailReadScope: boolean | undefined;
-let salesEmailReadScopeCheck: Promise<boolean | undefined> | undefined;
-
-async function checkSalesEmailReadScope(): Promise<boolean | undefined> {
-  if (salesEmailReadScope !== undefined) return salesEmailReadScope;
-  if (!salesEmailReadScopeCheck) {
-    salesEmailReadScopeCheck = (async () => {
-      try {
-        const client = await getHubSpotClientAsync();
-        const info = await client.getTokenInfo();
-        if (!Array.isArray(info.scopes)) return undefined; // introspection didn't say — stay silent
-        return info.scopes.includes(SALES_EMAIL_READ_SCOPE);
-      } catch (error) {
-        logger.warn('Token introspection for sales-email-read scope check failed:', error);
-        return undefined;
-      }
-    })();
-    const result = await salesEmailReadScopeCheck;
-    salesEmailReadScopeCheck = undefined;
-    // Only a definitive answer is memoised; an inconclusive check retries next call.
-    if (result !== undefined) salesEmailReadScope = result;
-    return result;
-  }
-  return salesEmailReadScopeCheck;
-}
-
-async function attachSalesEmailScopeNote<T extends object>(result: T): Promise<T & { notes?: string[] }> {
-  const granted = await checkSalesEmailReadScope();
-  if (granted !== false) return result;
-  return { ...result, notes: [SALES_EMAIL_READ_NOTE] };
-}
+// HubSpot silently redacts 1:1 sales email bodies without the sales-email-read
+// scope (200 with empty body fields). The scope check lives in
+// sales-email-scope.ts: it introspects the token, memoises per access token
+// (never per process), and produces a model-visible `notes` warning both when
+// the scope is definitively absent AND when the check is inconclusive — no
+// silent degradation either way.
 
 export async function handleSearchEmails(args: EngagementSearchArgs) {
-  return attachSalesEmailScopeNote(await searchEngagement('emails', args));
+  return attachSalesEmailScopeNote(await searchEngagement('emails', args), getHubSpotClientAsync);
 }
 
 export async function handleGetEmail(args: { emailId: string; properties?: string[] }) {
-  return attachSalesEmailScopeNote(await getEngagement('emails', args.emailId, args.properties));
+  return attachSalesEmailScopeNote(await getEngagement('emails', args.emailId, args.properties), getHubSpotClientAsync);
 }
 
 export async function handleCreateEmail(args: EngagementCreateArgs) {
@@ -905,7 +870,7 @@ export async function handleGetContactEngagements(args: { contactId: string; lim
         totalEmails: emailAssocs.results.length,
         totalMeetings: meetingAssocs.results.length
       }
-    });
+    }, getHubSpotClientAsync);
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType: 'contact_engagements', operation: 'get', args });
     logger.error(`Get contact engagements failed:`, parsed);

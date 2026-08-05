@@ -512,6 +512,16 @@ export class HubSpotClient {
     return response.json() as Promise<T>;
   }
 
+  /**
+   * Opaque in-process cache key for per-token memoisation (e.g. the
+   * sales-email-read scope check). It changes on every token rotation and
+   * reconnect, so a cached per-token fact cannot outlive the credential it
+   * describes. Never log this value or include it in a tool result.
+   */
+  get tokenCacheKey(): string {
+    return this.accessToken;
+  }
+
   // HubSpot's token-info endpoint is addressed by the token itself, so the
   // secret sits in the request path. The wire format is HubSpot's choice, but
   // redactEndpointForLogs keeps it out of every log line and error summary.
