@@ -349,6 +349,51 @@ RETURNS: ok, message confirming the agent_id and published version.`,
   );
 
   server.registerTool(
+    'delete_agent',
+    {
+      description: `Permanently delete an agent and ALL of its versions.
+
+WHEN TO USE:
+- Removing a test/throwaway agent after experiments
+- Cleaning up agents that are no longer needed
+
+CRITICAL: This permanently deletes the agent and every version — there is no undo. Any phone numbers bound to it lose their agent binding. Confirm the agent_id with list_agents/get_agent first, and prefer deleting only after checking no phone number still routes to it (list_phone_numbers).
+
+ERROR RECOVERY:
+- 401: API key is missing or invalid → configure_retell_api_key
+- 404: agent_id not found → list_agents and retry with a returned ID
+
+RELATED TOOLS:
+- list_agents/get_agent: Confirm the exact agent_id before deleting
+- list_phone_numbers: Check no number still binds the agent
+- create_agent: Create a replacement
+
+RETURNS: ok, message. Retell returns HTTP 204 on success.`,
+      inputSchema: {
+        agent_id: z.string().describe('The agent ID to permanently delete (deletes all versions). Confirm with list_agents/get_agent first.'),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args) => {
+      requireApiKey();
+      const agentId = args.agent_id;
+      await retellFetch<Record<string, unknown>>(
+        `/delete-agent/${encodeURIComponent(agentId)}`,
+        { method: 'DELETE' },
+      );
+      return JSON.stringify({
+        ok: true,
+        message: `Agent ${agentId} deleted permanently (all versions).`,
+      });
+    }),
+  );
+
+  server.registerTool(
     'get_agent_versions',
     {
       description: `List all versions of an agent, including draft and published versions.

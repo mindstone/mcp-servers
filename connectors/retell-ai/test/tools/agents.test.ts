@@ -105,4 +105,38 @@ describe('Agent tools — Retell AI', () => {
       '<untrusted-content source="retell:update_agent:agent_name">Updated Agent</untrusted-content>',
     );
   });
+
+  it('delete_agent succeeds with ok:true', async () => {
+    mswServer.use(...createRetellHandlers());
+    testClient = await createTestClient({
+      env: { RETELL_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.client.callTool({
+      name: 'delete_agent',
+      arguments: { agent_id: 'agent_test_123' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const parsed = JSON.parse(text);
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.message).toContain('agent_test_123');
+  });
+
+  it('delete_agent returns structured error for 404', async () => {
+    mswServer.use(...createRetellHandlers());
+    testClient = await createTestClient({
+      env: { RETELL_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.client.callTool({
+      name: 'delete_agent',
+      arguments: { agent_id: 'nonexistent' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const parsed = JSON.parse(text);
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.code).toBe('HTTP_404');
+  });
 });

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { retellFetch, requireApiKey } from '../client.js';
 import { withErrorHandling } from '../utils.js';
+import { validateE164 } from './calls.js';
 import { sanitizeVoice, sanitizePhoneNumber, sanitizeList } from '../sanitize.js';
 
 const phoneAgentBindingSchema = z.object({
@@ -239,6 +240,53 @@ RETURNS: phone_number, nickname, inbound_agents, outbound_agents, updated config
         ok: true,
         ...(sanitizePhoneNumber(result, 'retell:update_phone_number') as Record<string, unknown>),
         message: `Phone number ${phoneNumber} updated successfully.`,
+      });
+    }),
+  );
+
+  server.registerTool(
+    'delete_phone_number',
+    {
+      description: `Delete (release) a phone number from your Retell account.
+
+WHEN TO USE:
+- Releasing a number that is no longer needed (stops its recurring cost)
+- Cleaning up numbers purchased for a finished campaign
+
+CRITICAL: This releases the number back — there is no undo, and you may not be able to get the same number back. Any agents bound to it lose their routing immediately. Confirm with get_phone_number first.
+
+ERROR RECOVERY:
+- 401: API key is missing or invalid → configure_retell_api_key
+- 404: phone number not found → list_phone_numbers and use the exact E.164 value
+
+RELATED TOOLS:
+- list_phone_numbers/get_phone_number: Confirm the number and its bindings first
+- update_phone_number: Rebind agents instead of releasing the number
+
+RETURNS: ok, message. Retell returns HTTP 204 on success.`,
+      inputSchema: {
+        phone_number: z.string().describe('Phone number in E.164 format exactly as returned by list_phone_numbers (e.g. +14155551234). The number is released permanently.'),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args) => {
+      // Validate before requireApiKey / outbound request, consistent with the
+      // call tools: a malformed number never leaves the connector.
+      validateE164('phone_number', args.phone_number);
+      requireApiKey();
+      const phoneNumber = args.phone_number;
+      await retellFetch<Record<string, unknown>>(
+        `/delete-phone-number/${encodeURIComponent(phoneNumber)}`,
+        { method: 'DELETE' },
+      );
+      return JSON.stringify({
+        ok: true,
+        message: `Phone number ${phoneNumber} deleted (released) permanently.`,
       });
     }),
   );

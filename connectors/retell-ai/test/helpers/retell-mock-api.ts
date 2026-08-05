@@ -153,6 +153,34 @@ export function createRetellHandlers() {
       return HttpResponse.json([{ ...mockAgentVersion, agent_id: params.agentId }]);
     }),
 
+    http.delete(`${RETELL_API_BASE}/delete-agent/:agentId`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      if (params.agentId === 'nonexistent') {
+        return HttpResponse.json({ error_message: 'Agent not found' }, { status: 404 });
+      }
+      return new HttpResponse(null, { status: 204 });
+    }),
+
+    http.delete(`${RETELL_API_BASE}/delete-retell-llm/:llmId`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      if (params.llmId === 'nonexistent') {
+        return HttpResponse.json({ error_message: 'Retell LLM not found' }, { status: 404 });
+      }
+      return new HttpResponse(null, { status: 204 });
+    }),
+
+    http.delete(`${RETELL_API_BASE}/delete-phone-number/:phoneNumber`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      const phoneNumber = decodeURIComponent(params.phoneNumber as string);
+      if (phoneNumber === '+19999999999') {
+        return HttpResponse.json({ error_message: 'Phone number not found' }, { status: 404 });
+      }
+      return new HttpResponse(null, { status: 204 });
+    }),
+
     // --- Calls (v2/v3) ---
     http.post(`${RETELL_API_BASE}/v2/create-phone-call`, async ({ request }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
