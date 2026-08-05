@@ -20,6 +20,7 @@ are maintained manually as part of the PR review checklist.
 - Shortcut stdout and listed shortcut names are now wrapped in `<untrusted-content>` envelopes (AGENTS.md invariant #6); CLI stderr in error results is enveloped too. Previously this output reached the model unwrapped.
 - Re-synced the vendored `untrusted-content` envelope helper with the canonical reference (it had drifted in comments and helper surface while claiming to be byte-for-byte identical) and added direct adversarial unit tests covering exact/uppercase/space/tab/newline/CR close-tag breakout variants and idempotency.
 - Shortcut names echoed in `apple_shortcuts_run` / `apple_shortcuts_view` confirmation, error, and timeout messages are now wrapped in `<untrusted-content>` envelopes. A name picked up from the list output is attacker-controllable text and previously reached the model outside the trust boundary.
+- `apple_shortcuts_run` is now annotated `destructiveHint: true` (AGENTS.md invariant #7). A shortcut executes with the logged-in user's permissions and can send messages, delete files, make purchases, control devices, or call remote APIs; the tool previously declared itself non-destructive.
 
 ### Changed
 - Tool registration moved behind an exported `createServer(runner?)` factory so tests (and embedders) can inject a fake `shortcuts` CLI runner; the stdio entrypoint is unchanged.

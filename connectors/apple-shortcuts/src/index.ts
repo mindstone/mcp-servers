@@ -461,6 +461,9 @@ Caveats:
     raise it for shortcuts that legitimately take longer.
   - Shortcuts that open GUI dialogs or request user confirmation will hit that timeout.
   - Running shortcuts is not sandboxed — a shortcut has the same permissions as the logged-in user.
+    A shortcut can send messages, delete files, make purchases, control devices, or call
+    remote APIs, so this tool is annotated as potentially destructive; hosts should
+    require explicit user approval before running one.
 
 Example:
   - "Run my 'Morning Briefing' shortcut" -> { name: "Morning Briefing" }
@@ -468,7 +471,10 @@ Example:
       inputSchema: RunShortcutInputSchema,
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        // A shortcut runs with the logged-in user's permissions and can send
+        // messages, delete files, make purchases, or call remote APIs —
+        // arbitrary execution must be annotated destructive (invariant #7).
+        destructiveHint: true,
         idempotentHint: false,
         openWorldHint: false,
       },

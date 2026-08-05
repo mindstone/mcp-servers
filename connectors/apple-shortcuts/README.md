@@ -107,4 +107,4 @@ Add the connector in **Settings → Connectors** with:
 
 - **macOS only** — the `shortcuts` CLI is not available on other platforms.
 - Shortcuts that open GUI dialogs or prompt for confirmation cannot answer from the command line; they are terminated after `APPLE_SHORTCUTS_TIMEOUT_MS` (default 120s) instead of blocking forever.
-- Running a shortcut has the same system permissions as the logged-in user.
+- Running a shortcut has the same system permissions as the logged-in user — a shortcut can send messages, delete files, make purchases, control devices, or call remote APIs. `apple_shortcuts_run` is annotated `destructiveHint: true` so hosts require explicit user approval before running one.

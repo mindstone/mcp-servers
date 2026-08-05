@@ -58,6 +58,27 @@ describe("apple-shortcuts smoke", () => {
     ]);
   });
 
+  it("annotates apple_shortcuts_run as destructive (arbitrary user-permission execution)", async () => {
+    const { client } = await connect({});
+    const { tools } = await client.client.listTools();
+    const byName = Object.fromEntries(tools.map((t) => [t.name, t.annotations ?? {}]));
+    // A shortcut runs with the logged-in user's permissions and can send
+    // messages, delete files, or call remote APIs — it must not present as
+    // non-destructive to host approval UIs.
+    expect(byName["apple_shortcuts_run"]).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: true,
+    });
+    expect(byName["apple_shortcuts_list"]).toMatchObject({
+      readOnlyHint: true,
+      destructiveHint: false,
+    });
+    expect(byName["apple_shortcuts_view"]).toMatchObject({
+      readOnlyHint: true,
+      destructiveHint: false,
+    });
+  });
+
   it("apple_shortcuts_list returns enveloped shortcut names (happy path)", async () => {
     const { client, calls } = await connect({
       list: { stdout: "Morning Briefing\nSend Message\n", stderr: "", exitCode: 0 },
