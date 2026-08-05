@@ -1,24 +1,6 @@
 import type { Client, DriveItem } from '@mindstone/mcp-server-microsoft-shared';
 import { wrapUntrusted } from './untrusted-content.js';
-
-/**
- * Thrown by files tool functions when a request is rejected by business
- * rules that can only be evaluated AFTER an upstream Graph call (e.g.
- * `read_text_file` rejecting a folder or a binary file).
- *
- * Caught in `tools.ts` and converted into the cohort `{ ok: false, error,
- * action_required, next_step }` recovery-guidance envelope so the host can
- * surface the friendly guidance verbatim.
- */
-export class FilesBusinessError extends Error {
-  readonly nextStep: string;
-
-  constructor(message: string, nextStep: string) {
-    super(message);
-    this.name = 'FilesBusinessError';
-    this.nextStep = nextStep;
-  }
-}
+import { FilesBusinessError } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Formatting helpers (ported 1:1 from bundled microsoft-files)

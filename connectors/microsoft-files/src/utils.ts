@@ -5,8 +5,7 @@ import {
   formatGraphError,
 } from '@mindstone/mcp-server-microsoft-shared';
 import type { AuthRequiredReason } from '@mindstone/mcp-server-microsoft-shared';
-import { FilesBusinessError } from './files.js';
-import { AUTH_TOOL_NAME, REQUEST_TIMEOUT_MS, getMsPackageId } from './types.js';
+import { AUTH_TOOL_NAME, FilesBusinessError, REQUEST_TIMEOUT_MS, getMsPackageId } from './types.js';
 
 /**
  * Compose a per-call abort signal with the cohort timeout.
