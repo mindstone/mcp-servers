@@ -51,6 +51,8 @@ export interface ImapMockOptions {
   connectError?: string;
   /** If set, search() returns these UIDs */
   searchUids?: number[];
+  /** If set, messageMove() throws with this message */
+  moveError?: string;
 }
 
 /**
@@ -67,9 +69,12 @@ export function createImapMock(options: ImapMockOptions = {}) {
     messages = [],
     connectError,
     searchUids,
+    moveError,
   } = options;
 
   const constructorCalls: unknown[][] = [];
+  /** Invocation counters shared across all mock instances of this factory. */
+  const calls = { messageMove: 0, messageFlagsAdd: 0, messageDelete: 0 };
 
   class MockImapFlow {
     usable = true;
@@ -222,6 +227,10 @@ export function createImapMock(options: ImapMockOptions = {}) {
     }
 
     async messageMove(uids: number[], _destination: string, _opts?: unknown) {
+      calls.messageMove += 1;
+      if (moveError) {
+        throw new Error(moveError);
+      }
       return { uidMap: new Map(uids.map((uid) => [uid, uid + 1000])) };
     }
 
@@ -230,6 +239,7 @@ export function createImapMock(options: ImapMockOptions = {}) {
     }
 
     async messageFlagsAdd(_uids: number[], _flags: string[], _opts?: unknown) {
+      calls.messageFlagsAdd += 1;
       return true;
     }
 
@@ -238,6 +248,7 @@ export function createImapMock(options: ImapMockOptions = {}) {
     }
 
     async messageDelete(_uids: number[], _opts?: unknown) {
+      calls.messageDelete += 1;
       return true;
     }
 
@@ -262,5 +273,5 @@ export function createImapMock(options: ImapMockOptions = {}) {
     }
   }
 
-  return { MockImapFlow, constructorCalls };
+  return { MockImapFlow, constructorCalls, calls };
 }

@@ -1,6 +1,8 @@
 /**
  * email_delete — move-to-Trash (recoverable) with \Deleted+expunge fallback
- * (permanent) when no Trash mailbox exists or the message is already in it.
+ * (permanent) ONLY when no Trash mailbox exists or the message is already in
+ * it. A FAILED Trash move aborts observably (TRASH_MOVE_FAILED) without
+ * expunging — covered in delete-move-failure.test.ts.
  */
 
 import { describe, it, expect, afterEach, vi } from 'vitest';

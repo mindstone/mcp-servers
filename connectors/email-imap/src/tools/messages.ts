@@ -348,10 +348,12 @@ export function registerMessageTools(server: McpServer): void {
     {
       description:
         'Delete emails by UID. When the account has a Trash mailbox, messages are moved there ' +
-        '(recoverable); when no Trash mailbox exists, or the move fails, messages are marked ' +
-        '\\Deleted and expunged — PERMANENT. Deleting from the Trash mailbox always expunges ' +
-        'permanently. This is a destructive action: hosts MUST require explicit user ' +
-        'confirmation before each invocation.',
+        '(recoverable); when no Trash mailbox exists, messages are marked \\Deleted and ' +
+        'expunged — PERMANENT. Deleting from the Trash mailbox always expunges permanently. ' +
+        'If the move to Trash FAILS, the delete is aborted with an error and the messages are ' +
+        'left in place — a failed recoverable move never silently escalates to a permanent ' +
+        'expunge. This is a destructive action: hosts MUST require explicit user confirmation ' +
+        'before each invocation.',
       inputSchema: z.object({
         uids: z
           .array(z.number().int().positive())
@@ -376,23 +378,36 @@ export function registerMessageTools(server: McpServer): void {
           trashMailbox.toLowerCase() === mailbox.toLowerCase();
 
         if (trashMailbox && !alreadyInTrash) {
-          try {
-            const moveResult = await client.messageMove(uids, trashMailbox, {
-              uid: true,
+          const moveResult = await client
+            .messageMove(uids, trashMailbox, { uid: true })
+            .catch(() => null);
+          if (moveResult) {
+            return JSON.stringify({
+              ok: true,
+              deleted: uids.length,
+              method: 'trash',
+              // The Trash mailbox path comes from the server's LIST
+              // response — attacker-controlled text, so enveloped.
+              trashMailbox: wrapEmailField(trashMailbox),
             });
-            if (moveResult) {
-              return JSON.stringify({
-                ok: true,
-                deleted: uids.length,
-                method: 'trash',
-                // The Trash mailbox path comes from the server's LIST
-                // response — attacker-controlled text, so enveloped.
-                trashMailbox: wrapEmailField(trashMailbox),
-              });
-            }
-          } catch {
-            // MOVE unsupported or failed — fall through to expunge.
           }
+
+          // The recoverable path failed — MOVE unsupported, authorization
+          // failure, transient disconnect, quota, or a malformed response
+          // are indistinguishable here. Permanently expunging anyway would
+          // silently escalate a recoverable delete into an irreversible
+          // one, so fail observably and leave the messages in place.
+          return JSON.stringify({
+            ok: false,
+            code: 'TRASH_MOVE_FAILED',
+            error:
+              'Moving the message(s) to the Trash mailbox failed, so nothing was ' +
+              'deleted. The messages remain in their mailbox.',
+            resolution:
+              'Retry the delete. If the Trash move keeps failing and you accept ' +
+              'PERMANENT deletion, delete the messages from a client that supports ' +
+              'direct expunge, or remove the Trash mailbox mapping.',
+          });
         }
 
         await client.messageFlagsAdd(uids, ['\\Deleted'], { uid: true });
