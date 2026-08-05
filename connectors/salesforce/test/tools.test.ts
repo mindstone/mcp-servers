@@ -280,6 +280,30 @@ describe('Tool tests — Salesforce MCP server', () => {
     expect(result.json).toHaveProperty('ok', true);
     expect(result.json.records).toBeDefined();
   });
+
+  it('API requests are pinned to the declared Salesforce API version', async () => {
+    const observedPaths: string[] = [];
+    mswServer.events.removeAllListeners();
+    const recordRequest = ({ request }: { request: Request }) => {
+      observedPaths.push(new URL(request.url).pathname);
+    };
+    mswServer.events.on('request:start', recordRequest);
+
+    mswServer.use(...createSalesforceHandlers());
+    tempConfig = createConfigWithToken();
+    testClient = await createTestClient({ env: createAuthEnv(tempConfig.configPath) });
+
+    const result = await testClient.callTool('salesforce_get_accounts', { limit: 5 });
+    mswServer.events.removeListener('request:start', recordRequest);
+
+    expect(result.json).toHaveProperty('ok', true);
+    const { SALESFORCE_API_VERSION } = await import('../src/types.js');
+    const dataCalls = observedPaths.filter((p) => p.includes('/services/data/'));
+    expect(dataCalls.length).toBeGreaterThan(0);
+    for (const p of dataCalls) {
+      expect(p).toContain(`/services/data/v${SALESFORCE_API_VERSION}/`);
+    }
+  });
 });
 
 describe('Error handling — Salesforce MCP server', () => {

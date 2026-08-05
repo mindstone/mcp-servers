@@ -5,6 +5,14 @@ const pkg = require('../package.json') as { version: string };
 
 export const REQUEST_TIMEOUT_MS = 30_000;
 export const SERVER_NAME = 'salesforce-mcp-server';
+/**
+ * Salesforce REST API version the connector pins every request to. Pinned
+ * deliberately rather than riding jsforce's bundled default (v50.0): v66.0 is
+ * Spring '26 — one release behind current (v67.0, Summer '26) so orgs still on
+ * the previous release accept it. Raise this deliberately, with tests run,
+ * when newer API behavior is needed.
+ */
+export const SALESFORCE_API_VERSION = '66.0';
 /** Server version reported on MCP `initialize`. Read from package.json so
  *  it cannot drift from the published npm version. */
 export const SERVER_VERSION = pkg.version;
