@@ -12,6 +12,7 @@ import {
   createTokenResponse,
   createWorkersListResponse,
   createOrgsListResponse,
+  createDirectReportsResponse,
   createWorker,
 } from '../fixtures/workday-data.js';
 
@@ -80,6 +81,20 @@ export function createWorkdayHandlers(options: MockServerOptions = {}): HttpHand
       }
 
       return HttpResponse.json(createOrgsListResponse());
+    }),
+
+    // Direct reports
+    http.get(`${API_BASE}/workers/:workerId/directReports`, async ({ request }) => {
+      const authHeader = request.headers.get('Authorization');
+      if (!authHeader?.startsWith('Bearer ')) {
+        return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
+      if (options.apiErrorStatus) {
+        return HttpResponse.json({ error: 'Mock API error' }, { status: options.apiErrorStatus });
+      }
+
+      return HttpResponse.json(createDirectReportsResponse());
     }),
   ];
 }

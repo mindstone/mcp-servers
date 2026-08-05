@@ -87,3 +87,12 @@ export function createOrgsListResponse(count = 2, total = 5) {
   }));
   return { data, total };
 }
+
+export function createDirectReportsResponse(count = 2, total = 2) {
+  const data = Array.from({ length: count }, (_, i) => createWorker({
+    id: `report-${String(i + 1).padStart(3, '0')}`,
+    descriptor: `Report ${i + 1}`,
+    primaryWorkEmail: `report${i + 1}@acme.com`,
+  }));
+  return { data, total };
+}
