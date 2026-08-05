@@ -16,7 +16,7 @@ describe('compose-email template generation parity', () => {
       sendToolName: 'send_email',
       fromMissingHelperText:
         'Rebel could not confirm the sending account. Cancel and ask Rebel to recreate the draft before sending.',
-      fields: { cc: true, bcc: false },
+      fields: { cc: true, bcc: true },
       deepLink: { kind: 'none' },
     });
   });
@@ -56,11 +56,11 @@ describe('compose-email template contents', () => {
     expect(COMPOSE_EMAIL_HTML).toContain('package_id');
   });
 
-  it('renders CC but no BCC field (send_email has no BCC parameter)', () => {
+  it('renders CC and BCC fields (send_email accepts both)', () => {
     expect(COMPOSE_EMAIL_HTML).toContain('ccInput');
     expect(COMPOSE_EMAIL_HTML).toContain('toggleCcButton');
     for (const marker of ['bccInput', 'toggleBccButton', 'bccRow', 'sentBccField']) {
-      expect(COMPOSE_EMAIL_HTML, marker).not.toContain(marker);
+      expect(COMPOSE_EMAIL_HTML, marker).toContain(marker);
     }
   });
 

@@ -141,6 +141,24 @@ describe('microsoft-mail mock-API integration', () => {
     });
   });
 
+  it('send_email maps bcc to bccRecipients', async () => {
+    await client.callTool('send_email', {
+      to: 'alice@example.com',
+      bcc: ['carol@example.com', 'dan@example.com'],
+      subject: 'Hi',
+      body: 'Hello there',
+    });
+    const call = state.requests.find((r) => r.pathname.endsWith('/me/sendMail'));
+    expect(call?.body).toMatchObject({
+      message: {
+        bccRecipients: [
+          { emailAddress: { address: 'carol@example.com' } },
+          { emailAddress: { address: 'dan@example.com' } },
+        ],
+      },
+    });
+  });
+
   it('send_email rejects calls missing the recipient or subject', async () => {
     const result = await client.callTool('send_email', {
       to: [],
@@ -206,6 +224,20 @@ describe('microsoft-mail mock-API integration', () => {
     expect(call?.body).toMatchObject({
       subject: 'Draft',
       body: { contentType: 'HTML', content: '<p>Draft content</p>' },
+    });
+  });
+
+  it('create_draft maps bcc to bccRecipients', async () => {
+    await client.callTool('create_draft', {
+      subject: 'Draft',
+      body: 'Content',
+      bcc: 'carol@example.com',
+    });
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.endsWith('/me/messages'),
+    );
+    expect(call?.body).toMatchObject({
+      bccRecipients: [{ emailAddress: { address: 'carol@example.com' } }],
     });
   });
 

@@ -367,11 +367,17 @@ export const COMPOSE_EMAIL_HTML = `
 
       <div class="toggles">
         <button id="toggleCcButton" type="button" class="link-button" aria-expanded="false" aria-controls="ccRow">Add CC</button>
+        <button id="toggleBccButton" type="button" class="link-button" aria-expanded="false" aria-controls="bccRow">Add BCC</button>
       </div>
 
       <div id="ccRow" class="field hidden">
         <label for="ccInput">CC</label>
         <input id="ccInput" class="input" type="text" autocomplete="off" placeholder="cc@example.com">
+      </div>
+
+      <div id="bccRow" class="field hidden">
+        <label for="bccInput">BCC</label>
+        <input id="bccInput" class="input" type="text" autocomplete="off" placeholder="bcc@example.com">
       </div>
 
       <div class="field">
@@ -426,6 +432,11 @@ export const COMPOSE_EMAIL_HTML = `
         <span id="sentCc" class="sent-value"></span>
       </div>
 
+      <div id="sentBccField" class="field hidden">
+        <label>BCC</label>
+        <span id="sentBcc" class="sent-value"></span>
+      </div>
+
       <div class="field">
         <label>Subject</label>
         <span id="sentSubject" class="sent-value"></span>
@@ -476,18 +487,23 @@ export const COMPOSE_EMAIL_HTML = `
       var sentTo = document.getElementById('sentTo');
       var sentCcField = document.getElementById('sentCcField');
       var sentCc = document.getElementById('sentCc');
+      var sentBccField = document.getElementById('sentBccField');
+      var sentBcc = document.getElementById('sentBcc');
       var sentSubject = document.getElementById('sentSubject');
       var sentBody = document.getElementById('sentBody');
       var sentCollapseButton = document.getElementById('sentCollapseButton');
 
       var toInput = document.getElementById('toInput');
       var ccInput = document.getElementById('ccInput');
+      var bccInput = document.getElementById('bccInput');
       var subjectInput = document.getElementById('subjectInput');
       var bodyInput = document.getElementById('bodyInput');
       var fromValue = document.getElementById('fromValue');
       var fromHelper = document.getElementById('fromHelper');
       var ccRow = document.getElementById('ccRow');
+      var bccRow = document.getElementById('bccRow');
       var toggleCcButton = document.getElementById('toggleCcButton');
+      var toggleBccButton = document.getElementById('toggleBccButton');
 
       var sendButton = document.getElementById('sendButton');
       var sendLabel = document.getElementById('sendLabel');
@@ -617,6 +633,7 @@ export const COMPOSE_EMAIL_HTML = `
         cancelButton.disabled = nextSending;
         toInput.disabled = nextSending;
         ccInput.disabled = nextSending;
+        bccInput.disabled = nextSending;
         subjectInput.disabled = nextSending;
         bodyInput.disabled = nextSending;
         sendSpinner.classList.toggle('hidden', !nextSending);
@@ -692,10 +709,17 @@ export const COMPOSE_EMAIL_HTML = `
         toggleCcButton.setAttribute('aria-expanded', visible ? 'true' : 'false');
       }
 
+      function setBccVisible(visible) {
+        bccRow.classList.toggle('hidden', !visible);
+        toggleBccButton.textContent = visible ? 'Hide BCC' : 'Add BCC';
+        toggleBccButton.setAttribute('aria-expanded', visible ? 'true' : 'false');
+      }
+
       function readFormPayload() {
         var payload = {
           to: normalizeAddressList(toInput.value),
           cc: normalizeAddressList(ccInput.value),
+          bcc: normalizeAddressList(bccInput.value),
           subject: String(subjectInput.value || ''),
           body: String(bodyInput.value || '')
         };
@@ -746,11 +770,13 @@ export const COMPOSE_EMAIL_HTML = `
         var draft = rawDraft && typeof rawDraft === 'object' ? rawDraft : {};
         toInput.value = listToInputValue(draft.to);
         ccInput.value = listToInputValue(draft.cc);
+        bccInput.value = listToInputValue(draft.bcc);
         subjectInput.value = typeof draft.subject === 'string' ? draft.subject : '';
         bodyInput.value = typeof draft.body === 'string' ? draft.body : '';
         currentEmail = typeof draft.email === 'string' ? draft.email : '';
         applyFromValue(currentEmail);
         setCcVisible(normalizeAddressList(draft.cc).length > 0);
+        setBccVisible(normalizeAddressList(draft.bcc).length > 0);
         clearError();
         clearSuccess();
         postResize();
@@ -862,6 +888,9 @@ export const COMPOSE_EMAIL_HTML = `
         var ccList = normalizeAddressList(payload.cc);
         sentCc.textContent = ccList.join(', ');
         sentCcField.classList.toggle('hidden', ccList.length === 0);
+        var bccList = normalizeAddressList(payload.bcc);
+        sentBcc.textContent = bccList.join(', ');
+        sentBccField.classList.toggle('hidden', bccList.length === 0);
         sentSubject.textContent = String(payload.subject || '');
         sentBody.textContent = String(payload.body || '');
       }
@@ -937,7 +966,12 @@ export const COMPOSE_EMAIL_HTML = `
         postResize();
       });
 
-      [toInput, ccInput, subjectInput, bodyInput].forEach(function (element) {
+      toggleBccButton.addEventListener('click', function () {
+        setBccVisible(bccRow.classList.contains('hidden'));
+        postResize();
+      });
+
+      [toInput, ccInput, bccInput, subjectInput, bodyInput].forEach(function (element) {
         element.addEventListener('input', function () {
           clearError();
           clearSuccess();
@@ -1014,6 +1048,7 @@ export const COMPOSE_EMAIL_HTML = `
 
       applyThemeFromHostContext();
       setCcVisible(false);
+      setBccVisible(false);
       setCollapsed(false);
       postResize();
       postReady();

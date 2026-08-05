@@ -176,6 +176,7 @@ export interface SendEmailArgs {
   subject: string;
   body: string;
   cc?: string | string[];
+  bcc?: string | string[];
   importance?: 'low' | 'normal' | 'high';
 }
 
@@ -186,6 +187,7 @@ export async function sendEmail(
 ): Promise<unknown> {
   const toList = ensureArray(args.to) ?? [];
   const ccList = ensureArray(args.cc);
+  const bccList = ensureArray(args.bcc);
 
   const message = {
     subject: args.subject,
@@ -197,6 +199,9 @@ export async function sendEmail(
       emailAddress: { address: email },
     })),
     ccRecipients: ccList?.map((email) => ({
+      emailAddress: { address: email },
+    })),
+    bccRecipients: bccList?.map((email) => ({
       emailAddress: { address: email },
     })),
     importance: args.importance ?? 'normal',
@@ -417,6 +422,7 @@ export interface CreateDraftArgs {
   subject: string;
   body: string;
   cc?: string | string[];
+  bcc?: string | string[];
 }
 
 export async function createDraft(
@@ -426,6 +432,7 @@ export async function createDraft(
 ): Promise<unknown> {
   const toList = ensureArray(args.to);
   const ccList = ensureArray(args.cc);
+  const bccList = ensureArray(args.bcc);
 
   const draft = {
     subject: args.subject,
@@ -437,6 +444,9 @@ export async function createDraft(
       emailAddress: { address: email },
     })),
     ccRecipients: ccList?.map((email) => ({
+      emailAddress: { address: email },
+    })),
+    bccRecipients: bccList?.map((email) => ({
       emailAddress: { address: email },
     })),
   };

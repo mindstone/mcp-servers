@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - `mark_email_read` tool: marks an email read or unread.
 - `set_email_flag` tool: flags an email for follow-up, marks it complete, or clears the flag.
 - `get_conversation` tool: lists every message in a thread (oldest first) from a message ID or conversationId.
+- `bcc` parameter on `send_email`, `compose_email`, and `create_draft`; the compose view now renders a BCC row (regenerated from `@mindstone/mcp-app-compose`).
 
 ## [0.2.0] - 2026-07-29
 

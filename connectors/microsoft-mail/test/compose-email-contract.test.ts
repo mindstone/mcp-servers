@@ -111,6 +111,22 @@ describe('compose_email producer contract', () => {
     expect(text).not.toContain('auth');
   });
 
+  it('passes BCC recipients through to the draft payload', async () => {
+    const to = ['ada@example.com'];
+    const bcc = ['carol@example.com'];
+
+    const result = await client.client.callTool({
+      name: 'compose_email',
+      arguments: { to, bcc, subject: 'Quiet copy', body: 'For your records.' },
+    });
+
+    expect(result.isError).toBeFalsy();
+    const structured = result.structuredContent as { bcc: string[] };
+    expect(structured.bcc).toEqual(bcc);
+    const ui = (result._meta as { ui: { structuredFallback: { payload: { bcc: string[] } } } }).ui;
+    expect(ui.structuredFallback.payload.bcc).toEqual(bcc);
+  });
+
   it('serves the compose-email resource as the committed template HTML', async () => {
     const result = await client.client.readResource({ uri: COMPOSE_EMAIL_RESOURCE_URI });
 

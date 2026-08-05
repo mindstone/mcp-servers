@@ -9,8 +9,7 @@ import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
  * The `_meta.ui` producer contract below is shared with the Gmail
  * compose_workspace_email tool; the helpers are vendored from there (each
  * connector is an independent package — no cross-connector imports) and the
- * two must stay field-for-field identical apart from the resource URI and
- * this connector's empty BCC (send_email has no BCC parameter).
+ * two must stay field-for-field identical apart from the resource URI.
  */
 
 export const COMPOSE_EMAIL_RESOURCE_URI = 'ui://microsoft-mail/compose-email';
@@ -18,6 +17,7 @@ export const COMPOSE_EMAIL_RESOURCE_URI = 'ui://microsoft-mail/compose-email';
 export interface ComposeEmailParams {
   to: string[];
   cc?: string[];
+  bcc?: string[];
   subject: string;
   body: string;
 }
@@ -72,9 +72,7 @@ export async function handleComposeEmail(params: ComposeEmailParams): Promise<Co
     ? params.to.filter((addr) => typeof addr === 'string' && addr.trim().length > 0)
     : [];
   const cc = Array.isArray(params.cc) ? params.cc : [];
-  // send_email has no BCC parameter, so the compose form renders no BCC field
-  // and the draft always carries an empty list.
-  const bcc: string[] = [];
+  const bcc = Array.isArray(params.bcc) ? params.bcc : [];
   const subject = typeof params.subject === 'string' ? params.subject : '';
   const body = typeof params.body === 'string' ? params.body : '';
 
