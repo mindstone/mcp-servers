@@ -31,6 +31,20 @@ import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js'
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Single source of truth for the server-reported version — a hardcoded
+// literal here drifted a full release behind package.json once already.
+// dist/index.js and src/index.ts both resolve '../package.json' to the
+// connector root.
+const PACKAGE_VERSION = (() => {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+    return typeof pkg.version === 'string' ? pkg.version : 'unknown';
+  } catch (err) {
+    console.error('[RebelOffice] Could not read package.json for server version:', err?.message ?? err);
+    return 'unknown';
+  }
+})();
+
 // The sidecar uses HTTPS with a trusted localhost cert (via office-addin-dev-certs).
 // Office requires HTTPS for SourceLocation URLs. Since this MCP process connects
 // to the same-machine sidecar, we skip cert verification to avoid trust issues
@@ -796,7 +810,7 @@ const TOOL_NAMES = {
 
 const server = new McpServer({
   name: 'RebelOffice',
-  version: '0.1.1',
+  version: PACKAGE_VERSION,
 });
 
 const EMPTY_OBJECT_SCHEMA = {
@@ -3983,6 +3997,7 @@ export const __test = {
   isLoopbackHostname,
   toMcpResult,
   stampUntrustedSource,
+  packageVersion: PACKAGE_VERSION,
   setSpawnSidecarAndWaitForTests(fn: typeof defaultSpawnSidecarAndWait) {
     spawnSidecarAndWait = fn;
   },
