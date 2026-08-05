@@ -1,6 +1,8 @@
 /**
  * email_delete — move-to-Trash (recoverable) with \Deleted+expunge fallback
- * (permanent) when no Trash mailbox exists or the message is already in it.
+ * (permanent) ONLY when no Trash mailbox exists or the message is already in
+ * it. A FAILED Trash move aborts observably (TRASH_MOVE_FAILED) without
+ * expunging — covered in delete-move-failure.test.ts.
  */
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
@@ -66,8 +68,11 @@ describe('email_delete', () => {
     expect(json.ok).toBe(true);
     expect(json.deleted).toBe(1);
     expect(json.method).toBe('trash');
-    // Fixture trash mailbox: 'Deleted Messages' (specialUse \Trash).
-    expect(json.trashMailbox).toBe('Deleted Messages');
+    // Fixture trash mailbox: 'Deleted Messages' (specialUse \Trash) — the
+    // server-supplied mailbox path is enveloped in the response.
+    expect(json.trashMailbox).toBe(
+      '<untrusted-content source="external-email">Deleted Messages</untrusted-content>',
+    );
   });
 
   it('expunges permanently when deleting from the Trash mailbox itself', async () => {

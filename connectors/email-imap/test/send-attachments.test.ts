@@ -64,7 +64,7 @@ describe('outbound attachments (email_send / email_save_draft)', () => {
     return testClient;
   }
 
-  it('email_send attaches a workspace file by canonical path', async () => {
+  it('email_send attaches a workspace file, read through a single validated descriptor', async () => {
     await setupClient();
     const filePath = path.join(workspace, 'note.txt');
     fs.writeFileSync(filePath, 'hello attachment');
@@ -79,9 +79,13 @@ describe('outbound attachments (email_send / email_save_draft)', () => {
 
     expect(mockTransport.sendMail).toHaveBeenCalledTimes(1);
     const sent = mockTransport.sendMail.mock.calls[0]![0] as {
-      attachments?: Array<{ path: string }>;
+      attachments?: Array<{ content?: Buffer; filename?: string; path?: string }>;
     };
-    expect(sent.attachments).toEqual([{ path: fs.realpathSync(filePath) }]);
+    // Bytes are handed to nodemailer as `content` — never a `path` nodemailer
+    // could re-open after a post-validation swap.
+    expect(sent.attachments).toEqual([
+      { content: Buffer.from('hello attachment'), filename: 'note.txt' },
+    ]);
   });
 
   it('sanitizes the optional display filename to a basename', async () => {
@@ -174,8 +178,10 @@ describe('outbound attachments (email_send / email_save_draft)', () => {
 
     expect(streamTransport.sendMail).toHaveBeenCalledTimes(1);
     const sent = streamTransport.sendMail.mock.calls[0]![0] as {
-      attachments?: Array<{ path: string }>;
+      attachments?: Array<{ content?: Buffer; filename?: string }>;
     };
-    expect(sent.attachments).toEqual([{ path: fs.realpathSync(filePath) }]);
+    expect(sent.attachments).toEqual([
+      { content: Buffer.from('draft attachment'), filename: 'draft-note.txt' },
+    ]);
   });
 });

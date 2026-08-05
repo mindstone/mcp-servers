@@ -75,10 +75,28 @@ describe('Mailbox management tools', () => {
       expect(result.isError).toBe(true);
     });
 
+    it('is annotated destructiveHint: true (remote mailbox mutation)', async () => {
+      await setupClient();
+
+      const tools = await testClient.client.listTools();
+      const entry = tools.tools.find((t) => t.name === 'email_create_mailbox');
+      expect(entry, 'email_create_mailbox must be registered').toBeDefined();
+      expect(entry!.annotations?.destructiveHint).toBe(true);
+    });
+
     it('validates name is required', async () => {
       await setupClient();
 
       const result = await testClient.callTool('email_create_mailbox', {});
+      expect(result.isError).toBe(true);
+    });
+
+    it('rejects a whitespace-only name via schema validation (never reaches IMAP)', async () => {
+      await setupClient();
+
+      const result = await testClient.callTool('email_create_mailbox', {
+        name: '   ',
+      });
       expect(result.isError).toBe(true);
     });
   });
@@ -116,6 +134,25 @@ describe('Mailbox management tools', () => {
         new_name: 'INBOX',
       });
       expect(result.isError).toBe(true);
+    });
+
+    it('rejects whitespace-only names via schema validation (never reaches IMAP)', async () => {
+      await setupClient();
+
+      const result = await testClient.callTool('email_rename_mailbox', {
+        old_name: 'Receipts',
+        new_name: '\t\n ',
+      });
+      expect(result.isError).toBe(true);
+    });
+
+    it('is annotated destructiveHint: true (remote mailbox mutation)', async () => {
+      await setupClient();
+
+      const tools = await testClient.client.listTools();
+      const entry = tools.tools.find((t) => t.name === 'email_rename_mailbox');
+      expect(entry, 'email_rename_mailbox must be registered').toBeDefined();
+      expect(entry!.annotations?.destructiveHint).toBe(true);
     });
   });
 

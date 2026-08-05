@@ -444,5 +444,14 @@ describe('Send/draft tools', () => {
       const json = result.json as Record<string, unknown>;
       expect(json.error).toContain('subject or a text/html body');
     });
+
+    it('is annotated destructiveHint: true (remote mailbox mutation)', async () => {
+      await setupClient();
+
+      const tools = await testClient.client.listTools();
+      const entry = tools.tools.find((t) => t.name === 'email_save_draft');
+      expect(entry, 'email_save_draft must be registered').toBeDefined();
+      expect(entry!.annotations?.destructiveHint).toBe(true);
+    });
   });
 });

@@ -136,6 +136,26 @@ describe('Message tools', () => {
       expect(json.hasMore).toBeUndefined();
     });
 
+    it('rejects a fractional limit (0.5 must not truncate to a falsy 0 that returns everything)', async () => {
+      await setupClient();
+
+      const result = await testClient.callTool('email_search_messages', {
+        mailbox: 'INBOX',
+        limit: 0.5,
+      });
+      expect(result.isError).toBe(true);
+    });
+
+    it('rejects a limit above the 500 cap', async () => {
+      await setupClient();
+
+      const result = await testClient.callTool('email_search_messages', {
+        mailbox: 'INBOX',
+        limit: 501,
+      });
+      expect(result.isError).toBe(true);
+    });
+
     it('filters by since date', async () => {
       await setupClient();
 
@@ -210,7 +230,9 @@ describe('Message tools', () => {
       expect(attachments[0]!.filename).toBe(
         '<untrusted-content source="external-email">agenda.pdf</untrusted-content>',
       );
-      expect(attachments[0]!.contentType).toBe('application/pdf');
+      expect(attachments[0]!.contentType).toBe(
+        '<untrusted-content source="external-email">application/pdf</untrusted-content>',
+      );
     });
 
     it('validates uid must be positive integer', async () => {

@@ -6,8 +6,9 @@
  *
  * Wrapping applies to `textBody` and (when present) `htmlBody`, plus the
  * attacker-controlled header/metadata text fields: `subject`, `from`, `to`,
- * and attachment filenames. Structural fields (uid, date, messageId, flags,
- * attachment contentType/size) are NOT wrapped.
+ * `messageId`, attachment filenames, and attachment `contentType`/`part`
+ * (all server- or sender-supplied). Only genuinely structural non-text fields
+ * (uid, date, flags, attachment size) are NOT wrapped.
  */
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
@@ -242,9 +243,9 @@ describe('email_get_message — untrusted-content envelope (M2.6)', () => {
     );
   });
 
-  it('VAL-EMAIL-105 — subject and address headers are wrapped; date/messageId are not', async () => {
+  it('VAL-EMAIL-105 — subject, address headers, and messageId are wrapped; date is not', async () => {
     const message = await getMessage(201);
-    const wrappedFields = ['subject', 'from', 'to'];
+    const wrappedFields = ['subject', 'from', 'to', 'messageId'];
     for (const field of wrappedFields) {
       const value = message[field];
       expect(typeof value).toBe('string');
@@ -252,7 +253,11 @@ describe('email_get_message — untrusted-content envelope (M2.6)', () => {
         /^<untrusted-content source="external-email">[\s\S]*<\/untrusted-content>$/,
       );
     }
-    const structuralFields = ['date', 'messageId'];
+    // The Message-ID arrives via an email header: attacker-controlled text.
+    expect(message.messageId).toBe(
+      '<untrusted-content source="external-email"><welcome-201@example.com></untrusted-content>',
+    );
+    const structuralFields = ['date'];
     for (const field of structuralFields) {
       const value = message[field];
       if (typeof value === 'string') {
@@ -262,14 +267,19 @@ describe('email_get_message — untrusted-content envelope (M2.6)', () => {
     }
   });
 
-  it('VAL-EMAIL-106 — attachment filenames are wrapped; contentType/size are not', async () => {
+  it('VAL-EMAIL-106 — attachment filenames, contentType, and part are wrapped; size is not', async () => {
     const message = await getMessage(204);
     const attachments = message.attachments as Array<Record<string, unknown>>;
     expect(attachments.length).toBe(1);
     expect(attachments[0]!.filename).toBe(
       '<untrusted-content source="external-email">agenda.pdf</untrusted-content>',
     );
-    expect(attachments[0]!.contentType).toBe('application/pdf');
+    expect(attachments[0]!.contentType).toBe(
+      '<untrusted-content source="external-email">application/pdf</untrusted-content>',
+    );
+    expect(attachments[0]!.part).toBe(
+      '<untrusted-content source="external-email">2</untrusted-content>',
+    );
     expect(typeof attachments[0]!.size).toBe('number');
   });
 

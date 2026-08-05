@@ -193,13 +193,21 @@ behaviour.
 ## Security: untrusted-content envelopes and destructive tools
 
 Every attacker-controlled text field the connector returns — message bodies,
-subjects, from/to display names, attachment filenames, draft summaries — is
-wrapped in an `<untrusted-content source="external-email">…</untrusted-content>`
-envelope (with close-tag breakout escaping) so the host LLM treats it as data,
-not instructions.
+subjects, from/to display names, Message-IDs, attachment filenames, MIME
+content types and part identifiers, mailbox names and special-use values,
+draft summaries, and error text originating from the IMAP/SMTP server or
+vendor SDKs — is wrapped in an `<untrusted-content …>…</untrusted-content>`
+envelope (with close-tag breakout escaping) so the host LLM treats it as
+data, not instructions. Tools that consume a previously returned value
+(`mailbox`, `part`, mailbox names) accept the enveloped form as-is and strip
+one envelope layer on input.
 
 Beyond `email_send`, the tools annotated `destructiveHint: true` are
-`email_delete` (permanent when no Trash mailbox exists), `email_delete_draft`
+`email_save_draft`, `email_update_draft` (replaces and expunges the old
+draft), `email_create_mailbox`, `email_rename_mailbox`, `email_delete`
+(permanent when no Trash mailbox exists; aborts with a `TRASH_MOVE_FAILED`
+error — leaving the messages in place — when the move to Trash fails, rather
+than silently escalating to a permanent expunge), `email_delete_draft`
 (always permanent), and `email_delete_mailbox` (removes the folder and all
 messages inside it). Hosts should gate these behind the same explicit user
 confirmation as `email_send`.
@@ -212,22 +220,22 @@ confirmation as `email_send`.
 ### Mailbox
 - `email_list_mailboxes` — List all email folders/mailboxes with message counts
 - `email_get_mailbox_status` — Get mailbox status with unread count and latest subjects
-- `email_create_mailbox` — Create a new mailbox/folder
-- `email_rename_mailbox` — Rename a mailbox/folder (INBOX cannot be renamed)
+- `email_create_mailbox` — Create a new mailbox/folder (destructive)
+- `email_rename_mailbox` — Rename a mailbox/folder (INBOX cannot be renamed; destructive)
 - `email_delete_mailbox` — Permanently delete a mailbox/folder and its contents (destructive)
 
 ### Messages
 - `email_search_messages` — Search emails with sender/subject/unread filters, `since`/`before` date filters, and `before_uid` cursor pagination
-- `email_get_message` — Get full email content by UID (bodies, subjects, addresses, and attachment filenames are returned inside `<untrusted-content>` envelopes)
-- `email_get_attachment` — Download an attachment into the workspace sandbox (see `MCP_WORKSPACE_PATH`)
+- `email_get_message` — Get full email content by UID (bodies, subjects, addresses, Message-ID, and attachment filenames/MIME metadata are returned inside `<untrusted-content>` envelopes)
+- `email_get_attachment` — Download an attachment into the workspace sandbox (see `MCP_WORKSPACE_PATH`); writes are exclusive-create, so existing files are never overwritten
 - `email_move_messages` — Move emails between folders
-- `email_delete` — Delete emails (moves to Trash when one exists, otherwise expunges permanently; destructive)
+- `email_delete` — Delete emails (moves to Trash when one exists, otherwise expunges permanently; aborts with an error if the Trash move fails; destructive)
 - `email_set_flags` — Set or remove flags (read, starred) on messages
 
 ### Drafts
-- `email_save_draft` — Save a draft email (supports attachments)
+- `email_save_draft` — Save a draft email (supports attachments; mutates the remote account — destructive)
 - `email_list_drafts` — List drafts in the Drafts mailbox
-- `email_update_draft` — Replace a draft's content (the new version is saved before the old one is removed)
+- `email_update_draft` — Replace a draft's content (the new version is saved before the old one is removed; destructive)
 - `email_delete_draft` — Permanently delete a draft (destructive)
 
 ### Send

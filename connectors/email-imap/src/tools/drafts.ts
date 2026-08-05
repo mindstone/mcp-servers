@@ -98,7 +98,9 @@ export function registerDraftTools(server: McpServer): void {
 
         drafts.sort((a, b) => b.uid - a.uid);
 
-        return JSON.stringify({ ok: true, mailbox: draftsMailbox, drafts });
+        // The resolved Drafts mailbox path is server-supplied text, so it is
+        // enveloped before reaching the model.
+        return JSON.stringify({ ok: true, mailbox: wrapEmailField(draftsMailbox), drafts });
       } finally {
         lock.release();
       }
@@ -113,12 +115,13 @@ export function registerDraftTools(server: McpServer): void {
       description:
         'Replace a draft\'s content: appends the updated message to the Drafts mailbox first, ' +
         'then removes the old draft only after the new one is saved. Provide the full new ' +
-        'content — fields not supplied are dropped from the replacement.',
+        'content — fields not supplied are dropped from the replacement. This mutates the ' +
+        'remote account: hosts MUST require explicit user confirmation before each invocation.',
       inputSchema: z.object({
         uid: z.number().int().positive().describe('UID of the draft to replace (from email_list_drafts)'),
         ...draftFieldsSchema,
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const config = ensureInitialized();
@@ -142,7 +145,7 @@ export function registerDraftTools(server: McpServer): void {
       return JSON.stringify({
         ok: true,
         messageId: draft.messageId,
-        mailbox: draft.mailbox,
+        mailbox: wrapEmailField(draft.mailbox),
         replacedUid: uid,
         ...(draft.uid !== undefined ? { uid: draft.uid } : {}),
       });
@@ -178,7 +181,7 @@ export function registerDraftTools(server: McpServer): void {
         lock.release();
       }
 
-      return JSON.stringify({ ok: true, deleted: 1, mailbox: draftsMailbox });
+      return JSON.stringify({ ok: true, deleted: 1, mailbox: wrapEmailField(draftsMailbox) });
     }),
   );
 }

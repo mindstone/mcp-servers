@@ -16,17 +16,18 @@
  */
 
 import { z } from 'zod';
-import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import nodemailer from 'nodemailer';
 import { withErrorHandling } from '../utils.js';
 import { getConnection } from '../imap-client.js';
 import { getTransport } from '../smtp-client.js';
-import { resolveReadPath, sanitizeAttachmentFilename } from '../path-safety.js';
+import { readWorkspaceAttachment, sanitizeAttachmentFilename } from '../path-safety.js';
 import {
   ensureInitialized,
   generateMessageId,
   resolveDraftsMailbox,
+  wrapEmailField,
 } from './shared.js';
 import {
   checkRateLimit,
@@ -65,21 +66,33 @@ export const attachmentsSchema = z
 export type OutboundAttachment = z.infer<typeof outboundAttachmentSchema>;
 
 /**
- * Resolve outbound attachment paths to canonical in-workspace files and
- * enforce the aggregate size cap. Throws before any network I/O when a path
- * escapes the sandbox or the cap is exceeded.
+ * A resolved outbound attachment: bytes read through a single validated file
+ * descriptor (see readWorkspaceAttachment) plus the display filename.
+ * Nodemailer receives `content` (never a `path`) so it cannot re-open a
+ * swapped file after validation.
+ */
+export interface ResolvedOutboundAttachment {
+  content: Buffer;
+  filename: string;
+}
+
+/**
+ * Read outbound attachments from canonical in-workspace files (open-once,
+ * fstat, read-through-fd) and enforce the aggregate size cap against the
+ * descriptor's size. Throws before any network I/O when a path escapes the
+ * sandbox or the cap is exceeded.
  */
 function resolveOutboundAttachments(
   attachments: OutboundAttachment[] | undefined,
-): Array<{ path: string; filename?: string }> | undefined {
+): ResolvedOutboundAttachment[] | undefined {
   if (!attachments || attachments.length === 0) {
     return undefined;
   }
-  const resolved: Array<{ path: string; filename?: string }> = [];
+  const resolved: ResolvedOutboundAttachment[] = [];
   let totalBytes = 0;
   for (const attachment of attachments) {
-    const canonical = resolveReadPath(attachment.path);
-    totalBytes += fs.statSync(canonical).size;
+    const read = readWorkspaceAttachment(attachment.path);
+    totalBytes += read.sizeBytes;
     if (totalBytes > MAX_OUTBOUND_ATTACHMENT_BYTES) {
       throw new Error(
         `Attachments exceed the ${MAX_OUTBOUND_ATTACHMENT_BYTES}-byte aggregate cap; ` +
@@ -87,10 +100,10 @@ function resolveOutboundAttachments(
       );
     }
     resolved.push({
-      path: canonical,
-      ...(attachment.filename
-        ? { filename: sanitizeAttachmentFilename(attachment.filename) }
-        : {}),
+      content: read.content,
+      filename: attachment.filename
+        ? sanitizeAttachmentFilename(attachment.filename)
+        : path.basename(read.canonicalPath),
     });
   }
   return resolved;
@@ -324,8 +337,10 @@ export function registerSendTools(server: McpServer): void {
     'email_save_draft',
     {
       description:
-        'Save a draft email to the Drafts folder. Attachment paths must resolve inside the ' +
-        'workspace sandbox (MCP_WORKSPACE_PATH, or the system temp directory when unset).',
+        'Save a draft email to the Drafts folder. This mutates the remote account: hosts MUST ' +
+        'require explicit user confirmation before each invocation. Attachment paths must ' +
+        'resolve inside the workspace sandbox (MCP_WORKSPACE_PATH, or the system temp directory ' +
+        'when unset).',
       inputSchema: z.object({
         to: z
           .union([z.string().min(1), z.array(z.string().min(1)).min(1)])
@@ -340,7 +355,7 @@ export function registerSendTools(server: McpServer): void {
           .describe('Message-ID of the original email when drafting a reply'),
         attachments: attachmentsSchema,
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const config = ensureInitialized();
@@ -367,7 +382,7 @@ export function registerSendTools(server: McpServer): void {
       return JSON.stringify({
         ok: true,
         messageId: draft.messageId,
-        mailbox: draft.mailbox,
+        mailbox: wrapEmailField(draft.mailbox),
         ...(draft.uid !== undefined ? { uid: draft.uid } : {}),
       });
     }),

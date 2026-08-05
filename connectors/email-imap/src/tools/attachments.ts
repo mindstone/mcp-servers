@@ -3,14 +3,15 @@
  */
 
 import { z } from 'zod';
-import * as fs from 'node:fs';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { withErrorHandling } from '../utils.js';
+import { unwrapUntrusted } from '../untrusted-content.js';
 import { getConnection, getMailboxLock } from '../imap-client.js';
-import { resolveDownloadPath } from '../path-safety.js';
+import { resolveDownloadDir, writeDownloadExclusive } from '../path-safety.js';
 import {
   ensureInitialized,
   collectMessageParts,
+  wrapEmailField,
   type MessageParts,
 } from './shared.js';
 
@@ -53,7 +54,12 @@ export function registerAttachmentTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       ensureInitialized();
 
-      const { mailbox, uid, part } = args;
+      const { mailbox: rawMailbox, uid } = args;
+      const mailbox = unwrapUntrusted(rawMailbox);
+      // `part` round-trips from email_get_message's attachment metadata,
+      // where it is enveloped as server-supplied text — strip one envelope
+      // layer so wrapped and manually-authored identifiers both work.
+      const part = unwrapUntrusted(args.part);
 
       const lock = await getMailboxLock(mailbox);
       try {
@@ -94,14 +100,21 @@ export function registerAttachmentTools(server: McpServer): void {
           chunks.push(buffer);
         }
 
-        const targetPath = resolveDownloadPath(args.filename ?? attachment.filename);
-        await fs.promises.writeFile(targetPath, Buffer.concat(chunks));
+        // Exclusive-create write with collision retry: an entry planted
+        // (or concurrently downloaded) after the filename was chosen is
+        // never overwritten.
+        const downloadDir = await resolveDownloadDir();
+        const targetPath = await writeDownloadExclusive(
+          downloadDir,
+          args.filename ?? attachment.filename ?? 'attachment',
+          Buffer.concat(chunks),
+        );
 
         return JSON.stringify({
           ok: true,
           uid,
           part,
-          contentType: attachment.contentType,
+          contentType: wrapEmailField(attachment.contentType),
           sizeBytes: totalBytes,
           path: targetPath,
         });
