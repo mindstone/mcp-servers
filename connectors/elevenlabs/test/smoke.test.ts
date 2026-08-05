@@ -21,9 +21,11 @@ const EXPECTED_TOOL_NAMES = [
   'generate_sound_effect',
   'generate_speech',
   'get_dubbing',
+  'get_history_item_audio',
   'get_usage_stats',
   'get_voice',
   'isolate_audio',
+  'list_history',
   'list_models',
   'list_voices',
   'search_shared_voices',
@@ -32,7 +34,7 @@ const EXPECTED_TOOL_NAMES = [
   'transcribe_audio',
 ].sort();
 
-/** Complete D-ANNOTATIONS table for all 25 tools. */
+/** Complete D-ANNOTATIONS table for all 27 tools. */
 const EXPECTED_ANNOTATIONS: Record<string, { readOnlyHint: boolean; destructiveHint: boolean }> = {
   check_subscription: { readOnlyHint: true, destructiveHint: false },
   clone_voice: { readOnlyHint: false, destructiveHint: true },
@@ -50,9 +52,11 @@ const EXPECTED_ANNOTATIONS: Record<string, { readOnlyHint: boolean; destructiveH
   generate_sound_effect: { readOnlyHint: false, destructiveHint: false },
   generate_speech: { readOnlyHint: false, destructiveHint: false },
   get_dubbing: { readOnlyHint: true, destructiveHint: false },
+  get_history_item_audio: { readOnlyHint: true, destructiveHint: false },
   get_usage_stats: { readOnlyHint: true, destructiveHint: false },
   get_voice: { readOnlyHint: true, destructiveHint: false },
   isolate_audio: { readOnlyHint: false, destructiveHint: false },
+  list_history: { readOnlyHint: true, destructiveHint: false },
   list_models: { readOnlyHint: true, destructiveHint: false },
   list_voices: { readOnlyHint: true, destructiveHint: false },
   search_shared_voices: { readOnlyHint: true, destructiveHint: false },
@@ -72,7 +76,7 @@ describe('Smoke test — tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 25 tools with correct names', async () => {
+  it('registers exactly 27 tools with correct names', async () => {
     mswServer.use(...createElevenLabsHandlers());
 
     testClient = await createTestClient({
@@ -85,7 +89,7 @@ describe('Smoke test — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(25);
+    expect(toolsResult.tools).toHaveLength(27);
     expect(toolNames).toEqual(EXPECTED_TOOL_NAMES);
   });
 
@@ -137,7 +141,7 @@ describe('Smoke test — tool registration', () => {
 });
 
 describe('Spawned stdio smoke test', () => {
-  it('lists 25 tools from built dist/index.js', async () => {
+  it('lists 27 tools from built dist/index.js', async () => {
     const { createStdioTestClient } = await import('@mindstone/mcp-test-harness');
     const { join } = await import('path');
 
@@ -153,7 +157,7 @@ describe('Spawned stdio smoke test', () => {
 
     try {
       const toolsResult = await client.client.listTools();
-      expect(toolsResult.tools).toHaveLength(25);
+      expect(toolsResult.tools).toHaveLength(27);
     } finally {
       await client.close();
     }
