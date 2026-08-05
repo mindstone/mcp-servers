@@ -6,6 +6,7 @@
  */
 
 import { getApiKey } from './auth.js';
+import { wrapUntrusted } from './untrusted-content.js';
 import {
   HumaansError,
   HUMAANS_API_BASE,
@@ -13,8 +14,14 @@ import {
   type HumaansErrorResponse,
 } from './types.js';
 
+// Vendor error bodies are external text: envelope them before they reach the
+// model (invariant #6) and cap their length so an HTML error page cannot dump
+// an unbounded body into the conversation.
+const MAX_VENDOR_ERROR_CHARS = 500;
+
 /**
- * Format a Humaans API error response into a human-readable message.
+ * Format a Humaans API error response into a human-readable message. The
+ * vendor-authored text is wrapped in an untrusted-content envelope.
  */
 function formatApiError(error: HumaansErrorResponse): string {
   let msg = `${error.name} (${error.code}): ${error.message}`;
@@ -24,7 +31,8 @@ function formatApiError(error: HumaansErrorResponse): string {
     );
     msg += '\n' + issueLines.join('\n');
   }
-  return msg;
+  const wrapped = wrapUntrusted(msg.slice(0, MAX_VENDOR_ERROR_CHARS), 'humaans:api-error');
+  return wrapped ?? 'Unknown error';
 }
 
 /**
@@ -100,14 +108,18 @@ export async function humaansFetch<T>(
   }
 
   if (!response.ok) {
+    // Read the body exactly once — a failed JSON parse consumes it.
+    const errorText = await response.text().catch(() => '');
     let errorBody: HumaansErrorResponse | undefined;
-    try {
-      errorBody = (await response.json()) as HumaansErrorResponse;
-    } catch {
-      // Response may not be JSON
+    if (errorText.length > 0) {
+      try {
+        errorBody = JSON.parse(errorText) as HumaansErrorResponse;
+      } catch {
+        // Response is not JSON
+      }
     }
 
-    if (errorBody) {
+    if (errorBody && typeof errorBody.message === 'string') {
       throw new HumaansError(
         formatApiError(errorBody),
         'API_ERROR',
@@ -115,9 +127,15 @@ export async function humaansFetch<T>(
       );
     }
 
-    const errorText = await response.text().catch(() => 'Unknown error');
+    // Non-JSON (or wrong-shaped) vendor error body: it is external text, so
+    // envelope it and cap its length rather than interpolating it raw.
+    const detail =
+      errorText.length > 0
+        ? (wrapUntrusted(errorText.slice(0, MAX_VENDOR_ERROR_CHARS), 'humaans:api-error') ??
+          'unreadable response body')
+        : 'no response body';
     throw new HumaansError(
-      `Humaans API error (${response.status}): ${errorText}`,
+      `Humaans API error (${response.status}): ${detail}`,
       'API_ERROR',
       'Check the request parameters and try again.',
     );
