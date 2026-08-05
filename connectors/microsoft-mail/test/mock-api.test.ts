@@ -379,4 +379,68 @@ describe('microsoft-mail mock-API integration', () => {
     expect(json.error).toContain('Missing required parameters');
     expect(json.next_step).toBe('list_attachments');
   });
+
+  it('send_draft posts to the /send endpoint', async () => {
+    const result = await client.callTool('send_draft', { id: 'draft-1' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; message: string };
+    expect(json.ok).toBeUndefined();
+    expect(json.message).toContain('sent');
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.endsWith('/me/messages/draft-1/send'),
+    );
+    expect(call).toBeDefined();
+  });
+
+  it('send_draft returns an error envelope when id is missing', async () => {
+    const result = await client.callTool('send_draft', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Missing required parameter');
+    expect(json.next_step).toBe('create_draft');
+  });
+
+  it('update_draft patches only the provided fields', async () => {
+    const result = await client.callTool('update_draft', {
+      id: 'draft-1',
+      subject: 'Updated subject',
+      body: 'Updated content',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; draftId: string };
+    expect(json.ok).toBeUndefined();
+    expect(json.draftId).toBe('draft-1');
+    const call = state.requests.find(
+      (r) => r.method === 'PATCH' && r.pathname.endsWith('/me/messages/draft-1'),
+    );
+    expect(call?.body).toMatchObject({
+      subject: 'Updated subject',
+      body: { contentType: 'Text', content: 'Updated content' },
+    });
+    expect(call?.body).not.toHaveProperty('toRecipients');
+  });
+
+  it('update_draft normalises to/cc recipients into Graph recipient shape', async () => {
+    await client.callTool('update_draft', {
+      id: 'draft-1',
+      to: 'alice@example.com',
+      cc: ['bob@example.com'],
+    });
+    const call = state.requests.find(
+      (r) => r.method === 'PATCH' && r.pathname.endsWith('/me/messages/draft-1'),
+    );
+    expect(call?.body).toMatchObject({
+      toRecipients: [{ emailAddress: { address: 'alice@example.com' } }],
+      ccRecipients: [{ emailAddress: { address: 'bob@example.com' } }],
+    });
+  });
+
+  it('update_draft rejects calls with no fields to update', async () => {
+    const result = await client.callTool('update_draft', { id: 'draft-1' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Nothing to update');
+  });
 });

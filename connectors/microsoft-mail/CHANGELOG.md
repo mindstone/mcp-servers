@@ -11,6 +11,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - `list_attachments` tool: lists attachment metadata (ID, name, type, size) for a message, so agents can act on `hasAttachments` instead of dead-ending.
 - `download_attachment` tool: saves a file attachment into `MCP_WORKSPACE_PATH` (or the OS temp directory when unset) with canonical-prefix containment, filename sanitization, a 25 MB cap, and clear guidance for embedded-message/reference attachments that Graph does not inline.
 - `MCP_WORKSPACE_PATH` optional environment variable declared in `server.json`.
+- `send_draft` tool: sends an existing draft (`POST /me/messages/{id}/send`), completing the draft lifecycle that previously dead-ended after `create_draft`/`create_reply_draft`.
+- `update_draft` tool: patches a draft's subject, body, to/cc recipients, or importance before sending.
 
 ## [0.2.0] - 2026-07-29
 

@@ -171,6 +171,20 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
       return new HttpResponse(null, { status: 204 });
     }),
 
+    // /me/messages/{id} (PATCH) — update_draft, mark_email_read, set_email_flag
+    http.patch(`${GRAPH_BASE}/me/messages/:id`, async ({ request, params }) => {
+      const url = new URL(request.url);
+      await capture(request, url.pathname, url.search);
+      const body = (await request.clone().json()) as Record<string, unknown>;
+      return HttpResponse.json({
+        id: String(params.id),
+        subject: (body.subject as string | undefined) ?? 'Welcome',
+        isDraft: true,
+        isRead: (body.isRead as boolean | undefined) ?? true,
+        flag: body.flag,
+      });
+    }),
+
     // /me/messages/{id}/attachments/{attachmentId} (GET) — download_attachment
     http.get(`${GRAPH_BASE}/me/messages/:id/attachments/:attachmentId`, async ({ request, params }) => {
       const url = new URL(request.url);

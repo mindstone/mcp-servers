@@ -24,6 +24,17 @@ const GraphAttachmentListSchema = z
   .object({ value: z.array(GraphAttachmentSchema).default([]) })
   .passthrough();
 
+const GraphMessageMutationSchema = z
+  .object({
+    id: z.string(),
+    subject: z.string().optional(),
+    conversationId: z.string().optional(),
+    isDraft: z.boolean().optional(),
+    isRead: z.boolean().optional(),
+    flag: z.object({ flagStatus: z.string().optional() }).passthrough().optional(),
+  })
+  .passthrough();
+
 const WELL_KNOWN_FOLDERS: Record<string, string> = {
   inbox: 'inbox',
   'sent items': 'sentitems',
@@ -570,5 +581,69 @@ export async function downloadAttachment(
     size: content.byteLength,
     savedTo: fullPath,
     message: `Attachment saved to ${fullPath}`,
+  };
+}
+
+export interface SendDraftArgs {
+  id: string;
+}
+
+export async function sendDraft(
+  client: Client,
+  args: SendDraftArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  await client.api(`/me/messages/${args.id}/send`).options({ signal }).post({});
+
+  return {
+    success: true,
+    message: 'Draft sent',
+  };
+}
+
+export interface UpdateDraftArgs {
+  id: string;
+  to?: string | string[];
+  cc?: string | string[];
+  subject?: string;
+  body?: string;
+  importance?: 'low' | 'normal' | 'high';
+}
+
+export async function updateDraft(
+  client: Client,
+  args: UpdateDraftArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const toList = ensureArray(args.to);
+  const ccList = ensureArray(args.cc);
+
+  const patch: Record<string, unknown> = {};
+  if (args.subject !== undefined) patch.subject = args.subject;
+  if (args.body !== undefined) {
+    patch.body = {
+      contentType: args.body.includes('<') ? 'HTML' : 'Text',
+      content: args.body,
+    };
+  }
+  if (toList !== undefined) {
+    patch.toRecipients = toList.map((email) => ({ emailAddress: { address: email } }));
+  }
+  if (ccList !== undefined) {
+    patch.ccRecipients = ccList.map((email) => ({ emailAddress: { address: email } }));
+  }
+  if (args.importance !== undefined) patch.importance = args.importance;
+
+  const response = await client
+    .api(`/me/messages/${args.id}`)
+    .options({ signal })
+    .patch(patch);
+  const updated = GraphMessageMutationSchema.parse(response);
+
+  return {
+    success: true,
+    draftId: updated.id,
+    subject: wrapUntrusted(updated.subject, 'microsoft-mail:update_draft:subject'),
+    message: 'Draft updated',
   };
 }

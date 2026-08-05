@@ -100,6 +100,18 @@ const MANIFEST: ManifestRow[] = [
     pathname: '/v1.0/me/messages',
     args: { subject: 'x', body: 'y' },
   },
+  {
+    tool: 'send_draft',
+    method: 'POST',
+    pathname: '/v1.0/me/messages/:id/send',
+    args: { id: 'draft-1' },
+  },
+  {
+    tool: 'update_draft',
+    method: 'PATCH',
+    pathname: '/v1.0/me/messages/:id',
+    args: { id: 'draft-1', subject: 'x' },
+  },
 ];
 
 function matchPath(actual: string, pattern: string): boolean {

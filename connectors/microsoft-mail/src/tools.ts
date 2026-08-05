@@ -22,7 +22,9 @@ import {
   moveEmail,
   replyToEmail,
   searchEmails,
+  sendDraft,
   sendEmail,
+  updateDraft,
 } from './mail.js';
 
 const RecipientField = z.union([z.array(z.string()), z.string()]);
@@ -582,6 +584,103 @@ sign-in, Microsoft 365 tools become available.`,
             subject: args.subject!,
             body: args.body!,
             cc: args.cc,
+          },
+          signal,
+        ),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // send_draft
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'send_draft',
+    {
+      description:
+        'Send an existing draft email (created by create_draft or create_reply_draft). The draft is sent and saved to Sent Items.',
+      inputSchema: z.object({
+        id: z.string().optional().describe('Draft message ID (draftId from create_draft)'),
+      }).shape,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.id) {
+        return errorResponse({
+          error:
+            'Missing required parameter: "id" (the draft message ID). Example: { "id": "AAMkAGI2..." }. Use the draftId returned by create_draft or create_reply_draft, or list the drafts folder with list_emails.',
+          action_required: 'Provide the draft message ID.',
+          next_step: 'create_draft',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        sendDraft(c, { id: args.id! }, signal),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // update_draft
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'update_draft',
+    {
+      description:
+        'Update an existing draft email. Only the provided fields are changed (subject, body, to, cc, importance). Use send_draft to send it afterwards.',
+      inputSchema: z.object({
+        id: z.string().optional().describe('Draft message ID (draftId from create_draft)'),
+        to: RecipientField.optional().describe('Replace the recipient list'),
+        cc: RecipientField.optional().describe('Replace the CC recipient list'),
+        subject: z.string().optional().describe('New email subject'),
+        body: z.string().optional().describe('New email body (HTML supported)'),
+        importance: ImportanceEnum.optional().describe('Email importance'),
+      }).shape,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.id) {
+        return errorResponse({
+          error:
+            'Missing required parameter: "id" (the draft message ID). Example: { "id": "AAMkAGI2...", "subject": "Updated subject" }. Use the draftId returned by create_draft or create_reply_draft.',
+          action_required: 'Provide the draft message ID.',
+          next_step: 'create_draft',
+        });
+      }
+      if (
+        args.to === undefined &&
+        args.cc === undefined &&
+        args.subject === undefined &&
+        args.body === undefined &&
+        args.importance === undefined
+      ) {
+        return errorResponse({
+          error:
+            'Nothing to update. Provide at least one of "to", "cc", "subject", "body", or "importance". Example: { "id": "AAMkAGI2...", "body": "Updated content" }',
+          action_required: 'Provide at least one field to update.',
+          next_step: 'update_draft',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        updateDraft(
+          c,
+          {
+            id: args.id!,
+            to: args.to,
+            cc: args.cc,
+            subject: args.subject,
+            body: args.body,
+            importance: args.importance,
           },
           signal,
         ),
