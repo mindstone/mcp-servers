@@ -126,9 +126,16 @@ describe('nano_banana_edit — source-image sandbox (M3.6)', () => {
     expect(getCalls()).toBe(1);
   });
 
-  it('VAL-NANO-003 — https:// URL does NOT trigger a sandbox-violation error', async () => {
+  it('VAL-NANO-003 — https:// URL is fetched (no sandbox-violation error)', async () => {
     const { handlers, getCalls } = captureGeminiHandlers();
-    mswServer.use(...handlers);
+    mswServer.use(
+      ...handlers,
+      http.get('https://example.com/foo.png', () =>
+        new HttpResponse(ONE_PIXEL_PNG, {
+          headers: { 'Content-Type': 'image/png', 'Content-Length': String(ONE_PIXEL_PNG.length) },
+        }),
+      ),
+    );
 
     testClient = await createTestClient({
       env: {
@@ -143,16 +150,10 @@ describe('nano_banana_edit — source-image sandbox (M3.6)', () => {
       prompt: 'rotate',
     });
 
-    // Either the connector forwards the URL or it returns a clear non-sandbox
-    // error. What it must NOT do is emit a sandbox-violation error code or
-    // mention the workspace sandbox in the error text.
-    if (result.isError) {
-      expect(result.text).not.toMatch(/sandbox/i);
-      expect(result.text).not.toMatch(/workspace.*root/i);
-    }
-    // No matter what, no fs.readFileSync of the URL string was attempted —
-    // the connector must not crash with EACCES / weird file errors. The
-    // error (if any) is a clean URL-rejection or the URL was forwarded.
+    // The URL is fetched and forwarded to the Gemini API — the local-file
+    // sandbox must not fire on a remote URL.
+    expect(result.isError).toBeFalsy();
+    expect(getCalls()).toBe(1);
   });
 
   // ---------------------- REJECTED PATHS ----------------------

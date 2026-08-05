@@ -2,7 +2,10 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
+
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 import {
   createNanoBananaHandlers,
   createNanoBananaUnauthorizedHandlers,
@@ -95,6 +98,25 @@ describe('Error handling', () => {
       });
       expect(result.isError).toBe(true);
       expect(result.text).toContain('AUTH_REQUIRED');
+    });
+  });
+
+  describe('Network-level failure (no HTTP response)', () => {
+    it('returns the structured NETWORK_ERROR contract', async () => {
+      mswServer.use(
+        http.post(`${GEMINI_API_BASE}/models/:model\\:generateContent`, () => HttpResponse.error()),
+      );
+      testClient = await createTestClient({
+        env: { GEMINI_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('nano_banana_generate', {
+        prompt: 'A test image',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain('NETWORK_ERROR');
+      expect(result.text).toContain('resolution');
     });
   });
 });

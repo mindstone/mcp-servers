@@ -10,14 +10,23 @@ import {
   SUPPORTED_MODELS,
   DEFAULT_MODEL,
   SUPPORTED_ASPECT_RATIOS,
+  SUPPORTED_IMAGE_SIZES,
+  supportsImageSize,
+  unsupportedImageSizePayload,
   type GenerationConfig,
+  type ImageConfig,
 } from '../types.js';
 import { resolveSavePath } from './path-safety.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 
 const MODEL_DESCRIPTION =
-  'Model to use: "gemini-3.1-flash-image-preview" (Nano Banana 2, default — pro-quality at flash speed, 4K), ' +
+  'Model to use: "gemini-3.1-flash-image-preview" (Nano Banana 2, default — pro-quality at flash speed), ' +
   '"gemini-3-pro-image-preview" (Nano Banana Pro — highest quality), or ' +
-  '"gemini-2.5-flash-image" (original Nano Banana — fast, legacy)';
+  '"gemini-2.5-flash-image" (original Nano Banana — fast, legacy; ~1K output only)';
+
+const IMAGE_SIZE_DESCRIPTION =
+  'Output resolution: "1K" (default, ~1024px), "2K", or "4K". ' +
+  'Only sent to the Gemini 3 image models — gemini-2.5-flash-image always produces ~1K.';
 
 export function registerGenerateTools(server: McpServer): void {
   server.registerTool(
@@ -36,6 +45,7 @@ export function registerGenerateTools(server: McpServer): void {
         prompt: z.string().min(1).describe('Text description of the image to generate'),
         model: z.enum(SUPPORTED_MODELS).optional().describe(MODEL_DESCRIPTION),
         aspect_ratio: z.enum(SUPPORTED_ASPECT_RATIOS).optional().describe('Aspect ratio for the generated image (default: 1:1)'),
+        image_size: z.enum(SUPPORTED_IMAGE_SIZES).optional().describe(IMAGE_SIZE_DESCRIPTION),
         save_path: z.string().optional().describe('Optional file path to save the image. IMPORTANT: Must be inside the workspace directory so the image can be displayed inline.'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
@@ -61,9 +71,20 @@ export function registerGenerateTools(server: McpServer): void {
       }
 
       const model = input.model ?? DEFAULT_MODEL;
+
+      if (input.image_size && !supportsImageSize(model)) {
+        return {
+          content: [{ type: 'text', text: JSON.stringify(unsupportedImageSizePayload(model, input.image_size), null, 2) }],
+          isError: true,
+        };
+      }
+
       const generationConfig: GenerationConfig = { responseModalities: ['TEXT', 'IMAGE'] };
-      if (input.aspect_ratio) {
-        generationConfig.imageConfig = { aspectRatio: input.aspect_ratio };
+      const imageConfig: ImageConfig = {};
+      if (input.aspect_ratio) imageConfig.aspectRatio = input.aspect_ratio;
+      if (input.image_size) imageConfig.imageSize = input.image_size;
+      if (Object.keys(imageConfig).length > 0) {
+        generationConfig.imageConfig = imageConfig;
       }
 
       const requestBody = {
@@ -83,7 +104,7 @@ export function registerGenerateTools(server: McpServer): void {
         }
         const errMsg = error instanceof Error ? error.message : String(error);
         return {
-          content: [{ type: 'text', text: JSON.stringify({ ok: false, error: `Network error: ${errMsg}` }) }],
+          content: [{ type: 'text', text: JSON.stringify({ ok: false, error: `Network error: ${errMsg}`, code: 'NETWORK_ERROR', resolution: 'Check your internet connection and try again. If the problem persists, the Gemini API may be temporarily unreachable.' }, null, 2) }],
           isError: true,
         };
       }
@@ -120,7 +141,13 @@ export function registerGenerateTools(server: McpServer): void {
       }
 
       if (!imageData) {
-        const responseText = textResponse || 'No image was generated. The model may not support image generation for this prompt.';
+        // The model's free-text part is external, model-authored content —
+        // envelope it (invariant #6) rather than returning it raw.
+        const responseText = textResponse
+          // wrapUntrusted only passes `undefined` through for undefined input;
+          // the fallback keeps the type narrow without a non-null assertion.
+          ? wrapUntrusted(textResponse, 'gemini') ?? textResponse
+          : 'No image was generated. The model may not support image generation for this prompt.';
         return {
           content: [{ type: 'text', text: responseText }],
           isError: true,
@@ -147,6 +174,16 @@ export function registerGenerateTools(server: McpServer): void {
         } catch (saveError) {
           const errMsg = saveError instanceof Error ? saveError.message : String(saveError);
           console.error(`[NanoBanana] Failed to save: ${errMsg}`);
+          // The image was generated but the requested save failed — surface
+          // that as an error instead of silently reporting success. The image
+          // is still returned inline so the generation is not lost.
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify({ ok: false, error: `Image generated but could not be saved to ${resolveResult.path}: ${errMsg}`, code: 'SAVE_FAILED', resolution: 'Check that the save path is inside the workspace and writable, then try again. The generated image is included inline in this result.' }, null, 2) },
+              { type: 'image', data: imageData, mimeType: imageMimeType },
+            ],
+            isError: true,
+          };
         }
       }
 

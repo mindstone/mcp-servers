@@ -126,7 +126,11 @@ node dist/index.js
 
 ### Image generation
 - `nano_banana_generate` — Generate images from text descriptions
-- `nano_banana_edit` — Edit an existing image using AI
+- `nano_banana_edit` — Edit existing images using AI; accepts up to 14 reference images (`source_image_paths`) for multi-image composition/fusion. Each source may be a workspace file path or an `https://` URL — remote fetches are SSRF-guarded (HTTPS only, no userinfo, private/loopback/link-local hosts refused, redirects re-validated per hop, 20MB cap, PNG/JPEG/WebP only)
+
+### Output resolution
+
+Both image tools accept an optional `image_size` parameter (`"1K"`, `"2K"`, or `"4K"`; default `"1K"` ≈ 1024px). Higher resolutions are only honoured by the Gemini 3 image models (`gemini-3.1-flash-image-preview`, `gemini-3-pro-image-preview`); the legacy `gemini-2.5-flash-image` always produces ~1K output and rejects an explicit `image_size`.
 
 ## Licence
 
