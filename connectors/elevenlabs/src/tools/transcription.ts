@@ -57,7 +57,7 @@ RELATED TOOLS:
 - generate_speech: the inverse operation (text to audio)
 - forced_alignment: align a known transcript to audio instead of transcribing
 
-RETURNS: enveloped text, word_count, language. With diarize, also utterances[] (speaker_id, start/end seconds, enveloped text) and speaker_count. With include_word_timestamps, also words[] (enveloped text, start/end, speaker_id when diarized). File path must be inside MCP_WORKSPACE_PATH (or os.tmpdir()).
+RETURNS: enveloped text, word_count, language (caller-supplied code echoed as-is; an API-detected code is enveloped as untrusted content). With diarize, also utterances[] (speaker_id, start/end seconds, enveloped text) and speaker_count. With include_word_timestamps, also words[] (enveloped text, start/end, speaker_id when diarized). File path must be inside MCP_WORKSPACE_PATH (or os.tmpdir()).
 
 COST: Credits based on audio duration.`,
       inputSchema: z.object({
@@ -144,6 +144,10 @@ COST: Credits based on audio duration.`,
 
       // AGENTS.md invariant #6: the transcript is whatever was SPOKEN in the
       // audio — the most attacker-controllable text this connector returns.
+      // The API-DETECTED language_code is likewise API-authored text: it is
+      // enveloped (grammar-gating it is a false trust boundary — BCP-47-shaped
+      // regexes still admit instruction-shaped hyphenated text). A
+      // caller-supplied language_code is echoed raw (not API-authored).
       // `message` stays numeric-only; never echo transcript substrings into it.
       const words = data.words ?? [];
       const utterances = diarize ? groupWordsIntoUtterances(words) : [];
@@ -153,7 +157,10 @@ COST: Credits based on audio duration.`,
         ok: true,
         text: wrapUntrusted(data.text, 'elevenlabs:transcribe_audio:text'),
         word_count: words.length,
-        language: args.language_code || data.language_code || 'auto-detected',
+        language:
+          args.language_code ||
+          wrapUntrusted(data.language_code, 'elevenlabs:transcribe_audio:language_code') ||
+          'auto-detected',
         ...(diarize
           ? {
               speaker_count: speakerCount,

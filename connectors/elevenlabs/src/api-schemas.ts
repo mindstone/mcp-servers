@@ -99,14 +99,18 @@ export const pronunciationDictionaryWithRulesSchema = pronunciationDictionaryMet
 // ── Speech-to-text ────────────────────────────────────────────────────────
 
 /**
- * Closed grammars for API-authored identifier fields (fail-closed alternative
- * to enveloping): anything outside the documented shape is rejected as
- * INVALID_RESPONSE, so instruction-shaped text can never flow through them.
+ * Diarization speaker labels are documented as "speaker_0", "speaker_1", ... —
+ * a genuinely closed grammar (digits only after a fixed prefix), so anything
+ * outside it is rejected as INVALID_RESPONSE and instruction-shaped text can
+ * never flow through the raw `speaker_id` output fields.
  */
-/** Diarization speaker labels are documented as "speaker_0", "speaker_1", ... */
 const speakerIdSchema = z.string().regex(/^speaker_\d+$/);
-/** BCP-47-style language code ("en", "eng", "zh-CN"); no whitespace/underscores. */
-const languageCodeSchema = z.string().regex(/^[a-z]{2,3}(-[a-zA-Z0-9]{2,8})*$/);
+
+// NOTE: the API-detected `language_code` is deliberately NOT grammar-gated.
+// A BCP-47-shaped regex (e.g. /^[a-z]{2,3}(-[a-zA-Z0-9]{2,8})*$/) still admits
+// instruction-shaped hyphenated text like "en-ignore-all-rules", so a grammar
+// gate here would be a false trust boundary. It is treated as untrusted
+// API-authored text and enveloped at the output site (transcription.ts).
 
 export const transcriptionWordSchema = z.object({
   text: z.string(),
@@ -119,7 +123,7 @@ export const transcriptionWordSchema = z.object({
 export const transcriptionResponseSchema = z.object({
   text: z.string(),
   words: z.array(transcriptionWordSchema).optional(),
-  language_code: languageCodeSchema.optional(),
+  language_code: z.string().optional(),
   language_probability: z.number().optional(),
 });
 
