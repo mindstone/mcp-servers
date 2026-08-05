@@ -1,0 +1,32 @@
+{
+  "$schema": "../../docs/status.schema.json",
+  "schemaVersion": 2,
+  "name": "xero",
+  "package": "@mindstone/mcp-server-xero",
+  "auth": {
+    "type": "oauth",
+    "envVars": [
+      "XERO_CLIENT_ID",
+      "XERO_CLIENT_SECRET",
+      "XERO_CLIENT_BEARER_TOKEN"
+    ]
+  },
+  "tools": {
+    "count": 70,
+    "domains": [
+      "invoices",
+      "contacts",
+      "reports",
+      "payroll"
+    ]
+  },
+  "surface": "cloud-api",
+  "evidence": {
+    "changelog": "./CHANGELOG.md",
+    "tools": "./src/tools/",
+    "auth": "./src/",
+    "tests": "./test/",
+    "npm": "https://www.npmjs.com/package/@mindstone/mcp-server-xero",
+    "serverJson": "./server.json"
+  }
+}

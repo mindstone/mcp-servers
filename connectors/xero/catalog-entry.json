@@ -1,0 +1,10 @@
+{
+  "id": "bundled-xero",
+  "name": "Xero",
+  "description": "Xero accounting. View and create invoices, purchase orders, contacts, payments, quotes, and financial reports (profit & loss, balance sheet, bank/budget/executive summaries). 'Show my unpaid invoices' or 'Email invoice INV-0042 to the customer' or 'How did we do last quarter?'.",
+  "category": "payments",
+  "icon": "dollar-sign",
+  "maturity": "stable",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}
