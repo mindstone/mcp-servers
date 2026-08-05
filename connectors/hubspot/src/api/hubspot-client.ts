@@ -7,6 +7,39 @@ const HUBSPOT_API_BASE = 'https://api.hubapi.com';
 const MAX_HUBSPOT_REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
 export const DEFAULT_HUBSPOT_REQUEST_TIMEOUT_MS = 60_000;
 
+/**
+ * Central registry of HubSpot API path prefixes, one per product family.
+ *
+ * HubSpot is migrating from numeric API versions (/crm/v3/...) to date-based
+ * versions (/crm/objects/2026-03/...). Note the version segment MOVES — after
+ * the product name today, after the resource family in the date-based layout —
+ * so a prefix constant per family (not a bare version string) is what makes
+ * the future migration a one-line edit per family instead of a sweep across
+ * every call site. See:
+ * https://developers.hubspot.com/docs/developer-tooling/platform/versioning
+ */
+export const HUBSPOT_API_PREFIXES = {
+  crmObjects: '/crm/v3/objects',
+  crmProperties: '/crm/v3/properties',
+  crmOwners: '/crm/v3/owners',
+  crmPipelines: '/crm/v3/pipelines',
+  crmLists: '/crm/v3/lists',
+  crmAssociationsV4: '/crm/v4/associations',
+  crmObjectsV4: '/crm/v4/objects',
+  automationFlows: '/automation/v4/flows',
+  marketingForms: '/marketing/v3/forms',
+  marketingEmails: '/marketing/v3/emails',
+  analyticsReports: '/analytics/v2/reports',
+  formSubmissions: '/form-integrations/v1/submissions/forms',
+  cmsBlogSettings: '/cms/v3/blog-settings/settings',
+  cmsBlogPosts: '/cms/v3/blogs/posts',
+  cmsSiteSearch: '/cms/v3/site-search/search',
+  files: '/files/v3/files',
+  conversationThreads: '/conversations/v3/conversations/threads',
+  oauthV1: '/oauth/v1',
+  graphqlCollector: '/collector/graphql',
+} as const;
+
 // Buffer time before expiration to trigger refresh (5 minutes)
 const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000;
 
@@ -144,6 +177,7 @@ export interface SearchFilter {
 export interface SearchRequest {
   filterGroups?: Array<{ filters: SearchFilter[] }>;
   sorts?: Array<{ propertyName: string; direction: 'ASCENDING' | 'DESCENDING' }>;
+  query?: string;
   properties?: string[];
   limit?: number;
   after?: string;
@@ -467,13 +501,13 @@ export class HubSpotClient {
     return response.json() as Promise<T>;
   }
 
-  async getTokenInfo(): Promise<{ user: string; hub_id: number; user_id: number }> {
-    return this.request('GET', `/oauth/v1/access-tokens/${this.accessToken}`);
+  async getTokenInfo(): Promise<{ user: string; hub_id: number; user_id: number; scopes?: string[] }> {
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.oauthV1}/access-tokens/${this.accessToken}`);
   }
 
   // Generic CRUD operations for any object type
   async createObject(objectType: string, properties: Record<string, string>): Promise<CrmObject> {
-    return this.request('POST', `/crm/v3/objects/${objectType}`, { properties });
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${objectType}`, { properties });
   }
 
   async getObject(
@@ -487,15 +521,15 @@ export class HubSpotClient {
     if (associations && associations.length > 0) search.set('associations', associations.join(','));
     const qs = search.toString();
     const suffix = qs ? `?${qs}` : '';
-    return this.request('GET', `/crm/v3/objects/${objectType}/${objectId}${suffix}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${objectType}/${objectId}${suffix}`);
   }
 
   async updateObject(objectType: string, objectId: string, properties: Record<string, string>): Promise<CrmObject> {
-    return this.request('PATCH', `/crm/v3/objects/${objectType}/${objectId}`, { properties });
+    return this.request('PATCH', `${HUBSPOT_API_PREFIXES.crmObjects}/${objectType}/${objectId}`, { properties });
   }
 
   async deleteObject(objectType: string, objectId: string): Promise<void> {
-    await this.request('DELETE', `/crm/v3/objects/${objectType}/${objectId}`);
+    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.crmObjects}/${objectType}/${objectId}`);
   }
 
   async listObjects(objectType: string, limit = 10, after?: string, properties?: string[]): Promise<ListResponse<CrmObject>> {
@@ -504,20 +538,20 @@ export class HubSpotClient {
     if (after) params.set('after', after);
     if (properties) params.set('properties', properties.join(','));
     
-    return this.request('GET', `/crm/v3/objects/${objectType}?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${objectType}?${params.toString()}`);
   }
 
   async searchObjects(objectType: string, searchRequest: SearchRequest): Promise<ListResponse<CrmObject>> {
-    return this.request('POST', `/crm/v3/objects/${objectType}/search`, searchRequest);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${objectType}/search`, searchRequest);
   }
 
   // Batch operations
   async batchCreateObjects(objectType: string, inputs: Array<{ properties: Record<string, string> }>): Promise<BatchResponse<CrmObject>> {
-    return this.request('POST', `/crm/v3/objects/${objectType}/batch/create`, { inputs });
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${objectType}/batch/create`, { inputs });
   }
 
   async batchUpdateObjects(objectType: string, inputs: Array<{ id: string; properties: Record<string, string> }>): Promise<BatchResponse<CrmObject>> {
-    return this.request('POST', `/crm/v3/objects/${objectType}/batch/update`, { inputs });
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${objectType}/batch/update`, { inputs });
   }
 
   // Associations
@@ -535,7 +569,7 @@ export class HubSpotClient {
     assertHubSpotAssociationType(associationType);
     await this.request(
       'PUT',
-      `/crm/v3/objects/${encodeURIComponent(fromObjectType)}/${encodeURIComponent(fromObjectId)}/associations/${encodeURIComponent(toObjectType)}/${encodeURIComponent(toObjectId)}/${encodeURIComponent(associationType)}`
+      `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(fromObjectType)}/${encodeURIComponent(fromObjectId)}/associations/${encodeURIComponent(toObjectType)}/${encodeURIComponent(toObjectId)}/${encodeURIComponent(associationType)}`
     );
   }
 
@@ -549,7 +583,7 @@ export class HubSpotClient {
     assertHubSpotObjectType(toObjectType, 'toObjectType');
     return this.request(
       'GET',
-      `/crm/v3/objects/${encodeURIComponent(fromObjectType)}/${encodeURIComponent(fromObjectId)}/associations/${encodeURIComponent(toObjectType)}`
+      `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(fromObjectType)}/${encodeURIComponent(fromObjectId)}/associations/${encodeURIComponent(toObjectType)}`
     );
   }
 
@@ -567,7 +601,7 @@ export class HubSpotClient {
     assertHubSpotAssociationType(associationType);
     await this.request(
       'DELETE',
-      `/crm/v3/objects/${encodeURIComponent(fromObjectType)}/${encodeURIComponent(fromObjectId)}/associations/${encodeURIComponent(toObjectType)}/${encodeURIComponent(toObjectId)}/${encodeURIComponent(associationType)}`
+      `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(fromObjectType)}/${encodeURIComponent(fromObjectId)}/associations/${encodeURIComponent(toObjectType)}/${encodeURIComponent(toObjectId)}/${encodeURIComponent(associationType)}`
     );
   }
 
@@ -578,7 +612,7 @@ export class HubSpotClient {
   ): Promise<{ results: AssociationLabel[] }> {
     assertHubSpotObjectType(fromObjectType, 'fromObjectType');
     assertHubSpotObjectType(toObjectType, 'toObjectType');
-    return this.request('GET', `/crm/v4/associations/${encodeURIComponent(fromObjectType)}/${encodeURIComponent(toObjectType)}/labels`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmAssociationsV4}/${encodeURIComponent(fromObjectType)}/${encodeURIComponent(toObjectType)}/labels`);
   }
 
   async createLabeledAssociation(
@@ -594,7 +628,7 @@ export class HubSpotClient {
     assertHubSpotObjectId(toObjectId, 'toObjectId');
     return this.request(
       'PUT',
-      `/crm/v4/objects/${encodeURIComponent(fromObjectType)}/${encodeURIComponent(fromObjectId)}/associations/${encodeURIComponent(toObjectType)}/${encodeURIComponent(toObjectId)}`,
+      `${HUBSPOT_API_PREFIXES.crmObjectsV4}/${encodeURIComponent(fromObjectType)}/${encodeURIComponent(fromObjectId)}/associations/${encodeURIComponent(toObjectType)}/${encodeURIComponent(toObjectId)}`,
       associations
     );
   }
@@ -604,29 +638,29 @@ export class HubSpotClient {
     const params = new URLSearchParams();
     if (limit) params.set('limit', String(limit));
     const query = params.toString();
-    return this.request('GET', `/automation/v4/flows${query ? `?${query}` : ''}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.automationFlows}${query ? `?${query}` : ''}`);
   }
 
   async getWorkflow(flowId: string): Promise<WorkflowDetail> {
-    return this.request('GET', `/automation/v4/flows/${encodeURIComponent(flowId)}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.automationFlows}/${encodeURIComponent(flowId)}`);
   }
 
   async createWorkflow(data: CreateWorkflowRequest): Promise<WorkflowDetail> {
-    return this.request('POST', '/automation/v4/flows', data);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.automationFlows}`, data);
   }
 
   async updateWorkflow(flowId: string, data: UpdateWorkflowRequest): Promise<WorkflowDetail> {
-    return this.request('PUT', `/automation/v4/flows/${encodeURIComponent(flowId)}`, data);
+    return this.request('PUT', `${HUBSPOT_API_PREFIXES.automationFlows}/${encodeURIComponent(flowId)}`, data);
   }
 
   async deleteWorkflow(flowId: string): Promise<void> {
-    await this.request('DELETE', `/automation/v4/flows/${encodeURIComponent(flowId)}`);
+    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.automationFlows}/${encodeURIComponent(flowId)}`);
   }
 
   async enrollInWorkflow(flowId: string, objectIds: string[], objectType = 'contacts'): Promise<unknown> {
     return this.request(
       'POST',
-      `/automation/v4/flows/${encodeURIComponent(flowId)}/enrollments/${encodeURIComponent(objectType)}`,
+      `${HUBSPOT_API_PREFIXES.automationFlows}/${encodeURIComponent(flowId)}/enrollments/${encodeURIComponent(objectType)}`,
       {
         inputs: objectIds.map(id => ({ id }))
       }
@@ -635,31 +669,31 @@ export class HubSpotClient {
 
   // Properties
   async listProperties(objectType: string): Promise<{ results: PropertyResponse[] }> {
-    return this.request('GET', `/crm/v3/properties/${encodeURIComponent(objectType)}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmProperties}/${encodeURIComponent(objectType)}`);
   }
 
   async getProperty(objectType: string, propertyName: string): Promise<PropertyResponse> {
-    return this.request('GET', `/crm/v3/properties/${encodeURIComponent(objectType)}/${encodeURIComponent(propertyName)}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmProperties}/${encodeURIComponent(objectType)}/${encodeURIComponent(propertyName)}`);
   }
 
   async createProperty(objectType: string, data: CreatePropertyRequest): Promise<PropertyResponse> {
-    return this.request('POST', `/crm/v3/properties/${encodeURIComponent(objectType)}`, data);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmProperties}/${encodeURIComponent(objectType)}`, data);
   }
 
   async updateProperty(objectType: string, propertyName: string, data: UpdatePropertyRequest): Promise<PropertyResponse> {
-    return this.request('PATCH', `/crm/v3/properties/${encodeURIComponent(objectType)}/${encodeURIComponent(propertyName)}`, data);
+    return this.request('PATCH', `${HUBSPOT_API_PREFIXES.crmProperties}/${encodeURIComponent(objectType)}/${encodeURIComponent(propertyName)}`, data);
   }
 
   async deleteProperty(objectType: string, propertyName: string): Promise<void> {
-    await this.request('DELETE', `/crm/v3/properties/${encodeURIComponent(objectType)}/${encodeURIComponent(propertyName)}`);
+    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.crmProperties}/${encodeURIComponent(objectType)}/${encodeURIComponent(propertyName)}`);
   }
 
   async listPropertyGroups(objectType: string): Promise<{ results: PropertyGroup[] }> {
-    return this.request('GET', `/crm/v3/properties/${encodeURIComponent(objectType)}/groups`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmProperties}/${encodeURIComponent(objectType)}/groups`);
   }
 
   async createPropertyGroup(objectType: string, data: CreatePropertyGroupRequest): Promise<PropertyGroup> {
-    return this.request('POST', `/crm/v3/properties/${encodeURIComponent(objectType)}/groups`, data);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmProperties}/${encodeURIComponent(objectType)}/groups`, data);
   }
 
   // Owners
@@ -668,30 +702,30 @@ export class HubSpotClient {
     params.set('limit', String(limit));
     if (after) params.set('after', after);
     if (email) params.set('email', email);
-    return this.request('GET', `/crm/v3/owners?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmOwners}?${params.toString()}`);
   }
 
   async getOwner(ownerId: string): Promise<{ id: string; email: string; firstName: string; lastName: string; userId: number; teams: Array<{ id: string; name: string }> }> {
-    return this.request('GET', `/crm/v3/owners/${ownerId}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmOwners}/${ownerId}`);
   }
 
   // Pipelines
   async listPipelines(objectType: string): Promise<{ results: Array<{ id: string; label: string; displayOrder: number; stages: Array<{ id: string; label: string; displayOrder: number; metadata: Record<string, string> }> }> }> {
-    return this.request('GET', `/crm/v3/pipelines/${objectType}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmPipelines}/${objectType}`);
   }
 
   async getPipeline(objectType: string, pipelineId: string): Promise<{ id: string; label: string; displayOrder: number; stages: Array<{ id: string; label: string; displayOrder: number; metadata: Record<string, string> }> }> {
-    return this.request('GET', `/crm/v3/pipelines/${objectType}/${pipelineId}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmPipelines}/${objectType}/${pipelineId}`);
   }
 
   // Engagements (calls, emails, meetings)
   async searchEngagements(engagementType: string, searchRequest: SearchRequest): Promise<ListResponse<CrmObject>> {
-    return this.request('POST', `/crm/v3/objects/${engagementType}/search`, searchRequest);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${engagementType}/search`, searchRequest);
   }
 
   async getEngagement(engagementType: string, engagementId: string, properties?: string[]): Promise<CrmObject> {
     const params = properties ? `?properties=${properties.join(',')}` : '';
-    return this.request('GET', `/crm/v3/objects/${engagementType}/${engagementId}${params}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${engagementType}/${engagementId}${params}`);
   }
 
   async createEngagement(engagementType: string, properties: Record<string, string>, associations?: Array<{ to: { id: string }; types: Array<{ associationCategory: string; associationTypeId: number }> }>): Promise<CrmObject> {
@@ -699,7 +733,7 @@ export class HubSpotClient {
     if (associations) {
       body.associations = associations;
     }
-    return this.request('POST', `/crm/v3/objects/${engagementType}`, body);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${engagementType}`, body);
   }
 
   async listEngagements(engagementType: string, limit = 10, after?: string, properties?: string[]): Promise<ListResponse<CrmObject>> {
@@ -707,7 +741,7 @@ export class HubSpotClient {
     params.set('limit', String(limit));
     if (after) params.set('after', after);
     if (properties) params.set('properties', properties.join(','));
-    return this.request('GET', `/crm/v3/objects/${engagementType}?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${engagementType}?${params.toString()}`);
   }
 
   // Create object with associations (for line items → deals)
@@ -720,7 +754,7 @@ export class HubSpotClient {
     if (associations && associations.length > 0) {
       body.associations = associations;
     }
-    return this.request('POST', `/crm/v3/objects/${objectType}`, body);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${objectType}`, body);
   }
 
   // Forms API - Marketing v3
@@ -729,18 +763,18 @@ export class HubSpotClient {
     params.set('limit', String(limit));
     if (after) params.set('after', after);
     if (formTypes && formTypes.length > 0) params.set('formTypes', formTypes.join(','));
-    return this.request('GET', `/marketing/v3/forms?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.marketingForms}?${params.toString()}`);
   }
 
   async getForm(formId: string): Promise<{ id: string; name: string; formType: string; createdAt: string; updatedAt: string; configuration: Record<string, unknown>; fieldGroups: unknown[] }> {
-    return this.request('GET', `/marketing/v3/forms/${formId}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.marketingForms}/${formId}`);
   }
 
   async getFormSubmissions(formGuid: string, limit = 20, after?: string): Promise<{ results: Array<{ submittedAt: string; values: Array<{ name: string; value: string }>; pageUrl?: string }>; paging?: { next?: { after: string } } }> {
     const params = new URLSearchParams();
     params.set('limit', String(limit));
     if (after) params.set('after', after);
-    return this.request('GET', `/form-integrations/v1/submissions/forms/${formGuid}?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.formSubmissions}/${formGuid}?${params.toString()}`);
   }
 
   // Analytics API v2 - Requires Marketing Hub
@@ -755,7 +789,7 @@ export class HubSpotClient {
     params.set('start', startDate);
     params.set('end', endDate);
     if (limit) params.set('limit', String(limit));
-    return this.request('GET', `/analytics/v2/reports/${breakdownBy}/${timePeriod}?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.analyticsReports}/${breakdownBy}/${timePeriod}?${params.toString()}`);
   }
 
   // Marketing Emails API v3
@@ -763,11 +797,11 @@ export class HubSpotClient {
     const params = new URLSearchParams();
     params.set('limit', String(limit));
     if (after) params.set('after', after);
-    return this.request('GET', `/marketing/v3/emails?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.marketingEmails}?${params.toString()}`);
   }
 
   async getMarketingEmail(emailId: string): Promise<{ id: string; name: string; subject: string; previewText?: string; state: string; type: string; templatePath?: string; createdAt: string; updatedAt: string; stats?: Record<string, number> }> {
-    return this.request('GET', `/marketing/v3/emails/${emailId}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.marketingEmails}/${emailId}`);
   }
 
   async getEmailStatistics(
@@ -779,7 +813,7 @@ export class HubSpotClient {
     if (startTimestamp) params.set('startTimestamp', startTimestamp);
     if (endTimestamp) params.set('endTimestamp', endTimestamp);
     if (emailIds && emailIds.length > 0) params.set('emailIds', emailIds.join(','));
-    return this.request('GET', `/marketing/v3/emails/statistics/list?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.marketingEmails}/statistics/list?${params.toString()}`);
   }
 
   // Lists/Segments API v3
@@ -788,19 +822,34 @@ export class HubSpotClient {
     params.set('limit', String(limit));
     if (after) params.set('after', after);
     // HubSpot Lists API v3 returns { lists: [...] } rather than { results: [...] }
-    const raw = await this.request<HubSpotListsApiResponse>('GET', `/crm/v3/lists?${params.toString()}`);
+    const raw = await this.request<HubSpotListsApiResponse>('GET', `${HUBSPOT_API_PREFIXES.crmLists}?${params.toString()}`);
     return { results: raw.lists ?? raw.results ?? [], paging: raw.paging };
   }
 
   async getList(listId: string): Promise<{ listId: string; name: string; processingType: string; objectTypeId: string; filterBranch?: Record<string, unknown>; size?: number; createdAt: string; updatedAt: string }> {
-    return this.request('GET', `/crm/v3/lists/${listId}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmLists}/${listId}`);
   }
 
   async getListMembers(listId: string, limit = 100, after?: string): Promise<{ results: Array<{ recordId: string; membershipTimestamp?: string }>; paging?: { next?: { after: string } } }> {
     const params = new URLSearchParams();
     params.set('limit', String(limit));
     if (after) params.set('after', after);
-    return this.request('GET', `/crm/v3/lists/${listId}/memberships?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmLists}/${listId}/memberships?${params.toString()}`);
+  }
+
+  // List membership writes. Only MANUAL and SNAPSHOT lists accept membership
+  // changes; DYNAMIC lists reject them (membership is computed from filters).
+  // Body is a bare JSON array of record ID strings, per the v3 Lists API.
+  async addListMembers(listId: string, recordIds: string[]): Promise<void> {
+    assertHubSpotObjectId(listId, 'listId');
+    for (const recordId of recordIds) assertHubSpotObjectId(recordId, 'recordId');
+    await this.request('PUT', `${HUBSPOT_API_PREFIXES.crmLists}/${encodeURIComponent(listId)}/memberships/add`, recordIds);
+  }
+
+  async removeListMembers(listId: string, recordIds: string[]): Promise<void> {
+    assertHubSpotObjectId(listId, 'listId');
+    for (const recordId of recordIds) assertHubSpotObjectId(recordId, 'recordId');
+    await this.request('PUT', `${HUBSPOT_API_PREFIXES.crmLists}/${encodeURIComponent(listId)}/memberships/remove`, recordIds);
   }
 
   // CMS Blog / Knowledge Base APIs
@@ -809,7 +858,7 @@ export class HubSpotClient {
     if (limit !== undefined) params.set('limit', String(limit));
     if (after) params.set('after', after);
     const query = params.toString();
-    return this.request('GET', `/cms/v3/blog-settings/settings${query ? `?${query}` : ''}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.cmsBlogSettings}${query ? `?${query}` : ''}`);
   }
 
   async listBlogPosts(
@@ -824,23 +873,23 @@ export class HubSpotClient {
     if (after) params.set('after', after);
     if (state) params.set('state', state);
     const query = params.toString();
-    return this.request('GET', `/cms/v3/blogs/posts${query ? `?${query}` : ''}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}${query ? `?${query}` : ''}`);
   }
 
   async getBlogPost(postId: string): Promise<BlogPost> {
-    return this.request('GET', `/cms/v3/blogs/posts/${encodeURIComponent(postId)}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}/${encodeURIComponent(postId)}`);
   }
 
   async createBlogPost(data: CreateBlogPostRequest): Promise<BlogPost> {
-    return this.request('POST', '/cms/v3/blogs/posts', data);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}`, data);
   }
 
   async updateBlogPost(postId: string, data: UpdateBlogPostRequest): Promise<BlogPost> {
-    return this.request('PATCH', `/cms/v3/blogs/posts/${encodeURIComponent(postId)}`, data);
+    return this.request('PATCH', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}/${encodeURIComponent(postId)}`, data);
   }
 
   async deleteBlogPost(postId: string): Promise<void> {
-    await this.request('DELETE', `/cms/v3/blogs/posts/${encodeURIComponent(postId)}`);
+    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.cmsBlogPosts}/${encodeURIComponent(postId)}`);
   }
 
   // GraphQL API (used for Knowledge Base article queries)
@@ -848,7 +897,7 @@ export class HubSpotClient {
     query: string,
     variables?: Record<string, unknown>
   ): Promise<GraphQLResponse<T>> {
-    return this.request('POST', '/collector/graphql', {
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.graphqlCollector}`, {
       query,
       variables: variables ?? {},
     });
@@ -865,7 +914,7 @@ export class HubSpotClient {
     if (type) params.set('type', type);
     if (limit !== undefined) params.set('limit', String(limit));
     if (offset !== undefined) params.set('offset', String(offset));
-    return this.request('GET', `/cms/v3/site-search/search?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.cmsSiteSearch}?${params.toString()}`);
   }
 
   // Files API
@@ -874,7 +923,7 @@ export class HubSpotClient {
     fileName: string,
     options: { folderPath?: string; access?: 'PUBLIC_INDEXABLE' | 'PUBLIC_NOT_INDEXABLE' | 'PRIVATE' }
   ): Promise<{ id: string; name: string; path: string; url: string; size: number; access: string }> {
-    const url = `${HUBSPOT_API_BASE}/files/v3/files`;
+    const url = `${HUBSPOT_API_BASE}${HUBSPOT_API_PREFIXES.files}`;
     const boundary = `----FormBoundary${Date.now()}`;
 
     const optionsJson = JSON.stringify({ access: options.access || 'PRIVATE' });
@@ -935,7 +984,7 @@ export class HubSpotClient {
     fileUrl: string,
     options: { folderPath?: string; fileName?: string; access?: 'PUBLIC_INDEXABLE' | 'PUBLIC_NOT_INDEXABLE' | 'PRIVATE' }
   ): Promise<{ id: string; links: Record<string, string>[] }> {
-    return this.request('POST', '/files/v3/files/import-from-url/async', {
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.files}/import-from-url/async`, {
       url: fileUrl,
       access: options.access || 'PRIVATE',
       folderPath: options.folderPath || '/',
@@ -950,7 +999,7 @@ export class HubSpotClient {
     result?: { id: string; name: string; path: string; url: string; size: number };
     errors?: unknown[];
   }> {
-    return this.request('GET', `/files/v3/files/import-from-url/async/tasks/${taskId}/status`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.files}/import-from-url/async/tasks/${taskId}/status`);
   }
 
   async importFileFromUrlAndWait(
@@ -980,15 +1029,15 @@ export class HubSpotClient {
   }
 
   async getFile(fileId: string): Promise<{ id: string; name: string; path: string; url: string; size: number; type: string; access: string; createdAt: string; updatedAt: string }> {
-    return this.request('GET', `/files/v3/files/${fileId}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.files}/${fileId}`);
   }
 
   async getFileSignedUrl(fileId: string): Promise<{ url: string; name: string }> {
-    return this.request('GET', `/files/v3/files/${fileId}/signed-url`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.files}/${fileId}/signed-url`);
   }
 
   async deleteFile(fileId: string): Promise<void> {
-    await this.request('DELETE', `/files/v3/files/${fileId}`);
+    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.files}/${fileId}`);
   }
 
   // Batch Read API (for hydrating list member IDs into full contact records)
@@ -999,7 +1048,7 @@ export class HubSpotClient {
     if (properties && properties.length > 0) {
       body.properties = properties;
     }
-    return this.request('POST', '/crm/v3/objects/contacts/batch/read', body);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/contacts/batch/read`, body);
   }
 
   // Conversations Inbox API v3 (read-only — requires `conversations.read` scope)
@@ -1019,7 +1068,7 @@ export class HubSpotClient {
     if (params.after) search.set('after', params.after);
     if (params.archived !== undefined) search.set('archived', String(params.archived));
     const qs = search.toString();
-    return this.request('GET', `/conversations/v3/conversations/threads${qs ? `?${qs}` : ''}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.conversationThreads}${qs ? `?${qs}` : ''}`);
   }
 
   async listConversationThreadMessages(
@@ -1032,7 +1081,7 @@ export class HubSpotClient {
     const qs = search.toString();
     return this.request(
       'GET',
-      `/conversations/v3/conversations/threads/${encodeURIComponent(threadId)}/messages${qs ? `?${qs}` : ''}`
+      `${HUBSPOT_API_PREFIXES.conversationThreads}/${encodeURIComponent(threadId)}/messages${qs ? `?${qs}` : ''}`
     );
   }
 
@@ -1042,7 +1091,7 @@ export class HubSpotClient {
   ): Promise<Record<string, unknown>> {
     return this.request(
       'GET',
-      `/conversations/v3/conversations/threads/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}/original-content`
+      `${HUBSPOT_API_PREFIXES.conversationThreads}/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}/original-content`
     );
   }
 }

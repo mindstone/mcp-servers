@@ -1,5 +1,6 @@
 import { getHubSpotClientAsync } from '../api/hubspot-client.js';
 import { parseHubSpotError } from '../utils/error-parser.js';
+import { sanitizeHubSpotResponse } from '../sanitize.js';
 import logger from '../utils/logger.js';
 
 export interface ListTicketThreadsArgs {
@@ -33,13 +34,14 @@ export async function handleListTicketThreads(args: ListTicketThreadsArgs) {
   }
   try {
     const client = await getHubSpotClientAsync();
-    return await client.listConversationThreads({
+    const result = await client.listConversationThreads({
       associatedTicketId: args.ticketId,
       threadStatus: args.threadStatus,
       limit: args.limit,
       after: args.after,
       archived: args.archived,
     });
+    return sanitizeHubSpotResponse(result, 'hubspot:conversations');
   } catch (error) {
     const parsed = parseHubSpotError(error, {
       objectType: 'conversations',
@@ -63,10 +65,11 @@ export async function handleListThreadMessages(args: ListThreadMessagesArgs) {
   }
   try {
     const client = await getHubSpotClientAsync();
-    return await client.listConversationThreadMessages(args.threadId, {
+    const result = await client.listConversationThreadMessages(args.threadId, {
       limit: args.limit,
       after: args.after,
     });
+    return sanitizeHubSpotResponse(result, 'hubspot:conversations');
   } catch (error) {
     const parsed = parseHubSpotError(error, {
       objectType: 'conversations',
@@ -93,10 +96,11 @@ export async function handleGetThreadMessageOriginalContent(
   }
   try {
     const client = await getHubSpotClientAsync();
-    return await client.getConversationThreadMessageOriginalContent(
+    const result = await client.getConversationThreadMessageOriginalContent(
       args.threadId,
       args.messageId
     );
+    return sanitizeHubSpotResponse(result, 'hubspot:conversations');
   } catch (error) {
     const parsed = parseHubSpotError(error, {
       objectType: 'conversations',

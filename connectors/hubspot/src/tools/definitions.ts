@@ -930,6 +930,94 @@ export const taskTools: ToolMetadata[] = [
 // Note Tools
 export const noteTools: ToolMetadata[] = [
   {
+    name: 'search_hubspot_notes',
+    category: 'Notes',
+    description: `Search for notes in HubSpot CRM.
+
+USE THIS WHEN:
+- User asks "find the note about..." or "what notes are on this deal?"
+- Need to locate a note before reading or updating it
+
+RETURNS: Array of notes with id and properties (hs_note_body, hs_timestamp, hubspot_owner_id)
+
+Text search (query) matches against hs_note_body. Use filters for precise matching
+(e.g. filters=[{propertyName:"hs_lastmodifieddate", operator:"GT", value:"2026-01-01"}]).`,
+    aliases: ['find_notes', 'query_notes'],
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Free-text search across the note body' },
+        filters: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              propertyName: { type: 'string' },
+              operator: { type: 'string', enum: ['EQ', 'NEQ', 'LT', 'LTE', 'GT', 'GTE', 'CONTAINS_TOKEN', 'IN'] },
+              value: { type: 'string' }
+            }
+          },
+          description: 'Filter criteria for precise matching'
+        },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return (default: basic info)' },
+        limit: { type: 'number', description: 'Max results (default 10, max 100)' },
+        ...searchPaginationProperties
+      }
+    }
+  },
+  {
+    name: 'get_hubspot_note',
+    category: 'Notes',
+    description: `Get a single note by ID, including its full body.
+
+PREREQUISITE: Get the noteId from search_hubspot_notes first (or from a
+record's associations via get_hubspot_associations with toObjectType "notes").`,
+    aliases: ['view_note', 'read_note'],
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        noteId: { type: 'string', description: 'HubSpot note ID (numeric string)' },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' },
+        associations: { type: 'array', items: { type: 'string' }, description: 'Associated object types to include (e.g. ["contacts", "deals"])' }
+      },
+      required: ['noteId']
+    }
+  },
+  {
+    name: 'update_hubspot_note',
+    category: 'Notes',
+    description: `Update an existing note's properties (e.g. edit hs_note_body).
+
+PREREQUISITE: Get the noteId from search_hubspot_notes or get_hubspot_note first.
+Only the provided properties are changed; omitted properties are left as-is.`,
+    aliases: ['edit_note'],
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        noteId: { type: 'string', description: 'HubSpot note ID' },
+        properties: { type: 'object', description: 'Properties to update (e.g. hs_note_body)', additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH } }
+      },
+      required: ['noteId', 'properties']
+    }
+  },
+  {
+    name: 'delete_hubspot_note',
+    category: 'Notes',
+    description: `Permanently delete (archive) a note by ID. This cannot be undone from the CRM UI recycle bin for engagements — confirm with the user first.`,
+    aliases: ['remove_note'],
+    annotations: { readOnlyHint: false, destructiveHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        noteId: { type: 'string', description: 'HubSpot note ID' }
+      },
+      required: ['noteId']
+    }
+  },
+  {
     name: 'create_hubspot_note',
     category: 'Notes',
     description: `Create a note in HubSpot and optionally associate it with records.
@@ -1551,6 +1639,66 @@ PREREQUISITE: Get meetingId from search_hubspot_meetings or get_contact_engageme
     }
   },
   {
+    name: 'search_hubspot_emails',
+    category: 'Engagements',
+    description: `Search logged 1:1 sales email engagements in HubSpot CRM.
+
+USE THIS WHEN:
+- User asks "show the last email thread with this account" or "find emails about [topic]"
+- Meeting prep: recent email activity with a contact or company
+
+RETURNS: Array of email engagements with id, properties
+
+PROPERTIES to request:
+- hs_email_subject, hs_email_direction ("INCOMING_EMAIL"/"OUTGOING_EMAIL"), hs_email_status
+- hs_email_from_email, hs_email_to_email
+- hs_timestamp (Unix ms)
+- hs_email_text / hs_email_html (body — see SCOPE NOTE)
+
+SCOPE NOTE: HubSpot silently redacts email BODIES unless the connected app holds
+the sales-email-read scope. Without it you still get subjects, senders, and
+timestamps, and the response carries a notes field warning that bodies are
+redacted. To unlock bodies, enable sales-email-read on the HubSpot app and
+reconnect the account.
+
+EXAMPLE FILTERS:
+1. Recent: filters=[{propertyName:"hs_timestamp", operator:"GT", value:"1704067200000"}]
+2. By subject: filters=[{propertyName:"hs_email_subject", operator:"CONTAINS_TOKEN", value:"contract"}]`,
+    aliases: ['find_hubspot_emails', 'get_hubspot_emails', 'search_sales_emails'],
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        filters: { type: 'array', items: { type: 'object' }, description: 'Filter criteria' },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' },
+        limit: { type: 'number', description: 'Max results (default 10, max 100)' },
+        ...searchPaginationProperties
+      }
+    }
+  },
+  {
+    name: 'get_hubspot_email',
+    category: 'Engagements',
+    description: `Get full details for a single logged email engagement by ID.
+
+PREREQUISITE: Get emailId from search_hubspot_emails or get_contact_engagements.
+
+SCOPE NOTE: the email body (hs_email_text / hs_email_html) is redacted by HubSpot
+unless the connected app holds the sales-email-read scope; the response carries a
+notes field warning when redaction applies. Subject, sender, recipients, and
+timestamps are always returned.`,
+    aliases: ['view_hubspot_email', 'read_hubspot_email'],
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        emailId: { type: 'string', description: 'HubSpot email engagement ID (numeric string)' },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' }
+      },
+      required: ['emailId']
+    }
+  },
+  {
     name: 'create_hubspot_call',
     category: 'Engagements',
     description: `Log a call in HubSpot CRM.
@@ -1940,6 +2088,92 @@ RETURNS: Created line item with id`,
   }
 ];
 
+// Custom Object Tools — generic CRM object type for tenant-defined objects
+export const customObjectTools: ToolMetadata[] = [
+  {
+    name: 'search_hubspot_object',
+    category: 'Custom Objects',
+    description: `Search records of ANY HubSpot object type, including custom objects.
+
+USE THIS WHEN:
+- The object type isn't covered by a dedicated tool (contacts/companies/deals/tickets/leads/tasks/notes/products/line_items) — e.g. a tenant-defined custom object like "p_widgets" or "2-1234567"
+- Prefer the dedicated search_hubspot_<object> tools for standard objects
+
+objectType: the CRM object type name — standard plural names ("contacts") or custom object names/IDs ("p_widgets", "2-1234567"). Custom object names are visible in HubSpot under Settings → Data Management → Custom Objects, or via list_hubspot_properties on a known type.
+
+The query parameter uses HubSpot's native full-text search across the object's default searchable properties. Use filters for precise property matching.
+
+REQUIRES the crm.objects.custom.read OAuth scope for custom object types. On a 403 the account's plan or the connected app's scopes are the likely cause — reconnecting alone won't help unless the scope is enabled on the app.`,
+    aliases: ['search_hubspot_custom_objects', 'search_custom_objects'],
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        objectType: { type: 'string', pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$', description: 'Object type name (e.g. "contacts", "p_widgets", "2-1234567")' },
+        query: { type: 'string', description: 'Free-text search across the object\'s searchable properties' },
+        filters: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              propertyName: { type: 'string' },
+              operator: { type: 'string', enum: ['EQ', 'NEQ', 'LT', 'LTE', 'GT', 'GTE', 'CONTAINS_TOKEN', 'IN'] },
+              value: { type: 'string' }
+            }
+          },
+          description: 'Filter criteria for precise matching'
+        },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return (default: basic info)' },
+        limit: { type: 'number', description: 'Max results (default 10, max 100)' },
+        ...searchPaginationProperties
+      },
+      required: ['objectType']
+    }
+  },
+  {
+    name: 'get_hubspot_object',
+    category: 'Custom Objects',
+    description: `Get a single record of ANY HubSpot object type by ID, including custom objects.
+
+PREREQUISITE: Get the record ID from search_hubspot_object first.
+
+REQUIRES the crm.objects.custom.read OAuth scope for custom object types.`,
+    aliases: ['get_hubspot_custom_object', 'get_custom_object'],
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        objectType: { type: 'string', pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$', description: 'Object type name (e.g. "p_widgets", "2-1234567")' },
+        objectId: { type: 'string', description: 'HubSpot record ID (numeric string)' },
+        properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' },
+        associations: { type: 'array', items: { type: 'string' }, description: 'Associated object types to include (e.g. ["contacts", "deals"])' }
+      },
+      required: ['objectType', 'objectId']
+    }
+  },
+  {
+    name: 'create_hubspot_object',
+    category: 'Custom Objects',
+    description: `Create a record of ANY HubSpot object type, including custom objects.
+
+Use list_hubspot_properties with the same objectType first to discover the
+object's properties and their expected values. To link the new record to other
+records, follow up with create_hubspot_association (or create_hubspot_labeled_association).
+
+REQUIRES the crm.objects.custom.write OAuth scope for custom object types.`,
+    aliases: ['create_hubspot_custom_object', 'create_custom_object'],
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        objectType: { type: 'string', pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$', description: 'Object type name (e.g. "p_widgets", "2-1234567")' },
+        properties: { type: 'object', description: 'Record properties', additionalProperties: { type: 'string', maxLength: MAX_STRING_BODY_LENGTH } }
+      },
+      required: ['objectType', 'properties']
+    }
+  }
+];
+
 // Forms Tools
 export const formsTools: ToolMetadata[] = [
   {
@@ -2253,6 +2487,71 @@ Common properties: email, firstname, lastname, phone, company, jobtitle, lifecyc
         }
       },
       required: ['ids']
+    }
+  },
+  {
+    name: 'add_hubspot_list_members',
+    category: 'Lists',
+    description: `Add records to a HubSpot list/segment.
+
+USE THIS WHEN:
+- User asks "add these contacts to the Q3 webinar list" or "put this deal on the nurture list"
+
+WORKFLOW:
+1. list_hubspot_lists → find the listId
+2. search_hubspot_contacts (or another search tool) → find the record IDs
+3. add_hubspot_list_members with both
+
+IMPORTANT: only MANUAL and SNAPSHOT lists accept membership changes. DYNAMIC lists
+compute membership from their filter criteria — HubSpot rejects the write; edit the
+list's filters (in the HubSpot UI) instead.
+
+REQUIRES the crm.lists.write OAuth scope. On a 403 the account's plan, the signed-in
+user's permissions, or the connected app's scopes are the likely cause.`,
+    aliases: ['add_to_hubspot_list', 'add_list_members'],
+    annotations: { readOnlyHint: false, destructiveHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        listId: { type: 'string', description: 'The list ID (from list_hubspot_lists)' },
+        recordIds: {
+          type: 'array',
+          items: { type: 'string' },
+          maxItems: MAX_FAN_OUT,
+          description: 'Record IDs to add (max 100 per call)'
+        }
+      },
+      required: ['listId', 'recordIds']
+    }
+  },
+  {
+    name: 'remove_hubspot_list_members',
+    category: 'Lists',
+    description: `Remove records from a HubSpot list/segment.
+
+USE THIS WHEN:
+- User asks "take these contacts off the webinar list" or "clean up this segment"
+
+IMPORTANT: only MANUAL and SNAPSHOT lists accept membership changes. DYNAMIC lists
+compute membership from their filter criteria — HubSpot rejects the write; edit the
+list's filters (in the HubSpot UI) instead.
+
+REQUIRES the crm.lists.write OAuth scope. On a 403 the account's plan, the signed-in
+user's permissions, or the connected app's scopes are the likely cause.`,
+    aliases: ['remove_from_hubspot_list', 'remove_list_members'],
+    annotations: { readOnlyHint: false, destructiveHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        listId: { type: 'string', description: 'The list ID (from list_hubspot_lists)' },
+        recordIds: {
+          type: 'array',
+          items: { type: 'string' },
+          maxItems: MAX_FAN_OUT,
+          description: 'Record IDs to remove (max 100 per call)'
+        }
+      },
+      required: ['listId', 'recordIds']
     }
   }
 ];
@@ -2896,6 +3195,7 @@ const BASE_TOOLS: ToolMetadata[] = [
   ...engagementTools,
   ...productTools,
   ...lineItemTools,
+  ...customObjectTools,
   ...formsTools,
   ...analyticsTools,
   ...marketingEmailTools,

@@ -50,6 +50,10 @@ import {
   handleCreateTask,
   handleUpdateTask,
   handleDeleteTask,
+  handleSearchNotes,
+  handleGetNote,
+  handleUpdateNote,
+  handleDeleteNote,
   handleCreateNote,
   handleCreateAssociation,
   handleGetAssociations,
@@ -62,6 +66,8 @@ import {
   handleSearchCalls,
   handleGetCall,
   handleCreateCall,
+  handleSearchEmails,
+  handleGetEmail,
   handleSearchMeetings,
   handleGetMeeting,
   handleCreateMeeting,
@@ -72,7 +78,10 @@ import {
   handleUpdateProduct,
   handleSearchLineItems,
   handleGetLineItem,
-  handleCreateLineItem
+  handleCreateLineItem,
+  handleSearchCustomObjects,
+  handleGetCustomObject,
+  handleCreateCustomObject
 } from './crm-handlers.js';
 import {
   handleListForms,
@@ -85,6 +94,8 @@ import {
   handleListLists,
   handleGetList,
   handleListListMembers,
+  handleAddListMembers,
+  handleRemoveListMembers,
   handleBatchReadContacts
 } from './marketing-handlers.js';
 import {
@@ -404,6 +415,18 @@ export class HubSpotServer {
             break;
 
           // Notes
+          case 'search_hubspot_notes':
+            result = await handleSearchNotes(args as unknown as Parameters<typeof handleSearchNotes>[0]);
+            break;
+          case 'get_hubspot_note':
+            result = await handleGetNote(args as unknown as Parameters<typeof handleGetNote>[0]);
+            break;
+          case 'update_hubspot_note':
+            result = await handleUpdateNote(args as unknown as Parameters<typeof handleUpdateNote>[0]);
+            break;
+          case 'delete_hubspot_note':
+            result = await handleDeleteNote(args as unknown as Parameters<typeof handleDeleteNote>[0]);
+            break;
           case 'create_hubspot_note':
             result = await handleCreateNote(args as unknown as Parameters<typeof handleCreateNote>[0]);
             break;
@@ -503,6 +526,14 @@ export class HubSpotServer {
             result = await handleCreateCall(args as unknown as Parameters<typeof handleCreateCall>[0]);
             break;
 
+          // Engagements - Emails (1:1 sales emails; bodies need sales-email-read)
+          case 'search_hubspot_emails':
+            result = await handleSearchEmails(args as unknown as Parameters<typeof handleSearchEmails>[0]);
+            break;
+          case 'get_hubspot_email':
+            result = await handleGetEmail(args as unknown as Parameters<typeof handleGetEmail>[0]);
+            break;
+
           // Engagements - Meetings
           case 'search_hubspot_meetings':
             result = await handleSearchMeetings(args as unknown as Parameters<typeof handleSearchMeetings>[0]);
@@ -544,6 +575,17 @@ export class HubSpotServer {
             result = await handleCreateLineItem(args as unknown as Parameters<typeof handleCreateLineItem>[0]);
             break;
 
+          // Custom Objects (generic object type)
+          case 'search_hubspot_object':
+            result = await handleSearchCustomObjects(args as unknown as Parameters<typeof handleSearchCustomObjects>[0]);
+            break;
+          case 'get_hubspot_object':
+            result = await handleGetCustomObject(args as unknown as Parameters<typeof handleGetCustomObject>[0]);
+            break;
+          case 'create_hubspot_object':
+            result = await handleCreateCustomObject(args as unknown as Parameters<typeof handleCreateCustomObject>[0]);
+            break;
+
           // Forms
           case 'list_hubspot_forms':
             result = await handleListForms(args as unknown as Parameters<typeof handleListForms>[0]);
@@ -580,6 +622,12 @@ export class HubSpotServer {
             break;
           case 'list_hubspot_list_members':
             result = await handleListListMembers(args as unknown as Parameters<typeof handleListListMembers>[0]);
+            break;
+          case 'add_hubspot_list_members':
+            result = await handleAddListMembers(args as unknown as Parameters<typeof handleAddListMembers>[0]);
+            break;
+          case 'remove_hubspot_list_members':
+            result = await handleRemoveListMembers(args as unknown as Parameters<typeof handleRemoveListMembers>[0]);
             break;
           case 'batch_read_hubspot_contacts':
             result = await handleBatchReadContacts(args as unknown as Parameters<typeof handleBatchReadContacts>[0]);

@@ -11,6 +11,21 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+
+- 1:1 sales email engagement reads: `search_hubspot_emails` and `get_hubspot_email` expose logged email engagements (subjects, senders, direction, timestamps). HubSpot silently redacts email bodies unless the connected app holds the `sales-email-read` scope, so the tools introspect the token once per process and attach a model-visible `notes` warning when the scope is definitively absent — no silent degradation. `get_contact_engagements` carries the same warning.
+- List membership write tools: `add_hubspot_list_members` and `remove_hubspot_list_members` (up to 100 record IDs per call, validated against the connector's ID shape; both flagged `destructiveHint`). Membership writes only work on MANUAL and SNAPSHOT lists — HubSpot rejects them on DYNAMIC lists — and require the `crm.lists.write` OAuth scope; the tool descriptions say both, and a scope-less tenant gets the honest multi-cause 403 copy.
+- Generic custom-object tools: `search_hubspot_object`, `get_hubspot_object`, and `create_hubspot_object` work with any CRM object type (standard plural names or tenant-defined custom objects such as `p_widgets` / `2-1234567`). Text search uses HubSpot's native full-text `query` field; `objectType` is validated against the connector's safe-shape regex before any path interpolation. Custom object types need the `crm.objects.custom.read` / `crm.objects.custom.write` OAuth scopes enabled on the connected app — a 403 surfaces the honest multi-cause capability copy.
+- Notes read/update/delete tools: `search_hubspot_notes` (text search matches `hs_note_body`), `get_hubspot_note`, `update_hubspot_note`, and `delete_hubspot_note`. Notes were previously create-only, which dead-ended meeting-note workflows; the full lifecycle is now available. Update/delete are flagged `destructiveHint` per the write-tool convention.
+
+### Changed
+
+- Centralised every HubSpot API path prefix in `HUBSPOT_API_PREFIXES` (`src/api/hubspot-client.ts`). HubSpot is moving from numeric API versions (`/crm/v3/...`) to date-based versions (`/crm/objects/2026-03/...`) with the version segment in a different position per layout, so each product family's prefix is now a single constant — migrating a family later is a one-line edit instead of a sweep across every call site. No behavioural change; the existing mock-API tests assert the exact request paths.
+
+### Security
+
+- Wrapped all external, attacker-controllable text returned by HubSpot in `<untrusted-content source="hubspot:…">` envelopes with close-tag breakout escaping (FOX-3490 remediation): CRM record property values, note and engagement bodies, conversation thread messages and original content, knowledge-base article content, form submissions, marketing email subjects, list/workflow/property names and labels, and file metadata. Record IDs, enums, URLs, timestamps, and pagination cursors stay literal so tool round-trips (get-by-ID, pagination, schema-driven writes) keep working. Implemented as a deny-by-default walker (`src/sanitize.ts`) over the vendored envelope helper (`src/untrusted-content.ts`): every string is enveloped unless its key is a recognised structural identifier, so prose fields HubSpot adds in the future are safe by default.
+
 ## [0.3.1] - 2026-07-30
 
 ### Changed

@@ -6,6 +6,7 @@ import {
   type ParsedHubSpotError,
 } from '../utils/error-parser.js';
 import logger from '../utils/logger.js';
+import { sanitizeHubSpotResponse } from '../sanitize.js';
 
 /**
  * Parse HubSpot API error for AI-friendly messages (v4 Associations)
@@ -98,7 +99,7 @@ export async function handleListAssociationLabels(args: {
   try {
     const client = await getHubSpotClientAsync();
     const result = await client.listAssociationLabels(args.fromObjectType, args.toObjectType);
-    return { labels: result.results };
+    return { labels: sanitizeHubSpotResponse(result.results, 'hubspot:associations') };
   } catch (error) {
     const parsed = parseHubSpotError(error, {
       feature: 'associations_v4',
@@ -133,7 +134,7 @@ export async function handleCreateLabeledAssociation(args: {
     return {
       success: true,
       message: `Labeled association created between ${args.fromObjectType}/${args.fromObjectId} and ${args.toObjectType}/${args.toObjectId}`,
-      result
+      result: sanitizeHubSpotResponse(result, 'hubspot:associations')
     };
   } catch (error) {
     const parsed = parseHubSpotError(error, {
