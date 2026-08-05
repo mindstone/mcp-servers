@@ -14,6 +14,9 @@ are maintained manually as part of the PR review checklist.
 ### Security
 - Envelope all workspace-authored text returned by the document and template tools (names, recipients, created_by, fields, tokens, metadata, tags, grand_total, linked_objects) in `<untrusted-content>` envelopes with close-tag breakout escaping, via the shared `wrapUntrusted` helper vendored at `src/untrusted-content.ts` and field-level wrappers in `src/sanitize.ts`. Identifiers and URLs stay raw so downstream tool calls can still reference them. (FOX-3490 remediation.)
 
+### Added
+- `create_document_session` — create a view/sign session for a document recipient (`POST /documents/{id}/session`) and get back a shareable `https://app.pandadoc.com/s/{session_id}` link with an explicit lifetime. Marked `destructiveHint: true`: anyone with the link can view and sign until it expires.
+
 ## [0.2.2] - 2026-05-14
 ### Added
 - **registry**: Cohort A backfill — 12 API-key OSS connectors get server.json + mcpName. fathom, humaans, kling, mixmax, nano-banana, napkin, pandadoc, freshdesk, elevenlabs, retell-ai, runway, talentlms each gain a registry-shaped server.json (validated against registry.modelcontextprotocol.io) and an mcpName field on package.json under the io.github.mindstone namespace.

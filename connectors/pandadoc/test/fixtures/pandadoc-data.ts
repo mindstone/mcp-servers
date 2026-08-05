@@ -102,3 +102,8 @@ export const mockSendResponse = {
     },
   ],
 };
+
+export const mockSessionResponse = {
+  id: 'nPh2PDhFdDqAES9k64h9qX',
+  expires_at: '2026-03-10T13:05:00.000000Z',
+};

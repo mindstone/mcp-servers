@@ -14,7 +14,7 @@ describe('Smoke test — tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 9 tools with correct names', async () => {
+  it('registers exactly 10 tools with correct names', async () => {
     mswServer.use(...createPandaDocHandlers());
 
     testClient = await createTestClient({
@@ -27,10 +27,11 @@ describe('Smoke test — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(9);
+    expect(toolsResult.tools).toHaveLength(10);
     expect(toolNames).toEqual([
       'configure_pandadoc_api_key',
       'create_document_from_template',
+      'create_document_session',
       'download_document',
       'get_document_details',
       'get_document_status',

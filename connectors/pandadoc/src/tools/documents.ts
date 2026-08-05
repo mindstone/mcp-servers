@@ -16,6 +16,7 @@ import type {
   DocumentListResponse,
   DocumentCreateResponse,
   DocumentSendResponse,
+  DocumentSessionResponse,
 } from '../types.js';
 
 function noApiKeyError(): string {
@@ -522,6 +523,67 @@ RELATED TOOLS:
           recipients: sanitizeRecipients(result.recipients, 'pandadoc:send_document:recipients'),
         },
         message: 'Document sent successfully.',
+      });
+    }),
+  );
+
+  // ── create_document_session ─────────────────────────────────────────
+  server.registerTool(
+    'create_document_session',
+    {
+      description:
+        `Create a view/sign session link for a PandaDoc document recipient.
+
+Returns a shareable URL (https://app.pandadoc.com/s/{session_id}) the named
+recipient can open to view and sign the document — the standard way to hand a
+client a signing link directly instead of relying on PandaDoc's email.
+
+⚠️ WARNING — anyone with the link can view and sign as that recipient until
+the session expires. Only create a session when the user has explicitly asked
+for a signing/view link, and share the URL only through a channel the user
+chose. The document must already be in 'document.sent' status.
+
+RELATED TOOLS:
+- send_document: Send the document first (session creation requires 'document.sent')
+- get_document_status: Check the document's current status`,
+      inputSchema: z.object({
+        document_id: z.string().min(1).describe('The document ID'),
+        recipient: z
+          .string()
+          .email()
+          .describe('Email address of the document recipient the session is created for'),
+        lifetime: z
+          .number()
+          .int()
+          .min(60)
+          .max(31535999)
+          .optional()
+          .describe('Link lifetime in seconds (60 to 31535999 ≈ 1 year). Default: 3600 (1 hour)'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      if (!isConfigured()) return noApiKeyError();
+
+      const body: Record<string, unknown> = { recipient: args.recipient };
+      if (args.lifetime !== undefined) body.lifetime = args.lifetime;
+
+      const result = await pandadocFetch<DocumentSessionResponse>(
+        `/documents/${encodeURIComponent(args.document_id)}/session`,
+        {
+          method: 'POST',
+          body: JSON.stringify(body),
+        },
+      );
+
+      return JSON.stringify({
+        ok: true,
+        session: {
+          id: result.id,
+          expires_at: result.expires_at,
+          url: `https://app.pandadoc.com/s/${result.id}`,
+        },
+        message: `Signing session created for ${args.recipient}. Share the url with the recipient only — anyone with it can view and sign until it expires.`,
       });
     }),
   );

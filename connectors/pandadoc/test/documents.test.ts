@@ -198,6 +198,86 @@ describe('PandaDoc document tools', () => {
     expect(requestCount).toBe(0);
   });
 
+  // ── create_document_session ───────────────────────────────────────
+
+  it('create_document_session returns a signing link for a sent document', async () => {
+    mswServer.use(...createPandaDocHandlers());
+    testClient = await createTestClient({
+      env: { PANDADOC_API_KEY: 'test-pandadoc-key', MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('create_document_session', {
+      document_id: 'doc-1',
+      recipient: 'jane@client.com',
+      lifetime: 900,
+    });
+    const json = result.json as {
+      ok: boolean;
+      session: { id: string; expires_at: string; url: string };
+    };
+    expect(json.ok).toBe(true);
+    expect(json.session.id).toBe('nPh2PDhFdDqAES9k64h9qX');
+    expect(json.session.url).toBe('https://app.pandadoc.com/s/nPh2PDhFdDqAES9k64h9qX');
+    expect(json.session.expires_at).toBeTruthy();
+  });
+
+  it('create_document_session sends recipient and lifetime to the API', async () => {
+    let capturedBody: Record<string, unknown> | null = null;
+    mswServer.use(
+      http.post('https://api.pandadoc.com/public/v1/documents/:id/session', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(
+          { id: 'sess-1', expires_at: '2026-03-10T13:00:00.000000Z' },
+          { status: 201 },
+        );
+      }),
+    );
+    testClient = await createTestClient({
+      env: { PANDADOC_API_KEY: 'test-pandadoc-key', MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    await testClient.callTool('create_document_session', {
+      document_id: 'doc-1',
+      recipient: 'jane@client.com',
+      lifetime: 600,
+    });
+    expect(capturedBody).toEqual({ recipient: 'jane@client.com', lifetime: 600 });
+  });
+
+  it('create_document_session rejects a non-email recipient via Zod (no API call)', async () => {
+    let requestCount = 0;
+    mswServer.use(
+      http.post('https://api.pandadoc.com/public/v1/*', () => {
+        requestCount++;
+        return HttpResponse.json({});
+      }),
+    );
+    testClient = await createTestClient({
+      env: { PANDADOC_API_KEY: 'test-pandadoc-key', MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('create_document_session', {
+      document_id: 'doc-1',
+      recipient: 'not-an-email',
+    });
+    expect(result.isError).toBe(true);
+    expect(requestCount).toBe(0);
+  });
+
+  it('create_document_session on unknown document returns error', async () => {
+    mswServer.use(...createPandaDocHandlers());
+    testClient = await createTestClient({
+      env: { PANDADOC_API_KEY: 'test-pandadoc-key', MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('create_document_session', {
+      document_id: 'invalid-id',
+      recipient: 'jane@client.com',
+    });
+    const json = result.json as { ok: boolean };
+    expect(json.ok).toBe(false);
+  });
+
   // ── download_document ───────────────────────────────────────────
 
   it('download_document returns file path for valid document', async () => {

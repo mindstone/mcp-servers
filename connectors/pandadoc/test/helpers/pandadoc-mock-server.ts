@@ -5,6 +5,7 @@ import {
   mockTemplates,
   mockCreateFromTemplateResponse,
   mockSendResponse,
+  mockSessionResponse,
 } from '../fixtures/pandadoc-data.js';
 
 const BASE = 'https://api.pandadoc.com/public/v1';
@@ -110,6 +111,24 @@ export function createPandaDocHandlers(expectedKey = 'test-pandadoc-key') {
         return HttpResponse.json(
           { type: 'conflict', detail: 'Document is not in draft status' },
           { status: 409 },
+        );
+      }
+      return HttpResponse.json({ type: 'not_found', detail: 'Document not found' }, { status: 404 });
+    }),
+
+    // POST /documents/:id/session
+    http.post(`${BASE}/documents/:id/session`, ({ request, params }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+
+      const id = params.id as string;
+      if (id === 'doc-1') {
+        return HttpResponse.json(mockSessionResponse, { status: 201 });
+      }
+      if (id === 'doc-not-sent') {
+        return HttpResponse.json(
+          { type: 'bad_request', detail: 'Document must be sent before creating a session' },
+          { status: 400 },
         );
       }
       return HttpResponse.json({ type: 'not_found', detail: 'Document not found' }, { status: 404 });

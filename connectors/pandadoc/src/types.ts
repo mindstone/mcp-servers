@@ -71,3 +71,8 @@ export interface DocumentSendResponse {
   date_modified: string;
   recipients: Array<Record<string, unknown>>;
 }
+
+export interface DocumentSessionResponse {
+  id: string;
+  expires_at: string;
+}
