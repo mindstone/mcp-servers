@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-05
+
+### Changed
+
+- Add batch calls, knowledge bases, chat reads, delete lifecycle + concurrency tools; migrate list_agents to v2; harden uploads, pre-call checks, error envelopes
+
 ### Added
 - **Chat read-side tools** — `list_chat_agents`, `list_chats`, and `get_chat`: read-only access to Retell's chat feature area. `list_chats` supports agent and start-time filters (mapped to Retell's typed operator objects; date strings coerce to epoch ms like `list_calls`). Chat transcripts, per-message content, and chat analysis are end-user-authored text and are wrapped in untrusted-content envelopes.
 - **`get_concurrency`** — read the account's current/limit call concurrency (`GET /get-concurrency`) plus a derived `available_concurrency`, so the agent can sanity-check capacity before proposing a batch campaign or call burst.
