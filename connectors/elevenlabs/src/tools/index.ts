@@ -12,3 +12,4 @@ export { registerDialogueTools } from './dialogue.js';
 export { registerVoiceDesignTools } from './voice-design.js';
 export { registerDubbingTools } from './dubbing.js';
 export { registerHistoryTools } from './history.js';
+export { registerPronunciationTools } from './pronunciation.js';

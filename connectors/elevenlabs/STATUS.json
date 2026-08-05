@@ -10,7 +10,7 @@
     ]
   },
   "tools": {
-    "count": 27,
+    "count": 31,
     "domains": [
       "account",
       "usage",
@@ -25,7 +25,8 @@
       "dialogue",
       "voice design",
       "dubbing",
-      "history"
+      "history",
+      "pronunciation dictionaries"
     ]
   },
   "surface": "cloud-api",
