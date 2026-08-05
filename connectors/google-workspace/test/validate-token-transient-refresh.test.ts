@@ -220,9 +220,11 @@ describe('getAuthenticatedClient transient-refresh mapping', () => {
 
     const service = makeService(base);
     await expect(service.run('user@example.com')).rejects.toMatchObject({
-      // handleError re-wraps the AccountError('TEMPORARY_AUTH_ERROR') into a GoogleServiceError;
+      // The AccountError('TEMPORARY_AUTH_ERROR') now passes through handleError
+      // unchanged (previously re-wrapped into GoogleServiceError 'HTTP_TEMPORARY_AUTH_ERROR');
       // the important guarantee is it is NOT the AUTH_REQUIRED/reconnect shape.
-      data: { code: 'HTTP_TEMPORARY_AUTH_ERROR', details: expect.stringMatching(/temporarily/i) },
+      code: 'TEMPORARY_AUTH_ERROR',
+      resolution: expect.stringMatching(/try again/i),
     });
   });
 
@@ -236,7 +238,9 @@ describe('getAuthenticatedClient transient-refresh mapping', () => {
 
     const service = makeService(base);
     await expect(service.run('user@example.com')).rejects.toMatchObject({
-      data: { code: 'HTTP_AUTH_REQUIRED' },
+      // Raw AccountError survives (previously mangled to 'HTTP_AUTH_REQUIRED'),
+      // so formatErrorResponse can emit the structured auth_required handoff.
+      code: 'AUTH_REQUIRED',
     });
   });
 });

@@ -58,6 +58,11 @@ const SCOPE_HIERARCHY: Record<string, string[]> = {
   [`${SCOPE_BASE}presentations`]: [
     `${SCOPE_BASE}presentations.readonly`,
   ],
+
+  // Contacts: full access includes readonly
+  [`${SCOPE_BASE}contacts`]: [
+    `${SCOPE_BASE}contacts.readonly`,
+  ],
 };
 
 /**
@@ -78,16 +83,22 @@ export const SCOPE_SERVICE_NAMES: Record<string, string> = {
   [`${SCOPE_BASE}drive.readonly`]: 'Drive',
   [`${SCOPE_BASE}drive.file`]: 'Drive',
   [`${SCOPE_BASE}drive.appdata`]: 'Drive',
+  [`${SCOPE_BASE}drive.activity.readonly`]: 'Drive Activity',
   [`${SCOPE_BASE}documents`]: 'Google Docs',
   [`${SCOPE_BASE}documents.readonly`]: 'Google Docs',
   [`${SCOPE_BASE}spreadsheets`]: 'Google Sheets',
   [`${SCOPE_BASE}spreadsheets.readonly`]: 'Google Sheets',
   [`${SCOPE_BASE}presentations`]: 'Google Slides',
   [`${SCOPE_BASE}presentations.readonly`]: 'Google Slides',
+  [`${SCOPE_BASE}contacts`]: 'Contacts',
   [`${SCOPE_BASE}contacts.readonly`]: 'Contacts',
   [`${SCOPE_BASE}tasks`]: 'Google Tasks',
   [`${SCOPE_BASE}forms.body.readonly`]: 'Google Forms',
   [`${SCOPE_BASE}forms.responses.readonly`]: 'Google Forms Responses',
+  [`${SCOPE_BASE}chat.spaces.readonly`]: 'Google Chat',
+  [`${SCOPE_BASE}chat.messages.readonly`]: 'Google Chat',
+  [`${SCOPE_BASE}chat.messages.create`]: 'Google Chat',
+  [`${SCOPE_BASE}meetings.space.readonly`]: 'Google Meet',
 };
 
 /**

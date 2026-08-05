@@ -717,6 +717,93 @@ Attachments are NOT automatically carried over — you must explicitly download 
       required: []
     }
   },
+  {
+    name: 'update_workspace_vacation_responder',
+    category: 'Gmail/Settings',
+    description: `Turn the Gmail out-of-office (vacation) auto-reply on or off, and set its message.
+
+    Only the fields you provide are changed; the existing subject/body are kept
+    when omitted (the Gmail API otherwise replaces the whole resource).
+
+    Parameters:
+    - email: The Gmail account
+    - enabled: Required. true to turn the auto-reply on, false to turn it off
+    - response_subject: Subject of the auto-reply (e.g. "Out of office")
+    - response_body: Plain-text body of the auto-reply. Required when enabling
+      and the account has no existing auto-reply message.
+    - start_time: When to start replying — epoch milliseconds (number, e.g.
+      1786032000000) or a parseable date string (e.g. "2026-08-07"). Defaults to
+      now when enabling.
+    - end_time: When to stop replying (same formats). Omit for no scheduled end.
+    - contacts_only: Only auto-reply to people in the user's contacts
+    - domain_only: Only auto-reply to people in the user's organization
+
+    Example: { "enabled": true, "response_subject": "Out of office", "response_body": "I'm away until Monday.", "end_time": "2026-08-10" }`,
+    aliases: ['set_vacation_responder', 'update_vacation_responder', 'set_out_of_office'],
+    annotations: { readOnlyHint: false },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email: {
+          type: 'string',
+          description: 'Email address of the Gmail account'
+        },
+        enabled: {
+          type: 'boolean',
+          description: 'true to turn the out-of-office auto-reply on, false to turn it off'
+        },
+        response_subject: {
+          type: 'string',
+          description: 'Subject of the auto-reply message'
+        },
+        response_body: {
+          type: 'string',
+          description: 'Plain-text body of the auto-reply message'
+        },
+        start_time: {
+          type: ['number', 'string'],
+          description: 'When to start replying: Unix timestamp in milliseconds (number, e.g. 1786032000000) or a parseable date string (e.g. "2026-08-07"). Defaults to now when enabling.'
+        },
+        end_time: {
+          type: ['number', 'string'],
+          description: 'When to stop replying: Unix timestamp in milliseconds (number, e.g. 1786464000000) or a parseable date string (e.g. "2026-08-10"). Omit for no scheduled end.'
+        },
+        contacts_only: {
+          type: 'boolean',
+          description: 'Only auto-reply to people in the user\'s contacts'
+        },
+        domain_only: {
+          type: 'boolean',
+          description: 'Only auto-reply to people in the user\'s organization'
+        }
+      },
+      required: ['enabled']
+    }
+  },
+  {
+    name: 'list_workspace_send_as',
+    category: 'Gmail/Settings',
+    description: `List the Gmail account's send-as aliases, including each alias's
+    signature, display name, reply-to address, and verification status.
+
+    Useful for checking which identities an account can send from and what
+    signature each uses.
+
+    Parameters:
+    - email: The Gmail account`,
+    aliases: ['list_send_as', 'get_signatures', 'list_email_aliases'],
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email: {
+          type: 'string',
+          description: 'Email address of the Gmail account'
+        }
+      },
+      required: []
+    }
+  },
   // --- Individual draft tools (replaced legacy manage_workspace_draft) ---
 
   {

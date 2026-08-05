@@ -33,6 +33,9 @@ import {
   handleComposeWorkspaceEmail,
   handleSendWorkspaceEmail,
   handleGetWorkspaceGmailSettings,
+  handleUpdateWorkspaceVacationResponder,
+  handleListWorkspaceSendAs,
+  UpdateVacationResponderToolParams,
   handleManageWorkspaceDraft,
   handleManageWorkspaceLabel,
   handleManageWorkspaceLabelAssignment,
@@ -88,11 +91,19 @@ import {
   handleTrashDriveFile,
   handleUntrashDriveFile,
   handleListFileRevisions,
-  handleDownloadFileRevision
+  handleDownloadFileRevision,
+  handleQueryDriveActivity,
+  QueryDriveActivityArgs
 } from './drive-handlers.js';
 
 // Import contact handlers
-import { handleGetContacts, handleSearchContacts } from './contacts-handlers.js';
+import {
+  handleGetContacts,
+  handleSearchContacts,
+  handleCreateContact,
+  handleUpdateContact,
+  ContactWriteToolParams
+} from './contacts-handlers.js';
 
 // Import docs handlers
 import {
@@ -161,6 +172,20 @@ import {
   handleListFormResponses,
   handleGetFormResponse
 } from './forms-handlers.js';
+
+// Import chat handlers
+import {
+  handleListChatSpaces,
+  handleListChatMessages,
+  handleSendChatMessage
+} from './chat-handlers.js';
+
+// Import meet handlers
+import {
+  handleListMeetConferenceRecords,
+  handleListMeetTranscripts,
+  handleGetMeetTranscriptEntries
+} from './meet-handlers.js';
 
 // Import error types
 import { AccountError } from '../modules/accounts/types.js';
@@ -436,6 +461,14 @@ export class GSuiteServer {
             assertBaseToolArguments(args);
             result = await handleGetWorkspaceGmailSettings(args);
             break;
+          case 'update_workspace_vacation_responder':
+            assertBaseToolArguments(args);
+            result = await handleUpdateWorkspaceVacationResponder(args as UpdateVacationResponderToolParams);
+            break;
+          case 'list_workspace_send_as':
+            assertBaseToolArguments(args);
+            result = await handleListWorkspaceSendAs(args);
+            break;
 
           // Gmail Quick Actions
           case 'archive_workspace_email':
@@ -660,6 +693,10 @@ export class GSuiteServer {
             assertDriveDownloadRevisionArgs(args);
             result = await handleDownloadFileRevision(args);
             break;
+          case 'query_drive_activity':
+            assertBaseToolArguments(args);
+            result = await handleQueryDriveActivity(args as QueryDriveActivityArgs);
+            break;
 
           // Contact Operations
           case 'get_workspace_contacts':
@@ -669,6 +706,14 @@ export class GSuiteServer {
           case 'search_workspace_contacts':
             assertBaseToolArguments(args);
             result = await handleSearchContacts(args as { email: string; query: string; max_results?: number; maxResults?: number; returnJson?: boolean });
+            break;
+          case 'create_workspace_contact':
+            assertBaseToolArguments(args);
+            result = await handleCreateContact(args as ContactWriteToolParams);
+            break;
+          case 'update_workspace_contact':
+            assertBaseToolArguments(args);
+            result = await handleUpdateContact(args as ContactWriteToolParams);
             break;
 
           // Google Docs Operations
@@ -933,6 +978,34 @@ export class GSuiteServer {
           case 'get_form_response':
             assertGetFormResponseArgs(args);
             result = await handleGetFormResponse(args);
+            break;
+
+          // Google Chat Operations
+          case 'list_chat_spaces':
+            assertBaseToolArguments(args);
+            result = await handleListChatSpaces(args);
+            break;
+          case 'list_chat_messages':
+            assertBaseToolArguments(args);
+            result = await handleListChatMessages(args);
+            break;
+          case 'send_chat_message':
+            assertBaseToolArguments(args);
+            result = await handleSendChatMessage(args);
+            break;
+
+          // Google Meet Operations (read-only)
+          case 'list_meet_conference_records':
+            assertBaseToolArguments(args);
+            result = await handleListMeetConferenceRecords(args);
+            break;
+          case 'list_meet_transcripts':
+            assertBaseToolArguments(args);
+            result = await handleListMeetTranscripts(args);
+            break;
+          case 'get_meet_transcript_entries':
+            assertBaseToolArguments(args);
+            result = await handleGetMeetTranscriptEntries(args);
             break;
 
           default:

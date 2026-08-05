@@ -1,6 +1,6 @@
 import { google, tasks_v1 } from 'googleapis';
 import { BaseGoogleService } from '../../services/base/BaseGoogleService.js';
-import { describeApiError } from '../../utils/apiError.js';
+import { describeApiError, isAuthHandoffError } from '../../utils/apiError.js';
 import { TASKS_SCOPES } from './scopes.js';
 import {
   TaskList,
@@ -102,6 +102,9 @@ export class TasksService extends BaseGoogleService<tasks_v1.Tasks> {
         data: taskLists
       };
     } catch (error) {
+      // An expired/revoked grant must keep its reconnect signal — folding it
+      // into a plain error string would skip the host's auth_required handoff.
+      if (isAuthHandoffError(error)) throw error;
       return {
         success: false,
         error: describeApiError(error)
@@ -173,6 +176,9 @@ export class TasksService extends BaseGoogleService<tasks_v1.Tasks> {
         }
       };
     } catch (error) {
+      // An expired/revoked grant must keep its reconnect signal — folding it
+      // into a plain error string would skip the host's auth_required handoff.
+      if (isAuthHandoffError(error)) throw error;
       return {
         success: false,
         error: describeApiError(error)
@@ -233,6 +239,9 @@ export class TasksService extends BaseGoogleService<tasks_v1.Tasks> {
         data: task
       };
     } catch (error) {
+      // An expired/revoked grant must keep its reconnect signal — folding it
+      // into a plain error string would skip the host's auth_required handoff.
+      if (isAuthHandoffError(error)) throw error;
       return {
         success: false,
         error: describeApiError(error)
@@ -285,6 +294,9 @@ export class TasksService extends BaseGoogleService<tasks_v1.Tasks> {
         data: task
       };
     } catch (error) {
+      // An expired/revoked grant must keep its reconnect signal — folding it
+      // into a plain error string would skip the host's auth_required handoff.
+      if (isAuthHandoffError(error)) throw error;
       return {
         success: false,
         error: describeApiError(error)
@@ -354,6 +366,9 @@ export class TasksService extends BaseGoogleService<tasks_v1.Tasks> {
         data: task
       };
     } catch (error) {
+      // An expired/revoked grant must keep its reconnect signal — folding it
+      // into a plain error string would skip the host's auth_required handoff.
+      if (isAuthHandoffError(error)) throw error;
       return {
         success: false,
         error: describeApiError(error)
@@ -391,6 +406,9 @@ export class TasksService extends BaseGoogleService<tasks_v1.Tasks> {
         success: true
       };
     } catch (error) {
+      // An expired/revoked grant must keep its reconnect signal — folding it
+      // into a plain error string would skip the host's auth_required handoff.
+      if (isAuthHandoffError(error)) throw error;
       return {
         success: false,
         error: describeApiError(error)

@@ -8,6 +8,8 @@ import { initializeCommentsModule } from '../modules/comments/index.js';
 import { initializeSlidesModule } from '../modules/slides/index.js';
 import { initializeSheetsModule } from '../modules/sheets/index.js';
 import { initializeContactsModule } from '../modules/contacts/index.js';
+import { initializeChatModule } from '../modules/chat/index.js';
+import { initializeMeetModule } from '../modules/meet/index.js';
 import { initializeTasksModule } from '../modules/tasks/index.js';
 import { initializeFormsModule } from '../modules/forms/index.js';
 import { registerGmailScopes } from '../modules/gmail/scopes.js';
@@ -16,6 +18,8 @@ import { registerDriveScopes } from '../modules/drive/scopes.js';
 import { registerDocsScopes } from '../modules/docs/scopes.js';
 import { registerSlidesScopes } from '../modules/slides/scopes.js';
 import { registerSheetsScopes } from '../modules/sheets/scopes.js';
+import { registerChatScopes } from '../modules/chat/scopes.js';
+import { registerMeetScopes } from '../modules/meet/scopes.js';
 import { registerTasksScopes } from '../modules/tasks/scopes.js';
 import { registerFormsScopes } from '../modules/forms/scopes.js';
 import { CONTACTS_SCOPES } from '../modules/contacts/scopes.js';
@@ -36,6 +40,7 @@ export const TASKS_FORMS_ENABLED = process.env.ENABLE_GOOGLE_TASKS_FORMS === 'tr
 // Function to register contacts scopes
 function registerContactsScopes(): void {
   scopeRegistry.registerScope("contacts", CONTACTS_SCOPES.READONLY);
+  scopeRegistry.registerScope("contacts", CONTACTS_SCOPES.CONTACTS);
   logger.info('Contacts scopes registered');
 }
 
@@ -52,6 +57,8 @@ export async function initializeAllServices(): Promise<void> {
     registerSlidesScopes();
     registerSheetsScopes();
     registerContactsScopes();
+    registerChatScopes();
+    registerMeetScopes();
     
     // Tasks and Forms require additional OAuth scopes - only register if enabled
     if (TASKS_FORMS_ENABLED) {
@@ -77,6 +84,8 @@ export async function initializeAllServices(): Promise<void> {
       initializeGmailModule().then(() => logger.info('Gmail module initialized')),
       initializeCalendarModule().then(() => logger.info('Calendar module initialized')),
       initializeContactsModule().then(() => logger.info('Contacts module initialized')),
+      initializeChatModule().then(() => logger.info('Chat module initialized')),
+      initializeMeetModule().then(() => logger.info('Meet module initialized')),
     ];
     
     // Only initialize Tasks and Forms if enabled

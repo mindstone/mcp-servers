@@ -140,6 +140,22 @@
       }
     },
     {
+      "name": "update_workspace_vacation_responder",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "list_workspace_send_as",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": true
+      }
+    },
+    {
       "name": "list_workspace_drafts",
       "annotations": {
         "readOnlyHint": true,
@@ -481,6 +497,14 @@
       }
     },
     {
+      "name": "query_drive_activity",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": true
+      }
+    },
+    {
       "name": "get_workspace_contacts",
       "annotations": {
         "readOnlyHint": true,
@@ -493,6 +517,22 @@
       "annotations": {
         "readOnlyHint": true,
         "destructiveHint": false,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "create_workspace_contact",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "update_workspace_contact",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
         "openWorldHint": true
       }
     },
@@ -768,6 +808,54 @@
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "list_chat_spaces",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "list_chat_messages",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "send_chat_message",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "list_meet_conference_records",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "list_meet_transcripts",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "get_meet_transcript_entries",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
         "openWorldHint": true
       }
     },

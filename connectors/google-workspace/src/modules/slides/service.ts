@@ -11,7 +11,7 @@ import {
   SlideInfo,
 } from './types.js';
 import { SLIDES_SCOPES } from './scopes.js';
-import { describeApiError } from '../../utils/apiError.js';
+import { describeApiError, isAuthHandoffError } from '../../utils/apiError.js';
 
 const DEFAULT_MAX_CHARS = 50000;
 const TRUNCATION_MARKER = '\n\n[TRUNCATED - presentation exceeds character limit]';
@@ -256,6 +256,9 @@ export class SlidesService extends BaseGoogleService<slides_v1.Slides> {
         data: options.returnJson ? presentation : result,
       };
     } catch (error) {
+      // An expired/revoked grant must keep its reconnect signal — folding it
+      // into a plain error string would skip the host's auth_required handoff.
+      if (isAuthHandoffError(error)) throw error;
       return {
         success: false,
         error: describeApiError(error),
@@ -305,6 +308,9 @@ export class SlidesService extends BaseGoogleService<slides_v1.Slides> {
         data: result,
       };
     } catch (error) {
+      // An expired/revoked grant must keep its reconnect signal — folding it
+      // into a plain error string would skip the host's auth_required handoff.
+      if (isAuthHandoffError(error)) throw error;
       return {
         success: false,
         error: describeApiError(error),
@@ -341,6 +347,9 @@ export class SlidesService extends BaseGoogleService<slides_v1.Slides> {
         data: slidesInfo,
       };
     } catch (error) {
+      // An expired/revoked grant must keep its reconnect signal — folding it
+      // into a plain error string would skip the host's auth_required handoff.
+      if (isAuthHandoffError(error)) throw error;
       return {
         success: false,
         error: describeApiError(error),
@@ -405,6 +414,9 @@ export class SlidesService extends BaseGoogleService<slides_v1.Slides> {
         data: [slideInfo],
       };
     } catch (error) {
+      // An expired/revoked grant must keep its reconnect signal — folding it
+      // into a plain error string would skip the host's auth_required handoff.
+      if (isAuthHandoffError(error)) throw error;
       return {
         success: false,
         error: describeApiError(error),
@@ -448,6 +460,9 @@ export class SlidesService extends BaseGoogleService<slides_v1.Slides> {
         data: response.data,
       };
     } catch (error) {
+      // An expired/revoked grant must keep its reconnect signal — folding it
+      // into a plain error string would skip the host's auth_required handoff.
+      if (isAuthHandoffError(error)) throw error;
       return {
         success: false,
         error: describeApiError(error),
@@ -493,6 +508,9 @@ export class SlidesService extends BaseGoogleService<slides_v1.Slides> {
         data: response.data,
       };
     } catch (error) {
+      // An expired/revoked grant must keep its reconnect signal — folding it
+      // into a plain error string would skip the host's auth_required handoff.
+      if (isAuthHandoffError(error)) throw error;
       return {
         success: false,
         error: describeApiError(error),

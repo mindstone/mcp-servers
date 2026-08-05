@@ -2,7 +2,7 @@
 
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Google Workspace MCP server — Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Comments, and account diagnostics, with optional Tasks and Forms behind a feature flag.
+Google Workspace MCP server — Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Chat, Meet, Comments, and account diagnostics, with optional Tasks and Forms behind a feature flag.
 
 *Multi-account Google Workspace MCP. Host-orchestrated OAuth (the connector neither runs a callback server nor mints OAuth URLs), atomic per-account credential writes, and a structured `auth_required` handoff so the host drives the sign-in flow rather than the server.*
 
@@ -10,7 +10,7 @@ Google Workspace MCP server — Gmail, Calendar, Drive, Docs, Sheets, Slides, Co
 
 - **Version:** [0.2.0](./CHANGELOG.md) · npm: not yet published
 - **Auth:** OAuth (host-orchestrated) ([`GOOGLE_CLIENT_SECRET`](./server.json))
-- **Tools:** [95](./src/tools/definitions/) (Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Comments, Account; +10 gated Tasks/Forms behind `ENABLE_GOOGLE_TASKS_FORMS=true`)
+- **Tools:** [106](./src/tools/definitions/) (Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Chat, Meet, Comments, Account; +10 gated Tasks/Forms behind `ENABLE_GOOGLE_TASKS_FORMS=true`)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -153,26 +153,28 @@ Until the host has written `${ACCOUNTS_PATH}` and the matching per-account token
 }
 ```
 
-## Tools (95)
+## Tools (106)
 
 The full list lives under [`src/tools/definitions/`](./src/tools/definitions/) and is also surfaced in [`tools-inventory.json`](./tools-inventory.json). Grouped by domain:
 
 | Domain | Tools | Notes |
 | --- | --- | --- |
-| Gmail | 21 | Email search/thread/send/compose, drafts, labels, label filters, attachments, archive/trash/read-state helpers. |
+| Gmail | 23 | Email search/thread/send/compose, drafts, labels, label filters, attachments, archive/trash/read-state helpers, settings, vacation responder, and send-as aliases/signatures. |
 | Calendar | 9 | Current time, free-slot lookup, calendar/event listing, event creation, updates, responses, and deletion. |
-| Drive | 14 | List/search/upload/download/copy/move/trash/untrash files, folders, permissions, revisions, and shared-drive discovery. |
+| Drive | 15 | List/search/upload/download/copy/move/trash/untrash files, folders, permissions, revisions, shared-drive discovery, and activity queries (what changed, when, by whom). |
 | Docs | 8 | Read, create, append, replace, find/replace, tab listing, and batch updates. |
 | Sheets | 14 | Read/write ranges, create spreadsheets, sheet management, batch operations, find/replace, and formatting. |
 | Slides | 7 | Read, create, list/get slides, batch update, thumbnails, and ID extraction. |
 | Labels | 12 | Gmail label CRUD and filter rules. |
-| Contacts | 2 | List and search contacts. |
+| Contacts | 4 | List, search, create, and update contacts. |
+| Chat | 3 | List spaces, list messages in a space, and send text messages. |
+| Meet | 3 | List conference records, list transcripts, and read transcript entries (speaker + text). |
 | Comments | 5 | List/create/reply/resolve/delete Drive comments. |
 | Account | 3 | List, authenticate, and remove workspace accounts. |
 | Tasks (gated) | 6 | Registered only when `ENABLE_GOOGLE_TASKS_FORMS=true`. |
 | Forms (gated) | 4 | Registered only when `ENABLE_GOOGLE_TASKS_FORMS=true`. |
 
-The `## Status` block counts the 95 default-enabled tools; the additional 10 Tasks + Forms tools register when the feature flag is set.
+The `## Status` block counts the 106 default-enabled tools; the additional 10 Tasks + Forms tools register when the feature flag is set.
 
 ### Shared drives
 

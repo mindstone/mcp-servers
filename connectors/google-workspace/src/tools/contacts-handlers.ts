@@ -1,6 +1,8 @@
 import {
   GetContactsParams,
-  GetContactsResponse
+  GetContactsResponse,
+  CreateContactParams,
+  ContactWriteResult
 } from "../modules/contacts/types.js";
 import { ContactsService } from "../services/contacts/index.js";
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
@@ -147,6 +149,123 @@ export async function handleSearchContacts(
       // See handleGetContacts: toMcpError surfaces the real cause (details folded into
       // the message) and passes an McpError through unchanged.
       throw toMcpError(error, 'Failed to search contacts');
+    }
+  });
+}
+
+// Snake_case param names (canonical) with camelCase aliases for compatibility.
+export interface ContactWriteToolParams {
+  email?: string;
+  given_name?: string;
+  givenName?: string;
+  family_name?: string;
+  familyName?: string;
+  email_address?: string;
+  emailAddress?: string;
+  email_type?: string;
+  emailType?: string;
+  phone_number?: string;
+  phoneNumber?: string;
+  phone_type?: string;
+  phoneType?: string;
+  organization?: string;
+  job_title?: string;
+  jobTitle?: string;
+  notes?: string;
+}
+
+function readContactWriteFields(params: ContactWriteToolParams): Omit<CreateContactParams, 'email'> {
+  const raw = params as unknown as Record<string, unknown>;
+  return {
+    givenName: readAliasedString(raw, 'given_name', 'givenName'),
+    familyName: readAliasedString(raw, 'family_name', 'familyName'),
+    emailAddress: readAliasedString(raw, 'email_address', 'emailAddress'),
+    emailType: readAliasedString(raw, 'email_type', 'emailType'),
+    phoneNumber: readAliasedString(raw, 'phone_number', 'phoneNumber'),
+    phoneType: readAliasedString(raw, 'phone_type', 'phoneType'),
+    organization: readAliasedString(raw, 'organization', 'organization'),
+    jobTitle: readAliasedString(raw, 'job_title', 'jobTitle'),
+    notes: readAliasedString(raw, 'notes', 'notes')
+  };
+}
+
+function hasAnyWriteField(fields: Omit<CreateContactParams, 'email'>): boolean {
+  return Object.values(fields).some(value => value !== undefined);
+}
+
+function formatWriteResult(action: string, result: ContactWriteResult): unknown {
+  // Every string field is enveloped, matching the read handlers' whole-result wrapping.
+  return wrapUntrustedJsonStrings(
+    { status: 'success', action, contact: result },
+    'google-workspace:contacts:write'
+  );
+}
+
+/**
+ * Handler for creating a new Google Contact.
+ */
+export async function handleCreateContact(
+  params: ContactWriteToolParams
+): Promise<unknown> {
+  await initializeServices();
+  const email = await resolveEmail(params);
+  const fields = readContactWriteFields(params);
+
+  if (!hasAnyWriteField(fields)) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'Provide at least one contact field (e.g. given_name, email_address, phone_number)'
+    );
+  }
+  if (!fields.givenName && !fields.familyName && !fields.emailAddress) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'A new contact needs at least a name (given_name / family_name) or an email_address'
+    );
+  }
+
+  return accountManager.withTokenRenewal(email, async () => {
+    try {
+      const result = await contactsService.createContact({ email, ...fields });
+      return formatWriteResult('created', result);
+    } catch (error) {
+      throw toMcpError(error, 'Failed to create contact');
+    }
+  });
+}
+
+/**
+ * Handler for updating an existing Google Contact. Only the provided fields
+ * are replaced; everything else on the contact is left untouched.
+ */
+export async function handleUpdateContact(
+  params: ContactWriteToolParams & { resource_name?: string; resourceName?: string }
+): Promise<unknown> {
+  await initializeServices();
+  const email = await resolveEmail(params);
+  const raw = params as unknown as Record<string, unknown>;
+  const resourceName = readAliasedString(raw, 'resource_name', 'resourceName');
+  const fields = readContactWriteFields(params);
+
+  if (!resourceName) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'resource_name is required (e.g. "people/c1234567890" — get it from search_workspace_contacts)'
+    );
+  }
+  if (!hasAnyWriteField(fields)) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'Provide at least one field to update (e.g. phone_number, organization, notes)'
+    );
+  }
+
+  return accountManager.withTokenRenewal(email, async () => {
+    try {
+      const result = await contactsService.updateContact({ email, resourceName, ...fields });
+      return formatWriteResult('updated', result);
+    } catch (error) {
+      throw toMcpError(error, 'Failed to update contact');
     }
   });
 }

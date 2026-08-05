@@ -7,6 +7,19 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- Google Chat module: new `list_chat_spaces`, `list_chat_messages`, and `send_chat_message` tools (spaces, message history, and posting plain-text messages). Uses the narrow Chat scopes (`chat.spaces.readonly`, `chat.messages.readonly`, `chat.messages.create`), registered at startup — accounts connected before this change get reconnect guidance from the scope check. `send_chat_message` carries `destructiveHint`; space names, message text, and sender names are `<untrusted-content>`-enveloped.
+- Google Meet read module: new `list_meet_conference_records`, `list_meet_transcripts`, and `get_meet_transcript_entries` tools (meeting recap: past conferences, their transcripts, and speaker-attributed transcript entries) via the Meet API v2. Read-only, using the `meetings.space.readonly` scope; transcript text and speaker names are enveloped.
+- Drive activity queries: new `query_drive_activity` tool answers "what changed in this folder / shared drive / on this file" via the Drive Activity API v2 — action (edit, move, rename, delete, comment, …), timestamp, actors, and affected items, with pagination and the API's filter string (e.g. time ranges) passed through. Requires the new `drive.activity.readonly` scope (registered at startup; accounts connected before this change get reconnect guidance from the scope check). Item titles in the response are `<untrusted-content>`-enveloped.
+- Gmail vacation responder and send-as read: new `update_workspace_vacation_responder` (turn the out-of-office auto-reply on/off, set subject/body, schedule start/end, restrict to contacts or domain) and `list_workspace_send_as` (list send-as aliases incl. signatures) tools. The update merges with the existing responder settings instead of wiping them (the Gmail API replaces the whole resource otherwise), defaults the start time to now when enabling, and accepts epoch-ms or ISO date strings for scheduling. `update_workspace_vacation_responder` carries `destructiveHint`; both use the already-registered `gmail.settings.basic` scope.
+- Contacts write support: new `create_workspace_contact` and `update_workspace_contact` tools (name, email, phone, organization, job title, notes). Updates replace only the fields you pass and leave the rest of the contact untouched. Both carry `destructiveHint` and require the full Contacts permission — accounts that only granted read access get reconnect guidance. Write results are wrapped in `<untrusted-content>` envelopes like the existing read tools.
+
+### Fixed
+
+- An expired or revoked Google sign-in now reliably prompts a reconnect across every module. Previously, a first-request-of-the-session auth failure in Gmail or Contacts, and any auth failure in Tasks, Forms, Docs, Slides, Comments, or Sheets, collapsed to a plain error string: the shared service layer mangled the internal "needs to reconnect" code (`HTTP_AUTH_REQUIRED`), `validateScopes` reported an invalid grant as a generic scope problem, and the result-envelope services (`{ success: false }`) flattened the error to text. Auth-handoff errors (`AUTH_REQUIRED`, `TEMPORARY_AUTH_ERROR`) now pass through the service layer unchanged, so the host's reconnect prompt (or a "try again in a moment" for a transient refresh blip) shows instead of an opaque failure.
+- `server.json` now declares every environment variable the connector reads: `GOOGLE_WORKSPACE_DISABLE_REFRESH` and `MCP_WORKSPACE_PATH` (previously undocumented despite being load-bearing for token refresh and attachment-path containment), plus the legacy `WORKSPACE_BASE_PATH` and `GAUTH_FILE` fallbacks, marked as deprecated in favour of their modern counterparts.
+
 ## [0.2.0] - 2026-07-29
 
 ### Changed

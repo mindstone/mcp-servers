@@ -1,6 +1,8 @@
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { getAccountManager, resolveEmail } from '../modules/accounts/index.js';
-import { getDriveService } from '../modules/drive/index.js';
+import { getDriveService, getDriveActivityService } from '../modules/drive/index.js';
+import { normalizeDriveItemName } from '../modules/drive/activity-service.js';
+import { toMcpError } from '../utils/apiError.js';
 import { FileListOptions, FileSearchOptions, FileUploadOptions, PermissionOptions } from '../modules/drive/types.js';
 import { McpToolResponse } from './types.js';
 import {
@@ -757,6 +759,75 @@ export async function handleDownloadFileRevision(args: DriveDownloadRevisionArgs
       return JSON.stringify(wrapUntrustedJsonStrings(result, `google-workspace:drive:file/${fileId}/revision/${revisionId}`));
     } catch (error) {
       return JSON.stringify(formatDriveRecoveryError('download revision', error));
+    }
+  });
+}
+
+export interface QueryDriveActivityArgs {
+  email?: string;
+  item_id?: string;
+  itemId?: string;
+  ancestor_id?: string;
+  ancestorId?: string;
+  page_size?: number;
+  pageSize?: number;
+  page_token?: string;
+  pageToken?: string;
+  filter?: string;
+}
+
+const MAX_DRIVE_ACTIVITY_PAGE_SIZE = 100;
+
+/**
+ * Query the Drive Activity API: what changed on a file, or inside a folder /
+ * shared drive, and who did it.
+ */
+export async function handleQueryDriveActivity(args: QueryDriveActivityArgs): Promise<unknown> {
+  const rawArgs = args as unknown as Record<string, unknown>;
+  const itemId = readAliasedString(rawArgs, 'item_id', 'itemId');
+  const ancestorId = readAliasedString(rawArgs, 'ancestor_id', 'ancestorId');
+  const filter = readAliasedString(rawArgs, 'filter', 'filter');
+  const pageToken = readAliasedString(rawArgs, 'page_token', 'pageToken');
+  const rawPageSize = readAliasedNumber(rawArgs, 'page_size', 'pageSize');
+
+  if (!itemId && !ancestorId) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'Provide item_id (a file/folder ID, from list_drive_files or search_drive_files) ' +
+      'or ancestor_id (a folder or shared-drive ID, to see everything that changed inside it).'
+    );
+  }
+  if (itemId && ancestorId) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'Provide only one of item_id or ancestor_id — the Drive Activity API rejects queries with both.'
+    );
+  }
+  if (rawPageSize !== undefined && (rawPageSize < 1 || !Number.isInteger(rawPageSize))) {
+    throw new McpError(ErrorCode.InvalidParams, 'page_size must be a positive integer');
+  }
+  const pageSize = rawPageSize === undefined
+    ? undefined
+    : Math.min(rawPageSize, MAX_DRIVE_ACTIVITY_PAGE_SIZE);
+
+  const accountManager = getAccountManager();
+  const email = await resolveEmail(args);
+
+  return await accountManager.withTokenRenewal(email, async () => {
+    try {
+      const activityService = await getDriveActivityService();
+      const result = await activityService.queryActivity(email, {
+        itemName: itemId ? normalizeDriveItemName(itemId) : undefined,
+        ancestorName: ancestorId ? normalizeDriveItemName(ancestorId) : undefined,
+        pageSize,
+        pageToken,
+        filter
+      });
+      // Titles are enveloped field-level in the service (see summarizeTarget);
+      // the rest of the summary is connector-derived and returned raw.
+      return result;
+    } catch (error) {
+      throw toMcpError(error, 'Failed to query Drive activity');
     }
   });
 }

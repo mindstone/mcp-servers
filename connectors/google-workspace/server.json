@@ -63,6 +63,35 @@
           "isSecret": false,
           "default": "60000",
           "format": "number"
+        },
+        {
+          "name": "GOOGLE_WORKSPACE_DISABLE_REFRESH",
+          "description": "Set to 1 to disable background OAuth token refresh (tokens are only read, never refreshed)",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "0",
+          "format": "string"
+        },
+        {
+          "name": "MCP_WORKSPACE_PATH",
+          "description": "Directory attachments and downloaded files are constrained to (defaults to a temp dir; reads/writes outside it are refused)",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "filepath"
+        },
+        {
+          "name": "WORKSPACE_BASE_PATH",
+          "description": "Legacy fallback for MCP_WORKSPACE_PATH; prefer MCP_WORKSPACE_PATH",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "filepath"
+        },
+        {
+          "name": "GAUTH_FILE",
+          "description": "Legacy fallback path to gauth.json OAuth client config; host-orchestrated setups use GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET instead",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "filepath"
         }
       ]
     }

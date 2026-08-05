@@ -14,6 +14,9 @@ export const DRIVE_SCOPES = {
   
   // Access to app data folder
   APPDATA: 'https://www.googleapis.com/auth/drive.appdata',
+
+  // Read-only access to Drive activity (what changed, when, by whom)
+  ACTIVITY_READONLY: 'https://www.googleapis.com/auth/drive.activity.readonly',
 } as const;
 
 export type DriveScope = typeof DRIVE_SCOPES[keyof typeof DRIVE_SCOPES];
@@ -34,6 +37,7 @@ export function registerDriveScopes(): void {
   
   // Register feature-specific scopes
   scopeRegistry.registerScope('drive', DRIVE_SCOPES.APPDATA);
+  scopeRegistry.registerScope('drive', DRIVE_SCOPES.ACTIVITY_READONLY);
   
   // Verify all scopes are registered
   const registeredScopes = scopeRegistry.getAllScopes();
