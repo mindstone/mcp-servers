@@ -299,5 +299,79 @@ export function createGoogleHandlers() {
         ],
       });
     }),
+
+    http.post(new RegExp(`^${escapeRegex(DATA_BETA)}/properties/[^/]+/audienceExports$`), async ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      const body = (await request.json()) as {
+        audienceExport?: { audience?: string; dimensions?: Array<{ dimensionName: string }> };
+      };
+      return HttpResponse.json({
+        name: 'properties/200/audienceExports/700',
+        audience: body.audienceExport?.audience,
+        audienceDisplayName: 'Purchasers',
+        dimensions: body.audienceExport?.dimensions || [
+          { dimensionName: 'userId' },
+          { dimensionName: 'deviceId' },
+        ],
+        state: 'CREATING',
+        beginCreatingTime: '2026-08-01T00:00:00Z',
+        creationQuotaTokensCharged: 12,
+      });
+    }),
+
+    http.get(new RegExp(`^${escapeRegex(DATA_BETA)}/properties/[^/]+/audienceExports$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        audienceExports: [
+          {
+            name: 'properties/200/audienceExports/700',
+            audience: 'properties/200/audiences/500',
+            audienceDisplayName: 'Purchasers',
+            dimensions: [{ dimensionName: 'userId' }, { dimensionName: 'deviceId' }],
+            state: 'ACTIVE',
+            beginCreatingTime: '2026-08-01T00:00:00Z',
+            creationQuotaTokensCharged: 12,
+            rowCount: 2,
+          },
+        ],
+      });
+    }),
+
+    http.get(new RegExp(`^${escapeRegex(DATA_BETA)}/properties/[^/]+/audienceExports/[^/]+$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        name: 'properties/200/audienceExports/700',
+        audience: 'properties/200/audiences/500',
+        audienceDisplayName: 'Purchasers',
+        dimensions: [{ dimensionName: 'userId' }, { dimensionName: 'deviceId' }],
+        state: 'ACTIVE',
+        beginCreatingTime: '2026-08-01T00:00:00Z',
+        creationQuotaTokensCharged: 12,
+        rowCount: 2,
+      });
+    }),
+
+    http.post(new RegExp(`^${escapeRegex(DATA_BETA)}/properties/[^/]+/audienceExports/[^/]+:query$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        audienceRows: [
+          { dimensionValues: [{ value: 'user-1' }, { value: 'device-1' }] },
+          { dimensionValues: [{ value: 'user-2' }, { value: 'device-2' }] },
+        ],
+        audienceExport: {
+          name: 'properties/200/audienceExports/700',
+          audience: 'properties/200/audiences/500',
+          audienceDisplayName: 'Purchasers',
+          dimensions: [{ dimensionName: 'userId' }, { dimensionName: 'deviceId' }],
+          state: 'ACTIVE',
+          rowCount: 2,
+        },
+        rowCount: 2,
+      });
+    }),
   ];
 }
