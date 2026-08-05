@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mswServer } from './fixtures/setup.js';
 import { createMockApi, type MockApiState } from './fixtures/microsoft-mock-api.js';
+import { assertAttachmentDirIntact, resolveAttachmentDir } from '../src/mail.js';
 import {
   createMicrosoftConfigDir,
   createTestClient,
@@ -87,6 +88,27 @@ describe('download_attachment adversarial cases', () => {
     await expect(fs.readFile(outside, 'utf8')).resolves.toBe('sensitive');
   });
 
+  it('never writes through a destination symlink whose target is outside the workspace', async () => {
+    const dir = path.join(workspace, 'attachments', 'microsoft-mail');
+    await fs.mkdir(dir, { recursive: true });
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-leaf-out-'));
+    try {
+      const victim = path.join(outside, 'victim.txt');
+      await fs.writeFile(victim, 'sensitive');
+      await fs.symlink(victim, path.join(dir, 'report.pdf'));
+
+      const result = await callDownload('att-1');
+      expect(result.isError).not.toBe(true);
+      const json = result.json as { savedTo: string };
+      expect(path.basename(json.savedTo)).toBe('report-1.pdf');
+      expect(json.savedTo.startsWith(workspace)).toBe(true);
+      // The outside symlink target must be untouched.
+      await expect(fs.readFile(victim, 'utf8')).resolves.toBe('sensitive');
+    } finally {
+      await fs.rm(outside, { recursive: true, force: true });
+    }
+  });
+
   it('refuses a symlinked attachment directory escaping the workspace', async () => {
     const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-escape-'));
     await fs.symlink(outside, path.join(workspace, 'attachments'));
@@ -142,6 +164,52 @@ describe('download_attachment adversarial cases', () => {
     const json = errorJson(await callDownload('att-malformed'));
     expect(json.error).toContain('schema validation');
     expect(json.error).not.toContain('broken.pdf');
+  });
+});
+
+// The parent-directory replacement guard: a local attacker who swaps the
+// validated attachment directory (rename + symlink/directory replacement)
+// between canonicalization and the exclusive create must be detected, not
+// followed. These exercise assertAttachmentDirIntact directly; the
+// integration paths above cover the pre-validation cases.
+describe('attachment directory replacement guard', () => {
+  let workspace: string;
+
+  beforeEach(async () => {
+    workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-dir-guard-'));
+    vi.stubEnv('MCP_WORKSPACE_PATH', workspace);
+  });
+
+  afterEach(async () => {
+    vi.unstubAllEnvs();
+    await fs.rm(workspace, { recursive: true, force: true });
+  });
+
+  it('passes when the validated directory is untouched', async () => {
+    const target = await resolveAttachmentDir();
+    await expect(assertAttachmentDirIntact(target)).resolves.toBeUndefined();
+  });
+
+  it('detects the directory being replaced by a symlink escaping the workspace', async () => {
+    const target = await resolveAttachmentDir();
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-swap-out-'));
+    try {
+      await fs.rm(target.dir, { recursive: true });
+      await fs.symlink(outside, target.dir);
+      await expect(assertAttachmentDirIntact(target)).rejects.toThrow('escaped');
+    } finally {
+      await fs.rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('detects the directory being replaced by a different in-workspace directory', async () => {
+    const target = await resolveAttachmentDir();
+    // Containment still holds after this swap, so only the pinned dev/ino
+    // identity can catch it.
+    const renamed = path.join(path.dirname(target.dir), 'microsoft-mail-moved');
+    await fs.rename(target.dir, renamed);
+    await fs.mkdir(target.dir, { recursive: true });
+    await expect(assertAttachmentDirIntact(target)).rejects.toThrow('replaced');
   });
 });
 

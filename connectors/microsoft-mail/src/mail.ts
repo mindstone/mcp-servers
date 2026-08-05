@@ -557,14 +557,29 @@ function sanitizeAttachmentFilename(name: string): string {
 }
 
 /**
+ * The validated attachment-directory target: canonical path, the canonical
+ * workspace root it must stay contained in, and the directory's dev/ino
+ * identity at validation time. The identity pins the directory so a
+ * rename-and-replace swap after validation is detectable.
+ */
+export interface AttachmentDirTarget {
+  dir: string;
+  root: string;
+  dev: number;
+  ino: number;
+}
+
+/**
  * Resolve the directory attachments are saved into, honouring the repo's
  * file-write invariant: canonical-prefix containment under
  * `MCP_WORKSPACE_PATH` (or `os.tmpdir()` when unset), with the canonical
  * (symlink-resolved) root as the containment anchor. The parent chain is
  * canonicalised before `mkdir` so a symlinked intermediate cannot trick the
  * connector into even creating a directory outside the workspace.
+ *
+ * Exported for tests (the guard below is exercised directly).
  */
-async function resolveAttachmentDir(): Promise<string> {
+export async function resolveAttachmentDir(): Promise<AttachmentDirTarget> {
   const root = process.env.MCP_WORKSPACE_PATH || os.tmpdir();
   const realRoot = await fs.realpath(root);
   const dir = path.join(realRoot, 'attachments', 'microsoft-mail');
@@ -583,19 +598,76 @@ async function resolveAttachmentDir(): Promise<string> {
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new Error('Resolved attachment directory escaped its workspace root');
   }
-  return realDir;
+  const identity = await fs.stat(realDir);
+  return { dir: realDir, root: realRoot, dev: identity.dev, ino: identity.ino };
 }
 
 /**
- * Atomically create `dir/filename` and write `content` through the resulting
- * file descriptor. `fs.open(..., 'wx')` (O_CREAT|O_EXCL) fails with EEXIST on
- * any existing entry — including a symlink or hardlink planted after the
- * filename was chosen — so the descriptor we write is provably the file we
- * just created, never a followed symlink target. On EEXIST the next
+ * Re-verify, against the live filesystem, that the attachment directory is
+ * still the directory resolveAttachmentDir() validated: same dev/ino identity
+ * (a rename-and-replace with a symlink or a different directory changes it)
+ * and still canonically contained in the workspace root. Called after the
+ * leaf file is created and again after its content is written, so a
+ * parent-directory swap in between fails closed instead of silently
+ * redirecting the write outside the workspace.
+ *
+ * Exported for tests.
+ */
+export async function assertAttachmentDirIntact(target: AttachmentDirTarget): Promise<void> {
+  const realDir = await fs.realpath(target.dir);
+  const relative = path.relative(target.root, realDir);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('Resolved attachment directory escaped its workspace root');
+  }
+  const current = await fs.stat(target.dir);
+  if (current.dev !== target.dev || current.ino !== target.ino) {
+    throw new Error('Attachment directory was replaced after validation; refusing to write');
+  }
+}
+
+/**
+ * Confirm `fullPath` still names the same file as the open descriptor
+ * (dev/ino identity). After a parent-directory swap-and-restore the path
+ * would resolve to a different file — or nothing — than the one this
+ * connector created, and the write must not proceed.
+ */
+async function assertPathMatchesHandle(fullPath: string, handle: fs.FileHandle): Promise<void> {
+  const [viaPath, viaHandle] = await Promise.all([fs.stat(fullPath), handle.stat()]);
+  if (viaPath.dev !== viaHandle.dev || viaPath.ino !== viaHandle.ino) {
+    throw new Error(
+      'Attachment path no longer resolves to the file being written; refusing to continue',
+    );
+  }
+}
+
+/**
+ * Atomically create `target.dir/filename` and write `content` through the
+ * resulting file descriptor. `fs.open(..., 'wx')` (O_CREAT|O_EXCL) fails with
+ * EEXIST on any existing entry — including a symlink or hardlink planted
+ * after the filename was chosen — so the descriptor we write is provably the
+ * file we just created, never a followed symlink target. On EEXIST the next
  * `-<n>` suffix is tried, preserving the no-overwrite contract.
+ *
+ * O_EXCL protects the leaf entry, not the parent chain: a local attacker who
+ * can rename the attachment directory and replace it with a symlink AFTER
+ * resolveAttachmentDir() validated it could otherwise redirect the create
+ * outside the workspace. Node offers no ancestor pinning (no openat /
+ * RESOLVE_BENEATH), so the parent chain is re-verified against the pinned
+ * directory identity after the create (before any bytes are written) and
+ * again after the write, and the path is confirmed to still name the opened
+ * descriptor. A detected swap fails closed and the misplaced file is removed
+ * (unlink never follows symlinks, so cleanup cannot delete an attacker file
+ * through a swapped path).
+ *
+ * Irreducible residual: a swap landing between the post-create verification
+ * and the write syscall itself can still place bytes outside the workspace;
+ * the post-write verification detects that state and removes the file, so
+ * the tool reports failure rather than success — the guarantee is
+ * detect-and-refuse, not prevention. Closing that last window would require
+ * descriptor-relative opens, which Node does not expose.
  */
 async function writeFileExclusive(
-  dir: string,
+  target: AttachmentDirTarget,
   filename: string,
   content: Buffer,
 ): Promise<string> {
@@ -603,23 +675,34 @@ async function writeFileExclusive(
   const base = path.basename(filename, ext);
   for (let attempt = 0; ; attempt += 1) {
     const candidate = attempt === 0 ? filename : `${base}-${attempt}${ext}`;
-    const fullPath = path.join(dir, candidate);
+    const fullPath = path.join(target.dir, candidate);
     // The filename is separator-free, but keep the canonical containment
     // check so a future refactor cannot silently weaken the boundary.
-    const relative = path.relative(dir, fullPath);
+    const relative = path.relative(target.dir, fullPath);
     if (relative.startsWith('..') || path.isAbsolute(relative)) {
       throw new Error('Resolved attachment path escaped the attachment directory');
     }
     let handle: fs.FileHandle | undefined;
     try {
       handle = await fs.open(fullPath, 'wx');
-      await handle.writeFile(content);
-      return fullPath;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'EEXIST') continue;
       throw err;
+    }
+    try {
+      await assertAttachmentDirIntact(target);
+      await assertPathMatchesHandle(fullPath, handle);
+      await handle.writeFile(content);
+      await assertAttachmentDirIntact(target);
+      await assertPathMatchesHandle(fullPath, handle);
+      return fullPath;
+    } catch (err) {
+      // We created this leaf (O_EXCL), so it is safe — and required — to
+      // remove it wherever the parent chain pointed at creation time.
+      await fs.unlink(fullPath).catch(() => {});
+      throw err;
     } finally {
-      await handle?.close();
+      await handle.close();
     }
   }
 }
@@ -718,9 +801,8 @@ export async function downloadAttachment(
     .getStream();
   const content = await readStreamWithCap(body, MAX_ATTACHMENT_BYTES, () => new Error(sizeLimitMessage));
 
-  const dir = await resolveAttachmentDir();
-  const fullPath = await writeFileExclusive(dir, filename, content);
-
+  const target = await resolveAttachmentDir();
+  const fullPath = await writeFileExclusive(target, filename, content);
   return {
     success: true,
     messageId: args.id,
