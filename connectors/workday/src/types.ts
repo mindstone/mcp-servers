@@ -1,5 +1,11 @@
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json') as { version: string };
+
 export const REQUEST_TIMEOUT_MS = 30_000;
-export const USER_AGENT = 'mcp-server-workday/0.1.0';
+// Derived from package.json so the UA can never drift from the release version.
+export const USER_AGENT = `mcp-server-workday/${pkg.version}`;
 
 export interface BridgeState {
   port: number;
@@ -26,6 +32,38 @@ export const WORKER_DETAIL_FIELDS = ['id', 'descriptor', 'primaryWorkEmail', 'bu
 export const NESTED_OBJECT_FIELDS = ['id', 'descriptor'] as const;
 
 export const ORG_LIST_FIELDS = ['id', 'descriptor', 'type', 'isActive', 'href'] as const;
+
+// Time-off entries: scalar scheduling fields only — comment/reason fields are
+// free text authored in Workday and deliberately excluded from the allowlist.
+export const TIME_OFF_FIELDS = ['id', 'descriptor', 'startDate', 'endDate', 'quantity', 'unitOfTime', 'status', 'href'] as const;
+
+export const ABSENCE_MANAGEMENT_FAMILY = 'absenceManagement/v1';
+
+// Workday versions its recruiting REST family by platform release (e.g.
+// v41.2) and retires old versions over time; override via
+// WORKDAY_RECRUITING_API_VERSION when a tenant exposes a different one.
+export const RECRUITING_API_VERSION_DEFAULT = 'v41.2';
+
+// Job requisitions: scalar status/openings fields only — description and
+// other free-text fields are deliberately excluded from the allowlist.
+export const JOB_REQUISITION_FIELDS = [
+  'id',
+  'descriptor',
+  'title',
+  'status',
+  'recruitingStatus',
+  'openings',
+  'numberOfOpenings',
+  'href',
+] as const;
+
+// Locations/jobs: identity and classification fields only — address lines and
+// other free-text fields are deliberately excluded from the allowlists.
+export const LOCATION_FIELDS = ['id', 'descriptor', 'name', 'inactive', 'isActive', 'href'] as const;
+
+export const JOB_FIELDS = ['id', 'descriptor', 'businessTitle', 'jobType', 'href'] as const;
+
+export const PAYROLL_FAMILY = 'payroll/v2';
 
 // ── Field allowlisting ──
 

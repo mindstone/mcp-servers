@@ -9,15 +9,19 @@
  */
 
 import { WorkdayError, USER_AGENT, REQUEST_TIMEOUT_MS } from './types.js';
-import { getAccessToken, getApiBaseUrl, isConfigured, clearTokenCache } from './auth.js';
+import { getAccessToken, getApiBaseUrl, getServiceApiBaseUrl, isConfigured, clearTokenCache } from './auth.js';
 
 /**
  * Make an authenticated JSON request to the Workday REST API.
+ *
+ * `serviceFamily` selects a non-default API family (e.g. 'absenceManagement/v1');
+ * when omitted, requests go to the core /ccx/api/v1/{tenant} surface.
  */
 export async function workdayFetch<T>(
   resourcePath: string,
   options: RequestInit = {},
   retryCount = 0,
+  serviceFamily?: string,
 ): Promise<T> {
   if (!isConfigured()) {
     throw new WorkdayError(
@@ -28,7 +32,8 @@ export async function workdayFetch<T>(
   }
 
   const accessToken = await getAccessToken();
-  const url = `${getApiBaseUrl()}${resourcePath}`;
+  const baseUrl = serviceFamily ? getServiceApiBaseUrl(serviceFamily) : getApiBaseUrl();
+  const url = `${baseUrl}${resourcePath}`;
   const headers: Record<string, string> = {
     Authorization: `Bearer ${accessToken}`,
     Accept: 'application/json',
@@ -64,7 +69,7 @@ export async function workdayFetch<T>(
         ? parseInt(retryAfter, 10) * 1000
         : Math.min(1000 * Math.pow(2, retryCount), 8000);
       await new Promise((resolve) => setTimeout(resolve, waitMs));
-      return workdayFetch<T>(resourcePath, options, retryCount + 1);
+      return workdayFetch<T>(resourcePath, options, retryCount + 1, serviceFamily);
     }
 
     let errorText: string;

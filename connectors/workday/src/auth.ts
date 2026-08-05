@@ -12,7 +12,7 @@
  * - WORKDAY_REFRESH_TOKEN: Optional refresh token (enables refresh_token grant)
  */
 
-import { WorkdayError, USER_AGENT, REQUEST_TIMEOUT_MS } from './types.js';
+import { WorkdayError, USER_AGENT, REQUEST_TIMEOUT_MS, RECRUITING_API_VERSION_DEFAULT } from './types.js';
 import { bridgeRequest } from './bridge.js';
 
 // ── Runtime credentials ──
@@ -96,6 +96,26 @@ export function getTokenUrl(): string {
 
 export function getApiBaseUrl(): string {
   return `https://${workdayHost}/ccx/api/v1/${workdayTenant}`;
+}
+
+// Workday's wider REST surface is split into per-domain service families
+// (e.g. absenceManagement/v1, payroll/v2) that hang off /ccx/api/ rather
+// than the /ccx/api/v1/{tenant} alias used for the core worker/org endpoints.
+export function getServiceApiBaseUrl(serviceFamily: string): string {
+  return `https://${workdayHost}/ccx/api/${serviceFamily}/${workdayTenant}`;
+}
+
+// Recruiting REST family, with the platform-release version segment
+// overridable because tenants on different Workday releases expose
+// different versions.
+export function getRecruitingApiFamily(): string {
+  const raw = (process.env.WORKDAY_RECRUITING_API_VERSION ?? '').trim();
+  if (!raw) return `recruiting/${RECRUITING_API_VERSION_DEFAULT}`;
+  if (!/^v\d+(\.\d+)?$/.test(raw)) {
+    console.error('[Workday] Ignoring invalid WORKDAY_RECRUITING_API_VERSION (expected e.g. "v41.2")');
+    return `recruiting/${RECRUITING_API_VERSION_DEFAULT}`;
+  }
+  return `recruiting/${raw}`;
 }
 
 // ── SSRF / Host validation ──
