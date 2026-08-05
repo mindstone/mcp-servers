@@ -32,24 +32,33 @@ export function getConfigPath(): string {
 /**
  * Load accounts from accounts.json.
  * Called on every getAccount() call to support hot-reload.
+ *
+ * The file is opened once and read through the file descriptor (open →
+ * fstat → read) so it cannot be swapped between a path-level existence
+ * check and the read (check-then-use race). A missing, unreadable, or
+ * corrupt file fails closed to "no accounts", which surfaces as the
+ * observable "No Freshdesk account connected" error from every tool.
  */
 export function loadAccounts(): void {
   const accountsPath = path.join(CONFIG_PATH, 'accounts.json');
+  let fd: number | undefined;
   try {
-    if (fs.existsSync(accountsPath)) {
-      const raw = fs.readFileSync(accountsPath, 'utf8');
-      const parsed = JSON.parse(raw) as Record<string, unknown>;
-      if (parsed && Array.isArray(parsed.accounts)) {
-        accountsConfig = {
-          accounts: parsed.accounts as AccountInfo[],
-          defaultDomain: typeof parsed.defaultDomain === 'string' ? parsed.defaultDomain : undefined,
-        };
-      } else {
-        accountsConfig = { accounts: [] };
-      }
+    fd = fs.openSync(accountsPath, 'r');
+    if (!fs.fstatSync(fd).isFile()) return;
+    const raw = fs.readFileSync(fd, 'utf8');
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (parsed && Array.isArray(parsed.accounts)) {
+      accountsConfig = {
+        accounts: parsed.accounts as AccountInfo[],
+        defaultDomain: typeof parsed.defaultDomain === 'string' ? parsed.defaultDomain : undefined,
+      };
+    } else {
+      accountsConfig = { accounts: [] };
     }
   } catch {
     accountsConfig = { accounts: [] };
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
   }
 }
 

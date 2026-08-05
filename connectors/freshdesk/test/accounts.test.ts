@@ -9,7 +9,7 @@ import {
 } from './helpers/freshdesk-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
 import { createTempConfig } from '@mindstone/mcp-test-harness';
-import { writeFileSync, readFileSync, statSync, mkdtempSync, rmSync } from 'fs';
+import { writeFileSync, readFileSync, statSync, mkdtempSync, mkdirSync, rmSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -446,5 +446,72 @@ describe('Freshdesk bridge integration', () => {
     );
     expect(parsed.ok).toBe(false);
     expect(parsed.code).toBe('BRIDGE_ERROR');
+  });
+});
+
+describe('Freshdesk accounts.json loading', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('treats a non-regular accounts.json as no accounts (open-once + fstat)', async () => {
+    const configDir = mkdtempSync(join(tmpdir(), 'freshdesk-load-'));
+    mkdirSync(join(configDir, 'accounts.json'));
+    try {
+      testClient = await createTestClient({
+        env: { FRESHDESK_CONFIG_PATH: configDir, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.client.callTool({
+        name: 'list_freshdesk_accounts',
+        arguments: {},
+      });
+      const parsed = JSON.parse(
+        (result.content as Array<{ type: string; text: string }>)[0].text,
+      );
+      expect(parsed.accounts).toHaveLength(0);
+    } finally {
+      rmSync(configDir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails closed to no accounts when accounts.json is deleted', async () => {
+    const tc = createTempConfig({
+      accounts: [{ domain: 'testacme', apiKey: 'mock-test-key' }],
+      defaultAccount: 'testacme',
+      defaultAccountKey: 'defaultDomain',
+    });
+
+    try {
+      testClient = await createTestClient({
+        env: { FRESHDESK_CONFIG_PATH: tc.configPath, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      let result = await testClient.client.callTool({
+        name: 'list_freshdesk_accounts',
+        arguments: {},
+      });
+      let parsed = JSON.parse(
+        (result.content as Array<{ type: string; text: string }>)[0].text,
+      );
+      expect(parsed.accounts).toHaveLength(1);
+
+      // Hot-reload must not keep serving credentials for a deleted file.
+      unlinkSync(join(tc.configPath, 'accounts.json'));
+
+      result = await testClient.client.callTool({
+        name: 'list_freshdesk_accounts',
+        arguments: {},
+      });
+      parsed = JSON.parse(
+        (result.content as Array<{ type: string; text: string }>)[0].text,
+      );
+      expect(parsed.accounts).toHaveLength(0);
+    } finally {
+      tc.cleanup();
+    }
   });
 });
