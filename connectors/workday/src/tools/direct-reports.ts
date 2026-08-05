@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { WORKER_LIST_FIELDS, pickFields, paginationHint } from '../types.js';
+import { WORKER_LIST_FIELDS, workerIdSchema, paginationLimitSchema, paginationOffsetSchema, pickFields, paginationHint } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
 import { workdayFetch } from '../client.js';
@@ -28,9 +28,9 @@ RELATED TOOLS:
 - list_workday_workers: Search/browse workers to find IDs
 - get_workday_worker: Full profile for one worker`,
       inputSchema: z.object({
-        worker_id: z.string().describe('Worker ID of the manager (from list_workday_workers)'),
-        limit: z.number().optional().describe('Max results per page (default 50, max 100)'),
-        offset: z.number().optional().describe('Number of results to skip (for pagination, default 0)'),
+        worker_id: workerIdSchema.describe('Worker ID of the manager (from list_workday_workers)'),
+        limit: paginationLimitSchema.optional().describe('Max results per page (default 50, max 100)'),
+        offset: paginationOffsetSchema.optional().describe('Number of results to skip (for pagination, default 0)'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
@@ -58,7 +58,7 @@ RELATED TOOLS:
       );
 
       const reports = (result.data || []).map((w) => pickFields(w, WORKER_LIST_FIELDS));
-      const total = result.total || reports.length;
+      const total = result.total ?? reports.length;
       const hint = paginationHint(total, offset, reports.length);
 
       return JSON.stringify({ ok: true, direct_reports: reports, count: reports.length, total, pagination: hint });

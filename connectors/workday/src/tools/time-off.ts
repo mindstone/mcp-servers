@@ -8,6 +8,9 @@ import {
   TIME_OFF_FIELDS,
   NESTED_OBJECT_FIELDS,
   ABSENCE_MANAGEMENT_FAMILY,
+  workerIdSchema,
+  paginationLimitSchema,
+  paginationOffsetSchema,
   pickFields,
   paginationHint,
 } from '../types.js';
@@ -34,9 +37,9 @@ RELATED TOOLS:
 - list_workday_workers: Search/browse workers to find IDs
 - list_workday_direct_reports: Find a manager's team before checking their time off`,
       inputSchema: z.object({
-        worker_id: z.string().describe('Worker ID (from list_workday_workers)'),
-        limit: z.number().optional().describe('Max results per page (default 50, max 100)'),
-        offset: z.number().optional().describe('Number of results to skip (for pagination, default 0)'),
+        worker_id: workerIdSchema.describe('Worker ID (from list_workday_workers)'),
+        limit: paginationLimitSchema.optional().describe('Max results per page (default 50, max 100)'),
+        offset: paginationOffsetSchema.optional().describe('Number of results to skip (for pagination, default 0)'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
@@ -73,7 +76,7 @@ RELATED TOOLS:
         }
         return filtered;
       });
-      const total = result.total || entries.length;
+      const total = result.total ?? entries.length;
       const hint = paginationHint(total, offset, entries.length);
 
       return JSON.stringify({ ok: true, time_off: entries, count: entries.length, total, pagination: hint });

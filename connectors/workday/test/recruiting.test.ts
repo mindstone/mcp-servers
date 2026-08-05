@@ -46,7 +46,9 @@ describe('list_workday_job_requisitions', () => {
     const req = json.job_requisitions[0];
     expect(req.id).toBeDefined();
     expect(req.descriptor).toBeDefined();
-    expect((req.hiringManager as Record<string, unknown>).descriptor).toBe('Jane Manager');
+    expect((req.hiringManager as Record<string, unknown>).descriptor).toBe(
+      '<untrusted-content source="workday">Jane Manager</untrusted-content>',
+    );
     // Free-text and sensitive fields are stripped by the allowlist
     expect(req.jobDescription).toBeUndefined();
     expect(req.justification).toBeUndefined();

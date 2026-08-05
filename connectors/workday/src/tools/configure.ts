@@ -11,6 +11,7 @@ import { WorkdayError, USER_AGENT, REQUEST_TIMEOUT_MS } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 import {
   validateHost,
+  assertHostResolvesPublic,
   setHost,
   setTenant,
   setClientId,
@@ -70,6 +71,17 @@ COMMON MISTAKES:
       }
       const host = hostValidation.host!;
 
+      // Re-resolve the host and refuse non-public DNS records before the
+      // credential-bearing token exchange leaves the process.
+      try {
+        await assertHostResolvesPublic(host);
+      } catch (error) {
+        if (error instanceof WorkdayError) {
+          return JSON.stringify({ ok: false, error: error.message, resolution: error.resolution });
+        }
+        throw error;
+      }
+
       // Validate credentials by attempting token exchange + API probe
       const authHeader = 'Basic ' + Buffer.from(`${cid}:${csecret}`).toString('base64');
       const bodyParams: Record<string, string> = rtoken
@@ -90,6 +102,9 @@ COMMON MISTAKES:
             'User-Agent': USER_AGENT,
           },
           body: body.toString(),
+          // Never auto-follow redirects: the Basic-auth credential would be
+          // replayed to a vendor/proxy-controlled redirect target.
+          redirect: 'manual',
         });
       } catch (error) {
         if (error instanceof Error && error.name === 'TimeoutError') {
@@ -101,17 +116,25 @@ COMMON MISTAKES:
         }
         return JSON.stringify({
           ok: false,
-          error: `Could not reach Workday: ${error instanceof Error ? error.message : String(error)}`,
+          error: 'Could not reach the Workday token endpoint.',
           resolution: 'Verify the host domain is correct and accessible from your network.',
         });
       }
 
       if (!tokenResponse.ok) {
-        const errorBody = await tokenResponse.json().catch(() => ({})) as { error_description?: string; error?: string };
-        const detail = errorBody?.error_description || errorBody?.error || `HTTP ${tokenResponse.status}`;
+        // The OAuth error body is vendor/proxy-controlled and may reflect the
+        // credentials just sent — never propagate it. Bounded, connector-
+        // authored messages keyed on the status code only.
+        if (tokenResponse.status >= 300 && tokenResponse.status < 400) {
+          return JSON.stringify({
+            ok: false,
+            error: `Token endpoint attempted a redirect (HTTP ${tokenResponse.status}), which was refused.`,
+            resolution: 'Verify the host domain is correct.',
+          });
+        }
         return JSON.stringify({
           ok: false,
-          error: `Token exchange failed: ${detail}`,
+          error: `Token exchange failed (HTTP ${tokenResponse.status}).`,
           resolution: tokenResponse.status === 401
             ? 'Check your Client ID and Client Secret. Ensure the API Client is registered correctly in Workday.'
             : tokenResponse.status === 400
@@ -138,6 +161,7 @@ COMMON MISTAKES:
             Accept: 'application/json',
             'User-Agent': USER_AGENT,
           },
+          redirect: 'manual',
         });
       } catch (error) {
         if (error instanceof Error && error.name === 'TimeoutError') {
@@ -149,13 +173,20 @@ COMMON MISTAKES:
         }
         return JSON.stringify({
           ok: false,
-          error: `API probe failed: ${error instanceof Error ? error.message : String(error)}`,
+          error: 'API probe failed: could not reach the Workday API.',
           resolution: 'Verify the host domain and network connectivity.',
         });
       }
 
       if (!testResponse.ok) {
         const status = testResponse.status;
+        if (status >= 300 && status < 400) {
+          return JSON.stringify({
+            ok: false,
+            error: `API probe attempted a redirect (HTTP ${status}), which was refused.`,
+            resolution: 'Verify the host domain is correct.',
+          });
+        }
         return JSON.stringify({
           ok: false,
           error: `Token exchange succeeded but API probe failed (${status}).`,

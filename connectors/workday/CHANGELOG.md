@@ -20,6 +20,13 @@ are maintained manually as part of the PR review checklist.
 ### Fixed
 - **search**: `list_workday_workers`' `search` argument was forwarded to `/workers` as a query param, but the collection documents only `limit`/`offset` — the term was silently ignored. Search now filters client-side (case-insensitive match on name, email, title) over paged results, bounded to 1000 scanned workers, and reports the scan window in the response.
 - **metadata**: User-Agent is derived from `package.json` (was hardcoded to 0.1.0); `server.json` no longer marks `WORKDAY_REFRESH_TOKEN` as required, matching the auth model (client_credentials grant when absent).
+- **pagination**: `limit`/`offset` now require integers in range (`limit` 1-100, `offset` >= 0) and malformed values are rejected instead of silently clamped; `worker_id` arguments must be non-blank. Vendor-reported totals of `0` are no longer rewritten to the page size.
+
+### Security
+- **untrusted content**: Workday-authored text fields (descriptors, titles, emails, statuses, nested reference descriptors) and the echoed search query are now wrapped in `<untrusted-content source="workday">` envelopes with close-tag breakout escaping, so a Workday user who controls such a field cannot inject model instructions into tool output. Identity fields (`id`, `href`) stay raw so the model can round-trip them into later tool calls.
+- **error sanitization**: vendor/proxy-controlled error bodies (OAuth `error_description`, JSON error fields, raw text) are no longer propagated into model-visible errors; all API/token errors are bounded, connector-authored messages keyed on status code, and arbitrary thrown error messages are logged to stderr instead of returned.
+- **SSRF hardening**: all fetches run with `redirect: 'manual'` and 3xx responses fail closed, so a redirect can never replay the Basic credential or bearer token to an arbitrary host. Host validation now rejects non-canonical IPv4 spellings (short/hex/octal/integer forms), IPv6 loopback/link-local/unique-local/IPv4-mapped literals, ports, and embedded user-info, and a fail-closed DNS re-resolution guard re-checks every A/AAAA record against the non-public range deny list before any credential-bearing request.
+- **bridge state**: the host-supplied bridge-state file read is hardened — absolute/traversal-free path required, open-once + fstat + read-through-fd, 64 KiB size cap, strict JSON shape validation (integer port, non-empty token), and every failure logs an explicit stderr warning instead of silently collapsing.
 
 ## [0.2.2] - 2026-05-14
 ### Added

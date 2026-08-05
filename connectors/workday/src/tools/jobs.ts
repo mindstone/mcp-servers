@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { JOB_FIELDS, NESTED_OBJECT_FIELDS, PAYROLL_FAMILY, pickFields, paginationHint } from '../types.js';
+import { JOB_FIELDS, NESTED_OBJECT_FIELDS, PAYROLL_FAMILY, paginationLimitSchema, paginationOffsetSchema, pickFields, paginationHint } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
 import { workdayFetch } from '../client.js';
@@ -31,8 +31,8 @@ RELATED TOOLS:
 - list_workday_workers: Browse workers directly
 - get_workday_worker: Full profile for one worker`,
       inputSchema: z.object({
-        limit: z.number().optional().describe('Max results per page (default 50, max 100)'),
-        offset: z.number().optional().describe('Number of results to skip (for pagination, default 0)'),
+        limit: paginationLimitSchema.optional().describe('Max results per page (default 50, max 100)'),
+        offset: paginationOffsetSchema.optional().describe('Number of results to skip (for pagination, default 0)'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
@@ -71,7 +71,7 @@ RELATED TOOLS:
         }
         return filtered;
       });
-      const total = result.total || jobs.length;
+      const total = result.total ?? jobs.length;
       const hint = paginationHint(total, offset, jobs.length);
 
       return JSON.stringify({ ok: true, jobs, count: jobs.length, total, pagination: hint });

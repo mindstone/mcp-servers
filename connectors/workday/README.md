@@ -158,6 +158,9 @@ node dist/index.js
 
 - **Search is client-side.** Workday's `/workers` collection documents only `limit`/`offset`, so `list_workday_workers`' `search` argument pages through workers and filters locally (case-insensitive match on name, email, title), scanning at most 1000 workers. On larger tenants, use a specific term.
 - **Field allowlisting.** Every tool trims Workday's responses to an allowlisted set of fields (and deep-picks nested references to ID + name), so free-text fields such as time-off comments, requisition descriptions, and street addresses never reach the model.
+- **Untrusted-content envelopes.** Workday-authored text fields that are returned (names, titles, emails, statuses) are wrapped in `<untrusted-content source="workday">` envelopes so the model treats them as data, not instructions. `id` and `href` stay raw so they can be passed back into later tool calls.
+- **Strict pagination.** `limit` must be an integer 1-100 and `offset` a non-negative integer; out-of-range or fractional values are rejected rather than silently clamped. `worker_id` arguments must be non-blank.
+- **Bounded errors & no redirect following.** API and token errors return connector-authored messages (never raw vendor error bodies), and HTTP redirects are refused rather than followed, so credentials can never be replayed to a redirect target. The configured host is validated against loopback/private ranges (including non-canonical IP spellings and IPv6 forms) and re-resolved via DNS before credentials are sent.
 - **ISU security domains.** Workday gates each REST family behind Integration System User domain permissions; a 403 from `list_workday_time_off`, `list_workday_job_requisitions`, or `list_workday_jobs` means the ISU's security group needs the corresponding domain (Absence Management, Recruiting, Payroll).
 
 ## Licence

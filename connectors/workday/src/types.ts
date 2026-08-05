@@ -1,4 +1,6 @@
 import { createRequire } from 'node:module';
+import { z } from 'zod';
+import { wrapUntrusted } from './untrusted-content.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json') as { version: string };
@@ -65,7 +67,47 @@ export const JOB_FIELDS = ['id', 'descriptor', 'businessTitle', 'jobType', 'href
 
 export const PAYROLL_FAMILY = 'payroll/v2';
 
+// ── Shared input schemas (fail-closed) ──
+//
+// Validated by the MCP SDK before the handler runs, so a malformed value
+// never reaches the network. IDs must be non-blank after trimming; pagination
+// must be an integer inside a bounded range — fractional or negative values
+// are rejected, not silently rewritten.
+
+export const workerIdSchema = z
+  .string()
+  .trim()
+  .min(1, 'worker_id must not be empty')
+  .max(256, 'worker_id is too long');
+
+export const searchQuerySchema = z.string().max(512, 'search is too long');
+
+export const paginationLimitSchema = z.number().int().min(1).max(100);
+
+export const paginationOffsetSchema = z.number().int().min(0).max(1_000_000);
+
 // ── Field allowlisting ──
+
+// Human-authored / free-text fields whose values are authored inside Workday
+// (vendor-controlled). These MUST be enveloped in `<untrusted-content>` before
+// reaching the model (AGENTS.md security invariant #6): a Workday user able to
+// set a descriptor, title, email, or status string could otherwise inject a
+// close-tag breakout or model instructions directly into tool output.
+// Identity fields (`id`, `href`) stay raw by design — the model round-trips
+// them back into subsequent tool calls as path parameters, so enveloping them
+// would corrupt tool chaining.
+const EXTERNAL_TEXT_FIELDS: ReadonlySet<string> = new Set([
+  'descriptor',
+  'primaryWorkEmail',
+  'businessTitle',
+  'name',
+  'title',
+  'type',
+  'jobType',
+  'unitOfTime',
+  'status',
+  'recruitingStatus',
+]);
 
 export function pickFields<T extends readonly string[]>(
   obj: Record<string, unknown>,
@@ -74,7 +116,11 @@ export function pickFields<T extends readonly string[]>(
   const result: Record<string, unknown> = {};
   for (const field of fields) {
     if (field in obj) {
-      result[field] = obj[field];
+      const value = obj[field];
+      result[field] =
+        typeof value === 'string' && EXTERNAL_TEXT_FIELDS.has(field)
+          ? wrapUntrusted(value, 'workday')
+          : value;
     }
   }
   return result;

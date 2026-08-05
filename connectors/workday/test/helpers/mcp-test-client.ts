@@ -35,6 +35,12 @@ export async function createTestClient(options: TestClientOptions = {}): Promise
   // Dynamic import: gets a fresh module with the stubbed env vars
   const { createServer } = await import('../../src/server.js');
 
+  // Default DNS seam: every test host resolves to a public address, so the
+  // re-resolution guard in auth.ts never hits the real resolver. Tests for
+  // the guard itself override this via setDnsLookupForTesting.
+  const { setDnsLookupForTesting } = await import('../../src/auth.js');
+  setDnsLookupForTesting(async () => [{ address: '93.184.216.34', family: 4 }]);
+
   // Pass empty env to shared client since we already stubbed env above.
   return createInMemoryTestClient({ createServer });
 }
