@@ -141,6 +141,53 @@ describe('Reporting tools', () => {
     expect(data.leaderboard[0].id).toBe('2');
   });
 
+  it('get_talentlms_leaderboard pages past the first 1000 users so no top scorer is dropped', async () => {
+    // A tenant with 1001 users: page 1 is full, the highest scorer sits on page 2.
+    const bigTenant = Array.from({ length: 1000 }, (_, i) => ({
+      id: String(i + 1),
+      login: `user${i + 1}`,
+      first_name: `User${i + 1}`,
+      last_name: 'Tenant',
+      points: String(100 + i),
+      level: '1',
+    }));
+    bigTenant.push({
+      id: '1001',
+      login: 'latecomer',
+      first_name: 'Late',
+      last_name: 'Scorer',
+      points: '999999',
+      level: '99',
+    });
+
+    const requestedPages: string[] = [];
+    const { http, HttpResponse } = await import('msw');
+    mswServer.use(
+      http.get(`https://${MOCK_DOMAIN}.talentlms.com/api/v1/users/*`, ({ request }) => {
+        const segment = new URL(request.url).pathname.split('/api/v1/users/')[1] || '';
+        const pageMatch = segment.match(/page_number:(\d+)/);
+        const page = pageMatch ? parseInt(pageMatch[1], 10) : 1;
+        requestedPages.push(segment);
+        return HttpResponse.json(bigTenant.slice((page - 1) * 1000, page * 1000));
+      }),
+    );
+
+    const client = await getClient();
+    const result = await client.callTool('get_talentlms_leaderboard', { limit: 5 });
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(data.ok).toBe(true);
+    expect(data.leaderboard[0].id).toBe('1001');
+    expect(data.leaderboard[0].points).toBe('999999');
+    // Second place is the highest scorer of page 1.
+    expect(data.leaderboard[1].id).toBe('1000');
+    // Exactly two pages were needed; no third request was made.
+    expect(requestedPages).toEqual([
+      'page_size:1000,page_number:1',
+      'page_size:1000,page_number:2',
+    ]);
+  });
+
   it('get_talentlms_user_certifications returns issued certifications', async () => {
     const client = await getClient();
     const result = await client.callTool('get_talentlms_user_certifications', { user_id: '1' });

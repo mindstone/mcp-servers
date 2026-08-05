@@ -160,7 +160,7 @@ List tools paginate: TalentLMS returns 20 items per page by default — pass `pa
 - `get_talentlms_site_info` — Get site-level statistics and configuration
 - `get_talentlms_timeline` — Get activity timeline for users or courses
 - `get_talentlms_user_progress` — Get detailed progress for a user in a course
-- `get_talentlms_leaderboard` — Gamification leaderboard (users ranked by points; derived from the user list, up to 1000 users)
+- `get_talentlms_leaderboard` — Gamification leaderboard (users ranked by points; derived from the full user list, paged 1000 at a time so no user is dropped)
 - `get_talentlms_user_certifications` — Get a user's issued certifications with expiration dates
 
 ### Assessments

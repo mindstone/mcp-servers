@@ -3,6 +3,32 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { talentlmsFetch } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { wrapExternalTextFields } from '../envelope.js';
+import { TalentLMSError } from '../types.js';
+
+/** TalentLMS pages cap at 1000 items; the leaderboard reads every page so no user is dropped. */
+const LEADERBOARD_PAGE_SIZE = 1000;
+
+/** Safety bound against a misbehaving endpoint: 100 pages x 1000 users. */
+const MAX_LEADERBOARD_PAGES = 100;
+
+async function fetchAllUsers(): Promise<Array<Record<string, unknown>>> {
+  const all: Array<Record<string, unknown>> = [];
+  for (let page = 1; page <= MAX_LEADERBOARD_PAGES; page++) {
+    const users = await talentlmsFetch<Array<Record<string, unknown>>>(
+      `/users/page_size:${LEADERBOARD_PAGE_SIZE},page_number:${page}`,
+    );
+    if (!Array.isArray(users)) {
+      throw new TalentLMSError(
+        'TalentLMS returned an unexpected response shape while listing users.',
+        'INVALID_API_RESPONSE',
+        'Try again. If the problem persists, the API response format may have changed — check for a connector update.',
+      );
+    }
+    all.push(...users);
+    if (users.length < LEADERBOARD_PAGE_SIZE) break;
+  }
+  return all;
+}
 
 export function registerReportingTools(server: McpServer): void {
   server.registerTool(
@@ -67,7 +93,8 @@ export function registerReportingTools(server: McpServer): void {
       description:
         'Get the gamification leaderboard: users ranked by TalentLMS points (highest first).\n\n' +
         'The TalentLMS v1 API has no dedicated leaderboard endpoint, so this tool derives the ranking ' +
-        'from the documented points and level fields of the user list. It reads up to 1000 users.\n\n' +
+        'from the documented points and level fields of the user list, paging through all users ' +
+        '(1000 per request) so no one is dropped.\n\n' +
         'Returns: id, login, first_name, last_name, points, level — sorted by points descending.',
       inputSchema: z.object({
         limit: z.number().int().min(1).max(100).optional().describe('Maximum number of entries to return (default: 20, max: 100).'),
@@ -76,7 +103,7 @@ export function registerReportingTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const limit = args.limit ?? 20;
-      const users = await talentlmsFetch<Array<Record<string, unknown>>>('/users/page_size:1000');
+      const users = await fetchAllUsers();
       const ranked = users
         .map(u => ({
           id: u.id, login: u.login, first_name: u.first_name, last_name: u.last_name,
