@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { humaansFetch } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
+import { sanitizeJobRole, sanitizeList } from '../sanitize.js';
 import type { HumaansListResponse } from '../types.js';
 
 function paginationHint(total: number, skip: number, count: number): string {
@@ -66,7 +67,7 @@ RELATED TOOLS:
       const hint = paginationHint(result.total, result.skip, result.data.length);
       return JSON.stringify({
         ok: true,
-        jobRoles: result.data,
+        jobRoles: sanitizeList(result.data, sanitizeJobRole, 'humaans:list_humaans_job_roles'),
         count: result.data.length,
         total: result.total,
         pagination: hint,
@@ -94,7 +95,10 @@ Example: { "jobRoleId": "hmA5GnUq9ojK86LLKKWbiuKG" }`,
       const jobRole = await humaansFetch<Record<string, unknown>>(
         `/job-roles/${encodeURIComponent(args.jobRoleId)}`,
       );
-      return JSON.stringify({ ok: true, jobRole });
+      return JSON.stringify({
+        ok: true,
+        jobRole: sanitizeJobRole(jobRole, 'humaans:get_humaans_job_role'),
+      });
     }),
   );
 }

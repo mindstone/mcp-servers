@@ -11,6 +11,9 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Security
+- Envelope the free-text fields authored in Humaans — `note`/`reviewNote` on time-away entries and `note` on job roles — in `<untrusted-content>` wrappers (with close-tag breakout escaping) before they reach the model. These list/get responses previously returned the raw API objects unenveloped.
+
 ## [0.2.2] - 2026-05-14
 ### Added
 - **registry**: Cohort A backfill — 12 API-key OSS connectors get server.json + mcpName. fathom, humaans, kling, mixmax, nano-banana, napkin, pandadoc, freshdesk, elevenlabs, retell-ai, runway, talentlms each gain a registry-shaped server.json (validated against registry.modelcontextprotocol.io) and an mcpName field on package.json under the io.github.mindstone namespace.

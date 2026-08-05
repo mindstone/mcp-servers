@@ -137,6 +137,11 @@ node dist/index.js
 - `list_humaans_locations` — List company locations/offices
 - `get_humaans_company` — Get company information
 
+## Data handling
+
+- Person list responses are field-allowlisted; person detail responses strip sensitive fields (tax ID, personal email/phone, home address, birthday, profile photo).
+- Free-text fields authored in Humaans (time-away `note`/`reviewNote`, job-role `note`) are returned inside `<untrusted-content>` envelopes so the model treats them as data, not instructions.
+
 ## Licence
 
 [FSL-1.1-MIT](./LICENSE) — Functional Source License, Version 1.1, with MIT future licence. The software converts to MIT licence on 2030-04-08.

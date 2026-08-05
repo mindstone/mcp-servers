@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { humaansFetch } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
+import { sanitizeList, sanitizeTimeAwayEntry } from '../sanitize.js';
 import type { HumaansListResponse } from '../types.js';
 
 function paginationHint(total: number, skip: number, count: number): string {
@@ -72,7 +73,7 @@ RELATED TOOLS:
       const hint = paginationHint(result.total, result.skip, result.data.length);
       return JSON.stringify({
         ok: true,
-        timeAway: result.data,
+        timeAway: sanitizeList(result.data, sanitizeTimeAwayEntry, 'humaans:list_humaans_time_away'),
         count: result.data.length,
         total: result.total,
         pagination: hint,
@@ -132,7 +133,11 @@ COMMON MISTAKES:
         body: JSON.stringify(body),
       });
 
-      return JSON.stringify({ ok: true, message: 'Time away request created.', timeAway: created });
+      return JSON.stringify({
+        ok: true,
+        message: 'Time away request created.',
+        timeAway: sanitizeTimeAwayEntry(created, 'humaans:create_humaans_time_away'),
+      });
     }),
   );
 

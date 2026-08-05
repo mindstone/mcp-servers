@@ -41,6 +41,23 @@ describe('Humaans time away tools', () => {
     expect(json.timeAway[0]).toHaveProperty('startDate');
   });
 
+  it('list_humaans_time_away envelopes free-text note fields', async () => {
+    await setup();
+    const result = await testClient.callTool('list_humaans_time_away', {});
+    const json = result.json as {
+      ok: boolean;
+      timeAway: Array<{ note: string | null }>;
+    };
+
+    expect(json.ok).toBe(true);
+    expect(json.timeAway[0].note).toBe(
+      '<untrusted-content source="humaans:list_humaans_time_away:note">Doctor appointment</untrusted-content>',
+    );
+    expect(json.timeAway[1].note).toBe(
+      '<untrusted-content source="humaans:list_humaans_time_away:note">Vacation</untrusted-content>',
+    );
+  });
+
   // --- VAL-B1-HUMAANS-003: create_humaans_time_away validates required fields via Zod ---
   it('create_humaans_time_away creates a time away request', async () => {
     await setup();
@@ -61,6 +78,26 @@ describe('Humaans time away tools', () => {
     expect(json.message).toContain('created');
     expect(json.timeAway).toHaveProperty('id');
     expect(json.timeAway.personId).toBe('person-001');
+  });
+
+  it('create_humaans_time_away envelopes the note in the response', async () => {
+    await setup();
+    const result = await testClient.callTool('create_humaans_time_away', {
+      personId: 'person-001',
+      startDate: '2024-05-01',
+      endDate: '2024-05-02',
+      timeAwayTypeId: 'tat-001',
+      note: 'Short break',
+    });
+    const json = result.json as {
+      ok: boolean;
+      timeAway: { note: string };
+    };
+
+    expect(json.ok).toBe(true);
+    expect(json.timeAway.note).toBe(
+      '<untrusted-content source="humaans:create_humaans_time_away:note">Short break</untrusted-content>',
+    );
   });
 
   it('create_humaans_time_away validates required fields via Zod', async () => {

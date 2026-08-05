@@ -1,0 +1,50 @@
+/**
+ * Envelope-wrapping for the free-text fields Humaans returns to the LLM.
+ *
+ * People responses are field-allowlisted / sensitive-field-denylisted in
+ * `tools/people.ts`, but time away entries and job roles come back as raw
+ * API objects whose `note` / `reviewNote` fields are free text authored in
+ * Humaans (by employees, managers, or admins). Those are attacker-controlled
+ * strings, so they reach `wrapUntrusted` here before the object is returned
+ * (AGENTS.md security invariant #6). This module is the single, auditable
+ * place that enumerates those fields.
+ */
+import { wrapUntrusted } from './untrusted-content.js';
+
+type Obj = Record<string, unknown>;
+
+function isObj(v: unknown): v is Obj {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+function wrapStr(v: unknown, source: string): unknown {
+  return typeof v === 'string' ? wrapUntrusted(v, source) : v;
+}
+
+function wrapFields(value: unknown, fields: string[], source: string): unknown {
+  if (!isObj(value)) return value;
+  const out: Obj = { ...value };
+  for (const field of fields) {
+    out[field] = wrapStr(out[field], `${source}:${field}`);
+  }
+  return out;
+}
+
+/** Wrap the employee/manager-authored note fields on a time away entry. */
+export function sanitizeTimeAwayEntry(entry: unknown, source: string): unknown {
+  return wrapFields(entry, ['note', 'reviewNote'], source);
+}
+
+/** Wrap the admin-authored note field on a job role. */
+export function sanitizeJobRole(role: unknown, source: string): unknown {
+  return wrapFields(role, ['note'], source);
+}
+
+/** Map a sanitizer over an array, passing non-arrays through unchanged. */
+export function sanitizeList(
+  items: unknown,
+  fn: (item: unknown, source: string) => unknown,
+  source: string,
+): unknown {
+  return Array.isArray(items) ? items.map((it) => fn(it, source)) : items;
+}
