@@ -40,7 +40,9 @@ export function registerCensorTools(server: McpServer): void {
           })
           .optional(),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      // destructiveHint: creates a processing job (billable compute) that
+      // mutates how the clip is rendered on the production Opus account.
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       requireApiKey();

@@ -377,7 +377,9 @@ export function registerUploadTools(server: McpServer): void {
         uploadedVideoAttr: UploadedVideoAttrSchema.optional(),
         conclusionActions: z.array(ConclusionActionSchema).optional(),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      // destructiveHint: creates a production (potentially billable)
+      // clipping project on the Opus account.
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       requireApiKey();
