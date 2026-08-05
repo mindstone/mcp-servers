@@ -15,16 +15,7 @@ import {
   formatConversation,
   wrapTicketUntrustedFields,
 } from '../formatters.js';
-import { withErrorHandling } from '../utils.js';
-
-function noAccountError(): string {
-  return JSON.stringify({
-    ok: false,
-    error: 'No Freshdesk account connected',
-    resolution:
-      'Use configure_freshdesk to connect your account.',
-  });
-}
+import { withErrorHandling, noAccountError } from '../utils.js';
 
 export function registerTicketTools(server: McpServer): void {
   // ── list_freshdesk_tickets ──────────────────────────────────────

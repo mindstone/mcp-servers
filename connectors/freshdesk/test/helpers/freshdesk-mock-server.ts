@@ -3,6 +3,8 @@ import {
   mockTickets,
   mockConversations,
   mockTicketFields,
+  mockAgents,
+  mockGroups,
   makeTicket,
 } from '../fixtures/freshdesk-data.js';
 
@@ -184,6 +186,28 @@ export function createFreshdeskHandlers(
       const authError = checkAuth(request);
       if (authError) return authError;
       return HttpResponse.json(mockTicketFields);
+    }),
+
+    // ── Agents & Groups ───────────────────────────────────────────
+
+    http.get(`${base}/agents`, ({ request }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+
+      const url = new URL(request.url);
+      const email = url.searchParams.get('email');
+      if (email) {
+        return HttpResponse.json(
+          mockAgents.filter((a) => a.contact?.email === email),
+        );
+      }
+      return HttpResponse.json(mockAgents);
+    }),
+
+    http.get(`${base}/groups`, ({ request }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+      return HttpResponse.json(mockGroups);
     }),
   ];
 }

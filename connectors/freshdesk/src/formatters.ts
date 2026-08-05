@@ -10,7 +10,13 @@
  * (ids, statuses, priorities, timestamps, URLs) is NEVER wrapped.
  */
 
-import type { FreshdeskTicket, FreshdeskConversation, FreshdeskTicketField } from './types.js';
+import type {
+  FreshdeskTicket,
+  FreshdeskConversation,
+  FreshdeskTicketField,
+  FreshdeskAgent,
+  FreshdeskGroup,
+} from './types.js';
 import { statusToString, priorityToString, sourceToString } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
@@ -18,6 +24,18 @@ export const UNTRUSTED_TICKET_OPEN = '<untrusted-content source="external-ticket
 export const UNTRUSTED_TICKET_CLOSE = '</untrusted-content>';
 
 const TICKET_SOURCE = 'external-ticket';
+const AGENT_SOURCE = 'external-agent';
+const GROUP_SOURCE = 'external-group';
+
+/**
+ * Wrap an optional external-text field in an `<untrusted-content>` envelope.
+ * Returns `undefined` for null/undefined/empty input so callers can skip the
+ * field entirely rather than emit an empty envelope.
+ */
+function wrapField(s: string | null | undefined, source: string): string | undefined {
+  if (typeof s !== 'string' || s.length === 0) return undefined;
+  return wrapUntrusted(s, source);
+}
 
 /**
  * Wrap a body string in the external-ticket envelope using the canonical
@@ -30,8 +48,7 @@ const TICKET_SOURCE = 'external-ticket';
  * for the same source: `wrap(wrap(s)) === wrap(s)`.
  */
 export function wrapUntrustedTicketContent(s: string | null | undefined): string | undefined {
-  if (typeof s !== 'string' || s.length === 0) return undefined;
-  return wrapUntrusted(s, TICKET_SOURCE);
+  return wrapField(s, TICKET_SOURCE);
 }
 
 /**
@@ -102,4 +119,45 @@ export function formatTicketField(field: FreshdeskTicketField): string {
   const required = field.required_for_agents ? ' [required for agents]' : '';
   const closure = field.required_for_closure ? ' [required for closure]' : '';
   return `${field.label} (ID: ${field.id}, name: ${field.name}, type: ${field.type})${required}${closure}`;
+}
+
+export function formatAgentConcise(agent: FreshdeskAgent): string {
+  const name = wrapField(agent.contact?.name, AGENT_SOURCE) ?? '(no name)';
+  const email = agent.contact?.email ?? 'no email';
+  const availability = agent.available === false ? 'unavailable' : 'available';
+  return `#${agent.id}: ${name} <${email}> (${availability})`;
+}
+
+export function formatGroupConcise(group: FreshdeskGroup): string {
+  const name = wrapField(group.name, GROUP_SOURCE) ?? '(unnamed)';
+  const type = group.group_type ? `, type: ${group.group_type}` : '';
+  return `#${group.id}: ${name}${type}`;
+}
+
+/**
+ * Return a shallow clone of the agent with external-text fields (display
+ * name, signature) enveloped; ids and timestamps are left untouched.
+ */
+export function wrapAgentUntrustedFields(agent: FreshdeskAgent): FreshdeskAgent {
+  const wrapped: FreshdeskAgent = { ...agent };
+  if (agent.contact) {
+    const name = wrapField(agent.contact.name, AGENT_SOURCE);
+    wrapped.contact = { ...agent.contact, ...(name !== undefined ? { name } : {}) };
+  }
+  const signature = wrapField(agent.signature, AGENT_SOURCE);
+  if (signature !== undefined) wrapped.signature = signature;
+  return wrapped;
+}
+
+/**
+ * Return a shallow clone of the group with external-text fields (name,
+ * description) enveloped; ids and timestamps are left untouched.
+ */
+export function wrapGroupUntrustedFields(group: FreshdeskGroup): FreshdeskGroup {
+  const wrapped: FreshdeskGroup = { ...group };
+  const name = wrapField(group.name, GROUP_SOURCE);
+  if (name !== undefined) wrapped.name = name;
+  const description = wrapField(group.description, GROUP_SOURCE);
+  if (description !== undefined) wrapped.description = description;
+  return wrapped;
 }

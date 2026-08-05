@@ -19,7 +19,7 @@ describe('Smoke test — tool registration', () => {
     if (cleanupConfig) cleanupConfig();
   });
 
-  it('registers exactly 11 tools with correct names', async () => {
+  it('registers exactly 13 tools with correct names', async () => {
     // Create temp config — use the harness API with defaultAccountKey for Freshdesk
     const tempConfig = createTempConfig({
       accounts: [
@@ -47,13 +47,15 @@ describe('Smoke test — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(11);
+    expect(toolsResult.tools).toHaveLength(13);
     expect(toolNames).toEqual([
       'add_freshdesk_note',
       'configure_freshdesk',
       'create_freshdesk_ticket',
       'get_freshdesk_ticket',
       'list_freshdesk_accounts',
+      'list_freshdesk_agents',
+      'list_freshdesk_groups',
       'list_freshdesk_ticket_fields',
       'list_freshdesk_tickets',
       'remove_freshdesk_account',
@@ -107,7 +109,7 @@ describe('Smoke test — tool registration', () => {
 });
 
 describe('Spawned stdio smoke test', () => {
-  it('lists 11 tools from built dist/index.js', async () => {
+  it('lists 13 tools from built dist/index.js', async () => {
     const { createStdioTestClient } = await import('@mindstone/mcp-test-harness');
     const { join } = await import('path');
 
@@ -136,7 +138,7 @@ describe('Spawned stdio smoke test', () => {
 
       try {
         const toolsResult = await client.client.listTools();
-        expect(toolsResult.tools).toHaveLength(11);
+        expect(toolsResult.tools).toHaveLength(13);
       } finally {
         await client.close();
       }

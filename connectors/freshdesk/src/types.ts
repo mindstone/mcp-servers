@@ -88,6 +88,37 @@ export interface FreshdeskTicketField {
   choices?: Record<string, unknown> | Array<string | [string, string]>;
 }
 
+export interface FreshdeskAgent {
+  id: number;
+  available?: boolean;
+  occasional?: boolean;
+  signature?: string;
+  ticket_scope?: number;
+  group_ids?: number[];
+  role_ids?: number[];
+  contact?: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    mobile?: string;
+  };
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface FreshdeskGroup {
+  id: number;
+  name: string;
+  description?: string;
+  escalate_to?: number;
+  unassigned_for?: string;
+  business_hour_id?: number;
+  group_type?: string;
+  agent_ids?: number[];
+  created_at?: string;
+  updated_at?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Status / Priority / Source maps
 // ---------------------------------------------------------------------------

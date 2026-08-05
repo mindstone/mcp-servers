@@ -1,4 +1,10 @@
-import type { FreshdeskTicket, FreshdeskConversation, FreshdeskTicketField } from '../../src/types.js';
+import type {
+  FreshdeskTicket,
+  FreshdeskConversation,
+  FreshdeskTicketField,
+  FreshdeskAgent,
+  FreshdeskGroup,
+} from '../../src/types.js';
 
 export function makeTicket(id: number, overrides: Partial<FreshdeskTicket> = {}): FreshdeskTicket {
   return {
@@ -77,4 +83,43 @@ export const mockTicketFields: FreshdeskTicketField[] = [
   makeTicketField(2, 'priority', 'Priority', 'default_priority'),
   makeTicketField(3, 'subject', 'Subject', 'default_subject'),
   makeTicketField(4, 'cf_custom_dropdown', 'Custom Dropdown', 'custom_dropdown'),
+];
+
+export function makeAgent(id: number, overrides: Partial<FreshdeskAgent> = {}): FreshdeskAgent {
+  return {
+    id,
+    available: true,
+    occasional: false,
+    ticket_scope: 1,
+    group_ids: [1],
+    contact: {
+      name: `Agent ${id}`,
+      email: `agent${id}@testacme.freshdesk.com`,
+    },
+    created_at: '2025-06-01T09:00:00Z',
+    updated_at: '2026-01-10T09:00:00Z',
+    ...overrides,
+  };
+}
+
+export function makeGroup(id: number, overrides: Partial<FreshdeskGroup> = {}): FreshdeskGroup {
+  return {
+    id,
+    name: `Group ${id}`,
+    description: `Group ${id} description`,
+    group_type: 'support',
+    created_at: '2025-06-01T09:00:00Z',
+    updated_at: '2026-01-10T09:00:00Z',
+    ...overrides,
+  };
+}
+
+export const mockAgents: FreshdeskAgent[] = [
+  makeAgent(200),
+  makeAgent(201, { contact: { name: 'Jane Agent', email: 'jane@testacme.freshdesk.com' } }),
+];
+
+export const mockGroups: FreshdeskGroup[] = [
+  makeGroup(1, { name: 'Support' }),
+  makeGroup(2, { name: 'Escalations' }),
 ];
