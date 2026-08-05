@@ -130,23 +130,23 @@ temp) directory before uploading, and pick download targets inside it.
 - `opus_get_brand_templates` — List brand templates
 
 ### Project lifecycle
-- `opus_create_project` — Submit a long-form video URL for clipping
+- `opus_create_project` — Submit a long-form video URL for clipping (marked destructive)
 - `opus_get_project` — Retrieve a project's status, metadata, and clips
-- `opus_get_clips` — Retrieve clips generated for a project
-- `opus_share_project` — Update a project's sharing visibility
+- `opus_get_clips` — Retrieve clips generated for a project (surfaces pagination metadata: `total`/`next`/`limit`)
+- `opus_share_project` — Update a project's sharing visibility (marked destructive)
 
 ### Upload
-- `opus_upload_video` — Upload a local video file and create a clip project (orchestrates the 4-step GCS resumable upload; reads confined to the workspace sandbox)
+- `opus_upload_video` — Upload a local video file and create a clip project (orchestrates the 4-step GCS resumable upload; reads confined to the workspace sandbox; marked destructive)
 
 ### Downloads
-- `opus_download_clip` — Download an exported clip MP4 to a local file inside the workspace sandbox
+- `opus_download_clip` — Download an exported clip MP4 to a local file inside the workspace sandbox. Only OpusClip CDN / Google Cloud Storage hosts are accepted; hostnames are DNS-resolved and every resolved address must be public
 
 ### Censor jobs
-- `opus_create_censor_job` — Create a censor job for a clip
+- `opus_create_censor_job` — Create a censor job for a clip (marked destructive)
 - `opus_get_censor_job_status` — Poll the status of a censor job
 
 ### Collections
-- `opus_create_collection` — Create a clip collection
+- `opus_create_collection` — Create a clip collection (marked destructive)
 - `opus_get_collections` — List your collections
 - `opus_export_collection` — Export all clips from a collection
 - `opus_delete_collection` — Delete a collection (clips themselves are preserved)
@@ -165,8 +165,9 @@ temp) directory before uploading, and pick download targets inside it.
 
 External text returned by the Opus API (project/clip titles, template and
 collection names, social account display names, generated social copy,
-upstream error strings) is wrapped in `<untrusted-content>` envelopes so the
-model treats it as data, not instructions.
+upstream error strings and error bodies, job statuses, and continuation
+tokens) is wrapped in `<untrusted-content>` envelopes so the model treats
+it as data, not instructions.
 
 ## Licence
 
