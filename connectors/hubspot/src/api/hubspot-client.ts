@@ -1210,8 +1210,12 @@ export async function getHubSpotClientAsync(email?: string): Promise<HubSpotClie
     }
   }
   
-  // Reuse client if same account and token hasn't changed
-  if (clientInstance && currentEmail === targetEmail) {
+  // Reuse client only if same account AND the same access token. A
+  // same-account token file replacement (reconnect that doesn't go through the
+  // expiry-refresh branch above) must build a new client — otherwise API calls
+  // keep using the stale token and per-token memoisation (tokenCacheKey, e.g.
+  // the sales-email-read scope check) describes the wrong credential.
+  if (clientInstance && currentEmail === targetEmail && clientInstance.tokenCacheKey === token.access_token) {
     return clientInstance;
   }
   

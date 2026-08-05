@@ -35,6 +35,7 @@ are maintained manually as part of the PR review checklist.
 ### Fixed
 
 - The sales-email-read scope check no longer degrades silently: an introspection failure or a scope-less introspection response attaches an explicit "could not verify" `notes` warning, and the memoised answer is keyed by the access token instead of cached process-globally (a reconnect/token rotation previously could have reused a stale verdict for the wrong credential).
+- `getHubSpotClientAsync` reuses the cached client only when the access token (not just the account email) is unchanged — a same-account token file replacement previously kept serving the stale token.
 - `add_hubspot_list_members` / `remove_hubspot_list_members` reject an empty `recordIds` array before any API call (`minItems: 1` in the schema plus a runtime guard) — an empty write was previously a silent no-op the model would report as success.
 
 ## [0.3.1] - 2026-07-30
