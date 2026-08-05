@@ -5,6 +5,7 @@ import { mswServer } from '../helpers/setup.js';
 import { createZendeskHandlers } from '../helpers/zendesk-mock-server.js';
 import { createTestClient, type McpTestClient } from '../helpers/mcp-test-client.js';
 import { API_TOKEN_ACCOUNT } from '../fixtures/accounts.js';
+import { makeTicket } from '../fixtures/zendesk-data.js';
 
 describe('Discovery tools', () => {
   let testClient: McpTestClient;

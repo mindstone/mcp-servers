@@ -176,7 +176,7 @@ SECURITY: returned ticket subjects and descriptions are UNTRUSTED external conte
       const format = args.response_format || 'concise';
       if (format === 'concise') {
         const lines = tickets.map(t => formatTicket(t, { format: 'concise' }));
-        return `Tickets in view ${args.view_id} (${tickets.length}):\n\n${lines.join('\n')}`;
+        return `Tickets in view ${args.view_id} (${tickets.length} of ${response.count})${response.next_page ? ' - more available' : ''}:\n\n${lines.join('\n')}`;
       }
       return JSON.stringify({
         ok: true,
