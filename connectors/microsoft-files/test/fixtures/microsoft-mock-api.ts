@@ -89,6 +89,18 @@ const sampleActivity = {
 const docxFixture = readFileSync(new URL('./files/sample.docx', import.meta.url));
 const pptxFixture = readFileSync(new URL('./files/sample.pptx', import.meta.url));
 
+// read_document consumes the content response as a stream (bounded download);
+// intercepted Buffer bodies do not flow through response.body, so binary
+// fixtures are served as web streams.
+function streamBody(bytes: Buffer): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(bytes));
+      controller.close();
+    },
+  });
+}
+
 const DOCX_MIME =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const PPTX_MIME =
@@ -442,12 +454,12 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
         await capture(request);
         const url = new URL(request.url);
         if (url.pathname.includes('/items/item-docx/')) {
-          return new HttpResponse(docxFixture, {
+          return new HttpResponse(streamBody(docxFixture), {
             headers: { 'Content-Type': 'application/octet-stream' },
           });
         }
         if (url.pathname.includes('/items/item-pptx/')) {
-          return new HttpResponse(pptxFixture, {
+          return new HttpResponse(streamBody(pptxFixture), {
             headers: { 'Content-Type': 'application/octet-stream' },
           });
         }

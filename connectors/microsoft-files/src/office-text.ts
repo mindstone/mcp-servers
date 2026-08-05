@@ -1,4 +1,5 @@
 import { inflateRawSync } from 'node:zlib';
+import { wrapUntrusted } from './untrusted-content.js';
 
 /**
  * Minimal Office Open XML text extraction (`.docx` / `.pptx`) with zero
@@ -10,6 +11,12 @@ import { inflateRawSync } from 'node:zlib';
  * descriptors or ZIP64 (Office writers always populate the central directory
  * sizes this reader relies on). Anything unexpected raises
  * InvalidOfficeDocumentError, which the caller maps to user-facing guidance.
+ *
+ * Decompression is bounded in both dimensions because the input is an
+ * attacker-controllable download: each entry inflates through zlib's
+ * `maxOutputLength` (a ZIP bomb trips ERR_BUFFER_TOO_LARGE, mapped to
+ * InvalidOfficeDocumentError), the declared uncompressed size is checked
+ * BEFORE inflating, and a cumulative budget stops many-small-entries attacks.
  */
 
 export class InvalidOfficeDocumentError extends Error {
@@ -17,6 +24,15 @@ export class InvalidOfficeDocumentError extends Error {
     super(message);
     this.name = 'InvalidOfficeDocumentError';
   }
+}
+
+/** A 20MB .docx/.pptx expands to low-double-digit MB of XML in practice. */
+export const MAX_ZIP_ENTRY_UNCOMPRESSED_BYTES = 64 * 1024 * 1024;
+export const MAX_ZIP_TOTAL_UNCOMPRESSED_BYTES = 128 * 1024 * 1024;
+
+/** Entry names come from the wire; envelope them in error messages. */
+function safeEntryName(name: string): string {
+  return wrapUntrusted(name, 'microsoft-files:office:zipEntryName') ?? '';
 }
 
 const EOCD_SIGNATURE = 0x06054b50;
@@ -27,6 +43,7 @@ interface ZipEntry {
   name: string;
   compressionMethod: number;
   compressedSize: number;
+  uncompressedSize: number;
   localHeaderOffset: number;
 }
 
@@ -45,19 +62,27 @@ function listZipEntries(bytes: Buffer): ZipEntry[] {
   let offset = bytes.readUInt32LE(eocd + 16);
   const entries: ZipEntry[] = [];
   for (let i = 0; i < count; i += 1) {
+    if (offset + 46 > bytes.length) {
+      throw new InvalidOfficeDocumentError('truncated ZIP central directory');
+    }
     if (bytes.readUInt32LE(offset) !== CENTRAL_DIR_SIGNATURE) {
       throw new InvalidOfficeDocumentError('corrupt ZIP central directory');
     }
     const compressionMethod = bytes.readUInt16LE(offset + 10);
     const compressedSize = bytes.readUInt32LE(offset + 20);
+    const uncompressedSize = bytes.readUInt32LE(offset + 24);
     const nameLength = bytes.readUInt16LE(offset + 28);
     const extraLength = bytes.readUInt16LE(offset + 30);
     const commentLength = bytes.readUInt16LE(offset + 32);
     const localHeaderOffset = bytes.readUInt32LE(offset + 42);
+    if (offset + 46 + nameLength + extraLength + commentLength > bytes.length) {
+      throw new InvalidOfficeDocumentError('truncated ZIP central directory entry');
+    }
     entries.push({
       name: bytes.subarray(offset + 46, offset + 46 + nameLength).toString('utf-8'),
       compressionMethod,
       compressedSize,
+      uncompressedSize,
       localHeaderOffset,
     });
     offset += 46 + nameLength + extraLength + commentLength;
@@ -65,26 +90,61 @@ function listZipEntries(bytes: Buffer): ZipEntry[] {
   return entries;
 }
 
-function readZipEntry(bytes: Buffer, entry: ZipEntry): Buffer {
+interface InflationBudget {
+  remaining: number;
+}
+
+function readZipEntry(bytes: Buffer, entry: ZipEntry, budget: InflationBudget): Buffer {
+  const allowed = Math.min(MAX_ZIP_ENTRY_UNCOMPRESSED_BYTES, budget.remaining);
+  if (entry.uncompressedSize > allowed) {
+    throw new InvalidOfficeDocumentError(
+      `ZIP entry ${safeEntryName(entry.name)} declares an uncompressed size above the extraction limit`,
+    );
+  }
   const offset = entry.localHeaderOffset;
+  if (offset + 30 > bytes.length) {
+    throw new InvalidOfficeDocumentError(
+      `truncated ZIP local header for ${safeEntryName(entry.name)}`,
+    );
+  }
   if (bytes.readUInt32LE(offset) !== LOCAL_HEADER_SIGNATURE) {
-    throw new InvalidOfficeDocumentError(`corrupt ZIP local header for "${entry.name}"`);
+    throw new InvalidOfficeDocumentError(`corrupt ZIP local header for ${safeEntryName(entry.name)}`);
   }
   const nameLength = bytes.readUInt16LE(offset + 26);
   const extraLength = bytes.readUInt16LE(offset + 28);
   const dataStart = offset + 30 + nameLength + extraLength;
-  const compressed = bytes.subarray(dataStart, dataStart + entry.compressedSize);
-  if (entry.compressionMethod === 0) return Buffer.from(compressed);
-  if (entry.compressionMethod === 8) {
-    try {
-      return inflateRawSync(compressed);
-    } catch {
-      throw new InvalidOfficeDocumentError(`cannot inflate ZIP entry "${entry.name}"`);
-    }
+  if (dataStart + entry.compressedSize > bytes.length) {
+    throw new InvalidOfficeDocumentError(
+      `truncated ZIP entry data for ${safeEntryName(entry.name)}`,
+    );
   }
-  throw new InvalidOfficeDocumentError(
-    `unsupported ZIP compression method ${entry.compressionMethod} for "${entry.name}"`,
-  );
+  const compressed = bytes.subarray(dataStart, dataStart + entry.compressedSize);
+  let inflated: Buffer;
+  if (entry.compressionMethod === 0) {
+    inflated = Buffer.from(compressed);
+  } else if (entry.compressionMethod === 8) {
+    try {
+      // maxOutputLength makes inflation itself fail closed even when the
+      // declared size lies, so a ZIP bomb cannot expand in memory.
+      inflated = inflateRawSync(compressed, { maxOutputLength: allowed + 1 });
+    } catch (err) {
+      if ((err as { code?: unknown })?.code === 'ERR_BUFFER_TOO_LARGE') {
+        throw new InvalidOfficeDocumentError(
+          `ZIP entry ${safeEntryName(entry.name)} exceeds the extraction size limit`,
+        );
+      }
+      throw new InvalidOfficeDocumentError(`cannot inflate ZIP entry ${safeEntryName(entry.name)}`);
+    }
+  } else {
+    throw new InvalidOfficeDocumentError(
+      `unsupported ZIP compression method ${entry.compressionMethod} for ${safeEntryName(entry.name)}`,
+    );
+  }
+  budget.remaining -= inflated.length;
+  if (budget.remaining < 0) {
+    throw new InvalidOfficeDocumentError('ZIP contents exceed the total extraction size limit');
+  }
+  return inflated;
 }
 
 function decodeXmlEntities(text: string): string {
@@ -103,11 +163,12 @@ function decodeXmlEntities(text: string): string {
 }
 
 export function extractDocxText(bytes: Buffer): string {
+  const budget: InflationBudget = { remaining: MAX_ZIP_TOTAL_UNCOMPRESSED_BYTES };
   const entry = listZipEntries(bytes).find((e) => e.name === 'word/document.xml');
   if (!entry) {
     throw new InvalidOfficeDocumentError('no word/document.xml part found');
   }
-  const xml = readZipEntry(bytes, entry).toString('utf-8');
+  const xml = readZipEntry(bytes, entry, budget).toString('utf-8');
   const withBreaks = xml
     .replace(/<w:tab\b[^>]*\/>/g, '\t')
     .replace(/<w:br\b[^>]*\/>/g, '\n')
@@ -117,6 +178,7 @@ export function extractDocxText(bytes: Buffer): string {
 }
 
 export function extractPptxText(bytes: Buffer): string {
+  const budget: InflationBudget = { remaining: MAX_ZIP_TOTAL_UNCOMPRESSED_BYTES };
   const slides = listZipEntries(bytes)
     .map((entry) => ({ entry, match: /^ppt\/slides\/slide(\d+)\.xml$/.exec(entry.name) }))
     .filter((slide): slide is { entry: ZipEntry; match: RegExpExecArray } => slide.match !== null)
@@ -126,7 +188,7 @@ export function extractPptxText(bytes: Buffer): string {
   }
   return slides
     .map(({ entry, match }) => {
-      const xml = readZipEntry(bytes, entry).toString('utf-8');
+      const xml = readZipEntry(bytes, entry, budget).toString('utf-8');
       const runs = [...xml.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)]
         .map((m) => decodeXmlEntities(m[1] ?? ''))
         .filter((text) => text.length > 0);

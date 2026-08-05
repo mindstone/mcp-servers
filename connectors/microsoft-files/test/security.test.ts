@@ -416,3 +416,67 @@ describe('numeric input bounds (function-level, pre-network)', () => {
     expect(apiCalls).toBe(0);
   });
 });
+
+describe('read_document download byte cap', () => {
+  let client: McpTestClient;
+  let cfg: MicrosoftTestConfig;
+
+  beforeAll(async () => {
+    cfg = createMicrosoftConfigDir();
+    client = await createTestClient({
+      env: {
+        MS_CLIENT_ID: 'mock-client-id',
+        MS_CONFIG_DIR: cfg.configPath,
+      },
+    });
+  });
+
+  beforeEach(() => {
+    const mock = createMockApi();
+    mswServer.use(...mock.handlers);
+  });
+
+  afterAll(async () => {
+    if (client) await client.close();
+    if (cfg) cfg.cleanup();
+  });
+
+  it('rejects a body larger than maxSize even when metadata under-reports the size', async () => {
+    const DOCX_MIME =
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    const escapedBase = GRAPH_BASE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    mswServer.use(
+      // Metadata claims a tiny 100-byte file.
+      http.get(new RegExp(`${escapedBase}/me/drive/items/item-liar(\\?.*)?$`), () =>
+        HttpResponse.json({
+          id: 'item-liar',
+          name: 'report.docx',
+          size: 100,
+          file: { mimeType: DOCX_MIME },
+        }),
+      ),
+      // ...but the content endpoint streams 2MB (streamed body, no
+      // content-length — the streaming cap, not the header check, must trip).
+      http.get(new RegExp(`${escapedBase}/me/drive/items/item-liar/content(\\?.*)?$`), () =>
+        new HttpResponse(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new Uint8Array(1024 * 1024).fill(0x61));
+              controller.enqueue(new Uint8Array(1024 * 1024).fill(0x62));
+              controller.close();
+            },
+          }),
+          { headers: { 'Content-Type': 'application/octet-stream' } },
+        ),
+      ),
+    );
+    const result = await client.callTool('read_document', {
+      path: 'item-liar',
+      maxSize: 1024 * 1024,
+    });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('exceeds the maximum size');
+  });
+});

@@ -983,7 +983,18 @@ const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingm
 const PPTX_MIME =
   'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
-async function fetchDriveItemBytes(endpoint: string, signal: AbortSignal): Promise<Buffer> {
+/**
+ * Download a drive item's bytes with a hard size ceiling. The caller's
+ * metadata pre-check is advisory only (Graph metadata can be stale or
+ * inconsistent), so the body itself is independently bounded: a declared
+ * content-length over the cap fails fast, and the stream is cancelled the
+ * moment it overruns.
+ */
+async function fetchDriveItemBytes(
+  endpoint: string,
+  signal: AbortSignal,
+  maxBytes: number,
+): Promise<Buffer> {
   const token = await getAccessToken();
   const response = await fetch(`${GRAPH_BASE_URL}${endpoint}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -997,7 +1008,33 @@ async function fetchDriveItemBytes(endpoint: string, signal: AbortSignal): Promi
     err.statusCode = response.status;
     throw err;
   }
-  return Buffer.from(await response.arrayBuffer());
+  const declaredLength = Number(response.headers.get('content-length') ?? 0);
+  if (declaredLength > maxBytes) {
+    throw new FilesBusinessError(
+      `File download exceeds the maximum size of ${formatSize(maxBytes)}.`,
+      'read_document',
+    );
+  }
+  if (!response.body) {
+    return Buffer.from(await response.arrayBuffer());
+  }
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new FilesBusinessError(
+        `File download exceeds the maximum size of ${formatSize(maxBytes)}.`,
+        'read_document',
+      );
+    }
+    chunks.push(Buffer.from(value));
+  }
+  return Buffer.concat(chunks);
 }
 
 export async function readDocument(
@@ -1051,7 +1088,11 @@ export async function readDocument(
     );
   }
 
-  const bytes = await fetchDriveItemBytes(buildDriveItemEndpoint(args.path, '/content'), signal);
+  const bytes = await fetchDriveItemBytes(
+    buildDriveItemEndpoint(args.path, '/content'),
+    signal,
+    maxSize,
+  );
 
   let text: string;
   try {
