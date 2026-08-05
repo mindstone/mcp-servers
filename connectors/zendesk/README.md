@@ -233,8 +233,9 @@ EOF
 
 - Zendesk API-token credentials live in `accounts.json`; OAuth credentials are read from `credentials/*.token.json` under `ZENDESK_CONFIG_PATH`.
 - Host bridge calls, when configured, go to `127.0.0.1` using the token from `MCP_HOST_BRIDGE_STATE`.
-- Ticket subjects, descriptions, and comment bodies are wrapped in `<untrusted-content source="external-ticket">...</untrusted-content>` with close-tag escaping before model exposure.
-- Ticket exports that write files are constrained to the system temp directory.
+- Ticket subjects, descriptions, comment bodies, user/org/group/macro/view/field text, and other externally authored strings are wrapped in `<untrusted-content source="...">...</untrusted-content>` envelopes with close-tag escaping before model exposure.
+- Ticket exports that write files are constrained to the system temp directory (symlink-safe canonical containment), never overwrite an existing file, and are written with owner-only permissions. `export_zendesk_tickets` and `get_zendesk_tickets_by_ids` are annotated as non-read-only because they can write local export files.
+- Email inputs are validated for format and phone inputs for E.164 before any network call; numeric IDs and pagination parameters must be positive integers.
 - Account removal, ticket updates, ticket comments, and macro application are marked so capable hosts can ask before changing support data.
 
 ## Smoke test

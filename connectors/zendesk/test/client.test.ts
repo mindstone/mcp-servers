@@ -130,6 +130,52 @@ describe('Client — zendeskFetch', () => {
     }
   });
 
+  it('should fail closed with a sanitised error when a success response is malformed JSON', async () => {
+    // Canary built programmatically — stands in for attacker-controlled body
+    // fragments that runtime JSON parse errors would otherwise embed.
+    const canary = 'CANARY-' + 'fragment-' + 'z'.repeat(16);
+    mswServer.use(
+      http.get(`${base}/tickets/1.json`, () => {
+        return new HttpResponse(`<html>${canary}</html>`, {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }),
+    );
+
+    const { zendeskFetch } = await import('../src/client.js');
+    const { ZendeskError } = await import('../src/types.js');
+
+    try {
+      await zendeskFetch(apiTokenAccount, '/tickets/1.json');
+      expect.unreachable('Should have thrown');
+    } catch (err: any) {
+      expect(err).toBeInstanceOf(ZendeskError);
+      expect(err.code).toBe('API_ERROR');
+      expect(err.message).not.toContain(canary);
+      expect(err.resolution).not.toContain(canary);
+    }
+  });
+
+  it('should not log the raw vendor error body on API errors', async () => {
+    const canary = 'CANARY-' + 'vendor-body-' + 'q'.repeat(16);
+    mswServer.use(
+      http.get(`${base}/tickets/1.json`, () => {
+        return HttpResponse.text(`{"error":"${canary}"}`, { status: 500 });
+      }),
+    );
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const { zendeskFetch } = await import('../src/client.js');
+      await expect(zendeskFetch(apiTokenAccount, '/tickets/1.json')).rejects.toThrow();
+      const logged = errorSpy.mock.calls.map(c => c.map(String).join(' ')).join('\n');
+      expect(logged).not.toContain(canary);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it('should retry on 429 for GET requests', async () => {
     let requestCount = 0;
     mswServer.use(

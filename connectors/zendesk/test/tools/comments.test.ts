@@ -48,6 +48,27 @@ describe('Comment tools', () => {
       expect(result.text).toContain('Comments on ticket #1');
       expect(result.text).toContain('test comment');
     });
+
+    it('should surface author-lookup failure instead of silently degrading', async () => {
+      const base = `https://${API_TOKEN_ACCOUNT.subdomain}.zendesk.com/api/v2`;
+      mswServer.use(
+        http.get(`${base}/users/show_many.json`, () => {
+          return HttpResponse.json({ error: 'ServerError' }, { status: 500 });
+        }),
+      );
+
+      const concise = await testClient.callTool('list_zendesk_ticket_comments', { ticket_id: 1 });
+      expect(concise.isError).toBeFalsy();
+      expect(concise.text).toContain('Author name lookup failed');
+
+      const detailed = await testClient.callTool('list_zendesk_ticket_comments', {
+        ticket_id: 1,
+        response_format: 'detailed',
+      });
+      const data = detailed.json as any;
+      expect(data.ok).toBe(true);
+      expect(data.author_lookup_failed).toBe(true);
+    });
   });
 
   describe('add_zendesk_ticket_comment', () => {

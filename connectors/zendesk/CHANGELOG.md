@@ -13,6 +13,15 @@ are maintained manually as part of the PR review checklist.
 
 ### Security
 - Migrated the untrusted-content envelope from the connector-local hand-rolled implementation to the canonical shared helper (`src/untrusted-content.ts`, vendored from the connector template per security invariant #6) and extended coverage: ticket subjects are now enveloped in every read path (previously only search results), and user names/emails, organization names, and macro titles are enveloped as well.
+- Enveloped the remaining externally authored string fields in `<untrusted-content>` envelopes: macro action values, group names/descriptions, ticket-field titles/descriptions/custom options, view titles, organization domain names, user phone numbers, ticket tags and string custom-field values, Help Center `html_url`, and the `apply_zendesk_macro` preview payload.
+- Widened the envelope close-tag breakout matcher to neutralise newline, carriage-return, and form-feed variants (`</untrusted-content\n>` etc.), not just space/tab.
+- Export writes (`export_zendesk_tickets`, `get_zendesk_tickets_by_ids` with `save_to_file`) now enforce symlink-safe canonical containment under the system temp directory, open the target with exclusive create (never overwrite an existing file or follow a final-component symlink), and write through a single file descriptor. Both tools are now annotated `readOnlyHint: false, destructiveHint: true` since they can write local files.
+- Stopped writing raw Zendesk error response bodies to stderr (they can contain echoed request data), and malformed success responses now fail closed with a sanitised `API_ERROR` instead of leaking runtime JSON parse fragments into model-visible errors. Unexpected internal errors return a generic `INTERNAL_ERROR` message; detail stays in local logs.
+- User email inputs are validated for format and phone inputs for E.164, and all IDs/pagination parameters must be positive integers — invalid input now fails closed at the schema layer before any network call. Satisfaction date filters are validated before account resolution (which can trigger an OAuth refresh).
+
+### Fixed
+- `list_zendesk_view_tickets` concise output now reports the page count against the view total and flags when more pages exist, instead of silently showing one page.
+- `list_zendesk_ticket_comments` now surfaces author-name lookup failures in the output (and logs them) instead of silently falling back to raw user IDs.
 
 ### Added
 - `list_zendesk_satisfaction_ratings` — list customer satisfaction (CSAT) ratings with score/date filters for support-quality reporting. Customer comments are enveloped as untrusted content.

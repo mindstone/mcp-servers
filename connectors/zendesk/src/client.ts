@@ -23,6 +23,24 @@ function parseRetryAfterMs(header: string | null): number {
   return 1000;
 }
 
+/**
+ * Parse a Zendesk JSON response body. The runtime's JSON parse error can
+ * embed a fragment of the (vendor/proxy-controlled, potentially attacker
+ * influenced) body; never let that propagate into model-visible output or
+ * logs. Fail closed with a sanitised error instead.
+ */
+async function parseJsonResponse<T>(response: Response): Promise<T> {
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw new ZendeskError(
+      `Zendesk API returned a response that could not be parsed (HTTP ${response.status})`,
+      'API_ERROR',
+      'Try again. If the problem persists, reconnect your Zendesk account in your MCP host app settings.'
+    );
+  }
+}
+
 export async function zendeskFetch<T>(
   account: ZendeskAccount,
   endpoint: string,
@@ -105,7 +123,7 @@ export async function zendeskFetch<T>(
 
         if (retryResponse.ok || retryResponse.status === 204) {
           if (retryResponse.status === 204) return {} as T;
-          return retryResponse.json() as Promise<T>;
+          return parseJsonResponse<T>(retryResponse);
         }
 
         if (retryResponse.status === 401) {
@@ -116,8 +134,9 @@ export async function zendeskFetch<T>(
           );
         }
 
-        const postRefreshErrorText = await retryResponse.text().catch(() => '');
-        console.error(`Zendesk API error after token refresh (${retryResponse.status}):`, postRefreshErrorText);
+        // Do not read or log the raw vendor error body — it is
+        // attacker/vendor-controlled and may contain echoed request data.
+        console.error(`Zendesk API error after token refresh (HTTP ${retryResponse.status})`);
 
         if (retryResponse.status === 429) {
           const retryAfter = retryResponse.headers.get('Retry-After');
@@ -156,8 +175,9 @@ export async function zendeskFetch<T>(
     }
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      console.error(`Zendesk API error (${response.status}):`, errorText);
+      // Do not read or log the raw vendor error body — it is
+      // attacker/vendor-controlled and may contain echoed request data.
+      console.error(`Zendesk API error (HTTP ${response.status})`);
       const statusMessage = response.status === 403 ? 'Forbidden - check permissions'
         : response.status === 422 ? 'Validation error - check request parameters'
         : response.status >= 500 ? 'Zendesk server error - try again later'
@@ -170,7 +190,7 @@ export async function zendeskFetch<T>(
     }
 
     if (response.status === 204) return {} as T;
-    return response.json() as Promise<T>;
+    return parseJsonResponse<T>(response);
   }
 
   throw new ZendeskError(
