@@ -159,13 +159,21 @@ export function registerFilesTools(server: McpServer): void {
   server.registerTool(
     'upload_file',
     {
-      description: 'Upload a file to OneDrive (text content only, max 4MB).',
+      description:
+        'Upload a file to OneDrive. Text content up to 4MB; binary content as base64 up to 10MB (uploads over 4MB use a resumable upload session).',
       inputSchema: z.object({
         path: z
           .string()
           .optional()
           .describe('Destination path including filename (e.g., "/Documents/note.txt")'),
-        content: z.string().optional().describe('File content (text)'),
+        content: z
+          .string()
+          .optional()
+          .describe('File content (text, or base64 when encoding is "base64")'),
+        encoding: z
+          .enum(['utf8', 'base64'])
+          .optional()
+          .describe('Content encoding (default: utf8). Use "base64" for binary files.'),
       }).shape,
       annotations: {
         readOnlyHint: false,
@@ -183,7 +191,11 @@ export function registerFilesTools(server: McpServer): void {
         });
       }
       const result = await callGraph(extra, (c, signal) =>
-        uploadFile(c, { path: args.path!, content: args.content! }, signal),
+        uploadFile(
+          c,
+          { path: args.path!, content: args.content!, encoding: args.encoding },
+          signal,
+        ),
       );
       return successJson(result);
     }),

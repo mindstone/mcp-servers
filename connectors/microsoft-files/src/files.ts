@@ -37,6 +37,34 @@ function buildDriveItemEndpoint(path: string, suffix = ''): string {
   return `/me/drive/items/${path}${suffix}`;
 }
 
+// Simple PUT /content is capped at 4 MiB by Graph; larger payloads go through
+// a resumable upload session. Chunks must be a multiple of 320 KiB.
+const SIMPLE_UPLOAD_MAX_BYTES = 4 * 1024 * 1024;
+const UPLOAD_CHUNK_BYTES = 10 * 320 * 1024;
+// Hard cap: content travels base64-encoded inside an MCP tool call, so very
+// large binaries belong in the OneDrive UI rather than this connector.
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+// A regex like /^(?:[A-Za-z0-9+/]{4})*...$/ overflows V8's regexp stack on
+// multi-MB inputs, so validate base64 with a plain linear scan instead.
+function isValidBase64(value: string): boolean {
+  if (value.length === 0 || value.length % 4 !== 0) return false;
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+    const isAlphabet =
+      (code >= 65 && code <= 90) || // A-Z
+      (code >= 97 && code <= 122) || // a-z
+      (code >= 48 && code <= 57) || // 0-9
+      code === 43 || // +
+      code === 47; // /
+    if (isAlphabet) continue;
+    // '=' padding only as the final one or two characters
+    if (code === 61 && i >= value.length - 2) continue;
+    return false;
+  }
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Graph response schemas — validate external payloads at the boundary instead
 // of casting. `.passthrough()` keeps forward-compatible extra fields.
@@ -114,6 +142,22 @@ const GraphItemActivitySchema = z
 
 const GraphItemActivityListSchema = z
   .object({ value: z.array(GraphItemActivitySchema) })
+  .passthrough();
+
+const GraphUploadedItemSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    size: z.number().optional(),
+    webUrl: z.string().optional(),
+  })
+  .passthrough();
+
+const GraphUploadSessionSchema = z
+  .object({
+    uploadUrl: z.string().url(),
+    expirationDateTime: z.string().optional(),
+  })
   .passthrough();
 
 function formatActivity(
@@ -194,6 +238,7 @@ export interface SearchFilesArgs {
 export interface UploadFileArgs {
   path: string;
   content: string;
+  encoding?: 'utf8' | 'base64';
 }
 
 export interface CreateFolderArgs {
@@ -374,8 +419,37 @@ export async function uploadFile(
   args: UploadFileArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
+  const encoding = args.encoding ?? 'utf8';
+
+  if (encoding === 'base64') {
+    if (!isValidBase64(args.content)) {
+      throw new FilesBusinessError(
+        '"content" is not valid base64. Provide standard base64 (with padding) when encoding is "base64".',
+        'upload_file',
+      );
+    }
+    const bytes = Buffer.from(args.content, 'base64');
+    if (bytes.length > MAX_UPLOAD_BYTES) {
+      throw new FilesBusinessError(
+        `File too large (${formatSize(bytes.length)}). Maximum upload size is ${formatSize(MAX_UPLOAD_BYTES)}.`,
+        'upload_file',
+      );
+    }
+    const item =
+      bytes.length <= SIMPLE_UPLOAD_MAX_BYTES
+        ? GraphUploadedItemSchema.parse(
+            await client
+              .api(`/me/drive/root:${args.path}:/content`)
+              .options({ signal })
+              .header('Content-Type', 'application/octet-stream')
+              .put(bytes),
+          )
+        : await uploadViaSession(client, args.path, bytes, signal);
+    return formatUploadedItem(item);
+  }
+
   const contentSize = Buffer.byteLength(args.content, 'utf-8');
-  if (contentSize > 4 * 1024 * 1024) {
+  if (contentSize > SIMPLE_UPLOAD_MAX_BYTES) {
     throw new FilesBusinessError(
       'File too large. Maximum size is 4MB for text uploads.',
       'upload_file',
@@ -389,14 +463,73 @@ export async function uploadFile(
     .header('Content-Type', 'text/plain')
     .put(args.content);
 
+  return formatUploadedItem(GraphUploadedItemSchema.parse(response));
+}
+
+function formatUploadedItem(item: z.infer<typeof GraphUploadedItemSchema>) {
   return {
     success: true,
-    id: response.id,
-    name: wrapUntrusted(response.name, 'microsoft-files:upload_file:name'),
-    size: formatSize(response.size),
-    webUrl: response.webUrl,
+    id: item.id,
+    name: wrapUntrusted(item.name, 'microsoft-files:upload_file:name'),
+    size: formatSize(item.size),
+    webUrl: item.webUrl,
     message: 'File uploaded successfully',
   };
+}
+
+/**
+ * Resumable upload for files larger than the simple-PUT limit. The upload
+ * session URL returned by Graph is preauthenticated, so chunk PUTs go out
+ * WITHOUT an Authorization header; the shared composed signal still applies.
+ */
+async function uploadViaSession(
+  client: Client,
+  path: string,
+  bytes: Buffer,
+  signal: AbortSignal,
+): Promise<z.infer<typeof GraphUploadedItemSchema>> {
+  const sessionResponse = await client
+    .api(`/me/drive/root:${path}:/createUploadSession`)
+    .options({ signal })
+    .post({
+      item: { '@microsoft.graph.conflictBehavior': 'replace' },
+    });
+  const { uploadUrl } = GraphUploadSessionSchema.parse(sessionResponse);
+
+  let item: z.infer<typeof GraphUploadedItemSchema> | null = null;
+  for (let start = 0; start < bytes.length; start += UPLOAD_CHUNK_BYTES) {
+    const end = Math.min(start + UPLOAD_CHUNK_BYTES, bytes.length);
+    // Copy into a fresh Uint8Array: Buffer views are typed over
+    // ArrayBufferLike, which the DOM BodyInit union rejects.
+    const chunk = new Uint8Array(end - start);
+    chunk.set(bytes.subarray(start, end));
+    const response = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Length': String(end - start),
+        'Content-Range': `bytes ${start}-${end - 1}/${bytes.length}`,
+      },
+      body: chunk,
+      signal,
+    });
+    if (!response.ok) {
+      const err = new Error(`Upload chunk failed: HTTP ${response.status}`) as Error & {
+        statusCode?: number;
+      };
+      err.statusCode = response.status;
+      throw err;
+    }
+    if (response.status === 200 || response.status === 201) {
+      item = GraphUploadedItemSchema.parse(await response.json());
+    }
+  }
+  if (!item) {
+    throw new FilesBusinessError(
+      'Upload session ended without returning the uploaded file.',
+      'upload_file',
+    );
+  }
+  return item;
 }
 
 export async function createFolder(

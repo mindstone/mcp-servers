@@ -177,6 +177,77 @@ describe('microsoft-files mock-API integration', () => {
     expect(json.next_step).toBe('upload_file');
   });
 
+  it('upload_file with base64 encoding PUTs octet-stream for small binaries', async () => {
+    const result = await client.callTool('upload_file', {
+      path: '/Documents/logo.bin',
+      content: Buffer.from('hello bytes', 'utf-8').toString('base64'),
+      encoding: 'base64',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; success: boolean };
+    expect(json.ok).toBeUndefined();
+    expect(json.success).toBe(true);
+    const call = state.requests.find(
+      (r) => r.method === 'PUT' && r.pathname.includes('/me/drive/root:/Documents/logo.bin:/content'),
+    );
+    expect(call).toBeDefined();
+    expect(call?.contentType).toContain('application/octet-stream');
+  });
+
+  it('upload_file rejects invalid base64 content', async () => {
+    const result = await client.callTool('upload_file', {
+      path: '/Documents/logo.bin',
+      content: 'not!!valid!!base64!!',
+      encoding: 'base64',
+    });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('not valid base64');
+    expect(json.next_step).toBe('upload_file');
+  });
+
+  it('upload_file uses a resumable upload session for base64 content over 4MB', async () => {
+    const bytes = Buffer.alloc(4 * 1024 * 1024 + 1, 0x61);
+    const result = await client.callTool('upload_file', {
+      path: '/Documents/big.bin',
+      content: bytes.toString('base64'),
+      encoding: 'base64',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; success: boolean; id: string; size: string };
+    expect(json.ok).toBeUndefined();
+    expect(json.success).toBe(true);
+    expect(json.id).toBe('new-file-large');
+
+    const sessionCall = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.includes('/createUploadSession'),
+    );
+    expect(sessionCall).toBeDefined();
+
+    const total = bytes.length;
+    const chunks = state.requests.filter((r) => r.url.startsWith('https://upload.example.com/'));
+    expect(chunks).toHaveLength(2);
+    expect(chunks[0]?.contentRange).toBe(`bytes 0-3276799/${total}`);
+    expect(chunks[1]?.contentRange).toBe(`bytes 3276800-${total - 1}/${total}`);
+    // The upload URL is preauthenticated: chunks must not carry the Graph token.
+    expect(chunks[0]?.authorization).toBeUndefined();
+  });
+
+  it('upload_file rejects base64 content over the 10MB cap', async () => {
+    const bytes = Buffer.alloc(10 * 1024 * 1024 + 1, 0x61);
+    const result = await client.callTool('upload_file', {
+      path: '/Documents/huge.bin',
+      content: bytes.toString('base64'),
+      encoding: 'base64',
+    });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Maximum upload size');
+    expect(json.next_step).toBe('upload_file');
+  });
+
   // -------------------------------------------------------------------------
   // create_folder
   // -------------------------------------------------------------------------

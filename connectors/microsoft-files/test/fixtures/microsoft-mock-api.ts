@@ -14,6 +14,8 @@ export interface CapturedRequest {
   search: string;
   body: DefaultBodyType | null;
   authorization?: string;
+  contentRange?: string;
+  contentType?: string;
 }
 
 export interface MockApiState {
@@ -125,6 +127,8 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
       search: url.search,
       body,
       authorization: request.headers.get('authorization') ?? undefined,
+      contentRange: request.headers.get('content-range') ?? undefined,
+      contentType: request.headers.get('content-type') ?? undefined,
     });
   }
 
@@ -178,6 +182,43 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
         });
       },
     ),
+
+    // /me/drive/root:/{path}:/createUploadSession (POST) — upload_file large uploads
+    http.post(
+      new RegExp(`${SHARED_BASE}/me/drive/root:/[^?]+:/createUploadSession(\\?.*)?$`),
+      async ({ request }) => {
+        await capture(request);
+        return HttpResponse.json({
+          uploadUrl: 'https://upload.example.com/session-abc',
+          expirationDateTime: '2026-05-19T11:00:00Z',
+        });
+      },
+    ),
+
+    // Preauthenticated upload-session URL — chunked PUTs for large uploads
+    http.put('https://upload.example.com/session-abc', async ({ request }) => {
+      await capture(request);
+      const match = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(
+        request.headers.get('content-range') ?? '',
+      );
+      const end = match ? Number(match[2]) : 0;
+      const total = match ? Number(match[3]) : 0;
+      if (end < total - 1) {
+        return HttpResponse.json(
+          { nextExpectedRanges: [`${end + 1}-`] },
+          { status: 202 },
+        );
+      }
+      return HttpResponse.json(
+        {
+          id: 'new-file-large',
+          name: 'big.bin',
+          size: total,
+          webUrl: 'https://onedrive.example.com/new-file-large',
+        },
+        { status: 201 },
+      );
+    }),
 
     // /me/drive/root:/{path}:/content (PUT) — upload_file
     http.put(

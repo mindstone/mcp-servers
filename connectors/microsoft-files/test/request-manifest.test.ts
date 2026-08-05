@@ -53,6 +53,16 @@ const MANIFEST: ManifestRow[] = [
     args: { path: '/notes.txt', content: 'hello' },
   },
   {
+    tool: 'upload_file',
+    method: 'POST',
+    pathname: '/v1.0/me/drive/root:<rest>:/createUploadSession',
+    args: {
+      path: '/big.bin',
+      content: Buffer.alloc(4 * 1024 * 1024 + 1, 0x61).toString('base64'),
+      encoding: 'base64',
+    },
+  },
+  {
     tool: 'create_folder',
     method: 'POST',
     pathname: '/v1.0/me/drive/root/children',
