@@ -227,7 +227,7 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 ### Reactions
 - `add_slack_reaction` — Add an emoji reaction to a message.
 - `remove_slack_reaction` — Remove your own reaction from a message.
-- `list_slack_emoji` — List the workspace's custom emoji (name → URL/alias). Entries that violate Slack's emoji name/value constraints are dropped and reported (`omitted_invalid_entries`), never forwarded.
+- `list_slack_emoji` — List the workspace's custom emoji (name → URL/alias, both wrapped in `<untrusted-content>` envelopes). Entries that violate Slack's emoji name/value constraints are dropped and reported (`omitted_invalid_entries`), never forwarded.
 
 ### Pins
 - `list_slack_pins` — List messages pinned in a channel.

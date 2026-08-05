@@ -3,20 +3,28 @@ import { z } from 'zod';
 import { errorJson, withErrorHandling } from '../utils.js';
 import { getSlackUserClient } from '../client.js';
 import { resolveChannelId } from '../helpers.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 
 /**
  * Slack constrains custom emoji names to lowercase alphanumerics plus
  * `_`, `+`, `-`, and emoji.list values to either an `alias:<name>` pointer or
  * an HTTPS image URL on Slack-owned infrastructure (slack-edge.com CDN or
- * slack.com). The map is returned to the model un-enveloped on the strength
- * of that constraint — so it is ENFORCED here, not assumed (invariant #6):
- * any entry that violates it is attacker-shaped (a compromised or unexpected
- * upstream could otherwise smuggle arbitrary model-visible strings through
- * this tool) and is dropped, observably, rather than forwarded.
+ * slack.com). That constraint is ENFORCED here, not assumed: any entry that
+ * violates it is attacker-shaped (a compromised or unexpected upstream could
+ * otherwise smuggle arbitrary model-visible strings through this tool) and is
+ * dropped, observably, rather than forwarded.
+ *
+ * Validation alone is not sufficient — a value like
+ * `https://ignore-previous-instructions@slack.com/` passes a protocol+hostname
+ * check while carrying attacker text in the userinfo, query, or fragment. So
+ * every forwarded name and value is ADDITIONALLY wrapped in an
+ * `<untrusted-content>` envelope (invariant #6): even a hostile entry that
+ * passes validation reaches the model strictly as data.
  */
 const SLACK_EMOJI_NAME_PATTERN = /^[a-z0-9_+-]+$/;
 const SLACK_EMOJI_ALIAS_PATTERN = /^alias:[a-z0-9_+-]+$/;
 const SLACK_EMOJI_HOSTNAME = /(^|\.)(slack\.com|slack-edge\.com)$/;
+const SLACK_EMOJI_SOURCE = 'slack:emoji-list';
 
 function isSlackEmojiName(name: string): boolean {
   return SLACK_EMOJI_NAME_PATTERN.test(name);
@@ -144,9 +152,10 @@ names.`,
     {
       description: `List custom emoji available in the Slack workspace.
 
-Returns a name → image-URL (or alias) map. Use the names with
-add_slack_reaction / remove_slack_reaction — Slack's built-in emoji always
-work without being listed here.`,
+Returns a name → image-URL (or alias) map with names and values wrapped in
+<untrusted-content> envelopes (third-party-authored content). Use the names
+with add_slack_reaction / remove_slack_reaction — Slack's built-in emoji
+always work without being listed here.`,
       inputSchema: z.object({}).strict(),
       annotations: {
         readOnlyHint: true,
@@ -171,12 +180,17 @@ work without being listed here.`,
       // forwarding (see the module-top comment): names must be Slack emoji
       // names, values must be alias pointers or Slack-hosted HTTPS URLs.
       // Non-conforming entries are dropped AND reported, never silently
-      // forwarded or silently swallowed.
+      // forwarded or silently swallowed. Conforming entries are still
+      // third-party-authored strings, so both name and value are enveloped
+      // before they reach the model.
       const validEntries: Array<[string, string]> = [];
       let dropped = 0;
       for (const [name, value] of Object.entries(emoji)) {
         if (isSlackEmojiName(name) && isSlackEmojiValue(value)) {
-          validEntries.push([name, value]);
+          validEntries.push([
+            wrapUntrusted(name, SLACK_EMOJI_SOURCE)!,
+            wrapUntrusted(value, SLACK_EMOJI_SOURCE)!,
+          ]);
         } else {
           dropped += 1;
         }

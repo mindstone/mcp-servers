@@ -29,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - `search_slack_messages` / `get_slack_saved_messages` no longer cache the legacy-search fallback on `access_denied`. Slack can return that code for query- or resource-specific denials (not just installation capability), so caching it let one denied query pin the whole process to the legacy backend; `access_denied` now surfaces as an ordinary error and Real-Time Search is retried on the next call. The remaining cached codes (`missing_scope`, `not_allowed_token_type`, `feature_not_enabled`, `deprecated_endpoint`, `method_deprecated`) are all installation- or workspace-scoped.
 - `download_slack_file` / `upload_slack_file` failure messages no longer include the raw HTTP reason phrase (`statusText`) from the upstream response; they report the numeric status only.
 - Migrated the untrusted-content envelope helper to the canonical shared implementation: close-tag breakout escaping now neutralises case and horizontal-whitespace variants (`</UNTRUSTED-CONTENT>`, `</untrusted-content >`, tab variants), not just the exact lowercase no-whitespace spelling.
+- `list_slack_emoji` now wraps every forwarded emoji name and value in an untrusted-content envelope. Protocol+hostname validation alone still let a Slack-hosted URL carry attacker-authored text in the userinfo, query, or fragment (e.g. `https://ignore-previous-instructions@slack.com/`); entries that fail validation are still dropped and reported via `omitted_invalid_entries`.
 
 ## [0.2.0] - 2026-07-30
 
