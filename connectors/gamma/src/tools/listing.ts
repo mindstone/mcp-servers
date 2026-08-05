@@ -3,6 +3,11 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey, hasApiKey } from '../auth.js';
 import { listThemes, listFolders } from '../client.js';
 import { GammaError } from '../types.js';
+// SECURITY (AGENTS.md invariant #6): theme and folder names are authored in the
+// user's Gamma workspace, so they are untrusted external text and MUST be
+// enveloped before reaching the LLM. IDs and cursors are connector-consumed
+// metadata and stay raw.
+import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
 function requireApiKey(): string {
@@ -43,7 +48,10 @@ export function registerListingTools(server: McpServer): void {
       });
       return JSON.stringify(
         {
-          themes: result.data,
+          themes: result.data.map((theme) => ({
+            ...theme,
+            name: wrapUntrusted(theme.name, 'gamma:theme.name'),
+          })),
           has_more: result.hasMore,
           next_cursor: result.nextCursor,
         },
@@ -78,7 +86,10 @@ export function registerListingTools(server: McpServer): void {
       });
       return JSON.stringify(
         {
-          folders: result.data,
+          folders: result.data.map((folder) => ({
+            ...folder,
+            name: wrapUntrusted(folder.name, 'gamma:folder.name'),
+          })),
           has_more: result.hasMore,
           next_cursor: result.nextCursor,
         },
