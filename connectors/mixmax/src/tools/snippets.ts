@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { mixmaxFetch } from '../client.js';
-import { withErrorHandling, parseApiResponse } from '../utils.js';
+import { withErrorHandling, parseApiResponse, epochMsField } from '../utils.js';
 import { isConfigured } from '../auth.js';
 import { snippetsResponseSchema } from '../types.js';
 import { sanitizeSnippets } from '../sanitize.js';
@@ -69,7 +69,7 @@ PAGINATION: Cursor-based. If hasNext is true, pass the "next" value as the next 
     'send_mixmax_snippet',
     {
       description:
-        `Send a Mixmax template (snippet) to one or more recipients.
+        `Send a Mixmax template (snippet) to one or more recipients, immediately or scheduled for later.
 
 IMPORTANT: Confirm with the user before sending — this sends (or schedules) a real email using the template content.
 
@@ -79,11 +79,14 @@ WORKFLOW:
 3. Confirm recipients and variable values with user
 4. Call this tool with matching variables
 
+SCHEDULING: Pass scheduledAt to place the message in the user's Mixmax Outbox for later sending instead of sending immediately. A scheduled send can be recalled with cancel_mixmax_message.
+
 NOTE: Variables are applied to ALL recipients equally. If you need different variables per recipient, send one at a time. Sending fails with an error if the template has variables that are left unresolved.`,
       inputSchema: z.object({
         snippetId: z.string().min(1).describe('The _id of the snippet/template (from list_mixmax_snippets)'),
         to: z.array(z.string().email()).min(1).describe('Recipient email addresses'),
         variables: z.record(z.unknown()).optional().describe('Template variables matching {{placeholders}} in the snippet body'),
+        scheduledAt: epochMsField().optional().describe('Unix timestamp in milliseconds (number, e.g. 1735689600000) or a parseable date string (e.g. "2026-01-01") to schedule the send for later. Omit to send immediately.'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
@@ -94,6 +97,7 @@ NOTE: Variables are applied to ALL recipients equally. If you need different var
         to: args.to.map((email) => ({ email })),
       };
       if (args.variables) payload.variables = args.variables;
+      if (args.scheduledAt !== undefined) payload.scheduledAt = args.scheduledAt;
 
       const data = await mixmaxFetch<Record<string, unknown>>(
         `/snippets/${encodeURIComponent(args.snippetId)}/send`,
@@ -105,7 +109,9 @@ NOTE: Variables are applied to ALL recipients equally. If you need different var
 
       return JSON.stringify({
         ok: true,
-        message: `Snippet sent to ${args.to.join(', ')}.`,
+        message: args.scheduledAt !== undefined
+          ? `Snippet scheduled to send to ${args.to.join(', ')} at ${new Date(args.scheduledAt).toISOString()}.`
+          : `Snippet sent to ${args.to.join(', ')}.`,
         result: data,
       });
     }),

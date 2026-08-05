@@ -54,6 +54,32 @@ describe('Mixmax snippet tools', () => {
     expect(json.message).toContain('alice@acme.com');
   });
 
+  it('send_mixmax_snippet forwards scheduledAt for a scheduled send', async () => {
+    let capturedPayload: Record<string, unknown> = {};
+    const { http, HttpResponse } = await import('msw');
+    mswServer.use(
+      http.post('https://api.mixmax.com/v1/snippets/snip-001/send', async ({ request }) => {
+        capturedPayload = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ _id: 'msg-sched-001', status: 'scheduled' });
+      }),
+    );
+
+    testClient = await createTestClient({
+      env: { MIXMAX_API_TOKEN: API_TOKEN, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('send_mixmax_snippet', {
+      snippetId: 'snip-001',
+      to: ['alice@acme.com'],
+      scheduledAt: 1767225600000,
+    });
+    const json = result.json as { ok: boolean; message: string };
+
+    expect(json.ok).toBe(true);
+    expect(json.message).toContain('scheduled');
+    expect(capturedPayload.scheduledAt).toBe(1767225600000);
+  });
+
   it('list_mixmax_snippets escapes envelope breakout attempts in snippet names', async () => {
     const { http, HttpResponse } = await import('msw');
     const { mockMaliciousSnippet } = await import('./fixtures/mixmax-data.js');

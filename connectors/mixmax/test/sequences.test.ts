@@ -135,6 +135,71 @@ describe('Mixmax sequence tools', () => {
     expect(requestMade).toBe(false);
   });
 
+  it('add_mixmax_sequence_recipients forwards scheduledAt', async () => {
+    let capturedPayload: Record<string, unknown> = {};
+    mswServer.use(
+      http.post('https://api.mixmax.com/v1/sequences/seq-001/recipients', async ({ request }) => {
+        const token = request.headers.get('X-API-Token');
+        if (token !== API_TOKEN) {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        capturedPayload = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json([{ email: 'alice@acme.com', status: 'success' }]);
+      }),
+    );
+
+    testClient = await createTestClient({
+      env: { MIXMAX_API_TOKEN: API_TOKEN, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('add_mixmax_sequence_recipients', {
+      sequenceId: 'seq-001',
+      recipients: [{ email: 'alice@acme.com' }],
+      scheduledAt: '2026-03-01T09:00:00Z',
+    });
+    const json = result.json as { ok: boolean };
+
+    expect(json.ok).toBe(true);
+    expect(capturedPayload.scheduledAt).toBe(new Date('2026-03-01T09:00:00Z').getTime());
+  });
+
+  it('add_mixmax_sequence_recipients rejects ambiguous scheduledAt (Unix seconds)', async () => {
+    let requestMade = false;
+    mswServer.use(
+      http.post('https://api.mixmax.com/v1/sequences/*/recipients', () => {
+        requestMade = true;
+        return HttpResponse.json([]);
+      }),
+    );
+
+    testClient = await createTestClient({
+      env: { MIXMAX_API_TOKEN: API_TOKEN, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('add_mixmax_sequence_recipients', {
+      sequenceId: 'seq-001',
+      recipients: [{ email: 'alice@acme.com' }],
+      scheduledAt: '1735689600',
+    });
+    expect(result.isError).toBe(true);
+    expect(requestMade).toBe(false);
+  });
+
+  it('add_mixmax_sequence_recipients adds recipients', async () => {
+    await setup();
+    const result = await testClient.callTool('add_mixmax_sequence_recipients', {
+      sequenceId: 'seq-001',
+      recipients: [
+        { email: 'alice@acme.com', variables: { first_name: 'Alice' } },
+        { email: 'bob@acme.com', variables: { first_name: 'Bob' } },
+      ],
+    });
+    const json = result.json as { ok: boolean; message: string };
+
+    expect(json.ok).toBe(true);
+    expect(json.message).toContain('2 recipient(s)');
+  });
+
   // --- VAL-COMMON-003: Invalid credentials fail cleanly without leaking secrets ---
   it('invalid credentials return isError without leaking secrets', async () => {
     mswServer.use(...createMixmaxUnauthorizedHandlers());

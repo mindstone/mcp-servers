@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { mixmaxFetch } from '../client.js';
-import { withErrorHandling, parseApiResponse } from '../utils.js';
+import { withErrorHandling, parseApiResponse, epochMsField } from '../utils.js';
 import { isConfigured } from '../auth.js';
 import {
   sequencesResponseSchema,
@@ -123,17 +123,21 @@ TEMPLATE VARIABLES: If the sequence stages use variables like {{first_name}}, pa
             variables: z.record(z.unknown()).optional().describe('Template variables for personalisation'),
           }),
         ).min(1).describe('Array of recipients to add (each must have an email)'),
+        scheduledAt: epochMsField().optional().describe('Unix timestamp in milliseconds (number, e.g. 1735689600000) or a parseable date string (e.g. "2026-01-01") for when the sequence should activate for these recipients. Omit to activate immediately.'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiTokenError();
 
+      const payload: Record<string, unknown> = { recipients: args.recipients };
+      if (args.scheduledAt !== undefined) payload.scheduledAt = args.scheduledAt;
+
       const data = await mixmaxFetch<Record<string, unknown>>(
         `/sequences/${encodeURIComponent(args.sequenceId)}/recipients`,
         {
           method: 'POST',
-          body: JSON.stringify({ recipients: args.recipients }),
+          body: JSON.stringify(payload),
         },
       );
 
