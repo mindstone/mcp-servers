@@ -127,6 +127,11 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
       return HttpResponse.json({ id: 'msg-new' });
     }),
 
+    http.post(`${GRAPH_BASE}/me/chats/:chatId/messages/:messageId/replies`, async ({ request }) => {
+      await capture(request);
+      return HttpResponse.json({ id: 'reply-new' });
+    }),
+
     http.get(`${GRAPH_BASE}/teams/:teamId/channels`, async ({ request }) => {
       await capture(request);
       return HttpResponse.json({

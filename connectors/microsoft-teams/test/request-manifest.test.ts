@@ -41,6 +41,12 @@ const MANIFEST: ManifestRow[] = [
     args: { chatId: 'chat-1', content: 'Hello team' },
   },
   {
+    tool: 'reply_to_message',
+    method: 'POST',
+    pathname: '/v1.0/me/chats/:chatId/messages/:messageId/replies',
+    args: { chatId: 'chat-1', messageId: 'msg-1', content: 'On it' },
+  },
+  {
     tool: 'list_teams',
     method: 'GET',
     pathname: '/v1.0/me/joinedTeams',

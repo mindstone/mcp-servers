@@ -301,6 +301,24 @@ describe('microsoft-teams mock-API integration', () => {
     expect(body.requests[0]?.size).toBe(5);
   });
 
+  it('reply_to_message posts to the chat message replies endpoint', async () => {
+    const result = await client.callTool('reply_to_message', {
+      chatId: 'chat-1',
+      messageId: 'msg-1',
+      content: 'On it',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { success: boolean; messageId: string };
+    expect(json.success).toBe(true);
+    expect(json.messageId).toBe('reply-new');
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.endsWith('/me/chats/chat-1/messages/msg-1/replies'),
+    );
+    expect(call?.body).toMatchObject({
+      body: { contentType: 'text', content: 'On it' },
+    });
+  });
+
   it('send_chat_message rejects unknown keys (strict schema)', async () => {
     // F8: the input schema is `.strict()`, so an unexpected argument is refused
     // at the protocol boundary rather than silently forwarded to Graph. The SDK

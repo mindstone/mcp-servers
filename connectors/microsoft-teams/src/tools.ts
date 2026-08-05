@@ -17,6 +17,7 @@ import {
   listChatMessages,
   listTeams,
   replyToChannelMessage,
+  replyToChatMessage,
   searchMessages,
   sendChannelMessage,
   sendChatMessage,
@@ -212,6 +213,24 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
     },
     withErrorHandling(async (args, extra) =>
       successJson(await callGraph(extra, (c, signal) => sendChatMessage(c, args, signal))),
+    ),
+  );
+
+  server.registerTool(
+    'reply_to_message',
+    {
+      description: 'Reply to a specific message in a chat, creating a threaded reply.',
+      inputSchema: z
+        .object({
+          chatId: z.string().describe('Chat ID'),
+          messageId: z.string().describe('ID of the chat message to reply to'),
+          content: z.string().describe('Reply content (HTML supported)'),
+        })
+        .strict(),
+      annotations: WRITE_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) =>
+      successJson(await callGraph(extra, (c, signal) => replyToChatMessage(c, args, signal))),
     ),
   );
 

@@ -427,6 +427,29 @@ export async function replyToChannelMessage(
   };
 }
 
+export async function replyToChatMessage(
+  client: Client,
+  args: ArgBag,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const chatId = requireStringArg(args, 'chatId', 'chat ID', 'reply_to_message');
+  const messageId = requireStringArg(args, 'messageId', 'message ID', 'reply_to_message');
+  const content = requireStringArg(args, 'content', 'reply body', 'reply_to_message');
+
+  const response = sendMessageResponseSchema.parse(
+    await client
+      .api(`/me/chats/${chatId}/messages/${messageId}/replies`)
+      .options({ signal })
+      .post(messagePostBody(content)),
+  );
+
+  return {
+    success: true,
+    messageId: response.id,
+    message: 'Reply sent successfully',
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Message search
 // ---------------------------------------------------------------------------
