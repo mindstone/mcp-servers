@@ -143,8 +143,15 @@ node dist/index.js
 - `get_freshdesk_company` — Get a single company by ID
 
 ### Knowledge base
-- `search_freshdesk_solutions` — Search solution articles by keyword
+- `search_freshdesk_solutions` — Search solution articles by keyword (paginated: 30 per page, `page` parameter, `hasMore` indicator)
 - `get_freshdesk_solution_article` — Get a full solution article by ID
+
+## Security
+
+- Every string returned by the Freshdesk API (names, bodies, tags, emails, phone numbers, company domains, custom-field keys/values, ticket-field metadata, …) is wrapped in `<untrusted-content source="…">` envelopes so the host LLM treats it as data, not instructions. Only numeric connector metadata (IDs, statuses, priorities) is returned raw.
+- Credentials are stored in `accounts.json` under `FRESHDESK_CONFIG_PATH` with `0600` permissions (config directory `0700`).
+- Vendor error bodies, raw `Retry-After` header text, and query-bearing URLs are never written to logs or surfaced in tool errors.
+- Invalid `status`/`priority` values and out-of-range IDs/pagination inputs are rejected before any request is made.
 
 ## Licence
 
