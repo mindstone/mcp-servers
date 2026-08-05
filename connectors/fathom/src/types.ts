@@ -114,3 +114,19 @@ export interface SummaryResponse {
     markdown_formatted?: string;
   };
 }
+
+export interface RecordingDownloadFile {
+  url: string;
+  content_type?: string;
+  file_size_bytes?: number;
+  expires_at?: string;
+}
+
+export interface RecordingDownload {
+  download_id: string;
+  recording_id: number;
+  status: 'processing' | 'completed' | 'failed' | 'expired';
+  video?: RecordingDownloadFile;
+  audio?: RecordingDownloadFile;
+  failure_reason?: 'generation_failed' | 'generation_timeout';
+}

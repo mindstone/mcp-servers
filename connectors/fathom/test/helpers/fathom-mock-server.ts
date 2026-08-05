@@ -62,6 +62,49 @@ export function createFathomHandlers(expectedKey = 'test-fathom-key') {
       return HttpResponse.json({ error: 'Not found' }, { status: 404 });
     }),
 
+    // POST /recordings/:id/download — start async download generation
+    http.post(`${BASE}/recordings/:id/download`, ({ request, params }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+      const id = Number(params.id);
+      if (id === 101 || id === 102) {
+        return HttpResponse.json({
+          download_id: 'dl_test123',
+          recording_id: id,
+          status: 'processing',
+        });
+      }
+      return HttpResponse.json({ error: 'Not found' }, { status: 404 });
+    }),
+
+    // GET /recordings/:id/downloads/:downloadId — poll download status
+    http.get(`${BASE}/recordings/:id/downloads/:downloadId`, ({ request, params }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+      if (params.downloadId === 'dl_test123') {
+        return HttpResponse.json({
+          download_id: 'dl_test123',
+          recording_id: Number(params.id),
+          status: 'completed',
+          video: {
+            url: 'https://media.fathom.ai/downloads/signed-test-url',
+            content_type: 'video/mp4',
+            file_size_bytes: 154763264,
+            expires_at: '2026-01-17T10:00:00Z',
+          },
+        });
+      }
+      if (params.downloadId === 'dl_failed') {
+        return HttpResponse.json({
+          download_id: 'dl_failed',
+          recording_id: Number(params.id),
+          status: 'failed',
+          failure_reason: 'generation_failed',
+        });
+      }
+      return HttpResponse.json({ error: 'Not found' }, { status: 404 });
+    }),
+
     // GET /teams
     http.get(`${BASE}/teams`, ({ request }) => {
       const authError = checkAuth(request);

@@ -14,7 +14,7 @@ describe('Smoke test — tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 8 tools with correct names', async () => {
+  it('registers exactly 10 tools with correct names', async () => {
     mswServer.use(...createFathomHandlers());
 
     testClient = await createTestClient({
@@ -27,16 +27,18 @@ describe('Smoke test — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(8);
+    expect(toolsResult.tools).toHaveLength(10);
     expect(toolNames).toEqual([
       'configure_fathom_api_key',
       'get_fathom_action_items',
       'get_fathom_meeting',
       'get_fathom_meeting_participants',
+      'get_fathom_recording_download_status',
       'get_fathom_transcript',
       'list_fathom_meetings',
       'list_fathom_team_members',
       'list_fathom_teams',
+      'request_fathom_recording_download',
     ]);
   });
 });
