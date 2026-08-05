@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { stringifyToolResult, toToolErrorResponse, type VantaApiClient } from '../api.js';
 import { buildUploadForm, fetchRemoteDocument } from '../remote-document.js';
+import { sanitizeExternalText } from '../sanitize.js';
 
 // POST /v1/documents/{documentId}/uploads — multipart/form-data, `file` required,
 // `description` and `effectiveAtDate` optional. The upload attaches to an EXISTING
@@ -37,7 +38,7 @@ export async function vantaUploadDocument(
 
     return stringifyToolResult({
       ok: true,
-      upload,
+      upload: sanitizeExternalText(upload),
       file_name: document.fileName,
       content_type: document.contentType,
       size_bytes: document.bytes.byteLength,

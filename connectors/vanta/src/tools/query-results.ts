@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { stringifyToolResult, toToolErrorResponse, type VantaApiClient } from '../api.js';
+import { sanitizeExternalText } from '../sanitize.js';
 
 export const queryTestResultsSchema = z.object({
   test_id: z.string().min(1).describe('Vanta test ID whose entities/results should be listed'),
@@ -24,7 +25,7 @@ export async function vantaQueryTestResults(client: VantaApiClient, args: QueryT
 
     return stringifyToolResult({
       ok: true,
-      testEntities: result.data,
+      testEntities: sanitizeExternalText(result.data),
       count: result.data.length,
       pageInfo: result.pageInfo,
     });

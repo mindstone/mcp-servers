@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { stringifyToolResult, toToolErrorResponse, type VantaApiClient } from '../api.js';
+import { sanitizeExternalText } from '../sanitize.js';
 
 export const listControlsSchema = z.object({
   framework: z.string().optional().describe('Filter by framework, such as SOC2, ISO27001, or HIPAA'),
@@ -27,7 +28,7 @@ export async function vantaListControls(client: VantaApiClient, args: ListContro
 
     return stringifyToolResult({
       ok: true,
-      controls: result.data,
+      controls: sanitizeExternalText(result.data),
       count: result.data.length,
       pageInfo: result.pageInfo,
     });
@@ -41,7 +42,7 @@ export async function vantaGetControl(client: VantaApiClient, args: GetControlAr
     const control = await client.getById('/v1/controls', args.control_id);
     return stringifyToolResult({
       ok: true,
-      control,
+      control: sanitizeExternalText(control),
     });
   } catch (error) {
     return toToolErrorResponse(error);

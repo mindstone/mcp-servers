@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { stringifyToolResult, toToolErrorResponse, type VantaApiClient } from '../api.js';
+import { sanitizeExternalText } from '../sanitize.js';
 
 export const listTestsSchema = z.object({
   status: z.string().optional().describe('Filter by documented test status, such as OK, NEEDS_ATTENTION, DEACTIVATED, IN_PROGRESS, INVALID, or NOT_APPLICABLE'),
@@ -30,7 +31,7 @@ export async function vantaListTests(client: VantaApiClient, args: ListTestsArgs
 
     return stringifyToolResult({
       ok: true,
-      tests: result.data,
+      tests: sanitizeExternalText(result.data),
       count: result.data.length,
       pageInfo: result.pageInfo,
     });
@@ -44,7 +45,7 @@ export async function vantaGetTest(client: VantaApiClient, args: GetTestArgs): P
     const test = await client.getById('/v1/tests', args.test_id);
     return stringifyToolResult({
       ok: true,
-      test,
+      test: sanitizeExternalText(test),
     });
   } catch (error) {
     return toToolErrorResponse(error);
