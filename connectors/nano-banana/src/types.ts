@@ -166,6 +166,24 @@ export const SUPPORTED_IMAGE_EXTENSIONS: Record<string, string> = {
 };
 
 /**
+ * MIME types this connector will put into an MCP image content part or use
+ * to pick a save extension. `inlineData.mimeType` is external,
+ * vendor-controlled text — anything outside this allow-list is rejected in
+ * favour of a safe default (with an observable stderr warning) rather than
+ * forwarded verbatim into model-visible output.
+ */
+const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
+export function normaliseImageMimeType(mimeType: string | undefined): string {
+  if (mimeType === undefined) return 'image/png';
+  if (ALLOWED_IMAGE_MIME_TYPES.has(mimeType)) return mimeType;
+  console.error(
+    `[NanoBanana] Refusing unsupported image MIME type from API response; treating as image/png`,
+  );
+  return 'image/png';
+}
+
+/**
  * Resolve an error status code to an actionable resolution string.
  */
 export function getErrorResolution(status: number, detail?: string): string {

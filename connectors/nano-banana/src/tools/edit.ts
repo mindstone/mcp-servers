@@ -14,6 +14,7 @@ import {
   SUPPORTED_IMAGE_SIZES,
   supportsImageSize,
   unsupportedImageSizePayload,
+  normaliseImageMimeType,
   type GenerationConfig,
   type ImageConfig,
 } from '../types.js';
@@ -257,13 +258,15 @@ export function registerEditTools(server: McpServer): void {
         };
       }
 
-      // Check for prompt blocks
+      // Check for prompt blocks. The blockReason is external, vendor-authored
+      // text — envelope it (invariant #6) rather than interpolating it raw.
       const candidates = data.candidates;
       if (!candidates || !candidates.length) {
         const blockReason = data.promptFeedback?.blockReason;
         if (blockReason) {
+          const safeReason = wrapUntrusted(blockReason, 'gemini') ?? blockReason;
           return {
-            content: [{ type: 'text', text: `Prompt was blocked: ${blockReason}. Please try a different prompt.` }],
+            content: [{ type: 'text', text: `Prompt was blocked: ${safeReason}. Please try a different prompt.` }],
             isError: true,
           };
         }
@@ -282,7 +285,7 @@ export function registerEditTools(server: McpServer): void {
       for (const part of parts) {
         if (part.inlineData?.data) {
           imageData = part.inlineData.data;
-          imageMimeType = part.inlineData.mimeType || 'image/png';
+          imageMimeType = normaliseImageMimeType(part.inlineData.mimeType);
         } else if (part.text) {
           textResponse = part.text;
         }
