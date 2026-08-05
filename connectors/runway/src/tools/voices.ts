@@ -64,10 +64,10 @@ export function registerVoiceTools(server: McpServer): void {
         'MODELS: eleven_multilingual_ttv_v2 (default), eleven_ttv_v3 (newer). ' +
         'Check status with list_custom_voices. Once READY, use its ID with generate_speech.',
       inputSchema: z.object({
-        name: z.string().describe('Name for the voice. Max 100 characters.'),
-        prompt: z.string().describe('Text description of desired voice. Min 20, max 1000 characters.'),
+        name: z.string().min(1).max(100).describe('Name for the voice. Max 100 characters.'),
+        prompt: z.string().min(20).max(1000).describe('Text description of desired voice. Min 20, max 1000 characters.'),
         model: z.enum(['eleven_multilingual_ttv_v2', 'eleven_ttv_v3']).optional().describe('Voice design model. Default: eleven_multilingual_ttv_v2.'),
-        description: z.string().optional().describe('Optional description for your reference. Max 512 characters.'),
+        description: z.string().max(512).optional().describe('Optional description for your reference. Max 512 characters.'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
@@ -95,7 +95,7 @@ export function registerVoiceTools(server: McpServer): void {
         'Generate a short audio preview of a voice from a text description, without creating it. ' +
         'Use to audition voice characteristics before committing with create_custom_voice.',
       inputSchema: z.object({
-        prompt: z.string().describe('Text description of desired voice. Min 20, max 1000 characters.'),
+        prompt: z.string().min(20).max(1000).describe('Text description of desired voice. Min 20, max 1000 characters.'),
         model: z.enum(['eleven_multilingual_ttv_v2', 'eleven_ttv_v3']).optional().describe('Voice design model. Default: eleven_multilingual_ttv_v2.'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
