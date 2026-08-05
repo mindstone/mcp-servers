@@ -34,6 +34,9 @@ export const SLACK_PRODUCTION_API_URLS: string[] = [
   `${SLACK_API_BASE}/conversations.replies`,
   `${SLACK_API_BASE}/files.info`,
   `${SLACK_API_BASE}/oauth.v2.access`,
+  `${SLACK_API_BASE}/pins.list`,
+  `${SLACK_API_BASE}/pins.add`,
+  `${SLACK_API_BASE}/pins.remove`,
   `${SLACK_API_BASE}/reactions.add`,
   `${SLACK_API_BASE}/reminders.add`,
   `${SLACK_API_BASE}/search.messages`,
@@ -260,6 +263,27 @@ export function createSlackHandlers() {
       }),
     ),
     http.post(`${SLACK_API_BASE}/reactions.add`, () => HttpResponse.json({ ok: true })),
+    http.post(`${SLACK_API_BASE}/pins.list`, () =>
+      HttpResponse.json({
+        ok: true,
+        items: [
+          {
+            type: 'message',
+            channel: 'C123TEST',
+            created: 1704067300,
+            created_by: 'U123',
+            message: {
+              ts: '1704067200.123456',
+              user: 'U123',
+              text: 'Pinned announcement',
+              permalink: 'https://test.slack.com/archives/C123TEST/p1704067200123456',
+            },
+          },
+        ],
+      }),
+    ),
+    http.post(`${SLACK_API_BASE}/pins.add`, () => HttpResponse.json({ ok: true })),
+    http.post(`${SLACK_API_BASE}/pins.remove`, () => HttpResponse.json({ ok: true })),
     http.post(`${SLACK_API_BASE}/bookmarks.add`, async ({ request }) => {
       const body = await request.text();
       const params = new URLSearchParams(body);

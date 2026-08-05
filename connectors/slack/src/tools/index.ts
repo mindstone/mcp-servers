@@ -5,4 +5,5 @@ export { registerThreadTools } from './threads.js';
 export { registerReactionTools } from './reactions.js';
 export { registerUserTools } from './users.js';
 export { registerFileTools } from './files.js';
+export { registerPinTools } from './pins.js';
 export { registerWorkspaceTools } from './workspace.js';

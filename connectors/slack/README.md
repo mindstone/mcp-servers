@@ -226,6 +226,11 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 ### Reactions
 - `add_slack_reaction` — Add an emoji reaction to a message.
 
+### Pins
+- `list_slack_pins` — List messages pinned in a channel.
+- `pin_slack_message` — Pin a message to a channel.
+- `unpin_slack_message` — Remove a message from a channel's pinned items (the message itself is not deleted).
+
 ### Users
 - `list_slack_users` — List active users (auto-paginates name filter).
 - `get_slack_user_profile` — Get detailed profile for a user.
