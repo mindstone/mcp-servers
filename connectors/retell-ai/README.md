@@ -174,9 +174,21 @@ temp directory when unset) using canonical-prefix containment: `..`
 traversal, absolute paths outside the sandbox, and symlinks that escape it
 are rejected before any disk read. The read itself is open-then-validate:
 the connector opens a descriptor, confirms the opened inode is the file the
-sandbox approved, and reads through that descriptor, so a file swapped in
-between validation and read fails closed. Retell limits uploads to 25
-files, 50MB each.
+sandbox approved, reads through that descriptor, and re-checks the
+descriptor after the read — a file swapped, replaced, or modified between
+validation and read fails closed, and the 50MB bound is enforced on the
+bytes actually read. Retell limits uploads to 25 files, 50MB each.
+
+### Dynamic-variable pre-call validation is observable and ordered
+
+`create_phone_call`, `create_web_call`, and `create_batch_call` validate
+passed `retell_llm_dynamic_variables` against the live prompt BEFORE the
+call/session/campaign is created, keyed by the effective
+`(agent_id, agent_version)` so the prompt validated is the prompt that will
+run. The check never blocks an explicitly-requested call, but it also never
+fails silently: unmatched variables, an unidentifiable prompt (e.g. a
+conversation-flow agent), and lookup failures each surface as explicit
+`warnings` in the tool response.
 
 ### Delete tools are permanent
 
