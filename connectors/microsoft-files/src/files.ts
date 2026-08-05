@@ -89,6 +89,61 @@ const GraphDriveItemVersionListSchema = z
   .object({ value: z.array(GraphDriveItemVersionSchema) })
   .passthrough();
 
+const GraphItemActivitySchema = z
+  .object({
+    id: z.string(),
+    activityDateTime: z.string().optional(),
+    actor: z
+      .object({
+        user: GraphIdentitySchema.optional(),
+        application: GraphIdentitySchema.optional(),
+      })
+      .passthrough()
+      .optional(),
+    // v1.0 exposes `access`; older OneDrive payloads carry the legacy
+    // itemActionSet under `action`. Both are open bags — presence of a key
+    // marks that action type.
+    access: z.record(z.unknown()).optional(),
+    action: z.record(z.unknown()).optional(),
+    driveItem: z
+      .object({ id: z.string().optional(), name: z.string().optional() })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
+const GraphItemActivityListSchema = z
+  .object({ value: z.array(GraphItemActivitySchema) })
+  .passthrough();
+
+function formatActivity(
+  activity: z.infer<typeof GraphItemActivitySchema>,
+  sourceTool: string,
+) {
+  const actions = [
+    ...Object.keys(activity.action ?? {}),
+    ...(activity.access ? ['access'] : []),
+  ];
+  return {
+    id: activity.id,
+    time: activity.activityDateTime,
+    actor: wrapUntrusted(
+      activity.actor?.user?.displayName ?? activity.actor?.application?.displayName,
+      `microsoft-files:${sourceTool}:actor`,
+    ),
+    actions,
+    item: activity.driveItem
+      ? {
+          id: activity.driveItem.id,
+          name: wrapUntrusted(
+            activity.driveItem.name,
+            `microsoft-files:${sourceTool}:item`,
+          ),
+        }
+      : undefined,
+  };
+}
+
 function formatPermission(
   permission: z.infer<typeof GraphPermissionSchema>,
   sourceTool: string,
@@ -204,6 +259,10 @@ export interface ListFileVersionsArgs {
 export interface RestoreFileVersionArgs {
   path: string;
   versionId: string;
+}
+
+export interface ListFileActivitiesArgs {
+  path?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -677,5 +736,29 @@ export async function restoreFileVersion(
     success: true,
     versionId: args.versionId,
     message: 'Version restored successfully. The restored content becomes the current version.',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Activity feed
+// ---------------------------------------------------------------------------
+
+export async function listFileActivities(
+  client: Client,
+  args: ListFileActivitiesArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const endpoint = args.path
+    ? buildDriveItemEndpoint(args.path, '/activities')
+    : '/me/drive/activities';
+  const response = await client.api(endpoint).options({ signal }).get();
+
+  const parsed = GraphItemActivityListSchema.parse(response);
+
+  return {
+    count: parsed.value.length,
+    activities: parsed.value.map((activity) =>
+      formatActivity(activity, 'list_file_activities'),
+    ),
   };
 }

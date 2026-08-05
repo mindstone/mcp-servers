@@ -136,6 +136,18 @@ const MANIFEST: ManifestRow[] = [
     pathname: '/v1.0/me/drive/items/:id/versions/:versionId/restoreVersion',
     args: { path: '01ABC123xyz', versionId: '1.0' },
   },
+  {
+    tool: 'list_file_activities',
+    method: 'GET',
+    pathname: '/v1.0/me/drive/activities',
+    args: {},
+  },
+  {
+    tool: 'list_file_activities',
+    method: 'GET',
+    pathname: '/v1.0/me/drive/items/:id/activities',
+    args: { path: '01ABC123xyz' },
+  },
 ];
 
 function matchPath(actual: string, pattern: string): boolean {

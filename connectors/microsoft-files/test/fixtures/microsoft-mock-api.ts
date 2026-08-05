@@ -72,6 +72,14 @@ const sampleLinkPermission = {
   },
 };
 
+const sampleActivity = {
+  id: 'act-1',
+  activityDateTime: '2026-05-19T10:00:00Z',
+  actor: { user: { displayName: 'Jane Doe' } },
+  action: { edit: {} },
+  driveItem: { id: 'file-1', name: 'report.docx' },
+};
+
 /**
  * MSW URL patterns delegate to `path-to-regexp` which interprets `:foo`
  * as a named param. Microsoft Graph's OneDrive endpoints embed literal
@@ -323,6 +331,18 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
         return new HttpResponse(null, { status: 204 });
       },
     ),
+
+    // /me/drive/activities — list_file_activities (drive-wide)
+    http.get(`${GRAPH_BASE}/me/drive/activities`, async ({ request }) => {
+      await capture(request);
+      return HttpResponse.json({ value: [sampleActivity] });
+    }),
+
+    // /me/drive/items/{id}/activities (GET) — list_file_activities (item-scoped)
+    http.get(rx(`${GRAPH_BASE}/me/drive/items/<seg>/activities`), async ({ request }) => {
+      await capture(request);
+      return HttpResponse.json({ value: [sampleActivity] });
+    }),
 
     // /me/drive/items/{id}/copy (POST) — copy_file id-based
     http.post(rx(`${GRAPH_BASE}/me/drive/items/<seg>/copy`), async ({ request }) => {

@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Added
 - Permission-management tools: `invite_to_file` (share a file or folder with specific people by email, read or write), `list_file_permissions`, and `revoke_file_permission`, backed by the Graph `/invite` and `/permissions` endpoints. Grantee names and emails are returned inside `<untrusted-content>` envelopes, and the Graph permission payloads are validated with Zod at the boundary.
 - Version-history tools: `list_file_versions` and `restore_file_version` (replaces the current content with an earlier version; carries `destructiveHint`), backed by the Graph `/versions` and `/restoreVersion` endpoints.
+- Activity feed: `list_file_activities` (drive-wide, or scoped to one file/folder) backed by the Graph `/activities` endpoints. Activity history requires OneDrive for Business or SharePoint; personal OneDrive accounts do not expose it. Actor names and item names are returned inside `<untrusted-content>` envelopes.
 
 ## [0.1.2] - 2026-07-03
 

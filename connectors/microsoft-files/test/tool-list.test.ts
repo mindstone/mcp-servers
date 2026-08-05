@@ -25,6 +25,7 @@ const EXPECTED_TOOLS = [
   'revoke_file_permission',
   'list_file_versions',
   'restore_file_version',
+  'list_file_activities',
 ];
 
 const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
@@ -46,6 +47,7 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
   revoke_file_permission: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   list_file_versions: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   restore_file_version: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+  list_file_activities: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
 };
 
 describe('microsoft-files tools/list', () => {

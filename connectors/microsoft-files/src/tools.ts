@@ -11,6 +11,7 @@ import {
   getRecent,
   getShared,
   inviteToFile,
+  listFileActivities,
   listFilePermissions,
   listFiles,
   listFileVersions,
@@ -656,6 +657,34 @@ export function registerFilesTools(server: McpServer): void {
       }
       const result = await callGraph(extra, (c, signal) =>
         restoreFileVersion(c, { path: args.path!, versionId: args.versionId! }, signal),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // list_file_activities
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'list_file_activities',
+    {
+      description:
+        'List recent activity in your OneDrive, or on a specific file or folder when a path is given. Requires OneDrive for Business or SharePoint; personal OneDrive accounts do not expose activity history.',
+      inputSchema: z.object({
+        path: z
+          .string()
+          .optional()
+          .describe('File/folder path or item ID (omit for drive-wide activity)'),
+      }).shape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      const result = await callGraph(extra, (c, signal) =>
+        listFileActivities(c, { path: args.path }, signal),
       );
       return successJson(result);
     }),

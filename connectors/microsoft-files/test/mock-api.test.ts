@@ -527,4 +527,41 @@ describe('microsoft-files mock-API integration', () => {
     expect(json.error).toContain('WARNING');
     expect(json.next_step).toBe('list_file_versions');
   });
+
+  // -------------------------------------------------------------------------
+  // list_file_activities
+  // -------------------------------------------------------------------------
+  it('list_file_activities returns the drive-wide feed with enveloped fields', async () => {
+    const result = await client.callTool('list_file_activities', {});
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      ok?: unknown;
+      count: number;
+      activities: Array<{
+        id: string;
+        actions: string[];
+        actor?: string;
+        item?: { name?: string };
+      }>;
+    };
+    expect(json.ok).toBeUndefined();
+    expect(json.count).toBe(1);
+    expect(json.activities[0]?.actions).toEqual(['edit']);
+    expect(json.activities[0]?.actor).toContain('untrusted-content');
+    expect(json.activities[0]?.actor).toContain('Jane Doe');
+    expect(json.activities[0]?.item?.name).toContain('report.docx');
+    const call = state.requests.find(
+      (r) => r.method === 'GET' && r.pathname.endsWith('/me/drive/activities'),
+    );
+    expect(call).toBeDefined();
+  });
+
+  it('list_file_activities with a path hits the item activities endpoint', async () => {
+    const result = await client.callTool('list_file_activities', { path: 'item-1' });
+    expect(result.isError).not.toBe(true);
+    const call = state.requests.find(
+      (r) => r.method === 'GET' && r.pathname.includes('/me/drive/items/item-1/activities'),
+    );
+    expect(call).toBeDefined();
+  });
 });
