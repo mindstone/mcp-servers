@@ -10,7 +10,7 @@ import {
 } from '../modules/gmail/services/label.js';
 import { AttachmentService } from '../modules/attachments/service.js';
 import { ATTACHMENT_FOLDERS } from '../modules/attachments/types.js';
-import { lstatSync, readFileSync, realpathSync, statSync } from 'fs';
+import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, realpathSync } from 'fs';
 import path from 'path';
 import { McpToolResponse } from './types.js';
 import { wrapUntrustedContent, wrapUntrustedJsonStrings } from '../utils/untrusted-content.js';
@@ -155,15 +155,30 @@ export function resolveAttachmentFromPath(filePath: string): { content: string; 
     );
   }
 
-  const stats = statSync(candidateRealpath);
-  const content = readFileSync(candidateRealpath);
-  const ext = path.extname(candidateRealpath).toLowerCase();
-  return {
-    content: content.toString('base64'),
-    name: path.basename(candidateRealpath),
-    mimeType: MIME_TYPES[ext] || 'application/octet-stream',
-    size: stats.size,
-  };
+  // Open once and read through the fd: checking the path and then re-opening it
+  // by name would leave a swap race between the containment check and the read.
+  // O_NOFOLLOW (where the platform supports it) refuses a symlink planted in
+  // that window.
+  const fd = openSync(candidateRealpath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  try {
+    const stats = fstatSync(fd);
+    if (!stats.isFile()) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        'Attachment path must point to a regular file.'
+      );
+    }
+    const content = readFileSync(fd);
+    const ext = path.extname(candidateRealpath).toLowerCase();
+    return {
+      content: content.toString('base64'),
+      name: path.basename(candidateRealpath),
+      mimeType: MIME_TYPES[ext] || 'application/octet-stream',
+      size: stats.size,
+    };
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function processOutgoingAttachments(attachments?: OutgoingGmailAttachment[]): OutgoingGmailAttachment[] | undefined {
