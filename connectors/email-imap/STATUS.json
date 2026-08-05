@@ -10,10 +10,11 @@
     ]
   },
   "tools": {
-    "count": 9,
+    "count": 17,
     "domains": [
       "mailbox",
       "messages",
+      "drafts",
       "send"
     ]
   },

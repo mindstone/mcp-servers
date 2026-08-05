@@ -11,6 +11,17 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+- **email-imap**: `email_search_messages` gains `before_uid` cursor pagination (responses now return `hasMore` + `nextBeforeUid` when older pages exist) and `since`/`before` date filters — older history in busy inboxes is now reachable.
+- **email-imap**: new `email_delete` tool — moves messages to the account's Trash mailbox when one exists, otherwise marks `\Deleted` and expunges permanently; annotated `destructiveHint: true`.
+- **email-imap**: new `email_get_attachment` tool — downloads MIME attachment parts into an `email-imap-attachments/` directory inside the `MCP_WORKSPACE_PATH` workspace root (or the system temp directory), with sanitized filenames, symlink-safe containment, and a 50 MB per-attachment cap. Attachment metadata from `email_get_message` now includes the `part` identifier this tool consumes.
+- **email-imap**: draft management — new `email_list_drafts`, `email_update_draft` (append-first replace), and `email_delete_draft` (permanent; `destructiveHint: true`) tools alongside the existing `email_save_draft`.
+- **email-imap**: outbound attachments on `email_send`, `email_save_draft`, and `email_update_draft` — files are read only from inside the workspace sandbox (max 10 files / 25 MB total per message).
+- **email-imap**: mailbox management — new `email_create_mailbox`, `email_rename_mailbox`, and `email_delete_mailbox` (`destructiveHint: true`) tools; INBOX is refused for all three.
+
+### Security
+- **email-imap**: subject, from/to display names, and attachment filenames returned by `email_get_message`, `email_search_messages`, and `email_get_mailbox_status` are now wrapped in `<untrusted-content source="external-email">` envelopes (previously only message bodies were enveloped), closing the attacker-controlled-header injection gap. The connector's hand-rolled body wrapper was replaced by the canonical vendored `untrusted-content` helper.
+
 ## [0.2.3] - 2026-05-14
 ### Added
 - **registry**: Cohort B + C backfill — 13 OSS connectors get server.json (12 also get mcpName). google-analytics, hubspot, outreach, quickbooks, salesforce, servicenow, slack, workday, zendesk, office (5-service consolidator), apple-shortcuts, browser-automation, email-imap each gain a registry-shaped server.json validated against registry.modelcontextprotocol.io. mcpName added to 12 of 13 package.json files; browser-automation deferred due to a concurrent agent's uncommitted 0.1.5→0.1.6 version bump in the same file.

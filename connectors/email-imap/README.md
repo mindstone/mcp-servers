@@ -9,7 +9,7 @@ Email IMAP/SMTP MCP server for Model Context Protocol hosts. Read, search, send,
 
 - **Version:** [0.2.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-email-imap)
 - **Auth:** App password ([`EMAIL_IMAP_PASSWORD`](./server.json))
-- **Tools:** [9](./src/tools/) (mailbox, messages, send)
+- **Tools:** [17](./src/tools/) (mailbox, messages, drafts, send)
 - **Surface:** local-protocol
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -99,6 +99,12 @@ node dist/index.js
   **Strongly discouraged** — credentials and message bodies will travel
   unencrypted. With this env var unset, the connector refuses to start
   when a cleartext port is configured.
+- `MCP_WORKSPACE_PATH` — workspace directory used for attachment file I/O.
+  `email_get_attachment` downloads into an `email-imap-attachments/`
+  subdirectory of this path, and outbound attachments on `email_send` /
+  `email_save_draft` / `email_update_draft` may only be read from inside it
+  (paths outside — including via symlinks — are refused). Defaults to the
+  system temp directory when unset.
 - `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
 - `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
 
@@ -184,7 +190,21 @@ without contacting the SMTP transport. Caps are env-tunable but defaults are
 baked into the source — hosts do **not** need to set any env var to get safe
 behaviour.
 
-## Tools (9)
+## Security: untrusted-content envelopes and destructive tools
+
+Every attacker-controlled text field the connector returns — message bodies,
+subjects, from/to display names, attachment filenames, draft summaries — is
+wrapped in an `<untrusted-content source="external-email">…</untrusted-content>`
+envelope (with close-tag breakout escaping) so the host LLM treats it as data,
+not instructions.
+
+Beyond `email_send`, the tools annotated `destructiveHint: true` are
+`email_delete` (permanent when no Trash mailbox exists), `email_delete_draft`
+(always permanent), and `email_delete_mailbox` (removes the folder and all
+messages inside it). Hosts should gate these behind the same explicit user
+confirmation as `email_send`.
+
+## Tools (17)
 
 ### Configuration
 - `configure_email_imap` — Configure email account credentials and provider
@@ -192,16 +212,26 @@ behaviour.
 ### Mailbox
 - `email_list_mailboxes` — List all email folders/mailboxes with message counts
 - `email_get_mailbox_status` — Get mailbox status with unread count and latest subjects
+- `email_create_mailbox` — Create a new mailbox/folder
+- `email_rename_mailbox` — Rename a mailbox/folder (INBOX cannot be renamed)
+- `email_delete_mailbox` — Permanently delete a mailbox/folder and its contents (destructive)
 
 ### Messages
-- `email_search_messages` — Search for emails in a mailbox
-- `email_get_message` — Get full email content by UID
+- `email_search_messages` — Search emails with sender/subject/unread filters, `since`/`before` date filters, and `before_uid` cursor pagination
+- `email_get_message` — Get full email content by UID (bodies, subjects, addresses, and attachment filenames are returned inside `<untrusted-content>` envelopes)
+- `email_get_attachment` — Download an attachment into the workspace sandbox (see `MCP_WORKSPACE_PATH`)
 - `email_move_messages` — Move emails between folders
+- `email_delete` — Delete emails (moves to Trash when one exists, otherwise expunges permanently; destructive)
 - `email_set_flags` — Set or remove flags (read, starred) on messages
 
+### Drafts
+- `email_save_draft` — Save a draft email (supports attachments)
+- `email_list_drafts` — List drafts in the Drafts mailbox
+- `email_update_draft` — Replace a draft's content (the new version is saved before the old one is removed)
+- `email_delete_draft` — Permanently delete a draft (destructive)
+
 ### Send
-- `email_send` — Send an email or reply
-- `email_save_draft` — Save a draft email
+- `email_send` — Send an email or reply (supports attachments)
 
 ## Licence
 
