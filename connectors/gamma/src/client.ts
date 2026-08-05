@@ -30,12 +30,27 @@ const GAMMA_API_BASE = 'https://public-api.gamma.app/v1.0';
 // structural-looking fields through the object spreads in the listing tools.
 // ---------------------------------------------------------------------------
 
+/**
+ * Gamma-issued generation IDs are server-assigned opaque identifiers, but the
+ * connector interpolates them into trusted prose and request paths — so they
+ * must be strictly shaped rather than `z.string()`: URL-safe identifier
+ * characters only, bounded length. A Gamma response carrying anything else
+ * fails closed as INVALID_RESPONSE instead of reaching model-visible output
+ * (AGENTS.md invariant #6: Gamma-controlled text is untrusted until it is
+ * proven to be structured data).
+ */
+const generationIdSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9_-]+$/);
+
 const generationResponseSchema = z.object({
-  generationId: z.string(),
+  generationId: generationIdSchema,
 });
 
 const generationStatusSchema = z.object({
-  generationId: z.string(),
+  generationId: generationIdSchema,
   status: z.enum(['pending', 'completed', 'failed']),
   gammaUrl: z.string().optional(),
   pdfUrl: z.string().optional(),
@@ -180,6 +195,41 @@ export function validateDownloadUrl(input: string): URL {
 }
 
 /**
+ * Upper bound on an honoured Retry-After delay (seconds). Anything larger is
+ * treated as absent rather than relayed, so a hostile or buggy value cannot
+ * produce absurd model-visible instructions.
+ */
+const MAX_RETRY_AFTER_SECONDS = 3600;
+
+// RFC 9110 delay-seconds form: a non-negative decimal integer.
+const RETRY_AFTER_DELAY_SECONDS = /^\d{1,10}$/;
+// IMF-fixdate, the HTTP-date format in common use: "Sun, 06 Nov 1994 08:49:37 GMT".
+const RETRY_AFTER_HTTP_DATE = /^[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/;
+
+/**
+ * Parse a Gamma-supplied `Retry-After` header into a bounded number of seconds.
+ * Returns `undefined` for anything that is not a delay-seconds value or a valid
+ * future HTTP-date within the bound.
+ *
+ * The header is Gamma-controlled external text: the raw value must never be
+ * interpolated into model-visible output. Callers build their message from the
+ * parsed number, or from a connector-authored phrase when undefined.
+ */
+export function parseRetryAfterSeconds(header: string | null): number | undefined {
+  if (header === null) return undefined;
+  const trimmed = header.trim();
+  if (RETRY_AFTER_DELAY_SECONDS.test(trimmed)) {
+    const seconds = Number(trimmed);
+    return seconds <= MAX_RETRY_AFTER_SECONDS ? seconds : undefined;
+  }
+  if (RETRY_AFTER_HTTP_DATE.test(trimmed)) {
+    const seconds = Math.ceil((Date.parse(trimmed) - Date.now()) / 1000);
+    if (seconds > 0 && seconds <= MAX_RETRY_AFTER_SECONDS) return seconds;
+  }
+  return undefined;
+}
+
+/**
  * Make an authenticated request to the Gamma API.
  *
  * The response body is parsed defensively and validated against `schema`
@@ -230,10 +280,12 @@ async function gammaFetch<T extends z.ZodTypeAny>(
     throw error;
   }
 
-  // Handle rate limiting
+  // Handle rate limiting. The Retry-After header is Gamma-controlled external
+  // text: it is parsed into a bounded delay and never interpolated raw, so a
+  // hostile header cannot inject instruction-shaped text into the error.
   if (response.status === 429) {
-    const retryAfter = response.headers.get('Retry-After');
-    const waitTime = retryAfter ? `${retryAfter} seconds` : 'a moment';
+    const retrySeconds = parseRetryAfterSeconds(response.headers.get('Retry-After'));
+    const waitTime = retrySeconds !== undefined ? `${retrySeconds} seconds` : 'a moment';
     throw new GammaError(
       `Rate limited. Please wait ${waitTime} before retrying.`,
       'RATE_LIMITED',
