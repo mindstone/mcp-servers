@@ -315,7 +315,8 @@ export type RunShortcutInput = z.infer<typeof RunShortcutInputSchema>;
  * directory under `os.tmpdir()` (via `fs.mkdtempSync`) with mode `0o600`, and
  * that path is passed to `shortcuts run --input-path`. The temp file (and its
  * containing directory) are unlinked in a `finally` block so a crashed or
- * failing CLI invocation does not leave the user's input on disk.
+ * failing CLI invocation does not leave the user's input on disk; a cleanup
+ * failure is logged (it leaves user input at rest) rather than ignored.
  */
 export function createRunShortcutHandler(runner: ShortcutsRunner = runShortcuts) {
   return async (params: RunShortcutInput) => {
@@ -324,16 +325,16 @@ export function createRunShortcutHandler(runner: ShortcutsRunner = runShortcuts)
     let tempDir: string | undefined;
     let tempPath: string | undefined;
 
-    if (params.input !== undefined) {
-      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "apple-sc-"));
-      tempPath = path.join(tempDir, "input.txt");
-      // Create with mode 0o600 and re-chmod to defeat any umask interference.
-      fs.writeFileSync(tempPath, params.input, { mode: 0o600 });
-      fs.chmodSync(tempPath, 0o600);
-      argv.push("--input-path", tempPath);
-    }
-
     try {
+      if (params.input !== undefined) {
+        tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "apple-sc-"));
+        tempPath = path.join(tempDir, "input.txt");
+        // Create with mode 0o600 and re-chmod to defeat any umask interference.
+        fs.writeFileSync(tempPath, params.input, { mode: 0o600 });
+        fs.chmodSync(tempPath, 0o600);
+        argv.push("--input-path", tempPath);
+      }
+
       const result = await runner(argv);
 
       if (result.timedOut) {
@@ -385,15 +386,16 @@ export function createRunShortcutHandler(runner: ShortcutsRunner = runShortcuts)
       if (tempPath !== undefined) {
         try {
           fs.unlinkSync(tempPath);
-        } catch {
-          // best-effort cleanup; ignore ENOENT etc.
+        } catch (err) {
+          // Best-effort, but observable: a failure leaves user input at rest.
+          logger.warn("Failed to remove temporary shortcut input file", err);
         }
       }
       if (tempDir !== undefined) {
         try {
           fs.rmdirSync(tempDir);
-        } catch {
-          // best-effort cleanup
+        } catch (err) {
+          logger.warn("Failed to remove temporary shortcut input directory", err);
         }
       }
     }

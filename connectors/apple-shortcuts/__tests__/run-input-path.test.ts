@@ -5,7 +5,7 @@
  * file must be unlinked in a `finally` block on every exit path.
  */
 
-import { describe, it } from "vitest";
+import { describe, it, vi } from "vitest";
 import assert from "node:assert";
 import fs from "node:fs";
 import os from "node:os";
@@ -185,5 +185,30 @@ describe("VAL-APPLESC-301 — every input branch leaves os.tmpdir() clean (regre
     const after = listTempEntries();
     const leaked = after.filter((e) => !before.has(e));
     assert.deepEqual(leaked, [], `leftover apple-sc-* entries: ${leaked.join(",")}`);
+  });
+});
+
+describe("VAL-APPLESC-302 — cleanup failure is observable, not silent", () => {
+  it("logs a warning when the temp file cannot be removed", async () => {
+    // Simulate an external actor removing the file mid-run so unlinkSync fails.
+    const fakeRunner: ShortcutsRunner = async (argv) => {
+      const idx = argv.indexOf("--input-path");
+      fs.unlinkSync(argv[idx + 1]);
+      return { stdout: "ok", stderr: "", exitCode: 0 };
+    };
+
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const result = await createRunShortcutHandler(fakeRunner)({ name: "Echo", input: "hi" });
+      assert.ok(!("isError" in result) || result.isError !== true);
+
+      const logged = errSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+      assert.ok(
+        logged.includes("Failed to remove temporary shortcut input file"),
+        `expected a cleanup-failure warning; got: ${logged}`
+      );
+    } finally {
+      errSpy.mockRestore();
+    }
   });
 });
