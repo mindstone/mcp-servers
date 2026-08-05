@@ -61,6 +61,31 @@ describe('User tools', () => {
       expect(result.text).toContain('Users');
       expect(result.text).toContain('Test User');
     });
+
+    it('should reject negative, fractional, and non-finite pagination before any network call', async () => {
+      let requestSeen = false;
+      mswServer.use(
+        http.get(`${base}/search.json`, () => {
+          requestSeen = true;
+          return HttpResponse.json({ results: [], count: 0, next_page: null });
+        }),
+      );
+
+      const badArgs: Array<Record<string, unknown>> = [
+        { query: 'x', page: 0 },
+        { query: 'x', page: -3 },
+        { query: 'x', page: 1.5 },
+        { query: 'x', per_page: 0 },
+        { query: 'x', per_page: -1 },
+        { query: 'x', per_page: 2.5 },
+        { query: 'x', per_page: Number.POSITIVE_INFINITY },
+      ];
+      for (const args of badArgs) {
+        const result = await testClient.callTool('search_zendesk_users', args);
+        expect(result.isError).toBe(true);
+      }
+      expect(requestSeen).toBe(false);
+    });
   });
 
   describe('get_zendesk_user', () => {
@@ -111,7 +136,42 @@ describe('User tools', () => {
       expect(capturedBody.user.organization_id).toBe(500);
     });
 
-    it('should return a structured error on validation failure', async () => {
+    it('should reject a malformed email locally, before any network call', async () => {
+      let requestSeen = false;
+      mswServer.use(
+        http.post(`${base}/users/create_or_update.json`, () => {
+          requestSeen = true;
+          return HttpResponse.json({ error: 'RecordInvalid' }, { status: 422 });
+        }),
+      );
+      const result = await testClient.callTool('create_or_update_zendesk_user', {
+        name: 'Jane Doe',
+        email: 'not-an-email',
+      });
+      // Input validation fails closed at the schema layer: the request must
+      // never reach Zendesk.
+      expect(result.isError).toBe(true);
+      expect(requestSeen).toBe(false);
+    });
+
+    it('should reject a non-E.164 phone number locally, before any network call', async () => {
+      let requestSeen = false;
+      mswServer.use(
+        http.post(`${base}/users/create_or_update.json`, () => {
+          requestSeen = true;
+          return HttpResponse.json({ error: 'RecordInvalid' }, { status: 422 });
+        }),
+      );
+      const result = await testClient.callTool('create_or_update_zendesk_user', {
+        name: 'Jane Doe',
+        email: 'jane@example.com',
+        phone: 'not-a-phone-number',
+      });
+      expect(result.isError).toBe(true);
+      expect(requestSeen).toBe(false);
+    });
+
+    it('should return a structured error when Zendesk rejects the write', async () => {
       mswServer.use(
         http.post(`${base}/users/create_or_update.json`, () => {
           return HttpResponse.json({ error: 'RecordInvalid' }, { status: 422 });
@@ -119,7 +179,7 @@ describe('User tools', () => {
       );
       const result = await testClient.callTool('create_or_update_zendesk_user', {
         name: 'Jane Doe',
-        email: 'not-an-email',
+        email: 'jane@example.com',
       });
       const data = result.json as any;
       expect(data.ok).toBe(false);

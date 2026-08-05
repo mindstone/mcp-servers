@@ -108,7 +108,7 @@ Get your API token:
 5. Copy the token`,
       inputSchema: {
         subdomain: z.string().describe('Zendesk subdomain (e.g., "acme" for acme.zendesk.com)'),
-        email: z.string().describe('Zendesk agent email address'),
+        email: z.string().email().describe('Zendesk agent email address'),
         api_token: z.string().describe('Zendesk API token'),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },

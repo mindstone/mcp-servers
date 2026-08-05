@@ -124,3 +124,33 @@ describe('Satisfaction rating tools', () => {
     });
   });
 });
+
+describe('Satisfaction date validation happens before account resolution', () => {
+  // With NO account configured, an invalid date must still produce the date
+  // error — proving semantic validation runs before getAccount (which can
+  // trigger an OAuth token-refresh network call).
+  it('rejects an unparseable date even when no account is connected', async () => {
+    const tempConfig = createTempConfig({
+      accounts: [],
+      prefix: 'zendesk-test-noacct-',
+    });
+    const noAccountClient = await createTestClient({
+      env: {
+        ZENDESK_CONFIG_PATH: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+    try {
+      const result = await noAccountClient.callTool('list_zendesk_satisfaction_ratings', {
+        start_date: 'next tuesday-ish',
+      });
+      const data = result.json as { ok: boolean; error?: string; resolution?: string };
+      expect(data.ok).toBe(false);
+      expect(data.error).toContain('start_date');
+      expect(data.resolution).toContain('ISO 8601');
+    } finally {
+      await noAccountClient.close();
+      tempConfig.cleanup();
+    }
+  });
+});

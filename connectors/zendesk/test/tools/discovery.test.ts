@@ -155,6 +155,41 @@ describe('Discovery tools', () => {
       expect(result.text).toContain('#1');
     });
 
+    it('should report the total and more-available marker in concise output when another page exists', async () => {
+      const base = `https://${API_TOKEN_ACCOUNT.subdomain}.zendesk.com/api/v2`;
+      mswServer.use(
+        http.get(`${base}/views/700/tickets.json`, () => {
+          return HttpResponse.json({
+            tickets: [makeTicket({ id: 1 }), makeTicket({ id: 2, subject: 'Second ticket' })],
+            count: 250,
+            next_page: `${base}/views/700/tickets.json?page=2`,
+          });
+        }),
+      );
+      const result = await testClient.callTool('list_zendesk_view_tickets', { view_id: 700 });
+      expect(result.isError).toBeFalsy();
+      // Concise output must not silently truncate: it reports the page size
+      // against the view total and flags that more results exist.
+      expect(result.text).toContain('(2 of 250)');
+      expect(result.text).toContain('more available');
+    });
+
+    it('should reject non-integer or non-positive view IDs before any network call', async () => {
+      const base = `https://${API_TOKEN_ACCOUNT.subdomain}.zendesk.com/api/v2`;
+      let requestSeen = false;
+      mswServer.use(
+        http.get(`${base}/views/*`, () => {
+          requestSeen = true;
+          return HttpResponse.json({ tickets: [], count: 0, next_page: null });
+        }),
+      );
+      for (const view_id of [-1, 0, 1.5, Number.POSITIVE_INFINITY]) {
+        const result = await testClient.callTool('list_zendesk_view_tickets', { view_id });
+        expect(result.isError).toBe(true);
+      }
+      expect(requestSeen).toBe(false);
+    });
+
     it('should wrap subjects in the untrusted-content envelope (detailed)', async () => {
       const result = await testClient.callTool('list_zendesk_view_tickets', {
         view_id: 700,

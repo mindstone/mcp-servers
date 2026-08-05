@@ -22,8 +22,8 @@ Use apply_zendesk_macro to apply a macro to a ticket.`,
         query: z.string().optional().describe('Search query to filter macros by title (uses /macros/search endpoint). Omit to list all macros.'),
         subdomain: z.string().optional().describe('Zendesk subdomain (optional if only one account connected)'),
         active: z.boolean().optional().describe('Filter by active macros (default: all)'),
-        page: z.number().optional().describe('Page number (default: 1)'),
-        per_page: z.number().optional().describe('Results per page, max 100 (default: 100)'),
+        page: z.number().int().min(1).optional().describe('Page number (default: 1)'),
+        per_page: z.number().int().min(1).max(100).optional().describe('Results per page, max 100 (default: 100)'),
         response_format: z.enum(['concise', 'detailed']).optional().describe('Response format: "concise" (default) for title+ID, "detailed" for full macro data including actions'),
       },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
@@ -91,7 +91,7 @@ Actions use { field, value } format where field is e.g. "status", "priority", "a
 
 Use list_zendesk_macros to find macro IDs.`,
       inputSchema: {
-        macro_id: z.number().describe('Macro ID'),
+        macro_id: z.number().int().positive().describe('Macro ID'),
         subdomain: z.string().optional().describe('Zendesk subdomain (optional if only one account connected)'),
         response_format: z.enum(['concise', 'detailed']).optional().describe('Response format (default: detailed)'),
       },
@@ -137,8 +137,8 @@ Example:
   "macro_id": 67890
 }`,
       inputSchema: {
-        ticket_id: z.number().describe('Ticket ID to apply the macro to'),
-        macro_id: z.number().describe('Macro ID to apply'),
+        ticket_id: z.number().int().positive().describe('Ticket ID to apply the macro to'),
+        macro_id: z.number().int().positive().describe('Macro ID to apply'),
         subdomain: z.string().optional().describe('Zendesk subdomain (optional if only one account connected)'),
         preview_only: z.boolean().optional().describe('If true, only preview the changes without applying (default: false)'),
       },
