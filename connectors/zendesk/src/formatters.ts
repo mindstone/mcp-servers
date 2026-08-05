@@ -9,6 +9,7 @@ import type {
   ZendeskOrganization,
   ZendeskHelpCenterArticle,
   ZendeskSatisfactionRating,
+  ZendeskView,
 } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
@@ -34,6 +35,9 @@ export const UNTRUSTED_ORG_SOURCE = 'external-organization';
 export const UNTRUSTED_MACRO_SOURCE = 'external-macro';
 export const UNTRUSTED_ARTICLE_SOURCE = 'external-help-center';
 export const UNTRUSTED_SATISFACTION_SOURCE = 'external-satisfaction-rating';
+export const UNTRUSTED_GROUP_SOURCE = 'external-group';
+export const UNTRUSTED_TICKET_FIELD_SOURCE = 'external-ticket-field';
+export const UNTRUSTED_VIEW_SOURCE = 'external-view';
 
 export const UNTRUSTED_TICKET_OPEN = `<untrusted-content source="${UNTRUSTED_TICKET_SOURCE}">`;
 export const UNTRUSTED_TICKET_CLOSE = '</untrusted-content>';
@@ -55,9 +59,9 @@ export function wrapUntrustedTicketContent(s: string | null | undefined): string
 
 /**
  * Return a shallow clone of the ticket with the attacker-controlled text
- * fields wrapped: `subject` (end-users set subjects, e.g. via email) and
- * `description`. Metadata (id, status, priority, requester_id, timestamps,
- * tags...) is left untouched.
+ * fields wrapped: `subject` (end-users set subjects, e.g. via email),
+ * `description`, `tags`, and string-valued `custom_fields` values. Ids,
+ * statuses, priorities, requester ids, and timestamps are left untouched.
  */
 export function wrapTicketBodyFields(ticket: ZendeskTicket): ZendeskTicket {
   const wrapped: ZendeskTicket = { ...ticket };
@@ -65,12 +69,23 @@ export function wrapTicketBodyFields(ticket: ZendeskTicket): ZendeskTicket {
   if (ws !== undefined) wrapped.subject = ws;
   const wd = wrapUntrustedTicketContent(ticket.description);
   if (wd !== undefined) wrapped.description = wd;
+  if (Array.isArray(ticket.tags)) {
+    wrapped.tags = ticket.tags.map(t => wrapUntrusted(t, UNTRUSTED_TICKET_SOURCE) ?? t);
+  }
+  if (Array.isArray(ticket.custom_fields)) {
+    wrapped.custom_fields = ticket.custom_fields.map(cf =>
+      typeof cf.value === 'string'
+        ? { ...cf, value: wrapUntrusted(cf.value, UNTRUSTED_TICKET_SOURCE) ?? cf.value }
+        : cf,
+    );
+  }
   return wrapped;
 }
 
 /**
  * Return a shallow clone of the user with the user-authored text fields
- * wrapped: `name` and `email`. Role, ids, and timestamps are left untouched.
+ * wrapped: `name`, `email`, and `phone`. Role, ids, and timestamps are left
+ * untouched.
  */
 export function wrapUserFields(user: ZendeskUser): ZendeskUser {
   const wrapped: ZendeskUser = { ...user };
@@ -78,12 +93,14 @@ export function wrapUserFields(user: ZendeskUser): ZendeskUser {
   if (wn !== undefined) wrapped.name = wn;
   const we = wrapUntrusted(user.email, UNTRUSTED_USER_SOURCE);
   if (we !== undefined) wrapped.email = we;
+  const wp = wrapUntrusted(user.phone, UNTRUSTED_USER_SOURCE);
+  if (wp !== undefined) wrapped.phone = wp;
   return wrapped;
 }
 
 /**
  * Return a shallow clone of the organization with the externally-authored
- * text fields wrapped: `name`, `details`, and `notes`.
+ * text fields wrapped: `name`, `details`, `notes`, and `domain_names`.
  */
 export function wrapOrganizationFields(org: ZendeskOrganization): ZendeskOrganization {
   const wrapped: ZendeskOrganization = { ...org };
@@ -93,13 +110,62 @@ export function wrapOrganizationFields(org: ZendeskOrganization): ZendeskOrganiz
   if (wd !== undefined) wrapped.details = wd;
   const wno = wrapUntrusted(org.notes, UNTRUSTED_ORG_SOURCE);
   if (wno !== undefined) wrapped.notes = wno;
+  if (Array.isArray(org.domain_names)) {
+    wrapped.domain_names = org.domain_names.map(d => wrapUntrusted(d, UNTRUSTED_ORG_SOURCE) ?? d);
+  }
   return wrapped;
 }
 
 /**
- * Return a shallow clone of the macro with the admin-authored `title` and
- * `description` wrapped. Action values are left untouched (they are
- * structured field updates authored by admins, not end-user text).
+ * Return a shallow clone of the group with the externally-authored `name`
+ * and `description` wrapped. Group names are authored in Zendesk admin and
+ * are not connector-controlled.
+ */
+export function wrapGroupFields(group: ZendeskGroup): ZendeskGroup {
+  const wrapped: ZendeskGroup = { ...group };
+  const wn = wrapUntrusted(group.name, UNTRUSTED_GROUP_SOURCE);
+  if (wn !== undefined) wrapped.name = wn;
+  const wd = wrapUntrusted(group.description, UNTRUSTED_GROUP_SOURCE);
+  if (wd !== undefined) wrapped.description = wd;
+  return wrapped;
+}
+
+/**
+ * Return a shallow clone of the ticket field with the externally-authored
+ * `title`, `description`, and custom option names/values wrapped.
+ */
+export function wrapTicketFieldFields(field: ZendeskTicketField): ZendeskTicketField {
+  const wrapped: ZendeskTicketField = { ...field };
+  const wt = wrapUntrusted(field.title, UNTRUSTED_TICKET_FIELD_SOURCE);
+  if (wt !== undefined) wrapped.title = wt;
+  const wd = wrapUntrusted(field.description, UNTRUSTED_TICKET_FIELD_SOURCE);
+  if (wd !== undefined) wrapped.description = wd;
+  if (Array.isArray(field.custom_field_options)) {
+    wrapped.custom_field_options = field.custom_field_options.map(opt => ({
+      ...opt,
+      name: wrapUntrusted(opt.name, UNTRUSTED_TICKET_FIELD_SOURCE) ?? opt.name,
+      value: wrapUntrusted(opt.value, UNTRUSTED_TICKET_FIELD_SOURCE) ?? opt.value,
+    }));
+  }
+  return wrapped;
+}
+
+/**
+ * Return a shallow clone of the view with the externally-authored `title`
+ * wrapped.
+ */
+export function wrapViewFields(view: ZendeskView): ZendeskView {
+  const wrapped: ZendeskView = { ...view };
+  const wt = wrapUntrusted(view.title, UNTRUSTED_VIEW_SOURCE);
+  if (wt !== undefined) wrapped.title = wt;
+  return wrapped;
+}
+
+/**
+ * Return a shallow clone of the macro with the admin-authored `title`,
+ * `description`, and action values wrapped. Action values include free-form
+ * strings (e.g. `comment_value`) authored by Zendesk admins — they are
+ * external content, not connector-controlled structure.
  */
 export function wrapMacroFields(macro: ZendeskMacro): ZendeskMacro {
   const wrapped: ZendeskMacro = { ...macro };
@@ -107,12 +173,26 @@ export function wrapMacroFields(macro: ZendeskMacro): ZendeskMacro {
   if (wt !== undefined) wrapped.title = wt;
   const wd = wrapUntrusted(macro.description ?? undefined, UNTRUSTED_MACRO_SOURCE);
   if (wd !== undefined) wrapped.description = wd;
+  if (Array.isArray(macro.actions)) {
+    wrapped.actions = macro.actions.map(action => {
+      if (typeof action.value === 'string') {
+        return { ...action, value: wrapUntrusted(action.value, UNTRUSTED_MACRO_SOURCE) ?? action.value };
+      }
+      if (Array.isArray(action.value)) {
+        return {
+          ...action,
+          value: action.value.map(v => wrapUntrusted(v, UNTRUSTED_MACRO_SOURCE) ?? v),
+        };
+      }
+      return action;
+    });
+  }
   return wrapped;
 }
 
 /**
  * Return a shallow clone of the Help Center article with the externally
- * authored text fields wrapped: `title`, `body`, and `snippet`.
+ * authored text fields wrapped: `title`, `body`, `snippet`, and `html_url`.
  */
 export function wrapArticleFields(article: ZendeskHelpCenterArticle): ZendeskHelpCenterArticle {
   const wrapped: ZendeskHelpCenterArticle = { ...article };
@@ -122,6 +202,8 @@ export function wrapArticleFields(article: ZendeskHelpCenterArticle): ZendeskHel
   if (wb !== undefined) wrapped.body = wb;
   const ws = wrapUntrusted(article.snippet, UNTRUSTED_ARTICLE_SOURCE);
   if (ws !== undefined) wrapped.snippet = ws;
+  const wu = wrapUntrusted(article.html_url, UNTRUSTED_ARTICLE_SOURCE);
+  if (wu !== undefined) wrapped.html_url = wu;
   return wrapped;
 }
 

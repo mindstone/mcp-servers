@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ZendeskGroup, ZendeskTicketField, ZendeskView, ZendeskOrganization, ZendeskTicket } from '../types.js';
 import { getAccount } from '../auth.js';
 import { zendeskFetch, noAccountError } from '../client.js';
-import { formatGroup, formatTicket, formatTicketField, wrapOrganizationFields, wrapTicketBodyFields } from '../formatters.js';
+import { formatGroup, formatTicket, formatTicketField, wrapGroupFields, wrapOrganizationFields, wrapTicketBodyFields, wrapTicketFieldFields, wrapViewFields } from '../formatters.js';
 import { withErrorHandling } from '../utils.js';
 
 export function registerDiscoveryTools(server: McpServer): void {
@@ -29,12 +29,14 @@ Example: "Engineering Support" → ID: 360001234567`,
       if (!account) return noAccountError();
 
       const response = await zendeskFetch<{ groups: ZendeskGroup[] }>(account, '/groups.json');
+      // Group names/descriptions are authored in Zendesk — wrap them.
+      const groups = response.groups.map(g => wrapGroupFields(g));
       const format = args.response_format || 'concise';
       if (format === 'concise') {
-        const lines = response.groups.map(formatGroup);
-        return `Groups (${response.groups.length}):\n${lines.join('\n')}`;
+        const lines = groups.map(formatGroup);
+        return `Groups (${groups.length}):\n${lines.join('\n')}`;
       }
-      return JSON.stringify({ ok: true, groups: response.groups, count: response.groups.length });
+      return JSON.stringify({ ok: true, groups, count: groups.length });
     }),
   );
 
@@ -66,6 +68,8 @@ Custom fields use numeric IDs (e.g., 360001234567) not names.`,
       if (activeOnly) {
         fields = fields.filter(f => f.active);
       }
+      // Field titles/descriptions/option labels are authored in Zendesk — wrap them.
+      fields = fields.map(f => wrapTicketFieldFields(f));
       const format = args.response_format || 'concise';
       if (format === 'concise') {
         const lines = fields.map(formatTicketField);
@@ -104,6 +108,8 @@ Use list_zendesk_view_tickets to execute a view and get its tickets.`,
       if (activeOnly) {
         views = views.filter(v => v.active);
       }
+      // View titles are authored in Zendesk — wrap them.
+      views = views.map(v => wrapViewFields(v));
       const format = args.response_format || 'concise';
       if (format === 'concise') {
         const lines = views.map(v => {
