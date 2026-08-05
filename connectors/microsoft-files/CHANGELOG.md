@@ -13,6 +13,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - `upload_file` accepts binary content via `encoding: "base64"` (up to 10MB); payloads over the 4MB simple-PUT limit go through a resumable Graph upload session (`createUploadSession` + chunked `Content-Range` PUTs to the preauthenticated upload URL). Upload responses are now Zod-validated. Text (`utf8`) behaviour is unchanged, including the 4MB limit.
 - `read_document`: extract the text of `.docx` and `.pptx` files directly (offline Office Open XML text extraction, no new dependencies). Extracted text is returned inside an `<untrusted-content>` envelope and capped at 100k characters (configurable). PDFs and other types return actionable guidance pointing at `download_file` / `read_text_file`; corrupt files fail with a clear message instead of crashing.
 
+### Security
+- Resumable `upload_file` chunk PUTs are now restricted to HTTPS URLs on Microsoft OneDrive/SharePoint hosts (default port, no userinfo), and redirects are rejected instead of followed. A malicious or compromised upload-session response can no longer retarget file bytes to an arbitrary destination.
+- Microsoft Graph error text (including the vendor error body) is now returned inside an `<untrusted-content>` envelope with close-tag breakout escaping, instead of verbatim.
+- `@odata.nextLink` continuation URLs are only ever followed back to the Graph host over HTTPS, so a hostile continuation link cannot leak the bearer token to another origin.
+
+### Changed
+- `list_file_permissions`, `list_file_versions`, and `list_file_activities` now follow `@odata.nextLink` pagination (up to 10 pages) instead of silently dropping results beyond the first page, and return an explicit `truncated` flag when more pages remain.
+- Display-only vendor strings (activity action keys and IDs, permission roles/link type/scope, grantee user IDs, version timestamps, MIME-type fragments in error messages) are now returned inside `<untrusted-content>` envelopes. Functional identifiers (permission/version/item IDs, `webUrl`s) remain structural so they can round-trip into follow-up tool calls.
+
+### Fixed
+- Numeric limits (`top`, `maxSize`, `maxChars`) must now be positive integers; invalid values are rejected with explicit guidance before any network request is made.
+- `read_document` downloads are streamed with a hard byte ceiling (no longer bounded only by the advertised metadata size), and Office ZIP inflation is bounded per-entry and cumulatively with pre-inflation declared-size checks, so a ZIP bomb cannot expand in memory; truncated or offset-corrupt containers fail with a clear error instead of a raw `RangeError`.
+
 ## [0.1.2] - 2026-07-03
 
 ### Changed
