@@ -132,4 +132,97 @@ export function registerMailboxTools(server: McpServer): void {
       });
     }),
   );
+
+  // ── email_create_mailbox ────────────────────────────────────────
+
+  server.registerTool(
+    'email_create_mailbox',
+    {
+      description: 'Create a new mailbox/folder.',
+      inputSchema: z.object({
+        name: z.string().min(1).describe('Name of the mailbox/folder to create'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      ensureInitialized();
+
+      const name = args.name.trim();
+      if (name.toUpperCase() === 'INBOX') {
+        throw new Error('INBOX always exists and cannot be created');
+      }
+
+      const client = await getConnection();
+      const result = await client.mailboxCreate(name);
+      if (!result) {
+        throw new Error(`Unable to create mailbox "${name}"`);
+      }
+
+      return JSON.stringify({ ok: true, created: name });
+    }),
+  );
+
+  // ── email_rename_mailbox ────────────────────────────────────────
+
+  server.registerTool(
+    'email_rename_mailbox',
+    {
+      description:
+        'Rename a mailbox/folder. All messages inside move with it. INBOX cannot be renamed.',
+      inputSchema: z.object({
+        old_name: z.string().min(1).describe('Current mailbox/folder name'),
+        new_name: z.string().min(1).describe('New mailbox/folder name'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      ensureInitialized();
+
+      const oldName = args.old_name.trim();
+      const newName = args.new_name.trim();
+      if (oldName.toUpperCase() === 'INBOX' || newName.toUpperCase() === 'INBOX') {
+        throw new Error('INBOX cannot be renamed or used as a rename target');
+      }
+
+      const client = await getConnection();
+      const result = await client.mailboxRename(oldName, newName);
+      if (!result) {
+        throw new Error(`Unable to rename mailbox "${oldName}" to "${newName}"`);
+      }
+
+      return JSON.stringify({ ok: true, renamed: { from: oldName, to: newName } });
+    }),
+  );
+
+  // ── email_delete_mailbox ────────────────────────────────────────
+
+  server.registerTool(
+    'email_delete_mailbox',
+    {
+      description:
+        'Permanently delete a mailbox/folder and ALL messages inside it. This is a destructive ' +
+        'action: hosts MUST require explicit user confirmation before each invocation. ' +
+        'INBOX cannot be deleted.',
+      inputSchema: z.object({
+        name: z.string().min(1).describe('Name of the mailbox/folder to delete'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      ensureInitialized();
+
+      const name = args.name.trim();
+      if (name.toUpperCase() === 'INBOX') {
+        throw new Error('INBOX cannot be deleted');
+      }
+
+      const client = await getConnection();
+      const result = await client.mailboxDelete(name);
+      if (!result) {
+        throw new Error(`Unable to delete mailbox "${name}"`);
+      }
+
+      return JSON.stringify({ ok: true, deleted: name });
+    }),
+  );
 }

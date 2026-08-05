@@ -249,6 +249,14 @@ export function createImapMock(options: ImapMockOptions = {}) {
       return true;
     }
 
+    async mailboxRename(_oldPath: string, _newPath: string) {
+      return true;
+    }
+
+    async mailboxDelete(_mailbox: string) {
+      return true;
+    }
+
     on(_event: string, _handler: (...args: unknown[]) => void) {
       // no-op for mock
     }
