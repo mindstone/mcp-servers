@@ -50,6 +50,25 @@ describe('access-token redaction in request logging', () => {
     expect((thrown as Error).message).not.toContain(ACCESS_TOKEN);
   });
 
+  it('a rejected fetch propagates unwrapped — no token in logs or a wrapped error', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    const networkError = new Error('socket hangup');
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw networkError;
+    }));
+
+    const client = new HubSpotClient(ACCESS_TOKEN);
+    const thrown = await client.getTokenInfo().catch((error: unknown) => error);
+
+    // The network error propagates unwrapped — the client never enriches it
+    // with the request URL (which carries the token in the path for the
+    // token-info endpoint).
+    expect(thrown).toBe(networkError);
+    expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(ACCESS_TOKEN);
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(ACCESS_TOKEN);
+  });
+
   it('leaves token-free endpoints untouched in logs', async () => {
     const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
     vi.stubGlobal('fetch', vi.fn(async () => new Response(
