@@ -5,9 +5,101 @@ import { ENDPOINTS } from '../endpoints.js';
 import { sanitizeAgentTool, sanitizeList } from '../sanitize.js';
 import { ElevenLabsError } from '../types.js';
 import { unwrapUntrusted, unwrapUntrustedJsonStrings } from '../untrusted-content.js';
+import { validatePublicHttpsUrl } from '../url-safety.js';
 import { withErrorHandling } from '../utils.js';
 
 type Obj = Record<string, unknown>;
+
+/**
+ * First-class tool-config fields are validated by dedicated tool arguments, so
+ * `advanced_config` must not (re)set them — otherwise the raw passthrough
+ * becomes a bypass around exactly the validation those arguments carry (the
+ * type enum, the webhook URL policy, the method enum). The check is
+ * path-aware rather than a recursive key ban: JSON-Schema parameter fragments
+ * legitimately contain keys named `type` or `url` deeper down.
+ */
+const FIRST_CLASS_TOOL_CONFIG_KEYS = new Set(['type', 'name', 'description', 'expects_response']);
+const FIRST_CLASS_API_SCHEMA_KEYS = new Set(['url', 'method']);
+
+/**
+ * The merged structure is revalidated as a whole before anything is sent
+ * upstream, so even a merge bug cannot put an unvalidated `type`, webhook URL,
+ * or method on the wire. `passthrough()` keeps the advanced fragments the
+ * merge exists for (request headers, parameter schemas, timeouts).
+ */
+const mergedToolConfigSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('webhook'),
+    name: z.string().min(1),
+    description: z.string().min(1),
+    api_schema: z.object({
+      url: z.string().min(1),
+      method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).optional(),
+    }).passthrough(),
+  }).passthrough(),
+  z.object({
+    type: z.literal('client'),
+    name: z.string().min(1),
+    description: z.string().min(1),
+    expects_response: z.boolean().optional(),
+  }).passthrough(),
+]);
+
+function assertNoFirstClassKeysInAdvancedConfig(advancedConfig: Obj, type: 'webhook' | 'client'): void {
+  for (const key of Object.keys(advancedConfig)) {
+    if (FIRST_CLASS_TOOL_CONFIG_KEYS.has(key)) {
+      throw new ElevenLabsError(
+        `advanced_config must not set "${key}"; it is a first-class field.`,
+        'INVALID_ARGUMENTS',
+        `Pass "${key}" as a top-level tool argument instead of inside advanced_config.`,
+      );
+    }
+  }
+
+  const apiSchema = advancedConfig.api_schema;
+  if (apiSchema === undefined) return;
+  if (type === 'client') {
+    throw new ElevenLabsError(
+      'advanced_config must not set "api_schema" for a client tool; client tools have no HTTP endpoint.',
+      'INVALID_ARGUMENTS',
+      'Remove api_schema, or create a webhook tool with a public https url instead.',
+    );
+  }
+  if (isObj(apiSchema)) {
+    for (const key of Object.keys(apiSchema)) {
+      if (FIRST_CLASS_API_SCHEMA_KEYS.has(key)) {
+        throw new ElevenLabsError(
+          `advanced_config must not set "api_schema.${key}"; it is a first-class field.`,
+          'INVALID_ARGUMENTS',
+          `Pass "${key}" as a top-level tool argument instead of inside advanced_config.api_schema.`,
+        );
+      }
+    }
+  }
+}
+
+function validateMergedToolConfig(merged: unknown): Obj {
+  const parsed = mergedToolConfigSchema.safeParse(merged);
+  if (!parsed.success) {
+    const issues = parsed.error.issues
+      .map((issue) => `${issue.path.join('.') || 'root'}: ${issue.message}`)
+      .join('; ');
+    throw new ElevenLabsError(
+      `Merged tool config failed validation (${issues}).`,
+      'INVALID_ARGUMENTS',
+      'Check the first-class arguments and the advanced_config fragment, then retry.',
+    );
+  }
+  const config = parsed.data as Obj;
+  if (config.type === 'webhook' && isObj(config.api_schema)) {
+    // Defense in depth: the protected-key check above already guarantees this
+    // URL came through the first-class `url` argument (which is validated), but
+    // the merged structure is what goes on the wire, so it is what gets the
+    // final say.
+    validatePublicHttpsUrl('api_schema.url', String(config.api_schema.url));
+  }
+  return config;
+}
 
 function isObj(value: unknown): value is Obj {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -125,8 +217,8 @@ RETURNS: tool (the created tool, including its ID).
 COST: FREE for the write itself; the tool runs inside billable conversations once attached to an agent.
 
 COMMON MISTAKES:
-- type "webhook" requires url.
-- advanced_config deep-merges LAST into the tool config; it overrides first-class fields on conflicting paths.`,
+- type "webhook" requires url, and the url must be a public https:// address (loopback, private, link-local, and cloud-metadata destinations are rejected).
+- advanced_config deep-merges LAST, but it must not set first-class fields (type, name, description, expects_response, api_schema.url, api_schema.method) — pass those as top-level arguments; the merged config is revalidated before it is sent.`,
       inputSchema: z.object({
         type: z.enum(['webhook', 'client'])
           .describe('Tool kind: "webhook" calls an HTTP endpoint; "client" is executed by the host application.'),
@@ -135,13 +227,13 @@ COMMON MISTAKES:
         description: z.string().min(1)
           .describe('When the agent should use this tool and what it does.'),
         url: z.string().url().optional()
-          .describe('Webhook endpoint URL. Required when type is "webhook". May include {path_param} placeholders.'),
+          .describe('Webhook endpoint URL. Required when type is "webhook". Must be a public https:// address; loopback, private, link-local, and cloud-metadata destinations are rejected. May include {path_param} placeholders.'),
         method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).optional()
           .describe('HTTP method for webhook tools. Default: ElevenLabs API default (GET).'),
         expects_response: z.boolean().optional()
           .describe('Client tools only: when true, the conversation blocks until the client responds.'),
         advanced_config: z.record(z.unknown()).optional()
-          .describe('Optional raw tool_config fragments (request headers, parameter schemas, timeouts). Deep-merged LAST for full-platform reach.'),
+          .describe('Optional raw tool_config fragments (request headers, parameter schemas, timeouts). Deep-merged LAST for full-platform reach; first-class fields stay protected and the merged config is revalidated.'),
       }),
       annotations: {
         readOnlyHint: false,
@@ -157,6 +249,9 @@ COMMON MISTAKES:
           'INVALID_ARGUMENTS',
           'Send the endpoint URL the webhook should call, then retry.',
         );
+      }
+      if (args.type === 'webhook' && args.url) {
+        validatePublicHttpsUrl('url', args.url);
       }
 
       // Same round-trip contract as the agent authoring tools: names and
@@ -179,15 +274,26 @@ COMMON MISTAKES:
       const advancedConfig = args.advanced_config
         ? unwrapUntrustedJsonStrings(args.advanced_config)
         : undefined;
+      if (advancedConfig !== undefined && !isObj(advancedConfig)) {
+        throw new ElevenLabsError(
+          'advanced_config must be an object.',
+          'INVALID_ARGUMENTS',
+          'Send advanced_config as a JSON object of tool_config fragments, then retry.',
+        );
+      }
+      if (isObj(advancedConfig)) {
+        assertNoFirstClassKeysInAdvancedConfig(advancedConfig, args.type);
+      }
       const merged = isObj(advancedConfig)
         ? deepMerge(toolConfig, advancedConfig) as Obj
         : toolConfig;
+      const validated = validateMergedToolConfig(merged);
 
       const apiKey = requireApiKey();
       const result = await elevenLabsJson<unknown>(
         apiKey,
         ENDPOINTS.TOOLS,
-        { method: 'POST', body: JSON.stringify({ tool_config: merged }) },
+        { method: 'POST', body: JSON.stringify({ tool_config: validated }) },
       );
       return JSON.stringify({
         ok: true,

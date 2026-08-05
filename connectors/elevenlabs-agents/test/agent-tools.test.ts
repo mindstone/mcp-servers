@@ -102,6 +102,128 @@ describe('agent tool (workspace tool) tools', () => {
     expect(result.json.error).toContain('url');
   });
 
+  // No msw handlers are registered in these tests: a rejection must happen
+  // before any upstream call, so a validation miss would surface as a fetch
+  // failure instead of the asserted error.
+  it.each([
+    'http://169.254.169.254/latest/meta-data',
+    'https://169.254.169.254/latest/meta-data',
+    'http://127.0.0.1:8080/hook',
+    'https://10.0.0.8/hook',
+    'https://192.168.0.1/hook',
+    'https://[::1]/hook',
+    'https://localhost/hook',
+    'http://example.com/hook',
+  ])('add_agent_tool rejects dangerous webhook url %s before any upstream call', async (url) => {
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('add_agent_tool', {
+      type: 'webhook',
+      name: 'check_order_status',
+      description: 'Look up an order by ID.',
+      url,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.json).toMatchObject({ ok: false, code: 'INVALID_URL' });
+  });
+
+  it('rejects advanced_config that overrides the validated type to smuggle in a webhook', async () => {
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('add_agent_tool', {
+      type: 'client',
+      name: 'safe_name',
+      description: 'safe',
+      advanced_config: {
+        type: 'webhook',
+        api_schema: { url: 'http://169.254.169.254/latest/meta-data', method: 'TRACE' },
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.json).toMatchObject({ ok: false, code: 'INVALID_ARGUMENTS' });
+    expect(result.json.error).toContain('"type"');
+  });
+
+  it('rejects advanced_config that overrides the first-class webhook url or method', async () => {
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('add_agent_tool', {
+      type: 'webhook',
+      name: 'check_order_status',
+      description: 'Look up an order by ID.',
+      url: 'https://example.com/api/order',
+      advanced_config: { api_schema: { url: 'https://example.org/other' } },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.json).toMatchObject({ ok: false, code: 'INVALID_ARGUMENTS' });
+    expect(result.json.error).toContain('api_schema.url');
+  });
+
+  it('rejects api_schema inside advanced_config for a client tool', async () => {
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('add_agent_tool', {
+      type: 'client',
+      name: 'open_help_center',
+      description: 'Open the help center in the app.',
+      advanced_config: { api_schema: { request_headers: { 'X-Test': '1' } } },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.json).toMatchObject({ ok: false, code: 'INVALID_ARGUMENTS' });
+    expect(result.json.error).toContain('api_schema');
+  });
+
+  it('deep-merges non-protected advanced_config fragments into the webhook api_schema', async () => {
+    const { handler, captured } = createAddAgentToolCapturingHandler();
+    mswServer.use(handler, ...createElevenLabsAgentsHandlers());
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('add_agent_tool', {
+      type: 'webhook',
+      name: 'check_order_status',
+      description: 'Look up an order by ID.',
+      url: 'https://example.com/api/order',
+      method: 'POST',
+      advanced_config: {
+        api_schema: {
+          request_headers: { 'X-Custom': 'yes' },
+          request_body_schema: { type: 'object', properties: { id: { type: 'string' } } },
+        },
+        response_timeout_secs: 20,
+      },
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(captured.body).toEqual({
+      tool_config: {
+        type: 'webhook',
+        name: 'check_order_status',
+        description: 'Look up an order by ID.',
+        api_schema: {
+          url: 'https://example.com/api/order',
+          method: 'POST',
+          request_headers: { 'X-Custom': 'yes' },
+          request_body_schema: { type: 'object', properties: { id: { type: 'string' } } },
+        },
+        response_timeout_secs: 20,
+      },
+    });
+  });
+
   it('agent tool list surfaces upstream errors', async () => {
     mswServer.use(...createElevenLabsAgentsHandlers());
     testClient = await createTestClient({
