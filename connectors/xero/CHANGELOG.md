@@ -7,6 +7,9 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+- New report tools: `list-bank-summary` (per-account balances and movements), `list-budget-summary` (budget vs actuals), and `list-executive-summary` (key financial metrics snapshot). These use the report scopes the connector already requests.
+
 ### Changed
 - Write tools (create/update/delete, history notes) now refuse to run unless `XERO_ALLOW_WRITES=1` is set in the host environment — a secure-by-default guard against accidental writes to a real Xero organisation. Read-only tools are unaffected. Set `XERO_ALLOW_WRITES=1` to opt in.
 

@@ -2,7 +2,9 @@ import ListAccountsTool from "./list-accounts.tool.js";
 import ListAgedPayablesByContact from "./list-aged-payables-by-contact.tool.js";
 import ListAgedReceivablesByContact
   from "./list-aged-receivables-by-contact.tool.js";
+import ListBankSummaryTool from "./list-bank-summary.tool.js";
 import ListBankTransactionsTool from "./list-bank-transactions.tool.js";
+import ListBudgetSummaryTool from "./list-budget-summary.tool.js";
 import ListContactsTool from "./list-contacts.tool.js";
 import ListCreditNotesTool from "./list-credit-notes.tool.js";
 import ListCurrenciesTool from "./list-currencies.tool.js";
@@ -30,6 +32,7 @@ import ListTrackingCategoriesTool from "./list-tracking-categories.tool.js";
 import ListTrialBalanceTool from "./list-trial-balance.tool.js";
 import ListContactGroupsTool from "./list-contact-groups.tool.js";
 import ListInvoiceAttachmentsTool from "./list-invoice-attachments.tool.js";
+import ListExecutiveSummaryTool from "./list-executive-summary.tool.js";
 
 export const ListTools = [
   ListAccountsTool,
@@ -58,5 +61,8 @@ export const ListTools = [
   ListPayrollTimesheetsTool,
   ListContactGroupsTool,
   ListTrackingCategoriesTool,
-  ListInvoiceAttachmentsTool
+  ListInvoiceAttachmentsTool,
+  ListBankSummaryTool,
+  ListBudgetSummaryTool,
+  ListExecutiveSummaryTool
 ];

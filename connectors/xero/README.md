@@ -156,6 +156,9 @@ This guard is secure-by-default: it prevents an agent from accidentally performi
 - `list-items`: Retrieve a list of items
 - `list-organisation-details`: Retrieve details about an organisation
 - `list-profit-and-loss`: Retrieve a profit and loss report
+- `list-bank-summary`: Retrieve the bank summary report (per-account balances and movements)
+- `list-budget-summary`: Retrieve the budget summary report (budget vs actuals)
+- `list-executive-summary`: Retrieve the executive summary report (key financial metrics snapshot)
 - `list-quotes`: Retrieve a list of quotes
 - `list-tax-rates`: Retrieve a list of tax rates
 - `list-payments`: Retrieve a list of payments
