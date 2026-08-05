@@ -27,6 +27,8 @@ are maintained manually as part of the PR review checklist.
 ### Fixed
 - Timeout handling now settles the tool call even when signal delivery fails or the process never emits `close` after SIGKILL (previously the call could hang forever), and signal-delivery failures are logged.
 - `APPLE_SHORTCUTS_TIMEOUT_MS` values that floor below 1ms now fall back to the default (they previously caused near-instant termination), and values above Node's timer range are clamped instead of overflowing to a 1ms timeout.
+- Temporary-input cleanup failures are now logged instead of silently ignored (a failed unlink leaves user input at rest), and the temp-file setup happens inside the `try` so a setup failure still runs cleanup.
+- The exported `create*Handler` factories now parse their input against the strict Zod schemas themselves, so embedders calling them directly (without the MCP SDK's validation) get the same fail-closed behavior and an invalid call never reaches the `shortcuts` CLI.
 
 ### Changed
 - Tool registration moved behind an exported `createServer(runner?)` factory so tests (and embedders) can inject a fake `shortcuts` CLI runner; the stdio entrypoint is unchanged.

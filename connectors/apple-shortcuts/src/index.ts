@@ -240,11 +240,14 @@ export type ListShortcutsInput = z.infer<typeof ListShortcutsInputSchema>;
 
 export function createListShortcutsHandler(runner: ShortcutsRunner = runShortcuts) {
   return async (params: ListShortcutsInput) => {
+    // Parse at the boundary too: embedders calling this factory directly do
+    // not get the MCP SDK's validation, and the handler must stay fail-closed.
+    const parsed = ListShortcutsInputSchema.parse(params);
     const argv: string[] = ["list"];
-    if (params.folder_name !== undefined) {
-      argv.push("--folder-name", params.folder_name);
+    if (parsed.folder_name !== undefined) {
+      argv.push("--folder-name", parsed.folder_name);
     }
-    if (params.show_identifiers) {
+    if (parsed.show_identifiers) {
       argv.push("--show-identifiers");
     }
 
@@ -320,17 +323,20 @@ export type RunShortcutInput = z.infer<typeof RunShortcutInputSchema>;
  */
 export function createRunShortcutHandler(runner: ShortcutsRunner = runShortcuts) {
   return async (params: RunShortcutInput) => {
-    const argv: string[] = ["run", params.name];
+    // Parse at the boundary too: embedders calling this factory directly do
+    // not get the MCP SDK's validation, and the handler must stay fail-closed.
+    const parsed = RunShortcutInputSchema.parse(params);
+    const argv: string[] = ["run", parsed.name];
 
     let tempDir: string | undefined;
     let tempPath: string | undefined;
 
     try {
-      if (params.input !== undefined) {
+      if (parsed.input !== undefined) {
         tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "apple-sc-"));
         tempPath = path.join(tempDir, "input.txt");
         // Create with mode 0o600 and re-chmod to defeat any umask interference.
-        fs.writeFileSync(tempPath, params.input, { mode: 0o600 });
+        fs.writeFileSync(tempPath, parsed.input, { mode: 0o600 });
         fs.chmodSync(tempPath, 0o600);
         argv.push("--input-path", tempPath);
       }
@@ -345,7 +351,7 @@ export function createRunShortcutHandler(runner: ShortcutsRunner = runShortcuts)
             {
               type: "text" as const,
               text:
-                `Shortcut "${envelope(params.name, SOURCES.run)}" did not finish within ${resolveTimeoutMs()}ms and was terminated. ` +
+                `Shortcut "${envelope(parsed.name, SOURCES.run)}" did not finish within ${resolveTimeoutMs()}ms and was terminated. ` +
                 `Set APPLE_SHORTCUTS_TIMEOUT_MS to allow longer runs.` +
                 (partial
                   ? `\nPartial output before termination:\n${envelope(partial, SOURCES.run)}`
@@ -361,7 +367,7 @@ export function createRunShortcutHandler(runner: ShortcutsRunner = runShortcuts)
           content: [
             {
               type: "text" as const,
-              text: `Failed to run shortcut "${envelope(params.name, SOURCES.run)}" (exit ${result.exitCode}): ${envelope(result.stderr || result.stdout, SOURCES.run)}`,
+              text: `Failed to run shortcut "${envelope(parsed.name, SOURCES.run)}" (exit ${result.exitCode}): ${envelope(result.stderr || result.stdout, SOURCES.run)}`,
             },
           ],
         };
@@ -373,7 +379,7 @@ export function createRunShortcutHandler(runner: ShortcutsRunner = runShortcuts)
           content: [
             {
               type: "text" as const,
-              text: `Shortcut "${envelope(params.name, SOURCES.run)}" ran successfully with no output.`,
+              text: `Shortcut "${envelope(parsed.name, SOURCES.run)}" ran successfully with no output.`,
             },
           ],
         };
@@ -417,10 +423,13 @@ export type ViewShortcutInput = z.infer<typeof ViewShortcutInputSchema>;
 
 export function createViewShortcutHandler(runner: ShortcutsRunner = runShortcuts) {
   return async (params: ViewShortcutInput) => {
-    const result = await runner(["view", params.name]);
+    // Parse at the boundary too: embedders calling this factory directly do
+    // not get the MCP SDK's validation, and the handler must stay fail-closed.
+    const parsed = ViewShortcutInputSchema.parse(params);
+    const result = await runner(["view", parsed.name]);
 
     if (result.timedOut) {
-      return timedOutResult(`Opening shortcut "${envelope(params.name, SOURCES.view)}"`);
+      return timedOutResult(`Opening shortcut "${envelope(parsed.name, SOURCES.view)}"`);
     }
 
     if (result.exitCode !== 0) {
@@ -429,7 +438,7 @@ export function createViewShortcutHandler(runner: ShortcutsRunner = runShortcuts
         content: [
           {
             type: "text" as const,
-            text: `Failed to open shortcut "${envelope(params.name, SOURCES.view)}" (exit ${result.exitCode}): ${envelope(result.stderr || result.stdout, SOURCES.view)}`,
+            text: `Failed to open shortcut "${envelope(parsed.name, SOURCES.view)}" (exit ${result.exitCode}): ${envelope(result.stderr || result.stdout, SOURCES.view)}`,
           },
         ],
       };
@@ -441,7 +450,7 @@ export function createViewShortcutHandler(runner: ShortcutsRunner = runShortcuts
         {
           type: "text" as const,
           text:
-            `Opened shortcut "${envelope(params.name, SOURCES.view)}" in the Shortcuts app editor.` +
+            `Opened shortcut "${envelope(parsed.name, SOURCES.view)}" in the Shortcuts app editor.` +
             (output ? `\n${envelope(output, SOURCES.view)}` : ""),
         },
       ],
