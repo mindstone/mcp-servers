@@ -11,10 +11,14 @@
     ]
   },
   "tools": {
-    "count": 4,
+    "count": 9,
     "domains": [
       "workers",
-      "organizations"
+      "organizations",
+      "time-off",
+      "recruiting",
+      "locations",
+      "jobs"
     ]
   },
   "surface": "cloud-api",

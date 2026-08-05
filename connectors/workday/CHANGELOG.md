@@ -11,6 +11,16 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+- **tools**: `list_workday_direct_reports` — list a worker's direct reports (`GET /workers/{id}/directReports`), enabling org-chart questions.
+- **tools**: `list_workday_time_off` — list a worker's time-off entries from the `absenceManagement/v1` service family; comment/reason free-text fields are excluded from the response.
+- **tools**: `list_workday_job_requisitions` — list open roles from the recruiting REST family. The recruiting family version defaults to `v41.2` and is overridable via the new optional `WORKDAY_RECRUITING_API_VERSION` env var (Workday versions this API by platform release).
+- **tools**: `list_workday_locations` and `list_workday_jobs` — work locations (core v1 surface) and worker job assignments (`payroll/v2` family).
+
+### Fixed
+- **search**: `list_workday_workers`' `search` argument was forwarded to `/workers` as a query param, but the collection documents only `limit`/`offset` — the term was silently ignored. Search now filters client-side (case-insensitive match on name, email, title) over paged results, bounded to 1000 scanned workers, and reports the scan window in the response.
+- **metadata**: User-Agent is derived from `package.json` (was hardcoded to 0.1.0); `server.json` no longer marks `WORKDAY_REFRESH_TOKEN` as required, matching the auth model (client_credentials grant when absent).
+
 ## [0.2.2] - 2026-05-14
 ### Added
 - **registry**: Cohort B + C backfill — 13 OSS connectors get server.json (12 also get mcpName). google-analytics, hubspot, outreach, quickbooks, salesforce, servicenow, slack, workday, zendesk, office (5-service consolidator), apple-shortcuts, browser-automation, email-imap each gain a registry-shaped server.json validated against registry.modelcontextprotocol.io. mcpName added to 12 of 13 package.json files; browser-automation deferred due to a concurrent agent's uncommitted 0.1.5→0.1.6 version bump in the same file.

@@ -3,13 +3,13 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-workday.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-workday)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Workday HCM MCP server for Model Context Protocol hosts. Query workers, profiles, and organizations in Workday through a standardised MCP interface using OAuth 2.0 authentication.
+Workday HCM MCP server for Model Context Protocol hosts. Query workers, profiles, direct reports, organizations, locations, jobs, time off, and job requisitions in Workday through a standardised MCP interface using OAuth 2.0 authentication.
 
 ## Status
 
 - **Version:** [0.2.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-workday)
 - **Auth:** OAuth ([`WORKDAY_REFRESH_TOKEN`](./server.json))
-- **Tools:** [4](./src/tools/) (workers, organizations)
+- **Tools:** [9](./src/tools/) (workers, organizations, time off, recruiting, locations, jobs)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -84,7 +84,8 @@ node dist/index.js
 - `WORKDAY_TENANT` — Workday tenant ID
 - `WORKDAY_CLIENT_ID` — OAuth 2.0 client ID
 - `WORKDAY_CLIENT_SECRET` — OAuth 2.0 client secret
-- `WORKDAY_REFRESH_TOKEN` — OAuth 2.0 refresh token
+- `WORKDAY_REFRESH_TOKEN` — optional OAuth 2.0 refresh token (enables the refresh_token grant; without it the client_credentials grant is used)
+- `WORKDAY_RECRUITING_API_VERSION` — optional override for the recruiting REST family version (default `v41.2`; Workday versions this API by platform release, so tenants on a different release may need e.g. `v42.1`)
 - `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
 - `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
 
@@ -130,7 +131,7 @@ node dist/index.js
 }
 ```
 
-## Tools (4)
+## Tools (9)
 
 ### Configuration
 - `configure_workday_credentials` — Configure Workday OAuth API credentials
@@ -138,9 +139,26 @@ node dist/index.js
 ### Workers
 - `list_workday_workers` — List or search workers (employees and contingent workers)
 - `get_workday_worker` — Get a worker's full profile by ID
+- `list_workday_direct_reports` — List a worker's direct reports (one level of the org chart)
 
 ### Organizations
 - `list_workday_organizations` — List organizations (departments, supervisory orgs, cost centers)
+- `list_workday_locations` — List work locations (offices, sites)
+
+### Time off
+- `list_workday_time_off` — List a worker's time-off entries (requires the ISU to have Absence Management domain access)
+
+### Recruiting
+- `list_workday_job_requisitions` — List job requisitions / open roles (requires Recruiting domain access; see `WORKDAY_RECRUITING_API_VERSION` if your tenant 404s)
+
+### Jobs
+- `list_workday_jobs` — List worker job assignments (position, title, location, organization)
+
+## Notes
+
+- **Search is client-side.** Workday's `/workers` collection documents only `limit`/`offset`, so `list_workday_workers`' `search` argument pages through workers and filters locally (case-insensitive match on name, email, title), scanning at most 1000 workers. On larger tenants, use a specific term.
+- **Field allowlisting.** Every tool trims Workday's responses to an allowlisted set of fields (and deep-picks nested references to ID + name), so free-text fields such as time-off comments, requisition descriptions, and street addresses never reach the model.
+- **ISU security domains.** Workday gates each REST family behind Integration System User domain permissions; a 403 from `list_workday_time_off`, `list_workday_job_requisitions`, or `list_workday_jobs` means the ISU's security group needs the corresponding domain (Absence Management, Recruiting, Payroll).
 
 ## Licence
 
