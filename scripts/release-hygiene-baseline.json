@@ -7,5 +7,19 @@
       "c9638c49f48454c3ecfefe892fdde3f86d76c241",
       "22b2ceca34481c44e3c5f94bb7ffbad7c2471623"
     ]
+  },
+  "mcp-app-compose": {
+    "reason": "Build-time-only shared package: private:true (never npm-published by design), consumed via file: and bundled into connector tarballs as generated compose HTML at build time, so src changes reach consumers through ordinary connector releases. Detection A's unpublished-src concern does not apply.",
+    "date": "2026-08-05",
+    "ackCommits": [
+      "35443dd1fc6f7e44cace27e7cf82f74714f19961",
+      "fa1ad59aab8dac16d36833c68a47a6e443bc50c8",
+      "93ff229c1e99b3548b93eb1a1e773b64313413ed",
+      "017580ab35cc4aed2d48ac1f1bd928e58ce01516",
+      "66948acea127e2449a3e7971cd5ca7796b9c3933",
+      "c2ffe825ef537d480c5ca3ad3080285dddc1f8fd",
+      "621560f5cc8c6169aecffc4e172fb165650b34b4",
+      "a808e150647153c8a2ab3fbe45bd619d644dcb92"
+    ]
   }
 }
