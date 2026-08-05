@@ -19,6 +19,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 - The MCP server now reports the real `package.json` version instead of a hardcoded literal that had drifted a full release behind (reported `0.1.1` while the package was `0.2.0`).
+- Tighten tool input validation so malformed conditional arguments are rejected before anything is relayed to the Office sidecar: `rebel_office_word_apply_style` now requires `searchText` for `searchText` targets and `startParagraph` for `paragraphRange` targets, the PowerPoint shape tools require `shapeId`/`placeholder` matching their target type, and `rebel_office_powerpoint_format_shape` requires `formatting` to set at least one property. Previously these were only rejected inside the add-in, after the relay.
 - The six new content-mutating tools (`rebel_office_word_update_table_cell`, `rebel_office_word_apply_style`, `rebel_office_excel_create_pivot_table`, `rebel_office_excel_refresh_pivot_table`, `rebel_office_powerpoint_apply_layout`, `rebel_office_powerpoint_format_shape`) now advertise `destructiveHint: true`, matching both their README descriptions and the existing `rebel_office_powerpoint_delete_shape`.
 
 ### Security

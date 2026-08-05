@@ -58,3 +58,86 @@ describe('mutating tool annotations', () => {
     },
   );
 });
+
+describe('pre-network input validation', () => {
+  const callTool = async (name: string, args: Record<string, unknown>) => {
+    const result = await client.callTool({ name, arguments: args });
+    const text = (result.content as Array<{ type: string; text: string }>)[0]!.text;
+    return { isError: result.isError === true, text };
+  };
+
+  it.each([
+    [
+      'apply_style: searchText target without searchText',
+      'rebel_office_word_apply_style',
+      { style: 'Heading 1', target: { type: 'searchText' } },
+    ],
+    [
+      'apply_style: searchText target with empty searchText',
+      'rebel_office_word_apply_style',
+      { style: 'Heading 1', target: { type: 'searchText', searchText: '' } },
+    ],
+    [
+      'apply_style: paragraphRange target without startParagraph',
+      'rebel_office_word_apply_style',
+      { style: 'Heading 1', target: { type: 'paragraphRange' } },
+    ],
+    [
+      'delete_shape: shapeId target without shapeId',
+      'rebel_office_powerpoint_delete_shape',
+      { slideIndex: 1, target: { type: 'shapeId' } },
+    ],
+    [
+      'format_shape: placeholder target without placeholder',
+      'rebel_office_powerpoint_format_shape',
+      { slideIndex: 1, target: { type: 'placeholder' }, formatting: { name: 'x' } },
+    ],
+    [
+      'format_shape: formatting with no properties',
+      'rebel_office_powerpoint_format_shape',
+      { slideIndex: 1, target: { type: 'shapeId', shapeId: 's1' }, formatting: {} },
+    ],
+  ])('rejects %s before any sidecar relay', async (_label, name, args) => {
+    const result = await callTool(name as string, args as Record<string, unknown>);
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('Input validation error');
+  });
+
+  it.each([
+    [
+      'apply_style: searchText target with searchText',
+      'rebel_office_word_apply_style',
+      { style: 'Heading 1', target: { type: 'searchText', searchText: 'Quarterly' } },
+    ],
+    [
+      'apply_style: selection target',
+      'rebel_office_word_apply_style',
+      { style: 'Quote', target: { type: 'selection' } },
+    ],
+    [
+      'apply_style: paragraphRange with startParagraph',
+      'rebel_office_word_apply_style',
+      { style: 'Normal', target: { type: 'paragraphRange', startParagraph: 0 } },
+    ],
+    [
+      'delete_shape: shapeId target with shapeId',
+      'rebel_office_powerpoint_delete_shape',
+      { slideIndex: 1, target: { type: 'shapeId', shapeId: 'shape-42' } },
+    ],
+    [
+      'format_shape: valid target and formatting',
+      'rebel_office_powerpoint_format_shape',
+      {
+        slideIndex: 1,
+        target: { type: 'placeholder', placeholder: 'title' },
+        formatting: { fillColor: '#4472C4' },
+      },
+    ],
+  ])('accepts %s (fails later at the sidecar boundary, not validation)', async (_label, name, args) => {
+    const result = await callTool(name as string, args as Record<string, unknown>);
+    // No sidecar is configured here, so a schema-valid call must get PAST
+    // validation and fail at the sidecar lifecycle instead.
+    expect(result.isError).toBe(true);
+    expect(result.text).not.toContain('Input validation error');
+  });
+});

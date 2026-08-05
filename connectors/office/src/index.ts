@@ -2277,6 +2277,27 @@ registerTool(TOOL_NAMES.applyStyle, {
         "required": [
           "type"
         ],
+        "allOf": [
+          {
+            "if": {
+              "properties": { "type": { "const": "searchText" } },
+              "required": ["type"]
+            },
+            "then": {
+              "required": ["searchText"],
+              "properties": { "searchText": { "minLength": 1 } }
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "paragraphRange" } },
+              "required": ["type"]
+            },
+            "then": {
+              "required": ["startParagraph"]
+            }
+          }
+        ],
         "description": "Which paragraphs to style."
       }
     },
@@ -4291,6 +4312,28 @@ registerTool(TOOL_NAMES.pptDeleteShape, {
         "required": [
           "type"
         ],
+        "allOf": [
+          {
+            "if": {
+              "properties": { "type": { "const": "shapeId" } },
+              "required": ["type"]
+            },
+            "then": {
+              "required": ["shapeId"],
+              "properties": { "shapeId": { "minLength": 1 } }
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "placeholder" } },
+              "required": ["type"]
+            },
+            "then": {
+              "required": ["placeholder"],
+              "properties": { "placeholder": { "minLength": 1 } }
+            }
+          }
+        ],
         "description": "Which shape to delete."
       }
     },
@@ -4346,6 +4389,28 @@ registerTool(TOOL_NAMES.pptFormatShape, {
         "required": [
           "type"
         ],
+        "allOf": [
+          {
+            "if": {
+              "properties": { "type": { "const": "shapeId" } },
+              "required": ["type"]
+            },
+            "then": {
+              "required": ["shapeId"],
+              "properties": { "shapeId": { "minLength": 1 } }
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "placeholder" } },
+              "required": ["type"]
+            },
+            "then": {
+              "required": ["placeholder"],
+              "properties": { "placeholder": { "minLength": 1 } }
+            }
+          }
+        ],
         "description": "Which shape to format."
       },
       "formatting": {
@@ -4387,7 +4452,8 @@ registerTool(TOOL_NAMES.pptFormatShape, {
             "description": "Rename the shape."
           }
         },
-        "description": "Formatting to apply. At least one property is required."
+        "description": "Formatting to apply. At least one property is required.",
+        "minProperties": 1
       }
     },
     "required": [
