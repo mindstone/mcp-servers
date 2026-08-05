@@ -50,3 +50,20 @@ export const extractToolPayload = (result: CallToolResult): Record<string, unkno
 
   return JSON.parse(textContent.text) as Record<string, unknown>;
 };
+
+// Minimal format-correct image fixtures: the connector validates that upstream
+// bytes match the requested format's magic bytes, so mocks must return real
+// signatures (plus padding to clear the minimum payload length).
+export const makeImageBase64 = (format: 'png' | 'jpeg' | 'webp' = 'png'): string => {
+  const header =
+    format === 'png'
+      ? Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+      : format === 'jpeg'
+        ? Buffer.from([0xff, 0xd8, 0xff, 0xe0])
+        : Buffer.concat([
+            Buffer.from('RIFF', 'ascii'),
+            Buffer.alloc(4),
+            Buffer.from('WEBP', 'ascii'),
+          ]);
+  return Buffer.concat([header, Buffer.alloc(128, 1)]).toString('base64');
+};

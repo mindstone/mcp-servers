@@ -559,18 +559,49 @@ export const saveImageToDisk = async (
 ): Promise<string> => {
   await ensureOutputDirectoryIsAllowed(saveDir);
   await fs.promises.mkdir(saveDir, { recursive: true });
+  const canonicalSaveDir = await canonicalizeAllowedOutputDirectory(saveDir);
   const buffer = validateBase64ImageData(b64);
 
+  // Open-then-verify (write side of the MED-1 pattern): the fence approved the
+  // canonical directory above, but a local race could swap the directory for a
+  // symlink between validation and the write. Open the output file with 'wx'
+  // (fresh inode, descriptor-pinned), then re-canonicalise the directory and
+  // refuse before any bytes flow if it no longer resolves to the approved
+  // directory. Writes go through the descriptor, so a later path swap cannot
+  // redirect the bytes.
   const writeAttempt = async (): Promise<string> => {
     const filename = generateFilename(prompt, index, count, extension);
     const savePath = path.join(saveDir, filename);
-    await fs.promises.writeFile(savePath, buffer, { flag: 'wx', mode: 0o600 });
-    const stats = await fs.promises.stat(savePath);
-    if (stats.size === 0) {
-      throw new OpenAIImageToolError(
-        'WRITE_FAILED',
-        'Generated image file was empty after write.',
-        'Try the request again.',
+    const handle = await fs.promises.open(savePath, 'wx', 0o600);
+    let directorySwapped = false;
+    try {
+      const postOpenCanonicalDir = await fs.promises
+        .realpath(saveDir)
+        .catch(() => null);
+      if (postOpenCanonicalDir !== canonicalSaveDir) {
+        directorySwapped = true;
+      } else {
+        await handle.writeFile(buffer);
+        const stats = await handle.stat();
+        if (stats.size === 0) {
+          throw new OpenAIImageToolError(
+            'WRITE_FAILED',
+            'Generated image file was empty after write.',
+            'Try the request again.',
+          );
+        }
+      }
+    } finally {
+      await handle.close().catch(() => undefined);
+    }
+
+    if (directorySwapped) {
+      // The fresh empty file may have landed outside the fence; remove it best
+      // effort (the random filename makes collateral unlink infeasible).
+      await fs.promises.unlink(savePath).catch(() => undefined);
+      throw new WorkspaceFenceToolError(
+        'Generated image folder changed while the image was being saved.',
+        'Check the output folder for symbolic links or other changes, then try again.',
       );
     }
     return savePath;
@@ -579,6 +610,9 @@ export const saveImageToDisk = async (
   try {
     return await writeAttempt();
   } catch (firstError) {
+    if (firstError instanceof OpenAIImageToolError) {
+      throw firstError;
+    }
     if (getErrorCode(firstError) !== 'EEXIST') {
       throw new OpenAIImageToolError(
         'WRITE_FAILED',
@@ -590,6 +624,9 @@ export const saveImageToDisk = async (
     try {
       return await writeAttempt();
     } catch (secondError) {
+      if (secondError instanceof OpenAIImageToolError) {
+        throw secondError;
+      }
       if (getErrorCode(secondError) === 'EEXIST') {
         throw new OpenAIImageToolError(
           'WRITE_FAILED',
@@ -768,6 +805,62 @@ const ensureOutputDirectoryIsAllowed = async (
       workspacePath,
     );
   }
+};
+
+// After `mkdir` the output directory exists, so its canonical path can be
+// resolved in full (no deepest-existing-ancestor approximation). Re-verify
+// containment against that canonical path and return it; the write path then
+// compares the directory's canonical identity again after opening the output
+// file, closing the check-then-use window between validation and write.
+const canonicalizeAllowedOutputDirectory = async (
+  saveDir: string,
+): Promise<string> => {
+  const workspacePath = WORKSPACE_PATH;
+
+  let canonicalDir: string;
+  try {
+    canonicalDir = await fs.promises.realpath(saveDir);
+  } catch (error) {
+    if (!workspacePath) {
+      throw new OpenAIImageToolError(
+        'WRITE_FAILED',
+        'Failed to access the generated image folder.',
+        'Check folder permissions and available disk space, then try again.',
+      );
+    }
+    throw formatWorkspaceContainmentError(
+      'Generated image folder',
+      saveDir,
+      workspacePath,
+      'unverifiable',
+    );
+  }
+
+  if (!workspacePath) {
+    return canonicalDir;
+  }
+
+  let workspaceRealPath: string;
+  try {
+    workspaceRealPath = await fs.promises.realpath(workspacePath);
+  } catch {
+    throw formatWorkspaceContainmentError(
+      'Generated image folder',
+      saveDir,
+      workspacePath,
+      'unverifiable',
+    );
+  }
+
+  if (!(await isInsideConfiguredCanonicalZone(canonicalDir, workspaceRealPath))) {
+    throw formatWorkspaceContainmentError(
+      'Generated image folder',
+      saveDir,
+      workspacePath,
+    );
+  }
+
+  return canonicalDir;
 };
 
 export const resolveWorkspaceScopedImagePath = async (
