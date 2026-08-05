@@ -12,7 +12,7 @@ are maintained manually as part of the PR review checklist.
 ## [Unreleased]
 
 ### Added
-- `download_kling_video` — save generated videos/images to local disk before the 30-day URL expiry. Output is sandboxed to `KLING_DOWNLOAD_ROOT` (default `~/Downloads/kling-mcp`) with lexical + realpath containment, a sensitive-path deny-list, symlink refusal at the target, atomic no-clobber writes (opt-in `overwrite`), HTTPS-only SSRF validation, and manual redirect following with per-hop revalidation.
+- `download_kling_video` — save generated videos/images to local disk before the 30-day URL expiry. Output is sandboxed to the download root (default `<workspace>/kling-downloads`; `KLING_DOWNLOAD_ROOT` may redirect it within the workspace) with lexical + realpath containment, a sensitive-path deny-list, symlink refusal at the target, atomic no-clobber writes (opt-in `overwrite`), Kling-host-only SSRF validation, and manual redirect following with per-hop revalidation.
 - `generate_kling_image_to_video` now accepts a local image file via `image_path` (previously a public HTTPS URL was mandatory). Local reads are confined to `MCP_WORKSPACE_PATH` (or the system temp directory) with canonical-prefix containment that refuses symlink escape; jpg/jpeg/png up to 10MB are sent to Kling as base64.
 - `extend_kling_video` — continue a generated video (~4-5s per extension) via `/videos/video-extend`.
 - `generate_kling_lip_sync` — lip-sync a video from text (`text2video` mode, requires `text` + `voice_id`) or an audio file (`audio2video` mode, `audio_url` or workspace-fenced `audio_path`) via `/videos/lip-sync`.
@@ -33,6 +33,8 @@ are maintained manually as part of the PR review checklist.
 - `check_kling_task` now returns a `videos` array with every video the vendor returned (previously only index zero was surfaced as a singular `video`).
 - Local media reads no longer stat-then-reopen by pathname: the validated file is opened once with `O_NOFOLLOW`, `fstat`-verified as a regular file within the size limit, and read through that same descriptor, closing the swap race between validation and read.
 - `download_kling_video` opens its output with numeric flags including `O_NOFOLLOW` (plus `O_NONBLOCK` on overwrite) and `fstat`-verifies the opened object, so a symlink or special file planted at the target between the pre-checks and the open is refused instead of written through.
+- Download output is now confined to the same canonical roots as local reads: the download root defaults to `<workspace>/kling-downloads` (was `~/Downloads/kling-mcp`), and a configured `KLING_DOWNLOAD_ROOT` must resolve inside the workspace (`MCP_WORKSPACE_PATH`, or the system temp directory when unset) — an out-of-workspace value is refused fail-closed with guidance instead of silently widening the write surface.
+- `download_kling_video` only fetches Kling result URLs: the URL host must be `klingai.com` or a subdomain (hard-coded, not env-overridable), URLs with embedded credentials are refused, and the private/reserved IP checks now also cover CGNAT, TEST-NET, benchmark, multicast/reserved, and IPv4-mapped IPv6 ranges. Redirect error messages no longer echo the `Location` URL, so signed query strings cannot leak into model output.
 
 ## [0.3.2] - 2026-05-14
 ### Added

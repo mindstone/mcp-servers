@@ -13,15 +13,18 @@ export function registerDownloadTools(server: McpServer): void {
       description:
         'Download a generated Kling video (or image) to a local file. ' +
         'Use after check_kling_task reports "succeed" — result URLs expire 30 days after generation, so save anything you want to keep. ' +
-        'output_path MUST live inside KLING_DOWNLOAD_ROOT (default ~/Downloads/kling-mcp). ' +
+        'Only Kling result URLs (klingai.com hosts) are accepted. ' +
+        'output_path MUST live inside the download sandbox (default <workspace>/kling-downloads, where the workspace is MCP_WORKSPACE_PATH or the system temp directory; KLING_DOWNLOAD_ROOT may redirect it but only to a directory inside the workspace). ' +
         'Sensitive paths (~/.ssh, ~/.aws, /etc, ~/.bashrc, ~/.zshrc) are refused even when the root would otherwise permit them. ' +
         'By default, refuses to overwrite an existing file — pass overwrite: true to clobber.',
       inputSchema: z.object({
-        url: z.string().describe('Result URL from a completed task (video.url or image url).'),
+        url: z
+          .string()
+          .describe('Result URL from a completed task (video.url or image url). Must be a Kling host (klingai.com).'),
         output_path: z
           .string()
           .describe(
-            'Local file path to save to. Must be inside KLING_DOWNLOAD_ROOT (default ~/Downloads/kling-mcp). Parent directory must exist.',
+            'Local file path to save to. Must be inside the download sandbox (default <workspace>/kling-downloads). Parent directory must exist.',
           ),
         overwrite: z
           .boolean()
@@ -175,14 +178,16 @@ export function registerDownloadTools(server: McpServer): void {
             try {
               nextUrl = new URL(location, currentUrl).toString();
             } catch {
-              redirectError = `Refused to follow redirect: invalid Location header (${location}).`;
+              // Do not echo the Location header: signed CDN query strings or
+              // bearer parameters must not be copied into model-visible output.
+              redirectError = 'Refused to follow redirect: the redirect target is not a valid URL.';
               break;
             }
 
             // Re-apply the same SSRF allow-list to every redirect target.
             const validationError = validateDownloadUrl(nextUrl);
             if (validationError) {
-              redirectError = `Refused to follow redirect to ${nextUrl}: ${validationError}`;
+              redirectError = `Refused to follow redirect: the redirect target failed safety validation (${validationError})`;
               break;
             }
 

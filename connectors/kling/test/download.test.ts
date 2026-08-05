@@ -78,17 +78,81 @@ describe('Kling SSRF protection (download_kling_video)', () => {
     expect(json.ok).toBe(false);
     expect(json.error).toContain('Invalid URL');
   });
+
+  it('rejects download URLs with embedded credentials', async () => {
+    mswServer.use(...createKlingHandlers());
+    testClient = await createTestClient({
+      env: { KLING_ACCESS_KEY: ACCESS_KEY, KLING_SECRET_KEY: SECRET_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('download_kling_video', {
+      url: 'https://user:pass@cdn.klingai.com/video.mp4',
+      output_path: path.join(os.tmpdir(), 'kling-should-not-exist.mp4'),
+    });
+
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('embedded credentials');
+  });
+
+  it('rejects IPv4-mapped IPv6 and multicast/reserved literals', async () => {
+    mswServer.use(...createKlingHandlers());
+    testClient = await createTestClient({
+      env: { KLING_ACCESS_KEY: ACCESS_KEY, KLING_SECRET_KEY: SECRET_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    for (const url of [
+      'https://[::ffff:127.0.0.1]/video.mp4',
+      'https://[::ffff:7f00:1]/video.mp4',
+      'https://224.0.0.1/video.mp4',
+      'https://240.0.0.1/video.mp4',
+      'https://100.64.0.1/video.mp4',
+      'https://198.18.0.1/video.mp4',
+    ]) {
+      const result = await testClient.callTool('download_kling_video', {
+        url,
+        output_path: path.join(os.tmpdir(), 'kling-should-not-exist.mp4'),
+      });
+      const json = result.json as Record<string, unknown>;
+      expect(json.ok).toBe(false);
+      expect(json.error).toContain('local/private network');
+    }
+  });
+
+  it('rejects public-looking hosts outside the Kling allow-list', async () => {
+    mswServer.use(...createKlingHandlers());
+    testClient = await createTestClient({
+      env: { KLING_ACCESS_KEY: ACCESS_KEY, KLING_SECRET_KEY: SECRET_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    for (const url of [
+      'https://evil.example.com/video.mp4',
+      'https://klingai.com.evil.example/video.mp4',
+      'https://evil-klingai.com/video.mp4',
+      'https://example.com/redirect-to-kling.mp4',
+    ]) {
+      const result = await testClient.callTool('download_kling_video', {
+        url,
+        output_path: path.join(os.tmpdir(), 'kling-should-not-exist.mp4'),
+      });
+      const json = result.json as Record<string, unknown>;
+      expect(json.ok).toBe(false);
+      expect(json.error).toContain('Kling host');
+      // The rejected URL must not be echoed back (signed query strings).
+      expect(result.text).not.toContain(url);
+    }
+  });
 });
 
 describe('Kling download_kling_video sandbox', () => {
   const DOWNLOAD_BODY = Buffer.alloc(2048, 0xcd);
   const REPLACEMENT_BODY = Buffer.alloc(4096, 0xef);
-  const REMOTE_URL = 'https://cdn.klingai.example/clip.mp4';
+  const REMOTE_URL = 'https://cdn.klingai.com/clip.mp4';
 
   let testClient: McpTestClient;
   let downloadRoot: string;
   let outsideRoot: string;
-  let stubbedHome: string;
+  let workspace: string;
 
   function makeDownloadHandler(body: Buffer = DOWNLOAD_BODY) {
     const calls: Array<{ url: string }> = [];
@@ -105,7 +169,7 @@ describe('Kling download_kling_video sandbox', () => {
   beforeEach(() => {
     downloadRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'kling-dl-'));
     outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'kling-dl-outside-'));
-    stubbedHome = fs.mkdtempSync(path.join(os.tmpdir(), 'kling-home-'));
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'kling-dl-ws-'));
   });
 
   afterEach(async () => {
@@ -113,7 +177,7 @@ describe('Kling download_kling_video sandbox', () => {
     vi.unstubAllEnvs();
     try { fs.rmSync(downloadRoot, { recursive: true, force: true }); } catch { /* empty */ }
     try { fs.rmSync(outsideRoot, { recursive: true, force: true }); } catch { /* empty */ }
-    try { fs.rmSync(stubbedHome, { recursive: true, force: true }); } catch { /* empty */ }
+    try { fs.rmSync(workspace, { recursive: true, force: true }); } catch { /* empty */ }
   });
 
   it('downloads into KLING_DOWNLOAD_ROOT (happy path)', async () => {
@@ -144,8 +208,8 @@ describe('Kling download_kling_video sandbox', () => {
     expect(calls.length).toBe(1);
   });
 
-  it('defaults to ~/Downloads/kling-mcp when KLING_DOWNLOAD_ROOT is unset', async () => {
-    const outputPath = path.join(stubbedHome, 'Downloads', 'kling-mcp', 'clip.mp4');
+  it('defaults to <workspace>/kling-downloads when KLING_DOWNLOAD_ROOT is unset', async () => {
+    const outputPath = path.join(workspace, 'kling-downloads', 'clip.mp4');
     const { handler } = makeDownloadHandler();
     mswServer.use(...createKlingHandlers(), handler);
 
@@ -154,8 +218,7 @@ describe('Kling download_kling_video sandbox', () => {
         KLING_ACCESS_KEY: ACCESS_KEY,
         KLING_SECRET_KEY: SECRET_KEY,
         MCP_HOST_BRIDGE_STATE: '',
-        HOME: stubbedHome,
-        USERPROFILE: stubbedHome,
+        MCP_WORKSPACE_PATH: workspace,
         KLING_DOWNLOAD_ROOT: '',
       },
     });
@@ -169,6 +232,32 @@ describe('Kling download_kling_video sandbox', () => {
     const json = result.json as Record<string, unknown>;
     expect(json.ok).toBe(true);
     expect(fs.existsSync(outputPath)).toBe(true);
+  });
+
+  it('refuses a KLING_DOWNLOAD_ROOT outside the workspace sandbox, with guidance', async () => {
+    const { handler, calls } = makeDownloadHandler();
+    mswServer.use(...createKlingHandlers(), handler);
+
+    testClient = await createTestClient({
+      env: {
+        KLING_ACCESS_KEY: ACCESS_KEY,
+        KLING_SECRET_KEY: SECRET_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        MCP_WORKSPACE_PATH: workspace,
+        KLING_DOWNLOAD_ROOT: outsideRoot,
+      },
+    });
+
+    const result = await testClient.callTool('download_kling_video', {
+      url: REMOTE_URL,
+      output_path: path.join(outsideRoot, 'clip.mp4'),
+    });
+
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('DOWNLOAD_ROOT_OUTSIDE_WORKSPACE');
+    expect(String(json.resolution)).toContain('KLING_DOWNLOAD_ROOT');
+    expect(calls.length).toBe(0); // refused before any network call
   });
 
   it('refuses output_path outside the download root', async () => {
@@ -339,6 +428,40 @@ describe('Kling download_kling_video sandbox', () => {
     expect(json.ok).toBe(false);
     expect(String(json.error)).toContain('Refused to follow redirect');
     expect(fs.existsSync(outputPath)).toBe(false); // cleaned up on failure
+  });
+
+  it('never echoes a redirect Location URL (signed query strings stay out of model output)', async () => {
+    const outputPath = path.join(downloadRoot, 'clip.mp4');
+    // A credential-shaped signed token, built programmatically.
+    const signedToken = `sig-${'A'.repeat(43)}-${'b'.repeat(27)}`;
+    const location = `https://downloads.evil-cdn.example/clip.mp4?${signedToken}=1&expires=999`;
+    mswServer.use(
+      ...createKlingHandlers(),
+      http.get(REMOTE_URL, () => {
+        return new HttpResponse(null, { status: 302, headers: { Location: location } });
+      }),
+    );
+
+    testClient = await createTestClient({
+      env: {
+        KLING_ACCESS_KEY: ACCESS_KEY,
+        KLING_SECRET_KEY: SECRET_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        KLING_DOWNLOAD_ROOT: downloadRoot,
+      },
+    });
+
+    const result = await testClient.callTool('download_kling_video', {
+      url: REMOTE_URL,
+      output_path: outputPath,
+    });
+
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(String(json.error)).toContain('Refused to follow redirect');
+    expect(result.text).not.toContain(signedToken);
+    expect(result.text).not.toContain('evil-cdn.example');
+    expect(fs.existsSync(outputPath)).toBe(false);
   });
 
   it('reports HTTP failure and leaves no partial file', async () => {
