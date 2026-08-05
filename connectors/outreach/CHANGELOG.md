@@ -17,6 +17,9 @@ are maintained manually as part of the PR review checklist.
 ### Fixed
 - API responses are now Zod-validated against the expected JSON:API envelope structure instead of being blindly cast; a malformed 200 body surfaces a structured `INVALID_RESPONSE` error instead of confusing downstream failures.
 
+### Changed
+- The default OAuth scope set (`OUTREACH_OAUTH_SCOPES` fallback) now also requests `sequenceStates.all`, `sequenceSteps.read`, `sequenceTemplates.read`, `templates.read`, `calls.read`, and `mailboxes.read`, covering the new sequence-content, enrollment-management, calls, and mailboxes tools — and fixing the sequence-enroll tool's previously undeclared `sequenceStates` scope. Accounts connected before this change need to re-run `outreach_connect_account` to pick up the new scopes.
+
 ## [0.1.3] - 2026-05-14
 ### Added
 - **registry**: Cohort B + C backfill — 13 OSS connectors get server.json (12 also get mcpName). google-analytics, hubspot, outreach, quickbooks, salesforce, servicenow, slack, workday, zendesk, office (5-service consolidator), apple-shortcuts, browser-automation, email-imap each gain a registry-shaped server.json validated against registry.modelcontextprotocol.io. mcpName added to 12 of 13 package.json files; browser-automation deferred due to a concurrent agent's uncommitted 0.1.5→0.1.6 version bump in the same file.

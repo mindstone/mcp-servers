@@ -14,6 +14,15 @@ import {
 } from './types.js';
 import { BRIDGE_STATE_PATH } from './bridge.js';
 
+/**
+ * Default OAuth scope set requested when OUTREACH_OAUTH_SCOPES is not set.
+ * Covers every tool the connector ships: sequenceStates.all is required by
+ * enrollment (outreach_add/remove_prospect_from_sequence), the *.read scopes
+ * by the read-only list/get tools, tasks.all by task create/complete.
+ */
+const DEFAULT_OAUTH_SCOPES =
+  'prospects.all sequences.all sequenceStates.all sequenceSteps.read sequenceTemplates.read templates.read accounts.all users.read tasks.all mailings.read calls.read mailboxes.read';
+
 // ---------------------------------------------------------------------------
 // Auth Mode Detection (resolved ONCE at startup)
 // ---------------------------------------------------------------------------
@@ -453,7 +462,7 @@ async function runOAuthCallbackServer(
       }
 
       const redirectUri = `http://localhost:${actualPort}/callback`;
-      const scopes = process.env.OUTREACH_OAUTH_SCOPES || 'prospects.all sequences.all accounts.all users.read tasks.all mailings.read';
+      const scopes = process.env.OUTREACH_OAUTH_SCOPES || DEFAULT_OAUTH_SCOPES;
       const authorizeUrl =
         `${OUTREACH_AUTHORIZE_URL}?` +
         new URLSearchParams({

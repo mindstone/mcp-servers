@@ -78,8 +78,10 @@ OUTREACH_ACCESS_TOKEN=your_access_token
 ```bash
 OUTREACH_CONFIG_DIR=~/.mcp/outreach    # Custom config directory (default: ~/.mcp/outreach)
 OUTREACH_OAUTH_PORT=0                   # OAuth callback port (default: OS-assigned)
-OUTREACH_OAUTH_SCOPES="prospects.all sequences.all accounts.all users.read tasks.all mailings.read"
+OUTREACH_OAUTH_SCOPES="prospects.all sequences.all sequenceStates.all sequenceSteps.read sequenceTemplates.read templates.read accounts.all users.read tasks.all mailings.read calls.read mailboxes.read"
 ```
+
+The `OUTREACH_OAUTH_SCOPES` value above is the built-in default, which covers every tool the connector ships. If you connected an account before these scopes were added (or you override the variable), re-run `outreach_connect_account` so the new token picks them up.
 
 ## Available Tools (15)
 
