@@ -4,6 +4,35 @@ import { errorJson, withErrorHandling } from '../utils.js';
 import { getSlackUserClient } from '../client.js';
 import { resolveChannelId } from '../helpers.js';
 
+/**
+ * Slack constrains custom emoji names to lowercase alphanumerics plus
+ * `_`, `+`, `-`, and emoji.list values to either an `alias:<name>` pointer or
+ * an HTTPS image URL on Slack-owned infrastructure (slack-edge.com CDN or
+ * slack.com). The map is returned to the model un-enveloped on the strength
+ * of that constraint — so it is ENFORCED here, not assumed (invariant #6):
+ * any entry that violates it is attacker-shaped (a compromised or unexpected
+ * upstream could otherwise smuggle arbitrary model-visible strings through
+ * this tool) and is dropped, observably, rather than forwarded.
+ */
+const SLACK_EMOJI_NAME_PATTERN = /^[a-z0-9_+-]+$/;
+const SLACK_EMOJI_ALIAS_PATTERN = /^alias:[a-z0-9_+-]+$/;
+const SLACK_EMOJI_HOSTNAME = /(^|\.)(slack\.com|slack-edge\.com)$/;
+
+function isSlackEmojiName(name: string): boolean {
+  return SLACK_EMOJI_NAME_PATTERN.test(name);
+}
+
+function isSlackEmojiValue(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  if (SLACK_EMOJI_ALIAS_PATTERN.test(value)) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && SLACK_EMOJI_HOSTNAME.test(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function registerReactionTools(server: McpServer): void {
   server.registerTool(
     'add_slack_reaction',
@@ -138,10 +167,28 @@ work without being listed here.`,
       }
       const result = await userClient.emoji.list();
       const emoji = result.emoji || {};
-      const entries = Object.entries(emoji).sort(([a], [b]) => a.localeCompare(b));
-      // Slack constrains custom emoji names to [a-z0-9_+-] and values to
-      // slack-hosted image URLs / alias: targets, so no envelope is needed —
-      // this map carries no free-form text.
+      // Validate every entry against Slack's own emoji constraints before
+      // forwarding (see the module-top comment): names must be Slack emoji
+      // names, values must be alias pointers or Slack-hosted HTTPS URLs.
+      // Non-conforming entries are dropped AND reported, never silently
+      // forwarded or silently swallowed.
+      const validEntries: Array<[string, string]> = [];
+      let dropped = 0;
+      for (const [name, value] of Object.entries(emoji)) {
+        if (isSlackEmojiName(name) && isSlackEmojiValue(value)) {
+          validEntries.push([name, value]);
+        } else {
+          dropped += 1;
+        }
+      }
+      if (dropped > 0) {
+        console.error(
+          `[slack-mcp] emoji.list returned ${dropped} entr${dropped === 1 ? 'y' : 'ies'} that ` +
+            'violate Slack emoji name/value constraints; dropped from the response. ' +
+            'This indicates an unexpected or compromised upstream response.',
+        );
+      }
+      const entries = validEntries.sort(([a], [b]) => a.localeCompare(b));
       const MAX_ENTRIES = 1000;
       const truncated = entries.length > MAX_ENTRIES;
       const shown = truncated ? entries.slice(0, MAX_ENTRIES) : entries;
@@ -151,6 +198,12 @@ work without being listed here.`,
         count: entries.length,
         ...(truncated
           ? { note: `Workspace has ${entries.length} custom emoji; showing the first ${MAX_ENTRIES} (alphabetical).` }
+          : {}),
+        ...(dropped > 0
+          ? {
+              omitted_invalid_entries: dropped,
+              validation_note: `${dropped} emoji entr${dropped === 1 ? 'y' : 'ies'} omitted: the response contained names or values outside Slack's emoji constraints (unexpected upstream content, not forwarded to the model).`,
+            }
           : {}),
       });
     }),
