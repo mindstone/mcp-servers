@@ -7,6 +7,14 @@ import {
 import type { AuthRequiredReason } from '@mindstone/mcp-server-microsoft-shared';
 import { TeamsBusinessError } from './teams.js';
 import { AUTH_TOOL_NAME, REQUEST_TIMEOUT_MS, getMsPackageId } from './types.js';
+import { wrapUntrusted } from './untrusted-content.js';
+
+// formatGraphError surfaces vendor-controlled response-body text
+// (`error.message` from the Graph JSON body). Envelope it so the model treats
+// it as data, not instructions (AGENTS.md security invariant #6).
+function formatGraphErrorForModel(err: unknown): string {
+  return wrapUntrusted(formatGraphError(err), 'microsoft-teams:error:graph') ?? 'Unknown error';
+}
 
 export function abortableSignal(callerSignal?: AbortSignal): AbortSignal {
   const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
@@ -156,7 +164,7 @@ export function buildErrorResponse(err: unknown): CallToolResult {
           text: JSON.stringify({
             ...buildAuthRequiredResponse(),
             reason,
-            error: formatGraphError(err),
+            error: formatGraphErrorForModel(err),
             package_id: getMsPackageId(),
           }),
         },
@@ -165,7 +173,7 @@ export function buildErrorResponse(err: unknown): CallToolResult {
     };
   }
   return errorResponse({
-    error: formatGraphError(err),
+    error: formatGraphErrorForModel(err),
     action_required:
       'Retry the call. If it continues to fail, run authenticate_microsoft_account to refresh the connection.',
     next_step: AUTH_TOOL_NAME,
