@@ -173,6 +173,20 @@ import {
   handleGetFormResponse
 } from './forms-handlers.js';
 
+// Import chat handlers
+import {
+  handleListChatSpaces,
+  handleListChatMessages,
+  handleSendChatMessage
+} from './chat-handlers.js';
+
+// Import meet handlers
+import {
+  handleListMeetConferenceRecords,
+  handleListMeetTranscripts,
+  handleGetMeetTranscriptEntries
+} from './meet-handlers.js';
+
 // Import error types
 import { AccountError } from '../modules/accounts/types.js';
 import { GmailError } from '../modules/gmail/types.js';
@@ -964,6 +978,34 @@ export class GSuiteServer {
           case 'get_form_response':
             assertGetFormResponseArgs(args);
             result = await handleGetFormResponse(args);
+            break;
+
+          // Google Chat Operations
+          case 'list_chat_spaces':
+            assertBaseToolArguments(args);
+            result = await handleListChatSpaces(args);
+            break;
+          case 'list_chat_messages':
+            assertBaseToolArguments(args);
+            result = await handleListChatMessages(args);
+            break;
+          case 'send_chat_message':
+            assertBaseToolArguments(args);
+            result = await handleSendChatMessage(args);
+            break;
+
+          // Google Meet Operations (read-only)
+          case 'list_meet_conference_records':
+            assertBaseToolArguments(args);
+            result = await handleListMeetConferenceRecords(args);
+            break;
+          case 'list_meet_transcripts':
+            assertBaseToolArguments(args);
+            result = await handleListMeetTranscripts(args);
+            break;
+          case 'get_meet_transcript_entries':
+            assertBaseToolArguments(args);
+            result = await handleGetMeetTranscriptEntries(args);
             break;
 
           default:

@@ -136,6 +136,14 @@
     "handlerModule": "src/tools/comments-handlers.ts"
   },
   {
+    "tool": "create_workspace_contact",
+    "service": "contacts",
+    "method": "GOOGLEAPIS",
+    "path": "googleapis://contacts/create_workspace_contact",
+    "handlerId": "handleCreateContact",
+    "handlerModule": "src/tools/contacts-handlers.ts"
+  },
+  {
     "tool": "create_workspace_document",
     "service": "docs",
     "method": "POST",
@@ -360,6 +368,14 @@
     "handlerModule": "src/tools/forms-handlers.ts"
   },
   {
+    "tool": "get_meet_transcript_entries",
+    "service": "meet",
+    "method": "GOOGLEAPIS",
+    "path": "googleapis://meet/get_meet_transcript_entries",
+    "handlerId": "handleGetMeetTranscriptEntries",
+    "handlerModule": "src/tools/meet-handlers.ts"
+  },
+  {
     "tool": "get_workspace_calendar_event",
     "service": "calendar",
     "method": "GET",
@@ -424,6 +440,22 @@
     "handlerModule": "src/tools/slides-handlers.ts"
   },
   {
+    "tool": "list_chat_messages",
+    "service": "chat",
+    "method": "GOOGLEAPIS",
+    "path": "googleapis://chat/list_chat_messages",
+    "handlerId": "handleListChatMessages",
+    "handlerModule": "src/tools/chat-handlers.ts"
+  },
+  {
+    "tool": "list_chat_spaces",
+    "service": "chat",
+    "method": "GOOGLEAPIS",
+    "path": "googleapis://chat/list_chat_spaces",
+    "handlerId": "handleListChatSpaces",
+    "handlerModule": "src/tools/chat-handlers.ts"
+  },
+  {
     "tool": "list_drive_files",
     "service": "drive",
     "method": "GET",
@@ -454,6 +486,22 @@
     "path": "https://www.googleapis.com/drive/v3/files",
     "handlerId": "handleListForms",
     "handlerModule": "src/tools/forms-handlers.ts"
+  },
+  {
+    "tool": "list_meet_conference_records",
+    "service": "meet",
+    "method": "GOOGLEAPIS",
+    "path": "googleapis://meet/list_meet_conference_records",
+    "handlerId": "handleListMeetConferenceRecords",
+    "handlerModule": "src/tools/meet-handlers.ts"
+  },
+  {
+    "tool": "list_meet_transcripts",
+    "service": "meet",
+    "method": "GOOGLEAPIS",
+    "path": "googleapis://meet/list_meet_transcripts",
+    "handlerId": "handleListMeetTranscripts",
+    "handlerModule": "src/tools/meet-handlers.ts"
   },
   {
     "tool": "list_shared_drives",
@@ -552,6 +600,14 @@
     "handlerModule": "src/tools/slides-handlers.ts"
   },
   {
+    "tool": "list_workspace_send_as",
+    "service": "gmail",
+    "method": "GOOGLEAPIS",
+    "path": "googleapis://gmail/list_workspace_send_as",
+    "handlerId": "handleListWorkspaceSendAs",
+    "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
     "tool": "list_workspace_spreadsheet_sheets",
     "service": "sheets",
     "method": "GET",
@@ -629,6 +685,14 @@
     "method": "PATCH",
     "path": "https://www.googleapis.com/drive/v3/files/{fileId}",
     "handlerId": "handleMoveDriveFile",
+    "handlerModule": "src/tools/drive-handlers.ts"
+  },
+  {
+    "tool": "query_drive_activity",
+    "service": "drive",
+    "method": "GOOGLEAPIS",
+    "path": "googleapis://drive/query_drive_activity",
+    "handlerId": "handleQueryDriveActivity",
     "handlerModule": "src/tools/drive-handlers.ts"
   },
   {
@@ -728,6 +792,14 @@
     "handlerModule": "src/tools/gmail-handlers.ts"
   },
   {
+    "tool": "send_chat_message",
+    "service": "chat",
+    "method": "GOOGLEAPIS",
+    "path": "googleapis://chat/send_chat_message",
+    "handlerId": "handleSendChatMessage",
+    "handlerModule": "src/tools/chat-handlers.ts"
+  },
+  {
     "tool": "send_workspace_draft",
     "service": "gmail",
     "method": "POST",
@@ -792,6 +864,14 @@
     "handlerModule": "src/tools/tasks-handlers.ts"
   },
   {
+    "tool": "update_workspace_contact",
+    "service": "contacts",
+    "method": "GOOGLEAPIS",
+    "path": "googleapis://contacts/update_workspace_contact",
+    "handlerId": "handleUpdateContact",
+    "handlerModule": "src/tools/contacts-handlers.ts"
+  },
+  {
     "tool": "update_workspace_draft",
     "service": "gmail",
     "method": "PUT",
@@ -822,6 +902,14 @@
     "path": "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}/values/{range}",
     "handlerId": "handleUpdateValues",
     "handlerModule": "src/tools/sheets-handlers.ts"
+  },
+  {
+    "tool": "update_workspace_vacation_responder",
+    "service": "gmail",
+    "method": "GOOGLEAPIS",
+    "path": "googleapis://gmail/update_workspace_vacation_responder",
+    "handlerId": "handleUpdateWorkspaceVacationResponder",
+    "handlerModule": "src/tools/gmail-handlers.ts"
   },
   {
     "tool": "upload_drive_file",

@@ -32,6 +32,8 @@ export { sheetsTools } from "./sheets.js";
 export { commentsTools } from "./comments.js";
 export { tasksTools } from "./tasks.js";
 export { formsTools } from "./forms.js";
+export { chatTools } from "./chat.js";
+export { meetTools } from "./meet.js";
 
 // Import for combining into allTools
 import { accountTools } from "./account.js";
@@ -46,6 +48,8 @@ import { sheetsTools } from "./sheets.js";
 import { commentsTools } from "./comments.js";
 import { tasksTools } from "./tasks.js";
 import { formsTools } from "./forms.js";
+import { chatTools } from "./chat.js";
+import { meetTools } from "./meet.js";
 
 const require = createRequire(import.meta.url);
 export const DESTRUCTIVE_OVERRIDES = require('./destructive-overrides.json') as Record<string, boolean>;
@@ -77,6 +81,8 @@ const rawTools: ToolMetadata[] = [
   ...slidesTools,
   ...sheetsTools,
   ...commentsTools,
+  ...chatTools,
+  ...meetTools,
   ...(TASKS_FORMS_ENABLED ? tasksTools : []),
   ...(TASKS_FORMS_ENABLED ? formsTools : []),
 ];

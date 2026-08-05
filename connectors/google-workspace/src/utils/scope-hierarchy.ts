@@ -95,6 +95,10 @@ export const SCOPE_SERVICE_NAMES: Record<string, string> = {
   [`${SCOPE_BASE}tasks`]: 'Google Tasks',
   [`${SCOPE_BASE}forms.body.readonly`]: 'Google Forms',
   [`${SCOPE_BASE}forms.responses.readonly`]: 'Google Forms Responses',
+  [`${SCOPE_BASE}chat.spaces.readonly`]: 'Google Chat',
+  [`${SCOPE_BASE}chat.messages.readonly`]: 'Google Chat',
+  [`${SCOPE_BASE}chat.messages.create`]: 'Google Chat',
+  [`${SCOPE_BASE}meetings.space.readonly`]: 'Google Meet',
 };
 
 /**
