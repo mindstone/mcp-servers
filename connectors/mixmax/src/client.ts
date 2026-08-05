@@ -80,9 +80,13 @@ export async function mixmaxFetch<T>(
   }
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Unknown error');
+    // Drain the body (frees the connection) but NEVER surface it: vendor error
+    // bodies are attacker-influenceable — they can carry prompt-injection
+    // payloads or echo request data (email bodies, recipients, tokens) straight
+    // into model-visible output. Map to a fixed, safe message instead.
+    await response.text().catch(() => '');
     throw new MixmaxError(
-      `Mixmax API error (${response.status}): ${errorText}`,
+      `Mixmax API error (${response.status})`,
       'API_ERROR',
       'Check the request parameters and try again.',
     );
@@ -91,5 +95,15 @@ export async function mixmaxFetch<T>(
   // Some endpoints (e.g. POST with 204) may return empty body
   const text = await response.text();
   if (!text) return {} as T;
-  return JSON.parse(text) as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    // A malformed success body must not surface raw parse diagnostics (which
+    // can embed response fragments) — fail with a fixed, safe message.
+    throw new MixmaxError(
+      'Malformed JSON in Mixmax API response',
+      'INVALID_API_RESPONSE',
+      'The Mixmax API returned a malformed response. Try again, or update the connector if the problem persists.',
+    );
+  }
 }
