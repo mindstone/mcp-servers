@@ -8,15 +8,44 @@
  * Base URL: https://generativelanguage.googleapis.com/v1beta
  */
 
+import { z } from 'zod';
 import {
   NanoBananaError,
   getGeminiRequestTimeoutMs,
   getErrorResolution,
   type GeminiResponse,
-  type GeminiApiErrorData,
 } from './types.js';
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+
+/**
+ * Lenient structural schemas for the bits of the Gemini response the
+ * connector consumes. Every field is optional and unknown fields pass
+ * through — the point is to reject structurally wrong payloads (wrong
+ * types, error-shaped bodies on a 200) instead of casting them blindly.
+ */
+const geminiResponseSchema = z.object({
+  candidates: z.array(z.object({
+    content: z.object({
+      parts: z.array(z.object({
+        inlineData: z.object({
+          data: z.string(),
+          mimeType: z.string().optional(),
+        }).passthrough().optional(),
+        text: z.string().optional(),
+      }).passthrough()).optional(),
+    }).passthrough().optional(),
+  }).passthrough()).optional(),
+  promptFeedback: z.object({
+    blockReason: z.string().optional(),
+  }).passthrough().optional(),
+}).passthrough();
+
+const geminiApiErrorSchema = z.object({
+  error: z.object({
+    message: z.string().optional(),
+  }).passthrough().optional(),
+}).passthrough();
 
 /**
  * Make an authenticated request to the Gemini API.
@@ -92,8 +121,8 @@ export async function geminiFetch(
   if (response.status === 401 || response.status === 403) {
     let detail = '';
     try {
-      const errBody = await response.clone().json() as GeminiApiErrorData;
-      detail = errBody.error?.message || '';
+      const errBody = geminiApiErrorSchema.safeParse(await response.clone().json());
+      detail = errBody.success ? errBody.data.error?.message ?? '' : '';
     } catch { /* not JSON */ }
     throw new NanoBananaError(
       'Authentication failed',
@@ -106,8 +135,8 @@ export async function geminiFetch(
   if (!response.ok) {
     let detail = '';
     try {
-      const errBody = await response.clone().json() as GeminiApiErrorData;
-      detail = errBody.error?.message || '';
+      const errBody = geminiApiErrorSchema.safeParse(await response.clone().json());
+      detail = errBody.success ? errBody.data.error?.message ?? '' : '';
     } catch { /* not JSON */ }
 
     throw new NanoBananaError(
@@ -117,9 +146,10 @@ export async function geminiFetch(
     );
   }
 
-  // Parse response
+  // Parse and structurally validate the response — never cast blindly.
+  let rawBody: unknown;
   try {
-    return (await response.json()) as GeminiResponse;
+    rawBody = await response.json();
   } catch {
     throw new NanoBananaError(
       'Failed to parse Gemini API response',
@@ -127,4 +157,13 @@ export async function geminiFetch(
       'The API returned an unparseable response. Try again.',
     );
   }
+  const parsed = geminiResponseSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    throw new NanoBananaError(
+      'Unexpected response format from Gemini API',
+      'UNEXPECTED_RESPONSE',
+      'The API returned data in an unexpected format. Try again; if the problem persists, update the connector.',
+    );
+  }
+  return parsed.data;
 }

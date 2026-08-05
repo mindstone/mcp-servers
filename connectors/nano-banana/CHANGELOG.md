@@ -23,6 +23,7 @@ are maintained manually as part of the PR review checklist.
 - Tool descriptions no longer advertise "4K" as a default trait of the default model — output resolution defaults to ~1K unless `image_size` is set explicitly.
 - `nano_banana_generate` / `nano_banana_edit`: a failed `save_path` write no longer reports silent success — the tool now returns a structured `SAVE_FAILED` error (with the generated image still included inline, so the result is not lost).
 - `nano_banana_generate` / `nano_banana_edit`: network-level failures (no HTTP response at all) now return the same structured error contract as API errors — `NETWORK_ERROR` with a `resolution` hint — instead of a bare `{ ok: false, error }`.
+- Gemini API responses (success and error bodies) are now structurally validated with Zod instead of blind-cast; malformed 200 payloads fail with a structured `UNEXPECTED_RESPONSE` error rather than undefined-field behaviour downstream.
 
 ## [0.3.2] - 2026-05-14
 ### Added

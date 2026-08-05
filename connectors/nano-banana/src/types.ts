@@ -125,12 +125,6 @@ export function unsupportedImageSizePayload(model: SupportedModel, imageSize: st
   };
 }
 
-export interface GeminiApiErrorData {
-  error?: {
-    message?: string;
-  };
-}
-
 export interface GeminiInlineData {
   data: string;
   mimeType?: string;
