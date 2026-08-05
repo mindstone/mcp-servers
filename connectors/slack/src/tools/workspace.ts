@@ -49,13 +49,16 @@ docs, dashboards, or meeting notes.`,
         link: args.link,
         ...(args.emoji ? { emoji: args.emoji } : {}),
       });
+      // The bookmark title in the response is Slack-returned content — it can
+      // differ from what we sent (Slack normalises/truncates), so it gets the
+      // same untrusted-content envelope as list_slack_bookmarks (invariant #6).
       return JSON.stringify({
         ok: true,
         bookmark: {
           id: result.bookmark?.id,
           channel: result.bookmark?.channel_id,
           channel_id: result.bookmark?.channel_id,
-          title: result.bookmark?.title,
+          title: wrapUntrusted(result.bookmark?.title, 'slack:bookmarks-add'),
           link: result.bookmark?.link,
           emoji: result.bookmark?.emoji,
         },
@@ -112,11 +115,13 @@ The 'time' parameter accepts a Unix timestamp (seconds) or natural language like
         time: args.time,
         ...(args.user ? { user: args.user } : {}),
       });
+      // Reminder text is Slack-returned content (Slack may rewrite natural-
+      // language input), so it is enveloped like list_slack_reminders text.
       return JSON.stringify({
         ok: true,
         reminder: {
           id: result.reminder?.id,
-          text: result.reminder?.text,
+          text: wrapUntrusted(result.reminder?.text, 'slack:reminders-add'),
           time: result.reminder?.time,
           complete_ts: result.reminder?.complete_ts,
         },
