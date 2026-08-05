@@ -791,6 +791,9 @@ const TOOL_NAMES = {
   excelAddDataValidation: 'rebel_office_excel_add_data_validation',
   excelGetComments: 'rebel_office_excel_get_comments',
   excelAddComment: 'rebel_office_excel_add_comment',
+  excelGetPivotTables: 'rebel_office_excel_get_pivot_tables',
+  excelCreatePivotTable: 'rebel_office_excel_create_pivot_table',
+  excelRefreshPivotTable: 'rebel_office_excel_refresh_pivot_table',
 
   // PowerPoint tools
   pptGetSlides: 'rebel_office_powerpoint_get_slides',
@@ -3507,11 +3510,105 @@ registerTool(TOOL_NAMES.excelAddComment, {
   return toMcpResult(result);
 });
 
+// 43. rebel_office_excel_get_pivot_tables
+registerTool(TOOL_NAMES.excelGetPivotTables, {
+  title: 'List pivot tables',
+  description:
+    'List every pivot table in the workbook with its name and the worksheet it lives on.\n\n' +
+    'Use this to discover existing pivot tables before refreshing them with ' +
+    '`rebel_office_excel_refresh_pivot_table`.',
+  inputSchema: {
+    "type": "object",
+    "properties": {}
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async () => {
+  const result = await sidecarRequest('excel', 'get_pivot_tables', {});
+  return toMcpResult(result);
+});
+
+// 44. rebel_office_excel_create_pivot_table
+registerTool(TOOL_NAMES.excelCreatePivotTable, {
+  title: 'Create pivot table',
+  description:
+    'Create a pivot table from a source data range. By default the pivot table is placed on a ' +
+    'new worksheet named after it; pass `destinationWorksheet` to place it on an existing sheet.\n\n' +
+    'The pivot table is created without arranged fields — row, column, and value fields are ' +
+    'arranged in Excel afterwards (the pivot table API cannot arrange fields).\n\n' +
+    'Requires an Excel version supporting the pivot table API (ExcelApi 1.8+).',
+  inputSchema: {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Name for the new pivot table."
+      },
+      "sourceRange": {
+        "type": "string",
+        "minLength": 1,
+        "description": "A1-style range of the source data, e.g. \"A1:D100\". The first row should be headers."
+      },
+      "sourceWorksheet": {
+        "type": "string",
+        "description": "Worksheet holding the source range. Defaults to the active worksheet."
+      },
+      "destinationWorksheet": {
+        "type": "string",
+        "description": "Existing worksheet to place the pivot table on. When omitted, a new worksheet named after the pivot table is created (it must not already exist)."
+      },
+      "destinationCell": {
+        "type": "string",
+        "description": "Top-left cell of the pivot table on the destination worksheet (default \"A1\")."
+      }
+    },
+    "required": [
+      "name",
+      "sourceRange"
+    ]
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async (input) => {
+  const result = await sidecarRequest('excel', 'create_pivot_table', {
+    name: input.name,
+    sourceRange: input.sourceRange,
+    sourceWorksheet: input.sourceWorksheet,
+    destinationWorksheet: input.destinationWorksheet,
+    destinationCell: input.destinationCell,
+  });
+  return toMcpResult(result);
+});
+
+// 45. rebel_office_excel_refresh_pivot_table
+registerTool(TOOL_NAMES.excelRefreshPivotTable, {
+  title: 'Refresh pivot table',
+  description:
+    'Refresh a pivot table so it reflects the current source data. Pass `name` to refresh one ' +
+    'pivot table, or omit it to refresh every pivot table in the workbook.\n\n' +
+    'Use `rebel_office_excel_get_pivot_tables` to list available names.',
+  inputSchema: {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Name of the pivot table to refresh. Omit to refresh all pivot tables."
+      }
+    }
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async (input) => {
+  const result = await sidecarRequest('excel', 'refresh_pivot_table', {
+    name: input.name,
+  });
+  return toMcpResult(result);
+});
+
 // ---------------------------------------------------------------------------
 // PowerPoint tool definitions (12 tools)
 // ---------------------------------------------------------------------------
 
-// 43. rebel_office_powerpoint_get_slides
+// 46. rebel_office_powerpoint_get_slides
 registerTool(TOOL_NAMES.pptGetSlides, {
   title: 'List slides',
   description:
@@ -3538,7 +3635,7 @@ registerTool(TOOL_NAMES.pptGetSlides, {
   return toMcpResult(result);
 });
 
-// 44. rebel_office_powerpoint_get_slide_content
+// 47. rebel_office_powerpoint_get_slide_content
 registerTool(TOOL_NAMES.pptGetSlideContent, {
   title: 'Get slide content',
   description:
@@ -3565,7 +3662,7 @@ registerTool(TOOL_NAMES.pptGetSlideContent, {
   return toMcpResult(result);
 });
 
-// 45. rebel_office_powerpoint_add_slide
+// 48. rebel_office_powerpoint_add_slide
 registerTool(TOOL_NAMES.pptAddSlide, {
   title: 'Add slide',
   description:
@@ -3609,7 +3706,7 @@ registerTool(TOOL_NAMES.pptAddSlide, {
   return toMcpResult(result);
 });
 
-// 46. rebel_office_powerpoint_delete_slide
+// 49. rebel_office_powerpoint_delete_slide
 registerTool(TOOL_NAMES.pptDeleteSlide, {
   title: 'Delete slide',
   description:
@@ -3634,7 +3731,7 @@ registerTool(TOOL_NAMES.pptDeleteSlide, {
   return toMcpResult(result);
 });
 
-// 47. rebel_office_powerpoint_reorder_slides
+// 50. rebel_office_powerpoint_reorder_slides
 registerTool(TOOL_NAMES.pptReorderSlides, {
   title: 'Reorder slides',
   description:
@@ -3667,7 +3764,7 @@ registerTool(TOOL_NAMES.pptReorderSlides, {
   return toMcpResult(result);
 });
 
-// 48. rebel_office_powerpoint_add_text_box
+// 51. rebel_office_powerpoint_add_text_box
 registerTool(TOOL_NAMES.pptAddTextBox, {
   title: 'Add text box',
   description:
@@ -3768,7 +3865,7 @@ registerTool(TOOL_NAMES.pptAddTextBox, {
   return toMcpResult(result);
 });
 
-// 49. rebel_office_powerpoint_add_image
+// 52. rebel_office_powerpoint_add_image
 registerTool(TOOL_NAMES.pptAddImage, {
   title: 'Add image to slide',
   description:
@@ -3854,7 +3951,7 @@ registerTool(TOOL_NAMES.pptAddImage, {
   return toMcpResult(result);
 });
 
-// 50. rebel_office_powerpoint_add_shape
+// 53. rebel_office_powerpoint_add_shape
 registerTool(TOOL_NAMES.pptAddShape, {
   title: 'Add shape',
   description:
@@ -3934,7 +4031,7 @@ registerTool(TOOL_NAMES.pptAddShape, {
   return toMcpResult(result);
 });
 
-// 51. rebel_office_powerpoint_update_text
+// 54. rebel_office_powerpoint_update_text
 registerTool(TOOL_NAMES.pptUpdateText, {
   title: 'Update text in shape',
   description:
@@ -4036,7 +4133,7 @@ registerTool(TOOL_NAMES.pptUpdateText, {
   return toMcpResult(result);
 });
 
-// 52. rebel_office_powerpoint_get_speaker_notes
+// 55. rebel_office_powerpoint_get_speaker_notes
 registerTool(TOOL_NAMES.pptGetSpeakerNotes, {
   title: 'Read speaker notes',
   description:
@@ -4059,7 +4156,7 @@ registerTool(TOOL_NAMES.pptGetSpeakerNotes, {
   return toMcpResult(result);
 });
 
-// 53. rebel_office_powerpoint_set_speaker_notes
+// 56. rebel_office_powerpoint_set_speaker_notes
 registerTool(TOOL_NAMES.pptSetSpeakerNotes, {
   title: 'Set speaker notes',
   description:
@@ -4093,7 +4190,7 @@ registerTool(TOOL_NAMES.pptSetSpeakerNotes, {
   return toMcpResult(result);
 });
 
-// 54. rebel_office_powerpoint_get_presentation_properties
+// 57. rebel_office_powerpoint_get_presentation_properties
 registerTool(TOOL_NAMES.pptGetPresentationProperties, {
   title: 'Get presentation properties',
   description:

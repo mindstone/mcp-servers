@@ -34,6 +34,9 @@ const excelCommands: Record<string, ExcelCommandHandler> = {
   add_data_validation: addDataValidation,
   get_comments: getComments,
   add_comment: addComment,
+  get_pivot_tables: getPivotTables,
+  create_pivot_table: createPivotTable,
+  refresh_pivot_table: refreshPivotTable,
 };
 
 /**
@@ -1227,5 +1230,120 @@ async function addComment(params: Record<string, unknown>): Promise<CommandResul
     await context.sync();
 
     return { success: true, commentId: comment.id };
+  });
+}
+
+/**
+ * get_pivot_tables — List all pivot tables in the workbook.
+ * Params: (none)
+ */
+async function getPivotTables(_params: Record<string, unknown>): Promise<CommandResult> {
+  return executeExcelCommand(async (context) => {
+    const pivotTables = context.workbook.pivotTables;
+    pivotTables.load('items');
+    await context.sync();
+
+    for (const pivotTable of pivotTables.items) {
+      pivotTable.load(['name']);
+      pivotTable.worksheet.load(['name']);
+    }
+    await context.sync();
+
+    return {
+      pivotTables: pivotTables.items.map((pivotTable) => ({
+        name: pivotTable.name,
+        worksheet: pivotTable.worksheet.name,
+      })),
+      count: pivotTables.items.length,
+    };
+  });
+}
+
+/**
+ * create_pivot_table — Create a pivot table from a source range.
+ * Params:
+ *   name                 (string, required) — pivot table name
+ *   sourceRange          (string, required) — A1 range of the source data (e.g. "A1:D100")
+ *   sourceWorksheet      (string, optional) — worksheet holding the source range (default: active)
+ *   destinationWorksheet (string, optional) — worksheet to place the pivot table on; when
+ *                                             omitted, a new worksheet named after the pivot
+ *                                             table is created (it must not already exist)
+ *   destinationCell      (string, optional) — top-left cell of the pivot table (default "A1")
+ */
+async function createPivotTable(params: Record<string, unknown>): Promise<CommandResult> {
+  const name = params['name'];
+  if (typeof name !== 'string' || name.trim().length === 0) {
+    return {
+      success: false,
+      error: 'The "name" parameter is required and must be a non-empty string.',
+      code: 'INVALID_ARGUMENT',
+    };
+  }
+
+  const sourceRange = params['sourceRange'];
+  if (typeof sourceRange !== 'string' || sourceRange.trim().length === 0) {
+    return {
+      success: false,
+      error: 'The "sourceRange" parameter is required and must be an A1-style range (e.g. "A1:D100").',
+      code: 'INVALID_ARGUMENT',
+    };
+  }
+
+  const sourceWorksheet = typeof params['sourceWorksheet'] === 'string' ? params['sourceWorksheet'] : undefined;
+  const destinationWorksheet =
+    typeof params['destinationWorksheet'] === 'string' ? params['destinationWorksheet'] : undefined;
+  const destinationCell =
+    typeof params['destinationCell'] === 'string' && params['destinationCell'].trim().length > 0
+      ? params['destinationCell']
+      : 'A1';
+
+  return executeExcelCommand(async (context) => {
+    const sourceSheet = getWorksheet(context, sourceWorksheet);
+    const source = sourceSheet.getRange(sourceRange as string);
+
+    let destinationSheet: Excel.Worksheet;
+    if (destinationWorksheet) {
+      destinationSheet = context.workbook.worksheets.getItem(destinationWorksheet);
+    } else {
+      destinationSheet = context.workbook.worksheets.add(name as string);
+    }
+
+    const pivotTable = destinationSheet.pivotTables.add(
+      name as string,
+      source,
+      destinationSheet.getRange(destinationCell),
+    );
+    pivotTable.load(['name']);
+    destinationSheet.load(['name']);
+    await context.sync();
+
+    return {
+      success: true,
+      name: pivotTable.name,
+      worksheet: destinationSheet.name,
+      note: 'Pivot table created without fields. Arrange row/column/value fields in Excel to build the report.',
+    };
+  });
+}
+
+/**
+ * refresh_pivot_table — Refresh one pivot table by name, or all when no name is given.
+ * Params:
+ *   name (string, optional) — pivot table name; omit to refresh every pivot table
+ */
+async function refreshPivotTable(params: Record<string, unknown>): Promise<CommandResult> {
+  const name = typeof params['name'] === 'string' && params['name'].trim().length > 0 ? params['name'] : undefined;
+
+  return executeExcelCommand(async (context) => {
+    if (name) {
+      const pivotTable = context.workbook.pivotTables.getItem(name);
+      pivotTable.refresh();
+      await context.sync();
+      return { success: true, refreshed: name };
+    }
+
+    context.workbook.pivotTables.refreshAll();
+    await context.sync();
+    return { success: true, refreshed: 'all' };
   });
 }

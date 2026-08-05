@@ -829,3 +829,149 @@ describe('integration: Word apply_style tool', () => {
     expect(payload.error).toContain('No paragraphs contain');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Integration tests: Excel pivot table tools
+// ---------------------------------------------------------------------------
+
+describe('integration: Excel pivot table tools', () => {
+  it('routes get_pivot_tables and returns the pivot list', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'excel', baseUrl);
+
+    const commandReceived = new Promise<{ action: string; params: Record<string, unknown> }>((resolve) => {
+      socket.on('message', (raw) => {
+        const msg = JSON.parse(raw.toString()) as {
+          type?: string; id?: string; action?: string; params?: Record<string, unknown>;
+        };
+        if (msg.type === 'command' && typeof msg.id === 'string') {
+          sendJson(socket, {
+            type: 'response', id: msg.id, success: true,
+            data: { pivotTables: [{ name: 'SalesPivot', worksheet: 'Pivot' }], count: 1 },
+          });
+          resolve({ action: msg.action ?? '', params: msg.params ?? {} });
+        }
+      });
+    });
+
+    const response = await fetchHttps(`${baseUrl}/excel/get_pivot_tables`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+
+    const payload = (await response.json()) as {
+      success: boolean;
+      data: { pivotTables: Array<{ name: string; worksheet: string }>; count: number };
+    };
+    const routed = await commandReceived;
+
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(payload.data.pivotTables).toEqual([{ name: 'SalesPivot', worksheet: 'Pivot' }]);
+    expect(routed.action).toBe('get_pivot_tables');
+  });
+
+  it('routes create_pivot_table with source and destination params', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'excel', baseUrl);
+
+    const commandReceived = new Promise<{ action: string; params: Record<string, unknown> }>((resolve) => {
+      socket.on('message', (raw) => {
+        const msg = JSON.parse(raw.toString()) as {
+          type?: string; id?: string; action?: string; params?: Record<string, unknown>;
+        };
+        if (msg.type === 'command' && typeof msg.id === 'string') {
+          sendJson(socket, {
+            type: 'response', id: msg.id, success: true,
+            data: { success: true, name: 'SalesPivot', worksheet: 'SalesPivot' },
+          });
+          resolve({ action: msg.action ?? '', params: msg.params ?? {} });
+        }
+      });
+    });
+
+    const response = await fetchHttps(`${baseUrl}/excel/create_pivot_table`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'SalesPivot', sourceRange: 'A1:D100', sourceWorksheet: 'Data' }),
+    });
+
+    const payload = (await response.json()) as { success: boolean };
+    const routed = await commandReceived;
+
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(routed.action).toBe('create_pivot_table');
+    expect(routed.params).toEqual({
+      name: 'SalesPivot', sourceRange: 'A1:D100', sourceWorksheet: 'Data',
+    });
+  });
+
+  it('routes refresh_pivot_table for one pivot and for all', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'excel', baseUrl);
+
+    const received: Array<{ action: string; params: Record<string, unknown> }> = [];
+    socket.on('message', (raw) => {
+      const msg = JSON.parse(raw.toString()) as {
+        type?: string; id?: string; action?: string; params?: Record<string, unknown>;
+      };
+      if (msg.type === 'command' && typeof msg.id === 'string') {
+        received.push({ action: msg.action ?? '', params: msg.params ?? {} });
+        sendJson(socket, {
+          type: 'response', id: msg.id, success: true,
+          data: { success: true, refreshed: msg.params?.['name'] ?? 'all' },
+        });
+      }
+    });
+
+    const named = await fetchHttps(`${baseUrl}/excel/refresh_pivot_table`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'SalesPivot' }),
+    });
+    const all = await fetchHttps(`${baseUrl}/excel/refresh_pivot_table`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+
+    expect(named.status).toBe(200);
+    expect(all.status).toBe(200);
+    expect(received).toEqual([
+      { action: 'refresh_pivot_table', params: { name: 'SalesPivot' } },
+      { action: 'refresh_pivot_table', params: {} },
+    ]);
+  });
+
+  it('propagates create_pivot_table errors (missing source worksheet) from the add-in', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'excel', baseUrl);
+
+    socket.on('message', (raw) => {
+      const msg = JSON.parse(raw.toString()) as { type?: string; id?: string };
+      if (msg.type === 'command' && typeof msg.id === 'string') {
+        sendJson(socket, {
+          type: 'response', id: msg.id, success: false,
+          error: 'The requested item was not found.', code: 'ITEM_NOT_FOUND',
+        });
+      }
+    });
+
+    const response = await fetchHttps(`${baseUrl}/excel/create_pivot_table`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'P', sourceRange: 'A1:D10', sourceWorksheet: 'Missing' }),
+    });
+
+    const payload = (await response.json()) as { success: boolean; error: string; code: string };
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(false);
+    expect(payload.code).toBe('ITEM_NOT_FOUND');
+  });
+});

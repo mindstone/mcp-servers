@@ -11,7 +11,7 @@ Read and edit Word documents, Excel workbooks, and PowerPoint presentations from
 
 - **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-office)
 - **Auth:** None ([`server.json`](./server.json))
-- **Tools:** [56](./src/) (word, excel, powerpoint, setup)
+- **Tools:** [59](./src/) (word, excel, powerpoint, setup)
 - **Surface:** desktop-addin
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -173,7 +173,7 @@ Claude Desktop is possible but the host must provide a writable
 }
 ```
 
-## Tools (56)
+## Tools (59)
 
 ### Setup
 - `rebel_office_setup` — Install or repair (or uninstall) the Office add-in.
@@ -201,7 +201,7 @@ Claude Desktop is possible but the host must provide a writable
 - `rebel_office_word_get_tracked_changes` — Read tracked changes (revisions).
 - `rebel_office_word_accept_reject_changes` — Accept or reject tracked changes in bulk or by ID (destructive).
 
-### Excel (22)
+### Excel (25)
 - `rebel_office_excel_read_range` — Read cell values from an A1 range or named range.
 - `rebel_office_excel_write_range` — Write a 2D array of values to a range (destructive).
 - `rebel_office_excel_get_worksheets` — List worksheets with positions and used ranges.
@@ -224,6 +224,9 @@ Claude Desktop is possible but the host must provide a writable
 - `rebel_office_excel_add_data_validation` — Add input validation rules to a range (destructive).
 - `rebel_office_excel_get_comments` — Read threaded cell comments.
 - `rebel_office_excel_add_comment` — Add a comment or reply on a cell (destructive).
+- `rebel_office_excel_get_pivot_tables` — List pivot tables and the worksheets they live on.
+- `rebel_office_excel_create_pivot_table` — Create a pivot table from a source range (destructive).
+- `rebel_office_excel_refresh_pivot_table` — Refresh one pivot table, or all of them.
 
 ### PowerPoint (12)
 - `rebel_office_powerpoint_get_slides` — List slides with layout, title, and shape counts.
