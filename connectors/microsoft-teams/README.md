@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-microsoft-teams.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-teams)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Microsoft 365 Teams MCP server — list and read Teams chats, send chat messages, list teams and channels, and read presence via the Microsoft Graph API.
+Microsoft 365 Teams MCP server — list and read Teams chats and channel messages, send messages and replies, start new chats, look up colleagues, search messages, and read or set presence via the Microsoft Graph API.
 
 *Cohort-style Microsoft 365 Teams MCP. Reuses the OAuth surface owned by [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/) so the host signs in once and gets Teams plus mail plus calendar plus files plus SharePoint from the same credentials.*
 
@@ -11,7 +11,7 @@ Microsoft 365 Teams MCP server — list and read Teams chats, send chat messages
 
 - **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-teams)
 - **Auth:** OAuth (host-orchestrated, shared with [`mcp-server-microsoft-mail`](../microsoft-mail/)) ([`MS_CLIENT_ID`](./server.json))
-- **Tools:** [8](./src/tools.ts) (chats, messages, teams, channels, presence)
+- **Tools:** [17](./src/tools.ts) (chats, messages, teams, channels, users, search, presence)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 - **Shared library:** [`@mindstone/mcp-server-microsoft-shared`](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-shared)
@@ -164,7 +164,7 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 }
 ```
 
-## Tools (8)
+## Tools (17)
 
 | Tool | Description |
 | ---- | ----------- |
@@ -172,12 +172,21 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 | `get_chat` | Get details about a specific chat. |
 | `list_chat_messages` | List recent messages from a chat. |
 | `send_chat_message` | Send a message to a chat. |
+| `reply_to_message` | Reply to a specific chat message, creating a threaded reply. |
 | `compose_chat_message` | Open an inline editable compose form before sending; the form posts via `send_chat_message` when the user clicks Send. |
+| `find_user` | Look up people by display name or email. Requires `User.ReadBasic.All`. |
+| `create_chat` | Create a 1:1 or group chat by member email/user ID and return the new chat ID. |
+| `search_messages` | Search chat and channel messages by keyword. |
 | `list_teams` | List teams you are a member of. |
 | `list_channels` | List channels in a team. |
+| `list_channel_messages` | List recent messages in a channel. Requires `ChannelMessage.Read.All`. |
+| `send_channel_message` | Post a new message to a channel. Requires `ChannelMessage.Send`. |
+| `reply_to_channel_message` | Reply to an existing channel message. Requires `ChannelMessage.Send`. |
 | `get_presence` | Get your current presence status. |
+| `get_user_presence` | Get a colleague's presence status. Requires `Presence.Read.All`. |
+| `set_presence` | Set your own presence status, optionally for a limited duration. Requires `Presence.ReadWrite`. |
 
-Some Teams Graph APIs may require tenant admin approval.
+Some Teams Graph APIs may require tenant admin approval. Tools marked with a required permission check the connected account's token up front and return actionable reconnect guidance when the permission is missing (under Microsoft's managed consent policy, `ChannelMessage.Read.All` is admin-consent-gated in most tenants).
 
 ## Security notes
 

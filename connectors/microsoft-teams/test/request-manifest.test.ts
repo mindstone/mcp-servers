@@ -41,6 +41,12 @@ const MANIFEST: ManifestRow[] = [
     args: { chatId: 'chat-1', content: 'Hello team' },
   },
   {
+    tool: 'reply_to_message',
+    method: 'POST',
+    pathname: '/v1.0/me/chats/:chatId/messages/:messageId/replies',
+    args: { chatId: 'chat-1', messageId: 'msg-1', content: 'On it' },
+  },
+  {
     tool: 'list_teams',
     method: 'GET',
     pathname: '/v1.0/me/joinedTeams',
@@ -53,10 +59,58 @@ const MANIFEST: ManifestRow[] = [
     args: { teamId: 'team-1' },
   },
   {
+    tool: 'list_channel_messages',
+    method: 'GET',
+    pathname: '/v1.0/teams/:teamId/channels/:channelId/messages',
+    args: { teamId: 'team-1', channelId: 'channel-1', top: 1 },
+  },
+  {
+    tool: 'send_channel_message',
+    method: 'POST',
+    pathname: '/v1.0/teams/:teamId/channels/:channelId/messages',
+    args: { teamId: 'team-1', channelId: 'channel-1', content: 'Hello channel' },
+  },
+  {
+    tool: 'reply_to_channel_message',
+    method: 'POST',
+    pathname: '/v1.0/teams/:teamId/channels/:channelId/messages/:messageId/replies',
+    args: { teamId: 'team-1', channelId: 'channel-1', messageId: 'channel-msg-1', content: 'Agreed' },
+  },
+  {
+    tool: 'find_user',
+    method: 'GET',
+    pathname: '/v1.0/users/:userId',
+    args: { query: 'alice@example.com' },
+  },
+  {
+    tool: 'create_chat',
+    method: 'POST',
+    pathname: '/v1.0/chats',
+    args: { members: ['alice@example.com'] },
+  },
+  {
+    tool: 'search_messages',
+    method: 'POST',
+    pathname: '/v1.0/search/query',
+    args: { query: 'budget' },
+  },
+  {
     tool: 'get_presence',
     method: 'GET',
     pathname: '/v1.0/me/presence',
     args: {},
+  },
+  {
+    tool: 'get_user_presence',
+    method: 'GET',
+    pathname: '/v1.0/users/:userId/presence',
+    args: { userId: 'alice@example.com' },
+  },
+  {
+    tool: 'set_presence',
+    method: 'POST',
+    pathname: '/v1.0/me/presence/setUserPreferredPresence',
+    args: { availability: 'Busy' },
   },
 ];
 

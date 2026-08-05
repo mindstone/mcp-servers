@@ -1,17 +1,29 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
+import { hasScope } from '@mindstone/mcp-server-microsoft-shared';
 import { z } from 'zod';
-import { callGraph } from './client.js';
-import { successJson, withErrorHandling } from './utils.js';
+import { callGraph, getTokenProvider } from './client.js';
+import { errorResponse, successJson, withErrorHandling } from './utils.js';
+import { AUTH_TOOL_NAME } from './types.js';
 import {
+  createChat,
+  findUser,
   getChat,
   getPresence,
+  getUserPresence,
+  listChannelMessages,
   listChannels,
   listChats,
   listChatMessages,
   listTeams,
+  PRESENCE_AVAILABILITY_VALUES,
+  replyToChannelMessage,
+  replyToChatMessage,
+  searchMessages,
+  sendChannelMessage,
   sendChatMessage,
+  setPresence,
 } from './teams.js';
 
 /**
@@ -44,6 +56,39 @@ const WRITE_ANNOTATIONS = {
   destructiveHint: false,
   openWorldHint: true,
 };
+
+/**
+ * Some Teams Graph surfaces (channel messages, user lookup, other users'
+ * presence) need delegated permissions beyond the cohort's base scope set,
+ * and several are admin-consent-gated under Microsoft's managed consent
+ * policy. When the connected account's token lacks the scope, return an
+ * actionable error up front instead of letting Graph 403 — same pattern as
+ * the SharePoint connector's Sites.Read.All gate. When the scope cannot be
+ * introspected (no token on disk yet), fall through to the real call so the
+ * standard auth_required envelope handles it.
+ */
+async function requireScopesGranted(
+  requiredScopes: string[],
+  feature: string,
+): Promise<CallToolResult | null> {
+  let tokenScope: string | undefined;
+  try {
+    const tokenData = await getTokenProvider().loadToken();
+    if (!tokenData) return null;
+    tokenScope = tokenData.scope;
+  } catch {
+    return null;
+  }
+  const missing = requiredScopes.filter((scope) => !hasScope(tokenScope, scope));
+  if (missing.length === 0) return null;
+  return errorResponse({
+    error: `${feature} requires Microsoft Graph permission(s) not granted to the connected account: ${missing.join(', ')}.`,
+    action_required:
+      'Reconnect the Microsoft account with the additional permissions. In many organizations an administrator must approve these permissions first.',
+    next_step: AUTH_TOOL_NAME,
+    missing_scopes: missing,
+  });
+}
 
 export function registerTeamsTools(server: McpServer): void {
   server.registerTool(
@@ -175,6 +220,82 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
   );
 
   server.registerTool(
+    'reply_to_message',
+    {
+      description: 'Reply to a specific message in a chat, creating a threaded reply.',
+      inputSchema: z
+        .object({
+          chatId: z.string().describe('Chat ID'),
+          messageId: z.string().describe('ID of the chat message to reply to'),
+          content: z.string().describe('Reply content (HTML supported)'),
+        })
+        .strict(),
+      annotations: WRITE_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) =>
+      successJson(await callGraph(extra, (c, signal) => replyToChatMessage(c, args, signal))),
+    ),
+  );
+
+  server.registerTool(
+    'search_messages',
+    {
+      description:
+        'Search Teams chat and channel messages by keyword across conversations you can access.',
+      inputSchema: z
+        .object({
+          query: z.string().describe('Search text (keyword or phrase)'),
+          top: z.number().optional().describe('Max results to return (default: 10, max: 25)'),
+        })
+        .strict(),
+      annotations: READ_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) =>
+      successJson(await callGraph(extra, (c, signal) => searchMessages(c, args, signal))),
+    ),
+  );
+
+  server.registerTool(
+    'find_user',
+    {
+      description:
+        'Look up people in the organization by display name or email address. Use this to resolve a colleague to a user ID or email before creating a chat. Requires the User.ReadBasic.All Graph permission.',
+      inputSchema: z
+        .object({
+          query: z.string().describe('Display name or email address of the person to find'),
+        })
+        .strict(),
+      annotations: READ_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) => {
+      const gate = await requireScopesGranted(['User.ReadBasic.All'], 'Looking up users');
+      if (gate) return gate;
+      return successJson(await callGraph(extra, (c, signal) => findUser(c, args, signal)));
+    }),
+  );
+
+  server.registerTool(
+    'create_chat',
+    {
+      description:
+        'Create a new 1:1 or group chat with one or more colleagues (by email address or user ID) and return the new chat ID, which can then be used with send_chat_message.',
+      inputSchema: z
+        .object({
+          members: z
+            .array(z.string())
+            .min(1)
+            .describe('Email addresses or user IDs of the other participants (one for a 1:1 chat, several for a group chat)'),
+          topic: z.string().optional().describe('Chat topic (group chats only)'),
+        })
+        .strict(),
+      annotations: WRITE_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) =>
+      successJson(await callGraph(extra, (c, signal) => createChat(c, args, signal))),
+    ),
+  );
+
+  server.registerTool(
     'list_teams',
     {
       description: 'List Teams you are a member of.',
@@ -201,6 +322,71 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
   );
 
   server.registerTool(
+    'list_channel_messages',
+    {
+      description:
+        'List recent messages in a Teams channel. Requires the ChannelMessage.Read.All Graph permission, which may need tenant admin approval.',
+      inputSchema: z.object({
+        teamId: z.string().describe('Team ID'),
+        channelId: z.string().describe('Channel ID'),
+        top: z.number().optional().describe('Max messages to return (default: 25, max: 50)'),
+      }).shape,
+      annotations: READ_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) => {
+      const gate = await requireScopesGranted(
+        ['ChannelMessage.Read.All'],
+        'Reading channel messages',
+      );
+      if (gate) return gate;
+      return successJson(await callGraph(extra, (c, signal) => listChannelMessages(c, args, signal)));
+    }),
+  );
+
+  server.registerTool(
+    'send_channel_message',
+    {
+      description:
+        'Post a new message to a Teams channel. Requires the ChannelMessage.Send Graph permission, which may need tenant admin approval.',
+      inputSchema: z
+        .object({
+          teamId: z.string().describe('Team ID'),
+          channelId: z.string().describe('Channel ID'),
+          content: z.string().describe('Message content (HTML supported)'),
+        })
+        .strict(),
+      annotations: WRITE_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) => {
+      const gate = await requireScopesGranted(['ChannelMessage.Send'], 'Posting channel messages');
+      if (gate) return gate;
+      return successJson(await callGraph(extra, (c, signal) => sendChannelMessage(c, args, signal)));
+    }),
+  );
+
+  server.registerTool(
+    'reply_to_channel_message',
+    {
+      description:
+        'Reply to an existing message in a Teams channel. Requires the ChannelMessage.Send Graph permission, which may need tenant admin approval.',
+      inputSchema: z
+        .object({
+          teamId: z.string().describe('Team ID'),
+          channelId: z.string().describe('Channel ID'),
+          messageId: z.string().describe('ID of the channel message to reply to'),
+          content: z.string().describe('Reply content (HTML supported)'),
+        })
+        .strict(),
+      annotations: WRITE_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) => {
+      const gate = await requireScopesGranted(['ChannelMessage.Send'], 'Replying to channel messages');
+      if (gate) return gate;
+      return successJson(await callGraph(extra, (c, signal) => replyToChannelMessage(c, args, signal)));
+    }),
+  );
+
+  server.registerTool(
     'get_presence',
     {
       description: 'Get your current presence status (available, busy, away, etc.).',
@@ -210,5 +396,49 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
     withErrorHandling(async (args, extra) =>
       successJson(await callGraph(extra, (c, signal) => getPresence(c, args, signal))),
     ),
+  );
+
+  server.registerTool(
+    'get_user_presence',
+    {
+      description:
+        "Get a colleague's current presence status (available, busy, in a meeting, etc.). Requires the Presence.Read.All Graph permission, which may need tenant admin approval.",
+      inputSchema: z
+        .object({
+          userId: z.string().describe('User ID or email address of the colleague'),
+        })
+        .strict(),
+      annotations: READ_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) => {
+      const gate = await requireScopesGranted(['Presence.Read.All'], "Reading a colleague's presence");
+      if (gate) return gate;
+      return successJson(await callGraph(extra, (c, signal) => getUserPresence(c, args, signal)));
+    }),
+  );
+
+  server.registerTool(
+    'set_presence',
+    {
+      description:
+        'Set your own presence status (e.g. Busy, DoNotDisturb, Away), optionally for a limited duration. Requires the Presence.ReadWrite Graph permission.',
+      inputSchema: z
+        .object({
+          availability: z
+            .enum(PRESENCE_AVAILABILITY_VALUES)
+            .describe('Presence availability to set'),
+          durationMinutes: z
+            .number()
+            .optional()
+            .describe('How long the status applies, in minutes (5-480). Omit to keep it until changed.'),
+        })
+        .strict(),
+      annotations: WRITE_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) => {
+      const gate = await requireScopesGranted(['Presence.ReadWrite'], 'Setting presence');
+      if (gate) return gate;
+      return successJson(await callGraph(extra, (c, signal) => setPresence(c, args, signal)));
+    }),
   );
 }

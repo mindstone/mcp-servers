@@ -127,6 +127,11 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
       return HttpResponse.json({ id: 'msg-new' });
     }),
 
+    http.post(`${GRAPH_BASE}/me/chats/:chatId/messages/:messageId/replies`, async ({ request }) => {
+      await capture(request);
+      return HttpResponse.json({ id: 'reply-new' });
+    }),
+
     http.get(`${GRAPH_BASE}/teams/:teamId/channels`, async ({ request }) => {
       await capture(request);
       return HttpResponse.json({
@@ -158,6 +163,133 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
           },
         ],
       });
+    }),
+
+    http.get(`${GRAPH_BASE}/teams/:teamId/channels/:channelId/messages`, async ({ request }) => {
+      await capture(request);
+      return HttpResponse.json({
+        value: [
+          {
+            id: 'channel-msg-1',
+            replyToId: null,
+            from: { user: { id: 'user-1', displayName: 'Alice' } },
+            body: { content: '<p>Quarterly numbers are in</p>', contentType: 'html' },
+            createdDateTime: '2026-05-19T08:00:00Z',
+          },
+          {
+            id: 'channel-msg-2',
+            replyToId: 'channel-msg-1',
+            from: { user: { id: 'user-2', displayName: 'Bob' } },
+            body: { content: 'Thanks!', contentType: 'text' },
+            createdDateTime: '2026-05-19T08:05:00Z',
+          },
+        ],
+      });
+    }),
+
+    http.post(`${GRAPH_BASE}/teams/:teamId/channels/:channelId/messages`, async ({ request }) => {
+      await capture(request);
+      return HttpResponse.json({ id: 'channel-msg-new' });
+    }),
+
+    http.post(
+      `${GRAPH_BASE}/teams/:teamId/channels/:channelId/messages/:messageId/replies`,
+      async ({ request }) => {
+        await capture(request);
+        return HttpResponse.json({ id: 'channel-reply-new' });
+      },
+    ),
+
+    http.get(`${GRAPH_BASE}/users/:userId`, async ({ request, params }) => {
+      await capture(request);
+      const userId = String(params.userId);
+      if (userId === 'missing%40example.com' || userId === 'missing@example.com') {
+        return HttpResponse.json(
+          { error: { code: 'Request_ResourceNotFound', message: 'Resource not found' } },
+          { status: 404 },
+        );
+      }
+      return HttpResponse.json({
+        id: 'user-1',
+        displayName: 'Alice Anderson',
+        mail: 'alice@example.com',
+        userPrincipalName: 'alice@example.com',
+      });
+    }),
+
+    http.get(`${GRAPH_BASE}/users`, async ({ request }) => {
+      await capture(request);
+      return HttpResponse.json({
+        value: [
+          {
+            id: 'user-1',
+            displayName: 'Alice Anderson',
+            mail: 'alice@example.com',
+            userPrincipalName: 'alice@example.com',
+          },
+          {
+            id: 'user-2',
+            displayName: 'Aaron Baker',
+            mail: null,
+            userPrincipalName: 'aaron@example.com',
+          },
+        ],
+      });
+    }),
+
+    http.post(`${GRAPH_BASE}/chats`, async ({ request }) => {
+      await capture(request);
+      const body = (await request.clone().json()) as { chatType?: string };
+      return HttpResponse.json({ id: 'chat-new', chatType: body.chatType ?? 'oneOnOne' });
+    }),
+
+    http.post(`${GRAPH_BASE}/search/query`, async ({ request }) => {
+      await capture(request);
+      return HttpResponse.json({
+        value: [
+          {
+            hitsContainers: [
+              {
+                total: 1,
+                hits: [
+                  {
+                    hitId: 'hit-1',
+                    summary: '...the <c0>budget</c0> draft is ready...',
+                    resource: {
+                      id: 'msg-9',
+                      chatId: 'chat-1',
+                      from: { user: { id: 'user-1', displayName: 'Alice' } },
+                      body: {
+                        content: '<p>The budget draft is ready</p>',
+                        contentType: 'html',
+                      },
+                      createdDateTime: '2026-05-18T12:00:00Z',
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+    }),
+
+    http.get(`${GRAPH_BASE}/users/:userId/presence`, async ({ request }) => {
+      await capture(request);
+      return HttpResponse.json({
+        availability: 'Busy',
+        activity: 'InAMeeting',
+        statusMessage: {
+          message: {
+            content: 'Focus time',
+          },
+        },
+      });
+    }),
+
+    http.post(`${GRAPH_BASE}/me/presence/setUserPreferredPresence`, async ({ request }) => {
+      await capture(request);
+      return HttpResponse.json({});
     }),
 
     http.get(`${GRAPH_BASE}/me/presence`, async ({ request }) => {

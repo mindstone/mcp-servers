@@ -1,4 +1,5 @@
 import type { Chat, ChatMessage, Client } from '@mindstone/mcp-server-microsoft-shared';
+import { z } from 'zod';
 import { wrapUntrusted } from './untrusted-content.js';
 
 export class TeamsBusinessError extends Error {
@@ -74,15 +75,22 @@ function requireStringArg(args: ArgBag, name: string, label: string, nextStep: s
   );
 }
 
-function formatMessage(msg: ChatMessage): Record<string, unknown> {
+interface MessageLike {
+  id?: string;
+  from?: { user?: { displayName?: string | null; id?: string | null } | null } | null;
+  body?: { content?: string | null; contentType?: string | null } | null;
+  createdDateTime?: string | null;
+}
+
+function formatMessage(msg: MessageLike, tool: string): Record<string, unknown> {
   return {
     id: msg.id,
     from: msg.from?.user?.displayName
-      ? wrapUntrusted(msg.from.user.displayName, 'microsoft-teams:list_chat_messages:from')
+      ? wrapUntrusted(msg.from.user.displayName, `microsoft-teams:${tool}:from`)
       : 'Unknown',
     content: wrapUntrusted(
       stripHtml(msg.body?.content ?? ''),
-      'microsoft-teams:list_chat_messages:content',
+      `microsoft-teams:${tool}:content`,
     ),
     contentType: msg.body?.contentType,
     createdAt: msg.createdDateTime,
@@ -177,7 +185,7 @@ export async function listChatMessages(
   return {
     chatId,
     count: messages.length,
-    messages: messages.map(formatMessage),
+    messages: messages.map((msg) => formatMessage(msg, 'list_chat_messages')),
   };
 }
 
@@ -288,5 +296,439 @@ export async function getPresence(
       presence.statusMessage?.message?.content ?? undefined,
       'microsoft-teams:get_presence:statusMessage',
     ),
+  };
+}
+
+const presenceSchema = z
+  .object({
+    availability: z.string().nullish(),
+    activity: z.string().nullish(),
+    statusMessage: z
+      .object({
+        message: z
+          .object({
+            content: z.string().nullish(),
+          })
+          .nullish(),
+      })
+      .nullish(),
+  })
+  .passthrough();
+
+export async function getUserPresence(
+  client: Client,
+  args: ArgBag,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const userId = requireStringArg(args, 'userId', 'user ID or email', 'get_user_presence');
+  const presence = presenceSchema.parse(
+    await client.api(`/users/${encodeURIComponent(userId)}/presence`).options({ signal }).get(),
+  );
+  return {
+    userId,
+    availability: presence.availability,
+    activity: presence.activity,
+    statusMessage: wrapUntrusted(
+      presence.statusMessage?.message?.content ?? undefined,
+      'microsoft-teams:get_user_presence:statusMessage',
+    ),
+  };
+}
+
+export const PRESENCE_AVAILABILITY_VALUES = [
+  'Available',
+  'Busy',
+  'DoNotDisturb',
+  'BeRightBack',
+  'Away',
+  'Offline',
+] as const;
+
+export async function setPresence(
+  client: Client,
+  args: ArgBag,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const availability = requireStringArg(
+    args,
+    'availability',
+    `presence availability (${PRESENCE_AVAILABILITY_VALUES.join(', ')})`,
+    'set_presence',
+  );
+  const duration = numberArg(args, 'durationMinutes');
+  const durationMinutes = duration == null ? undefined : Math.round(Math.max(5, Math.min(duration, 480)));
+
+  const body: Record<string, unknown> = { availability, activity: availability };
+  if (durationMinutes != null) body.expirationDuration = `PT${durationMinutes}M`;
+
+  await client.api('/me/presence/setUserPreferredPresence').options({ signal }).post(body);
+
+  return {
+    success: true,
+    availability,
+    ...(durationMinutes != null ? { durationMinutes } : {}),
+    message: `Presence set to ${availability}`,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Channel messages
+// ---------------------------------------------------------------------------
+// Newer functions validate Graph responses with Zod (the repo convention);
+// the older functions above predate it and still cast — intentional, not an
+// oversight, pending the planned cohort-wide tightening.
+
+const graphMessageSchema = z
+  .object({
+    id: z.string().optional(),
+    replyToId: z.string().nullish(),
+    from: z
+      .object({
+        user: z
+          .object({
+            id: z.string().nullish(),
+            displayName: z.string().nullish(),
+          })
+          .nullish(),
+      })
+      .nullish(),
+    body: z
+      .object({
+        content: z.string().nullish(),
+        contentType: z.string().nullish(),
+      })
+      .nullish(),
+    createdDateTime: z.string().nullish(),
+  })
+  .passthrough();
+
+const graphMessageCollectionSchema = z
+  .object({
+    value: z.array(graphMessageSchema).nullish(),
+  })
+  .passthrough();
+
+const sendMessageResponseSchema = z
+  .object({
+    id: z.string().optional(),
+  })
+  .passthrough();
+
+function messagePostBody(content: string): { body: { contentType: string; content: string } } {
+  return {
+    body: {
+      contentType: content.includes('<') ? 'html' : 'text',
+      content,
+    },
+  };
+}
+
+export async function listChannelMessages(
+  client: Client,
+  args: ArgBag,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const teamId = requireStringArg(args, 'teamId', 'team ID', 'list_channel_messages');
+  const channelId = requireStringArg(args, 'channelId', 'channel ID', 'list_channel_messages');
+  const top = clampTop(numberArg(args, 'top'), 25, 50);
+
+  const response = graphMessageCollectionSchema.parse(
+    await client
+      .api(`/teams/${teamId}/channels/${channelId}/messages`)
+      .options({ signal })
+      .top(top)
+      .get(),
+  );
+  const messages = response.value ?? [];
+
+  return {
+    teamId,
+    channelId,
+    count: messages.length,
+    messages: messages.map((msg) => ({
+      ...formatMessage(msg, 'list_channel_messages'),
+      replyToId: msg.replyToId ?? undefined,
+    })),
+  };
+}
+
+export async function sendChannelMessage(
+  client: Client,
+  args: ArgBag,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const teamId = requireStringArg(args, 'teamId', 'team ID', 'send_channel_message');
+  const channelId = requireStringArg(args, 'channelId', 'channel ID', 'send_channel_message');
+  const content = requireStringArg(args, 'content', 'message body', 'send_channel_message');
+
+  const response = sendMessageResponseSchema.parse(
+    await client
+      .api(`/teams/${teamId}/channels/${channelId}/messages`)
+      .options({ signal })
+      .post(messagePostBody(content)),
+  );
+
+  return {
+    success: true,
+    messageId: response.id,
+    message: 'Message sent successfully',
+  };
+}
+
+export async function replyToChannelMessage(
+  client: Client,
+  args: ArgBag,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const teamId = requireStringArg(args, 'teamId', 'team ID', 'reply_to_channel_message');
+  const channelId = requireStringArg(args, 'channelId', 'channel ID', 'reply_to_channel_message');
+  const messageId = requireStringArg(args, 'messageId', 'channel message ID', 'reply_to_channel_message');
+  const content = requireStringArg(args, 'content', 'reply body', 'reply_to_channel_message');
+
+  const response = sendMessageResponseSchema.parse(
+    await client
+      .api(`/teams/${teamId}/channels/${channelId}/messages/${messageId}/replies`)
+      .options({ signal })
+      .post(messagePostBody(content)),
+  );
+
+  return {
+    success: true,
+    messageId: response.id,
+    message: 'Reply sent successfully',
+  };
+}
+
+export async function replyToChatMessage(
+  client: Client,
+  args: ArgBag,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const chatId = requireStringArg(args, 'chatId', 'chat ID', 'reply_to_message');
+  const messageId = requireStringArg(args, 'messageId', 'message ID', 'reply_to_message');
+  const content = requireStringArg(args, 'content', 'reply body', 'reply_to_message');
+
+  const response = sendMessageResponseSchema.parse(
+    await client
+      .api(`/me/chats/${chatId}/messages/${messageId}/replies`)
+      .options({ signal })
+      .post(messagePostBody(content)),
+  );
+
+  return {
+    success: true,
+    messageId: response.id,
+    message: 'Reply sent successfully',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Message search
+// ---------------------------------------------------------------------------
+
+const searchHitSchema = z
+  .object({
+    hitId: z.string().nullish(),
+    summary: z.string().nullish(),
+    resource: graphMessageSchema.extend({ chatId: z.string().nullish() }).nullish(),
+  })
+  .passthrough();
+
+const searchResponseSchema = z
+  .object({
+    value: z
+      .array(
+        z
+          .object({
+            hitsContainers: z
+              .array(
+                z
+                  .object({
+                    hits: z.array(searchHitSchema).nullish(),
+                    total: z.number().nullish(),
+                  })
+                  .passthrough(),
+              )
+              .nullish(),
+          })
+          .passthrough(),
+      )
+      .nullish(),
+  })
+  .passthrough();
+
+export async function searchMessages(
+  client: Client,
+  args: ArgBag,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const query = requireStringArg(args, 'query', 'search text', 'search_messages');
+  const top = clampTop(numberArg(args, 'top'), 10, 25);
+
+  const response = searchResponseSchema.parse(
+    await client
+      .api('/search/query')
+      .options({ signal })
+      .post({
+        requests: [
+          {
+            entityTypes: ['chatMessage'],
+            query: { queryString: query },
+            from: 0,
+            size: top,
+          },
+        ],
+      }),
+  );
+
+  const container = response.value?.[0]?.hitsContainers?.[0];
+  const hits = container?.hits ?? [];
+
+  return {
+    query,
+    count: hits.length,
+    total: container?.total ?? hits.length,
+    results: hits.map((hit) => ({
+      ...formatMessage(hit.resource ?? {}, 'search_messages'),
+      chatId: hit.resource?.chatId ?? undefined,
+      summary: wrapUntrusted(
+        hit.summary ? stripHtml(hit.summary) : undefined,
+        'microsoft-teams:search_messages:summary',
+      ),
+    })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// User lookup and chat creation
+// ---------------------------------------------------------------------------
+
+const graphUserSchema = z
+  .object({
+    id: z.string(),
+    displayName: z.string().nullish(),
+    mail: z.string().nullish(),
+    userPrincipalName: z.string().nullish(),
+  })
+  .passthrough();
+
+const graphUserCollectionSchema = z
+  .object({
+    value: z.array(graphUserSchema).nullish(),
+  })
+  .passthrough();
+
+function formatUser(user: z.infer<typeof graphUserSchema>, tool: string): Record<string, unknown> {
+  return {
+    id: user.id,
+    displayName: wrapUntrusted(user.displayName ?? undefined, `microsoft-teams:${tool}:displayName`),
+    email: wrapUntrusted(
+      user.mail ?? user.userPrincipalName ?? undefined,
+      `microsoft-teams:${tool}:email`,
+    ),
+  };
+}
+
+export async function findUser(
+  client: Client,
+  args: ArgBag,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const query = requireStringArg(args, 'query', 'name or email address', 'find_user');
+
+  if (query.includes('@')) {
+    try {
+      const user = graphUserSchema.parse(
+        await client
+          .api(`/users/${encodeURIComponent(query)}`)
+          .options({ signal })
+          .select('id,displayName,mail,userPrincipalName')
+          .get(),
+      );
+      return { count: 1, users: [formatUser(user, 'find_user')] };
+    } catch (err) {
+      // A 404 here means "no such user", which is a result, not a failure.
+      if ((err as { statusCode?: number })?.statusCode === 404) {
+        return { count: 0, users: [] };
+      }
+      throw err;
+    }
+  }
+
+  // $search on /users requires the ConsistencyLevel: eventual header; strip
+  // characters that would break out of the quoted search expression.
+  const safeQuery = query.replace(/["\\]/g, ' ').trim();
+  const response = graphUserCollectionSchema.parse(
+    await client
+      .api('/users')
+      .options({ signal })
+      .header('ConsistencyLevel', 'eventual')
+      .search(`"displayName:${safeQuery}"`)
+      .select('id,displayName,mail,userPrincipalName')
+      .top(10)
+      .get(),
+  );
+  const users = response.value ?? [];
+  return { count: users.length, users: users.map((user) => formatUser(user, 'find_user')) };
+}
+
+function requireStringArrayArg(args: ArgBag, name: string, label: string, nextStep: string): string[] {
+  const value = args[name];
+  if (Array.isArray(value) && value.length > 0) {
+    const members = value.map((entry) => (typeof entry === 'string' ? entry.trim() : ''));
+    if (members.every((entry) => entry.length > 0)) return members;
+  }
+  throw new TeamsBusinessError(
+    `Missing required parameter: "${name}" (${label}). Provide a non-empty array of email addresses or user IDs.`,
+    nextStep,
+  );
+}
+
+const createdChatSchema = z
+  .object({
+    id: z.string(),
+    chatType: z.string().nullish(),
+  })
+  .passthrough();
+
+export async function createChat(
+  client: Client,
+  args: ArgBag,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const members = [...new Set(requireStringArrayArg(args, 'members', 'chat participants', 'create_chat'))];
+  const topic = stringArg(args, 'topic');
+  const chatType = members.length === 1 ? 'oneOnOne' : 'group';
+
+  const memberBindings = [
+    {
+      '@odata.type': '#microsoft.graph.aadUserConversationMember',
+      roles: ['owner'],
+      'user@odata.bind': 'https://graph.microsoft.com/v1.0/me',
+    },
+    ...members.map((member) => ({
+      '@odata.type': '#microsoft.graph.aadUserConversationMember',
+      roles: ['owner'],
+      'user@odata.bind': `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(member)}`,
+    })),
+  ];
+
+  const chat = createdChatSchema.parse(
+    await client
+      .api('/chats')
+      .options({ signal })
+      .post({
+        chatType,
+        // Topic is only valid on group chats.
+        ...(chatType === 'group' && topic ? { topic } : {}),
+        'members@odata.bind': memberBindings,
+      }),
+  );
+
+  return {
+    success: true,
+    chatId: chat.id,
+    chatType: chat.chatType ?? chatType,
+    message: 'Chat created successfully',
   };
 }

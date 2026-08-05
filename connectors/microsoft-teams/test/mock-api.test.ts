@@ -130,6 +130,245 @@ describe('microsoft-teams mock-API integration', () => {
     });
   });
 
+  it('list_channel_messages returns channel messages', async () => {
+    const result = await client.callTool('list_channel_messages', {
+      teamId: 'team-1',
+      channelId: 'channel-1',
+      top: 5,
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      teamId: string;
+      channelId: string;
+      count: number;
+      messages: Array<{ id: string; content: string; from: string; replyToId?: string }>;
+    };
+    expect(json.teamId).toBe('team-1');
+    expect(json.channelId).toBe('channel-1');
+    expect(json.count).toBe(2);
+    expect(json.messages[0]?.content).toContain('Quarterly numbers are in');
+    expect(json.messages[0]?.from).toContain('Alice');
+    expect(json.messages[1]?.replyToId).toBe('channel-msg-1');
+    const call = state.requests.find(
+      (r) => r.pathname.endsWith('/teams/team-1/channels/channel-1/messages') && r.method === 'GET',
+    );
+    expect(call).toBeDefined();
+    expect(call?.search).toMatch(/\$top=5/);
+  });
+
+  it('send_channel_message posts to the channel messages endpoint', async () => {
+    const result = await client.callTool('send_channel_message', {
+      teamId: 'team-1',
+      channelId: 'channel-1',
+      content: 'Hello channel',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { success: boolean; messageId: string };
+    expect(json.success).toBe(true);
+    expect(json.messageId).toBe('channel-msg-new');
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.endsWith('/teams/team-1/channels/channel-1/messages'),
+    );
+    expect(call?.body).toMatchObject({
+      body: { contentType: 'text', content: 'Hello channel' },
+    });
+  });
+
+  it('reply_to_channel_message posts to the replies endpoint', async () => {
+    const result = await client.callTool('reply_to_channel_message', {
+      teamId: 'team-1',
+      channelId: 'channel-1',
+      messageId: 'channel-msg-1',
+      content: 'Agreed',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { success: boolean; messageId: string };
+    expect(json.success).toBe(true);
+    expect(json.messageId).toBe('channel-reply-new');
+    const call = state.requests.find(
+      (r) =>
+        r.method === 'POST' &&
+        r.pathname.endsWith('/teams/team-1/channels/channel-1/messages/channel-msg-1/replies'),
+    );
+    expect(call?.body).toMatchObject({
+      body: { contentType: 'text', content: 'Agreed' },
+    });
+  });
+
+  it('find_user resolves an email address to a user', async () => {
+    const result = await client.callTool('find_user', { query: 'alice@example.com' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      count: number;
+      users: Array<{ id: string; displayName: string; email: string }>;
+    };
+    expect(json.count).toBe(1);
+    expect(json.users[0]?.id).toBe('user-1');
+    expect(json.users[0]?.displayName).toContain('Alice Anderson');
+    const call = state.requests.find((r) => r.method === 'GET' && r.pathname.includes('/users/'));
+    expect(call).toBeDefined();
+  });
+
+  it('find_user returns an empty result for an unknown email', async () => {
+    const result = await client.callTool('find_user', { query: 'missing@example.com' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { count: number; users: unknown[] };
+    expect(json.count).toBe(0);
+    expect(json.users).toEqual([]);
+  });
+
+  it('find_user searches by display name with $search', async () => {
+    const result = await client.callTool('find_user', { query: 'Alice' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      count: number;
+      users: Array<{ id: string; email: string }>;
+    };
+    expect(json.count).toBe(2);
+    expect(json.users[1]?.email).toContain('aaron@example.com');
+    const call = state.requests.find(
+      (r) => r.method === 'GET' && r.pathname.endsWith('/v1.0/users'),
+    );
+    expect(call?.search).toMatch(/\$search=/);
+    expect(decodeURIComponent(call?.search ?? '')).toContain('"displayName:Alice"');
+  });
+
+  it('create_chat creates a 1:1 chat binding the caller and the member', async () => {
+    const result = await client.callTool('create_chat', { members: ['alice@example.com'] });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { success: boolean; chatId: string; chatType: string };
+    expect(json.success).toBe(true);
+    expect(json.chatId).toBe('chat-new');
+    expect(json.chatType).toBe('oneOnOne');
+    const call = state.requests.find((r) => r.method === 'POST' && r.pathname.endsWith('/v1.0/chats'));
+    const body = call?.body as {
+      chatType: string;
+      topic?: string;
+      'members@odata.bind': Array<{ 'user@odata.bind': string }>;
+    };
+    expect(body.chatType).toBe('oneOnOne');
+    expect(body.topic).toBeUndefined();
+    expect(body['members@odata.bind']).toHaveLength(2);
+    expect(body['members@odata.bind'][0]?.['user@odata.bind']).toBe(
+      'https://graph.microsoft.com/v1.0/me',
+    );
+    expect(body['members@odata.bind'][1]?.['user@odata.bind']).toBe(
+      'https://graph.microsoft.com/v1.0/users/alice%40example.com',
+    );
+  });
+
+  it('create_chat creates a group chat with a topic', async () => {
+    const result = await client.callTool('create_chat', {
+      members: ['alice@example.com', 'aaron@example.com'],
+      topic: 'Launch plan',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { success: boolean; chatType: string };
+    expect(json.success).toBe(true);
+    expect(json.chatType).toBe('group');
+    const call = state.requests.find((r) => r.method === 'POST' && r.pathname.endsWith('/v1.0/chats'));
+    const body = call?.body as { chatType: string; topic?: string };
+    expect(body.chatType).toBe('group');
+    expect(body.topic).toBe('Launch plan');
+  });
+
+  it('search_messages posts a chatMessage search query and maps hits', async () => {
+    const result = await client.callTool('search_messages', { query: 'budget', top: 5 });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      query: string;
+      count: number;
+      total: number;
+      results: Array<{ id: string; chatId: string; from: string; summary: string; content: string }>;
+    };
+    expect(json.query).toBe('budget');
+    expect(json.count).toBe(1);
+    expect(json.total).toBe(1);
+    expect(json.results[0]?.id).toBe('msg-9');
+    expect(json.results[0]?.chatId).toBe('chat-1');
+    expect(json.results[0]?.from).toContain('Alice');
+    expect(json.results[0]?.summary).toContain('budget');
+    expect(json.results[0]?.summary).not.toContain('<c0>');
+    expect(json.results[0]?.content).toContain('The budget draft is ready');
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.endsWith('/search/query'),
+    );
+    const body = call?.body as {
+      requests: Array<{ entityTypes: string[]; query: { queryString: string }; size: number }>;
+    };
+    expect(body.requests[0]?.entityTypes).toEqual(['chatMessage']);
+    expect(body.requests[0]?.query.queryString).toBe('budget');
+    expect(body.requests[0]?.size).toBe(5);
+  });
+
+  it('reply_to_message posts to the chat message replies endpoint', async () => {
+    const result = await client.callTool('reply_to_message', {
+      chatId: 'chat-1',
+      messageId: 'msg-1',
+      content: 'On it',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { success: boolean; messageId: string };
+    expect(json.success).toBe(true);
+    expect(json.messageId).toBe('reply-new');
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.endsWith('/me/chats/chat-1/messages/msg-1/replies'),
+    );
+    expect(call?.body).toMatchObject({
+      body: { contentType: 'text', content: 'On it' },
+    });
+  });
+
+  it('get_user_presence returns a colleague presence', async () => {
+    const result = await client.callTool('get_user_presence', { userId: 'alice@example.com' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      userId: string;
+      availability: string;
+      activity: string;
+      statusMessage: string;
+    };
+    expect(json.userId).toBe('alice@example.com');
+    expect(json.availability).toBe('Busy');
+    expect(json.activity).toBe('InAMeeting');
+    expect(json.statusMessage).toContain('Focus time');
+    const call = state.requests.find(
+      (r) => r.method === 'GET' && r.pathname.includes('/users/') && r.pathname.endsWith('/presence'),
+    );
+    expect(call).toBeDefined();
+  });
+
+  it('set_presence posts preferred presence with a duration', async () => {
+    const result = await client.callTool('set_presence', {
+      availability: 'DoNotDisturb',
+      durationMinutes: 60,
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { success: boolean; availability: string; durationMinutes: number };
+    expect(json.success).toBe(true);
+    expect(json.availability).toBe('DoNotDisturb');
+    expect(json.durationMinutes).toBe(60);
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.endsWith('/me/presence/setUserPreferredPresence'),
+    );
+    expect(call?.body).toMatchObject({
+      availability: 'DoNotDisturb',
+      activity: 'DoNotDisturb',
+      expirationDuration: 'PT60M',
+    });
+  });
+
+  it('set_presence without a duration omits expirationDuration', async () => {
+    const result = await client.callTool('set_presence', { availability: 'Available' });
+    expect(result.isError).not.toBe(true);
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.endsWith('/me/presence/setUserPreferredPresence'),
+    );
+    const body = call?.body as Record<string, unknown>;
+    expect(body.availability).toBe('Available');
+    expect('expirationDuration' in body).toBe(false);
+  });
+
   it('send_chat_message rejects unknown keys (strict schema)', async () => {
     // F8: the input schema is `.strict()`, so an unexpected argument is refused
     // at the protocol boundary rather than silently forwarded to Graph. The SDK

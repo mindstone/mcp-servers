@@ -4,6 +4,18 @@ All notable changes to this connector will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Corrected the 0.1.0 changelog entry below, which claimed "search" and "replies" tools that never actually shipped (message search and threaded replies only arrive in this release, as `search_messages` / `reply_to_message` / `reply_to_channel_message`).
+
+### Added
+
+- `get_user_presence` (a colleague's availability; requires `Presence.Read.All`) and `set_presence` (set your own status via `setUserPreferredPresence`, with an optional duration; requires `Presence.ReadWrite`).
+- `reply_to_message` — threaded replies to a specific chat message.
+- `search_messages` — keyword search across chat and channel messages via the Graph `/search/query` `chatMessage` entity (works with the already-granted `Chat.Read` permission).
+- `find_user` (resolve colleagues by display name or email; requires `User.ReadBasic.All`) and `create_chat` (start a 1:1 or group chat by member email/user ID, returning the chat ID for use with `send_chat_message`) — together they enable "message a colleague" flows that previously required an existing chat ID.
+- Channel messaging tools: `list_channel_messages`, `send_channel_message`, and `reply_to_channel_message`. Channel reads require the `ChannelMessage.Read.All` Graph permission and sends `ChannelMessage.Send`; when the connected account's token lacks the scope, the tools return actionable reconnect guidance (naming the missing permission and the likely admin-consent step) instead of a raw Graph 403.
+
 ## [0.2.0] - 2026-07-30
 
 ### Changed
@@ -27,4 +39,4 @@ All notable changes to this connector will be documented in this file.
 
 ### Added
 
-- Initial Microsoft 365 Teams MCP server with seven tools for chats, messages, search, channels, sends, and replies.
+- Initial Microsoft 365 Teams MCP server with seven tools covering chats, messages, teams, channels, sends, and presence. (Corrected after release: the original entry also claimed search and reply tools, which did not exist until later.)
