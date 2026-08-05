@@ -10,7 +10,10 @@ type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
  * - On GammaError: returns a structured JSON error with code and resolution.
  * - On unknown error: returns a generic error message.
  *
- * Secrets are never exposed in error messages.
+ * Secrets are never exposed in error messages. Unknown (non-GammaError)
+ * exceptions are logged with detail but reported generically: runtime error
+ * messages (e.g. JSON parser failures) can embed fragments of a vendor
+ * response, which must not reach model-visible output.
  */
 export function withErrorHandling<T>(
   fn: (args: T, extra: unknown) => Promise<string>,
@@ -37,8 +40,18 @@ export function withErrorHandling<T>(
         };
       }
       const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('[gamma] Unexpected tool error:', errorMessage);
       return {
-        content: [{ type: 'text', text: JSON.stringify({ ok: false, error: errorMessage }) }],
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              ok: false,
+              error:
+                'An unexpected error occurred while running the tool. Details are in the connector logs.',
+            }),
+          },
+        ],
         isError: true,
       };
     }

@@ -8,6 +8,7 @@
  * Base URL: https://public-api.gamma.app/v1.0
  */
 
+import { z } from 'zod';
 import {
   GammaError,
   getRequestTimeoutMs,
@@ -21,6 +22,48 @@ import {
 } from './types.js';
 
 const GAMMA_API_BASE = 'https://public-api.gamma.app/v1.0';
+
+// ---------------------------------------------------------------------------
+// Response schemas — every Gamma API response is validated fail-closed with
+// Zod before it reaches tool code. Unknown vendor-added fields are stripped
+// (Zod default), so a poisoned or evolving payload cannot smuggle
+// structural-looking fields through the object spreads in the listing tools.
+// ---------------------------------------------------------------------------
+
+const generationResponseSchema = z.object({
+  generationId: z.string(),
+});
+
+const generationStatusSchema = z.object({
+  generationId: z.string(),
+  status: z.enum(['pending', 'completed', 'failed']),
+  gammaUrl: z.string().optional(),
+  pdfUrl: z.string().optional(),
+  pptxUrl: z.string().optional(),
+  credits: z.object({ deducted: z.number(), remaining: z.number() }).optional(),
+  error: z.string().optional(),
+});
+
+const themeSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.enum(['standard', 'custom']),
+  colorKeywords: z.array(z.string()).optional(),
+  toneKeywords: z.array(z.string()).optional(),
+});
+
+const folderSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+
+function paginatedSchema<T extends z.ZodTypeAny>(itemSchema: T) {
+  return z.object({
+    data: z.array(itemSchema),
+    hasMore: z.boolean(),
+    nextCursor: z.string().nullable().default(null),
+  });
+}
 
 /**
  * Hosts allowed to serve export downloads. Export URLs come from Gamma's own
@@ -138,12 +181,18 @@ export function validateDownloadUrl(input: string): URL {
 
 /**
  * Make an authenticated request to the Gamma API.
+ *
+ * The response body is parsed defensively and validated against `schema`
+ * (fail-closed): a malformed JSON body or a shape mismatch surfaces as a
+ * generic `INVALID_RESPONSE` error — raw parser messages can embed a fragment
+ * of the vendor response and must never reach model-visible output.
  */
-async function gammaFetch<T>(
+async function gammaFetch<T extends z.ZodTypeAny>(
   apiKey: string,
   endpoint: string,
+  schema: T,
   options: RequestInit = {},
-): Promise<T> {
+): Promise<z.infer<T>> {
   const url = `${GAMMA_API_BASE}${endpoint}`;
 
   console.error(`[Gamma API] ${options.method || 'GET'} ${url}`);
@@ -220,8 +269,10 @@ async function gammaFetch<T>(
 
   // Handle other errors
   if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    console.error(`Gamma API error (${response.status}):`, errorText);
+    // Deliberately do NOT read or log the vendor error body: it can contain
+    // reflected request data, sensitive diagnostics, or attacker-controlled
+    // content, and must stay out of both logs and model-visible errors.
+    console.error(`Gamma API error: HTTP ${response.status}`);
 
     const statusMessage =
       response.status === 422
@@ -237,7 +288,30 @@ async function gammaFetch<T>(
     );
   }
 
-  return response.json() as Promise<T>;
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new GammaError(
+      `Gamma API returned a malformed response (HTTP ${response.status})`,
+      'INVALID_RESPONSE',
+      'The Gamma API response could not be parsed. Try again; if it persists, check the connector logs.',
+    );
+  }
+
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    console.error(
+      `[Gamma API] Response failed schema validation for ${options.method || 'GET'} ${endpoint} (${parsed.error.issues.length} issue(s))`,
+    );
+    throw new GammaError(
+      'Gamma API returned an unexpected response shape',
+      'INVALID_RESPONSE',
+      'The Gamma API response did not match the expected schema. If this persists, the API may have changed — check for a connector update.',
+    );
+  }
+
+  return parsed.data;
 }
 
 /**
@@ -264,7 +338,7 @@ export async function createGeneration(
   if (request.cardOptions) body.cardOptions = request.cardOptions;
   if (request.sharingOptions) body.sharingOptions = request.sharingOptions;
 
-  return gammaFetch<GenerationResponse>(apiKey, '/generations', {
+  return gammaFetch(apiKey, '/generations', generationResponseSchema, {
     method: 'POST',
     body: JSON.stringify(body),
   });
@@ -288,7 +362,7 @@ export async function createFromTemplate(
   if (request.imageOptions) body.imageOptions = request.imageOptions;
   if (request.sharingOptions) body.sharingOptions = request.sharingOptions;
 
-  return gammaFetch<GenerationResponse>(apiKey, '/generations/from-template', {
+  return gammaFetch(apiKey, '/generations/from-template', generationResponseSchema, {
     method: 'POST',
     body: JSON.stringify(body),
   });
@@ -301,7 +375,7 @@ export async function getGenerationStatus(
   apiKey: string,
   generationId: string,
 ): Promise<GenerationStatus> {
-  return gammaFetch<GenerationStatus>(apiKey, `/generations/${generationId}`);
+  return gammaFetch(apiKey, `/generations/${generationId}`, generationStatusSchema);
 }
 
 /**
@@ -316,9 +390,10 @@ export async function listThemes(
   if (options?.limit) params.set('limit', String(options.limit));
   if (options?.after) params.set('after', options.after);
   const queryString = params.toString();
-  return gammaFetch<PaginatedResponse<Theme>>(
+  return gammaFetch(
     apiKey,
     `/themes${queryString ? `?${queryString}` : ''}`,
+    paginatedSchema(themeSchema),
   );
 }
 
@@ -334,9 +409,10 @@ export async function listFolders(
   if (options?.limit) params.set('limit', String(options.limit));
   if (options?.after) params.set('after', options.after);
   const queryString = params.toString();
-  return gammaFetch<PaginatedResponse<Folder>>(
+  return gammaFetch(
     apiKey,
     `/folders${queryString ? `?${queryString}` : ''}`,
+    paginatedSchema(folderSchema),
   );
 }
 

@@ -24,6 +24,9 @@ import { GammaError } from '../src/types.js';
 
 const BASE = 'https://public-api.gamma.app/v1.0';
 
+/** Credential-shaped marker built programmatically (never a literal). */
+const VENDOR_BODY_MARKER = ['AC', '0123456789abcdef', '0123456789abcdef'].join('');
+
 describe('validateDownloadUrl (unit)', () => {
   it.each([
     'https://gamma.app/export/abc123.pdf',
@@ -207,5 +210,103 @@ describe('gamma_get_status — poisoned export URL handling', () => {
     expect(data.file_path).toBeUndefined();
     expect(data.message).toMatch(/private\/loopback\/reserved/);
     expect(fetchCallsTo('169.254.169.254')).toBe(0);
+  });
+});
+
+describe('Gamma API response validation (fail-closed Zod)', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('surfaces a malformed JSON body as a generic INVALID_RESPONSE, without parser fragments', async () => {
+    // V8 JSON.parse errors embed an excerpt of the source text; the marker
+    // must not reach the model through that channel.
+    mswServer.use(
+      http.get(`${BASE}/generations/:id`, () =>
+        new HttpResponse(`{"generationId":"gen-x","note":"${VENDOR_BODY_MARKER}", broken`, {
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+
+    testClient = await createTestClient({
+      env: { GAMMA_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('gamma_get_status', {
+      generation_id: 'gen-x',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('INVALID_RESPONSE');
+    expect(result.text).not.toContain(VENDOR_BODY_MARKER);
+  });
+
+  it('rejects a well-formed body that fails schema validation', async () => {
+    mswServer.use(
+      http.get(`${BASE}/generations/:id`, () =>
+        HttpResponse.json({ generationId: 'gen-x' }), // missing required `status`
+      ),
+    );
+
+    testClient = await createTestClient({
+      env: { GAMMA_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('gamma_get_status', {
+      generation_id: 'gen-x',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('INVALID_RESPONSE');
+    expect(result.text).toContain('unexpected response shape');
+  });
+
+  it('keeps vendor error bodies out of the model-visible error AND the logs', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mswServer.use(
+      http.get(`${BASE}/themes`, () =>
+        HttpResponse.text(`gateway exploded: ${VENDOR_BODY_MARKER}`, { status: 500 }),
+      ),
+    );
+
+    testClient = await createTestClient({
+      env: { GAMMA_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('gamma_list_themes', {});
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('API_ERROR');
+    expect(result.text).not.toContain(VENDOR_BODY_MARKER);
+    const logged = consoleSpy.mock.calls.map((call) => call.join(' ')).join('\n');
+    expect(logged).not.toContain(VENDOR_BODY_MARKER);
+    consoleSpy.mockRestore();
+  });
+
+  it('reports unexpected (non-Gamma) errors generically, with detail only in logs', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mswServer.use(
+      http.get(`${BASE}/themes`, () => HttpResponse.error()),
+    );
+
+    testClient = await createTestClient({
+      env: { GAMMA_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('gamma_list_themes', {});
+
+    expect(result.isError).toBe(true);
+    const parsed = result.json as { ok: boolean; error: string };
+    expect(parsed.ok).toBe(false);
+    // Generic message — the raw fetch error must not be relayed to the model.
+    expect(parsed.error).toContain('unexpected error');
+    // ...but the detail IS observable in the connector logs.
+    const logged = consoleSpy.mock.calls.map((call) => call.join(' ')).join('\n');
+    expect(logged).toContain('[gamma] Unexpected tool error');
+    consoleSpy.mockRestore();
   });
 });
