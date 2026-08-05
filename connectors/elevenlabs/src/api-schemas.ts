@@ -131,7 +131,11 @@ export const transcriptionResponseSchema = z.object({
 
 export const historyItemSchema = z.object({
   history_item_id: z.string(),
-  date_unix: z.number().finite().optional(),
+  // Bounded to the range where `date_unix * 1000` stays a valid JS Date, so
+  // the toISOString() conversion in history.ts cannot throw on an extreme
+  // finite upstream value (which would surface as a generic error instead of
+  // INVALID_RESPONSE). 8_640_000_000_000 s * 1000 = 8.64e15 ms, Date's max.
+  date_unix: z.number().finite().min(0).max(8_640_000_000_000).optional(),
   character_count_change_from: z.number().finite().optional(),
   character_count_change_to: z.number().finite().optional(),
   content_type: z.string().optional(),
@@ -188,6 +192,13 @@ export const characterAlignmentSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: `alignment start times are not non-decreasing at index ${i}`,
+        });
+        return;
+      }
+      if (i > 0 && ends[i] < ends[i - 1]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `alignment end times are not non-decreasing at index ${i}`,
         });
         return;
       }
