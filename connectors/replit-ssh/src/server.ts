@@ -3,9 +3,13 @@ import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 import { checkConnectionSchema, replitCheckConnection } from './tools/checkConnection.js';
+import { deleteFileSchema, replitDeleteFile } from './tools/deleteFile.js';
 import { listFilesSchema, replitListFiles } from './tools/listFiles.js';
+import { moveFileSchema, replitMoveFile } from './tools/moveFile.js';
 import { readFileSchema, replitReadFile } from './tools/readFile.js';
+import { searchFilesSchema, replitSearchFiles } from './tools/searchFiles.js';
 import { setupSshSchema, replitSetupSsh } from './tools/setupSsh.js';
+import { statFileSchema, replitStatFile } from './tools/statFile.js';
 import { writeFileSchema, replitWriteFile } from './tools/writeFile.js';
 
 const SERVER_VERSION = (createRequire(import.meta.url)('../package.json') as { version: string }).version;
@@ -75,6 +79,30 @@ export function createServer(): McpServer {
   );
 
   server.registerTool(
+    'replit_search_files',
+    {
+      title: 'Search Replit Files',
+      description:
+        'Search a Replit project for files by name substring and/or text content substring (case-insensitive). Recursive from the given path with result caps; returns matching paths and, for content matches, the matching lines. Use this to find where a name, key, or string is used without reading every file.',
+      annotations: remoteReadAnnotations,
+      inputSchema: searchFilesSchema.shape,
+    },
+    async (input, extra) => textResult(await replitSearchFiles(input, extra?.signal)),
+  );
+
+  server.registerTool(
+    'replit_stat',
+    {
+      title: 'Stat Replit File',
+      description:
+        'Get metadata for a file or directory in a Replit project without reading its contents: type, size, permissions, and modification/access times.',
+      annotations: remoteReadAnnotations,
+      inputSchema: statFileSchema.shape,
+    },
+    async (input, extra) => textResult(await replitStatFile(input, extra?.signal)),
+  );
+
+  server.registerTool(
     'replit_write_file',
     {
       title: 'Write Replit File',
@@ -84,6 +112,30 @@ export function createServer(): McpServer {
       inputSchema: writeFileSchema.shape,
     },
     async (input, extra) => textResult(await replitWriteFile(input, extra?.signal)),
+  );
+
+  server.registerTool(
+    'replit_move',
+    {
+      title: 'Move Replit File',
+      description:
+        'Move or rename a file or directory within a Replit project. Never overwrites: fails if the destination already exists. The destination parent directory must already exist.',
+      annotations: remoteWriteAnnotations,
+      inputSchema: moveFileSchema.shape,
+    },
+    async (input, extra) => textResult(await replitMoveFile(input, extra?.signal)),
+  );
+
+  server.registerTool(
+    'replit_delete_file',
+    {
+      title: 'Delete Replit File',
+      description:
+        'Permanently delete a file from a Replit project (files only, not directories). Deletion is irreversible — there is no trash. Disabled by default; requires MCP_REPLIT_SSH_ALLOW_DELETE=1 in the server environment.',
+      annotations: remoteWriteAnnotations,
+      inputSchema: deleteFileSchema.shape,
+    },
+    async (input, extra) => textResult(await replitDeleteFile(input, extra?.signal)),
   );
 
   server.registerTool(

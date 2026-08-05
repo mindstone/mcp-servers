@@ -28,6 +28,10 @@ const EXPECTED_ANNOTATIONS: Record<string, {
   replit_list_files: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   replit_read_file: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   replit_write_file: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+  replit_search_files: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  replit_stat: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  replit_move: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+  replit_delete_file: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
   replit_setup_ssh: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
 };
 
@@ -168,9 +172,9 @@ describe.skipIf(!HAVE_CREDS)('Replit SSH MCP — live API probe (packed tarball)
     }
   });
 
-  it('lists 5 tools matching the C2-locked annotation set', async () => {
+  it('lists 9 tools matching the C2-locked annotation set', async () => {
     const result = await client!.listTools();
-    expect(result.tools).toHaveLength(5);
+    expect(result.tools).toHaveLength(9);
     for (const tool of result.tools) {
       const parsed = ToolSchema.safeParse(tool);
       expect(parsed.success, `Tool ${tool.name} must match the SDK Tool schema`).toBe(true);

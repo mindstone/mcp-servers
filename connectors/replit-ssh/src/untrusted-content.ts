@@ -9,6 +9,7 @@
  *   - `replit_read_file` content (utf-8 + base64 branches)
  *   - `replit_list_files` directory entry names (file names on the remote
  *     are attacker-influenced)
+ *   - `replit_search_files` matched paths and matched content lines
  *
  * The wrapper lives here (not in `ssh.ts`) so a grep audit can easily
  * verify the envelope helper is reached at every external-text boundary.

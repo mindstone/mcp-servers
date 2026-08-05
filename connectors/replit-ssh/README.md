@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-replit-ssh.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-replit-ssh)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Replit SSH MCP server — read, write, list, and check files on Replit projects over SSH/SFTP, plus one-shot generation of the local SSH key and `~/.ssh/config` block.
+Replit SSH MCP server — read, write, list, search, stat, move, and delete files on Replit projects over SSH/SFTP, plus one-shot generation of the local SSH key and `~/.ssh/config` block.
 
 *Local Replit SSH MCP. Connects from the operator's machine to `*.replit.dev` hosts only, writes are atomic with SHA-256 read-back, and the `~/.ssh/config` rewrite parses via AST rather than `Match exec` shell evaluation.*
 
@@ -11,7 +11,7 @@ Replit SSH MCP server — read, write, list, and check files on Replit projects 
 
 - **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-replit-ssh)
 - **Auth:** Local SSH key on disk (`~/.ssh/rebel-replit` by default; resolved via `~/.ssh/config` `IdentityFile` if set). No env-var-supplied secrets.
-- **Tools:** [5](./src/server.ts) (connection, files, ssh-setup)
+- **Tools:** [9](./src/server.ts) (connection, files, ssh-setup)
 - **Surface:** local-protocol
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -117,6 +117,7 @@ This server has no required environment variables. Authentication is via the loc
 - `REPLIT_SSH_REQUEST_TIMEOUT_MS` — per-request timeout in milliseconds (default: `60000`, max `600000`). Tool-level timeout for SFTP operations; the lower-level TCP/SSH handshake uses a separate 30-second budget.
 - `MCP_REPLIT_SSH_STRICT_HOST_KEY` — set to `1` to require pre-populated known-hosts entries. When unset (default), unknown hosts are recorded on first contact (matches OpenSSH's `StrictHostKeyChecking=accept-new`); a fingerprint mismatch on a subsequent connect always fails closed regardless of this flag. See the **SSH host-key verification** entry in *Security notes* below.
 - `MCP_REPLIT_SSH_KNOWN_HOSTS_PATH` — explicit path to the connector's SSH known-hosts file. Defaults to `$MCP_WORKSPACE_PATH/.replit-ssh-known-hosts`, falling back to `$HOME/.replit-mcp/known_hosts`. The file is created with mode `0o600` and the parent directory with mode `0o700`.
+- `MCP_REPLIT_SSH_ALLOW_DELETE` — set to `1` to enable `replit_delete_file`. Deletion is irreversible on Replit (no trash), so the tool fails closed with `DELETE_DISABLED` unless this opt-in is set.
 
 ## Host configuration examples
 
@@ -148,17 +149,21 @@ This server has no required environment variables. Authentication is via the loc
 
 After the host launches the server, run `replit_setup_ssh` once to generate the local key, then add the printed public key to [replit.com/account#ssh-keys](https://replit.com/account#ssh-keys).
 
-## Tools (5)
+## Tools (9)
 
 ### Read
 
 - `replit_check_connection` — verify SSH connectivity, working directory, and SFTP support. Set `verbose=true` for handshake/auth diagnostics.
 - `replit_list_files` — list files and directories at a path (relative to the project root). Default path is `.`.
 - `replit_read_file` — read a file. UTF-8 text by default; binary files (detected via null-byte scan) are returned as base64.
+- `replit_search_files` — recursive search by file-name substring and/or text-content substring (case-insensitive), with result caps (`max_results`, default 50) and a depth cap (`max_depth`, default 4). Content search skips binary files and files over 1 MB. Returns matching paths and, for content matches, the matching lines with line numbers.
+- `replit_stat` — file/directory metadata (type, size, permissions, mtime/atime) without reading contents.
 
 ### Write
 
 - `replit_write_file` — atomic write via `temp + ext_openssh_rename` with SHA-256 read-back verification. Fails closed if the server doesn't support atomic overwrite and the target already exists (we never `unlink + rename`, which opens a data-loss window).
+- `replit_move` — move or rename a file or directory. Never overwrites: fails with `DESTINATION_EXISTS` if the destination path is taken. The destination parent directory must already exist.
+- `replit_delete_file` — permanently delete a file (files only, not directories). Deletion is irreversible on Replit — there is no trash — so this tool is disabled unless `MCP_REPLIT_SSH_ALLOW_DELETE=1` is set in the server environment (it also carries `destructiveHint: true`).
 - `replit_setup_ssh` — generate an Ed25519 key pair at `~/.ssh/rebel-replit`, write public/private files with mode `0600` (or `icacls` ACL on Windows), and append a `*.replit.dev` block to `~/.ssh/config`. Idempotent by default; pass `force_regenerate=true` to replace the existing key (you will need to re-register the new public key with Replit).
 
 ## Security notes
@@ -169,7 +174,9 @@ After the host launches the server, run `replit_setup_ssh` once to generate the 
 - **Atomic write invariant.** `replit_write_file` writes to a randomized temp filename, renames via OpenSSH's POSIX rename extension (`ext_openssh_rename`), and verifies the final file's SHA-256 against the expected hash. If the server lacks the extension and the target file already exists, the write fails rather than falling back to `unlink + rename`.
 - **Read-back verification.** Every `replit_write_file` re-reads the final file and asserts SHA-256 equality before returning `verified: true`.
 - **SSH host-key verification.** Every outbound SSH connection passes an explicit `hostVerifier` to ssh2 that pins server fingerprints in a per-user known-hosts file (mode `0o600`). The default behaviour mirrors OpenSSH's `StrictHostKeyChecking=accept-new`: the first time the connector reaches a host, the SHA-256 fingerprint is recorded and a notice is logged to stderr; on subsequent connects, a mismatch fails closed with `HOST_KEY_MISMATCH`. Operators who need fail-closed first-contact set `MCP_REPLIT_SSH_STRICT_HOST_KEY=1` and pre-populate the known-hosts file out-of-band (e.g. `ssh-keyscan riker.replit.dev > "$MCP_WORKSPACE_PATH/.replit-ssh-known-hosts"` from a trusted network). Added in 0.1.2 to close audit finding `replit-ssh-001`.
-- **Untrusted-content envelopes.** Content from `replit_read_file` and directory-entry names from `replit_list_files` are wrapped in `<untrusted-content source="…">…</untrusted-content>` envelopes per AGENTS.md invariant #6. Hosts must keep the envelopes intact when surfacing tool output to the model. Added in 0.1.2 to close audit finding `replit-ssh-006`.
+- **Untrusted-content envelopes.** Content from `replit_read_file`, directory-entry names from `replit_list_files`, and matched paths/lines from `replit_search_files` are wrapped in `<untrusted-content source="…">…</untrusted-content>` envelopes per AGENTS.md invariant #6. Hosts must keep the envelopes intact when surfacing tool output to the model. Added in 0.1.2 to close audit finding `replit-ssh-006`.
+- **Delete is opt-in and fail-closed.** `replit_delete_file` performs irreversible deletion (Replit has no trash), so beyond `destructiveHint: true` it refuses to run unless `MCP_REPLIT_SSH_ALLOW_DELETE=1` is set in the server environment, failing with `DELETE_DISABLED` otherwise. Directories are never deleted.
+- **Move never overwrites.** `replit_move` pre-checks the destination and fails with `DESTINATION_EXISTS` rather than clobbering an existing file.
 - **Algorithm allow-list.** Outbound SSH connections restrict the negotiated KEX/host-key/cipher/HMAC algorithms to curve25519-sha256 + ssh-ed25519/rsa-sha2-* + ChaCha20-Poly1305/AES-GCM + ETM HMACs. Blocks downgrade negotiation to weaker suites if the proxy is ever misconfigured.
 
 ## Licence
