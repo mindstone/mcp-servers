@@ -15,6 +15,18 @@ const INSTANCE = 'test-instance';
 const BASE = `https://${INSTANCE}.service-now.com/api/now/table`;
 
 /**
+ * Applies sysparm_limit / sysparm_offset the way the real Table API does, so
+ * pagination tests are not vacuous.
+ */
+function applyPagination<T>(items: T[], url: URL): T[] {
+  const limitParam = url.searchParams.get('sysparm_limit');
+  const offsetParam = url.searchParams.get('sysparm_offset');
+  const limit = limitParam === null ? items.length : Number(limitParam);
+  const offset = offsetParam === null ? 0 : Number(offsetParam);
+  return items.slice(offset, offset + limit);
+}
+
+/**
  * Creates MSW handlers that mock the ServiceNow Table API.
  * Verifies `Authorization: Basic base64(username:password)` on every request.
  */
@@ -56,7 +68,7 @@ export function createServiceNowHandlers(
         }
       }
 
-      return HttpResponse.json({ result: filtered });
+      return HttpResponse.json({ result: applyPagination(filtered, url) });
     }),
 
     // GET /incident/:sys_id (get by sys_id)
@@ -130,7 +142,7 @@ export function createServiceNowHandlers(
         }
       }
 
-      return HttpResponse.json({ result: filtered });
+      return HttpResponse.json({ result: applyPagination(filtered, url) });
     }),
 
     // GET /change_request/:sys_id (get by sys_id)
@@ -192,7 +204,7 @@ export function createServiceNowHandlers(
         }
       }
 
-      return HttpResponse.json({ result: filtered });
+      return HttpResponse.json({ result: applyPagination(filtered, url) });
     }),
 
     // GET /kb_knowledge/:sys_id (get by sys_id)
@@ -217,7 +229,7 @@ export function createServiceNowHandlers(
       const authError = checkAuth(request);
       if (authError) return authError;
 
-      return HttpResponse.json({ result: mockUsers });
+      return HttpResponse.json({ result: applyPagination(mockUsers, new URL(request.url)) });
     }),
 
     // ── Service Catalog ───────────────────────────────────────────
@@ -241,7 +253,7 @@ export function createServiceNowHandlers(
         }
       }
 
-      return HttpResponse.json({ result: filtered });
+      return HttpResponse.json({ result: applyPagination(filtered, url) });
     }),
 
     // GET /sc_cat_item/:sys_id (get by sys_id)

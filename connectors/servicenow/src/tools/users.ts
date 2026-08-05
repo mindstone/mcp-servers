@@ -24,11 +24,16 @@ export function registerUserTools(server: McpServer): void {
           .describe('ServiceNow encoded query (e.g., "active=true^departmentLIKEengineering")'),
         limit: z
           .number()
+          .int()
+          .min(1)
+          .max(1000)
           .optional()
           .default(20)
-          .describe('Max results to return (default: 20)'),
+          .describe('Max results to return (default: 20, max: 1000)'),
         offset: z
           .number()
+          .int()
+          .min(0)
           .optional()
           .default(0)
           .describe('Offset for pagination (default: 0)'),

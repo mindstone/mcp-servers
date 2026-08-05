@@ -24,11 +24,16 @@ export function registerKnowledgeTools(server: McpServer): void {
           .describe('Search keywords or ServiceNow encoded query'),
         limit: z
           .number()
+          .int()
+          .min(1)
+          .max(1000)
           .optional()
           .default(20)
-          .describe('Max results to return (default: 20)'),
+          .describe('Max results to return (default: 20, max: 1000)'),
         offset: z
           .number()
+          .int()
+          .min(0)
           .optional()
           .default(0)
           .describe('Offset for pagination (default: 0)'),
