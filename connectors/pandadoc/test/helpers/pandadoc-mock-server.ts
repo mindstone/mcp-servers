@@ -5,6 +5,11 @@ import {
   mockTemplates,
   mockCreateFromTemplateResponse,
   mockSendResponse,
+  mockSessionResponse,
+  mockDocumentFolders,
+  mockContacts,
+  mockContentLibraryItems,
+  mockContentLibraryItemDetails,
 } from '../fixtures/pandadoc-data.js';
 
 const BASE = 'https://api.pandadoc.com/public/v1';
@@ -23,6 +28,54 @@ export function createPandaDocHandlers(expectedKey = 'test-pandadoc-key') {
   };
 
   return [
+    // GET /documents/folders — must precede the /documents/:id handler so
+    // the literal "folders" path isn't captured as a document id.
+    http.get(`${BASE}/documents/folders`, ({ request }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+      return HttpResponse.json({ results: mockDocumentFolders });
+    }),
+
+    // GET /contacts
+    http.get(`${BASE}/contacts`, ({ request }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+
+      const url = new URL(request.url);
+      const email = url.searchParams.get('email');
+      let filtered = mockContacts;
+      if (email) {
+        filtered = mockContacts.filter(c => c.email === email);
+      }
+      return HttpResponse.json({ results: filtered });
+    }),
+
+    // GET /content-library-items (list) — must precede the /:id handlers.
+    http.get(`${BASE}/content-library-items`, ({ request }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+
+      const url = new URL(request.url);
+      const q = url.searchParams.get('q');
+      let filtered = mockContentLibraryItems;
+      if (q) {
+        filtered = mockContentLibraryItems.filter(i => i.name.toLowerCase().includes(q.toLowerCase()));
+      }
+      return HttpResponse.json({ results: filtered });
+    }),
+
+    // GET /content-library-items/:id/details
+    http.get(`${BASE}/content-library-items/:id/details`, ({ request, params }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+
+      const id = params.id as string;
+      if (id === 'cli-1') {
+        return HttpResponse.json(mockContentLibraryItemDetails);
+      }
+      return HttpResponse.json({ type: 'not_found', detail: 'Content library item not found' }, { status: 404 });
+    }),
+
     // GET /documents (list)
     http.get(`${BASE}/documents`, ({ request }) => {
       const authError = checkAuth(request);
@@ -110,6 +163,24 @@ export function createPandaDocHandlers(expectedKey = 'test-pandadoc-key') {
         return HttpResponse.json(
           { type: 'conflict', detail: 'Document is not in draft status' },
           { status: 409 },
+        );
+      }
+      return HttpResponse.json({ type: 'not_found', detail: 'Document not found' }, { status: 404 });
+    }),
+
+    // POST /documents/:id/session
+    http.post(`${BASE}/documents/:id/session`, ({ request, params }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+
+      const id = params.id as string;
+      if (id === 'doc-1') {
+        return HttpResponse.json(mockSessionResponse, { status: 201 });
+      }
+      if (id === 'doc-not-sent') {
+        return HttpResponse.json(
+          { type: 'bad_request', detail: 'Document must be sent before creating a session' },
+          { status: 400 },
         );
       }
       return HttpResponse.json({ type: 'not_found', detail: 'Document not found' }, { status: 404 });

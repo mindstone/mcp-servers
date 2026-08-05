@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { pandadocFetch } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
+import { sanitizeTemplate } from '../sanitize.js';
 import type { TemplateListResponse } from '../types.js';
 
 function noApiKeyError(): string {
@@ -61,13 +62,18 @@ RELATED TOOLS:
         `/templates?${params.toString()}`,
       );
 
-      const templates = (result.results || []).map((t) => ({
-        id: t.id,
-        name: t.name,
-        date_created: t.date_created,
-        date_modified: t.date_modified,
-        version: t.version,
-      }));
+      const templates = (result.results || []).map((t) =>
+        sanitizeTemplate(
+          {
+            id: t.id,
+            name: t.name,
+            date_created: t.date_created,
+            date_modified: t.date_modified,
+            version: t.version,
+          },
+          'pandadoc:list_templates',
+        ),
+      );
 
       const hint = paginationHint(templates.length, args.page, args.count);
       return JSON.stringify({ ok: true, templates, count: templates.length, pagination: hint });

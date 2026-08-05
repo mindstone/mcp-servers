@@ -102,3 +102,89 @@ export const mockSendResponse = {
     },
   ],
 };
+
+export const mockSessionResponse = {
+  id: 'nPh2PDhFdDqAES9k64h9qX',
+  expires_at: '2026-03-10T13:05:00.000000Z',
+};
+
+export const mockDocumentFolders = [
+  {
+    uuid: 'folder-1',
+    name: 'Client Contracts',
+    date_created: '2026-01-15T09:00:00.000000Z',
+    has_folders: false,
+    has_items: true,
+  },
+  {
+    uuid: 'folder-2',
+    name: 'HR Documents',
+    date_created: '2026-02-01T09:00:00.000000Z',
+    has_folders: true,
+    has_items: true,
+  },
+];
+
+export const mockContacts = [
+  {
+    id: 'contact-1',
+    email: 'jane@client.com',
+    first_name: 'Jane',
+    last_name: 'Doe',
+    company: 'Acme Corp',
+    job_title: 'Procurement Manager',
+    phone: '+1-555-123-4567',
+    country: 'USA',
+    state: 'California',
+    street_address: '1234 Elm Street',
+    city: 'San Francisco',
+    postal_code: '94101',
+  },
+  {
+    id: 'contact-2',
+    email: 'john@example.com',
+    first_name: 'John',
+    last_name: 'Smith',
+    company: 'TechCorp',
+    job_title: 'CTO',
+    phone: null,
+    country: null,
+    state: null,
+    street_address: null,
+    city: null,
+    postal_code: null,
+  },
+];
+
+export const mockContentLibraryItems = [
+  {
+    id: 'cli-1',
+    name: 'Standard Pricing Table',
+    date_created: '2026-01-10T08:00:00.000000Z',
+    date_modified: '2026-02-10T08:00:00.000000Z',
+    version: '2',
+  },
+  {
+    id: 'cli-2',
+    name: 'Mutual NDA Clause',
+    date_created: '2026-01-20T08:00:00.000000Z',
+    date_modified: '2026-01-20T08:00:00.000000Z',
+    version: '1',
+  },
+];
+
+export const mockContentLibraryItemDetails = {
+  id: 'cli-1',
+  name: 'Standard Pricing Table',
+  date_created: '2026-01-10T08:00:00.000000Z',
+  date_modified: '2026-02-10T08:00:00.000000Z',
+  content_date_modified: '2026-02-10T08:00:00.000000Z',
+  created_by: { id: 'user-1', email: 'admin@co.com', first_name: 'Admin', last_name: 'User' },
+  metadata: { department: 'sales' },
+  tokens: [{ name: 'Client.CompanyName', value: '' }],
+  fields: [],
+  pricing: { tables: [] },
+  tags: ['approved'],
+  roles: [],
+  version: '2',
+};

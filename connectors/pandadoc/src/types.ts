@@ -50,6 +50,18 @@ export interface TemplateListResponse {
   results: Record<string, unknown>[];
 }
 
+export interface FolderListResponse {
+  results: Record<string, unknown>[];
+}
+
+export interface ContactListResponse {
+  results: Record<string, unknown>[];
+}
+
+export interface ContentLibraryItemListResponse {
+  results: Record<string, unknown>[];
+}
+
 export interface DocumentCreateResponse {
   id: string;
   name: string;
@@ -70,4 +82,9 @@ export interface DocumentSendResponse {
   date_created: string;
   date_modified: string;
   recipients: Array<Record<string, unknown>>;
+}
+
+export interface DocumentSessionResponse {
+  id: string;
+  expires_at: string;
 }
