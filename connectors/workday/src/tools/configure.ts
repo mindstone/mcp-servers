@@ -11,6 +11,7 @@ import { WorkdayError, USER_AGENT, REQUEST_TIMEOUT_MS } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 import {
   validateHost,
+  assertHostResolvesPublic,
   setHost,
   setTenant,
   setClientId,
@@ -69,6 +70,17 @@ COMMON MISTAKES:
         return JSON.stringify({ ok: false, error: hostValidation.error });
       }
       const host = hostValidation.host!;
+
+      // Re-resolve the host and refuse non-public DNS records before the
+      // credential-bearing token exchange leaves the process.
+      try {
+        await assertHostResolvesPublic(host);
+      } catch (error) {
+        if (error instanceof WorkdayError) {
+          return JSON.stringify({ ok: false, error: error.message, resolution: error.resolution });
+        }
+        throw error;
+      }
 
       // Validate credentials by attempting token exchange + API probe
       const authHeader = 'Basic ' + Buffer.from(`${cid}:${csecret}`).toString('base64');

@@ -12,6 +12,8 @@
  * - WORKDAY_REFRESH_TOKEN: Optional refresh token (enables refresh_token grant)
  */
 
+import { isIP } from 'node:net';
+
 import { WorkdayError, USER_AGENT, REQUEST_TIMEOUT_MS, RECRUITING_API_VERSION_DEFAULT } from './types.js';
 import { bridgeRequest } from './bridge.js';
 
@@ -22,17 +24,6 @@ let workdayTenant: string = process.env.WORKDAY_TENANT ?? '';
 let clientId: string = process.env.WORKDAY_CLIENT_ID ?? '';
 let clientSecret: string = process.env.WORKDAY_CLIENT_SECRET ?? '';
 let refreshToken: string = process.env.WORKDAY_REFRESH_TOKEN ?? '';
-
-// Validate WORKDAY_HOST from env at startup — reject private/localhost hosts
-const _envHost = process.env.WORKDAY_HOST ?? '';
-if (_envHost) {
-  const _hostResult = validateHost(_envHost);
-  if (_hostResult.valid) {
-    workdayHost = _hostResult.host!;
-  } else {
-    console.error(`[Workday] Ignoring invalid WORKDAY_HOST from env: ${_hostResult.error}`);
-  }
-}
 
 // ── Token cache ──
 
@@ -127,25 +118,100 @@ function normalizeHost(raw: string): string {
   return host;
 }
 
-function isPrivateOrLocalhost(host: string): boolean {
-  const lower = host.toLowerCase();
-  if (lower === 'localhost' || lower === '[::1]') {
-    return true;
+const parseIPv4 = (value: string): [number, number, number, number] | null => {
+  const match = value.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!match) return null;
+  const octets = match.slice(1, 5).map((s) => Number(s));
+  if (octets.some((n) => !Number.isFinite(n) || n < 0 || n > 255)) return null;
+  return octets as [number, number, number, number];
+};
+
+// Returns a reason string when the IPv4 octets are non-public, else null.
+const privateIPv4Reason = (octets: [number, number, number, number]): string | null => {
+  const [a, b, c] = octets;
+  if (a === 127) return 'loopback range (127.0.0.0/8)';
+  if (a === 10) return 'RFC1918 private range (10.0.0.0/8)';
+  if (a === 172 && b >= 16 && b <= 31) return 'RFC1918 private range (172.16.0.0/12)';
+  if (a === 192 && b === 168) return 'RFC1918 private range (192.168.0.0/16)';
+  if (a === 169 && b === 254) return 'link-local range (169.254.0.0/16, includes IMDS)';
+  if (a === 0) return 'unspecified range (0.0.0.0/8)';
+  // RFC 6598 shared address space — carrier-grade NAT, also used by overlay networks.
+  if (a === 100 && b >= 64 && b <= 127) return 'shared/CGNAT range (100.64.0.0/10, RFC 6598)';
+  // Benchmarking (RFC 2544) — not publicly routable.
+  if (a === 198 && (b === 18 || b === 19)) return 'benchmarking range (198.18.0.0/15)';
+  // Documentation-only TEST-NETs; denying them keeps this guard fail-closed.
+  if (a === 192 && b === 0 && c === 2) return 'documentation range (192.0.2.0/24, TEST-NET-1)';
+  if (a === 198 && b === 51 && c === 100) return 'documentation range (198.51.100.0/24, TEST-NET-2)';
+  if (a === 203 && b === 0 && c === 113) return 'documentation range (203.0.113.0/24, TEST-NET-3)';
+  // Deprecated 6to4 relay anycast (RFC 7526).
+  if (a === 192 && b === 88 && c === 99) return '6to4 relay range (192.88.99.0/24)';
+  // Multicast (224.0.0.0/4) and reserved/broadcast (240.0.0.0/4).
+  if (a >= 224 && a <= 239) return 'multicast range (224.0.0.0/4)';
+  if (a >= 240) return 'reserved range (240.0.0.0/4)';
+  return null;
+};
+
+// Returns a reason string when the IPv6 literal is non-routable, else null.
+const privateIPv6Reason = (raw: string): string | null => {
+  const lower = raw.toLowerCase();
+
+  if (lower === '::') return 'IPv6 unspecified (::)';
+  if (
+    lower === '::1' ||
+    lower === '0:0:0:0:0:0:0:1' ||
+    lower === '0000:0000:0000:0000:0000:0000:0000:0001'
+  ) {
+    return 'IPv6 loopback (::1)';
   }
 
-  const ipMatch = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (ipMatch) {
-    const [, a, b] = ipMatch.map(Number);
-    if (a === 127) return true;
-    if (a === 10) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 169 && b === 254) return true;
-    if (a === 0) return true;
+  // IPv4-mapped IPv6, dotted form (::ffff:127.0.0.1).
+  const mappedDot = lower.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
+  if (mappedDot) {
+    const octets = parseIPv4(mappedDot[1]);
+    if (!octets) return 'IPv4-mapped IPv6 (malformed)';
+    const v4Reason = privateIPv4Reason(octets);
+    return v4Reason ? `IPv4-mapped IPv6 (${v4Reason})` : null;
   }
 
-  return false;
-}
+  // IPv4-mapped IPv6, hex form — WHATWG URL normalizes ::ffff:127.0.0.1 to
+  // ::ffff:7f00:1, so the hex form must be handled too.
+  const mappedHex = lower.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (mappedHex) {
+    const hi = parseInt(mappedHex[1], 16);
+    const lo = parseInt(mappedHex[2], 16);
+    if (Number.isFinite(hi) && Number.isFinite(lo) && hi <= 0xffff && lo <= 0xffff) {
+      const octets: [number, number, number, number] = [
+        (hi >> 8) & 0xff,
+        hi & 0xff,
+        (lo >> 8) & 0xff,
+        lo & 0xff,
+      ];
+      const v4Reason = privateIPv4Reason(octets);
+      return v4Reason ? `IPv4-mapped IPv6 (${v4Reason})` : null;
+    }
+  }
+
+  if (/^fe[89ab][0-9a-f]?:/.test(lower)) return 'IPv6 link-local (fe80::/10)';
+  if (/^f[cd][0-9a-f]{0,2}:/.test(lower)) return 'IPv6 unique-local (fc00::/7)';
+  if (/^2001:0*db8(?::|$)/.test(lower)) return 'IPv6 documentation range (2001:db8::/32)';
+
+  return null;
+};
+
+// Returns a reason string when a normalized hostname is non-public, else null.
+const nonPublicHostReason = (hostname: string): string | null => {
+  const lower = hostname.toLowerCase();
+  if (lower === 'localhost' || lower === 'localhost.localdomain') return 'loopback hostname';
+
+  const v4 = parseIPv4(lower);
+  if (v4) return privateIPv4Reason(v4);
+
+  // IPv6 literals arrive bracketed from URL.hostname; also accept raw forms.
+  const bare = lower.replace(/^\[|\]$/g, '');
+  if (bare.includes(':') && isIP(bare) === 6) return privateIPv6Reason(bare);
+
+  return null;
+};
 
 export function validateHost(rawHost: string): { valid: boolean; host?: string; error?: string } {
   const host = normalizeHost(rawHost);
@@ -153,15 +219,117 @@ export function validateHost(rawHost: string): { valid: boolean; host?: string; 
     return { valid: false, error: 'Host is required.' };
   }
 
-  if (isPrivateOrLocalhost(host)) {
-    return { valid: false, error: 'Host must not be localhost or a private IP address.' };
+  // WHATWG URL parsing normalizes non-canonical IPv4 spellings (127.1,
+  // 0x7f000001, 2130706433, 0177.0.0.1) to dotted-quad, so loopback/private
+  // literals in disguise cannot slip past the checks below.
+  let url: URL;
+  try {
+    url = new URL(`https://${host}`);
+  } catch {
+    return { valid: false, error: 'Host must be a valid hostname.' };
+  }
+  if (url.username || url.password || url.port || url.pathname !== '/') {
+    return { valid: false, error: 'Host must be a bare hostname (no port, path, or credentials).' };
   }
 
-  if (host.length < 2 || !/^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$/.test(host)) {
+  const normalized = url.hostname;
+  const reason = nonPublicHostReason(normalized);
+  if (reason) {
+    return { valid: false, error: `Host must not be localhost or a private IP address (${reason}).` };
+  }
+
+  if (normalized.length < 2 || !/^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$/.test(normalized)) {
     return { valid: false, error: 'Host must be a valid hostname.' };
   }
 
-  return { valid: true, host };
+  return { valid: true, host: normalized };
+}
+
+// ── DNS re-resolution guard ──
+//
+// A syntactically public hostname can still resolve to a private address
+// (split-horizon DNS, DNS rebinding). Before any credential-bearing request,
+// resolve the host and re-check every A/AAAA record against the same
+// non-public deny list. Fail-closed: an unresolvable host is refused.
+
+export type DnsLookupFn = (
+  hostname: string,
+) => Promise<Array<{ address: string; family: number }>>;
+
+const defaultDnsLookup: DnsLookupFn = async (hostname) => {
+  const dns = await import('node:dns/promises');
+  return dns.lookup(hostname, { all: true });
+};
+
+// Test seam: ESM module namespaces can't be spied on with vi.spyOn().
+let dnsLookupImpl: DnsLookupFn = defaultDnsLookup;
+export function setDnsLookupForTesting(fn: DnsLookupFn | null): void {
+  dnsLookupImpl = fn ?? defaultDnsLookup;
+}
+
+// dns.lookup has no abort signal; a stuck resolver must not hang a tool call.
+const DNS_LOOKUP_TIMEOUT_MS = 10_000;
+
+const lookupWithTimeout = async (
+  hostname: string,
+): Promise<Array<{ address: string; family: number }>> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      dnsLookupImpl(hostname),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('DNS lookup timed out')), DNS_LOOKUP_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+};
+
+const nonPublicAddressReason = (address: string): string | null => {
+  const v4 = parseIPv4(address);
+  if (v4) return privateIPv4Reason(v4);
+  if (isIP(address) === 6) return privateIPv6Reason(address.toLowerCase());
+  return 'unrecognized address family';
+};
+
+export async function assertHostResolvesPublic(host: string): Promise<void> {
+  // Literal IPs were already validated by validateHost; skip DNS.
+  if (isIP(host.replace(/^\[|\]$/g, '')) !== 0) return;
+
+  let addresses: Array<{ address: string; family: number }>;
+  try {
+    addresses = await lookupWithTimeout(host);
+  } catch {
+    throw new WorkdayError(
+      'Workday host could not be resolved.',
+      'HOST_UNRESOLVABLE',
+      'Verify the host domain is correct and publicly resolvable, then retry.',
+    );
+  }
+
+  for (const { address } of addresses) {
+    if (nonPublicAddressReason(address)) {
+      throw new WorkdayError(
+        'Workday host resolves to a non-public address, which is refused.',
+        'HOST_NOT_PUBLIC',
+        'Internal, loopback, link-local, or private-network addresses are refused. Verify the host domain.',
+      );
+    }
+  }
+}
+
+// Validate WORKDAY_HOST from env at startup — reject private/localhost hosts.
+// (Lives below the SSRF section because validateHost closes over const helpers
+// defined there.)
+const _envHost = process.env.WORKDAY_HOST ?? '';
+if (_envHost) {
+  const _hostResult = validateHost(_envHost);
+  if (_hostResult.valid) {
+    workdayHost = _hostResult.host!;
+  } else {
+    console.error(`[Workday] Ignoring invalid WORKDAY_HOST from env: ${_hostResult.error}`);
+  }
 }
 
 // ── Token exchange ──
@@ -178,6 +346,10 @@ export async function getAccessToken(): Promise<string> {
   if (cachedAccessToken && Date.now() < tokenExpiresAt) {
     return cachedAccessToken;
   }
+
+  // Re-resolve the host and refuse non-public records before any
+  // credential-bearing request leaves the process.
+  await assertHostResolvesPublic(workdayHost);
 
   const authHeader = 'Basic ' + Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
