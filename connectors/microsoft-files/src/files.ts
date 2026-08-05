@@ -1,5 +1,11 @@
 import type { Client, DriveItem } from '@mindstone/mcp-server-microsoft-shared';
 import { z } from 'zod';
+import { getAccessToken } from './client.js';
+import {
+  InvalidOfficeDocumentError,
+  extractDocxText,
+  extractPptxText,
+} from './office-text.js';
 import { wrapUntrusted } from './untrusted-content.js';
 import { FilesBusinessError } from './types.js';
 
@@ -160,6 +166,16 @@ const GraphUploadSessionSchema = z
   })
   .passthrough();
 
+const GraphDriveItemContentMetadataSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().optional(),
+    size: z.number().optional(),
+    file: z.object({ mimeType: z.string().optional() }).passthrough().optional(),
+    folder: z.object({ childCount: z.number().optional() }).passthrough().optional(),
+  })
+  .passthrough();
+
 function formatActivity(
   activity: z.infer<typeof GraphItemActivitySchema>,
   sourceTool: string,
@@ -308,6 +324,12 @@ export interface RestoreFileVersionArgs {
 
 export interface ListFileActivitiesArgs {
   path?: string;
+}
+
+export interface ReadDocumentArgs {
+  path: string;
+  maxSize?: number;
+  maxChars?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -892,6 +914,109 @@ export async function listFileActivities(
     count: parsed.value.length,
     activities: parsed.value.map((activity) =>
       formatActivity(activity, 'list_file_activities'),
+    ),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Document text extraction (docx / pptx)
+// ---------------------------------------------------------------------------
+
+// Matches the shared Graph client's defaultVersion (v1.0); raw fetch is only
+// used for binary content the SDK cannot hand back as bytes.
+const GRAPH_BASE_URL = 'https://graph.microsoft.com/v1.0';
+
+const DEFAULT_READ_DOCUMENT_MAX_BYTES = 20 * 1024 * 1024;
+const DEFAULT_READ_DOCUMENT_MAX_CHARS = 100_000;
+
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const PPTX_MIME =
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+
+async function fetchDriveItemBytes(endpoint: string, signal: AbortSignal): Promise<Buffer> {
+  const token = await getAccessToken();
+  const response = await fetch(`${GRAPH_BASE_URL}${endpoint}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  });
+  if (!response.ok) {
+    // statusCode lets withGraphRetry invalidate the cached token and retry on 401.
+    const err = new Error(`Graph content request failed: HTTP ${response.status}`) as Error & {
+      statusCode?: number;
+    };
+    err.statusCode = response.status;
+    throw err;
+  }
+  return Buffer.from(await response.arrayBuffer());
+}
+
+export async function readDocument(
+  client: Client,
+  args: ReadDocumentArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const maxSize = args.maxSize ?? DEFAULT_READ_DOCUMENT_MAX_BYTES;
+  const maxChars = args.maxChars ?? DEFAULT_READ_DOCUMENT_MAX_CHARS;
+
+  const endpoint = buildDriveItemEndpoint(args.path);
+  const metadata = GraphDriveItemContentMetadataSchema.parse(
+    await client.api(endpoint).options({ signal }).select('id,name,size,file,folder').get(),
+  );
+
+  if (metadata.folder) {
+    throw new FilesBusinessError('Cannot read a folder as a document', 'list_files');
+  }
+
+  if ((metadata.size ?? 0) > maxSize) {
+    throw new FilesBusinessError(
+      `File too large (${formatSize(metadata.size)}). Max size: ${formatSize(maxSize)}`,
+      'read_document',
+    );
+  }
+
+  const name = metadata.name ?? '';
+  const extension = name.split('.').pop()?.toLowerCase() ?? '';
+  const mimeType = metadata.file?.mimeType ?? '';
+  const isDocx = extension === 'docx' || mimeType === DOCX_MIME;
+  const isPptx = extension === 'pptx' || mimeType === PPTX_MIME;
+
+  if (extension === 'pdf' || mimeType === 'application/pdf') {
+    throw new FilesBusinessError(
+      'PDF text extraction is not supported. Use download_file to get the file instead.',
+      'download_file',
+    );
+  }
+  if (!isDocx && !isPptx) {
+    throw new FilesBusinessError(
+      `Unsupported document type (${mimeType || extension || 'unknown'}). read_document supports .docx and .pptx; use read_text_file for plain-text files or download_file otherwise.`,
+      'read_text_file',
+    );
+  }
+
+  const bytes = await fetchDriveItemBytes(buildDriveItemEndpoint(args.path, '/content'), signal);
+
+  let text: string;
+  try {
+    text = isDocx ? extractDocxText(bytes) : extractPptxText(bytes);
+  } catch (err) {
+    if (err instanceof InvalidOfficeDocumentError) {
+      throw new FilesBusinessError(
+        `Could not extract text (${err.message}). The file may be corrupt or not a real Office Open XML document.`,
+        'download_file',
+      );
+    }
+    throw err;
+  }
+
+  const truncated = text.length > maxChars;
+  return {
+    name: wrapUntrusted(metadata.name, 'microsoft-files:read_document:name'),
+    size: formatSize(metadata.size),
+    mimeType,
+    truncated,
+    content: wrapUntrusted(
+      truncated ? text.slice(0, maxChars) : text,
+      'microsoft-files:read_document:content',
     ),
   };
 }

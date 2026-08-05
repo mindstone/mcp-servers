@@ -26,6 +26,7 @@ const EXPECTED_TOOLS = [
   'list_file_versions',
   'restore_file_version',
   'list_file_activities',
+  'read_document',
 ];
 
 const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
@@ -48,6 +49,7 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
   list_file_versions: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   restore_file_version: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   list_file_activities: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  read_document: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
 };
 
 describe('microsoft-files tools/list', () => {

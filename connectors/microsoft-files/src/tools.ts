@@ -16,6 +16,7 @@ import {
   listFiles,
   listFileVersions,
   moveFile,
+  readDocument,
   readTextFile,
   restoreFileVersion,
   revokeFilePermission,
@@ -697,6 +698,51 @@ export function registerFilesTools(server: McpServer): void {
     withErrorHandling(async (args, extra) => {
       const result = await callGraph(extra, (c, signal) =>
         listFileActivities(c, { path: args.path }, signal),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // read_document
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'read_document',
+    {
+      description:
+        'Extract the text of a Word (.docx) or PowerPoint (.pptx) document directly, without downloading it. Use read_text_file for plain-text files.',
+      inputSchema: z.object({
+        path: z.string().optional().describe('Document path or item ID'),
+        maxSize: z
+          .number()
+          .optional()
+          .describe('Max file bytes to download (default: 20MB)'),
+        maxChars: z
+          .number()
+          .optional()
+          .describe('Max extracted characters to return (default: 100000)'),
+      }).shape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.path) {
+        return errorResponse({
+          error:
+            'Missing required parameter: "path" (document to read). Example: { "path": "/Documents/report.docx" }. Works with .docx and .pptx files.',
+          action_required: 'Provide the document path or item ID.',
+          next_step: 'list_files',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        readDocument(
+          c,
+          { path: args.path!, maxSize: args.maxSize, maxChars: args.maxChars },
+          signal,
+        ),
       );
       return successJson(result);
     }),

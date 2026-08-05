@@ -158,6 +158,12 @@ const MANIFEST: ManifestRow[] = [
     pathname: '/v1.0/me/drive/items/:id/activities',
     args: { path: '01ABC123xyz' },
   },
+  {
+    tool: 'read_document',
+    method: 'GET',
+    pathname: '/v1.0/me/drive/items/:id/content',
+    args: { path: 'item-docx' },
+  },
 ];
 
 function matchPath(actual: string, pattern: string): boolean {

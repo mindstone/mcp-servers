@@ -635,4 +635,68 @@ describe('microsoft-files mock-API integration', () => {
     );
     expect(call).toBeDefined();
   });
+
+  // -------------------------------------------------------------------------
+  // read_document
+  // -------------------------------------------------------------------------
+  it('read_document extracts enveloped text from a .docx', async () => {
+    const result = await client.callTool('read_document', { path: 'item-docx' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      ok?: unknown;
+      mimeType: string;
+      truncated: boolean;
+      content: string;
+    };
+    expect(json.ok).toBeUndefined();
+    expect(json.truncated).toBe(false);
+    expect(json.content).toContain('<untrusted-content source="microsoft-files:read_document:content">');
+    expect(json.content).toContain('Quarterly Results & Outlook');
+    expect(json.content).toContain('Revenue grew 12% year over year.');
+  });
+
+  it('read_document extracts slide text from a .pptx', async () => {
+    const result = await client.callTool('read_document', { path: 'item-pptx' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; content: string };
+    expect(json.content).toContain('--- Slide 1 ---');
+    expect(json.content).toContain('Launch Plan');
+    expect(json.content).toContain('--- Slide 10 ---');
+    expect(json.content).toContain('Next Steps');
+  });
+
+  it('read_document refuses PDFs with download_file guidance', async () => {
+    const result = await client.callTool('read_document', { path: 'item-pdf' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('PDF text extraction is not supported');
+    expect(json.next_step).toBe('download_file');
+  });
+
+  it('read_document refuses plain-text files with read_text_file guidance', async () => {
+    const result = await client.callTool('read_document', { path: 'item-text' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Unsupported document type');
+    expect(json.next_step).toBe('read_text_file');
+  });
+
+  it('read_document reports corrupt Office files instead of crashing', async () => {
+    const result = await client.callTool('read_document', { path: 'item-corrupt' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Could not extract text');
+    expect(json.next_step).toBe('download_file');
+  });
+
+  it('read_document rejects missing path', async () => {
+    const result = await client.callTool('read_document', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.next_step).toBe('list_files');
+  });
 });
