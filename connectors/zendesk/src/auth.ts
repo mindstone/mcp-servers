@@ -147,17 +147,26 @@ export async function refreshToken(subdomain: string): Promise<boolean> {
     });
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      console.error(`[Zendesk] Token refresh failed for ${subdomain}:`, response.status, errorText);
+      // Do not read or log the raw vendor error body — it is
+      // attacker/vendor-controlled and may contain echoed request data.
+      console.error(`[Zendesk] Token refresh failed for ${subdomain} (HTTP ${response.status})`);
       return false;
     }
 
-    const tokenResponse = await response.json() as {
+    let tokenResponse: {
       access_token: string;
       refresh_token?: string;
       expires_in: number;
       token_type: string;
     };
+    try {
+      tokenResponse = await response.json();
+    } catch {
+      // The runtime JSON parse error can embed a fragment of the response
+      // body; do not let it reach logs.
+      console.error(`[Zendesk] Token refresh for ${subdomain} returned an unparseable response`);
+      return false;
+    }
 
     const expiresAt = Date.now() + (tokenResponse.expires_in * 1000);
     account.accessToken = tokenResponse.access_token;

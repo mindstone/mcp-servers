@@ -36,9 +36,19 @@ export function withErrorHandling<T>(
           }],
         };
       }
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      // Unexpected errors: log the raw detail locally for diagnostics, but
+      // return a sanitised message — runtime error text can embed fragments
+      // of vendor-controlled response bodies or environment details.
+      console.error('[Zendesk] Unexpected error while handling tool call:', error);
       return {
-        content: [{ type: 'text', text: JSON.stringify({ ok: false, error: errorMessage }) }],
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            ok: false,
+            error: 'Unexpected internal error while handling the request',
+            code: 'INTERNAL_ERROR',
+          }),
+        }],
       };
     }
   };
