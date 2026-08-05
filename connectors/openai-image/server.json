@@ -52,6 +52,12 @@
           "description": "JSON array of absolute paths the connector may read through (and write generated images through) in-workspace symlinks that resolve into them. Mirrors the host's built-in file-tool declared-Space roots. Malformed or partially-malformed values fail closed to workspace-only. Optional; standalone users omit it.",
           "isRequired": false,
           "format": "string"
+        },
+        {
+          "name": "MCP_HTTP_PORT",
+          "description": "When set, serve MCP over HTTP on this port bound to 127.0.0.1 (loopback only) instead of stdio. Intended for host-managed local deployments; stdio hosts omit it.",
+          "isRequired": false,
+          "format": "number"
         }
       ]
     }

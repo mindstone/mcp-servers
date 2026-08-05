@@ -122,6 +122,7 @@ node dist/index.js
 - `OPENAI_IMAGE_MODEL` — optional model override. Defaults to `gpt-image-2`.
 - `OPENAI_IMAGE_REQUEST_TIMEOUT_MS` — optional override (positive integer ms, max 30 min) for the OpenAI image API timeout. Default: `180000` (3 min). Sized for `quality: 'high'` generation, which OpenAI documents as taking up to ~2 min for complex prompts; lower for tighter bounds.
 - `MCP_ALLOWED_SYMLINK_ROOTS` — optional JSON array of absolute paths. The connector reads (and writes generated images) through in-workspace symlinks whose canonical targets land inside `MCP_WORKSPACE_PATH` **or** one of these declared roots — the same roots the host's built-in file tools trust for declared Spaces. Fail-closed: if the value is missing, empty, malformed JSON, not an array, or **any** entry is non-string / empty / relative, the whole value is rejected and the connector falls back to strict workspace-only containment with one structured stderr warning. Standalone OSS users omit it; Rebel's host injects it automatically from your declared Spaces.
+- `MCP_HTTP_PORT` — optional. When set, the server speaks MCP over HTTP on this port bound to `127.0.0.1` (loopback only, non-loopback `Host` headers are rejected) instead of stdio. Intended for host-managed local deployments; stdio hosts omit it.
 
 ## Host configuration examples
 
