@@ -10,6 +10,7 @@
 
 import { QuickBooksError, USER_AGENT, REQUEST_TIMEOUT_MS, QBO_MINOR_VERSION } from './types.js';
 import { getAccessToken, getBaseUrl, isConfigured, clearTokenCache } from './auth.js';
+import { wrapUntrusted } from './untrusted-content.js';
 
 /**
  * Make an authenticated request to the QuickBooks Online API and return the
@@ -79,6 +80,11 @@ async function qboRequest(
     } catch {
       errorText = await response.text().catch(() => 'Unknown error');
     }
+    // Fault Detail/Message is vendor-controlled text on its way to the model
+    // (QuickBooksError.message -> withErrorHandling -> tool output). Envelope
+    // it so a compromised API response cannot inject instructions or break
+    // out of the surrounding untrusted-content envelope (AGENTS.md #6).
+    errorText = wrapUntrusted(errorText, 'quickbooks:api-error') ?? 'Unknown error';
 
     if (response.status === 401) {
       clearTokenCache();

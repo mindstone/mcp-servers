@@ -9,6 +9,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { QuickBooksError, TOKEN_URL, USER_AGENT, REQUEST_TIMEOUT_MS } from '../types.js';
 import { withErrorHandling } from '../utils.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import {
   setClientId,
   setClientSecret,
@@ -103,9 +104,13 @@ COMMON MISTAKES:
 
       if (!tokenResponse.ok) {
         const errorBody = await tokenResponse.json().catch(() => ({})) as { error_description?: string };
+        // Intuit-controlled text heading to the model — envelope it (AGENTS.md #6).
+        const detail = errorBody?.error_description
+          ? wrapUntrusted(errorBody.error_description, 'quickbooks:oauth-error')
+          : `HTTP ${tokenResponse.status}`;
         return JSON.stringify({
           ok: false,
-          error: `Invalid credentials: ${errorBody?.error_description || `HTTP ${tokenResponse.status}`}`,
+          error: `Invalid credentials: ${detail}`,
           resolution: 'Check your Client ID, Client Secret, and Refresh Token. Refresh tokens expire after 100 days of inactivity.',
         });
       }

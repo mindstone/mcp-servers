@@ -15,6 +15,7 @@
 
 import { QuickBooksError, TOKEN_URL, USER_AGENT, REQUEST_TIMEOUT_MS } from './types.js';
 import { bridgeRequest } from './bridge.js';
+import { wrapUntrusted } from './untrusted-content.js';
 
 // ── Runtime credentials ──
 
@@ -159,6 +160,8 @@ export async function getAccessToken(): Promise<string> {
     } catch {
       errorText = await response.text().catch(() => 'Unknown error');
     }
+    // Intuit-controlled text heading to the model — envelope it (AGENTS.md #6).
+    errorText = wrapUntrusted(errorText, 'quickbooks:oauth-error') ?? 'Unknown error';
     throw new QuickBooksError(
       `OAuth token refresh failed (${response.status}): ${errorText}`,
       'AUTH_FAILED',
