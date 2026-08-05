@@ -59,17 +59,18 @@ COST: FREE — read only.`,
 
       // text and voice_name are external content (the spoken text is whatever
       // was generated, possibly from an injected prompt) — envelope both
-      // (AGENTS.md invariant #6). IDs/models/sources are API enums, not
-      // free text.
+      // (AGENTS.md invariant #6). model_id, source, and content_type are
+      // API-authored strings too; they are expected to be enum-like but are
+      // not validated against a closed grammar, so they are enveloped as well.
       const items = (data.history ?? []).map((item) => ({
         history_item_id: item.history_item_id,
         date_unix: item.date_unix,
         date_iso: item.date_unix ? new Date(item.date_unix * 1000).toISOString() : undefined,
-        model_id: item.model_id,
-        source: item.source,
+        model_id: wrapUntrusted(item.model_id, 'elevenlabs:list_history:model_id'),
+        source: wrapUntrusted(item.source, 'elevenlabs:list_history:source'),
         voice_id: item.voice_id,
         voice_name: wrapUntrusted(item.voice_name, 'elevenlabs:list_history:voice_name'),
-        content_type: item.content_type,
+        content_type: wrapUntrusted(item.content_type, 'elevenlabs:list_history:content_type'),
         characters_used:
           item.character_count_change_from != null && item.character_count_change_to != null
             ? item.character_count_change_to - item.character_count_change_from

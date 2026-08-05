@@ -37,7 +37,7 @@ const phonemeRuleSchema = z.object({
   string_to_replace: z.string().min(1).describe('The word or phrase to replace.'),
   type: z.literal('phoneme'),
   phoneme: z.string().min(1).describe('Phonemic transcription (e.g. "/təˈmeɪtoʊ/").'),
-  alphabet: z.string().min(1).describe('Alphabet of the phoneme string (e.g. "ipa").'),
+  alphabet: z.enum(['ipa', 'arpabet']).describe('Alphabet of the phoneme string ("ipa" or "arpabet").'),
   case_sensitive: z.boolean().optional().describe('Match case-sensitively. Default: true.'),
   word_boundaries: z.boolean().optional().describe('Only match at word boundaries. Default: true.'),
 });
@@ -68,7 +68,7 @@ function shapeRule(rule: PronunciationDictionaryRule, sourcePrefix: string): Rec
     string_to_replace: wrapUntrusted(rule.string_to_replace, `${sourcePrefix}:rule_string`),
     alias: wrapUntrusted(rule.alias, `${sourcePrefix}:rule_alias`),
     phoneme: wrapUntrusted(rule.phoneme, `${sourcePrefix}:rule_phoneme`),
-    alphabet: rule.alphabet,
+    alphabet: wrapUntrusted(rule.alphabet, `${sourcePrefix}:rule_alphabet`),
     case_sensitive: rule.case_sensitive,
     word_boundaries: rule.word_boundaries,
   };
