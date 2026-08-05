@@ -5,6 +5,7 @@ import CreateInvoiceTool from "./create-invoice.tool.js";
 import CreateItemTool from "./create-item.tool.js";
 import CreateManualJournalTool from "./create-manual-journal.tool.js";
 import CreatePaymentTool from "./create-payment.tool.js";
+import CreatePurchaseOrderTool from "./create-purchase-order.tool.js";
 import CreatePayrollTimesheetTool from "./create-payroll-timesheet.tool.js";
 import CreateQuoteTool from "./create-quote.tool.js";
 import CreateTrackingCategoryTool from "./create-tracking-category.tool.js";
@@ -21,5 +22,6 @@ export const CreateTools = [
   CreateBankTransactionTool,
   CreatePayrollTimesheetTool,
   CreateTrackingCategoryTool,
-  CreateTrackingOptionsTool
+  CreateTrackingOptionsTool,
+  CreatePurchaseOrderTool
 ];

@@ -1,6 +1,29 @@
 import { ToolCallback } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ToolDefinition } from "../types/tool-definition.js";
 import { ZodRawShapeCompat } from "@modelcontextprotocol/sdk/server/zod-compat.js";
+import { wrapUntrusted } from "../untrusted-content.js";
+
+/**
+ * AGENTS.md security invariant #6: any text block a tool returns can carry
+ * Xero-authored (attacker-controllable) text — contact names, line item
+ * descriptions, references, history details/changes, validation messages.
+ * Envelope every text block here, at the single factory every tool is built
+ * with, so individual tools cannot forget to wrap their external text.
+ */
+function envelopToolResult(
+  result: CallToolResult,
+  source: string,
+): CallToolResult {
+  return {
+    ...result,
+    content: result.content?.map((block) =>
+      block.type === "text"
+        ? { ...block, text: wrapUntrusted(block.text, source) ?? block.text }
+        : block,
+    ),
+  };
+}
 
 export const CreateXeroTool =
   <Args extends ZodRawShapeCompat>(
@@ -13,5 +36,9 @@ export const CreateXeroTool =
     name: name,
     description: description,
     schema: schema,
-    handler: handler,
+    handler: (async (args, extra) =>
+      envelopToolResult(
+        await handler(args, extra),
+        `xero.${name}`,
+      )) as ToolCallback<Args>,
   });

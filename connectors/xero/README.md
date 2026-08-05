@@ -125,7 +125,31 @@ In this case, use the following configuration:
 
 NOTE: The `XERO_CLIENT_BEARER_TOKEN` will take precedence over the `XERO_CLIENT_ID` if defined.
 
+### Write access gate (`XERO_ALLOW_WRITES`)
+
+Write tools (create/update/delete, adding history notes, emailing invoices) are **disabled by default**. They refuse to run unless the host environment sets `XERO_ALLOW_WRITES=1` (the value must be exactly `1`). Read-only tools (`list-*`, `get-*`) are unaffected.
+
+This guard is secure-by-default: it prevents an agent from accidentally performing a destructive write against a real Xero organisation. Only opt in when you intend writes to occur:
+
+```json
+{
+  "mcpServers": {
+    "xero": {
+      "command": "npx",
+      "args": ["-y", "@mindstone/mcp-server-xero@latest"],
+      "env": {
+        "XERO_CLIENT_ID": "your_client_id_here",
+        "XERO_CLIENT_SECRET": "your_client_secret_here",
+        "XERO_ALLOW_WRITES": "1"
+      }
+    }
+  }
+}
+```
+
 ### Available MCP Commands
+
+> **Tool naming:** this connector's tools use unprefixed dash-case names (e.g. `list-invoices`, `create-contact`), inherited from its fork lineage. Sibling connectors use prefixed snake_case names (e.g. `list_quickbooks_invoices`). In multi-server hosts, unprefixed generic names can collide with other servers' tools. Renaming would be a breaking change for existing configurations, so the names are kept as-is; if your host supports namespacing/aliasing, prefer enabling it for this server.
 
 - `list-accounts`: Retrieve a list of accounts
 - `list-contacts`: Retrieve a list of contacts from Xero
@@ -134,6 +158,9 @@ NOTE: The `XERO_CLIENT_BEARER_TOKEN` will take precedence over the `XERO_CLIENT_
 - `list-items`: Retrieve a list of items
 - `list-organisation-details`: Retrieve details about an organisation
 - `list-profit-and-loss`: Retrieve a profit and loss report
+- `list-bank-summary`: Retrieve the bank summary report (per-account balances and movements)
+- `list-budget-summary`: Retrieve the budget summary report (budget vs actuals)
+- `list-executive-summary`: Retrieve the executive summary report (key financial metrics snapshot)
 - `list-quotes`: Retrieve a list of quotes
 - `list-tax-rates`: Retrieve a list of tax rates
 - `list-payments`: Retrieve a list of payments
@@ -152,11 +179,13 @@ NOTE: The `XERO_CLIENT_BEARER_TOKEN` will take precedence over the `XERO_CLIENT_
 - `list-contact-groups`: Retrieve a list of contact groups
 - `list-currencies`: Retrieve currencies enabled in the connected Xero organisation
 - `list-invoice-attachments`: Retrieve files attached to a Xero invoice
+- `list-purchase-orders`: Retrieve a list of purchase orders
 - `create-contact`: Create a new contact
 - `create-credit-note`: Create a new credit note
 - `create-invoice`: Create a new invoice. Supports optional `currencyCode`, such as `USD`, when that currency is enabled in the connected Xero organisation.
 - `create-payment`: Create a new payment
 - `create-quote`: Create a new quote
+- `create-purchase-order`: Create a new purchase order (requires `XERO_ALLOW_WRITES=1`)
 - `create-credit-note`: Create a new credit note
 - `create-payroll-timesheet`: Create a new Payroll Timesheet
 - `update-contact`: Update an existing contact
@@ -179,6 +208,7 @@ NOTE: The `XERO_CLIENT_BEARER_TOKEN` will take precedence over the `XERO_CLIENT_
 - `add-payroll-timesheet-line`: Add new line on an existing Payroll Timesheet
 - `delete-payroll-timesheet`: Delete an existing Payroll Timesheet
 - `get-payroll-timesheet`: Retrieve an existing Payroll Timesheet
+- `email-invoice`: Email a copy of an AUTHORISED invoice to its related contact (requires `XERO_ALLOW_WRITES=1`)
 
 For detailed API documentation, please refer to the [MCP Protocol Specification](https://modelcontextprotocol.io/).
 

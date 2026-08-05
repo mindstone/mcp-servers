@@ -32,6 +32,6 @@ export async function assertXeroCurrencyEnabled(
     : "none";
 
   throw new Error(
-    `Currency ${currencyCode} is not enabled in this Xero organisation. Enabled currencies: ${enabledList}. Add ${currencyCode} in Xero before creating or updating invoices in that currency.`,
+    `Currency ${currencyCode} is not enabled in this Xero organisation. Enabled currencies: ${enabledList}. Add ${currencyCode} in Xero before creating or updating records in that currency.`,
   );
 }

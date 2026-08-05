@@ -40,6 +40,13 @@
           "isRequired": false,
           "isSecret": true,
           "format": "string"
+        },
+        {
+          "name": "XERO_ALLOW_WRITES",
+          "description": "Optional write gate. Set to \"1\" to enable Xero write tools (create/update/delete, notes, email-invoice); unset or any other value keeps the connector read-only.",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
         }
       ]
     }
