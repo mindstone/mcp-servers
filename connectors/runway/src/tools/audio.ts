@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { runwayFetch, resolveMediaInput } from '../client.js';
-import { type TaskResponse, VOICE_PRESETS, DUBBING_LANGUAGES } from '../types.js';
+import { RunwayError, type TaskResponse, VOICE_PRESETS, DUBBING_LANGUAGES } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 
 export function registerAudioTools(server: McpServer): void {
@@ -11,22 +11,32 @@ export function registerAudioTools(server: McpServer): void {
     {
       description:
         'Generate spoken audio from text using ElevenLabs voices via Runway. ' +
-        '49 voice presets available. Can also use custom voice IDs. ' +
+        '49 voice presets available. Can also use custom voice IDs (eleven_multilingual_v2 only). ' +
+        'MODELS: eleven_multilingual_v2 (default), eleven_v3 (expressive; supports audio tags like [laughs] and [whispers] in the text; preset voices only). ' +
         'COST: 1 credit per 50 characters. WORKFLOW: Returns task_id → poll or use wait_for_runway_task.',
       inputSchema: z.object({
-        text: z.string().describe('Text to speak. Max 1000 characters.'),
-        voice: z.string().optional().describe('Voice preset name or custom voice UUID. Default: Maya.'),
+        text: z.string().describe('Text to speak. Max 1000 characters (5000 for eleven_v3, which also accepts audio tags like [laughs]).'),
+        voice: z.string().optional().describe('Voice preset name or custom voice UUID (custom voices require eleven_multilingual_v2). Default: Maya.'),
+        model: z.enum(['eleven_multilingual_v2', 'eleven_v3']).optional().describe('Speech model. Default: eleven_multilingual_v2.'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const voice = args.voice || 'Maya';
+      const model = args.model || 'eleven_multilingual_v2';
       const isCustomVoice = voice.includes('-') && voice.length > 20;
+      if (isCustomVoice && model === 'eleven_v3') {
+        throw new RunwayError(
+          'eleven_v3 supports Runway preset voices only',
+          'INVALID_INPUT',
+          'Use a voice preset name (e.g. Maya) with eleven_v3, or switch to eleven_multilingual_v2 to use a custom voice.',
+        );
+      }
       const voicePayload = isCustomVoice
         ? { type: 'custom', id: voice }
         : { type: 'runway-preset', presetId: voice };
       const body = {
-        model: 'eleven_multilingual_v2',
+        model,
         promptText: args.text,
         voice: voicePayload,
       };
@@ -35,9 +45,9 @@ export function registerAudioTools(server: McpServer): void {
       const textLen = args.text.length;
       const estCredits = Math.ceil(textLen / 50);
       return JSON.stringify({
-        ok: true, task_id: result.id, status: 'PENDING', voice,
+        ok: true, task_id: result.id, status: 'PENDING', voice, model,
         estimated_credits: estCredits, estimated_cost: `$${(estCredits * 0.01).toFixed(2)}`,
-        message: `Speech generation started (voice: ${voice}). Poll with check_runway_task("${result.id}") every 10s, or use wait_for_runway_task.`,
+        message: `Speech generation started (voice: ${voice}, model: ${model}). Poll with check_runway_task("${result.id}") every 10s, or use wait_for_runway_task.`,
       });
     }),
   );
