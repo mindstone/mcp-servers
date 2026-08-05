@@ -244,6 +244,18 @@ describe('gmail settings write/read tools', () => {
     ).rejects.toMatchObject({ code: ErrorCode.InvalidParams });
   });
 
+  it('rejects a non-boolean clear_end_time instead of coercing it to false', async () => {
+    const handlers = await loadHandlers();
+    await expect(
+      handlers.handleUpdateWorkspaceVacationResponder({
+        email: TEST_EMAIL,
+        enabled: true,
+        // Wrong-typed direct-handler input must fail closed, not vanish.
+        clear_end_time: 'true' as unknown as boolean,
+      }),
+    ).rejects.toMatchObject({ code: ErrorCode.InvalidParams });
+  });
+
   it('does not inherit an already-past scheduled end when re-enabling', async () => {
     const pastEnd = String(Date.now() - 24 * 60 * 60 * 1000);
     let sentBody: Record<string, unknown> | undefined;

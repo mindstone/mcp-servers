@@ -252,7 +252,17 @@ function readAliasedNumber(args: Record<string, unknown>, canonicalKey: string, 
 
 function readAliasedBoolean(args: Record<string, unknown>, canonicalKey: string, legacyKey: string): boolean | undefined {
   const value = args[canonicalKey] ?? args[legacyKey];
-  return typeof value === 'boolean' ? value : undefined;
+  if (value === undefined || value === null) return undefined;
+  // Fail closed on wrong-typed input (e.g. the string "true") rather than
+  // silently treating it as absent — for write flags like clear_end_time a
+  // coerced default can mask what the caller asked for.
+  if (typeof value !== 'boolean') {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      `"${canonicalKey}" must be a boolean (true/false), got ${typeof value}`
+    );
+  }
+  return value;
 }
 
 function readAliasedStringArray(args: Record<string, unknown>, canonicalKey: string, legacyKey: string): string[] | undefined {
