@@ -152,3 +152,26 @@ export const mockCreatedTimeAway = {
   days: 2,
   note: 'Short break',
 };
+
+export const mockTimeAwayAllocations = [
+  {
+    id: 'alloc-001',
+    personId: 'person-001',
+    type: 'specific',
+    effectiveDate: '2024-01-01',
+    timeAwayPolicyId: 'policy-001',
+    timeAwayPolicy: { id: 'policy-001', name: 'Standard PTO' },
+    createdAt: '2024-01-01T09:00:00.000Z',
+    updatedAt: '2024-01-01T09:00:00.000Z',
+  },
+  {
+    id: 'alloc-002',
+    personId: 'person-002',
+    type: 'placeOfWork',
+    effectiveDate: null,
+    timeAwayPolicyId: 'policy-002',
+    timeAwayPolicy: { id: 'policy-002', name: 'US PTO' },
+    createdAt: '2024-01-02T09:00:00.000Z',
+    updatedAt: '2024-01-02T09:00:00.000Z',
+  },
+];

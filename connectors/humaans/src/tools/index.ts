@@ -3,3 +3,4 @@ export { registerPeopleTools } from './people.js';
 export { registerJobRoleTools } from './job-roles.js';
 export { registerCompanyTools } from './company.js';
 export { registerTimeAwayTools } from './time-away.js';
+export { registerTeamTools } from './teams.js';

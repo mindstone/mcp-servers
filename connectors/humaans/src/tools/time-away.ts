@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { humaansFetch } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
+import { sanitizeList, sanitizeTimeAwayEntry } from '../sanitize.js';
 import type { HumaansListResponse } from '../types.js';
 
 function paginationHint(total: number, skip: number, count: number): string {
@@ -72,7 +73,7 @@ RELATED TOOLS:
       const hint = paginationHint(result.total, result.skip, result.data.length);
       return JSON.stringify({
         ok: true,
-        timeAway: result.data,
+        timeAway: sanitizeList(result.data, sanitizeTimeAwayEntry, 'humaans:list_humaans_time_away'),
         count: result.data.length,
         total: result.total,
         pagination: hint,
@@ -132,7 +133,11 @@ COMMON MISTAKES:
         body: JSON.stringify(body),
       });
 
-      return JSON.stringify({ ok: true, message: 'Time away request created.', timeAway: created });
+      return JSON.stringify({
+        ok: true,
+        message: 'Time away request created.',
+        timeAway: sanitizeTimeAwayEntry(created, 'humaans:create_humaans_time_away'),
+      });
     }),
   );
 
@@ -175,6 +180,176 @@ RELATED TOOLS:
         count: result.data.length,
         total: result.total,
         pagination: hint,
+      });
+    }),
+  );
+
+  server.registerTool(
+    'list_humaans_time_away_allocations',
+    {
+      description:
+        `List time away allocations in Humaans — which time off policy applies to each person, and from which date.
+
+Allocations link a person to a time away policy (the policy defines their allowance and balances).
+Use this to answer "which PTO policy is Jane on?" or "who is on the US policy?".
+
+Example: { "personId": "VMB1yzL5uL8VvNNCJc9rykJz" }
+
+RELATED TOOLS:
+- list_humaans_people: Find personId to filter by
+- list_humaans_time_away: See actual time off taken
+- list_humaans_time_away_types: See available time away types`,
+      inputSchema: z.object({
+        personId: z.string().optional()
+          .describe('Filter by person ID'),
+        limit: z.number().min(1).max(250).optional()
+          .describe('Max results (default 100, max 250)'),
+        skip: z.number().min(0).optional()
+          .describe('Number of results to skip'),
+      }),
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      if (!isConfigured()) return noApiKeyError();
+
+      const limit = Math.min(Math.max(args.limit ?? 100, 1), 250);
+      const skip = Math.max(args.skip ?? 0, 0);
+      const params = new URLSearchParams();
+      params.set('$limit', String(limit));
+      params.set('$skip', String(skip));
+
+      if (args.personId) params.set('personId', args.personId);
+
+      const result = await humaansFetch<HumaansListResponse<Record<string, unknown>>>(
+        `/time-away-allocations?${params.toString()}`,
+      );
+
+      const hint = paginationHint(result.total, result.skip, result.data.length);
+      return JSON.stringify({
+        ok: true,
+        allocations: result.data,
+        count: result.data.length,
+        total: result.total,
+        pagination: hint,
+      });
+    }),
+  );
+
+  server.registerTool(
+    'cancel_humaans_time_away',
+    {
+      description:
+        `Cancel a time away entry in Humaans (deletes it permanently).
+
+Use this to withdraw a time off request or remove an incorrect entry.
+The deletion cannot be undone — confirm the entry with list_humaans_time_away first.
+
+Example: { "timeAwayId": "YLlqHE4DLvGtFJ7L2qro6bTF" }
+
+RELATED TOOLS:
+- list_humaans_time_away: Find the timeAwayId to cancel
+- create_humaans_time_away: Create a new request instead`,
+      inputSchema: z.object({
+        timeAwayId: z.string().min(1)
+          .describe('Time away entry ID (from list_humaans_time_away)'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      if (!isConfigured()) return noApiKeyError();
+
+      const result = await humaansFetch<{ id: string; deleted: boolean }>(
+        `/time-away/${encodeURIComponent(args.timeAwayId)}`,
+        { method: 'DELETE' },
+      );
+
+      return JSON.stringify({
+        ok: true,
+        message: 'Time away entry cancelled.',
+        id: result.id,
+        deleted: result.deleted,
+      });
+    }),
+  );
+
+  server.registerTool(
+    'approve_humaans_time_away',
+    {
+      description:
+        `Approve a pending time away request in Humaans (manager action).
+
+Sets the request status to approved. Use list_humaans_time_away with
+requestStatus="pending" to find requests awaiting review.
+
+Example: { "timeAwayId": "YLlqHE4DLvGtFJ7L2qro6bTF" }
+
+RELATED TOOLS:
+- decline_humaans_time_away: Decline the request instead
+- list_humaans_time_away: Find pending requests`,
+      inputSchema: z.object({
+        timeAwayId: z.string().min(1)
+          .describe('Time away entry ID (from list_humaans_time_away)'),
+        reviewNote: z.string().optional()
+          .describe('Optional note attached to the approval (visible to the employee)'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      if (!isConfigured()) return noApiKeyError();
+
+      const body: Record<string, unknown> = { requestStatus: 'approved' };
+      if (args.reviewNote) body.reviewNote = args.reviewNote;
+
+      const updated = await humaansFetch<Record<string, unknown>>(
+        `/time-away/${encodeURIComponent(args.timeAwayId)}`,
+        { method: 'PATCH', body: JSON.stringify(body) },
+      );
+
+      return JSON.stringify({
+        ok: true,
+        message: 'Time away request approved.',
+        timeAway: sanitizeTimeAwayEntry(updated, 'humaans:approve_humaans_time_away'),
+      });
+    }),
+  );
+
+  server.registerTool(
+    'decline_humaans_time_away',
+    {
+      description:
+        `Decline a pending time away request in Humaans (manager action).
+
+Sets the request status to declined. Consider including a reviewNote so the
+employee knows why.
+
+Example: { "timeAwayId": "YLlqHE4DLvGtFJ7L2qro6bTF", "reviewNote": "Dates clash with the release freeze" }
+
+RELATED TOOLS:
+- approve_humaans_time_away: Approve the request instead
+- list_humaans_time_away: Find pending requests`,
+      inputSchema: z.object({
+        timeAwayId: z.string().min(1)
+          .describe('Time away entry ID (from list_humaans_time_away)'),
+        reviewNote: z.string().optional()
+          .describe('Optional note explaining the decline (visible to the employee)'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      if (!isConfigured()) return noApiKeyError();
+
+      const body: Record<string, unknown> = { requestStatus: 'declined' };
+      if (args.reviewNote) body.reviewNote = args.reviewNote;
+
+      const updated = await humaansFetch<Record<string, unknown>>(
+        `/time-away/${encodeURIComponent(args.timeAwayId)}`,
+        { method: 'PATCH', body: JSON.stringify(body) },
+      );
+
+      return JSON.stringify({
+        ok: true,
+        message: 'Time away request declined.',
+        timeAway: sanitizeTimeAwayEntry(updated, 'humaans:decline_humaans_time_away'),
       });
     }),
   );

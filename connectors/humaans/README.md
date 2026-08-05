@@ -9,7 +9,7 @@ Humaans HR platform MCP server for Model Context Protocol hosts. Query employee 
 
 - **Version:** [0.2.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-humaans)
 - **Auth:** API key ([`HUMAANS_API_KEY`](./server.json))
-- **Tools:** [11](./src/tools/) (people, job-roles, time-away, company)
+- **Tools:** [16](./src/tools/) (people, job-roles, time-away, company, teams)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -114,7 +114,7 @@ node dist/index.js
 }
 ```
 
-## Tools (11)
+## Tools (16)
 
 ### Configuration
 - `configure_humaans_api_key` — Configure the Humaans API access token
@@ -123,6 +123,7 @@ node dist/index.js
 - `get_humaans_me` — Get the current authenticated user's profile
 - `list_humaans_people` — List employees
 - `get_humaans_person` — Get full employee profile by ID
+- `list_humaans_teams` — List team names with member counts (derived from the people directory; Humaans has no dedicated teams endpoint)
 
 ### Job roles
 - `list_humaans_job_roles` — List job role history for employees
@@ -132,10 +133,19 @@ node dist/index.js
 - `list_humaans_time_away` — List time-away entries (PTO, sick leave, etc.)
 - `create_humaans_time_away` — Create a time-away request
 - `list_humaans_time_away_types` — List available time-away types
+- `list_humaans_time_away_allocations` — List time-away allocations (which policy applies to each person)
+- `cancel_humaans_time_away` — Cancel (permanently delete) a time-away entry
+- `approve_humaans_time_away` — Approve a pending time-away request (manager action)
+- `decline_humaans_time_away` — Decline a pending time-away request (manager action)
 
 ### Company
 - `list_humaans_locations` — List company locations/offices
 - `get_humaans_company` — Get company information
+
+## Data handling
+
+- Person list responses are field-allowlisted; person detail responses strip sensitive fields (tax ID, personal email/phone, home address, birthday, profile photo).
+- Free-text fields authored in Humaans (time-away `note`/`reviewNote`, job-role `note`) are returned inside `<untrusted-content>` envelopes so the model treats them as data, not instructions.
 
 ## Licence
 

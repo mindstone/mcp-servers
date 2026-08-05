@@ -14,7 +14,7 @@ describe('Smoke test — tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 11 tools with correct names', async () => {
+  it('registers exactly 16 tools with correct names', async () => {
     mswServer.use(...createHumaansHandlers());
 
     testClient = await createTestClient({
@@ -27,10 +27,13 @@ describe('Smoke test — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(11);
+    expect(toolsResult.tools).toHaveLength(16);
     expect(toolNames).toEqual([
+      'approve_humaans_time_away',
+      'cancel_humaans_time_away',
       'configure_humaans_api_key',
       'create_humaans_time_away',
+      'decline_humaans_time_away',
       'get_humaans_company',
       'get_humaans_job_role',
       'get_humaans_me',
@@ -38,7 +41,9 @@ describe('Smoke test — tool registration', () => {
       'list_humaans_job_roles',
       'list_humaans_locations',
       'list_humaans_people',
+      'list_humaans_teams',
       'list_humaans_time_away',
+      'list_humaans_time_away_allocations',
       'list_humaans_time_away_types',
     ]);
   });

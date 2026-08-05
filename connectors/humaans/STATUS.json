@@ -10,12 +10,13 @@
     ]
   },
   "tools": {
-    "count": 11,
+    "count": 16,
     "domains": [
       "people",
       "job-roles",
       "time-away",
-      "company"
+      "company",
+      "teams"
     ]
   },
   "surface": "cloud-api",
