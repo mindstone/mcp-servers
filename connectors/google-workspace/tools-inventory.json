@@ -140,6 +140,22 @@
       }
     },
     {
+      "name": "update_workspace_vacation_responder",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "list_workspace_send_as",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": true
+      }
+    },
+    {
       "name": "list_workspace_drafts",
       "annotations": {
         "readOnlyHint": true,

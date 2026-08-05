@@ -828,6 +828,109 @@ export async function handleGetWorkspaceGmailSettings(params: { email?: string }
   });
 }
 
+/**
+ * Parses a vacation start/end timestamp per the repo's epoch-ms rules: a number
+ * (epoch ms), a digit-only string in the unambiguous epoch-ms window
+ * [1e12, 1e14), or a parseable date string. Anything else is rejected.
+ */
+function parseEpochMsField(value: unknown, fieldName: string): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new McpError(ErrorCode.InvalidParams, `${fieldName} must be a positive epoch-ms number`);
+    }
+    return value;
+  }
+  if (typeof value === 'string') {
+    if (/^\d+$/.test(value)) {
+      const parsed = Number(value);
+      if (parsed >= 1e12 && parsed < 1e14) return parsed;
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `${fieldName} digit-only strings must be epoch milliseconds (e.g. 1735689600000), not seconds`
+      );
+    }
+    const parsed = Date.parse(value);
+    if (Number.isNaN(parsed)) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `${fieldName} must be epoch milliseconds or a parseable date string (e.g. "2026-08-07")`
+      );
+    }
+    return parsed;
+  }
+  throw new McpError(ErrorCode.InvalidParams, `${fieldName} must be a number or a date string`);
+}
+
+export interface UpdateVacationResponderToolParams {
+  email?: string;
+  enabled?: boolean;
+  response_subject?: string;
+  responseSubject?: string;
+  response_body?: string;
+  responseBody?: string;
+  start_time?: number | string;
+  startTime?: number | string;
+  end_time?: number | string;
+  endTime?: number | string;
+  contacts_only?: boolean;
+  contactsOnly?: boolean;
+  domain_only?: boolean;
+  domainOnly?: boolean;
+}
+
+export async function handleUpdateWorkspaceVacationResponder(params: UpdateVacationResponderToolParams) {
+  await initializeServices();
+  const rawParams = params as unknown as Record<string, unknown>;
+  const email = await resolveEmail(params);
+
+  const enabled = readAliasedBoolean(rawParams, 'enabled', 'enabled');
+  if (enabled === undefined) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'Missing required parameter: "enabled" (true to turn the out-of-office reply on, false to turn it off)'
+    );
+  }
+
+  const startTime = parseEpochMsField(rawParams.start_time ?? rawParams.startTime, 'start_time');
+  const endTime = parseEpochMsField(rawParams.end_time ?? rawParams.endTime, 'end_time');
+  if (startTime !== undefined && endTime !== undefined && endTime <= startTime) {
+    throw new McpError(ErrorCode.InvalidParams, 'end_time must be after start_time');
+  }
+
+  return accountManager.withTokenRenewal(email, async () => {
+    try {
+      const result = await gmailService.updateVacationResponder({
+        email,
+        enabled,
+        responseSubject: readAliasedString(rawParams, 'response_subject', 'responseSubject'),
+        responseBody: readAliasedString(rawParams, 'response_body', 'responseBody'),
+        startTime,
+        endTime,
+        contactsOnly: readAliasedBoolean(rawParams, 'contacts_only', 'contactsOnly'),
+        domainOnly: readAliasedBoolean(rawParams, 'domain_only', 'domainOnly')
+      });
+      return wrapUntrustedJsonStrings(result, 'google-workspace:gmail:vacation-responder');
+    } catch (error) {
+      throw toMcpError(error, 'Failed to update vacation responder');
+    }
+  });
+}
+
+export async function handleListWorkspaceSendAs(params: { email?: string }) {
+  await initializeServices();
+  const email = await resolveEmail(params);
+
+  return accountManager.withTokenRenewal(email, async () => {
+    try {
+      const result = await gmailService.listSendAs({ email });
+      return wrapUntrustedJsonStrings(result, 'google-workspace:gmail:send-as');
+    } catch (error) {
+      throw toMcpError(error, 'Failed to list send-as aliases');
+    }
+  });
+}
+
 export async function handleManageWorkspaceDraft(params: ManageDraftParams) {
   await initializeServices();
   const rawParams = params as unknown as Record<string, unknown>;

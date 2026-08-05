@@ -175,6 +175,43 @@ export interface GetGmailSettingsParams {
   email: string;
 }
 
+export interface UpdateVacationResponderParams {
+  email: string;
+  /** Turn the auto-reply on or off. */
+  enabled: boolean;
+  responseSubject?: string;
+  /** Plain-text auto-reply body. */
+  responseBody?: string;
+  /** Epoch milliseconds; omit to start immediately when enabling. */
+  startTime?: number;
+  /** Epoch milliseconds; omit for no scheduled end. */
+  endTime?: number;
+  /** Only auto-reply to people in the user's contacts. */
+  contactsOnly?: boolean;
+  /** Only auto-reply to people in the user's Workspace domain. */
+  domainOnly?: boolean;
+}
+
+export interface VacationResponderState {
+  enabled: boolean;
+  responseSubject?: string;
+  message?: string;
+  startTime?: string;
+  endTime?: string;
+  contactsOnly?: boolean;
+  domainOnly?: boolean;
+}
+
+export interface SendAsAlias {
+  sendAsEmail: string;
+  displayName?: string;
+  replyToAddress?: string;
+  signature?: string;
+  isPrimary?: boolean;
+  isDefault?: boolean;
+  verificationStatus?: string;
+}
+
 export interface GetGmailSettingsResponse {
   profile: {
     emailAddress: string;

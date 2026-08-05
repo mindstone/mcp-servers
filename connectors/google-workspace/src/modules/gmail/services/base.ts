@@ -7,6 +7,9 @@ import {
   SendEmailResponse,
   GetGmailSettingsParams,
   GetGmailSettingsResponse,
+  UpdateVacationResponderParams,
+  VacationResponderState,
+  SendAsAlias,
   GmailError,
   GmailModuleConfig,
   GetEmailsResponse,
@@ -144,6 +147,16 @@ export class GmailService extends BaseGoogleService<ReturnType<typeof google.gma
   async getWorkspaceGmailSettings(params: GetGmailSettingsParams): Promise<GetGmailSettingsResponse> {
     await this.getGmailClient(params.email);
     return this.settingsService.getWorkspaceGmailSettings(params);
+  }
+
+  async updateVacationResponder(params: UpdateVacationResponderParams): Promise<VacationResponderState> {
+    await this.getGmailClient(params.email);
+    return this.settingsService.updateVacationResponder(params);
+  }
+
+  async listSendAs(params: GetGmailSettingsParams): Promise<{ sendAs: SendAsAlias[] }> {
+    await this.getGmailClient(params.email);
+    return this.settingsService.listSendAs(params);
   }
 
   // Consolidated Label Management Methods

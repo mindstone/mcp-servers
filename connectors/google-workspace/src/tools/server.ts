@@ -33,6 +33,9 @@ import {
   handleComposeWorkspaceEmail,
   handleSendWorkspaceEmail,
   handleGetWorkspaceGmailSettings,
+  handleUpdateWorkspaceVacationResponder,
+  handleListWorkspaceSendAs,
+  UpdateVacationResponderToolParams,
   handleManageWorkspaceDraft,
   handleManageWorkspaceLabel,
   handleManageWorkspaceLabelAssignment,
@@ -441,6 +444,14 @@ export class GSuiteServer {
           case 'get_workspace_gmail_settings':
             assertBaseToolArguments(args);
             result = await handleGetWorkspaceGmailSettings(args);
+            break;
+          case 'update_workspace_vacation_responder':
+            assertBaseToolArguments(args);
+            result = await handleUpdateWorkspaceVacationResponder(args as UpdateVacationResponderToolParams);
+            break;
+          case 'list_workspace_send_as':
+            assertBaseToolArguments(args);
+            result = await handleListWorkspaceSendAs(args);
             break;
 
           // Gmail Quick Actions

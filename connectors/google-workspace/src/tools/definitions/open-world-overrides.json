@@ -69,6 +69,7 @@
   "list_workspace_label_filters": true,
   "list_workspace_labels": true,
   "list_workspace_presentation_slides": true,
+  "list_workspace_send_as": true,
   "list_workspace_spreadsheet_sheets": true,
   "manage_workspace_attachment": true,
   "manage_workspace_calendar_event": true,
@@ -104,6 +105,7 @@
   "update_workspace_label": true,
   "update_workspace_label_filter": true,
   "update_workspace_spreadsheet_values": true,
+  "update_workspace_vacation_responder": true,
   "upload_drive_file": true,
   "upload_workspace_attachment": true
 }

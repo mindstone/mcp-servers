@@ -9,6 +9,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+- Gmail vacation responder and send-as read: new `update_workspace_vacation_responder` (turn the out-of-office auto-reply on/off, set subject/body, schedule start/end, restrict to contacts or domain) and `list_workspace_send_as` (list send-as aliases incl. signatures) tools. The update merges with the existing responder settings instead of wiping them (the Gmail API replaces the whole resource otherwise), defaults the start time to now when enabling, and accepts epoch-ms or ISO date strings for scheduling. `update_workspace_vacation_responder` carries `destructiveHint`; both use the already-registered `gmail.settings.basic` scope.
 - Contacts write support: new `create_workspace_contact` and `update_workspace_contact` tools (name, email, phone, organization, job title, notes). Updates replace only the fields you pass and leave the rest of the contact untouched. Both carry `destructiveHint` and require the full Contacts permission — accounts that only granted read access get reconnect guidance. Write results are wrapped in `<untrusted-content>` envelopes like the existing read tools.
 
 ### Fixed
