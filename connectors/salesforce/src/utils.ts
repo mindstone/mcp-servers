@@ -1,5 +1,6 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ConnectorError } from './types.js';
+import { wrapUntrusted } from './untrusted-content.js';
 
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
 
@@ -164,6 +165,40 @@ export function validateAndMergeCustomFields(
 }
 
 export const ALLOWED_FILTER_OPERATORS = new Set(['=', '!=', '<', '>', '<=', '>=', 'LIKE']);
+
+/**
+ * Keys whose values are structural identifiers, not user-authored text: record
+ * IDs are copied verbatim into follow-up tool calls (update, convert, link), so
+ * enveloping them would corrupt that flow. Everything else reachable inside a
+ * Salesforce record (names, emails, descriptions, subjects, …) is authored in
+ * the external system and MUST be enveloped (AGENTS.md invariant #6, FOX-3490).
+ */
+function isStructuralRecordKey(key: string): boolean {
+  return key === 'Id' || key === 'attributes' || key.endsWith('Id');
+}
+
+function wrapRecordValue(value: unknown, source: string): unknown {
+  if (typeof value === 'string') return wrapUntrusted(value, source);
+  if (Array.isArray(value)) return value.map((item) => wrapRecordValue(item, source));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        isStructuralRecordKey(key) ? item : wrapRecordValue(item, source),
+      ]),
+    );
+  }
+  return value;
+}
+
+/**
+ * Envelope every external-text field in a list of Salesforce records before
+ * they are returned to the LLM. Structural keys (Id, *Id, attributes) pass
+ * through raw so downstream tool calls can use them as identifiers.
+ */
+export function sanitizeRecords(records: unknown[], source: string): unknown[] {
+  return records.map((record) => wrapRecordValue(record, source));
+}
 
 export function checkSaveResult(
   result: { success: boolean; errors?: unknown[] } | Array<{ success: boolean; errors?: unknown[] }>,

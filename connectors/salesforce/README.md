@@ -187,6 +187,7 @@ Then call `salesforce_connect_account` to start the OAuth flow.
 - OAuth credentials are stored under `SALESFORCE_CONFIG_DIR` (default `~/.mcp/salesforce`) with restrictive directory and file permissions.
 - Write and disconnect tools are marked so capable hosts can ask for confirmation before changing Salesforce data.
 - SOQL helper paths escape string and `LIKE` values, strip comments quote-safely before applying the query limit cap, and enforce a maximum of 200 records for raw SOQL queries.
+- Record text returned by read tools is wrapped in `<untrusted-content>` envelopes so Salesforce-authored field values are presented to the model as data, not instructions.
 
 ## Licence
 

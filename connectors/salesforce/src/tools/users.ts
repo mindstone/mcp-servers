@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeSOQLLike, validateFields, isValidQueryFieldName } from '../utils.js';
+import { withErrorHandling, escapeSOQLLike, validateFields, isValidQueryFieldName, sanitizeRecords } from '../utils.js';
 import { withConnection } from '../client.js';
 
 export function registerUserTools(server: McpServer): void {
@@ -32,7 +32,7 @@ export function registerUserTools(server: McpServer): void {
         const limit = Math.min(Math.max(1, args.limit ?? 50), 200);
         query += ` LIMIT ${limit}`;
         const result = await conn.query(query);
-        return JSON.stringify({ ok: true, records: result.records, totalSize: result.totalSize });
+        return JSON.stringify({ ok: true, records: sanitizeRecords(result.records, 'salesforce:get_users:records'), totalSize: result.totalSize });
       });
     }),
   );

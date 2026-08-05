@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Security
+
+- Envelope every record field returned by `salesforce_query`, `salesforce_get_records`, and all `salesforce_get_*` tools in `<untrusted-content>` tags so org-authored text (names, emails, descriptions, subjects) is treated as data, not instructions (FOX-3490). Record IDs stay raw so they can be reused in follow-up calls. Org-authored labels in `salesforce_describe_object` and `salesforce_list_objects` are enveloped too.
+
 ## [0.1.3] - 2026-06-12
 
 ### Changed

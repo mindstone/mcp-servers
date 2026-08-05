@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, checkSaveResult } from '../utils.js';
+import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, checkSaveResult, sanitizeRecords } from '../utils.js';
 import { withConnection } from '../client.js';
 import { ConnectorError, type SaveResult } from '../types.js';
 
@@ -34,7 +34,7 @@ export function registerContactTools(server: McpServer): void {
         const limit = Math.min(Math.max(1, args.limit ?? 50), 200);
         query += ` LIMIT ${limit}`;
         const result = await conn.query(query);
-        return JSON.stringify({ ok: true, records: result.records, totalSize: result.totalSize });
+        return JSON.stringify({ ok: true, records: sanitizeRecords(result.records, 'salesforce:get_contacts:records'), totalSize: result.totalSize });
       });
     }),
   );

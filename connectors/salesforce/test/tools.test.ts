@@ -69,7 +69,11 @@ describe('Tool tests — Salesforce MCP server', () => {
     expect(result.json).toHaveProperty('ok', true);
     expect(result.json.records).toBeDefined();
     expect(result.json.records.length).toBeGreaterThan(0);
-    expect(result.json.records[0]).toHaveProperty('LastName', 'Doe');
+    // Record text fields are enveloped (FOX-3490); IDs stay raw.
+    expect(result.json.records[0].LastName).toBe(
+      '<untrusted-content source="salesforce:get_contacts:records">Doe</untrusted-content>',
+    );
+    expect(result.json.records[0]).toHaveProperty('Id', '003000000000001');
   });
 
   it('salesforce_create_contact sends correct payload via mock', async () => {
