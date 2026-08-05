@@ -406,6 +406,78 @@ describe('Tool tests — Outreach MCP server', () => {
     expect(result.json).toHaveProperty('ok', true);
   });
 
+  it('outreach_create_task creates a task with note, due date, and prospect', async () => {
+    mswServer.use(...createOutreachHandlers());
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('outreach_create_task', {
+      note: 'Follow up on pricing question',
+      action: 'call',
+      due_at: '2026-05-01T17:00:00Z',
+      prospect_id: '101',
+    });
+    expect(result.isError).toBeFalsy();
+    expect(result.json).toHaveProperty('ok', true);
+    expect(result.json).toHaveProperty('status', 'created');
+    expect(result.json).toHaveProperty('dueAt', '2026-05-01T17:00:00.000Z');
+    expect(result.json).toHaveProperty('prospect_id', '101');
+    // The note is user-authored text echoed back by the API: enveloped.
+    expect((result.json as Record<string, unknown>).note).toBe(
+      '<untrusted-content source="outreach:task:note">Follow up on pricing question</untrusted-content>',
+    );
+  });
+
+  it('outreach_create_task rejects an unparseable due_at', async () => {
+    mswServer.use(...createOutreachHandlers());
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('outreach_create_task', {
+      note: 'Call back',
+      due_at: 'next Tuesday-ish',
+    });
+    expect(result.isError).toBe(true);
+    expect(result.json).toHaveProperty('ok', false);
+    expect(result.json).toHaveProperty('code', 'VALIDATION_ERROR');
+  });
+
+  it('outreach_complete_task marks a task completed', async () => {
+    mswServer.use(...createOutreachHandlers());
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('outreach_complete_task', { id: '401' });
+    expect(result.isError).toBeFalsy();
+    expect(result.json).toHaveProperty('ok', true);
+    expect(result.json).toHaveProperty('status', 'completed');
+    expect(result.json).toHaveProperty('state', 'completed');
+  });
+
   // --- Mailings ---
 
   it('outreach_list_mailings returns mailings', async () => {

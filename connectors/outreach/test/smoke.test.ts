@@ -6,8 +6,10 @@ import { createTempConfig, type TempConfigResult } from '@mindstone/mcp-test-har
 
 const EXPECTED_TOOLS = [
   'outreach_add_prospect_to_sequence',
+  'outreach_complete_task',
   'outreach_connect_account',
   'outreach_create_prospect',
+  'outreach_create_task',
   'outreach_disconnect_account',
   'outreach_get_account',
   'outreach_get_prospect',
@@ -66,7 +68,7 @@ describe('Smoke test — Outreach MCP server', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(18);
+    expect(toolsResult.tools).toHaveLength(20);
     expect(toolNames).toEqual(EXPECTED_TOOLS);
   });
 

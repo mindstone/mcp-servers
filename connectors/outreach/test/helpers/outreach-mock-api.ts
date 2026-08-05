@@ -47,8 +47,9 @@ const mockTask = {
   id: '401',
   type: 'task',
   attributes: {
-    status: 'incomplete',
+    state: 'incomplete',
     taskType: 'call',
+    note: 'Follow up with Jane',
     dueAt: '2026-05-01T00:00:00Z',
   },
   relationships: {
@@ -286,6 +287,35 @@ export function createOutreachHandlers() {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;
       return HttpResponse.json(jsonApiList([mockTask]));
+    }),
+
+    http.post(`${OUTREACH_API_BASE}/tasks`, async ({ request }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      const body = (await request.json()) as Record<string, unknown>;
+      const reqData = body.data as Record<string, unknown>;
+      return HttpResponse.json({
+        data: {
+          ...mockTask,
+          id: '402',
+          attributes: { ...mockTask.attributes, ...(reqData?.attributes as Record<string, unknown> || {}) },
+          relationships: { ...mockTask.relationships, ...(reqData?.relationships as Record<string, unknown> || {}) },
+        },
+      });
+    }),
+
+    http.patch(`${OUTREACH_API_BASE}/tasks/:id`, async ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      const body = (await request.json()) as Record<string, unknown>;
+      const reqData = body.data as Record<string, unknown>;
+      return HttpResponse.json({
+        data: {
+          ...mockTask,
+          id: params.id as string,
+          attributes: { ...mockTask.attributes, ...(reqData?.attributes as Record<string, unknown> || {}) },
+        },
+      });
     }),
 
     // --- Mailings ---
