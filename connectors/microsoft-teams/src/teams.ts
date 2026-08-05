@@ -356,7 +356,16 @@ export async function setPresence(
     'set_presence',
   );
   const duration = numberArg(args, 'durationMinutes');
-  const durationMinutes = duration == null ? undefined : Math.round(Math.max(5, Math.min(duration, 480)));
+  // The tool schema bounds this to an integer in 5-480; keep the business layer
+  // fail-closed too rather than silently coercing a value into a different
+  // meaning before a network write.
+  if (duration != null && (!Number.isInteger(duration) || duration < 5 || duration > 480)) {
+    throw new TeamsBusinessError(
+      'Invalid "durationMinutes": must be a whole number of minutes between 5 and 480.',
+      'set_presence',
+    );
+  }
+  const durationMinutes = duration;
 
   const body: Record<string, unknown> = { availability, activity: availability };
   if (durationMinutes != null) body.expirationDuration = `PT${durationMinutes}M`;

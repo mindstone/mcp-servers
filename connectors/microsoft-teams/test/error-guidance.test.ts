@@ -100,4 +100,38 @@ describe('missing-argument guidance errors', () => {
     const graphCalls = state.requests.filter((r) => r.url.includes('graph.microsoft.com'));
     expect(graphCalls).toEqual([]);
   });
+
+  // durationMinutes must be a whole number in 5-480; out-of-range or fractional
+  // values are rejected at the schema boundary, never silently clamped/rounded
+  // into a different meaning before a network write.
+  const INVALID_DURATION_CASES = [-100, 4, 480.9, 1000000, 5.5];
+  for (const durationMinutes of INVALID_DURATION_CASES) {
+    it(`set_presence rejects durationMinutes=${durationMinutes} instead of coercing it`, async () => {
+      const result = await client.callTool('set_presence', {
+        availability: 'Busy',
+        durationMinutes,
+      });
+      expect(result.isError).toBe(true);
+      const graphCalls = state.requests.filter((r) => r.url.includes('graph.microsoft.com'));
+      expect(graphCalls).toEqual([]);
+    });
+  }
+});
+
+describe('setPresence business-layer duration guard', () => {
+  // The tool schema is the primary boundary; the business layer must also fail
+  // closed for direct callers rather than silently coercing.
+  it('rejects out-of-range and fractional durations without calling Graph', async () => {
+    const { setPresence } = await import('../src/teams.js');
+    const client = { api: () => ({ options: () => ({ post: async () => ({}) }) }) };
+    for (const durationMinutes of [0, 3, 480.5, 1000000]) {
+      await expect(
+        setPresence(
+          client as unknown as import('@mindstone/mcp-server-microsoft-shared').Client,
+          { availability: 'Busy', durationMinutes },
+          new AbortController().signal,
+        ),
+      ).rejects.toThrow(/durationMinutes/);
+    }
+  });
 });

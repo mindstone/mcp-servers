@@ -446,8 +446,11 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
             .describe('Presence availability to set'),
           durationMinutes: z
             .number()
+            .int()
+            .min(5)
+            .max(480)
             .optional()
-            .describe('How long the status applies, in minutes (5-480). Omit to keep it until changed.'),
+            .describe('How long the status applies, in whole minutes (5-480). Omit to keep it until changed.'),
         })
         .strict(),
       annotations: DESTRUCTIVE_WRITE_ANNOTATIONS,

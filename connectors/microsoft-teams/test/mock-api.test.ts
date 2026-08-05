@@ -369,6 +369,23 @@ describe('microsoft-teams mock-API integration', () => {
     expect('expirationDuration' in body).toBe(false);
   });
 
+  it('set_presence accepts the 5 and 480 minute boundaries unchanged', async () => {
+    for (const [durationMinutes, expected] of [
+      [5, 'PT5M'],
+      [480, 'PT480M'],
+    ] as const) {
+      const result = await client.callTool('set_presence', {
+        availability: 'Busy',
+        durationMinutes,
+      });
+      expect(result.isError).not.toBe(true);
+      const call = state.requests
+        .filter((r) => r.method === 'POST' && r.pathname.endsWith('/me/presence/setUserPreferredPresence'))
+        .at(-1);
+      expect((call?.body as Record<string, unknown>).expirationDuration).toBe(expected);
+    }
+  });
+
   it('send_chat_message rejects unknown keys (strict schema)', async () => {
     // F8: the input schema is `.strict()`, so an unexpected argument is refused
     // at the protocol boundary rather than silently forwarded to Graph. The SDK
