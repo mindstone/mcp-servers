@@ -416,34 +416,135 @@ export async function listFolders(
   );
 }
 
+/** Maximum redirect hops an export download will follow. */
+const MAX_DOWNLOAD_REDIRECTS = 5;
+
 /**
  * Download an export file (PDF/PPTX) to the system tmpdir.
  * Returns the absolute path of the downloaded file.
  *
  * The URL is validated against the Gamma export allow-list BEFORE any outbound
  * request is made — a rejected URL produces a structured `URL_REJECTED` error
- * with zero network calls.
+ * with zero network calls. Redirects are followed manually with every hop
+ * re-validated against the same allow-list, so an allowed export URL cannot
+ * bounce the connector's fetch to an arbitrary or private host (SSRF).
+ *
+ * The temp file is created atomically: opened with O_CREAT|O_EXCL|O_NOFOLLOW
+ * (an unpredictable random suffix makes pre-creation impractical, and a raced
+ * or pre-planted symlink fails the open instead of being written through),
+ * fstat-verified as a regular file, and written through the open descriptor.
  */
 export async function downloadExportFile(
   url: string,
   generationId: string,
   format: 'pdf' | 'pptx',
 ): Promise<string> {
-  const validated = validateDownloadUrl(url);
+  // Follow redirects manually, re-validating every hop. Invariant #7: do not
+  // auto-follow redirects on downloads.
+  let current = validateDownloadUrl(url);
+  let response: Response | undefined;
+  let redirectCount = 0;
+  for (;;) {
+    response = await fetch(current.toString(), { redirect: 'manual' });
+    if (response.status >= 300 && response.status < 400) {
+      // Drain the redirect body so the connection isn't held open.
+      try {
+        await response.body?.cancel();
+      } catch {
+        /* best-effort */
+      }
+      redirectCount++;
+      if (redirectCount > MAX_DOWNLOAD_REDIRECTS) {
+        throw new GammaError(
+          `Refused to follow redirect: too many redirects (>${MAX_DOWNLOAD_REDIRECTS})`,
+          'URL_REJECTED',
+          'The export URL redirected too many times. Export manually from the Gamma app instead.',
+        );
+      }
+      const location = response.headers.get('location');
+      if (!location) {
+        throw new GammaError(
+          `Export download redirected (HTTP ${response.status}) without a Location header`,
+          'DOWNLOAD_FAILED',
+          'The export endpoint responded with an incomplete redirect. Export manually from the Gamma app instead.',
+        );
+      }
+      let next: URL;
+      try {
+        next = new URL(location, current);
+      } catch {
+        throw new GammaError(
+          'Refused to follow redirect: invalid Location header',
+          'URL_REJECTED',
+          'The export endpoint returned a malformed redirect target. Export manually from the Gamma app instead.',
+        );
+      }
+      // Re-validate every hop: a redirect must not downgrade to http://,
+      // leave the Gamma allow-list, or point at a private/reserved host.
+      // Throws URL_REJECTED on any violation.
+      current = validateDownloadUrl(next.toString());
+      continue;
+    }
+    break;
+  }
 
-  const { writeFileSync } = await import('fs');
-  const { join } = await import('path');
-  const { tmpdir } = await import('os');
-
-  const safeId = generationId.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const fileName = `gamma_export_${safeId}_${Date.now()}.${format}`;
-  const filePath = join(tmpdir(), fileName);
-
-  const response = await fetch(validated.toString());
   if (!response.ok) {
     throw new Error(`Download failed: HTTP ${response.status}`);
   }
+
+  const fs = await import('fs');
+  const { join } = await import('path');
+  const { tmpdir } = await import('os');
+  const { randomBytes } = await import('crypto');
+
+  const safeId = generationId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const fileName = `gamma_export_${safeId}_${Date.now()}_${randomBytes(4).toString('hex')}.${format}`;
+  const filePath = join(tmpdir(), fileName);
+
   const buffer = Buffer.from(await response.arrayBuffer());
-  writeFileSync(filePath, buffer);
+
+  // O_NOFOLLOW is unavailable on some platforms (e.g. Windows); O_EXCL alone
+  // still refuses any pre-existing path, including symlinks.
+  const flags =
+    fs.constants.O_WRONLY |
+    fs.constants.O_CREAT |
+    fs.constants.O_EXCL |
+    (fs.constants.O_NOFOLLOW ?? 0);
+
+  let fd: number;
+  try {
+    fd = fs.openSync(filePath, flags, 0o600);
+  } catch (openErr) {
+    const e = openErr as NodeJS.ErrnoException;
+    throw new GammaError(
+      `Could not create the export temp file (${e?.code || 'unknown error'})`,
+      'DOWNLOAD_FAILED',
+      'The temporary export path already exists or is not writable. Try again.',
+    );
+  }
+  try {
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile()) {
+      throw new GammaError(
+        'Export temp file is not a regular file',
+        'DOWNLOAD_FAILED',
+        'The temporary export path resolved to an unexpected file type. Try again.',
+      );
+    }
+    fs.writeFileSync(fd, buffer);
+  } catch (writeErr) {
+    try {
+      fs.closeSync(fd);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.unlinkSync(filePath);
+    } catch {
+      /* cleanup best-effort */
+    }
+    throw writeErr;
+  }
+  fs.closeSync(fd);
   return filePath;
 }
