@@ -267,14 +267,32 @@ describe('Chat handlers error handling', () => {
     await expect(nestedPath).rejects.toMatchObject({ code: ErrorCode.InvalidParams });
   });
 
-  it('rejects message text above the Chat API length limit', async () => {
+  it('rejects message text above the documented 32,000-byte Chat API limit', async () => {
     const handlers = await loadHandlers();
 
-    const tooLong = handlers.handleSendChatMessage({ space: SPACE_NAME, text: 'x'.repeat(4097) });
+    const tooLong = handlers.handleSendChatMessage({ space: SPACE_NAME, text: 'x'.repeat(32_001) });
     await expect(tooLong).rejects.toMatchObject({ code: ErrorCode.InvalidParams });
     await tooLong.catch((err: McpError) => {
-      expect(err.message).toContain('4096');
+      expect(err.message).toContain('32000');
     });
+  });
+
+  it('measures the Chat text limit in UTF-8 bytes, not characters', async () => {
+    const handlers = await loadHandlers();
+
+    // 16,001 three-byte characters = 48,003 bytes: under 32,000 characters but
+    // over the 32,000-byte total message size limit.
+    const tooLong = handlers.handleSendChatMessage({ space: SPACE_NAME, text: '€'.repeat(16_001) });
+    await expect(tooLong).rejects.toMatchObject({ code: ErrorCode.InvalidParams });
+  });
+
+  it('accepts message text longer than the old, incorrect 4096-character cap', async () => {
+    installHappyPathChatMocks();
+    const handlers = await loadHandlers();
+
+    const text = 'x'.repeat(5000);
+    const result = await handlers.handleSendChatMessage({ space: SPACE_NAME, text });
+    expect(JSON.stringify(result)).toContain('msg-created-1');
   });
 
   it('rejects a space parameter that is not a space resource name', async () => {

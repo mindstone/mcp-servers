@@ -22,7 +22,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - `update_workspace_vacation_responder` no longer erases a pending scheduled end when you change something else: an omitted `end_time` now preserves the existing end, and removing one requires the explicit new `clear_end_time` parameter. An end already in the past is still not carried into a re-enable (Gmail requires start before end, and an expired end is meaningless).
 - `update_workspace_vacation_responder` keeps an existing HTML auto-reply body as HTML when you don't pass a new body, instead of flattening the markup into the plain-text body.
 - `update_workspace_vacation_responder` now rejects numeric Unix-seconds timestamps (e.g. `1786464000`), matching the existing rejection of digit-only strings — both must be epoch milliseconds in the unambiguous window `[1e12, 1e14)`. Previously a numeric seconds value was accepted and silently became a 1970-adjacent time.
-- Tighter input validation on the new write tools: `update_workspace_contact` requires `resource_name` in the documented `people/<id>` form, contact `email_address` must look like an email address, `phone_number` must contain a digit, Chat space names must be exactly `spaces/<id>`, and Chat message text is capped at the API's 4096-character limit.
+- Tighter input validation on the new write tools: `update_workspace_contact` requires `resource_name` in the documented `people/<id>` form, contact `email_address` must look like an email address, `phone_number` must contain a digit, Chat space names must be exactly `spaces/<id>`, and Chat message text is capped at the API's documented 32,000-byte total message size (measured in UTF-8 bytes).
 
 ### Security
 

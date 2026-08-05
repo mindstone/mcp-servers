@@ -16,8 +16,10 @@ import { wrapUntrustedJsonStrings } from "../utils/untrusted-content.js";
 // Cap page sizes well below the Chat API maximum (1000) to keep responses manageable
 const MAX_CHAT_PAGE_SIZE = 100;
 
-// Chat message text bodies are limited to 4096 characters by the Chat API.
-const MAX_CHAT_MESSAGE_TEXT_LENGTH = 4096;
+// Google Chat documents a maximum TOTAL message size of 32,000 bytes
+// (spaces.messages.create). Enforce it against the UTF-8 byte length of the
+// text body — the only sizable field this tool sends.
+const MAX_CHAT_MESSAGE_TEXT_BYTES = 32_000;
 
 // Space resource names look like "spaces/AAAA..." — exactly one segment after the prefix.
 const SPACE_NAME_PATTERN = /^spaces\/[^/\s]+$/;
@@ -135,10 +137,11 @@ export async function handleSendChatMessage(
       'text parameter is required (the plain-text message body to send)'
     );
   }
-  if (text.length > MAX_CHAT_MESSAGE_TEXT_LENGTH) {
+  const textBytes = Buffer.byteLength(text, 'utf8');
+  if (textBytes > MAX_CHAT_MESSAGE_TEXT_BYTES) {
     throw new McpError(
       ErrorCode.InvalidParams,
-      `text exceeds the Chat message limit of ${MAX_CHAT_MESSAGE_TEXT_LENGTH} characters (got ${text.length})`
+      `text exceeds the Chat message size limit of ${MAX_CHAT_MESSAGE_TEXT_BYTES} bytes (got ${textBytes})`
     );
   }
 
