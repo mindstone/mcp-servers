@@ -60,6 +60,20 @@
           "description": "Set to exactly 1 to enable mutating tools (secure-by-default; required since 0.3.0)",
           "isRequired": false,
           "format": "string"
+        },
+        {
+          "name": "MCP_HOST_BRIDGE_STATE",
+          "description": "Optional path to a host bridge state file used for credential management",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "MINDSTONE_REBEL_BRIDGE_STATE",
+          "description": "Backwards-compatible alias for MCP_HOST_BRIDGE_STATE",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
         }
       ]
     }

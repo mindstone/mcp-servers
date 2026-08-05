@@ -4,8 +4,10 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeQboql, requireProdWritesEnabled } from '../utils.js';
-import { qboFetch, qboQuery } from '../client.js';
+import { withErrorHandling, escapeQboql, requireProdWritesEnabled, validateAlphanumericId } from '../utils.js';
+import { qboFetch, qboQuery, qboSparseUpdate } from '../client.js';
+import { QBO_MINOR_VERSION, QuickBooksError } from '../types.js';
+import { sanitizeQboEntity } from '../sanitize.js';
 
 export function registerVendorTools(server: McpServer): void {
   server.registerTool(
@@ -36,7 +38,11 @@ Example: { "searchTerm": "Office" }`,
       const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
       const query = `SELECT * FROM Vendor${where} ORDERBY DisplayName`;
       const vendors = await qboQuery('Vendor', query, limit);
-      return JSON.stringify({ ok: true, vendors, count: vendors.length });
+      return JSON.stringify({
+        ok: true,
+        vendors: sanitizeQboEntity(vendors, 'quickbooks:list_quickbooks_vendors'),
+        count: vendors.length,
+      });
     }),
   );
 
@@ -63,10 +69,64 @@ Example: { "displayName": "AWS", "email": "billing@aws.amazon.com", "companyName
       if (args.companyName) vendorBody.CompanyName = args.companyName;
 
       const result = await qboFetch<{ Vendor: Record<string, unknown> }>(
-        '/vendor?minorversion=65',
+        `/vendor?minorversion=${QBO_MINOR_VERSION}`,
         { method: 'POST', body: JSON.stringify(vendorBody) },
       );
-      return JSON.stringify({ ok: true, message: 'Vendor created.', vendor: result.Vendor });
+      return JSON.stringify({
+        ok: true,
+        message: 'Vendor created.',
+        vendor: sanitizeQboEntity(result.Vendor, 'quickbooks:create_quickbooks_vendor'),
+      });
+    }),
+  );
+
+  server.registerTool(
+    'update_quickbooks_vendor',
+    {
+      description: `Sparse-update an existing vendor in QuickBooks Online.
+
+Example: { "vendorId": "123", "email": "ap@example.com" }
+Example: { "vendorId": "123", "active": false }
+
+Requires QB_ALLOW_PROD_WRITES=1. If syncToken is omitted the vendor is read
+first to obtain the current one (QuickBooks rejects stale SyncTokens).
+Setting active to false deactivates the vendor.`,
+      inputSchema: z.object({
+        vendorId: z.string().describe('Vendor ID (required)'),
+        syncToken: z.string().optional()
+          .describe('Current SyncToken (omit to read it from QuickBooks first)'),
+        displayName: z.string().optional().describe('New display name'),
+        email: z.string().optional().describe('New primary email address'),
+        phone: z.string().optional().describe('New primary phone number'),
+        companyName: z.string().optional().describe('New company name'),
+        active: z.boolean().optional().describe('Set false to deactivate the vendor'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      requireProdWritesEnabled();
+      validateAlphanumericId(args.vendorId, 'vendorId');
+
+      const fields: Record<string, unknown> = {};
+      if (args.displayName) fields.DisplayName = args.displayName;
+      if (args.email) fields.PrimaryEmailAddr = { Address: args.email };
+      if (args.phone) fields.PrimaryPhone = { FreeFormNumber: args.phone };
+      if (args.companyName) fields.CompanyName = args.companyName;
+      if (args.active !== undefined) fields.Active = args.active;
+      if (Object.keys(fields).length === 0) {
+        throw new QuickBooksError(
+          'Nothing to update: provide at least one of displayName, email, phone, companyName, active.',
+          'INVALID_INPUT',
+          'Pass at least one field to update.',
+        );
+      }
+
+      const vendor = await qboSparseUpdate('vendor', 'Vendor', args.vendorId, args.syncToken, fields);
+      return JSON.stringify({
+        ok: true,
+        message: 'Vendor updated.',
+        vendor: sanitizeQboEntity(vendor, 'quickbooks:update_quickbooks_vendor'),
+      });
     }),
   );
 }

@@ -9,7 +9,7 @@ QuickBooks Online MCP server for Model Context Protocol hosts. Manage invoices, 
 
 - **Version:** [0.3.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-quickbooks)
 - **Auth:** OAuth ([`QUICKBOOKS_REFRESH_TOKEN`](./server.json))
-- **Tools:** [13](./src/tools/) (customers, vendors, invoices, bills)
+- **Tools:** [21](./src/tools/) (customers, vendors, invoices, bills, estimates, reports)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -17,10 +17,13 @@ QuickBooks Online MCP server for Model Context Protocol hosts. Manage invoices, 
 
 Starting with **version 0.3.0**, every QuickBooks-mutating tool
 (`create_quickbooks_invoice`, `create_quickbooks_bill`,
-`create_quickbooks_customer`, `create_quickbooks_vendor`) is **secure-by-default**:
+`create_quickbooks_customer`, `create_quickbooks_vendor`,
+`create_quickbooks_estimate`, `send_quickbooks_invoice_email`,
+`update_quickbooks_invoice`, `update_quickbooks_customer`,
+`update_quickbooks_vendor`) is **secure-by-default**:
 the tool refuses to execute and returns a structured error unless the host
 sets `QB_ALLOW_PROD_WRITES=1` in the environment. Read-only tools
-(`list_*`, `get_*`, `query_*`, `configure_quickbooks`) are unaffected.
+(`list_*`, `get_*`, `query_*`, `download_*`, `configure_quickbooks`) are unaffected.
 
 This is a deliberate guard-rail to prevent an LLM agent from accidentally
 writing to a real QuickBooks production company. Hosts that have integrated
@@ -31,7 +34,7 @@ environment variable on the next upgrade.
 
 To preserve the previous (write-enabled) behaviour, add `QB_ALLOW_PROD_WRITES=1`
 to the `env` block of your host configuration alongside the existing
-`QUICKBOOKS_*` variables. Without it, the four mutating tools will return:
+`QUICKBOOKS_*` variables. Without it, the mutating tools will return:
 
 ```json
 {
@@ -118,9 +121,9 @@ node dist/index.js
 - `QUICKBOOKS_REFRESH_TOKEN` — OAuth 2.0 refresh token
 - `QUICKBOOKS_REALM_ID` — QuickBooks company (realm) ID
 - `QUICKBOOKS_ENVIRONMENT` — `sandbox` or `production` (default: `production`)
-- `QB_ALLOW_PROD_WRITES` — set to **exactly** `1` to enable the four
-  mutating tools (`create_quickbooks_invoice`, `create_quickbooks_bill`,
-  `create_quickbooks_customer`, `create_quickbooks_vendor`). Any other
+- `QB_ALLOW_PROD_WRITES` — set to **exactly** `1` to enable the
+  mutating tools (every `create_*`, `update_*`, and
+  `send_quickbooks_invoice_email`). Any other
   value (unset, empty, `true`, `yes`, `0`, …) keeps the secure-by-default
   gate closed and the mutating tools refuse to run. Read-only tools are
   unaffected. **Required since 0.3.0** to preserve 0.2.x write behaviour.
@@ -167,7 +170,7 @@ node dist/index.js
 }
 ```
 
-## Tools (13)
+## Tools (21)
 
 ### Configuration
 - `configure_quickbooks` — Configure QuickBooks Online OAuth credentials
@@ -176,17 +179,29 @@ node dist/index.js
 - `query_quickbooks` — Run a QuickBooks query using QuickBooks Query Language
 - `get_quickbooks_entity` — Get a single entity by type and ID
 
+### Reports
+- `get_quickbooks_report` — Run a financial report (ProfitAndLoss, BalanceSheet, CashFlow, AgedReceivables, AgedPayables)
+
 ### Customers
 - `list_quickbooks_customers` — List customers
 - `create_quickbooks_customer` — Create a new customer
+- `update_quickbooks_customer` — Sparse-update a customer (deactivate with `active: false`)
 
 ### Vendors
 - `list_quickbooks_vendors` — List vendors
 - `create_quickbooks_vendor` — Create a new vendor
+- `update_quickbooks_vendor` — Sparse-update a vendor (deactivate with `active: false`)
 
 ### Invoices
 - `list_quickbooks_invoices` — List invoices
 - `create_quickbooks_invoice` — Create a new invoice
+- `update_quickbooks_invoice` — Sparse-update invoice header fields (dueDate, memo, privateNote)
+- `send_quickbooks_invoice_email` — Email an invoice to its customer
+- `download_quickbooks_invoice_pdf` — Download an invoice as a PDF (saved to the system temp directory)
+
+### Estimates
+- `list_quickbooks_estimates` — List estimates (quotes)
+- `create_quickbooks_estimate` — Create a new estimate
 
 ### Bills
 - `list_quickbooks_bills` — List bills (accounts payable)
@@ -197,6 +212,16 @@ node dist/index.js
 
 ### Accounts
 - `list_quickbooks_accounts` — List chart of accounts
+
+## Untrusted content envelopes
+
+Text authored inside QuickBooks (customer/vendor display names, memos, line
+descriptions, report cells) is attacker-influenceable, so the connector wraps
+it in `<untrusted-content source="quickbooks:…">` envelopes before returning
+it to the model (typed entity payloads envelope the known free-text fields;
+`query_quickbooks`, `get_quickbooks_entity`, and reports envelope every string
+value wholesale). Structural values such as `Id`, `SyncToken`, dates, and
+amounts are left untouched so they stay usable as inputs to follow-up calls.
 
 ## Licence
 

@@ -11,6 +11,23 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+- `get_quickbooks_report` — financial reports (ProfitAndLoss, BalanceSheet, CashFlow, AgedReceivables, AgedPayables) from the dedicated `/reports` endpoint, which `query_quickbooks` cannot reach. Date-range reports take `startDate`/`endDate`, aging reports take `asOfDate`, and `accountingMethod` is optional.
+- `send_quickbooks_invoice_email` — email an invoice to its customer (optional `sendTo` override). Gated behind `QB_ALLOW_PROD_WRITES=1` with `destructiveHint`, since it emails a real customer.
+- `download_quickbooks_invoice_pdf` — download an invoice as a PDF, saved to the system temp directory.
+- `list_quickbooks_estimates` / `create_quickbooks_estimate` — estimates (quotes), previously reachable only through raw `query_quickbooks`.
+- `update_quickbooks_invoice` / `update_quickbooks_customer` / `update_quickbooks_vendor` — sparse updates. When `syncToken` is omitted the entity is read first (QuickBooks rejects stale SyncTokens). Customer/vendor updates can deactivate via `active: false`. All gated behind `QB_ALLOW_PROD_WRITES=1`.
+
+### Security
+- QuickBooks-authored free text (display names, memos, line descriptions, report cells) is now wrapped in `<untrusted-content>` envelopes before reaching the model (FOX-3490 remediation). Typed entity payloads envelope the known free-text fields; `query_quickbooks`, `get_quickbooks_entity`, and reports envelope every string value wholesale.
+
+### Changed
+- QuickBooks `minorversion` is centralized in one constant and bumped from 65 to 75 (was hardcoded at every call site).
+- The `User-Agent` header now tracks `package.json` instead of being pinned to a stale version.
+
+### Fixed
+- `server.json` now declares the optional `MCP_HOST_BRIDGE_STATE` / `MINDSTONE_REBEL_BRIDGE_STATE` bridge variables that `src/bridge.ts` reads.
+
 ## [0.3.1] - 2026-05-14
 ### Added
 - **registry**: Cohort B + C backfill — 13 OSS connectors get server.json (12 also get mcpName). google-analytics, hubspot, outreach, quickbooks, salesforce, servicenow, slack, workday, zendesk, office (5-service consolidator), apple-shortcuts, browser-automation, email-imap each gain a registry-shaped server.json validated against registry.modelcontextprotocol.io. mcpName added to 12 of 13 package.json files; browser-automation deferred due to a concurrent agent's uncommitted 0.1.5→0.1.6 version bump in the same file.

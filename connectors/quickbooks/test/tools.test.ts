@@ -17,6 +17,8 @@ import {
   createVendorsQueryResponse,
   createAccountsQueryResponse,
   createEmployeesQueryResponse,
+  createEstimatesQueryResponse,
+  createReportResponse,
 } from './fixtures/quickbooks-data.js';
 
 function defaultEnv() {
@@ -297,6 +299,496 @@ describe('list_quickbooks_employees', () => {
     const json = result.json as Record<string, unknown>;
     expect(json.ok).toBe(true);
     expect(Array.isArray(json.employees)).toBe(true);
+  });
+});
+
+describe('send_quickbooks_invoice_email', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('sends an invoice email when the write gate is open', async () => {
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+    let capturedUrl = '';
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.post(`${PRODUCTION_API_BASE}/invoice/:invoiceId/send`, ({ request, params }) => {
+        capturedUrl = request.url;
+        return HttpResponse.json({
+          Invoice: { Id: params.invoiceId as string, EmailStatus: 'EmailSent' },
+        });
+      }),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('send_quickbooks_invoice_email', {
+      invoiceId: 'inv-001',
+      sendTo: 'billing@example.com',
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(json.message).toBe('Invoice sent.');
+    expect(capturedUrl).toContain('/invoice/inv-001/send');
+    expect(capturedUrl).toContain('sendTo=billing%40example.com');
+  });
+
+  it('refuses without QB_ALLOW_PROD_WRITES and never hits the API', async () => {
+    let postCount = 0;
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.post(`${PRODUCTION_API_BASE}/invoice/:invoiceId/send`, () => {
+        postCount++;
+        return HttpResponse.json({ Invoice: { Id: 'should-not-happen' } });
+      }),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('send_quickbooks_invoice_email', { invoiceId: 'inv-001' });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(String(json.error)).toContain('QB_ALLOW_PROD_WRITES');
+    expect(postCount).toBe(0);
+  });
+
+  it('rejects an invalid invoice ID', async () => {
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+    mswServer.use(...createQuickBooksHandlers());
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('send_quickbooks_invoice_email', {
+      invoiceId: "1' OR '1'='1",
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('INVALID_INPUT');
+  });
+});
+
+describe('download_quickbooks_invoice_pdf', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('downloads the invoice PDF to the temp directory', async () => {
+    mswServer.use(...createQuickBooksHandlers());
+    testClient = await createTestClient({ env: defaultEnv() });
+
+    const result = await testClient.callTool('download_quickbooks_invoice_pdf', { invoiceId: 'inv-001' });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(String(json.filePath)).toContain('quickbooks_invoice_inv-001.pdf');
+
+    const fs = await import('fs');
+    const content = fs.readFileSync(String(json.filePath));
+    expect(content.subarray(0, 4).toString()).toBe('%PDF');
+    fs.unlinkSync(String(json.filePath));
+  });
+
+  it('rejects an invalid invoice ID before any outbound request', async () => {
+    mswServer.use(...createQuickBooksHandlers());
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('download_quickbooks_invoice_pdf', {
+      invoiceId: '../../etc/passwd',
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('INVALID_INPUT');
+  });
+
+  it('returns a structured error when the API fails', async () => {
+    mswServer.use(...createQuickBooksHandlers({ apiErrorStatus: 404 }));
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('download_quickbooks_invoice_pdf', { invoiceId: 'nope' });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('NOT_FOUND');
+  });
+});
+
+describe('list_quickbooks_estimates', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('lists estimates', async () => {
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.get(`${PRODUCTION_API_BASE}/query`, () =>
+        HttpResponse.json(createEstimatesQueryResponse()),
+      ),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('list_quickbooks_estimates', {});
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(Array.isArray(json.estimates)).toBe(true);
+    expect(json.count).toBeGreaterThan(0);
+  });
+
+  it('filters by status', async () => {
+    let capturedQuery: string | null = null;
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.get(`${PRODUCTION_API_BASE}/query`, async ({ request }) => {
+        const url = new URL(request.url);
+        capturedQuery = decodeURIComponent(url.searchParams.get('query') ?? '');
+        return HttpResponse.json(createEstimatesQueryResponse());
+      }),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    await testClient.callTool('list_quickbooks_estimates', { status: 'Pending' });
+    expect(capturedQuery).toContain("TxnStatus = 'Pending'");
+  });
+});
+
+describe('create_quickbooks_estimate', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('creates an estimate', async () => {
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+    mswServer.use(...createQuickBooksHandlers());
+    testClient = await createTestClient({ env: defaultEnv() });
+
+    const result = await testClient.callTool('create_quickbooks_estimate', {
+      customerId: 'cust-001',
+      lines: [{ description: 'Consulting', amount: 1500 }],
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(json.message).toBe('Estimate created.');
+  });
+
+  it('refuses without QB_ALLOW_PROD_WRITES and never hits the API', async () => {
+    let postCount = 0;
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.post(`${PRODUCTION_API_BASE}/estimate`, () => {
+        postCount++;
+        return HttpResponse.json({ Estimate: { Id: 'should-not-happen' } });
+      }),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('create_quickbooks_estimate', {
+      customerId: 'cust-001',
+      lines: [{ description: 'x', amount: 100 }],
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(String(json.error)).toContain('QB_ALLOW_PROD_WRITES');
+    expect(postCount).toBe(0);
+  });
+});
+
+describe('update_quickbooks_invoice', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('sparse-updates an invoice with an explicit syncToken (no read-first)', async () => {
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+    let getCount = 0;
+    let capturedBody: Record<string, unknown> | null = null;
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.get(`${PRODUCTION_API_BASE}/invoice/:id`, () => {
+        getCount++;
+        return HttpResponse.json({ Invoice: { Id: 'inv-1', SyncToken: '0' } });
+      }),
+      http.post(`${PRODUCTION_API_BASE}/invoice`, async ({ request }) => {
+        capturedBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ Invoice: { Id: 'inv-1', SyncToken: '1' } });
+      }),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('update_quickbooks_invoice', {
+      invoiceId: 'inv-1',
+      syncToken: '3',
+      dueDate: '2026-04-01',
+      memo: 'Net 30',
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(json.message).toBe('Invoice updated.');
+    expect(getCount).toBe(0);
+    expect(capturedBody).toMatchObject({
+      Id: 'inv-1',
+      SyncToken: '3',
+      sparse: true,
+      DueDate: '2026-04-01',
+      CustomerMemo: { value: 'Net 30' },
+    });
+  });
+
+  it('reads the entity first when syncToken is omitted', async () => {
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+    let capturedBody: Record<string, unknown> | null = null;
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.get(`${PRODUCTION_API_BASE}/invoice/:id`, () =>
+        HttpResponse.json({ Invoice: { Id: 'inv-1', SyncToken: '7' } }),
+      ),
+      http.post(`${PRODUCTION_API_BASE}/invoice`, async ({ request }) => {
+        capturedBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ Invoice: { Id: 'inv-1', SyncToken: '8' } });
+      }),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('update_quickbooks_invoice', {
+      invoiceId: 'inv-1',
+      privateNote: 'Chased',
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(capturedBody).toMatchObject({ Id: 'inv-1', SyncToken: '7', sparse: true });
+  });
+
+  it('refuses without QB_ALLOW_PROD_WRITES and never hits the API', async () => {
+    let outboundCount = 0;
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.get(`${PRODUCTION_API_BASE}/invoice/:id`, () => {
+        outboundCount++;
+        return HttpResponse.json({ Invoice: { Id: 'inv-1', SyncToken: '0' } });
+      }),
+      http.post(`${PRODUCTION_API_BASE}/invoice`, () => {
+        outboundCount++;
+        return HttpResponse.json({ Invoice: { Id: 'should-not-happen' } });
+      }),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('update_quickbooks_invoice', {
+      invoiceId: 'inv-1',
+      memo: 'x',
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(String(json.error)).toContain('QB_ALLOW_PROD_WRITES');
+    expect(outboundCount).toBe(0);
+  });
+
+  it('rejects an update with no fields', async () => {
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+    mswServer.use(...createQuickBooksHandlers());
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('update_quickbooks_invoice', { invoiceId: 'inv-1' });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('INVALID_INPUT');
+  });
+});
+
+describe('update_quickbooks_customer / update_quickbooks_vendor', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('sparse-updates a customer', async () => {
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+    let capturedBody: Record<string, unknown> | null = null;
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.post(`${PRODUCTION_API_BASE}/customer`, async ({ request }) => {
+        capturedBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ Customer: { Id: 'c1', SyncToken: '1' } });
+      }),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('update_quickbooks_customer', {
+      customerId: 'c1',
+      syncToken: '0',
+      email: 'ap@example.com',
+      active: false,
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(json.message).toBe('Customer updated.');
+    expect(capturedBody).toMatchObject({
+      Id: 'c1',
+      SyncToken: '0',
+      sparse: true,
+      PrimaryEmailAddr: { Address: 'ap@example.com' },
+      Active: false,
+    });
+  });
+
+  it('sparse-updates a vendor (reads SyncToken first)', async () => {
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+    let capturedBody: Record<string, unknown> | null = null;
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.get(`${PRODUCTION_API_BASE}/vendor/:id`, () =>
+        HttpResponse.json({ Vendor: { Id: 'v1', SyncToken: '2' } }),
+      ),
+      http.post(`${PRODUCTION_API_BASE}/vendor`, async ({ request }) => {
+        capturedBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ Vendor: { Id: 'v1', SyncToken: '3' } });
+      }),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('update_quickbooks_vendor', {
+      vendorId: 'v1',
+      companyName: 'Acme Supplies',
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(json.message).toBe('Vendor updated.');
+    expect(capturedBody).toMatchObject({
+      Id: 'v1',
+      SyncToken: '2',
+      sparse: true,
+      CompanyName: 'Acme Supplies',
+    });
+  });
+
+  it('update_quickbooks_customer refuses without the write gate', async () => {
+    let postCount = 0;
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.post(`${PRODUCTION_API_BASE}/customer`, () => {
+        postCount++;
+        return HttpResponse.json({ Customer: { Id: 'should-not-happen' } });
+      }),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('update_quickbooks_customer', {
+      customerId: 'c1',
+      syncToken: '0',
+      displayName: 'X',
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(String(json.error)).toContain('QB_ALLOW_PROD_WRITES');
+    expect(postCount).toBe(0);
+  });
+});
+
+describe('get_quickbooks_report', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('runs a ProfitAndLoss report over a date range', async () => {
+    let capturedUrl = '';
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.get(`${PRODUCTION_API_BASE}/reports/:reportName`, ({ request, params }) => {
+        capturedUrl = request.url;
+        return HttpResponse.json(createReportResponse(params.reportName as string));
+      }),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('get_quickbooks_report', {
+      report: 'ProfitAndLoss',
+      startDate: '2026-01-01',
+      endDate: '2026-03-31',
+      accountingMethod: 'Accrual',
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    const report = json.report as { Header: { ReportName: string } };
+    // Report payloads are enveloped wholesale (arbitrary shape).
+    expect(report.Header.ReportName).toBe(
+      '<untrusted-content source="quickbooks:get_quickbooks_report:ProfitAndLoss">ProfitAndLoss</untrusted-content>',
+    );
+    expect(capturedUrl).toContain('start_date=2026-01-01');
+    expect(capturedUrl).toContain('end_date=2026-03-31');
+    expect(capturedUrl).toContain('accounting_method=Accrual');
+  });
+
+  it('maps asOfDate to report_date for aging reports', async () => {
+    let capturedUrl = '';
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.get(`${PRODUCTION_API_BASE}/reports/:reportName`, ({ request, params }) => {
+        capturedUrl = request.url;
+        return HttpResponse.json(createReportResponse(params.reportName as string));
+      }),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('get_quickbooks_report', {
+      report: 'AgedReceivables',
+      asOfDate: '2026-03-31',
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(capturedUrl).toContain('report_date=2026-03-31');
+    expect(capturedUrl).not.toContain('start_date');
+  });
+
+  it('envelopes report string values as untrusted content', async () => {
+    mswServer.use(...createQuickBooksHandlers());
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('get_quickbooks_report', { report: 'BalanceSheet' });
+    const json = result.json as {
+      report: { Rows: { Row: Array<{ Rows: { Row: Array<{ ColData: Array<{ value: string }> }> } }> } };
+    };
+    const cellValue = json.report.Rows.Row[0].Rows.Row[0].ColData[0].value;
+    expect(cellValue).toBe(
+      '<untrusted-content source="quickbooks:get_quickbooks_report:BalanceSheet">Consulting Revenue</untrusted-content>',
+    );
+  });
+
+  it('rejects an unknown report name before any outbound request', async () => {
+    let outboundRequestCount = 0;
+    mswServer.use(
+      http.post(TOKEN_URL, () => {
+        outboundRequestCount++;
+        return HttpResponse.json(createTokenResponse());
+      }),
+      http.get(`${PRODUCTION_API_BASE}/reports/:reportName`, () => {
+        outboundRequestCount++;
+        return HttpResponse.json(createReportResponse());
+      }),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('get_quickbooks_report', {
+      report: 'NotAReport',
+    } as Record<string, unknown>);
+    expect(result.isError).toBe(true);
+    expect(outboundRequestCount).toBe(0);
+  });
+
+  it('returns a structured error when the API fails', async () => {
+    mswServer.use(...createQuickBooksHandlers({ apiErrorStatus: 500 }));
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('get_quickbooks_report', { report: 'CashFlow' });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('SERVER_ERROR');
   });
 });
 

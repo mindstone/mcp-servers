@@ -8,6 +8,9 @@ export const MOCK_REFRESH_TOKEN = 'test-refresh-token-abc123';
 export const MOCK_REALM_ID = '123456789';
 export const MOCK_ACCESS_TOKEN = 'test-access-token-xyz789';
 
+/** Minimal valid PDF header bytes for download tests. */
+export const MOCK_PDF_BYTES = new TextEncoder().encode('%PDF-1.4 mock invoice pdf');
+
 export const TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
 export const SANDBOX_API_BASE = `https://sandbox-quickbooks.api.intuit.com/v3/company/${MOCK_REALM_ID}`;
 export const PRODUCTION_API_BASE = `https://quickbooks.api.intuit.com/v3/company/${MOCK_REALM_ID}`;
@@ -162,6 +165,71 @@ export function createEmployeesQueryResponse(count = 2) {
       Employee: Array.from({ length: count }, (_, i) =>
         createEmployee({ Id: `emp-${String(i + 1).padStart(3, '0')}`, DisplayName: `Employee ${i + 1}` }),
       ),
+    },
+  };
+}
+
+export function createEstimate(overrides: Record<string, unknown> = {}) {
+  return {
+    Id: 'est-001',
+    DocNumber: '3001',
+    TxnDate: '2024-01-10',
+    ExpirationDate: '2024-02-10',
+    TotalAmt: 1500.00,
+    TxnStatus: 'Pending',
+    CustomerRef: { value: 'cust-001', name: 'Acme Corp' },
+    Line: [
+      {
+        Amount: 1500.00,
+        DetailType: 'SalesItemLineDetail',
+        Description: 'Consulting services',
+        SalesItemLineDetail: { Qty: 1, UnitPrice: 1500.00 },
+      },
+    ],
+    ...overrides,
+  };
+}
+
+export function createEstimatesQueryResponse(count = 2) {
+  return {
+    QueryResponse: {
+      Estimate: Array.from({ length: count }, (_, i) =>
+        createEstimate({ Id: `est-${String(i + 1).padStart(3, '0')}`, DocNumber: `${3001 + i}` }),
+      ),
+    },
+  };
+}
+
+export function createReportResponse(reportName = 'ProfitAndLoss') {
+  return {
+    Header: {
+      ReportName: reportName,
+      StartPeriod: '2026-01-01',
+      EndPeriod: '2026-03-31',
+      Currency: 'USD',
+    },
+    Columns: {
+      Column: [
+        { ColTitle: '', ColType: 'Account' },
+        { ColTitle: 'Total', ColType: 'Money' },
+      ],
+    },
+    Rows: {
+      Row: [
+        {
+          type: 'Section',
+          header: { ColData: [{ value: 'Income' }, { value: '' }] },
+          Rows: {
+            Row: [
+              {
+                type: 'Data',
+                ColData: [{ value: 'Consulting Revenue', id: '84' }, { value: '15000.00' }],
+              },
+            ],
+          },
+          Summary: { ColData: [{ value: 'Total Income' }, { value: '15000.00' }] },
+        },
+      ],
     },
   };
 }

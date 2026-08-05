@@ -4,17 +4,20 @@
 
 import { http, HttpResponse, type HttpHandler } from 'msw';
 import {
-  MOCK_ACCESS_TOKEN,
+  MOCK_PDF_BYTES,
   TOKEN_URL,
   SANDBOX_API_BASE,
   PRODUCTION_API_BASE,
   createTokenResponse,
+  createInvoice,
   createInvoicesQueryResponse,
   createCustomersQueryResponse,
   createBillsQueryResponse,
   createVendorsQueryResponse,
   createAccountsQueryResponse,
   createEmployeesQueryResponse,
+  createEstimatesQueryResponse,
+  createReportResponse,
 } from '../fixtures/quickbooks-data.js';
 
 export interface MockServerOptions {
@@ -81,9 +84,68 @@ export function createQuickBooksHandlers(options: MockServerOptions = {}): HttpH
       if (query.includes('Employee')) {
         return HttpResponse.json(createEmployeesQueryResponse());
       }
+      if (query.includes('Estimate')) {
+        return HttpResponse.json(createEstimatesQueryResponse());
+      }
 
       // Default: empty response
       return HttpResponse.json({ QueryResponse: {} });
+    }),
+
+    // Invoice send + PDF endpoints (multi-segment paths; declared before the
+    // generic entity handlers for clarity even though they cannot clash).
+    http.post(`${apiBase}/invoice/:invoiceId/send`, async ({ request, params }) => {
+      const authHeader = request.headers.get('Authorization');
+      if (!authHeader?.startsWith('Bearer ')) {
+        return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
+      if (options.apiErrorStatus) {
+        return HttpResponse.json(
+          { Fault: { Error: [{ Message: 'Mock API error' }] } },
+          { status: options.apiErrorStatus },
+        );
+      }
+
+      return HttpResponse.json({
+        Invoice: createInvoice({ Id: params.invoiceId as string, EmailStatus: 'EmailSent' }),
+      });
+    }),
+
+    http.get(`${apiBase}/invoice/:invoiceId/pdf`, async ({ request }) => {
+      const authHeader = request.headers.get('Authorization');
+      if (!authHeader?.startsWith('Bearer ')) {
+        return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
+      if (options.apiErrorStatus) {
+        return HttpResponse.json(
+          { Fault: { Error: [{ Message: 'Mock API error' }] } },
+          { status: options.apiErrorStatus },
+        );
+      }
+
+      return new HttpResponse(MOCK_PDF_BYTES, {
+        headers: { 'Content-Type': 'application/pdf' },
+      });
+    }),
+
+    // Reports endpoint — must precede the generic /:entityType/:entityId
+    // handler below, which would otherwise swallow /reports/{name}.
+    http.get(`${apiBase}/reports/:reportName`, async ({ request, params }) => {
+      const authHeader = request.headers.get('Authorization');
+      if (!authHeader?.startsWith('Bearer ')) {
+        return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
+      if (options.apiErrorStatus) {
+        return HttpResponse.json(
+          { Fault: { Error: [{ Message: 'Mock API error', Detail: 'Test error detail' }] } },
+          { status: options.apiErrorStatus },
+        );
+      }
+
+      return HttpResponse.json(createReportResponse(params.reportName as string));
     }),
 
     // Entity detail endpoints
@@ -105,7 +167,7 @@ export function createQuickBooksHandlers(options: MockServerOptions = {}): HttpH
       const capitalized = entityType.charAt(0).toUpperCase() + entityType.slice(1);
 
       return HttpResponse.json({
-        [capitalized]: { Id: entityId, DisplayName: `Test ${capitalized}`, Active: true },
+        [capitalized]: { Id: entityId, SyncToken: '0', DisplayName: `Test ${capitalized}`, Active: true },
       });
     }),
 

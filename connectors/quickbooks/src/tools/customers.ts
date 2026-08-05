@@ -4,8 +4,10 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeQboql, requireProdWritesEnabled } from '../utils.js';
-import { qboFetch, qboQuery } from '../client.js';
+import { withErrorHandling, escapeQboql, requireProdWritesEnabled, validateAlphanumericId } from '../utils.js';
+import { qboFetch, qboQuery, qboSparseUpdate } from '../client.js';
+import { QBO_MINOR_VERSION, QuickBooksError } from '../types.js';
+import { sanitizeQboEntity } from '../sanitize.js';
 
 export function registerCustomerTools(server: McpServer): void {
   server.registerTool(
@@ -37,7 +39,11 @@ Example: { "searchTerm": "Smith" }`,
       const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
       const query = `SELECT * FROM Customer${where} ORDERBY DisplayName`;
       const customers = await qboQuery('Customer', query, limit);
-      return JSON.stringify({ ok: true, customers, count: customers.length });
+      return JSON.stringify({
+        ok: true,
+        customers: sanitizeQboEntity(customers, 'quickbooks:list_quickbooks_customers'),
+        count: customers.length,
+      });
     }),
   );
 
@@ -64,10 +70,64 @@ Example: { "displayName": "Jane Smith", "email": "jane@smith.com", "phone": "555
       if (args.companyName) customerBody.CompanyName = args.companyName;
 
       const result = await qboFetch<{ Customer: Record<string, unknown> }>(
-        '/customer?minorversion=65',
+        `/customer?minorversion=${QBO_MINOR_VERSION}`,
         { method: 'POST', body: JSON.stringify(customerBody) },
       );
-      return JSON.stringify({ ok: true, message: 'Customer created.', customer: result.Customer });
+      return JSON.stringify({
+        ok: true,
+        message: 'Customer created.',
+        customer: sanitizeQboEntity(result.Customer, 'quickbooks:create_quickbooks_customer'),
+      });
+    }),
+  );
+
+  server.registerTool(
+    'update_quickbooks_customer',
+    {
+      description: `Sparse-update an existing customer in QuickBooks Online.
+
+Example: { "customerId": "123", "email": "ap@example.com" }
+Example: { "customerId": "123", "active": false }
+
+Requires QB_ALLOW_PROD_WRITES=1. If syncToken is omitted the customer is read
+first to obtain the current one (QuickBooks rejects stale SyncTokens).
+Setting active to false deactivates the customer.`,
+      inputSchema: z.object({
+        customerId: z.string().describe('Customer ID (required)'),
+        syncToken: z.string().optional()
+          .describe('Current SyncToken (omit to read it from QuickBooks first)'),
+        displayName: z.string().optional().describe('New display name'),
+        email: z.string().optional().describe('New primary email address'),
+        phone: z.string().optional().describe('New primary phone number'),
+        companyName: z.string().optional().describe('New company name'),
+        active: z.boolean().optional().describe('Set false to deactivate the customer'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      requireProdWritesEnabled();
+      validateAlphanumericId(args.customerId, 'customerId');
+
+      const fields: Record<string, unknown> = {};
+      if (args.displayName) fields.DisplayName = args.displayName;
+      if (args.email) fields.PrimaryEmailAddr = { Address: args.email };
+      if (args.phone) fields.PrimaryPhone = { FreeFormNumber: args.phone };
+      if (args.companyName) fields.CompanyName = args.companyName;
+      if (args.active !== undefined) fields.Active = args.active;
+      if (Object.keys(fields).length === 0) {
+        throw new QuickBooksError(
+          'Nothing to update: provide at least one of displayName, email, phone, companyName, active.',
+          'INVALID_INPUT',
+          'Pass at least one field to update.',
+        );
+      }
+
+      const customer = await qboSparseUpdate('customer', 'Customer', args.customerId, args.syncToken, fields);
+      return JSON.stringify({
+        ok: true,
+        message: 'Customer updated.',
+        customer: sanitizeQboEntity(customer, 'quickbooks:update_quickbooks_customer'),
+      });
     }),
   );
 }
