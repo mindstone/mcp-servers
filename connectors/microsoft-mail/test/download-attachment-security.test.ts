@@ -143,6 +143,32 @@ describe('download_attachment adversarial cases', () => {
     }
   });
 
+  it('accepts an attachment exactly at the 25 MB boundary', async () => {
+    const result = await callDownload('att-exact-limit');
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { savedTo: string; size: number };
+    expect(json.size).toBe(25 * 1024 * 1024);
+    const written = await fs.readFile(json.savedTo);
+    expect(written.byteLength).toBe(25 * 1024 * 1024);
+  });
+
+  it('rejects an oversized metadata response before fetching content', async () => {
+    const json = errorJson(await callDownload('att-meta-big'));
+    expect(json.error).toContain('metadata');
+    expect(json.error).toContain('1 MB');
+    // The $value content endpoint must never be hit, and nothing is written.
+    expect(state.requests.some((r) => r.pathname.includes('$value'))).toBe(false);
+    expect(await fs.readdir(workspace)).toEqual([]);
+  });
+
+  it('fails closed on non-JSON metadata without echoing body fragments', async () => {
+    const json = errorJson(await callDownload('att-meta-garbage'));
+    expect(json.error).toContain('not valid JSON');
+    // The upstream body fragment must not leak through a raw parse error.
+    expect(json.error).not.toContain('IGNORE PREVIOUS INSTRUCTIONS');
+    expect(state.requests.some((r) => r.pathname.includes('$value'))).toBe(false);
+  });
+
   it('envelopes an attacker-controlled name on the unsupported-type error path', async () => {
     const json = errorJson(await callDownload('att-evil-type'));
     expect(json.error).toContain('itemAttachment');

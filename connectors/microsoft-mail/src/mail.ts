@@ -528,6 +528,11 @@ export async function listAttachments(
 // materialized in memory.
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
+// Attachment metadata ($select'ed to a handful of small fields) is tiny;
+// 1 MB is orders of magnitude above any legitimate payload while still
+// bounding what a noncompliant response can make the connector buffer.
+const MAX_METADATA_BYTES = 1024 * 1024;
+
 /**
  * Reject anything that is not a plain filename before it is joined onto the
  * attachment directory (same rule family as the other file-writing
@@ -709,9 +714,10 @@ async function writeFileExclusive(
 
 /**
  * Read a response body stream with a hard byte cap, aborting the stream the
- * moment the cap is exceeded. The body is never fully materialized beyond
- * `maxBytes`, so a malicious or unexpectedly large Graph response cannot
- * exhaust connector memory. Handles both Node Readable (node-fetch) and web
+ * moment the cap is exceeded. Buffered retention stays bounded (the cap plus
+ * at most one in-flight delivered chunk, which may itself exceed the cap),
+ * so a malicious or unexpectedly large Graph response cannot exhaust
+ * connector memory. Handles both Node Readable (node-fetch) and web
  * ReadableStream (undici/native fetch) bodies.
  */
 async function readStreamWithCap(
@@ -754,14 +760,31 @@ export async function downloadAttachment(
   args: DownloadAttachmentArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
-  // Fetch metadata first, explicitly excluding contentBytes so this response
-  // is small and bounded; the bytes themselves are streamed (and capped)
-  // below via the $value endpoint instead of an unbounded inline base64 JSON.
-  const metaResponse = await client
+  // Fetch metadata first, explicitly excluding contentBytes, and read it
+  // through the same kind of hard byte cap as the content path: $select asks
+  // Graph to omit contentBytes but is not a transport limit, so a
+  // noncompliant or compromised response could otherwise materialize an
+  // unbounded JSON document before Zod runs. The bytes themselves are
+  // streamed (and capped) below via the $value endpoint instead of an
+  // unbounded inline base64 JSON.
+  const metaBody = await client
     .api(`/me/messages/${args.id}/attachments/${args.attachmentId}`)
     .options({ signal })
     .select('id,name,contentType,size,isInline')
-    .get();
+    .getStream();
+  const metaBuffer = await readStreamWithCap(
+    metaBody,
+    MAX_METADATA_BYTES,
+    () => new Error('Attachment metadata response exceeded the 1 MB limit.'),
+  );
+  let metaResponse: unknown;
+  try {
+    metaResponse = JSON.parse(metaBuffer.toString('utf8'));
+  } catch {
+    // Never surface the raw parse error: Node embeds an excerpt of the
+    // (upstream-controlled) body in SyntaxError messages.
+    throw new Error('Attachment metadata response was not valid JSON.');
+  }
   const attachment = GraphAttachmentSchema.parse(metaResponse);
 
   // The attachment name is attacker-controlled; every error path below must
