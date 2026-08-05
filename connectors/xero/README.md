@@ -204,6 +204,7 @@ This guard is secure-by-default: it prevents an agent from accidentally performi
 - `add-payroll-timesheet-line`: Add new line on an existing Payroll Timesheet
 - `delete-payroll-timesheet`: Delete an existing Payroll Timesheet
 - `get-payroll-timesheet`: Retrieve an existing Payroll Timesheet
+- `email-invoice`: Email a copy of an AUTHORISED invoice to its related contact (requires `XERO_ALLOW_WRITES=1`)
 
 For detailed API documentation, please refer to the [MCP Protocol Specification](https://modelcontextprotocol.io/).
 

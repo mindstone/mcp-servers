@@ -9,6 +9,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 - New report tools: `list-bank-summary` (per-account balances and movements), `list-budget-summary` (budget vs actuals), and `list-executive-summary` (key financial metrics snapshot). These use the report scopes the connector already requests.
+- New `email-invoice` tool that emails a copy of an AUTHORISED invoice to its related contact via Xero. Gated behind `XERO_ALLOW_WRITES=1` like the other write tools.
 
 ### Changed
 - Write tools (create/update/delete, history notes) now refuse to run unless `XERO_ALLOW_WRITES=1` is set in the host environment — a secure-by-default guard against accidental writes to a real Xero organisation. Read-only tools are unaffected. Set `XERO_ALLOW_WRITES=1` to opt in.
