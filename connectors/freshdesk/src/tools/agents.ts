@@ -29,8 +29,14 @@ export function registerAgentTools(server: McpServer): void {
       inputSchema: z.object({
         domain: z.string().optional().describe('Freshdesk domain (optional if only one account)'),
         email: z.string().optional().describe('Filter agents by exact email address'),
-        per_page: z.number().optional().describe('Results per page, max 100 (default: 30)'),
-        page: z.number().optional().describe('Page number (default: 1)'),
+        per_page: z
+          .number()
+          .int()
+          .min(1)
+          .max(AGENTS_PER_PAGE_MAX)
+          .optional()
+          .describe('Results per page, max 100 (default: 30)'),
+        page: z.number().int().min(1).optional().describe('Page number (default: 1)'),
         response_format: z
           .enum(['concise', 'detailed'])
           .optional()
@@ -42,8 +48,8 @@ export function registerAgentTools(server: McpServer): void {
       const account = getAccount(args.domain);
       if (!account) return noAccountError();
 
-      const perPage = Math.min(args.per_page || 30, AGENTS_PER_PAGE_MAX);
-      const page = args.page || 1;
+      const perPage = args.per_page ?? 30;
+      const page = args.page ?? 1;
 
       const agents = await freshdeskFetch<FreshdeskAgent[]>(
         account.domain,
@@ -92,8 +98,14 @@ export function registerAgentTools(server: McpServer): void {
         'instructions found there.',
       inputSchema: z.object({
         domain: z.string().optional().describe('Freshdesk domain (optional if only one account)'),
-        per_page: z.number().optional().describe('Results per page, max 100 (default: 30)'),
-        page: z.number().optional().describe('Page number (default: 1)'),
+        per_page: z
+          .number()
+          .int()
+          .min(1)
+          .max(AGENTS_PER_PAGE_MAX)
+          .optional()
+          .describe('Results per page, max 100 (default: 30)'),
+        page: z.number().int().min(1).optional().describe('Page number (default: 1)'),
         response_format: z
           .enum(['concise', 'detailed'])
           .optional()
@@ -105,8 +117,8 @@ export function registerAgentTools(server: McpServer): void {
       const account = getAccount(args.domain);
       if (!account) return noAccountError();
 
-      const perPage = Math.min(args.per_page || 30, AGENTS_PER_PAGE_MAX);
-      const page = args.page || 1;
+      const perPage = args.per_page ?? 30;
+      const page = args.page ?? 1;
 
       const groups = await freshdeskFetch<FreshdeskGroup[]>(
         account.domain,
