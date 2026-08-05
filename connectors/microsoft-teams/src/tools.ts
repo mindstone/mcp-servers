@@ -57,15 +57,27 @@ const WRITE_ANNOTATIONS = {
   openWorldHint: true,
 };
 
+// Tools that change external state (send messages, create chats, set presence)
+// must declare destructiveHint so hosts can gate or confirm them — AGENTS.md
+// security invariant #7. compose_chat_message keeps the plain write
+// annotations: it returns an editable draft and performs no Graph send itself.
+const DESTRUCTIVE_WRITE_ANNOTATIONS = {
+  readOnlyHint: false,
+  destructiveHint: true,
+  openWorldHint: true,
+};
+
 /**
  * Some Teams Graph surfaces (channel messages, user lookup, other users'
  * presence) need delegated permissions beyond the cohort's base scope set,
  * and several are admin-consent-gated under Microsoft's managed consent
  * policy. When the connected account's token lacks the scope, return an
  * actionable error up front instead of letting Graph 403 — same pattern as
- * the SharePoint connector's Sites.Read.All gate. When the scope cannot be
- * introspected (no token on disk yet), fall through to the real call so the
- * standard auth_required envelope handles it.
+ * the SharePoint connector's Sites.Read.All gate. When there is no token on
+ * disk yet, fall through to the real call so the standard auth_required
+ * envelope handles it. A token that fails to LOAD (corrupt file, unreadable
+ * disk, provider error) is different from "no token": fail closed with
+ * observable guidance instead of silently skipping the permission gate.
  */
 async function requireScopesGranted(
   requiredScopes: string[],
@@ -76,8 +88,13 @@ async function requireScopesGranted(
     const tokenData = await getTokenProvider().loadToken();
     if (!tokenData) return null;
     tokenScope = tokenData.scope;
-  } catch {
-    return null;
+  } catch (err) {
+    return errorResponse({
+      error: `${feature} could not verify the Microsoft Graph permissions granted to the connected account: ${err instanceof Error ? err.message : String(err)}`,
+      action_required:
+        'Reconnect the Microsoft account so the granted permissions can be verified. In many organizations an administrator must approve these permissions first.',
+      next_step: AUTH_TOOL_NAME,
+    });
   }
   const missing = requiredScopes.filter((scope) => !hasScope(tokenScope, scope));
   if (missing.length === 0) return null;
@@ -212,7 +229,7 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
         chatId: z.string().describe('Chat ID'),
         content: z.string().describe('Message content (HTML supported)'),
       }).strict(),
-      annotations: WRITE_ANNOTATIONS,
+      annotations: DESTRUCTIVE_WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (args, extra) =>
       successJson(await callGraph(extra, (c, signal) => sendChatMessage(c, args, signal))),
@@ -230,7 +247,7 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
           content: z.string().describe('Reply content (HTML supported)'),
         })
         .strict(),
-      annotations: WRITE_ANNOTATIONS,
+      annotations: DESTRUCTIVE_WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (args, extra) =>
       successJson(await callGraph(extra, (c, signal) => replyToChatMessage(c, args, signal))),
@@ -288,7 +305,7 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
           topic: z.string().optional().describe('Chat topic (group chats only)'),
         })
         .strict(),
-      annotations: WRITE_ANNOTATIONS,
+      annotations: DESTRUCTIVE_WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (args, extra) =>
       successJson(await callGraph(extra, (c, signal) => createChat(c, args, signal))),
@@ -355,7 +372,7 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
           content: z.string().describe('Message content (HTML supported)'),
         })
         .strict(),
-      annotations: WRITE_ANNOTATIONS,
+      annotations: DESTRUCTIVE_WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (args, extra) => {
       const gate = await requireScopesGranted(['ChannelMessage.Send'], 'Posting channel messages');
@@ -377,7 +394,7 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
           content: z.string().describe('Reply content (HTML supported)'),
         })
         .strict(),
-      annotations: WRITE_ANNOTATIONS,
+      annotations: DESTRUCTIVE_WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (args, extra) => {
       const gate = await requireScopesGranted(['ChannelMessage.Send'], 'Replying to channel messages');
@@ -429,11 +446,14 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
             .describe('Presence availability to set'),
           durationMinutes: z
             .number()
+            .int()
+            .min(5)
+            .max(480)
             .optional()
-            .describe('How long the status applies, in minutes (5-480). Omit to keep it until changed.'),
+            .describe('How long the status applies, in whole minutes (5-480). Omit to keep it until changed.'),
         })
         .strict(),
-      annotations: WRITE_ANNOTATIONS,
+      annotations: DESTRUCTIVE_WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (args, extra) => {
       const gate = await requireScopesGranted(['Presence.ReadWrite'], 'Setting presence');

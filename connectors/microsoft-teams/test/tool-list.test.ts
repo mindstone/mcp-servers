@@ -30,20 +30,22 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
   list_chats: { readOnlyHint: true, openWorldHint: true },
   get_chat: { readOnlyHint: true, openWorldHint: true },
   list_chat_messages: { readOnlyHint: true, openWorldHint: true },
+  // compose_chat_message performs no Graph write itself (the iframe invokes
+  // send_chat_message), so it keeps the non-destructive write annotations.
   compose_chat_message: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-  send_chat_message: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-  reply_to_message: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  send_chat_message: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+  reply_to_message: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   find_user: { readOnlyHint: true, openWorldHint: true },
-  create_chat: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  create_chat: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   search_messages: { readOnlyHint: true, openWorldHint: true },
   list_teams: { readOnlyHint: true, openWorldHint: true },
   list_channels: { readOnlyHint: true, openWorldHint: true },
   list_channel_messages: { readOnlyHint: true, openWorldHint: true },
-  send_channel_message: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-  reply_to_channel_message: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  send_channel_message: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+  reply_to_channel_message: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   get_presence: { readOnlyHint: true, openWorldHint: true },
   get_user_presence: { readOnlyHint: true, openWorldHint: true },
-  set_presence: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  set_presence: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
 };
 
 describe('microsoft-teams tools/list', () => {

@@ -4,9 +4,19 @@ All notable changes to this connector will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+
+- Envelope Microsoft Graph error text in `<untrusted-content>` before returning it to the model, so vendor-controlled error bodies cannot inject instructions into the conversation.
+- Scope pre-checks now fail closed: when the stored token cannot be loaded or parsed, permission-gated tools return explicit reconnect guidance instead of silently skipping the check and proceeding to Graph.
+- Tools that change external state (`send_chat_message`, `reply_to_message`, `create_chat`, `send_channel_message`, `reply_to_channel_message`, `set_presence`) now declare `destructiveHint: true` so hosts can gate or confirm them.
+- Structural Graph fields (message/chat/user IDs, content types, timestamps, presence states, chat types) are validated against safe formats; values carrying envelope-breakout or markup characters fail closed instead of reaching model-visible output.
+- Re-synced the vendored untrusted-content helper with the canonical reference implementation (all-whitespace close-tag variants, plus the unwrap helpers).
+
 ### Fixed
 
 - Corrected the 0.1.0 changelog entry below, which claimed "search" and "replies" tools that never actually shipped (message search and threaded replies only arrive in this release, as `search_messages` / `reply_to_message` / `reply_to_channel_message`).
+- `set_presence` rejects out-of-range or fractional `durationMinutes` instead of silently clamping/rounding them into a different duration.
+- `find_user` name searches and `list_channel_messages` now report `hasMore` (from Graph's `@odata.nextLink`) so truncated results are no longer indistinguishable from complete ones.
 
 ### Added
 

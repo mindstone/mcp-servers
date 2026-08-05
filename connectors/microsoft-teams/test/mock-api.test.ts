@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { http, HttpResponse } from 'msw';
 import { mswServer } from './fixtures/setup.js';
 import { createMockApi, type MockApiState } from './fixtures/microsoft-mock-api.js';
 import {
@@ -149,6 +150,7 @@ describe('microsoft-teams mock-API integration', () => {
     expect(json.messages[0]?.content).toContain('Quarterly numbers are in');
     expect(json.messages[0]?.from).toContain('Alice');
     expect(json.messages[1]?.replyToId).toBe('channel-msg-1');
+    expect((json as { hasMore?: boolean }).hasMore).toBe(false);
     const call = state.requests.find(
       (r) => r.pathname.endsWith('/teams/team-1/channels/channel-1/messages') && r.method === 'GET',
     );
@@ -222,9 +224,11 @@ describe('microsoft-teams mock-API integration', () => {
     expect(result.isError).not.toBe(true);
     const json = result.json as {
       count: number;
+      hasMore: boolean;
       users: Array<{ id: string; email: string }>;
     };
     expect(json.count).toBe(2);
+    expect(json.hasMore).toBe(false);
     expect(json.users[1]?.email).toContain('aaron@example.com');
     const call = state.requests.find(
       (r) => r.method === 'GET' && r.pathname.endsWith('/v1.0/users'),
@@ -367,6 +371,77 @@ describe('microsoft-teams mock-API integration', () => {
     const body = call?.body as Record<string, unknown>;
     expect(body.availability).toBe('Available');
     expect('expirationDuration' in body).toBe(false);
+  });
+
+  it('list_channel_messages surfaces Graph continuation via hasMore', async () => {
+    mswServer.use(
+      http.get(
+        'https://graph.microsoft.com/v1.0/teams/:teamId/channels/:channelId/messages',
+        () =>
+          HttpResponse.json({
+            value: [
+              {
+                id: 'channel-msg-1',
+                from: { user: { id: 'user-1', displayName: 'Alice' } },
+                body: { content: 'First page', contentType: 'text' },
+                createdDateTime: '2026-05-19T08:00:00Z',
+              },
+            ],
+            '@odata.nextLink':
+              'https://graph.microsoft.com/v1.0/teams/team-1/channels/channel-1/messages?$skip=1',
+          }),
+      ),
+    );
+
+    const result = await client.callTool('list_channel_messages', {
+      teamId: 'team-1',
+      channelId: 'channel-1',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { count: number; hasMore: boolean };
+    expect(json.count).toBe(1);
+    expect(json.hasMore).toBe(true);
+  });
+
+  it('find_user surfaces truncation via hasMore when Graph returns a next link', async () => {
+    mswServer.use(
+      http.get('https://graph.microsoft.com/v1.0/users', () =>
+        HttpResponse.json({
+          value: [
+            {
+              id: 'user-1',
+              displayName: 'Alice Anderson',
+              mail: 'alice@example.com',
+              userPrincipalName: 'alice@example.com',
+            },
+          ],
+          '@odata.nextLink': 'https://graph.microsoft.com/v1.0/users?$skip=10',
+        }),
+      ),
+    );
+
+    const result = await client.callTool('find_user', { query: 'Alice' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { count: number; hasMore: boolean };
+    expect(json.count).toBe(1);
+    expect(json.hasMore).toBe(true);
+  });
+
+  it('set_presence accepts the 5 and 480 minute boundaries unchanged', async () => {
+    for (const [durationMinutes, expected] of [
+      [5, 'PT5M'],
+      [480, 'PT480M'],
+    ] as const) {
+      const result = await client.callTool('set_presence', {
+        availability: 'Busy',
+        durationMinutes,
+      });
+      expect(result.isError).not.toBe(true);
+      const call = state.requests
+        .filter((r) => r.method === 'POST' && r.pathname.endsWith('/me/presence/setUserPreferredPresence'))
+        .at(-1);
+      expect((call?.body as Record<string, unknown>).expirationDuration).toBe(expected);
+    }
   });
 
   it('send_chat_message rejects unknown keys (strict schema)', async () => {

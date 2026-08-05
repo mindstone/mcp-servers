@@ -39,6 +39,27 @@ function clampTop(value: number | undefined, defaultValue: number, maxValue: num
   return Math.max(1, Math.min(value, maxValue));
 }
 
+// Structural Graph values (IDs, enum-like tokens, timestamps) are vendor-assigned
+// rather than user-authored free text, so instead of an untrusted-content
+// envelope — which would corrupt an ID the model must pass back verbatim in
+// follow-up calls — they are validated against shapes that cannot carry
+// envelope-breakout or markup characters. An unexpected value fails closed: the
+// Zod error surfaces through the standard (enveloped) error path.
+const graphStructuralTokenSchema = z
+  .string()
+  .max(512)
+  .regex(/^[^\s<>"'`\\]*$/, 'unexpected characters in Microsoft Graph identifier');
+const graphIsoDateTimeSchema = z
+  .string()
+  .regex(
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/,
+    'unexpected Microsoft Graph datetime format',
+  );
+const graphPresenceStateSchema = z
+  .string()
+  .max(64)
+  .regex(/^[A-Za-z][A-Za-z0-9]*$/, 'unexpected Microsoft Graph presence value');
+
 const HTML_ENTITIES: Record<string, string> = {
   '&nbsp;': ' ',
   '&amp;': '&',
@@ -84,7 +105,7 @@ interface MessageLike {
 
 function formatMessage(msg: MessageLike, tool: string): Record<string, unknown> {
   return {
-    id: msg.id,
+    id: graphStructuralTokenSchema.nullish().parse(msg.id),
     from: msg.from?.user?.displayName
       ? wrapUntrusted(msg.from.user.displayName, `microsoft-teams:${tool}:from`)
       : 'Unknown',
@@ -92,8 +113,8 @@ function formatMessage(msg: MessageLike, tool: string): Record<string, unknown> 
       stripHtml(msg.body?.content ?? ''),
       `microsoft-teams:${tool}:content`,
     ),
-    contentType: msg.body?.contentType,
-    createdAt: msg.createdDateTime,
+    contentType: graphStructuralTokenSchema.nullish().parse(msg.body?.contentType),
+    createdAt: graphIsoDateTimeSchema.nullish().parse(msg.createdDateTime),
   };
 }
 
@@ -290,8 +311,8 @@ export async function getPresence(
 ): Promise<unknown> {
   const presence = (await client.api('/me/presence').options({ signal }).get()) as Presence;
   return {
-    availability: presence.availability,
-    activity: presence.activity,
+    availability: graphPresenceStateSchema.nullish().parse(presence.availability),
+    activity: graphPresenceStateSchema.nullish().parse(presence.activity),
     statusMessage: wrapUntrusted(
       presence.statusMessage?.message?.content ?? undefined,
       'microsoft-teams:get_presence:statusMessage',
@@ -301,8 +322,8 @@ export async function getPresence(
 
 const presenceSchema = z
   .object({
-    availability: z.string().nullish(),
-    activity: z.string().nullish(),
+    availability: graphPresenceStateSchema.nullish(),
+    activity: graphPresenceStateSchema.nullish(),
     statusMessage: z
       .object({
         message: z
@@ -356,7 +377,16 @@ export async function setPresence(
     'set_presence',
   );
   const duration = numberArg(args, 'durationMinutes');
-  const durationMinutes = duration == null ? undefined : Math.round(Math.max(5, Math.min(duration, 480)));
+  // The tool schema bounds this to an integer in 5-480; keep the business layer
+  // fail-closed too rather than silently coercing a value into a different
+  // meaning before a network write.
+  if (duration != null && (!Number.isInteger(duration) || duration < 5 || duration > 480)) {
+    throw new TeamsBusinessError(
+      'Invalid "durationMinutes": must be a whole number of minutes between 5 and 480.',
+      'set_presence',
+    );
+  }
+  const durationMinutes = duration;
 
   const body: Record<string, unknown> = { availability, activity: availability };
   if (durationMinutes != null) body.expirationDuration = `PT${durationMinutes}M`;
@@ -380,13 +410,13 @@ export async function setPresence(
 
 const graphMessageSchema = z
   .object({
-    id: z.string().optional(),
-    replyToId: z.string().nullish(),
+    id: graphStructuralTokenSchema.optional(),
+    replyToId: graphStructuralTokenSchema.nullish(),
     from: z
       .object({
         user: z
           .object({
-            id: z.string().nullish(),
+            id: graphStructuralTokenSchema.nullish(),
             displayName: z.string().nullish(),
           })
           .nullish(),
@@ -395,22 +425,23 @@ const graphMessageSchema = z
     body: z
       .object({
         content: z.string().nullish(),
-        contentType: z.string().nullish(),
+        contentType: graphStructuralTokenSchema.nullish(),
       })
       .nullish(),
-    createdDateTime: z.string().nullish(),
+    createdDateTime: graphIsoDateTimeSchema.nullish(),
   })
   .passthrough();
 
 const graphMessageCollectionSchema = z
   .object({
     value: z.array(graphMessageSchema).nullish(),
+    '@odata.nextLink': z.string().nullish(),
   })
   .passthrough();
 
 const sendMessageResponseSchema = z
   .object({
-    id: z.string().optional(),
+    id: graphStructuralTokenSchema.optional(),
   })
   .passthrough();
 
@@ -445,6 +476,7 @@ export async function listChannelMessages(
     teamId,
     channelId,
     count: messages.length,
+    hasMore: Boolean(response['@odata.nextLink']),
     messages: messages.map((msg) => ({
       ...formatMessage(msg, 'list_channel_messages'),
       replyToId: msg.replyToId ?? undefined,
@@ -530,7 +562,7 @@ const searchHitSchema = z
   .object({
     hitId: z.string().nullish(),
     summary: z.string().nullish(),
-    resource: graphMessageSchema.extend({ chatId: z.string().nullish() }).nullish(),
+    resource: graphMessageSchema.extend({ chatId: graphStructuralTokenSchema.nullish() }).nullish(),
   })
   .passthrough();
 
@@ -605,7 +637,7 @@ export async function searchMessages(
 
 const graphUserSchema = z
   .object({
-    id: z.string(),
+    id: graphStructuralTokenSchema,
     displayName: z.string().nullish(),
     mail: z.string().nullish(),
     userPrincipalName: z.string().nullish(),
@@ -615,6 +647,7 @@ const graphUserSchema = z
 const graphUserCollectionSchema = z
   .object({
     value: z.array(graphUserSchema).nullish(),
+    '@odata.nextLink': z.string().nullish(),
   })
   .passthrough();
 
@@ -645,11 +678,11 @@ export async function findUser(
           .select('id,displayName,mail,userPrincipalName')
           .get(),
       );
-      return { count: 1, users: [formatUser(user, 'find_user')] };
+      return { count: 1, hasMore: false, users: [formatUser(user, 'find_user')] };
     } catch (err) {
       // A 404 here means "no such user", which is a result, not a failure.
       if ((err as { statusCode?: number })?.statusCode === 404) {
-        return { count: 0, users: [] };
+        return { count: 0, hasMore: false, users: [] };
       }
       throw err;
     }
@@ -669,7 +702,13 @@ export async function findUser(
       .get(),
   );
   const users = response.value ?? [];
-  return { count: users.length, users: users.map((user) => formatUser(user, 'find_user')) };
+  // Name searches are capped at 10 results; surface Graph's continuation link
+  // so a truncated result is never mistaken for a complete one.
+  return {
+    count: users.length,
+    hasMore: Boolean(response['@odata.nextLink']),
+    users: users.map((user) => formatUser(user, 'find_user')),
+  };
 }
 
 function requireStringArrayArg(args: ArgBag, name: string, label: string, nextStep: string): string[] {
@@ -686,8 +725,8 @@ function requireStringArrayArg(args: ArgBag, name: string, label: string, nextSt
 
 const createdChatSchema = z
   .object({
-    id: z.string(),
-    chatType: z.string().nullish(),
+    id: graphStructuralTokenSchema,
+    chatType: z.enum(['oneOnOne', 'group', 'meeting']).nullish(),
   })
   .passthrough();
 
