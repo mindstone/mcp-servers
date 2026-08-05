@@ -14,11 +14,12 @@ import {
   SUPPORTED_IMAGE_SIZES,
   supportsImageSize,
   unsupportedImageSizePayload,
+  normaliseImageMimeType,
   type GenerationConfig,
   type ImageConfig,
 } from '../types.js';
-import { resolveSavePath, resolveSourcePath } from './path-safety.js';
-import { fetchRemoteImage, isRemoteImageUrl } from './remote-image.js';
+import { getSourceWorkspaceRoot, readSandboxedWorkspaceFile, resolveSavePath, resolveSourcePath } from './path-safety.js';
+import { fetchRemoteImage, isRemoteImageUrl, validateRemoteImageUrlWithDns } from './remote-image.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 
 const MODEL_DESCRIPTION =
@@ -46,9 +47,18 @@ function getMimeTypeFromPath(filePath: string): string | null {
  */
 export const MAX_REFERENCE_IMAGES = 14;
 
+/**
+ * Hard cap on the COMBINED byte size of all source images in one edit call.
+ * Each source is individually capped (remote: MAX_REMOTE_IMAGE_BYTES), but
+ * 14 near-max images would still pin several hundred MiB of live base64
+ * strings per call; this aggregate bound keeps per-call memory proportional.
+ */
+export const MAX_COMBINED_SOURCE_IMAGE_BYTES = 40 * 1024 * 1024;
+
 interface LoadedSourceImage {
   mimeType: string;
   base64: string;
+  bytes: number;
 }
 
 type LoadSourceResult =
@@ -64,7 +74,7 @@ type LoadSourceResult =
 async function loadRemoteSourceImage(rawSource: string): Promise<LoadSourceResult> {
   try {
     const remote = await fetchRemoteImage(rawSource);
-    return { ok: true, image: { mimeType: remote.mimeType, base64: remote.base64 } };
+    return { ok: true, image: { mimeType: remote.mimeType, base64: remote.base64, bytes: remote.bytes } };
   } catch (error) {
     if (error instanceof NanoBananaError) {
       return {
@@ -102,10 +112,11 @@ async function loadRemoteSourceImage(rawSource: string): Promise<LoadSourceResul
  *      inside the workspace pointing OUTSIDE the workspace is
  *      refused.
  *
- * We additionally call `fs.realpathSync` again as defence-in-depth
- * immediately before reading the bytes — if the file was swapped
- * out behind a symlink between the validation and the read, the
- * post-realpath read catches the escape.
+ * The bytes are then read through `readSandboxedWorkspaceFile`, which
+ * opens the canonical path ONCE, `fstat`s the descriptor, re-verifies
+ * the path still names the same inode, and reads THROUGH the descriptor
+ * — a check-then-use swap between validation and read fails closed
+ * instead of reading an out-of-sandbox target.
  * ----------------------------------------------------------------
  */
 function loadLocalSourceImage(rawSource: string): LoadSourceResult {
@@ -123,13 +134,13 @@ function loadLocalSourceImage(rawSource: string): LoadSourceResult {
   }
 
   try {
-    if (!fs.existsSync(sourcePath)) {
-      return { ok: false, errorText: `File not found: ${sourcePath}` };
+    const readResult = readSandboxedWorkspaceFile(sourcePath, getSourceWorkspaceRoot());
+    if (!readResult.ok) {
+      return { ok: false, errorText: JSON.stringify({ ok: false, error: readResult.error }) };
     }
-    const verifiedPath = fs.realpathSync(sourcePath);
-    const imageBuffer = fs.readFileSync(verifiedPath);
+    const imageBuffer = readResult.content;
     console.error(`[NanoBanana] Read source image: ${imageBuffer.length} bytes, type: ${sourceMimeType}`);
-    return { ok: true, image: { mimeType: sourceMimeType, base64: imageBuffer.toString('base64') } };
+    return { ok: true, image: { mimeType: sourceMimeType, base64: imageBuffer.toString('base64'), bytes: imageBuffer.length } };
   } catch (readError) {
     const errMsg = readError instanceof Error ? readError.message : String(readError);
     return { ok: false, errorText: `Failed to read image file: ${errMsg}` };
@@ -160,7 +171,7 @@ export function registerEditTools(server: McpServer): void {
         image_size: z.enum(SUPPORTED_IMAGE_SIZES).optional().describe(IMAGE_SIZE_DESCRIPTION),
         save_path: z.string().optional().describe('Optional file path to save the edited image. IMPORTANT: Must be inside the workspace directory so the image can be displayed inline.'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     async (input): Promise<CallToolResult> => {
       if (!hasApiKey()) {
@@ -208,7 +219,43 @@ export function registerEditTools(server: McpServer): void {
         };
       }
 
+      // Security-validate EVERY source before the first network fetch or
+      // disk read: the whole input must fail closed before any I/O happens,
+      // so a mixed list like [validRemoteUrl, "http://invalid"] is rejected
+      // without fetching the first entry.
+      for (const rawSource of rawSources) {
+        if (isRemoteImageUrl(rawSource)) {
+          try {
+            await validateRemoteImageUrlWithDns(rawSource);
+          } catch (error) {
+            if (error instanceof NanoBananaError) {
+              return {
+                content: [{ type: 'text', text: JSON.stringify({ ok: false, error: error.message, code: error.code, resolution: error.resolution }, null, 2) }],
+                isError: true,
+              };
+            }
+            throw error;
+          }
+        } else {
+          const localCheck = resolveSourcePath(rawSource);
+          if (!localCheck.ok) {
+            return {
+              content: [{ type: 'text', text: JSON.stringify({ ok: false, error: localCheck.error }) }],
+              isError: true,
+            };
+          }
+          if (!getMimeTypeFromPath(localCheck.path)) {
+            const ext = path.extname(localCheck.path).toLowerCase() || '(no extension)';
+            return {
+              content: [{ type: 'text', text: `Unsupported image format: ${ext}. Supported formats: PNG, JPEG, WebP.` }],
+              isError: true,
+            };
+          }
+        }
+      }
+
       const loadedSources: LoadedSourceImage[] = [];
+      let combinedSourceBytes = 0;
       for (const rawSource of rawSources) {
         const loadResult = isRemoteImageUrl(rawSource)
           ? await loadRemoteSourceImage(rawSource)
@@ -216,6 +263,18 @@ export function registerEditTools(server: McpServer): void {
         if (!loadResult.ok) {
           return {
             content: [{ type: 'text', text: loadResult.errorText }],
+            isError: true,
+          };
+        }
+        combinedSourceBytes += loadResult.image.bytes;
+        if (combinedSourceBytes > MAX_COMBINED_SOURCE_IMAGE_BYTES) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({
+              ok: false,
+              error: `Source images exceed the combined size limit (${MAX_COMBINED_SOURCE_IMAGE_BYTES} bytes across all sources)`,
+              code: 'SOURCE_IMAGES_TOO_LARGE',
+              resolution: 'Use fewer or smaller source images, or downscale them below the combined limit.',
+            }, null, 2) }],
             isError: true,
           };
         }
@@ -257,13 +316,15 @@ export function registerEditTools(server: McpServer): void {
         };
       }
 
-      // Check for prompt blocks
+      // Check for prompt blocks. The blockReason is external, vendor-authored
+      // text — envelope it (invariant #6) rather than interpolating it raw.
       const candidates = data.candidates;
       if (!candidates || !candidates.length) {
         const blockReason = data.promptFeedback?.blockReason;
         if (blockReason) {
+          const safeReason = wrapUntrusted(blockReason, 'gemini') ?? blockReason;
           return {
-            content: [{ type: 'text', text: `Prompt was blocked: ${blockReason}. Please try a different prompt.` }],
+            content: [{ type: 'text', text: `Prompt was blocked: ${safeReason}. Please try a different prompt.` }],
             isError: true,
           };
         }
@@ -282,7 +343,7 @@ export function registerEditTools(server: McpServer): void {
       for (const part of parts) {
         if (part.inlineData?.data) {
           imageData = part.inlineData.data;
-          imageMimeType = part.inlineData.mimeType || 'image/png';
+          imageMimeType = normaliseImageMimeType(part.inlineData.mimeType);
         } else if (part.text) {
           textResponse = part.text;
         }
@@ -316,18 +377,32 @@ export function registerEditTools(server: McpServer): void {
         }
         try {
           fs.mkdirSync(path.dirname(resolveResult.path), { recursive: true });
-          fs.writeFileSync(resolveResult.path, Buffer.from(imageData, 'base64'));
+          // 'wx' (O_CREAT|O_EXCL): never truncate an existing file — a
+          // silent overwrite of user content is a data-loss bug.
+          fs.writeFileSync(resolveResult.path, Buffer.from(imageData, 'base64'), { flag: 'wx' });
           savedPath = resolveResult.path;
           console.error(`[NanoBanana] Saved edited image to: ${savedPath}`);
         } catch (saveError) {
-          const errMsg = saveError instanceof Error ? saveError.message : String(saveError);
+          // EEXIST from the 'wx' write means the target file exists (refuse
+          // overwrite); EEXIST can also bubble up from mkdir when a path
+          // segment is a regular file — discriminate on the actual target.
+          const isExists =
+            (saveError as NodeJS.ErrnoException).code === 'EEXIST' &&
+            fs.existsSync(resolveResult.path);
+          const errMsg = isExists
+            ? 'a file already exists at that path'
+            : saveError instanceof Error ? saveError.message : String(saveError);
+          const saveCode = isExists ? 'SAVE_EXISTS' : 'SAVE_FAILED';
+          const saveResolution = isExists
+            ? 'Choose a different save_path (or delete the existing file) and try again. The edited image is included inline in this result.'
+            : 'Check that the save path is inside the workspace and writable, then try again. The edited image is included inline in this result.';
           console.error(`[NanoBanana] Failed to save: ${errMsg}`);
           // The image was edited but the requested save failed — surface
           // that as an error instead of silently reporting success. The image
           // is still returned inline so the edit is not lost.
           return {
             content: [
-              { type: 'text', text: JSON.stringify({ ok: false, error: `Image edited but could not be saved to ${resolveResult.path}: ${errMsg}`, code: 'SAVE_FAILED', resolution: 'Check that the save path is inside the workspace and writable, then try again. The edited image is included inline in this result.' }, null, 2) },
+              { type: 'text', text: JSON.stringify({ ok: false, error: `Image edited but could not be saved to ${resolveResult.path}: ${errMsg}`, code: saveCode, resolution: saveResolution }, null, 2) },
               { type: 'image', data: imageData, mimeType: imageMimeType },
             ],
             isError: true,

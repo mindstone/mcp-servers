@@ -19,14 +19,14 @@ describe('Path traversal safety — resolveSavePath', () => {
       expect(getWorkspaceRoot()).toBe('/tmp/test-workspace');
     });
 
-    it('falls back to process.cwd() when MCP_WORKSPACE_PATH is empty', () => {
+    it('falls back to os.tmpdir() when MCP_WORKSPACE_PATH is empty', () => {
       vi.stubEnv('MCP_WORKSPACE_PATH', '');
-      expect(getWorkspaceRoot()).toBe(path.resolve(process.cwd()));
+      expect(getWorkspaceRoot()).toBe(fs.realpathSync(os.tmpdir()));
     });
 
-    it('falls back to process.cwd() when MCP_WORKSPACE_PATH is undefined', () => {
+    it('falls back to os.tmpdir() when MCP_WORKSPACE_PATH is undefined', () => {
       delete process.env.MCP_WORKSPACE_PATH;
-      expect(getWorkspaceRoot()).toBe(path.resolve(process.cwd()));
+      expect(getWorkspaceRoot()).toBe(fs.realpathSync(os.tmpdir()));
     });
   });
 

@@ -131,7 +131,10 @@ export async function geminiFetch(
     );
   }
 
-  // Handle other HTTP errors
+  // Handle other HTTP errors. The vendor error body and Response.statusText
+  // are external, potentially attacker-influenced text (Gemini may echo
+  // request content back in error.message) — they are used ONLY to pick a
+  // canned resolution string and never reach the model-visible message raw.
   if (!response.ok) {
     let detail = '';
     try {
@@ -140,7 +143,7 @@ export async function geminiFetch(
     } catch { /* not JSON */ }
 
     throw new NanoBananaError(
-      `Gemini API error (HTTP ${response.status}): ${detail || response.statusText}`,
+      `Gemini API error (HTTP ${response.status})`,
       `HTTP_${response.status}`,
       getErrorResolution(response.status, detail),
     );
