@@ -63,7 +63,7 @@ export async function talentlmsFetch<T>(
     throw new TalentLMSError(
       'Rate limited by TalentLMS. Please wait before retrying.',
       'RATE_LIMITED',
-      'Please wait before retrying. TalentLMS rate limits: 2,000-10,000 calls/hour depending on plan.',
+      'TalentLMS rate limits depend on your subscription plan (no fixed public figures) and include a short-window burst cap. Wait a moment before retrying, and pace bulk operations.',
     );
   }
 
