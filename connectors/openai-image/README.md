@@ -174,6 +174,7 @@ Inputs:
 - `moderation` (`auto | low`, optional) — content moderation strictness.
 - `output_format` (`png | jpeg | webp`, optional) — output file format, defaults to `png`. The saved filename extension and inline preview MIME type follow the chosen format (`.png` / `.jpg` / `.webp`).
 - `output_compression` (integer 0–100, optional) — compression level; only valid with `jpeg` or `webp` output. Combining it with `png` fails fast with a structured `INVALID_INPUT` error before any API call.
+- `background` (`transparent | opaque | auto`, optional) — background style. `transparent` produces a cutout with an alpha channel and requires `png`/`webp` output plus a transparency-capable model: `gpt-image-2` rejects transparent backgrounds upstream, so the tool fails fast with `INVALID_INPUT` and a resolution pointing at `OPENAI_IMAGE_MODEL=gpt-image-1.5` (or `gpt-image-1`). Unknown model overrides are passed through to upstream validation, matching the connector's existing `OPENAI_IMAGE_MODEL` philosophy.
 
 Returns a text content block with the saved path(s) plus up to 5 inline `image` content blocks. On failure, returns a structured `{ ok: false, code, error, resolution }` response. The tool is annotated `destructiveHint: true, openWorldHint: true, idempotentHint: false`.
 
@@ -183,7 +184,7 @@ Inputs:
 - `prompt` (string, required) — what to change about the input images.
 - `image_paths` (array of 1–4 absolute file paths, required) — source images. Each path is validated: it must resolve lexically inside `MCP_WORKSPACE_PATH`, and its canonical `realpath` must land inside the canonical workspace **or** one of the declared roots in `MCP_ALLOWED_SYMLINK_ROOTS` (matching the host's built-in file-tool containment). Paths outside both are rejected with `WORKSPACE_FENCE_VIOLATION` before any read.
 - `mask_path` (PNG path, optional) — alpha-channel mask indicating which area to edit.
-- `size`, `quality`, `count`, `moderation`, `output_format`, `output_compression` — same shape as `generate_image`.
+- `size`, `quality`, `count`, `moderation`, `output_format`, `output_compression`, `background` — same shape as `generate_image`.
 
 Returns the same content shape as `generate_image`. Same `destructiveHint` / `openWorldHint` / `idempotentHint` annotations.
 

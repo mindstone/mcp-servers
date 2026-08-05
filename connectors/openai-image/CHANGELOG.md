@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `output_format` (`png | jpeg | webp`) and `output_compression` (0–100, jpeg/webp only) options on `generate_image` and `edit_image`. Saved filename extensions (`.png` / `.jpg` / `.webp`) and inline preview MIME types follow the chosen format. `output_compression` combined with `png` output fails fast with a structured `INVALID_INPUT` error before any API call.
+- `background` (`transparent | opaque | auto`) option on both tools. `background: 'transparent'` is gated: it fails fast with `INVALID_INPUT` when combined with `jpeg` output (no alpha channel) or with the default `gpt-image-2` model, which rejects transparent backgrounds upstream — the resolution suggests `OPENAI_IMAGE_MODEL=gpt-image-1.5` (or `gpt-image-1`). Unknown model overrides pass through to upstream validation.
 
 ## [0.2.0] - 2026-07-25
 

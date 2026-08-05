@@ -120,6 +120,12 @@ class WorkspaceFenceToolError extends OpenAIImageToolError {
 const modelSupportsModeration = (model: string): boolean =>
   model.startsWith('gpt-image-2');
 
+// gpt-image-2 rejects background: 'transparent' upstream (OpenAI Images API,
+// verified 2026-08). Unknown models (OPENAI_IMAGE_MODEL overrides) pass
+// through to upstream validation, matching the configuredModel() philosophy.
+const modelKnownToRejectTransparency = (model: string): boolean =>
+  model.startsWith('gpt-image-2');
+
 export const configuredModel = (): string =>
   process.env.OPENAI_IMAGE_MODEL?.trim() || 'gpt-image-2';
 
@@ -1094,6 +1100,32 @@ const resolveOutputOptions = (input: ImageOutputOptions): ResolvedOutputOptions 
   };
 };
 
+const ensureTransparentBackgroundSupported = (
+  background: 'transparent' | 'opaque' | 'auto' | undefined,
+  outputFormat: string,
+  model: string,
+): void => {
+  if (background !== 'transparent') {
+    return;
+  }
+
+  if (outputFormat === 'jpeg') {
+    throw new OpenAIImageToolError(
+      'INVALID_INPUT',
+      "background: 'transparent' requires an output format that supports transparency.",
+      "Set output_format to 'png' or 'webp', or omit output_format (png is the default).",
+    );
+  }
+
+  if (modelKnownToRejectTransparency(model)) {
+    throw new OpenAIImageToolError(
+      'INVALID_INPUT',
+      `Model ${model} does not support transparent backgrounds.`,
+      'Set OPENAI_IMAGE_MODEL to gpt-image-1.5 (or gpt-image-1), or omit the background option.',
+    );
+  }
+};
+
 const generateImageSchema = z.object({
   prompt: z
     .string()
@@ -1138,6 +1170,12 @@ const generateImageSchema = z.object({
     .optional()
     .describe(
       'Compression level 0-100 (higher = better quality, larger file). Only applies when output_format is jpeg or webp.',
+    ),
+  background: z
+    .enum(['transparent', 'opaque', 'auto'])
+    .optional()
+    .describe(
+      "Background style. 'transparent' produces a cutout with an alpha channel; it requires png or webp output and a transparency-capable model (gpt-image-1.x — gpt-image-2 rejects it).",
     ),
 });
 
@@ -1196,6 +1234,12 @@ const editImageSchema = z.object({
     .optional()
     .describe(
       'Compression level 0-100 (higher = better quality, larger file). Only applies when output_format is jpeg or webp.',
+    ),
+  background: z
+    .enum(['transparent', 'opaque', 'auto'])
+    .optional()
+    .describe(
+      "Background style. 'transparent' produces a cutout with an alpha channel; it requires png or webp output and a transparency-capable model (gpt-image-1.x — gpt-image-2 rejects it).",
     ),
 });
 
@@ -1300,6 +1344,7 @@ const registerTools = (targetServer: McpServer): void => {
         const moderation = input.moderation ?? 'auto';
         const { outputFormat, outputExtension, outputMime, outputCompression } =
           resolveOutputOptions(input);
+        ensureTransparentBackgroundSupported(input.background, outputFormat, model);
 
         const body: Record<string, unknown> = {
           model,
@@ -1317,6 +1362,9 @@ const registerTools = (targetServer: McpServer): void => {
         }
         if (outputCompression !== undefined) {
           body.output_compression = outputCompression;
+        }
+        if (input.background) {
+          body.background = input.background;
         }
 
         logger.info('[openai-image] Sending generate request.', {
@@ -1386,6 +1434,7 @@ const registerTools = (targetServer: McpServer): void => {
         const moderation = input.moderation ?? 'auto';
         const { outputFormat, outputExtension, outputMime, outputCompression } =
           resolveOutputOptions(input);
+        ensureTransparentBackgroundSupported(input.background, outputFormat, model);
 
         const referenceImages: LoadedLocalImage[] = [];
         for (const imagePath of input.image_paths) {
@@ -1428,6 +1477,9 @@ const registerTools = (targetServer: McpServer): void => {
         }
         if (outputCompression !== undefined) {
           form.append('output_compression', String(outputCompression));
+        }
+        if (input.background) {
+          form.append('background', input.background);
         }
 
         logger.info('[openai-image] Sending edit request.', {
