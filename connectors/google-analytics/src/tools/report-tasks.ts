@@ -13,11 +13,13 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { googleApi, propertyPath, Bases } from '../client.js';
 import { GoogleAnalyticsError, type DataApiResponse } from '../types.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import {
   compactObject,
   formatRows,
   parseOrderBy,
   toNameList,
+  UNTRUSTED_SOURCES,
   withErrorHandling,
 } from '../utils.js';
 
@@ -71,7 +73,10 @@ function mapReportTask(task: ReportTask) {
     totalRowCount: task.reportMetadata?.totalRowCount ?? null,
     beginCreatingTime: task.reportMetadata?.beginCreatingTime || null,
     creationQuotaTokensCharged: task.reportMetadata?.creationQuotaTokensCharged ?? null,
-    errorMessage: task.reportMetadata?.errorMessage || null,
+    // Vendor-authored failure detail — envelope before model output
+    // (invariant #6).
+    errorMessage:
+      wrapUntrusted(task.reportMetadata?.errorMessage, UNTRUSTED_SOURCES.report) || null,
   };
 }
 

@@ -1,4 +1,5 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { ZodError } from 'zod';
 import { GoogleAnalyticsError, type DataApiResponse } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
@@ -8,6 +9,7 @@ export const UNTRUSTED_SOURCES = {
   admin: 'ga4-admin',
   metadata: 'ga4-metadata',
   audienceExport: 'ga4-audience-export',
+  apiError: 'ga4-api-error',
 } as const;
 
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
@@ -41,6 +43,24 @@ export function withErrorHandling<T>(
           isError: true,
         };
       }
+      if (error instanceof ZodError) {
+        // Connector-generated validation detail (never vendor text) — safe to
+        // surface so the caller can correct the arguments.
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                ok: false,
+                error: 'Invalid tool arguments.',
+                code: 'INVALID_ARGUMENTS',
+                issues: error.issues,
+              }),
+            },
+          ],
+          isError: true,
+        };
+      }
       const errorMessage = error instanceof Error ? error.message : String(error);
 
       // Map common google-auth-library errors to friendly messages.
@@ -52,8 +72,24 @@ export function withErrorHandling<T>(
         };
       }
 
+      // Unexpected runtime errors can embed credential details, file paths, or
+      // vendor/proxy-controlled fragments from deep library stacks. Log the
+      // detail to server stderr (not model-visible) and return a sanitised
+      // message instead of the raw error text.
+      console.error('[google-analytics] Unexpected error:', error);
       return {
-        content: [{ type: 'text', text: JSON.stringify({ ok: false, error: errorMessage }) }],
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              ok: false,
+              error: 'An unexpected error occurred while calling the Google Analytics API.',
+              code: 'UNEXPECTED_ERROR',
+              resolution:
+                'Try again. If the problem persists, check the MCP host server logs for the underlying error detail.',
+            }),
+          },
+        ],
         isError: true,
       };
     }
