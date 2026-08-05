@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-05
+
+### Changed
+
+- Add custom objects, list membership writes, notes lifecycle, email engagement reads; deny-by-default envelopes; API prefix registry; three hardening rounds
+
 ### Added
 
 - 1:1 sales email engagement reads: `search_hubspot_emails` and `get_hubspot_email` expose logged email engagements (subjects, senders, direction, timestamps). HubSpot silently redacts email bodies unless the connected app holds the `sales-email-read` scope, so the tools introspect the token and attach a model-visible `notes` warning when the scope is definitively absent — and an explicit "could not verify" warning when introspection fails or reports no scopes — no silent degradation in either direction. The check is memoised per access token, so a reconnect or token rotation always re-runs it. `get_contact_engagements` carries the same warning.

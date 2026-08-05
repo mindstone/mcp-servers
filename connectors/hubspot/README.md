@@ -9,7 +9,7 @@ HubSpot MCP server for CRM operations (contacts, companies, deals, tickets, lead
 
 ## Status
 
-- **Version:** [0.3.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-hubspot)
+- **Version:** [0.4.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-hubspot)
 - **Auth:** OAuth (host-orchestrated) ([`HUBSPOT_CLIENT_SECRET`](./server.json))
 - **Tools:** [106](./src/tools/) (crm-objects, associations, marketing, files, workflows, conversations)
 - **Surface:** cloud-api
