@@ -129,6 +129,36 @@ describe('agents tools', () => {
     expect(result.json.agent.agent_id).toBe('agent_test_123');
   });
 
+  it('update_agent envelopes advanced_config fragments in the flattened reflection', async () => {
+    // Same flattened-merge class as add_agent_tool: advanced_config deep-merges
+    // into the PATCH body, so the reflected agent config carries the fragment at
+    // the config root with no `advanced_config` ancestor name. A two-word,
+    // alphabet-conforming string under a structural-looking key must come back
+    // enveloped, while known schema positions (agent_id, tts.voice_id) stay literal.
+    const { handler, captured } = createUpdateAgentCapturingHandler();
+    mswServer.use(handler, ...createElevenLabsAgentsHandlers());
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('update_agent', {
+      agent_id: 'agent_test_123',
+      advanced_config: {
+        custom: { status: 'DELETE_DATA' },
+      },
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(captured.body).toEqual({ custom: { status: 'DELETE_DATA' } });
+
+    const agent = result.json.agent;
+    expect(agent.agent_id).toBe('agent_test_123');
+    expect(agent.custom.status).toContain('<untrusted-content');
+    expect(agent.custom.status).toContain('DELETE_DATA');
+    expect(agent.custom.status).toContain('elevenlabs-agents:update_agent:custom:status');
+    expect(agent.conversation_config.tts.voice_id).toBe('voice_test_123');
+  });
+
   it('update_agent lets advanced_config win when it targets the same nested path', async () => {
     const { handler, captured } = createUpdateAgentCapturingHandler();
     mswServer.use(handler, ...createElevenLabsAgentsHandlers());

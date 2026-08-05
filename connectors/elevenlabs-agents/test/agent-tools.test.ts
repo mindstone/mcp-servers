@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mswServer } from './helpers/setup.js';
 import {
   createAddAgentToolCapturingHandler,
+  createAddAgentToolEchoHandler,
   createElevenLabsAgentsHandlers,
   MOCK_API_KEY,
 } from './helpers/elevenlabs-agents-mock-server.js';
@@ -84,6 +85,43 @@ describe('agent tool (workspace tool) tools', () => {
         response_timeout_secs: 30,
       },
     });
+  });
+
+  it('envelopes advanced_config fragments in the flattened tool_config reflection', async () => {
+    // Regression: advanced_config deep-merges into tool_config before the POST,
+    // so the API reflection carries the fragment at tool_config.custom with no
+    // `advanced_config` ancestor name. Ancestor-name-based trust therefore let a
+    // two-word, alphabet-conforming string such as DELETE_DATA sit literally
+    // under the structural-looking `status` key and reach the model unenveloped.
+    const { handler, captured } = createAddAgentToolEchoHandler();
+    mswServer.use(handler, ...createElevenLabsAgentsHandlers());
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('add_agent_tool', {
+      type: 'client',
+      name: 'open_help_center',
+      description: 'Open the help center in the app.',
+      advanced_config: { custom: { status: 'DELETE_DATA' } },
+    });
+
+    expect(result.isError).toBeFalsy();
+    // The fragment went upstream flattened: no `advanced_config` key on the wire.
+    expect(captured.body).toEqual({
+      tool_config: {
+        type: 'client',
+        name: 'open_help_center',
+        description: 'Open the help center in the app.',
+        custom: { status: 'DELETE_DATA' },
+      },
+    });
+
+    const config = result.json.tool.tool_config;
+    expect(config.type).toBe('client');
+    expect(config.custom.status).toContain('<untrusted-content');
+    expect(config.custom.status).toContain('DELETE_DATA');
+    expect(config.custom.status).toContain('elevenlabs-agents:add_agent_tool:tool_config:custom:status');
   });
 
   it('add_agent_tool rejects a webhook tool without a url before any upstream call', async () => {
