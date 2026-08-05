@@ -1,5 +1,14 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { GoogleAnalyticsError, type DataApiResponse } from './types.js';
+import { wrapUntrusted } from './untrusted-content.js';
+
+/** Envelope source labels used across the connector. */
+export const UNTRUSTED_SOURCES = {
+  report: 'ga4-report',
+  admin: 'ga4-admin',
+  metadata: 'ga4-metadata',
+  audienceExport: 'ga4-audience-export',
+} as const;
 
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
 
@@ -145,7 +154,12 @@ export function formatRows(response: DataApiResponse) {
   const rows = (response.rows || []).map((row) => {
     const item: Record<string, string | null> = {};
     dimensionHeaders.forEach((header, index) => {
-      item[header] = row.dimensionValues?.[index]?.value ?? null;
+      // Dimension values (page titles, campaign names, custom-dimension
+      // values) are authored or influenced outside Google's control and
+      // rendered to the model — envelope them (invariant #6). Metric values
+      // are numeric strings and stay raw.
+      item[header] =
+        wrapUntrusted(row.dimensionValues?.[index]?.value, UNTRUSTED_SOURCES.report) ?? null;
     });
     metricHeaders.forEach((header, index) => {
       item[header] = row.metricValues?.[index]?.value ?? null;
@@ -258,10 +272,18 @@ interface MetadataField {
 
 /** Map a raw Data-API metadata field into a cleaner shape. */
 export function mapMetadataField(field: MetadataField, kind: 'dimension' | 'metric') {
+  // Standard dimension/metric uiName/description are Google-authored
+  // documentation. Custom definitions are authored by property editors, so
+  // only those are enveloped (invariant #6).
+  const userAuthored = field.customDefinition === true;
   return {
     apiName: field.apiName || null,
-    uiName: field.uiName || null,
-    description: field.description || null,
+    uiName: userAuthored
+      ? wrapUntrusted(field.uiName, UNTRUSTED_SOURCES.metadata) ?? null
+      : field.uiName || null,
+    description: userAuthored
+      ? wrapUntrusted(field.description, UNTRUSTED_SOURCES.metadata) ?? null
+      : field.description || null,
     category: categoriseField(field, kind),
     type: field.type || null,
     expression: field.expression || null,

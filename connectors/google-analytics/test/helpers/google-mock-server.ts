@@ -8,6 +8,7 @@ import { http, HttpResponse } from 'msw';
 const ADMIN_BETA = 'https://analyticsadmin.googleapis.com/v1beta';
 const ADMIN_ALPHA = 'https://analyticsadmin.googleapis.com/v1alpha';
 const DATA_BETA = 'https://analyticsdata.googleapis.com/v1beta';
+const DATA_ALPHA = 'https://analyticsdata.googleapis.com/v1alpha';
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -191,10 +192,310 @@ export function createGoogleHandlers() {
       });
     }),
 
+    http.get(new RegExp(`^${escapeRegex(ADMIN_BETA)}/properties/[^/]+/googleAdsLinks$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        googleAdsLinks: [
+          {
+            name: 'properties/200/googleAdsLinks/900',
+            customerId: '123-456-7890',
+            canManageClients: false,
+            adsPersonalizationEnabled: true,
+            creatorEmailAddress: 'jane@example.com',
+          },
+        ],
+      });
+    }),
+
+    http.get(new RegExp(`^${escapeRegex(ADMIN_BETA)}/properties/[^/]+/keyEvents$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        keyEvents: [
+          {
+            name: 'properties/200/keyEvents/910',
+            eventName: 'purchase',
+            createTime: '2024-02-01T00:00:00Z',
+            countingMethod: 'ONCE_PER_EVENT',
+            deletable: true,
+          },
+        ],
+      });
+    }),
+
+    http.get(new RegExp(`^${escapeRegex(ADMIN_BETA)}/properties/[^/]+/dataRetentionSettings$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        name: 'properties/200/dataRetentionSettings',
+        eventDataRetention: 'FOURTEEN_MONTHS',
+        resetUserDataOnNewActivity: true,
+      });
+    }),
+
+    http.get(new RegExp(`^${escapeRegex(ADMIN_BETA)}/properties/[^/]+/firebaseLinks$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        firebaseLinks: [
+          {
+            name: 'properties/200/firebaseLinks/920',
+            project: 'acme-app',
+            createTime: '2024-02-15T00:00:00Z',
+          },
+        ],
+      });
+    }),
+
+    http.post(new RegExp(`^${escapeRegex(DATA_BETA)}/properties/[^/]+:runPivotReport$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        rowCount: 2,
+        dimensionHeaders: [{ name: 'country' }],
+        metricHeaders: [{ name: 'sessions' }],
+        pivotHeaders: [{ dimensionNames: ['deviceCategory'] }],
+        rows: [
+          {
+            dimensionValues: [{ value: 'United Kingdom' }],
+            metricValues: [{ value: '1194' }],
+          },
+        ],
+      });
+    }),
+
     http.post(new RegExp(`^${escapeRegex(ADMIN_ALPHA)}/accounts/[^/]+:searchChangeHistoryEvents$`), ({ request }) => {
       const err = checkAuth(request);
       if (err) return err;
       return HttpResponse.json({ changeHistoryEvents: [] });
+    }),
+
+    http.get(new RegExp(`^${escapeRegex(ADMIN_BETA)}/properties/[^/]+/dataStreams$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        dataStreams: [
+          {
+            name: 'properties/200/dataStreams/300',
+            displayName: 'Acme Web Stream',
+            type: 'WEB_DATA_STREAM',
+            createTime: '2024-01-01T00:00:00Z',
+            webStreamData: {
+              defaultUri: 'https://example.com',
+              measurementId: 'G-XXXXXXX',
+            },
+          },
+        ],
+      });
+    }),
+
+    http.get(new RegExp(`^${escapeRegex(ADMIN_ALPHA)}/properties/[^/]+/dataStreams/[^/]+/globalSiteTag$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        name: 'properties/200/dataStreams/300/globalSiteTag',
+        snippet: '<script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXX"></script>',
+      });
+    }),
+
+    http.get(new RegExp(`^${escapeRegex(ADMIN_ALPHA)}/properties/[^/]+/bigQueryLinks$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        bigQueryLinks: [
+          {
+            name: 'properties/200/bigQueryLinks/400',
+            project: 'acme-analytics-export',
+            dailyExportEnabled: true,
+            streamingExportEnabled: false,
+          },
+        ],
+      });
+    }),
+
+    http.get(new RegExp(`^${escapeRegex(ADMIN_ALPHA)}/properties/[^/]+/audiences$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        audiences: [
+          {
+            name: 'properties/200/audiences/500',
+            displayName: 'Purchasers',
+            description: 'Users who completed a purchase.',
+            membershipDurationDays: 30,
+            adsPersonalizationEnabled: true,
+            exclusionDurationMode: 'AUDIENCE_EXCLUSION_DURATION_MODE_UNSPECIFIED',
+            filterClauses: [
+              {
+                clauseType: 'INCLUDE',
+                simpleFilter: {
+                  scope: 'AUDIENCE_FILTER_SCOPE_ACROSS_ALL_SESSIONS',
+                  filterExpression: {
+                    andGroup: {
+                      filterExpressions: [
+                        { dimensionOrMetricFilter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: 'purchase' } } },
+                      ],
+                    },
+                  },
+                },
+              },
+            ],
+            createTime: '2024-03-01T00:00:00Z',
+          },
+        ],
+      });
+    }),
+
+    http.get(new RegExp(`^${escapeRegex(ADMIN_ALPHA)}/properties/[^/]+/channelGroups$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        channelGroups: [
+          {
+            name: 'properties/200/channelGroups/600',
+            displayName: 'Default Channel Group',
+            description: 'The default channel grouping.',
+            systemDefined: true,
+            groupingRule: [
+              {
+                displayName: 'Organic Social',
+                expression: {
+                  orGroup: {
+                    expressions: [
+                      { dimensionOrMetricFilter: { fieldName: 'source', inListFilter: { values: ['facebook', 'instagram'] } } },
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      });
+    }),
+
+    http.post(new RegExp(`^${escapeRegex(DATA_BETA)}/properties/[^/]+/audienceExports$`), async ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      const body = (await request.json()) as {
+        audienceExport?: { audience?: string; dimensions?: Array<{ dimensionName: string }> };
+      };
+      return HttpResponse.json({
+        name: 'properties/200/audienceExports/700',
+        audience: body.audienceExport?.audience,
+        audienceDisplayName: 'Purchasers',
+        dimensions: body.audienceExport?.dimensions || [
+          { dimensionName: 'userId' },
+          { dimensionName: 'deviceId' },
+        ],
+        state: 'CREATING',
+        beginCreatingTime: '2026-08-01T00:00:00Z',
+        creationQuotaTokensCharged: 12,
+      });
+    }),
+
+    http.get(new RegExp(`^${escapeRegex(DATA_BETA)}/properties/[^/]+/audienceExports$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        audienceExports: [
+          {
+            name: 'properties/200/audienceExports/700',
+            audience: 'properties/200/audiences/500',
+            audienceDisplayName: 'Purchasers',
+            dimensions: [{ dimensionName: 'userId' }, { dimensionName: 'deviceId' }],
+            state: 'ACTIVE',
+            beginCreatingTime: '2026-08-01T00:00:00Z',
+            creationQuotaTokensCharged: 12,
+            rowCount: 2,
+          },
+        ],
+      });
+    }),
+
+    http.get(new RegExp(`^${escapeRegex(DATA_BETA)}/properties/[^/]+/audienceExports/[^/]+$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        name: 'properties/200/audienceExports/700',
+        audience: 'properties/200/audiences/500',
+        audienceDisplayName: 'Purchasers',
+        dimensions: [{ dimensionName: 'userId' }, { dimensionName: 'deviceId' }],
+        state: 'ACTIVE',
+        beginCreatingTime: '2026-08-01T00:00:00Z',
+        creationQuotaTokensCharged: 12,
+        rowCount: 2,
+      });
+    }),
+
+    http.post(new RegExp(`^${escapeRegex(DATA_BETA)}/properties/[^/]+/audienceExports/[^/]+:query$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        audienceRows: [
+          { dimensionValues: [{ value: 'user-1' }, { value: 'device-1' }] },
+          { dimensionValues: [{ value: 'user-2' }, { value: 'device-2' }] },
+        ],
+        audienceExport: {
+          name: 'properties/200/audienceExports/700',
+          audience: 'properties/200/audiences/500',
+          audienceDisplayName: 'Purchasers',
+          dimensions: [{ dimensionName: 'userId' }, { dimensionName: 'deviceId' }],
+          state: 'ACTIVE',
+          rowCount: 2,
+        },
+        rowCount: 2,
+      });
+    }),
+
+    http.post(new RegExp(`^${escapeRegex(DATA_ALPHA)}/properties/[^/]+/reportTasks$`), async ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      const body = (await request.json()) as { reportDefinition?: { limit?: string } };
+      return HttpResponse.json({
+        name: 'properties/200/reportTasks/800',
+        reportDefinition: body.reportDefinition,
+        reportMetadata: {
+          state: 'CREATING',
+          beginCreatingTime: '2026-08-01T00:00:00Z',
+          creationQuotaTokensCharged: 5,
+        },
+      });
+    }),
+
+    http.get(new RegExp(`^${escapeRegex(DATA_ALPHA)}/properties/[^/]+/reportTasks/[^/]+$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        name: 'properties/200/reportTasks/800',
+        reportMetadata: {
+          state: 'ACTIVE',
+          taskRowCount: 2,
+          totalRowCount: 300000,
+          beginCreatingTime: '2026-08-01T00:00:00Z',
+          creationQuotaTokensCharged: 5,
+        },
+      });
+    }),
+
+    http.post(new RegExp(`^${escapeRegex(DATA_ALPHA)}/properties/[^/]+/reportTasks/[^/]+:query$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        rowCount: 2,
+        dimensionHeaders: [{ name: 'country' }],
+        metricHeaders: [{ name: 'totalUsers' }],
+        rows: [
+          {
+            dimensionValues: [{ value: 'United Kingdom' }],
+            metricValues: [{ value: '634' }],
+          },
+          {
+            dimensionValues: [{ value: 'United States' }],
+            metricValues: [{ value: '628' }],
+          },
+        ],
+      });
     }),
   ];
 }

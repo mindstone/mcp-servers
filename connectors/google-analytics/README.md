@@ -3,13 +3,13 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-google-analytics.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-google-analytics)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Google Analytics 4 MCP server for Model Context Protocol hosts. Discover account/property structure, explore the live schema, run reports (with row-volume safety), and inspect admin configuration through a standardised MCP interface.
+Google Analytics 4 MCP server for Model Context Protocol hosts. Discover account/property structure, explore the live schema, run reports (with row-volume safety), create large asynchronous exports, and inspect admin configuration through a standardised MCP interface.
 
 ## Status
 
 - **Version:** [0.1.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-google-analytics)
 - **Auth:** OAuth via Google ADC ([`GOOGLE_APPLICATION_CREDENTIALS`](./server.json))
-- **Tools:** [25](./src/tools/) (accounts, schema, reporting, admin)
+- **Tools:** [34](./src/tools/) (accounts, schema, reporting, admin)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -130,7 +130,7 @@ For service accounts, set `GOOGLE_APPLICATION_CREDENTIALS` to the absolute path 
 }
 ```
 
-## Tools (25)
+## Tools (34)
 
 ### Account & property
 - `ga_list_account_summaries` — discover available accounts and properties
@@ -152,7 +152,18 @@ For service accounts, set `GOOGLE_APPLICATION_CREDENTIALS` to the absolute path 
 - `ga_run_realtime_report` — last 30 minutes of activity
 - `ga_get_property_quotas_snapshot` — remaining tokens / requests
 
+### Large exports
+- `ga_create_report_task` — start an asynchronous report task for large exports (no synchronous timeout, no row-volume gate)
+- `ga_get_report_task` — poll task state until `ACTIVE`
+- `ga_query_report_task` — page task rows (up to 250,000 per page)
+- `ga_create_audience_export` — snapshot the users in an audience (incl. predictive segments); charges audience-export quota tokens
+- `ga_get_audience_export` — poll export state until `ACTIVE`
+- `ga_list_audience_exports` — find and reuse existing exports
+- `ga_query_audience_export` — page user-level rows from an `ACTIVE` export
+
 ### Admin visibility
+- `ga_list_audiences` — audiences configured on the property, with filter clauses
+- `ga_list_channel_groups` — channel groups and their grouping rules
 - `ga_get_custom_dimensions_and_metrics`
 - `ga_list_google_ads_links`
 - `ga_list_key_events`
@@ -162,6 +173,12 @@ For service accounts, set `GOOGLE_APPLICATION_CREDENTIALS` to the absolute path 
 - `ga_get_data_retention_settings`
 - `ga_list_firebase_links`
 - `ga_search_change_history_events`
+
+## Notes
+
+- **Read-only posture.** All tools are read-only except `ga_create_report_task` and `ga_create_audience_export`, which materialise server-side snapshots (annotated `readOnlyHint: false`, `destructiveHint: false`) without modifying property configuration.
+- **Alpha endpoints.** Audiences, channel groups, BigQuery links, the global site tag, change history (Admin API), and report tasks (Data API) are only exposed on Google's `v1alpha` surfaces today; the corresponding tools note this in their descriptions.
+- **Untrusted content.** Text authored inside the GA4 property — report dimension values (page titles, campaign names, custom-dimension values), audience/display names, descriptions, and definition blobs — is returned inside `<untrusted-content source="…">` envelopes so hosts treat it as data, not instructions. Metric values and resource identifiers stay raw so agents can compose follow-up calls.
 
 ## Licence
 

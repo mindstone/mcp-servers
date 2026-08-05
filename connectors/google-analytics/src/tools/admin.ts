@@ -8,7 +8,8 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { googleApi, paginate, propertyPath, accountPath, Bases } from '../client.js';
 import { GoogleAnalyticsError } from '../types.js';
-import { withErrorHandling } from '../utils.js';
+import { wrapUntrusted, wrapUntrustedJsonStrings } from '../untrusted-content.js';
+import { UNTRUSTED_SOURCES, withErrorHandling } from '../utils.js';
 
 const READ_ONLY = {
   readOnlyHint: true,
@@ -77,16 +78,16 @@ export function registerAdminTools(server: McpServer): void {
         customDimensions: customDimensions.map((item) => ({
           name: item.name || null,
           parameterName: item.parameterName || null,
-          displayName: item.displayName || null,
-          description: item.description || null,
+          displayName: wrapUntrusted(item.displayName, UNTRUSTED_SOURCES.admin) || null,
+          description: wrapUntrusted(item.description, UNTRUSTED_SOURCES.admin) || null,
           scope: item.scope || null,
           disallowAdsPersonalization: item.disallowAdsPersonalization || false,
         })),
         customMetrics: customMetrics.map((item) => ({
           name: item.name || null,
           parameterName: item.parameterName || null,
-          displayName: item.displayName || null,
-          description: item.description || null,
+          displayName: wrapUntrusted(item.displayName, UNTRUSTED_SOURCES.admin) || null,
+          description: wrapUntrusted(item.description, UNTRUSTED_SOURCES.admin) || null,
           measurementUnit: item.measurementUnit || null,
           restrictedMetricType: item.restrictedMetricType || [],
         })),
@@ -121,7 +122,8 @@ export function registerAdminTools(server: McpServer): void {
           customerId: link.customerId || null,
           canManageClients: link.canManageClients || false,
           adsPersonalizationEnabled: link.adsPersonalizationEnabled || false,
-          creatorEmailAddress: link.creatorEmailAddress || null,
+          creatorEmailAddress:
+            wrapUntrusted(link.creatorEmailAddress, UNTRUSTED_SOURCES.admin) || null,
         })),
       });
     }),
@@ -153,7 +155,7 @@ export function registerAdminTools(server: McpServer): void {
         property,
         keyEvents: keyEvents.map((item) => ({
           name: item.name || null,
-          eventName: item.eventName || null,
+          eventName: wrapUntrusted(item.eventName, UNTRUSTED_SOURCES.admin) || null,
           createTime: item.createTime || null,
           countingMethod: item.countingMethod || null,
           defaultValue: item.defaultValue || null,
@@ -182,13 +184,97 @@ export function registerAdminTools(server: McpServer): void {
         property,
         dataStreams: dataStreams.map((stream) => ({
           name: stream.name || null,
-          displayName: stream.displayName || null,
+          displayName: wrapUntrusted(stream.displayName, UNTRUSTED_SOURCES.admin) || null,
           type: stream.type || null,
           createTime: stream.createTime || null,
           updateTime: stream.updateTime || null,
           webStreamData: stream.webStreamData || null,
           androidAppStreamData: stream.androidAppStreamData || null,
           iosAppStreamData: stream.iosAppStreamData || null,
+        })),
+      });
+    }),
+  );
+
+  server.registerTool(
+    'ga_list_audiences',
+    {
+      description:
+        'List all audiences configured on a GA4 property, including membership duration, ads-personalization flag, and filter clauses. Uses the v1alpha Admin API (audiences are not yet promoted to v1beta); structure may evolve over time.',
+      inputSchema: requiredPropertyId.shape,
+      annotations: READ_ONLY,
+    },
+    withErrorHandling(async (args) => {
+      const property = propertyPath(args.property_id);
+      const audiences = await paginate<{
+        name?: string;
+        displayName?: string;
+        description?: string;
+        membershipDurationDays?: number;
+        adsPersonalizationEnabled?: boolean;
+        exclusionDurationMode?: string;
+        filterClauses?: unknown[];
+        createTime?: string;
+      }>(`/${property}/audiences`, {
+        itemKey: 'audiences',
+        query: { pageSize: 200 },
+        baseUrl: Bases.adminAlpha,
+      });
+      return JSON.stringify({
+        ok: true,
+        property,
+        audiences: audiences.map((audience) => ({
+          name: audience.name || null,
+          displayName: wrapUntrusted(audience.displayName, UNTRUSTED_SOURCES.admin) || null,
+          description: wrapUntrusted(audience.description, UNTRUSTED_SOURCES.admin) || null,
+          membershipDurationDays: audience.membershipDurationDays ?? null,
+          adsPersonalizationEnabled: audience.adsPersonalizationEnabled || false,
+          exclusionDurationMode: audience.exclusionDurationMode || null,
+          // User-authored definition blob — enveloped wholesale.
+          filterClauses: wrapUntrustedJsonStrings(
+            audience.filterClauses || [],
+            UNTRUSTED_SOURCES.admin,
+          ),
+          createTime: audience.createTime || null,
+        })),
+      });
+    }),
+  );
+
+  server.registerTool(
+    'ga_list_channel_groups',
+    {
+      description:
+        'List all channel groups configured on a GA4 property, including the grouping rules that define channels such as "Organic Social". Uses the v1alpha Admin API (channel groups are not yet promoted to v1beta); structure may evolve over time.',
+      inputSchema: requiredPropertyId.shape,
+      annotations: READ_ONLY,
+    },
+    withErrorHandling(async (args) => {
+      const property = propertyPath(args.property_id);
+      const channelGroups = await paginate<{
+        name?: string;
+        displayName?: string;
+        description?: string;
+        systemDefined?: boolean;
+        groupingRule?: unknown[];
+      }>(`/${property}/channelGroups`, {
+        itemKey: 'channelGroups',
+        query: { pageSize: 200 },
+        baseUrl: Bases.adminAlpha,
+      });
+      return JSON.stringify({
+        ok: true,
+        property,
+        channelGroups: channelGroups.map((group) => ({
+          name: group.name || null,
+          displayName: wrapUntrusted(group.displayName, UNTRUSTED_SOURCES.admin) || null,
+          description: wrapUntrusted(group.description, UNTRUSTED_SOURCES.admin) || null,
+          systemDefined: group.systemDefined || false,
+          // User-authored definition blob — enveloped wholesale.
+          groupingRule: wrapUntrustedJsonStrings(
+            group.groupingRule || [],
+            UNTRUSTED_SOURCES.admin,
+          ),
         })),
       });
     }),
@@ -221,12 +307,13 @@ export function registerAdminTools(server: McpServer): void {
       const streamId = webStream.name.split('/').pop();
       const response = await googleApi<{ snippet?: string; name?: string }>(
         `/${property}/dataStreams/${streamId}/globalSiteTag`,
+        { baseUrl: Bases.adminAlpha },
       );
       return JSON.stringify({
         ok: true,
         property,
         dataStream: webStream.name,
-        displayName: webStream.displayName || null,
+        displayName: wrapUntrusted(webStream.displayName, UNTRUSTED_SOURCES.admin) || null,
         globalSiteTag: response?.snippet || null,
         globalSiteTagName: response?.name || null,
       });
@@ -253,6 +340,7 @@ export function registerAdminTools(server: McpServer): void {
       }>(`/${property}/bigQueryLinks`, {
         itemKey: 'bigQueryLinks',
         query: { pageSize: 200 },
+        baseUrl: Bases.adminAlpha,
       });
       return JSON.stringify({
         ok: true,
@@ -374,11 +462,15 @@ export function registerAdminTools(server: McpServer): void {
           id: event.id || null,
           changeTime: event.changeTime || null,
           actorType: event.actorType || null,
-          userActorEmail: event.userActorEmail || null,
+          userActorEmail: wrapUntrusted(event.userActorEmail, UNTRUSTED_SOURCES.admin) || null,
           changesFiltered: (event.changes || []).map((change) => ({
             action: change.action || null,
             resource: change.resource || null,
-            resourceAfterChange: change.resourceAfterChange || null,
+            // Arbitrary resource snapshot authored in the external system —
+            // enveloped wholesale rather than field-enumerated.
+            resourceAfterChange: change.resourceAfterChange
+              ? wrapUntrustedJsonStrings(change.resourceAfterChange, UNTRUSTED_SOURCES.admin)
+              : null,
           })),
         })),
       });

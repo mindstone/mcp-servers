@@ -3,6 +3,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
   registerAccountTools,
   registerAdminTools,
+  registerAudienceExportTools,
+  registerReportTaskTools,
   registerReportTools,
   registerSchemaTools,
 } from './tools/index.js';
@@ -20,6 +22,8 @@ export function createServer(): McpServer {
   registerSchemaTools(server);
   registerReportTools(server);
   registerAdminTools(server);
+  registerAudienceExportTools(server);
+  registerReportTaskTools(server);
 
   return server;
 }

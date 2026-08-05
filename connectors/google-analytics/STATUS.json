@@ -8,7 +8,7 @@
     "envVars": []
   },
   "tools": {
-    "count": 25,
+    "count": 34,
     "domains": [
       "accounts",
       "schema",
