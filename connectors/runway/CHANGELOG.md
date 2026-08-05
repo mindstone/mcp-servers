@@ -14,6 +14,7 @@ are maintained manually as part of the PR review checklist.
 ### Added
 - **runway**: `negative_prompt` parameter on `generate_video_from_text` and `generate_video_from_image` for veo models (`veo3`, `veo3.1`, `veo3.1_fast`) — sent upstream as `negativePrompt` (max 1000 chars); omitted for models that don't support it.
 - **runway**: `model` parameter on `generate_speech` with `eleven_v3` support (expressive speech with audio tags like `[laughs]` / `[whispers]`, text up to 5000 chars). `eleven_v3` accepts preset voices only; combining it with a custom voice ID returns a structured `INVALID_INPUT` error.
+- **runway**: New `upscale_video` tool — upscale a video (max 30s input) to 720p/1k/2k/4k via the Magnific Video Upscaler (`magnific_video_upscaler_creative`), with optional `creativity`, `sharpen`, `smart_grain`, `flavor`, and `fps_boost` controls. Billed per output frame.
 
 ### Fixed
 - **runway**: Replace sunset model identifiers. The Runway API retired `gen3a_turbo` and `gen4_aleph` on 2026-07-30 and requests using them now fail. `generate_video_from_image` no longer offers `gen3a_turbo` (use `gen4_turbo` or `gen4.5` instead), and `generate_video_from_video` now submits with `aleph2` (Aleph 2.0) at 28 credits/sec (56 credit minimum); an optional `reference_image` is sent as a keyframe at second 0.

@@ -8,6 +8,7 @@ import {
   registerVoiceTools,
   registerTaskTools,
   registerAccountTools,
+  registerUpscaleTools,
 } from './tools/index.js';
 
 const require = createRequire(import.meta.url);
@@ -26,6 +27,7 @@ export function createServer(): McpServer {
   registerVoiceTools(server);
   registerTaskTools(server);
   registerAccountTools(server);
+  registerUpscaleTools(server);
 
   return server;
 }
