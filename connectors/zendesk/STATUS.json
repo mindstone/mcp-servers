@@ -10,14 +10,15 @@
     ]
   },
   "tools": {
-    "count": 25,
+    "count": 26,
     "domains": [
       "tickets",
       "users",
       "comments",
       "macros",
       "views",
-      "help-center"
+      "help-center",
+      "satisfaction"
     ]
   },
   "surface": "cloud-api",

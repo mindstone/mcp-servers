@@ -8,6 +8,7 @@ import type {
   ZendeskMacro,
   ZendeskOrganization,
   ZendeskHelpCenterArticle,
+  ZendeskSatisfactionRating,
 } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
@@ -32,6 +33,7 @@ export const UNTRUSTED_USER_SOURCE = 'external-user';
 export const UNTRUSTED_ORG_SOURCE = 'external-organization';
 export const UNTRUSTED_MACRO_SOURCE = 'external-macro';
 export const UNTRUSTED_ARTICLE_SOURCE = 'external-help-center';
+export const UNTRUSTED_SATISFACTION_SOURCE = 'external-satisfaction-rating';
 
 export const UNTRUSTED_TICKET_OPEN = `<untrusted-content source="${UNTRUSTED_TICKET_SOURCE}">`;
 export const UNTRUSTED_TICKET_CLOSE = '</untrusted-content>';
@@ -120,6 +122,19 @@ export function wrapArticleFields(article: ZendeskHelpCenterArticle): ZendeskHel
   if (wb !== undefined) wrapped.body = wb;
   const ws = wrapUntrusted(article.snippet, UNTRUSTED_ARTICLE_SOURCE);
   if (ws !== undefined) wrapped.snippet = ws;
+  return wrapped;
+}
+
+/**
+ * Return a shallow clone of the satisfaction rating with the end-user-authored
+ * `comment` wrapped. Scores, ids, and timestamps are left untouched.
+ */
+export function wrapSatisfactionRatingFields(rating: ZendeskSatisfactionRating): ZendeskSatisfactionRating {
+  const wrapped: ZendeskSatisfactionRating = { ...rating };
+  if (typeof rating.comment === 'string' && rating.comment.length > 0) {
+    const wc = wrapUntrusted(rating.comment, UNTRUSTED_SATISFACTION_SOURCE);
+    if (wc !== undefined) wrapped.comment = wc;
+  }
   return wrapped;
 }
 

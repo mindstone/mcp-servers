@@ -9,6 +9,7 @@ import {
   makeMacro,
   makeComment,
   makeArticle,
+  makeSatisfactionRating,
 } from '../fixtures/zendesk-data.js';
 
 export interface ZendeskMockOptions {
@@ -34,6 +35,8 @@ export interface ZendeskMockOptions {
   comments?: Array<Record<string, unknown>>;
   /** Custom Help Center articles to return */
   articles?: Array<Record<string, unknown>>;
+  /** Custom satisfaction ratings to return */
+  satisfactionRatings?: Array<Record<string, unknown>>;
 }
 
 /**
@@ -56,6 +59,7 @@ export function createZendeskHandlers(subdomain: string, options: ZendeskMockOpt
   const defaultMacros = options.empty ? [] : (options.macros ?? [makeMacro()]);
   const defaultComments = options.empty ? [] : (options.comments ?? [makeComment()]);
   const defaultArticles = options.empty ? [] : (options.articles ?? [makeArticle()]);
+  const defaultRatings = options.empty ? [] : (options.satisfactionRatings ?? [makeSatisfactionRating()]);
 
   return [
     // Search (used by search_zendesk_tickets, search_zendesk_users)
@@ -246,6 +250,15 @@ export function createZendeskHandlers(subdomain: string, options: ZendeskMockOpt
       const articleId = Number(params.articleId);
       const article = defaultArticles.find(a => (a as { id: number }).id === articleId) ?? makeArticle({ id: articleId });
       return HttpResponse.json({ article });
+    }),
+
+    // Satisfaction ratings (used by list_zendesk_satisfaction_ratings)
+    http.get(`${base}/satisfaction_ratings.json`, () => {
+      return HttpResponse.json({
+        satisfaction_ratings: defaultRatings,
+        count: defaultRatings.length,
+        next_page: null,
+      });
     }),
 
     // OAuth token refresh (outside /api/v2)

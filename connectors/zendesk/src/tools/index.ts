@@ -5,3 +5,4 @@ export { registerCommentTools } from './comments.js';
 export { registerDiscoveryTools } from './discovery.js';
 export { registerMacroTools } from './macros.js';
 export { registerHelpCenterTools } from './helpcenter.js';
+export { registerSatisfactionTools } from './satisfaction.js';
