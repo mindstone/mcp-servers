@@ -12,6 +12,9 @@
 ### Fixed
 - **`list_agents` migrated off the deprecated endpoint**: Retell deprecated the legacy `GET /list-agents` in favour of the unified `POST /v2/list-agents` (voice + chat). The tool now calls `POST /v2/list-agents` with a voice-channel filter and returns paginated agent summaries (`pagination_key`, `has_more`), with optional `limit`, `sort_order`, and `pagination_key` parameters. Summary items also expose `voice_name` and `tags` (both wrapped in untrusted-content envelopes).
 
+### Changed
+- README: new tool groups documented (batch calls, knowledge bases, chats, delete lifecycle tools), a "Vendor deprecation watch" section covering Retell's breaking-change cadence, and security notes for batch-call confirmation, workspace-sandboxed knowledge-base file uploads (`MCP_WORKSPACE_PATH`), and permanent delete tools.
+
 ## [0.2.4] - 2026-06-11
 
 ### Changed
