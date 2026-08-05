@@ -19,6 +19,14 @@ are maintained manually as part of the PR review checklist.
 
 ### Security
 - All external text returned by ServiceNow (incident/change-request/knowledge/user records, including fields added by instance customisation) is now wrapped in `<untrusted-content>` envelopes with close-tag breakout escaping, per the repo's untrusted-content invariant. Identifiers, timestamps, and choice-list display values stay literal so they can be copied into follow-up tool calls.
+- Close-tag breakout escaping now neutralises every whitespace variant (`</untrusted-content\n>`, `\r\n`, form feed, etc.), matching the canonical strong envelope helper — previously only spaces and tabs were escaped.
+- Vendor API error messages and bodies are now enveloped (and length-bounded) before reaching model-visible output, and a malformed successful JSON body no longer leaks parser messages that can embed body fragments.
+- Values under "structural" keys (state, priority, type, …) must now match a conservative printable-character shape to stay literal; a hostile instance-customised display value fails safe into an envelope instead of being trusted by key name alone.
+- The host bridge state file is now opened once and read through its file descriptor (no check-then-use window), refuses symlinks / non-regular files / oversized files, and is Zod-validated — the port must be an integer in 1–65535, so a crafted state file can no longer re-interpret the request URL authority and exfiltrate the bridge bearer token. Rejections are logged to stderr instead of being silently swallowed. Bridge responses are Zod-validated before use.
+- Write-tool choice parameters are now real enums (`type`, `risk`, `state`, `urgency`, `impact`) and list pagination is bounded (integer limit 1–1000, non-negative offset), so invalid values are rejected before any network call.
+
+### Fixed
+- The ServiceNow mock server in tests now honours `sysparm_limit` / `sysparm_offset`, so pagination tests exercise real page boundaries.
 
 ## [0.2.2] - 2026-05-14
 ### Added
