@@ -36,7 +36,7 @@ No required environment variables — the install completes without prompts.
 
 - **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-apple-shortcuts)
 - **Auth:** None ([`server.json`](./server.json))
-- **Tools:** [2](./src/) (shortcuts)
+- **Tools:** [3](./src/) (shortcuts)
 - **Surface:** local-cli
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -74,6 +74,14 @@ Run a named shortcut with optional text input.
 |---|---|---|---|
 | `name` | string | Yes | Exact name or identifier of the shortcut |
 | `input` | string | No | Text content to send to the shortcut as its Magic Variable input. Provide the literal text — the connector stores it in a private, mode-`0o600` temporary file (under `os.tmpdir()`) and forwards that location to the macOS `shortcuts` CLI for you. The temporary file is removed once the shortcut returns. Do NOT supply a filename here. |
+
+### `apple_shortcuts_view`
+
+Open a named shortcut in the Shortcuts app editor on the Mac, so you can visually review what it does before running it. The definition opens in the Shortcuts GUI — this tool does not return the definition as text.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Exact name or identifier of the shortcut to open |
 
 ## Configuration
 

@@ -3,7 +3,8 @@
  * MCP Server for Apple Shortcuts
  *
  * Provides tools to interact with macOS Shortcuts via the `shortcuts` CLI.
- * Supports listing available shortcuts and running them with optional input.
+ * Supports listing available shortcuts, opening one in the Shortcuts editor,
+ * and running them with optional input.
  */
 
 import { spawn } from "child_process";
@@ -20,11 +21,6 @@ import { wrapUntrusted } from "./untrusted-content.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
-
-const server = new McpServer({
-  name: "apple-shortcuts-mcp",
-  version: pkg.version,
-});
 
 // =============================================================================
 // CLI Invocation Helpers
@@ -147,6 +143,20 @@ function envelope(text: string, source: string): string {
   return wrapUntrusted(text, source) ?? text;
 }
 
+function timedOutResult(what: string) {
+  return {
+    isError: true as const,
+    content: [
+      {
+        type: "text" as const,
+        text:
+          `${what} did not finish within ${resolveTimeoutMs()}ms and was terminated. ` +
+          `Set APPLE_SHORTCUTS_TIMEOUT_MS to allow longer runs.`,
+      },
+    ],
+  };
+}
+
 // =============================================================================
 // Tool: apple_shortcuts_list
 // =============================================================================
@@ -164,35 +174,8 @@ export const ListShortcutsInputSchema = z.object({
 
 export type ListShortcutsInput = z.infer<typeof ListShortcutsInputSchema>;
 
-server.registerTool(
-  "apple_shortcuts_list",
-  {
-    title: "List Apple Shortcuts",
-    description: `List all available Apple Shortcuts, optionally filtered by folder.
-
-Use this tool to discover what shortcuts are available on this Mac before running one.
-
-Args:
-  - folder_name (string, optional): Filter to a specific folder. Use "none" to list shortcuts not in any folder.
-  - show_identifiers (boolean, default: false): Include internal identifiers in the output.
-
-Returns:
-  A formatted list of shortcut names (and optionally identifiers). Shortcut names
-  are user-authored text and are returned inside an untrusted-content envelope.
-
-Example:
-  - "List all my shortcuts" -> {}
-  - "What shortcuts are in the Work folder?" -> { folder_name: "Work" }
-  - "Show shortcuts with their IDs" -> { show_identifiers: true }`,
-    inputSchema: ListShortcutsInputSchema,
-    annotations: {
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true,
-      openWorldHint: false,
-    },
-  },
-  async (params: ListShortcutsInput) => {
+export function createListShortcutsHandler(runner: ShortcutsRunner = runShortcuts) {
+  return async (params: ListShortcutsInput) => {
     const argv: string[] = ["list"];
     if (params.folder_name !== undefined) {
       argv.push("--folder-name", params.folder_name);
@@ -201,14 +184,18 @@ Example:
       argv.push("--show-identifiers");
     }
 
-    const result = await runShortcuts(argv);
+    const result = await runner(argv);
+
+    if (result.timedOut) {
+      return timedOutResult("Listing shortcuts");
+    }
 
     if (result.exitCode !== 0) {
       return {
         isError: true,
         content: [
           {
-            type: "text",
+            type: "text" as const,
             text: `Failed to list shortcuts (exit ${result.exitCode}): ${envelope(result.stderr || result.stdout, SOURCES.list)}`,
           },
         ],
@@ -218,7 +205,7 @@ Example:
     const lines = result.stdout.trim().split("\n").filter((l) => l.length > 0);
     if (lines.length === 0) {
       return {
-        content: [{ type: "text", text: "No shortcuts found." }],
+        content: [{ type: "text" as const, text: "No shortcuts found." }],
       };
     }
 
@@ -226,13 +213,13 @@ Example:
     return {
       content: [
         {
-          type: "text",
+          type: "text" as const,
           text: `Shortcuts (${lines.length}):\n${envelope(formatted, SOURCES.list)}`,
         },
       ],
     };
-  }
-);
+  };
+}
 
 // =============================================================================
 // Tool: apple_shortcuts_run
@@ -349,11 +336,103 @@ export function createRunShortcutHandler(runner: ShortcutsRunner = runShortcuts)
   };
 }
 
-server.registerTool(
-  "apple_shortcuts_run",
-  {
-    title: "Run Apple Shortcut",
-    description: `Run a named Apple Shortcut, optionally with text input.
+// =============================================================================
+// Tool: apple_shortcuts_view
+// =============================================================================
+
+export const ViewShortcutInputSchema = z.object({
+  name: z
+    .string()
+    .min(1, "Shortcut name is required")
+    .describe("The name or identifier of the shortcut to open in the Shortcuts editor"),
+}).strict();
+
+export type ViewShortcutInput = z.infer<typeof ViewShortcutInputSchema>;
+
+export function createViewShortcutHandler(runner: ShortcutsRunner = runShortcuts) {
+  return async (params: ViewShortcutInput) => {
+    const result = await runner(["view", params.name]);
+
+    if (result.timedOut) {
+      return timedOutResult(`Opening shortcut "${params.name}"`);
+    }
+
+    if (result.exitCode !== 0) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text" as const,
+            text: `Failed to open shortcut "${params.name}" (exit ${result.exitCode}): ${envelope(result.stderr || result.stdout, SOURCES.view)}`,
+          },
+        ],
+      };
+    }
+
+    const output = result.stdout.trim();
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text:
+            `Opened shortcut "${params.name}" in the Shortcuts app editor.` +
+            (output ? `\n${envelope(output, SOURCES.view)}` : ""),
+        },
+      ],
+    };
+  };
+}
+
+// =============================================================================
+// Server factory
+// =============================================================================
+
+/**
+ * Build the MCP server with all tools registered. Factored out so tests can
+ * inject a fake `runner` (the `shortcuts` CLI only exists on macOS).
+ */
+export function createServer(runner: ShortcutsRunner = runShortcuts): McpServer {
+  const server = new McpServer({
+    name: "apple-shortcuts-mcp",
+    version: pkg.version,
+  });
+
+  server.registerTool(
+    "apple_shortcuts_list",
+    {
+      title: "List Apple Shortcuts",
+      description: `List all available Apple Shortcuts, optionally filtered by folder.
+
+Use this tool to discover what shortcuts are available on this Mac before running one.
+
+Args:
+  - folder_name (string, optional): Filter to a specific folder. Use "none" to list shortcuts not in any folder.
+  - show_identifiers (boolean, default: false): Include internal identifiers in the output.
+
+Returns:
+  A formatted list of shortcut names (and optionally identifiers). Shortcut names
+  are user-authored text and are returned inside an untrusted-content envelope.
+
+Example:
+  - "List all my shortcuts" -> {}
+  - "What shortcuts are in the Work folder?" -> { folder_name: "Work" }
+  - "Show shortcuts with their IDs" -> { show_identifiers: true }`,
+      inputSchema: ListShortcutsInputSchema,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    createListShortcutsHandler(runner)
+  );
+
+  server.registerTool(
+    "apple_shortcuts_run",
+    {
+      title: "Run Apple Shortcut",
+      description: `Run a named Apple Shortcut, optionally with text input.
 
 Use this tool to execute any shortcut the user has in their Shortcuts library.
 
@@ -378,16 +457,48 @@ Caveats:
 Example:
   - "Run my 'Morning Briefing' shortcut" -> { name: "Morning Briefing" }
   - "Send a message via my workflow shortcut" -> { name: "Send Message", input: "Hello world" }`,
-    inputSchema: RunShortcutInputSchema,
-    annotations: {
-      readOnlyHint: false,
-      destructiveHint: false,
-      idempotentHint: false,
-      openWorldHint: false,
+      inputSchema: RunShortcutInputSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
     },
-  },
-  createRunShortcutHandler()
-);
+    createRunShortcutHandler(runner)
+  );
+
+  server.registerTool(
+    "apple_shortcuts_view",
+    {
+      title: "View Apple Shortcut",
+      description: `Open a named Apple Shortcut in the Shortcuts app editor on this Mac.
+
+Use this tool so the user can visually review what a shortcut does before
+running it. The shortcut's definition opens in the Shortcuts GUI — this tool
+does NOT return the definition as text.
+
+Args:
+  - name (string): The exact name or identifier of the shortcut to open.
+
+Returns:
+  A confirmation that the shortcut was opened in the editor.
+
+Example:
+  - "Show me what my 'Morning Briefing' shortcut does" -> { name: "Morning Briefing" }`,
+      inputSchema: ViewShortcutInputSchema,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    createViewShortcutHandler(runner)
+  );
+
+  return server;
+}
 
 // =============================================================================
 // Start Server
@@ -396,7 +507,7 @@ Example:
 async function main() {
   logger.info("Apple Shortcuts MCP server starting");
   const transport = new StdioServerTransport();
-  await server.connect(transport);
+  await createServer().connect(transport);
   logger.info("Apple Shortcuts MCP server connected via stdio");
 }
 

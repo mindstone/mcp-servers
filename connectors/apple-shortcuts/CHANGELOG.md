@@ -12,10 +12,14 @@ are maintained manually as part of the PR review checklist.
 ## [Unreleased]
 
 ### Added
+- New tool `apple_shortcuts_view`: opens a named shortcut in the Shortcuts app editor (`shortcuts view`) so the user can review what it does before running it.
 - `APPLE_SHORTCUTS_TIMEOUT_MS` (default `120000`): `shortcuts` CLI invocations that exceed the timeout are terminated (SIGTERM, then SIGKILL after a 5s grace period) and reported as errors, instead of blocking the tool call forever when a shortcut opens a GUI dialog.
 
 ### Security
 - Shortcut stdout and listed shortcut names are now wrapped in `<untrusted-content>` envelopes (AGENTS.md invariant #6); CLI stderr in error results is enveloped too. Previously this output reached the model unwrapped.
+
+### Changed
+- Tool registration moved behind an exported `createServer(runner?)` factory so tests (and embedders) can inject a fake `shortcuts` CLI runner; the stdio entrypoint is unchanged.
 
 ## [0.1.2] - 2026-05-14
 ### Added
