@@ -17,9 +17,16 @@
  * `scripts/check-untrusted-coverage.mjs` greps for a reference to
  * `untrusted-content` in any connector that talks to an external system; this
  * file (and the call sites that import from it) is what satisfies that gate.
+ *
+ * LOCAL DEVIATION from the shared reference (2026-08, §13 adversarial
+ * review): the close-tag variant pattern below matches ALL whitespace
+ * (`\s*`) before the closing `>`, not just space/tab — a model can read
+ * `</untrusted-content\n>` (or CR/FF/vertical-tab variants) as the envelope
+ * close just as easily. Matching `\s*` is strictly stronger than the shared
+ * `[ \t]*`; the shared reference and `_template` should adopt the same.
  */
 
-const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content[ \t]*>/gi;
+const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content\s*>/gi;
 const ESCAPED_UNTRUSTED_CLOSE_TAG = '<\\/untrusted-content>';
 
 function escapeAttr(s: string): string {

@@ -9,6 +9,7 @@
 
 import { getApiKey } from './auth.js';
 import { PandaDocError, PANDADOC_API_BASE, REQUEST_TIMEOUT_MS } from './types.js';
+import { sanitizeVendorErrorText } from './utils.js';
 
 /**
  * Make an authenticated request to the PandaDoc API.
@@ -84,16 +85,22 @@ export async function pandadocFetch<T>(
   if (response.status === 409) {
     const errorBody = await response.text().catch(() => '');
     throw new PandaDocError(
-      `Conflict (409): ${errorBody || 'Document is not ready for this operation.'}`,
+      errorBody
+        ? `Conflict (409): ${sanitizeVendorErrorText(errorBody, 'pandadoc:client:error_409')}`
+        : 'Conflict (409): Document is not ready for this operation.',
       'CONFLICT',
       'Check the document status with get_document_status. The document may not be in the required state.',
     );
   }
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Unknown error');
+    const errorText = await response.text().catch(() => '');
     throw new PandaDocError(
-      `PandaDoc API error (${response.status}): ${errorText}`,
+      `PandaDoc API error (${response.status}): ${
+        errorText
+          ? sanitizeVendorErrorText(errorText, 'pandadoc:client:error_body')
+          : 'no error details provided'
+      }`,
       'API_ERROR',
       'Check the request parameters and try again.',
     );
@@ -102,7 +109,17 @@ export async function pandadocFetch<T>(
   // Some endpoints may return empty body
   const text = await response.text();
   if (!text) return {} as T;
-  return JSON.parse(text) as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    // A JSON.parse failure message is runtime-generated and can echo body
+    // fragments — never surface it (or the body) to the model.
+    throw new PandaDocError(
+      `PandaDoc API returned a malformed (non-JSON) response (status ${response.status}).`,
+      'INVALID_RESPONSE',
+      'Try the request again. If it persists, the PandaDoc API may be degraded.',
+    );
+  }
 }
 
 /**
@@ -174,8 +191,9 @@ export async function pandadocFetchRaw(
   }
 
   if (!response.ok) {
+    // statusText is server-controlled text — surface the numeric status only.
     throw new PandaDocError(
-      `Download failed (${response.status}): ${response.statusText}`,
+      `Download failed (HTTP ${response.status}).`,
       'DOWNLOAD_ERROR',
       'Check the document status and try again.',
     );

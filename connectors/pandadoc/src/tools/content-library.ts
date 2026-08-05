@@ -23,8 +23,13 @@ function noApiKeyError(): string {
 }
 
 function paginationHint(count: number, page: number, pageSize: number): string {
-  if (count < pageSize) return `Showing all ${count} results.`;
-  return `Showing ${count} results (page ${page}). Use page=${page + 1} to see more.`;
+  // The PandaDoc list API returns only `results` — no totals or next-page
+  // markers — so a page's length cannot prove completeness. Never claim
+  // "all results", and never promise another page exists.
+  if (count < pageSize) {
+    return `Showing ${count} results (page ${page}). This page is not full, so there are probably no further pages; the API does not report totals.`;
+  }
+  return `Showing ${count} results (page ${page}). This page is full, so more results may exist — try page=${page + 1}. The API does not report totals.`;
 }
 
 export function registerContentLibraryTools(server: McpServer): void {

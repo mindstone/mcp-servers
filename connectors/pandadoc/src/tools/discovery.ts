@@ -19,8 +19,13 @@ function noApiKeyError(): string {
 }
 
 function paginationHint(count: number, page: number, pageSize: number): string {
-  if (count < pageSize) return `Showing all ${count} results.`;
-  return `Showing ${count} results (page ${page}). Use page=${page + 1} to see more.`;
+  // The PandaDoc list API returns only `results` — no totals or next-page
+  // markers — so a page's length cannot prove completeness. Never claim
+  // "all results", and never promise another page exists.
+  if (count < pageSize) {
+    return `Showing ${count} results (page ${page}). This page is not full, so there are probably no further pages; the API does not report totals.`;
+  }
+  return `Showing ${count} results (page ${page}). This page is full, so more results may exist — try page=${page + 1}. The API does not report totals.`;
 }
 
 export function registerDiscoveryTools(server: McpServer): void {
@@ -80,12 +85,16 @@ RELATED TOOLS:
 
 Returns contact ids, names, emails, companies, and other stored details.
 Use this to discover existing recipients before creating or sending documents.
+Supports count/page paging; use the pagination hint in the response to page
+through large workspaces.
 
 RELATED TOOLS:
 - create_document_from_template: Reference discovered contacts as recipients
 - send_document: Send a document to discovered recipients`,
       inputSchema: z.object({
         email: z.string().optional().describe('Filter by exact email match'),
+        count: z.number().min(1).max(100).default(50).describe('Results per page (default 50, max 100)'),
+        page: z.number().min(1).default(1).describe('Page number (starts at 1)'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
@@ -93,11 +102,13 @@ RELATED TOOLS:
       if (!isConfigured()) return noApiKeyError();
 
       const params = new URLSearchParams();
+      params.set('count', String(args.count));
+      params.set('page', String(args.page));
       if (args.email) params.set('email', args.email);
       const queryStr = params.toString();
 
       const result = await pandadocFetch<ContactListResponse>(
-        `/contacts${queryStr ? `?${queryStr}` : ''}`,
+        `/contacts?${queryStr}`,
       );
 
       const contacts = sanitizeList(
@@ -105,8 +116,9 @@ RELATED TOOLS:
         sanitizeContact,
         'pandadoc:list_contacts',
       ) as Array<Record<string, unknown>>;
+      const hint = paginationHint(contacts.length, args.page, args.count);
 
-      return JSON.stringify({ ok: true, contacts, count: contacts.length });
+      return JSON.stringify({ ok: true, contacts, count: contacts.length, pagination: hint });
     }),
   );
 }
