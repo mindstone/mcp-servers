@@ -168,9 +168,9 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 | Tool | Description |
 | ---- | ----------- |
 | `list_events` | List calendar events within a date range (JSON with per-attendee RSVP status, or agenda-style text). |
-| `get_event` | Get detailed information about a specific calendar event. |
-| `create_event` | Create a new calendar event (with optional Teams meeting). |
-| `update_event` | Update an existing calendar event. |
+| `get_event` | Get detailed information about a specific calendar event (optionally including attachment metadata). |
+| `create_event` | Create a new calendar event (with optional Teams meeting and recurrence). |
+| `update_event` | Update an existing calendar event (including adding/removing attendees and recurrence). |
 | `delete_event` | Delete a calendar event. |
 | `cancel_event` | Cancel a meeting as organizer with an optional message to attendees. |
 | `respond_to_event` | Accept, decline, or tentatively accept an event invitation. |
