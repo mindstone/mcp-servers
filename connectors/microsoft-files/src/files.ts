@@ -1,4 +1,5 @@
 import type { Client, DriveItem } from '@mindstone/mcp-server-microsoft-shared';
+import { z } from 'zod';
 import { wrapUntrusted } from './untrusted-content.js';
 import { FilesBusinessError } from './types.js';
 
@@ -34,6 +35,67 @@ function buildDriveItemEndpoint(path: string, suffix = ''): string {
     return `/me/drive/root:${path}${suffix}`;
   }
   return `/me/drive/items/${path}${suffix}`;
+}
+
+// ---------------------------------------------------------------------------
+// Graph response schemas — validate external payloads at the boundary instead
+// of casting. `.passthrough()` keeps forward-compatible extra fields.
+// ---------------------------------------------------------------------------
+
+const GraphIdentitySchema = z
+  .object({
+    id: z.string().optional(),
+    displayName: z.string().optional(),
+    email: z.string().optional(),
+  })
+  .passthrough();
+
+const GraphPermissionSchema = z
+  .object({
+    id: z.string(),
+    roles: z.array(z.string()).optional(),
+    link: z
+      .object({
+        type: z.string().optional(),
+        scope: z.string().optional(),
+        webUrl: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
+    grantedToIdentities: z
+      .array(z.object({ user: GraphIdentitySchema.optional() }).passthrough())
+      .optional(),
+    invitation: z.object({ email: z.string().optional() }).passthrough().optional(),
+  })
+  .passthrough();
+
+const GraphPermissionListSchema = z
+  .object({ value: z.array(GraphPermissionSchema) })
+  .passthrough();
+
+function formatPermission(
+  permission: z.infer<typeof GraphPermissionSchema>,
+  sourceTool: string,
+) {
+  return {
+    id: permission.id,
+    roles: permission.roles ?? [],
+    link: permission.link
+      ? {
+          type: permission.link.type,
+          scope: permission.link.scope,
+          webUrl: permission.link.webUrl,
+        }
+      : undefined,
+    grantedTo: (permission.grantedToIdentities ?? []).map((identity) => ({
+      id: identity.user?.id,
+      displayName: wrapUntrusted(
+        identity.user?.displayName,
+        `microsoft-files:${sourceTool}:displayName`,
+      ),
+      email: wrapUntrusted(identity.user?.email, `microsoft-files:${sourceTool}:email`),
+    })),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -100,6 +162,23 @@ export interface ShareFileArgs {
 export interface ReadTextFileArgs {
   path: string;
   maxSize?: number;
+}
+
+export interface InviteToFileArgs {
+  path: string;
+  recipients: string[];
+  role?: 'read' | 'write';
+  message?: string;
+  sendInvitation?: boolean;
+}
+
+export interface ListFilePermissionsArgs {
+  path: string;
+}
+
+export interface RevokeFilePermissionArgs {
+  path: string;
+  permissionId: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -459,5 +538,73 @@ export async function readTextFile(
       typeof content === 'string' ? content : content.toString(),
       'microsoft-files:read_text_file:content',
     ),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Permission management (invite / list / revoke)
+// ---------------------------------------------------------------------------
+
+export async function inviteToFile(
+  client: Client,
+  args: InviteToFileArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const endpoint = buildDriveItemEndpoint(args.path, '/invite');
+  const response = await client
+    .api(endpoint)
+    .options({ signal })
+    .post({
+      recipients: args.recipients.map((email) => ({ email })),
+      requireSignIn: true,
+      sendInvitation: args.sendInvitation ?? false,
+      roles: [args.role ?? 'read'],
+      ...(args.message ? { message: args.message } : {}),
+    });
+
+  const parsed = GraphPermissionListSchema.parse(response);
+
+  return {
+    success: true,
+    permissions: parsed.value.map((permission) =>
+      formatPermission(permission, 'invite_to_file'),
+    ),
+    message: 'Sharing invitation created',
+  };
+}
+
+export async function listFilePermissions(
+  client: Client,
+  args: ListFilePermissionsArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const endpoint = buildDriveItemEndpoint(args.path, '/permissions');
+  const response = await client.api(endpoint).options({ signal }).get();
+
+  const parsed = GraphPermissionListSchema.parse(response);
+
+  return {
+    count: parsed.value.length,
+    permissions: parsed.value.map((permission) =>
+      formatPermission(permission, 'list_file_permissions'),
+    ),
+  };
+}
+
+export async function revokeFilePermission(
+  client: Client,
+  args: RevokeFilePermissionArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const endpoint = buildDriveItemEndpoint(
+    args.path,
+    `/permissions/${encodeURIComponent(args.permissionId)}`,
+  );
+  await client.api(endpoint).options({ signal }).delete();
+
+  return {
+    success: true,
+    permissionId: args.permissionId,
+    message: 'Permission revoked successfully',
   };
 }

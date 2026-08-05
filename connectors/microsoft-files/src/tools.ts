@@ -10,9 +10,12 @@ import {
   getFile,
   getRecent,
   getShared,
+  inviteToFile,
+  listFilePermissions,
   listFiles,
   moveFile,
   readTextFile,
+  revokeFilePermission,
   searchFiles,
   shareFile,
   uploadFile,
@@ -449,6 +452,139 @@ export function registerFilesTools(server: McpServer): void {
       }
       const result = await callGraph(extra, (c, signal) =>
         readTextFile(c, { path: args.path!, maxSize: args.maxSize }, signal),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // invite_to_file
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'invite_to_file',
+    {
+      description:
+        'Share a file or folder with specific people by email (grants read or write permission).',
+      inputSchema: z.object({
+        path: z.string().optional().describe('File/folder path or item ID'),
+        recipients: z
+          .array(z.string().email())
+          .min(1)
+          .optional()
+          .describe('Email addresses to share with'),
+        role: z
+          .enum(['read', 'write'])
+          .optional()
+          .describe('Permission to grant (default: read)'),
+        message: z
+          .string()
+          .optional()
+          .describe('Optional note included in the sharing invitation'),
+        sendInvitation: z
+          .boolean()
+          .optional()
+          .describe('Email the recipients about the share (default: false)'),
+      }).shape,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.path || !args.recipients?.length) {
+        return errorResponse({
+          error:
+            'Missing required parameters: "path" (file/folder to share) and "recipients" (email addresses). Example: { "path": "/Documents/report.pdf", "recipients": ["jane@example.com"], "role": "read" }',
+          action_required: 'Provide the file path or item ID and at least one recipient email.',
+          next_step: 'invite_to_file',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        inviteToFile(
+          c,
+          {
+            path: args.path!,
+            recipients: args.recipients!,
+            role: args.role,
+            message: args.message,
+            sendInvitation: args.sendInvitation,
+          },
+          signal,
+        ),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // list_file_permissions
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'list_file_permissions',
+    {
+      description: 'List the sharing permissions granted on a file or folder.',
+      inputSchema: z.object({
+        path: z.string().optional().describe('File/folder path or item ID'),
+      }).shape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.path) {
+        return errorResponse({
+          error:
+            'Missing required parameter: "path" (file/folder to inspect). Example: { "path": "/Documents/report.pdf" }',
+          action_required: 'Provide the file path or item ID.',
+          next_step: 'list_file_permissions',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        listFilePermissions(c, { path: args.path! }, signal),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // revoke_file_permission
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'revoke_file_permission',
+    {
+      description:
+        'Revoke a sharing permission from a file or folder. Use list_file_permissions to find the permission ID.',
+      inputSchema: z.object({
+        path: z.string().optional().describe('File/folder path or item ID'),
+        permissionId: z
+          .string()
+          .optional()
+          .describe('Permission ID from list_file_permissions'),
+      }).shape,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.path || !args.permissionId) {
+        return errorResponse({
+          error:
+            'Missing required parameters: "path" (file/folder) and "permissionId". Example: { "path": "/Documents/report.pdf", "permissionId": "perm-123" }. Use list_file_permissions to find permission IDs.',
+          action_required: 'Provide both the file path or item ID and the permission ID.',
+          next_step: 'list_file_permissions',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        revokeFilePermission(
+          c,
+          { path: args.path!, permissionId: args.permissionId! },
+          signal,
+        ),
       );
       return successJson(result);
     }),

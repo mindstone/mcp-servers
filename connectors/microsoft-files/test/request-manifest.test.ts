@@ -106,6 +106,24 @@ const MANIFEST: ManifestRow[] = [
     pathname: '/v1.0/me/drive/items/:id/content',
     args: { path: '01ABC123xyz' },
   },
+  {
+    tool: 'invite_to_file',
+    method: 'POST',
+    pathname: '/v1.0/me/drive/items/:id/invite',
+    args: { path: '01ABC123xyz', recipients: ['jane@example.com'] },
+  },
+  {
+    tool: 'list_file_permissions',
+    method: 'GET',
+    pathname: '/v1.0/me/drive/items/:id/permissions',
+    args: { path: '01ABC123xyz' },
+  },
+  {
+    tool: 'revoke_file_permission',
+    method: 'DELETE',
+    pathname: '/v1.0/me/drive/items/:id/permissions/:permissionId',
+    args: { path: '01ABC123xyz', permissionId: 'perm-1' },
+  },
 ];
 
 function matchPath(actual: string, pattern: string): boolean {

@@ -54,6 +54,24 @@ const sampleTextMetadata = {
   parentReference: { path: '/drive/root:' },
 };
 
+const samplePermission = {
+  id: 'perm-1',
+  roles: ['read'],
+  grantedToIdentities: [
+    { user: { id: 'user-1', displayName: 'Jane Doe', email: 'jane@example.com' } },
+  ],
+};
+
+const sampleLinkPermission = {
+  id: 'perm-2',
+  roles: ['edit'],
+  link: {
+    type: 'edit',
+    scope: 'organization',
+    webUrl: 'https://onedrive.example.com/share/perm-2',
+  },
+};
+
 /**
  * MSW URL patterns delegate to `path-to-regexp` which interprets `:foo`
  * as a named param. Microsoft Graph's OneDrive endpoints embed literal
@@ -253,6 +271,27 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
       async ({ request }) => {
         await capture(request);
         return HttpResponse.json({ value: [sampleFile] });
+      },
+    ),
+
+    // /me/drive/items/{id}/invite (POST) — invite_to_file
+    http.post(rx(`${GRAPH_BASE}/me/drive/items/<seg>/invite`), async ({ request }) => {
+      await capture(request);
+      return HttpResponse.json({ value: [samplePermission] });
+    }),
+
+    // /me/drive/items/{id}/permissions (GET) — list_file_permissions
+    http.get(rx(`${GRAPH_BASE}/me/drive/items/<seg>/permissions`), async ({ request }) => {
+      await capture(request);
+      return HttpResponse.json({ value: [samplePermission, sampleLinkPermission] });
+    }),
+
+    // /me/drive/items/{id}/permissions/{permissionId} (DELETE) — revoke_file_permission
+    http.delete(
+      rx(`${GRAPH_BASE}/me/drive/items/<seg>/permissions/<seg>`),
+      async ({ request }) => {
+        await capture(request);
+        return new HttpResponse(null, { status: 204 });
       },
     ),
 

@@ -365,4 +365,106 @@ describe('microsoft-files mock-API integration', () => {
     expect(json.ok).toBe(false);
     expect(json.next_step).toBe('list_files');
   });
+
+  // -------------------------------------------------------------------------
+  // invite_to_file
+  // -------------------------------------------------------------------------
+  it('invite_to_file POSTs recipients to /invite and returns enveloped grantees', async () => {
+    const result = await client.callTool('invite_to_file', {
+      path: 'item-1',
+      recipients: ['jane@example.com'],
+      role: 'write',
+      message: 'Here is the report',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      ok?: unknown;
+      success: boolean;
+      permissions: Array<{
+        id: string;
+        roles: string[];
+        grantedTo: Array<{ displayName?: string; email?: string }>;
+      }>;
+    };
+    expect(json.ok).toBeUndefined();
+    expect(json.success).toBe(true);
+    expect(json.permissions[0]?.id).toBe('perm-1');
+    expect(json.permissions[0]?.grantedTo[0]?.displayName).toContain('untrusted-content');
+    expect(json.permissions[0]?.grantedTo[0]?.displayName).toContain('Jane Doe');
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.includes('/me/drive/items/item-1/invite'),
+    );
+    expect(call?.body).toMatchObject({
+      recipients: [{ email: 'jane@example.com' }],
+      roles: ['write'],
+      requireSignIn: true,
+      sendInvitation: false,
+      message: 'Here is the report',
+    });
+  });
+
+  it('invite_to_file rejects missing recipients with guidance', async () => {
+    const result = await client.callTool('invite_to_file', { path: 'item-1' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Missing required parameters');
+    expect(json.next_step).toBe('invite_to_file');
+  });
+
+  // -------------------------------------------------------------------------
+  // list_file_permissions
+  // -------------------------------------------------------------------------
+  it('list_file_permissions returns permissions with enveloped identities', async () => {
+    const result = await client.callTool('list_file_permissions', { path: 'item-1' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      ok?: unknown;
+      count: number;
+      permissions: Array<{ id: string; link?: { scope?: string } }>;
+    };
+    expect(json.ok).toBeUndefined();
+    expect(json.count).toBe(2);
+    expect(json.permissions[1]?.link?.scope).toBe('organization');
+    const call = state.requests.find(
+      (r) => r.method === 'GET' && r.pathname.includes('/me/drive/items/item-1/permissions'),
+    );
+    expect(call).toBeDefined();
+  });
+
+  it('list_file_permissions rejects missing path', async () => {
+    const result = await client.callTool('list_file_permissions', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.next_step).toBe('list_file_permissions');
+  });
+
+  // -------------------------------------------------------------------------
+  // revoke_file_permission
+  // -------------------------------------------------------------------------
+  it('revoke_file_permission DELETEs the permission', async () => {
+    const result = await client.callTool('revoke_file_permission', {
+      path: 'item-1',
+      permissionId: 'perm-2',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; success: boolean };
+    expect(json.ok).toBeUndefined();
+    expect(json.success).toBe(true);
+    const call = state.requests.find(
+      (r) =>
+        r.method === 'DELETE' &&
+        r.pathname.includes('/me/drive/items/item-1/permissions/perm-2'),
+    );
+    expect(call).toBeDefined();
+  });
+
+  it('revoke_file_permission rejects missing permissionId', async () => {
+    const result = await client.callTool('revoke_file_permission', { path: 'item-1' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.next_step).toBe('list_file_permissions');
+  });
 });
