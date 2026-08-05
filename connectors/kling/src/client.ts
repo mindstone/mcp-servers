@@ -68,7 +68,10 @@ export async function klingFetch<T>(
   }
 
   const jwt = await getJwtToken();
-  const url = `${KLING_API_BASE}${path}`;
+  // A full https:// URL bypasses the base prefix — needed for the account
+  // costs endpoint, which Kling documents at the domain root (/account/costs)
+  // rather than under /v1.
+  const url = path.startsWith('https://') ? path : `${KLING_API_BASE}${path}`;
 
   let response: Response;
 

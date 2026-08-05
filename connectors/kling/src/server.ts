@@ -6,6 +6,8 @@ import {
   registerDownloadTools,
   registerExtendTools,
   registerLipSyncTools,
+  registerTaskListTools,
+  registerAccountTools,
 } from './tools/index.js';
 
 const require = createRequire(import.meta.url);
@@ -22,6 +24,8 @@ export function createServer(): McpServer {
   registerDownloadTools(server);
   registerExtendTools(server);
   registerLipSyncTools(server);
+  registerTaskListTools(server);
+  registerAccountTools(server);
 
   return server;
 }
