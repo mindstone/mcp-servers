@@ -18,9 +18,11 @@ are maintained manually as part of the PR review checklist.
 
 ### Security
 - **runway**: Envelope user-authored voice `name`/`description` returned by `list_custom_voices` in `<untrusted-content>` wrappers (with close-tag breakout escaping) via the shared `wrapUntrusted` helper, vendored at `src/untrusted-content.ts`, and validate the upstream response with a Zod schema. Previously these attacker-controllable strings reached model-visible output raw.
+- **runway**: Make `generate_speech` `voice` validation fail-closed. The field now accepts exactly a known preset name or a UUID custom-voice ID (`z.union([z.enum(VOICE_PRESETS), z.string().uuid()])`); unknown preset-like strings and malformed custom identifiers are rejected at input validation before any upstream request. Previously a `includes('-') && length > 20` heuristic decided the preset-vs-custom branch, so arbitrary strings were forwarded as presets. Combining a custom voice with `eleven_v3` remains a structured `INVALID_INPUT` error.
 
 ### Fixed
 - **runway**: Replace sunset model identifiers. The Runway API retired `gen3a_turbo` and `gen4_aleph` on 2026-07-30 and requests using them now fail. `generate_video_from_image` no longer offers `gen3a_turbo` (use `gen4_turbo` or `gen4.5` instead), and `generate_video_from_video` now submits with `aleph2` (Aleph 2.0) at 28 credits/sec (56 credit minimum); an optional `reference_image` is sent as a keyframe at second 0.
+- **runway**: Enforce the documented `generate_speech` text length limits locally (1000 characters; 5000 for `eleven_v3`) and the `generate_sound_effect` prompt limit (3000 characters) before submitting, instead of relying on the upstream API to reject over-limit input.
 
 ## [0.3.2] - 2026-05-14
 ### Added

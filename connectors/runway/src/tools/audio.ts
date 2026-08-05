@@ -4,6 +4,17 @@ import { runwayFetch, resolveMediaInput } from '../client.js';
 import { RunwayError, type TaskResponse, VOICE_PRESETS, DUBBING_LANGUAGES } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 
+// Custom voice IDs are UUIDs (as returned by create_custom_voice /
+// list_custom_voices); the voice field accepts exactly a known preset name or
+// a UUID — anything else must fail input validation rather than be guessed
+// from string shape.
+const voiceSchema = z.union([z.enum(VOICE_PRESETS), z.string().uuid()]);
+const customVoiceIdSchema = z.string().uuid();
+
+// Documented promptText ceiling for the speech models; the tighter
+// model-dependent limits are enforced in the generate_speech handler.
+const SPEECH_TEXT_MAX_CHARS = 5000;
+
 export function registerAudioTools(server: McpServer): void {
   // ── Text-to-Speech ────────────────────────────────────────────────────
   server.registerTool(
@@ -15,8 +26,8 @@ export function registerAudioTools(server: McpServer): void {
         'MODELS: eleven_multilingual_v2 (default), eleven_v3 (expressive; supports audio tags like [laughs] and [whispers] in the text; preset voices only). ' +
         'COST: 1 credit per 50 characters. WORKFLOW: Returns task_id → poll or use wait_for_runway_task.',
       inputSchema: z.object({
-        text: z.string().describe('Text to speak. Max 1000 characters (5000 for eleven_v3, which also accepts audio tags like [laughs]).'),
-        voice: z.string().optional().describe('Voice preset name or custom voice UUID (custom voices require eleven_multilingual_v2). Default: Maya.'),
+        text: z.string().max(SPEECH_TEXT_MAX_CHARS).describe('Text to speak. Max 1000 characters (5000 for eleven_v3, which also accepts audio tags like [laughs]).'),
+        voice: voiceSchema.optional().describe('Voice preset name or custom voice UUID (custom voices require eleven_multilingual_v2). Default: Maya.'),
         model: z.enum(['eleven_multilingual_v2', 'eleven_v3']).optional().describe('Speech model. Default: eleven_multilingual_v2.'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
@@ -24,7 +35,20 @@ export function registerAudioTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       const voice = args.voice || 'Maya';
       const model = args.model || 'eleven_multilingual_v2';
-      const isCustomVoice = voice.includes('-') && voice.length > 20;
+      // Model-dependent text ceiling, enforced here rather than via a
+      // schema-level refine: a .superRefine on the object schema would make
+      // the MCP SDK advertise an empty parameter list for this tool.
+      const maxTextChars = model === 'eleven_v3' ? 5000 : 1000;
+      if (args.text.length > maxTextChars) {
+        throw new RunwayError(
+          `Text is ${args.text.length} characters; ${model} supports at most ${maxTextChars}.`,
+          'INVALID_INPUT',
+          model === 'eleven_v3'
+            ? 'Shorten the text to 5000 characters or fewer.'
+            : 'Shorten the text to 1000 characters or fewer, or switch to eleven_v3 (up to 5000 characters).',
+        );
+      }
+      const isCustomVoice = customVoiceIdSchema.safeParse(voice).success;
       if (isCustomVoice && model === 'eleven_v3') {
         throw new RunwayError(
           'eleven_v3 supports Runway preset voices only',
@@ -60,7 +84,7 @@ export function registerAudioTools(server: McpServer): void {
         'Generate sound effects from a text description. ' +
         'COST: 1 credit per 6 seconds. WORKFLOW: Returns task_id → poll or use wait_for_runway_task.',
       inputSchema: z.object({
-        prompt_text: z.string().describe('Describe the sound effect. Max 3000 chars.'),
+        prompt_text: z.string().max(3000).describe('Describe the sound effect. Max 3000 chars.'),
         duration: z.number().optional().describe('Duration in seconds (0.5-30). Auto-determined if omitted.'),
         loop: z.boolean().optional().describe('If true, output loops seamlessly. Default: false.'),
       }),
