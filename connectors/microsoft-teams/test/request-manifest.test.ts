@@ -53,6 +53,24 @@ const MANIFEST: ManifestRow[] = [
     args: { teamId: 'team-1' },
   },
   {
+    tool: 'list_channel_messages',
+    method: 'GET',
+    pathname: '/v1.0/teams/:teamId/channels/:channelId/messages',
+    args: { teamId: 'team-1', channelId: 'channel-1', top: 1 },
+  },
+  {
+    tool: 'send_channel_message',
+    method: 'POST',
+    pathname: '/v1.0/teams/:teamId/channels/:channelId/messages',
+    args: { teamId: 'team-1', channelId: 'channel-1', content: 'Hello channel' },
+  },
+  {
+    tool: 'reply_to_channel_message',
+    method: 'POST',
+    pathname: '/v1.0/teams/:teamId/channels/:channelId/messages/:messageId/replies',
+    args: { teamId: 'team-1', channelId: 'channel-1', messageId: 'channel-msg-1', content: 'Agreed' },
+  },
+  {
     tool: 'get_presence',
     method: 'GET',
     pathname: '/v1.0/me/presence',

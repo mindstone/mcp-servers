@@ -1,16 +1,21 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
+import { hasScope } from '@mindstone/mcp-server-microsoft-shared';
 import { z } from 'zod';
-import { callGraph } from './client.js';
-import { successJson, withErrorHandling } from './utils.js';
+import { callGraph, getTokenProvider } from './client.js';
+import { errorResponse, successJson, withErrorHandling } from './utils.js';
+import { AUTH_TOOL_NAME } from './types.js';
 import {
   getChat,
   getPresence,
+  listChannelMessages,
   listChannels,
   listChats,
   listChatMessages,
   listTeams,
+  replyToChannelMessage,
+  sendChannelMessage,
   sendChatMessage,
 } from './teams.js';
 
@@ -44,6 +49,39 @@ const WRITE_ANNOTATIONS = {
   destructiveHint: false,
   openWorldHint: true,
 };
+
+/**
+ * Some Teams Graph surfaces (channel messages, user lookup, other users'
+ * presence) need delegated permissions beyond the cohort's base scope set,
+ * and several are admin-consent-gated under Microsoft's managed consent
+ * policy. When the connected account's token lacks the scope, return an
+ * actionable error up front instead of letting Graph 403 — same pattern as
+ * the SharePoint connector's Sites.Read.All gate. When the scope cannot be
+ * introspected (no token on disk yet), fall through to the real call so the
+ * standard auth_required envelope handles it.
+ */
+async function requireScopesGranted(
+  requiredScopes: string[],
+  feature: string,
+): Promise<CallToolResult | null> {
+  let tokenScope: string | undefined;
+  try {
+    const tokenData = await getTokenProvider().loadToken();
+    if (!tokenData) return null;
+    tokenScope = tokenData.scope;
+  } catch {
+    return null;
+  }
+  const missing = requiredScopes.filter((scope) => !hasScope(tokenScope, scope));
+  if (missing.length === 0) return null;
+  return errorResponse({
+    error: `${feature} requires Microsoft Graph permission(s) not granted to the connected account: ${missing.join(', ')}.`,
+    action_required:
+      'Reconnect the Microsoft account with the additional permissions. In many organizations an administrator must approve these permissions first.',
+    next_step: AUTH_TOOL_NAME,
+    missing_scopes: missing,
+  });
+}
 
 export function registerTeamsTools(server: McpServer): void {
   server.registerTool(
@@ -198,6 +236,71 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
     withErrorHandling(async (args, extra) =>
       successJson(await callGraph(extra, (c, signal) => listChannels(c, args, signal))),
     ),
+  );
+
+  server.registerTool(
+    'list_channel_messages',
+    {
+      description:
+        'List recent messages in a Teams channel. Requires the ChannelMessage.Read.All Graph permission, which may need tenant admin approval.',
+      inputSchema: z.object({
+        teamId: z.string().describe('Team ID'),
+        channelId: z.string().describe('Channel ID'),
+        top: z.number().optional().describe('Max messages to return (default: 25, max: 50)'),
+      }).shape,
+      annotations: READ_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) => {
+      const gate = await requireScopesGranted(
+        ['ChannelMessage.Read.All'],
+        'Reading channel messages',
+      );
+      if (gate) return gate;
+      return successJson(await callGraph(extra, (c, signal) => listChannelMessages(c, args, signal)));
+    }),
+  );
+
+  server.registerTool(
+    'send_channel_message',
+    {
+      description:
+        'Post a new message to a Teams channel. Requires the ChannelMessage.Send Graph permission, which may need tenant admin approval.',
+      inputSchema: z
+        .object({
+          teamId: z.string().describe('Team ID'),
+          channelId: z.string().describe('Channel ID'),
+          content: z.string().describe('Message content (HTML supported)'),
+        })
+        .strict(),
+      annotations: WRITE_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) => {
+      const gate = await requireScopesGranted(['ChannelMessage.Send'], 'Posting channel messages');
+      if (gate) return gate;
+      return successJson(await callGraph(extra, (c, signal) => sendChannelMessage(c, args, signal)));
+    }),
+  );
+
+  server.registerTool(
+    'reply_to_channel_message',
+    {
+      description:
+        'Reply to an existing message in a Teams channel. Requires the ChannelMessage.Send Graph permission, which may need tenant admin approval.',
+      inputSchema: z
+        .object({
+          teamId: z.string().describe('Team ID'),
+          channelId: z.string().describe('Channel ID'),
+          messageId: z.string().describe('ID of the channel message to reply to'),
+          content: z.string().describe('Reply content (HTML supported)'),
+        })
+        .strict(),
+      annotations: WRITE_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) => {
+      const gate = await requireScopesGranted(['ChannelMessage.Send'], 'Replying to channel messages');
+      if (gate) return gate;
+      return successJson(await callGraph(extra, (c, signal) => replyToChannelMessage(c, args, signal)));
+    }),
   );
 
   server.registerTool(

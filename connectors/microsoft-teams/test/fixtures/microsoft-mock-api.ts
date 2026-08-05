@@ -160,6 +160,41 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
       });
     }),
 
+    http.get(`${GRAPH_BASE}/teams/:teamId/channels/:channelId/messages`, async ({ request }) => {
+      await capture(request);
+      return HttpResponse.json({
+        value: [
+          {
+            id: 'channel-msg-1',
+            replyToId: null,
+            from: { user: { id: 'user-1', displayName: 'Alice' } },
+            body: { content: '<p>Quarterly numbers are in</p>', contentType: 'html' },
+            createdDateTime: '2026-05-19T08:00:00Z',
+          },
+          {
+            id: 'channel-msg-2',
+            replyToId: 'channel-msg-1',
+            from: { user: { id: 'user-2', displayName: 'Bob' } },
+            body: { content: 'Thanks!', contentType: 'text' },
+            createdDateTime: '2026-05-19T08:05:00Z',
+          },
+        ],
+      });
+    }),
+
+    http.post(`${GRAPH_BASE}/teams/:teamId/channels/:channelId/messages`, async ({ request }) => {
+      await capture(request);
+      return HttpResponse.json({ id: 'channel-msg-new' });
+    }),
+
+    http.post(
+      `${GRAPH_BASE}/teams/:teamId/channels/:channelId/messages/:messageId/replies`,
+      async ({ request }) => {
+        await capture(request);
+        return HttpResponse.json({ id: 'channel-reply-new' });
+      },
+    ),
+
     http.get(`${GRAPH_BASE}/me/presence`, async ({ request }) => {
       await capture(request);
       return HttpResponse.json({

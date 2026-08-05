@@ -14,6 +14,9 @@ const EXPECTED_TOOLS = [
   'send_chat_message',
   'list_teams',
   'list_channels',
+  'list_channel_messages',
+  'send_channel_message',
+  'reply_to_channel_message',
   'get_presence',
 ];
 
@@ -25,6 +28,9 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
   send_chat_message: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
   list_teams: { readOnlyHint: true, openWorldHint: true },
   list_channels: { readOnlyHint: true, openWorldHint: true },
+  list_channel_messages: { readOnlyHint: true, openWorldHint: true },
+  send_channel_message: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  reply_to_channel_message: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
   get_presence: { readOnlyHint: true, openWorldHint: true },
 };
 
@@ -47,7 +53,7 @@ describe('microsoft-teams tools/list', () => {
     if (cfg) cfg.cleanup();
   });
 
-  it('registers exactly the 8 teams tools in the locked surface', async () => {
+  it('registers exactly the 11 teams tools in the locked surface', async () => {
     const response = await client.client.listTools();
     const names = response.tools.map((tool) => tool.name).sort();
     expect(names).toEqual([...EXPECTED_TOOLS].sort());

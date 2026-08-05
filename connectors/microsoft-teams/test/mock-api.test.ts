@@ -130,6 +130,71 @@ describe('microsoft-teams mock-API integration', () => {
     });
   });
 
+  it('list_channel_messages returns channel messages', async () => {
+    const result = await client.callTool('list_channel_messages', {
+      teamId: 'team-1',
+      channelId: 'channel-1',
+      top: 5,
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      teamId: string;
+      channelId: string;
+      count: number;
+      messages: Array<{ id: string; content: string; from: string; replyToId?: string }>;
+    };
+    expect(json.teamId).toBe('team-1');
+    expect(json.channelId).toBe('channel-1');
+    expect(json.count).toBe(2);
+    expect(json.messages[0]?.content).toContain('Quarterly numbers are in');
+    expect(json.messages[0]?.from).toContain('Alice');
+    expect(json.messages[1]?.replyToId).toBe('channel-msg-1');
+    const call = state.requests.find(
+      (r) => r.pathname.endsWith('/teams/team-1/channels/channel-1/messages') && r.method === 'GET',
+    );
+    expect(call).toBeDefined();
+    expect(call?.search).toMatch(/\$top=5/);
+  });
+
+  it('send_channel_message posts to the channel messages endpoint', async () => {
+    const result = await client.callTool('send_channel_message', {
+      teamId: 'team-1',
+      channelId: 'channel-1',
+      content: 'Hello channel',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { success: boolean; messageId: string };
+    expect(json.success).toBe(true);
+    expect(json.messageId).toBe('channel-msg-new');
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.endsWith('/teams/team-1/channels/channel-1/messages'),
+    );
+    expect(call?.body).toMatchObject({
+      body: { contentType: 'text', content: 'Hello channel' },
+    });
+  });
+
+  it('reply_to_channel_message posts to the replies endpoint', async () => {
+    const result = await client.callTool('reply_to_channel_message', {
+      teamId: 'team-1',
+      channelId: 'channel-1',
+      messageId: 'channel-msg-1',
+      content: 'Agreed',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { success: boolean; messageId: string };
+    expect(json.success).toBe(true);
+    expect(json.messageId).toBe('channel-reply-new');
+    const call = state.requests.find(
+      (r) =>
+        r.method === 'POST' &&
+        r.pathname.endsWith('/teams/team-1/channels/channel-1/messages/channel-msg-1/replies'),
+    );
+    expect(call?.body).toMatchObject({
+      body: { contentType: 'text', content: 'Agreed' },
+    });
+  });
+
   it('send_chat_message rejects unknown keys (strict schema)', async () => {
     // F8: the input schema is `.strict()`, so an unexpected argument is refused
     // at the protocol boundary rather than silently forwarded to Graph. The SDK

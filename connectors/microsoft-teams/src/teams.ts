@@ -1,4 +1,5 @@
 import type { Chat, ChatMessage, Client } from '@mindstone/mcp-server-microsoft-shared';
+import { z } from 'zod';
 import { wrapUntrusted } from './untrusted-content.js';
 
 export class TeamsBusinessError extends Error {
@@ -74,15 +75,22 @@ function requireStringArg(args: ArgBag, name: string, label: string, nextStep: s
   );
 }
 
-function formatMessage(msg: ChatMessage): Record<string, unknown> {
+interface MessageLike {
+  id?: string;
+  from?: { user?: { displayName?: string | null; id?: string | null } | null } | null;
+  body?: { content?: string | null; contentType?: string | null } | null;
+  createdDateTime?: string | null;
+}
+
+function formatMessage(msg: MessageLike, tool: string): Record<string, unknown> {
   return {
     id: msg.id,
     from: msg.from?.user?.displayName
-      ? wrapUntrusted(msg.from.user.displayName, 'microsoft-teams:list_chat_messages:from')
+      ? wrapUntrusted(msg.from.user.displayName, `microsoft-teams:${tool}:from`)
       : 'Unknown',
     content: wrapUntrusted(
       stripHtml(msg.body?.content ?? ''),
-      'microsoft-teams:list_chat_messages:content',
+      `microsoft-teams:${tool}:content`,
     ),
     contentType: msg.body?.contentType,
     createdAt: msg.createdDateTime,
@@ -177,7 +185,7 @@ export async function listChatMessages(
   return {
     chatId,
     count: messages.length,
-    messages: messages.map(formatMessage),
+    messages: messages.map((msg) => formatMessage(msg, 'list_chat_messages')),
   };
 }
 
@@ -288,5 +296,133 @@ export async function getPresence(
       presence.statusMessage?.message?.content ?? undefined,
       'microsoft-teams:get_presence:statusMessage',
     ),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Channel messages
+// ---------------------------------------------------------------------------
+// Newer functions validate Graph responses with Zod (the repo convention);
+// the older functions above predate it and still cast — intentional, not an
+// oversight, pending the planned cohort-wide tightening.
+
+const graphMessageSchema = z
+  .object({
+    id: z.string().optional(),
+    replyToId: z.string().nullish(),
+    from: z
+      .object({
+        user: z
+          .object({
+            id: z.string().nullish(),
+            displayName: z.string().nullish(),
+          })
+          .nullish(),
+      })
+      .nullish(),
+    body: z
+      .object({
+        content: z.string().nullish(),
+        contentType: z.string().nullish(),
+      })
+      .nullish(),
+    createdDateTime: z.string().nullish(),
+  })
+  .passthrough();
+
+const graphMessageCollectionSchema = z
+  .object({
+    value: z.array(graphMessageSchema).nullish(),
+  })
+  .passthrough();
+
+const sendMessageResponseSchema = z
+  .object({
+    id: z.string().optional(),
+  })
+  .passthrough();
+
+function messagePostBody(content: string): { body: { contentType: string; content: string } } {
+  return {
+    body: {
+      contentType: content.includes('<') ? 'html' : 'text',
+      content,
+    },
+  };
+}
+
+export async function listChannelMessages(
+  client: Client,
+  args: ArgBag,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const teamId = requireStringArg(args, 'teamId', 'team ID', 'list_channel_messages');
+  const channelId = requireStringArg(args, 'channelId', 'channel ID', 'list_channel_messages');
+  const top = clampTop(numberArg(args, 'top'), 25, 50);
+
+  const response = graphMessageCollectionSchema.parse(
+    await client
+      .api(`/teams/${teamId}/channels/${channelId}/messages`)
+      .options({ signal })
+      .top(top)
+      .get(),
+  );
+  const messages = response.value ?? [];
+
+  return {
+    teamId,
+    channelId,
+    count: messages.length,
+    messages: messages.map((msg) => ({
+      ...formatMessage(msg, 'list_channel_messages'),
+      replyToId: msg.replyToId ?? undefined,
+    })),
+  };
+}
+
+export async function sendChannelMessage(
+  client: Client,
+  args: ArgBag,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const teamId = requireStringArg(args, 'teamId', 'team ID', 'send_channel_message');
+  const channelId = requireStringArg(args, 'channelId', 'channel ID', 'send_channel_message');
+  const content = requireStringArg(args, 'content', 'message body', 'send_channel_message');
+
+  const response = sendMessageResponseSchema.parse(
+    await client
+      .api(`/teams/${teamId}/channels/${channelId}/messages`)
+      .options({ signal })
+      .post(messagePostBody(content)),
+  );
+
+  return {
+    success: true,
+    messageId: response.id,
+    message: 'Message sent successfully',
+  };
+}
+
+export async function replyToChannelMessage(
+  client: Client,
+  args: ArgBag,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const teamId = requireStringArg(args, 'teamId', 'team ID', 'reply_to_channel_message');
+  const channelId = requireStringArg(args, 'channelId', 'channel ID', 'reply_to_channel_message');
+  const messageId = requireStringArg(args, 'messageId', 'channel message ID', 'reply_to_channel_message');
+  const content = requireStringArg(args, 'content', 'reply body', 'reply_to_channel_message');
+
+  const response = sendMessageResponseSchema.parse(
+    await client
+      .api(`/teams/${teamId}/channels/${channelId}/messages/${messageId}/replies`)
+      .options({ signal })
+      .post(messagePostBody(content)),
+  );
+
+  return {
+    success: true,
+    messageId: response.id,
+    message: 'Reply sent successfully',
   };
 }

@@ -11,7 +11,7 @@ Microsoft 365 Teams MCP server — list and read Teams chats, send chat messages
 
 - **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-teams)
 - **Auth:** OAuth (host-orchestrated, shared with [`mcp-server-microsoft-mail`](../microsoft-mail/)) ([`MS_CLIENT_ID`](./server.json))
-- **Tools:** [8](./src/tools.ts) (chats, messages, teams, channels, presence)
+- **Tools:** [11](./src/tools.ts) (chats, messages, teams, channels, presence)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 - **Shared library:** [`@mindstone/mcp-server-microsoft-shared`](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-shared)
@@ -164,7 +164,7 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 }
 ```
 
-## Tools (8)
+## Tools (11)
 
 | Tool | Description |
 | ---- | ----------- |
@@ -175,9 +175,12 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 | `compose_chat_message` | Open an inline editable compose form before sending; the form posts via `send_chat_message` when the user clicks Send. |
 | `list_teams` | List teams you are a member of. |
 | `list_channels` | List channels in a team. |
+| `list_channel_messages` | List recent messages in a channel. Requires `ChannelMessage.Read.All`. |
+| `send_channel_message` | Post a new message to a channel. Requires `ChannelMessage.Send`. |
+| `reply_to_channel_message` | Reply to an existing channel message. Requires `ChannelMessage.Send`. |
 | `get_presence` | Get your current presence status. |
 
-Some Teams Graph APIs may require tenant admin approval.
+Some Teams Graph APIs may require tenant admin approval. Tools marked with a required permission check the connected account's token up front and return actionable reconnect guidance when the permission is missing (under Microsoft's managed consent policy, `ChannelMessage.Read.All` is admin-consent-gated in most tenants).
 
 ## Security notes
 
