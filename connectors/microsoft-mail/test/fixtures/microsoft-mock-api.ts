@@ -171,6 +171,57 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
       return new HttpResponse(null, { status: 204 });
     }),
 
+    // /me/messages/{id}/attachments/{attachmentId} (GET) — download_attachment
+    http.get(`${GRAPH_BASE}/me/messages/:id/attachments/:attachmentId`, async ({ request, params }) => {
+      const url = new URL(request.url);
+      await capture(request, url.pathname, url.search);
+      if (params.attachmentId === 'att-item') {
+        return HttpResponse.json({
+          '@odata.type': '#microsoft.graph.itemAttachment',
+          id: 'att-item',
+          name: 'nested-message.eml',
+          size: 4096,
+          isInline: false,
+        });
+      }
+      return HttpResponse.json({
+        '@odata.type': '#microsoft.graph.fileAttachment',
+        id: String(params.attachmentId),
+        name: 'report.pdf',
+        contentType: 'application/pdf',
+        size: 16,
+        isInline: false,
+        // base64 of "hello attachment"
+        contentBytes: 'aGVsbG8gYXR0YWNobWVudA==',
+      });
+    }),
+
+    // /me/messages/{id}/attachments (GET) — list_attachments
+    http.get(`${GRAPH_BASE}/me/messages/:id/attachments`, async ({ request }) => {
+      const url = new URL(request.url);
+      await capture(request, url.pathname, url.search);
+      return HttpResponse.json({
+        value: [
+          {
+            '@odata.type': '#microsoft.graph.fileAttachment',
+            id: 'att-1',
+            name: 'report.pdf',
+            contentType: 'application/pdf',
+            size: 16,
+            isInline: false,
+          },
+          {
+            '@odata.type': '#microsoft.graph.fileAttachment',
+            id: 'att-2',
+            name: 'photo.jpg',
+            contentType: 'image/jpeg',
+            size: 2048,
+            isInline: true,
+          },
+        ],
+      });
+    }),
+
     // /me/mailFolders — list_folders
     http.get(`${GRAPH_BASE}/me/mailFolders`, async ({ request }) => {
       const url = new URL(request.url);

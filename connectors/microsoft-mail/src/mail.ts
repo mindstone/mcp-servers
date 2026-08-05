@@ -1,5 +1,28 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { z } from 'zod';
 import type { Client, EmailMessage, MailFolder } from '@mindstone/mcp-server-microsoft-shared';
 import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
+
+// Graph response payloads are cast by the SDK; the tools added here validate
+// the fields they consume with Zod at the boundary (planned tightening —
+// pre-existing read tools still cast, tracked in the CHANGELOG).
+const GraphAttachmentSchema = z
+  .object({
+    '@odata.type': z.string().optional(),
+    id: z.string(),
+    name: z.string().optional(),
+    contentType: z.string().optional(),
+    size: z.number().optional(),
+    isInline: z.boolean().optional(),
+    contentBytes: z.string().optional(),
+  })
+  .passthrough();
+
+const GraphAttachmentListSchema = z
+  .object({ value: z.array(GraphAttachmentSchema).default([]) })
+  .passthrough();
 
 const WELL_KNOWN_FOLDERS: Record<string, string> = {
   inbox: 'inbox',
@@ -386,5 +409,166 @@ export async function createDraft(
     success: true,
     draftId: response.id,
     message: 'Draft created successfully',
+  };
+}
+
+export interface ListAttachmentsArgs {
+  id: string;
+}
+
+export async function listAttachments(
+  client: Client,
+  args: ListAttachmentsArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const response = await client
+    .api(`/me/messages/${args.id}/attachments`)
+    .options({ signal })
+    .get();
+  const parsed = GraphAttachmentListSchema.parse(response);
+
+  const attachments = parsed.value.map((attachment) => ({
+    id: attachment.id,
+    name: wrapUntrusted(attachment.name, 'microsoft-mail:list_attachments:name'),
+    contentType: attachment.contentType,
+    size: attachment.size,
+    isInline: attachment.isInline,
+    type: attachment['@odata.type']?.replace('#microsoft.graph.', ''),
+  }));
+
+  return {
+    messageId: args.id,
+    count: attachments.length,
+    attachments,
+  };
+}
+
+// Mail attachment bodies can be large; Graph inlines contentBytes on the
+// single-attachment GET, so cap what we are willing to decode and write.
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Reject anything that is not a plain filename before it is joined onto the
+ * attachment directory (same rule family as the other file-writing
+ * connectors: no separators, no `..`, no dotfiles, no NUL).
+ */
+function sanitizeAttachmentFilename(name: string): string {
+  if (name.trim().length === 0) {
+    throw new Error('Invalid attachment filename: must not be empty');
+  }
+  if (name.includes('\0')) {
+    throw new Error('Invalid attachment filename: must not contain NUL bytes');
+  }
+  if (name.includes('/') || name.includes('\\')) {
+    throw new Error('Invalid attachment filename: must not contain path separators');
+  }
+  if (name.includes('..')) {
+    throw new Error(`Invalid attachment filename: must not contain '..'`);
+  }
+  if (name.startsWith('.')) {
+    throw new Error('Invalid attachment filename: must not start with a dot');
+  }
+  const basename = path.basename(name);
+  if (basename !== name || basename === '.' || basename === '..') {
+    throw new Error('Invalid attachment filename: must be a plain filename');
+  }
+  return basename;
+}
+
+/**
+ * Resolve the directory attachments are saved into, honouring the repo's
+ * file-write invariant: canonical-prefix containment under
+ * `MCP_WORKSPACE_PATH` (or `os.tmpdir()` when unset), with the canonical
+ * (symlink-resolved) root as the containment anchor.
+ */
+async function resolveAttachmentDir(): Promise<string> {
+  const root = process.env.MCP_WORKSPACE_PATH || os.tmpdir();
+  const dir = path.join(root, 'attachments', 'microsoft-mail');
+  await fs.mkdir(dir, { recursive: true });
+  const realDir = await fs.realpath(dir);
+  const relative = path.relative(await fs.realpath(root), realDir);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('Resolved attachment directory escaped its workspace root');
+  }
+  return realDir;
+}
+
+async function uniqueAttachmentPath(dir: string, filename: string): Promise<string> {
+  const ext = path.extname(filename);
+  const base = path.basename(filename, ext);
+  for (let attempt = 0; ; attempt += 1) {
+    const candidate = attempt === 0 ? filename : `${base}-${attempt}${ext}`;
+    const fullPath = path.join(dir, candidate);
+    try {
+      await fs.lstat(fullPath);
+    } catch {
+      return fullPath;
+    }
+  }
+}
+
+export interface DownloadAttachmentArgs {
+  id: string;
+  attachmentId: string;
+}
+
+export async function downloadAttachment(
+  client: Client,
+  args: DownloadAttachmentArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const response = await client
+    .api(`/me/messages/${args.id}/attachments/${args.attachmentId}`)
+    .options({ signal })
+    .get();
+  const attachment = GraphAttachmentSchema.parse(response);
+
+  if (attachment['@odata.type'] && !attachment['@odata.type'].endsWith('fileAttachment')) {
+    throw new Error(
+      `Attachment "${attachment.name ?? args.attachmentId}" is not a file attachment ` +
+        `(${attachment['@odata.type'].replace('#microsoft.graph.', '')}); inline download is not ` +
+        'supported for embedded-message or reference attachments. Open the message in Outlook to access it.',
+    );
+  }
+  if (!attachment.contentBytes) {
+    throw new Error(
+      `Attachment "${attachment.name ?? args.attachmentId}" has no inline content. ` +
+        'Open the message in Outlook to access it.',
+    );
+  }
+
+  // ~4/3 expansion when decoding; reject before allocating the buffer.
+  if (attachment.contentBytes.length > Math.ceil((MAX_ATTACHMENT_BYTES * 4) / 3)) {
+    throw new Error(
+      `Attachment "${attachment.name ?? args.attachmentId}" exceeds the ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB download limit.`,
+    );
+  }
+  const content = Buffer.from(attachment.contentBytes, 'base64');
+  if (content.byteLength > MAX_ATTACHMENT_BYTES) {
+    throw new Error(
+      `Attachment "${attachment.name ?? args.attachmentId}" exceeds the ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB download limit.`,
+    );
+  }
+
+  const dir = await resolveAttachmentDir();
+  const filename = sanitizeAttachmentFilename(attachment.name?.trim() || 'attachment');
+  const fullPath = await uniqueAttachmentPath(dir, filename);
+  // The filename is separator-free, but keep the canonical containment check
+  // so a future refactor cannot silently weaken the boundary.
+  const relative = path.relative(dir, fullPath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('Resolved attachment path escaped the attachment directory');
+  }
+  await fs.writeFile(fullPath, content);
+
+  return {
+    success: true,
+    messageId: args.id,
+    attachmentId: attachment.id,
+    name: wrapUntrusted(attachment.name, 'microsoft-mail:download_attachment:name'),
+    contentType: attachment.contentType,
+    size: content.byteLength,
+    savedTo: fullPath,
+    message: `Attachment saved to ${fullPath}`,
   };
 }

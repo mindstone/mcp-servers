@@ -13,8 +13,10 @@ import {
   createDraft,
   createReplyDraft,
   deleteEmail,
+  downloadAttachment,
   forwardEmail,
   getEmail,
+  listAttachments,
   listEmails,
   listFolders,
   moveEmail,
@@ -127,6 +129,76 @@ sign-in, Microsoft 365 tools become available.`,
         });
       }
       const result = await callGraph(extra, (c, signal) => getEmail(c, { id: args.id! }, signal));
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // list_attachments
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'list_attachments',
+    {
+      description:
+        'List attachments on an email message. Returns attachment IDs, names, types, and sizes. Use download_attachment to save one locally.',
+      inputSchema: z.object({
+        id: z.string().optional().describe('Email message ID'),
+      }).shape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.id) {
+        return errorResponse({
+          error:
+            'Missing required parameter: "id" (the email message ID). Example: { "id": "AAMkAGI2..." }. Use list_emails or search_emails to find message IDs; messages with hasAttachments=true have attachments.',
+          action_required: 'Provide the message ID of an email that has attachments.',
+          next_step: 'list_emails',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        listAttachments(c, { id: args.id! }, signal),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // download_attachment
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'download_attachment',
+    {
+      description:
+        'Download an email attachment and save it into the workspace (MCP_WORKSPACE_PATH, or the OS temp directory when unset). Use list_attachments to find attachment IDs.',
+      inputSchema: z.object({
+        id: z.string().optional().describe('Email message ID'),
+        attachmentId: z
+          .string()
+          .optional()
+          .describe('Attachment ID from list_attachments'),
+      }).shape,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.id || !args.attachmentId) {
+        return errorResponse({
+          error:
+            'Missing required parameters: "id" (email message ID) and "attachmentId" (attachment to save). Example: { "id": "AAMkAGI2...", "attachmentId": "AAMkADA1..." }. Use list_attachments to find attachment IDs.',
+          action_required: 'Provide both the message ID and the attachment ID.',
+          next_step: 'list_attachments',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        downloadAttachment(c, { id: args.id!, attachmentId: args.attachmentId! }, signal),
+      );
       return successJson(result);
     }),
   );

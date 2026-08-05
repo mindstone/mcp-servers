@@ -1,4 +1,7 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { mswServer } from './fixtures/setup.js';
 import { createMockApi, type MockApiState } from './fixtures/microsoft-mock-api.js';
 import {
@@ -295,5 +298,85 @@ describe('microsoft-mail mock-API integration', () => {
       comment: 'FYI',
       toRecipients: [{ emailAddress: { address: 'colleague@example.com' } }],
     });
+  });
+
+  it('list_attachments returns the attachment metadata', async () => {
+    const result = await client.callTool('list_attachments', { id: 'msg-1' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      ok?: unknown;
+      count: number;
+      attachments: Array<{ id: string; name: string; type: string }>;
+    };
+    expect(json.ok).toBeUndefined();
+    expect(json.count).toBe(2);
+    expect(json.attachments[0]).toMatchObject({
+      id: 'att-1',
+      type: 'fileAttachment',
+    });
+    expect(json.attachments[0]!.name).toContain('report.pdf');
+    const call = state.requests.find((r) =>
+      r.pathname.endsWith('/me/messages/msg-1/attachments'),
+    );
+    expect(call?.method).toBe('GET');
+  });
+
+  it('list_attachments returns an error envelope when id is missing', async () => {
+    const result = await client.callTool('list_attachments', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Missing required parameter');
+    expect(json.next_step).toBe('list_emails');
+  });
+
+  it('download_attachment saves the file inside MCP_WORKSPACE_PATH', async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-attach-test-'));
+    vi.stubEnv('MCP_WORKSPACE_PATH', workspace);
+    try {
+      const result = await client.callTool('download_attachment', {
+        id: 'msg-1',
+        attachmentId: 'att-1',
+      });
+      expect(result.isError).not.toBe(true);
+      const json = result.json as {
+        ok?: unknown;
+        savedTo: string;
+        size: number;
+        name: string;
+      };
+      expect(json.ok).toBeUndefined();
+      expect(json.savedTo.startsWith(workspace)).toBe(true);
+      expect(json.size).toBe(16);
+      expect(json.name).toContain('report.pdf');
+      const written = await fs.readFile(json.savedTo);
+      expect(written.toString('utf8')).toBe('hello attachment');
+      const call = state.requests.find((r) =>
+        r.pathname.endsWith('/me/messages/msg-1/attachments/att-1'),
+      );
+      expect(call?.method).toBe('GET');
+    } finally {
+      await fs.rm(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it('download_attachment refuses embedded-message attachments with guidance', async () => {
+    const result = await client.callTool('download_attachment', {
+      id: 'msg-1',
+      attachmentId: 'att-item',
+    });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('itemAttachment');
+  });
+
+  it('download_attachment returns an error envelope when attachmentId is missing', async () => {
+    const result = await client.callTool('download_attachment', { id: 'msg-1' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Missing required parameters');
+    expect(json.next_step).toBe('list_attachments');
   });
 });

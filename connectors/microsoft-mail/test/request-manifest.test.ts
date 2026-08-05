@@ -35,6 +35,18 @@ const MANIFEST: ManifestRow[] = [
     args: { id: 'AAMkAGI2' },
   },
   {
+    tool: 'list_attachments',
+    method: 'GET',
+    pathname: '/v1.0/me/messages/:id/attachments',
+    args: { id: 'msg-1' },
+  },
+  {
+    tool: 'download_attachment',
+    method: 'GET',
+    pathname: '/v1.0/me/messages/:id/attachments/:attachmentId',
+    args: { id: 'msg-1', attachmentId: 'att-1' },
+  },
+  {
     tool: 'send_email',
     method: 'POST',
     pathname: '/v1.0/me/sendMail',

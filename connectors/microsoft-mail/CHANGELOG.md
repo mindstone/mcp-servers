@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- `list_attachments` tool: lists attachment metadata (ID, name, type, size) for a message, so agents can act on `hasAttachments` instead of dead-ending.
+- `download_attachment` tool: saves a file attachment into `MCP_WORKSPACE_PATH` (or the OS temp directory when unset) with canonical-prefix containment, filename sanitization, a 25 MB cap, and clear guidance for embedded-message/reference attachments that Graph does not inline.
+- `MCP_WORKSPACE_PATH` optional environment variable declared in `server.json`.
+
 ## [0.2.0] - 2026-07-29
 
 ### Changed
