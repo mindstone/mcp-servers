@@ -143,6 +143,52 @@ describe('tool calls — happy path', () => {
     expect(links).toHaveLength(1);
     expect(links[0].project).toBe('acme-analytics-export');
   });
+
+  it('ga_list_audiences returns the mocked audiences with enveloped text', async () => {
+    await setup();
+    const result = await testClient.client.callTool({
+      name: 'ga_list_audiences',
+      arguments: { property_id: '200' },
+    });
+    const parsed = parseToolResult(result);
+    expect(parsed.ok).toBe(true);
+    const audiences = parsed.audiences as Array<{
+      name: string;
+      displayName: string;
+      membershipDurationDays: number;
+      filterClauses: unknown[];
+    }>;
+    expect(audiences).toHaveLength(1);
+    expect(audiences[0].name).toBe('properties/200/audiences/500');
+    expect(audiences[0].displayName).toBe(
+      '<untrusted-content source="ga4-admin">Purchasers</untrusted-content>',
+    );
+    expect(audiences[0].membershipDurationDays).toBe(30);
+    expect(audiences[0].filterClauses).toHaveLength(1);
+  });
+
+  it('ga_list_channel_groups returns grouping rules', async () => {
+    await setup();
+    const result = await testClient.client.callTool({
+      name: 'ga_list_channel_groups',
+      arguments: { property_id: '200' },
+    });
+    const parsed = parseToolResult(result);
+    expect(parsed.ok).toBe(true);
+    const groups = parsed.channelGroups as Array<{
+      displayName: string;
+      systemDefined: boolean;
+      groupingRule: Array<Record<string, unknown>>;
+    }>;
+    expect(groups).toHaveLength(1);
+    expect(groups[0].displayName).toBe(
+      '<untrusted-content source="ga4-admin">Default Channel Group</untrusted-content>',
+    );
+    expect(groups[0].systemDefined).toBe(true);
+    // The wholesale envelope wraps keys and values of the definition blob.
+    const ruleKeys = Object.keys(groups[0].groupingRule[0]);
+    expect(ruleKeys.some((key) => key.includes('displayName'))).toBe(true);
+  });
 });
 
 describe('error handling', () => {

@@ -9,9 +9,9 @@ export const ADMIN_BASE_URL = 'https://analyticsadmin.googleapis.com/v1beta';
 
 /**
  * v1alpha base URL — only used for endpoints that are not yet promoted to
- * v1beta. Currently `searchChangeHistoryEvents`, `bigQueryLinks`, and
- * `dataStreams.globalSiteTag`. Keep this surface narrow; alpha endpoints
- * can change without notice.
+ * v1beta. Currently `searchChangeHistoryEvents`, `bigQueryLinks`,
+ * `dataStreams.globalSiteTag`, `audiences`, and `channelGroups`. Keep this
+ * surface narrow; alpha endpoints can change without notice.
  */
 export const ADMIN_ALPHA_BASE_URL = 'https://analyticsadmin.googleapis.com/v1alpha';
 

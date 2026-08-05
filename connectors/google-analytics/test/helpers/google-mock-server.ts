@@ -239,5 +239,65 @@ export function createGoogleHandlers() {
         ],
       });
     }),
+
+    http.get(new RegExp(`^${escapeRegex(ADMIN_ALPHA)}/properties/[^/]+/audiences$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        audiences: [
+          {
+            name: 'properties/200/audiences/500',
+            displayName: 'Purchasers',
+            description: 'Users who completed a purchase.',
+            membershipDurationDays: 30,
+            adsPersonalizationEnabled: true,
+            exclusionDurationMode: 'AUDIENCE_EXCLUSION_DURATION_MODE_UNSPECIFIED',
+            filterClauses: [
+              {
+                clauseType: 'INCLUDE',
+                simpleFilter: {
+                  scope: 'AUDIENCE_FILTER_SCOPE_ACROSS_ALL_SESSIONS',
+                  filterExpression: {
+                    andGroup: {
+                      filterExpressions: [
+                        { dimensionOrMetricFilter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: 'purchase' } } },
+                      ],
+                    },
+                  },
+                },
+              },
+            ],
+            createTime: '2024-03-01T00:00:00Z',
+          },
+        ],
+      });
+    }),
+
+    http.get(new RegExp(`^${escapeRegex(ADMIN_ALPHA)}/properties/[^/]+/channelGroups$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        channelGroups: [
+          {
+            name: 'properties/200/channelGroups/600',
+            displayName: 'Default Channel Group',
+            description: 'The default channel grouping.',
+            systemDefined: true,
+            groupingRule: [
+              {
+                displayName: 'Organic Social',
+                expression: {
+                  orGroup: {
+                    expressions: [
+                      { dimensionOrMetricFilter: { fieldName: 'source', inListFilter: { values: ['facebook', 'instagram'] } } },
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      });
+    }),
   ];
 }

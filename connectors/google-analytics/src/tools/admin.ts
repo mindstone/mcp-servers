@@ -197,6 +197,90 @@ export function registerAdminTools(server: McpServer): void {
   );
 
   server.registerTool(
+    'ga_list_audiences',
+    {
+      description:
+        'List all audiences configured on a GA4 property, including membership duration, ads-personalization flag, and filter clauses. Uses the v1alpha Admin API (audiences are not yet promoted to v1beta); structure may evolve over time.',
+      inputSchema: requiredPropertyId.shape,
+      annotations: READ_ONLY,
+    },
+    withErrorHandling(async (args) => {
+      const property = propertyPath(args.property_id);
+      const audiences = await paginate<{
+        name?: string;
+        displayName?: string;
+        description?: string;
+        membershipDurationDays?: number;
+        adsPersonalizationEnabled?: boolean;
+        exclusionDurationMode?: string;
+        filterClauses?: unknown[];
+        createTime?: string;
+      }>(`/${property}/audiences`, {
+        itemKey: 'audiences',
+        query: { pageSize: 200 },
+        baseUrl: Bases.adminAlpha,
+      });
+      return JSON.stringify({
+        ok: true,
+        property,
+        audiences: audiences.map((audience) => ({
+          name: audience.name || null,
+          displayName: wrapUntrusted(audience.displayName, UNTRUSTED_SOURCES.admin) || null,
+          description: wrapUntrusted(audience.description, UNTRUSTED_SOURCES.admin) || null,
+          membershipDurationDays: audience.membershipDurationDays ?? null,
+          adsPersonalizationEnabled: audience.adsPersonalizationEnabled || false,
+          exclusionDurationMode: audience.exclusionDurationMode || null,
+          // User-authored definition blob — enveloped wholesale.
+          filterClauses: wrapUntrustedJsonStrings(
+            audience.filterClauses || [],
+            UNTRUSTED_SOURCES.admin,
+          ),
+          createTime: audience.createTime || null,
+        })),
+      });
+    }),
+  );
+
+  server.registerTool(
+    'ga_list_channel_groups',
+    {
+      description:
+        'List all channel groups configured on a GA4 property, including the grouping rules that define channels such as "Organic Social". Uses the v1alpha Admin API (channel groups are not yet promoted to v1beta); structure may evolve over time.',
+      inputSchema: requiredPropertyId.shape,
+      annotations: READ_ONLY,
+    },
+    withErrorHandling(async (args) => {
+      const property = propertyPath(args.property_id);
+      const channelGroups = await paginate<{
+        name?: string;
+        displayName?: string;
+        description?: string;
+        systemDefined?: boolean;
+        groupingRule?: unknown[];
+      }>(`/${property}/channelGroups`, {
+        itemKey: 'channelGroups',
+        query: { pageSize: 200 },
+        baseUrl: Bases.adminAlpha,
+      });
+      return JSON.stringify({
+        ok: true,
+        property,
+        channelGroups: channelGroups.map((group) => ({
+          name: group.name || null,
+          displayName: wrapUntrusted(group.displayName, UNTRUSTED_SOURCES.admin) || null,
+          description: wrapUntrusted(group.description, UNTRUSTED_SOURCES.admin) || null,
+          systemDefined: group.systemDefined || false,
+          // User-authored definition blob — enveloped wholesale.
+          groupingRule: wrapUntrustedJsonStrings(
+            group.groupingRule || [],
+            UNTRUSTED_SOURCES.admin,
+          ),
+        })),
+      });
+    }),
+  );
+
+  server.registerTool(
     'ga_get_global_site_tag',
     {
       description:

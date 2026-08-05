@@ -16,7 +16,7 @@ describe('smoke — tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 25 tools with ga_ prefix', async () => {
+  it('registers exactly 27 tools with ga_ prefix', async () => {
     testClient = await createTestClient({
       env: {
         GOOGLE_APPLICATION_CREDENTIALS: FIXTURE_ADC,
@@ -26,7 +26,7 @@ describe('smoke — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((tool) => tool.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(25);
+    expect(toolsResult.tools).toHaveLength(27);
     expect(toolNames).toEqual(
       [
         'ga_batch_run_reports',
@@ -41,7 +41,9 @@ describe('smoke — tool registration', () => {
         'ga_get_property_quotas_snapshot',
         'ga_get_property_schema',
         'ga_list_account_summaries',
+        'ga_list_audiences',
         'ga_list_bigquery_links',
+        'ga_list_channel_groups',
         'ga_list_data_streams',
         'ga_list_dimension_categories',
         'ga_list_firebase_links',
