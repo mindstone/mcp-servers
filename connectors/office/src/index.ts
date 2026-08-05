@@ -754,6 +754,7 @@ const TOOL_NAMES = {
   insertText: 'rebel_office_word_insert_text',
   replaceText: 'rebel_office_word_replace_text',
   formatText: 'rebel_office_word_format_text',
+  applyStyle: 'rebel_office_word_apply_style',
   insertTable: 'rebel_office_word_insert_table',
   readTable: 'rebel_office_word_read_table',
   updateTableCell: 'rebel_office_word_update_table_cell',
@@ -2216,11 +2217,77 @@ registerTool(TOOL_NAMES.updateTableCell, {
   return toMcpResult(result);
 });
 
+// 20. rebel_office_word_apply_style
+registerTool(TOOL_NAMES.applyStyle, {
+  title: 'Apply Word style to paragraphs',
+  description:
+    'Apply a named paragraph style to existing paragraphs — built-in styles like "Heading 1", ' +
+    '"Title", or "Quote", or any custom style defined in the document. Target the current ' +
+    'selection, a range of paragraphs, or every paragraph containing a search text.\n\n' +
+    'Styles are how Word documents stay consistent — prefer this over manual font formatting ' +
+    '(`rebel_office_word_format_text`) when making headings, quotes, or other structural text ' +
+    'look intentional. To style new text at insertion time, use `rebel_office_word_insert_text` ' +
+    'with its `style` parameter.',
+  inputSchema: {
+    "type": "object",
+    "properties": {
+      "style": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Style name, e.g. \"Heading 1\", \"Title\", \"Subtitle\", \"Quote\", \"Intense Quote\", \"No Spacing\", or a custom style defined in the document."
+      },
+      "target": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "selection",
+              "paragraphRange",
+              "searchText"
+            ],
+            "description": "Which paragraphs to style: the current selection, a range of paragraphs, or paragraphs containing a search text."
+          },
+          "startParagraph": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Start paragraph index, 0-based (for paragraphRange)."
+          },
+          "endParagraph": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "End paragraph index, 0-based, inclusive (for paragraphRange; defaults to startParagraph)."
+          },
+          "searchText": {
+            "type": "string",
+            "description": "Style every paragraph containing this text (for searchText)."
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "description": "Which paragraphs to style."
+      }
+    },
+    "required": [
+      "style",
+      "target"
+    ]
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async (input) => {
+  const result = await sidecarRequest('word', 'apply_style', {
+    style: input.style,
+    target: input.target,
+  });
+  return toMcpResult(result);
+});
+
 // ---------------------------------------------------------------------------
 // Excel tool definitions (22 tools)
 // ---------------------------------------------------------------------------
 
-// 22. rebel_office_excel_read_range
+// 21. rebel_office_excel_read_range
 registerTool(TOOL_NAMES.excelReadRange, {
   title: 'Read Excel range',
   description:
@@ -2273,7 +2340,7 @@ registerTool(TOOL_NAMES.excelReadRange, {
   return toMcpResult(result);
 });
 
-// 21. rebel_office_excel_write_range
+// 22. rebel_office_excel_write_range
 registerTool(TOOL_NAMES.excelWriteRange, {
   title: 'Write Excel range',
   description:
@@ -2332,7 +2399,7 @@ registerTool(TOOL_NAMES.excelWriteRange, {
   return toMcpResult(result);
 });
 
-// 22. rebel_office_excel_get_worksheets
+// 23. rebel_office_excel_get_worksheets
 registerTool(TOOL_NAMES.excelGetWorksheets, {
   title: 'List worksheets',
   description:
@@ -2350,7 +2417,7 @@ registerTool(TOOL_NAMES.excelGetWorksheets, {
   return toMcpResult(result);
 });
 
-// 23. rebel_office_excel_add_worksheet
+// 24. rebel_office_excel_add_worksheet
 registerTool(TOOL_NAMES.excelAddWorksheet, {
   title: 'Add worksheet',
   description:
@@ -2388,7 +2455,7 @@ registerTool(TOOL_NAMES.excelAddWorksheet, {
   return toMcpResult(result);
 });
 
-// 24. rebel_office_excel_delete_worksheet
+// 25. rebel_office_excel_delete_worksheet
 registerTool(TOOL_NAMES.excelDeleteWorksheet, {
   title: 'Delete worksheet',
   description:
@@ -2413,7 +2480,7 @@ registerTool(TOOL_NAMES.excelDeleteWorksheet, {
   return toMcpResult(result);
 });
 
-// 25. rebel_office_excel_read_table
+// 26. rebel_office_excel_read_table
 registerTool(TOOL_NAMES.excelReadTable, {
   title: 'Read Excel table',
   description:
@@ -2460,7 +2527,7 @@ registerTool(TOOL_NAMES.excelReadTable, {
   return toMcpResult(result);
 });
 
-// 26. rebel_office_excel_create_table
+// 27. rebel_office_excel_create_table
 registerTool(TOOL_NAMES.excelCreateTable, {
   title: 'Create Excel table',
   description:
@@ -2501,7 +2568,7 @@ registerTool(TOOL_NAMES.excelCreateTable, {
   return toMcpResult(result);
 });
 
-// 27. rebel_office_excel_set_formula
+// 28. rebel_office_excel_set_formula
 registerTool(TOOL_NAMES.excelSetFormula, {
   title: 'Set formula',
   description:
@@ -2546,7 +2613,7 @@ registerTool(TOOL_NAMES.excelSetFormula, {
   return toMcpResult(result);
 });
 
-// 28. rebel_office_excel_get_formulas
+// 29. rebel_office_excel_get_formulas
 registerTool(TOOL_NAMES.excelGetFormulas, {
   title: 'Read formulas',
   description:
@@ -2579,7 +2646,7 @@ registerTool(TOOL_NAMES.excelGetFormulas, {
   return toMcpResult(result);
 });
 
-// 29. rebel_office_excel_create_chart
+// 30. rebel_office_excel_create_chart
 registerTool(TOOL_NAMES.excelCreateChart, {
   title: 'Create chart',
   description:
@@ -2669,7 +2736,7 @@ registerTool(TOOL_NAMES.excelCreateChart, {
   return toMcpResult(result);
 });
 
-// 30. rebel_office_excel_format_range
+// 31. rebel_office_excel_format_range
 registerTool(TOOL_NAMES.excelFormatRange, {
   title: 'Format Excel range',
   description:
@@ -2794,7 +2861,7 @@ registerTool(TOOL_NAMES.excelFormatRange, {
   return toMcpResult(result);
 });
 
-// 31. rebel_office_excel_add_conditional_formatting
+// 32. rebel_office_excel_add_conditional_formatting
 registerTool(TOOL_NAMES.excelAddConditionalFormatting, {
   title: 'Add conditional formatting',
   description:
@@ -2923,7 +2990,7 @@ registerTool(TOOL_NAMES.excelAddConditionalFormatting, {
   return toMcpResult(result);
 });
 
-// 32. rebel_office_excel_sort_range
+// 33. rebel_office_excel_sort_range
 registerTool(TOOL_NAMES.excelSortRange, {
   title: 'Sort range or table',
   description:
@@ -2981,7 +3048,7 @@ registerTool(TOOL_NAMES.excelSortRange, {
   return toMcpResult(result);
 });
 
-// 33. rebel_office_excel_filter_table
+// 34. rebel_office_excel_filter_table
 registerTool(TOOL_NAMES.excelFilterTable, {
   title: 'Filter table',
   description:
@@ -3069,7 +3136,7 @@ registerTool(TOOL_NAMES.excelFilterTable, {
   return toMcpResult(result);
 });
 
-// 34. rebel_office_excel_get_named_ranges
+// 35. rebel_office_excel_get_named_ranges
 registerTool(TOOL_NAMES.excelGetNamedRanges, {
   title: 'List named ranges and tables',
   description:
@@ -3088,7 +3155,7 @@ registerTool(TOOL_NAMES.excelGetNamedRanges, {
   return toMcpResult(result);
 });
 
-// 35. rebel_office_excel_insert_rows_columns
+// 36. rebel_office_excel_insert_rows_columns
 registerTool(TOOL_NAMES.excelInsertRowsColumns, {
   title: 'Insert rows or columns',
   description:
@@ -3134,7 +3201,7 @@ registerTool(TOOL_NAMES.excelInsertRowsColumns, {
   return toMcpResult(result);
 });
 
-// 36. rebel_office_excel_delete_rows_columns
+// 37. rebel_office_excel_delete_rows_columns
 registerTool(TOOL_NAMES.excelDeleteRowsColumns, {
   title: 'Delete rows or columns',
   description:
@@ -3180,7 +3247,7 @@ registerTool(TOOL_NAMES.excelDeleteRowsColumns, {
   return toMcpResult(result);
 });
 
-// 37. rebel_office_excel_merge_cells
+// 38. rebel_office_excel_merge_cells
 registerTool(TOOL_NAMES.excelMergeCells, {
   title: 'Merge or unmerge cells',
   description:
@@ -3221,7 +3288,7 @@ registerTool(TOOL_NAMES.excelMergeCells, {
   return toMcpResult(result);
 });
 
-// 38. rebel_office_excel_auto_fit
+// 39. rebel_office_excel_auto_fit
 registerTool(TOOL_NAMES.excelAutoFit, {
   title: 'Auto-fit columns or rows',
   description:
@@ -3258,7 +3325,7 @@ registerTool(TOOL_NAMES.excelAutoFit, {
   return toMcpResult(result);
 });
 
-// 39. rebel_office_excel_add_data_validation
+// 40. rebel_office_excel_add_data_validation
 registerTool(TOOL_NAMES.excelAddDataValidation, {
   title: 'Add data validation',
   description:
@@ -3367,7 +3434,7 @@ registerTool(TOOL_NAMES.excelAddDataValidation, {
   return toMcpResult(result);
 });
 
-// 40. rebel_office_excel_get_comments
+// 41. rebel_office_excel_get_comments
 registerTool(TOOL_NAMES.excelGetComments, {
   title: 'Read Excel comments',
   description:
@@ -3397,7 +3464,7 @@ registerTool(TOOL_NAMES.excelGetComments, {
   return toMcpResult(result);
 });
 
-// 41. rebel_office_excel_add_comment
+// 42. rebel_office_excel_add_comment
 registerTool(TOOL_NAMES.excelAddComment, {
   title: 'Add Excel comment',
   description:
@@ -3444,7 +3511,7 @@ registerTool(TOOL_NAMES.excelAddComment, {
 // PowerPoint tool definitions (12 tools)
 // ---------------------------------------------------------------------------
 
-// 42. rebel_office_powerpoint_get_slides
+// 43. rebel_office_powerpoint_get_slides
 registerTool(TOOL_NAMES.pptGetSlides, {
   title: 'List slides',
   description:
@@ -3471,7 +3538,7 @@ registerTool(TOOL_NAMES.pptGetSlides, {
   return toMcpResult(result);
 });
 
-// 43. rebel_office_powerpoint_get_slide_content
+// 44. rebel_office_powerpoint_get_slide_content
 registerTool(TOOL_NAMES.pptGetSlideContent, {
   title: 'Get slide content',
   description:
@@ -3498,7 +3565,7 @@ registerTool(TOOL_NAMES.pptGetSlideContent, {
   return toMcpResult(result);
 });
 
-// 44. rebel_office_powerpoint_add_slide
+// 45. rebel_office_powerpoint_add_slide
 registerTool(TOOL_NAMES.pptAddSlide, {
   title: 'Add slide',
   description:
@@ -3542,7 +3609,7 @@ registerTool(TOOL_NAMES.pptAddSlide, {
   return toMcpResult(result);
 });
 
-// 45. rebel_office_powerpoint_delete_slide
+// 46. rebel_office_powerpoint_delete_slide
 registerTool(TOOL_NAMES.pptDeleteSlide, {
   title: 'Delete slide',
   description:
@@ -3567,7 +3634,7 @@ registerTool(TOOL_NAMES.pptDeleteSlide, {
   return toMcpResult(result);
 });
 
-// 46. rebel_office_powerpoint_reorder_slides
+// 47. rebel_office_powerpoint_reorder_slides
 registerTool(TOOL_NAMES.pptReorderSlides, {
   title: 'Reorder slides',
   description:
@@ -3600,7 +3667,7 @@ registerTool(TOOL_NAMES.pptReorderSlides, {
   return toMcpResult(result);
 });
 
-// 47. rebel_office_powerpoint_add_text_box
+// 48. rebel_office_powerpoint_add_text_box
 registerTool(TOOL_NAMES.pptAddTextBox, {
   title: 'Add text box',
   description:
@@ -3701,7 +3768,7 @@ registerTool(TOOL_NAMES.pptAddTextBox, {
   return toMcpResult(result);
 });
 
-// 48. rebel_office_powerpoint_add_image
+// 49. rebel_office_powerpoint_add_image
 registerTool(TOOL_NAMES.pptAddImage, {
   title: 'Add image to slide',
   description:
@@ -3787,7 +3854,7 @@ registerTool(TOOL_NAMES.pptAddImage, {
   return toMcpResult(result);
 });
 
-// 49. rebel_office_powerpoint_add_shape
+// 50. rebel_office_powerpoint_add_shape
 registerTool(TOOL_NAMES.pptAddShape, {
   title: 'Add shape',
   description:
@@ -3867,7 +3934,7 @@ registerTool(TOOL_NAMES.pptAddShape, {
   return toMcpResult(result);
 });
 
-// 50. rebel_office_powerpoint_update_text
+// 51. rebel_office_powerpoint_update_text
 registerTool(TOOL_NAMES.pptUpdateText, {
   title: 'Update text in shape',
   description:
@@ -3969,7 +4036,7 @@ registerTool(TOOL_NAMES.pptUpdateText, {
   return toMcpResult(result);
 });
 
-// 51. rebel_office_powerpoint_get_speaker_notes
+// 52. rebel_office_powerpoint_get_speaker_notes
 registerTool(TOOL_NAMES.pptGetSpeakerNotes, {
   title: 'Read speaker notes',
   description:
@@ -3992,7 +4059,7 @@ registerTool(TOOL_NAMES.pptGetSpeakerNotes, {
   return toMcpResult(result);
 });
 
-// 52. rebel_office_powerpoint_set_speaker_notes
+// 53. rebel_office_powerpoint_set_speaker_notes
 registerTool(TOOL_NAMES.pptSetSpeakerNotes, {
   title: 'Set speaker notes',
   description:
@@ -4026,7 +4093,7 @@ registerTool(TOOL_NAMES.pptSetSpeakerNotes, {
   return toMcpResult(result);
 });
 
-// 53. rebel_office_powerpoint_get_presentation_properties
+// 54. rebel_office_powerpoint_get_presentation_properties
 registerTool(TOOL_NAMES.pptGetPresentationProperties, {
   title: 'Get presentation properties',
   description:

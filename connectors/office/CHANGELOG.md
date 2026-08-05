@@ -13,6 +13,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Added
 - **Word tables are no longer write-only**: new `rebel_office_word_read_table` (read a table's cell values as a 2D array) and `rebel_office_word_update_table_cell` (replace the text of a single cell by 0-based row/column) tools.
+- **Word named styles**: new `rebel_office_word_apply_style` tool applies a paragraph style (built-in like "Heading 1"/"Quote", or a document-defined custom style) to existing paragraphs — targeted by selection, paragraph range, or search text.
 
 ### Fixed
 - The MCP server now reports the real `package.json` version instead of a hardcoded literal that had drifted a full release behind (reported `0.1.1` while the package was `0.2.0`).

@@ -18,6 +18,7 @@ const wordCommands: Record<string, WordCommandHandler> = {
   insert_text: insertText,
   replace_text: replaceText,
   format_text: formatText,
+  apply_style: applyStyle,
   insert_table: insertTable,
   read_table: readTable,
   update_table_cell: updateTableCell,
@@ -1466,5 +1467,96 @@ async function updateTableCell(params: Record<string, unknown>): Promise<Command
     await context.sync();
 
     return { success: true, tableIndex, rowIndex, columnIndex };
+  });
+}
+
+/**
+ * apply_style — Apply a named paragraph style to existing paragraphs.
+ * Params:
+ *   style  (string, required) — style name: built-in ("Heading 1", "Title",
+ *                               "Quote", …) or a custom style defined in the document
+ *   target (object, required) — which paragraphs to style:
+ *     { type: 'selection' }
+ *     { type: 'paragraphRange', startParagraph, endParagraph }  (0-based, inclusive)
+ *     { type: 'searchText', searchText }  (every paragraph containing the text)
+ */
+async function applyStyle(params: Record<string, unknown>): Promise<CommandResult> {
+  const style = params['style'];
+  if (typeof style !== 'string' || style.trim().length === 0) {
+    return {
+      success: false,
+      error: 'The "style" parameter is required and must be a non-empty string (e.g. "Heading 1", "Quote").',
+      code: 'INVALID_ARGUMENT',
+    };
+  }
+
+  const target = params['target'] as
+    | { type: string; startParagraph?: number; endParagraph?: number; searchText?: string }
+    | undefined;
+  if (!target || typeof target.type !== 'string') {
+    return {
+      success: false,
+      error: 'The "target" parameter with a "type" field is required.',
+      code: 'INVALID_ARGUMENT',
+    };
+  }
+
+  return executeWordCommand(async (context) => {
+    let paragraphsToStyle: Word.Paragraph[] = [];
+
+    switch (target.type) {
+      case 'selection': {
+        const selection = context.document.getSelection();
+        const paragraphs = selection.paragraphs;
+        paragraphs.load('items');
+        await context.sync();
+        if (paragraphs.items.length === 0) {
+          throw new Error('The current selection contains no paragraphs to style.');
+        }
+        paragraphsToStyle = [...paragraphs.items];
+        break;
+      }
+
+      case 'paragraphRange': {
+        const startIdx = typeof target.startParagraph === 'number' ? target.startParagraph : 0;
+        const endIdx = typeof target.endParagraph === 'number' ? target.endParagraph : startIdx;
+        const paragraphs = context.document.body.paragraphs;
+        paragraphs.load('items');
+        await context.sync();
+
+        if (startIdx >= paragraphs.items.length || endIdx >= paragraphs.items.length) {
+          throw new Error(
+            `Paragraph index out of range. Document has ${paragraphs.items.length} paragraphs.`,
+          );
+        }
+        paragraphsToStyle = paragraphs.items.slice(startIdx, endIdx + 1);
+        break;
+      }
+
+      case 'searchText': {
+        if (typeof target.searchText !== 'string' || target.searchText.length === 0) {
+          throw new Error('The "searchText" field is required for target type "searchText".');
+        }
+        const paragraphs = context.document.body.paragraphs;
+        paragraphs.load(['text']);
+        await context.sync();
+
+        paragraphsToStyle = paragraphs.items.filter((p) => p.text.includes(target.searchText!));
+        if (paragraphsToStyle.length === 0) {
+          throw new Error(`No paragraphs contain "${target.searchText}".`);
+        }
+        break;
+      }
+
+      default:
+        throw new Error(`Unsupported target type: "${target.type}".`);
+    }
+
+    for (const paragraph of paragraphsToStyle) {
+      paragraph.style = style as string;
+    }
+    await context.sync();
+
+    return { success: true, styledParagraphs: paragraphsToStyle.length, style };
   });
 }

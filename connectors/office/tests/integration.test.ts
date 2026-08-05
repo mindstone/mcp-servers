@@ -750,3 +750,82 @@ describe('integration: Word table tools', () => {
     expect(payload.error).toContain('out of range');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Integration tests: Word apply_style tool
+// ---------------------------------------------------------------------------
+
+describe('integration: Word apply_style tool', () => {
+  it('routes apply_style with style and searchText target', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'word', baseUrl);
+
+    const commandReceived = new Promise<{ action: string; params: Record<string, unknown> }>((resolve) => {
+      socket.on('message', (raw) => {
+        const msg = JSON.parse(raw.toString()) as {
+          type?: string; id?: string; action?: string; params?: Record<string, unknown>;
+        };
+        if (msg.type === 'command' && typeof msg.id === 'string') {
+          sendJson(socket, {
+            type: 'response', id: msg.id, success: true,
+            data: { success: true, styledParagraphs: 2, style: 'Heading 1' },
+          });
+          resolve({ action: msg.action ?? '', params: msg.params ?? {} });
+        }
+      });
+    });
+
+    const response = await fetchHttps(`${baseUrl}/word/apply_style`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        style: 'Heading 1',
+        target: { type: 'searchText', searchText: 'Quarterly Report' },
+      }),
+    });
+
+    const payload = (await response.json()) as { success: boolean; data: { styledParagraphs: number } };
+    const routed = await commandReceived;
+
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(payload.data.styledParagraphs).toBe(2);
+    expect(routed.action).toBe('apply_style');
+    expect(routed.params).toEqual({
+      style: 'Heading 1',
+      target: { type: 'searchText', searchText: 'Quarterly Report' },
+    });
+  });
+
+  it('propagates apply_style errors (no matching paragraphs) from the add-in', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'word', baseUrl);
+
+    socket.on('message', (raw) => {
+      const msg = JSON.parse(raw.toString()) as { type?: string; id?: string };
+      if (msg.type === 'command' && typeof msg.id === 'string') {
+        sendJson(socket, {
+          type: 'response', id: msg.id, success: false,
+          error: 'No paragraphs contain "nonexistent phrase".',
+          code: 'UNKNOWN_ERROR',
+        });
+      }
+    });
+
+    const response = await fetchHttps(`${baseUrl}/word/apply_style`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        style: 'Quote',
+        target: { type: 'searchText', searchText: 'nonexistent phrase' },
+      }),
+    });
+
+    const payload = (await response.json()) as { success: boolean; error: string };
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(false);
+    expect(payload.error).toContain('No paragraphs contain');
+  });
+});
