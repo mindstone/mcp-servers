@@ -3,6 +3,17 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { talentlmsFetch, formEncode } from '../client.js';
 import { withErrorHandling, paginationFields, paginatedPath } from '../utils.js';
 import { wrapExternalTextFields } from '../envelope.js';
+import { TalentLMSError } from '../types.js';
+
+/** IANA timezone shape (e.g. "Europe/Athens", "UTC", "America/New_York"). */
+const timezoneSchema = z
+  .string()
+  .regex(/^[A-Za-z][A-Za-z0-9_+\-/]{0,63}$/, 'Invalid timezone. Use an IANA name such as "Europe/Athens".');
+
+/** DD/MM/YYYY as documented by the TalentLMS edituser endpoint; empty string clears the date. */
+const deactivationDateSchema = z
+  .string()
+  .regex(/^(\d{2}\/\d{2}\/\d{4})?$/, 'Invalid date. Use DD/MM/YYYY, or an empty string to clear.');
 
 export function registerUserTools(server: McpServer): void {
   server.registerTool(
@@ -74,9 +85,9 @@ export function registerUserTools(server: McpServer): void {
       inputSchema: z.object({
         first_name: z.string().min(1).describe('First name'),
         last_name: z.string().min(1).describe('Last name'),
-        email: z.string().min(1).describe('Email address'),
+        email: z.string().email().describe('Email address'),
         login: z.string().min(1).describe('Login username'),
-        password: z.string().optional().describe('Password (auto-generated if omitted)'),
+        password: z.string().min(1).optional().describe('Password (auto-generated if omitted)'),
         user_type: z
           .enum(['Learner', 'Trainer'])
           .optional()
@@ -117,17 +128,16 @@ export function registerUserTools(server: McpServer): void {
         user_id: z.string().min(1).describe('User ID'),
         first_name: z.string().min(1).optional().describe('First name'),
         last_name: z.string().min(1).optional().describe('Last name'),
-        email: z.string().min(1).optional().describe('Email address'),
+        email: z.string().email().optional().describe('Email address'),
         login: z.string().min(1).optional().describe('Login username'),
-        password: z.string().optional().describe('New password'),
+        password: z.string().min(1).optional().describe('New password'),
         bio: z.string().optional().describe('User biography'),
-        timezone: z.string().optional().describe('Timezone (e.g. "Europe/Athens")'),
+        timezone: timezoneSchema.optional().describe('Timezone (e.g. "Europe/Athens")'),
         user_type: z
           .enum(['Learner', 'Trainer'])
           .optional()
           .describe('User type: Learner or Trainer. Administrator/SuperAdmin are intentionally not settable through this tool.'),
-        deactivation_date: z
-          .string()
+        deactivation_date: deactivationDateSchema
           .optional()
           .describe('Date (DD/MM/YYYY) on which the user becomes automatically inactive; pass an empty string to clear. Can only be set on active users.'),
       }),
@@ -136,11 +146,12 @@ export function registerUserTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       const { user_id, ...fields } = args;
       if (Object.values(fields).every(v => v === undefined)) {
-        return JSON.stringify({
-          ok: false,
-          error: 'Provide at least one field to update (e.g. first_name, email, timezone).',
-          resolution: 'Use get_talentlms_user to see the current profile first.',
-        });
+        // Thrown (not returned ok:false) so the precondition sets MCP isError.
+        throw new TalentLMSError(
+          'Provide at least one field to update (e.g. first_name, email, timezone).',
+          'NO_UPDATE_FIELDS',
+          'Use get_talentlms_user to see the current profile first.',
+        );
       }
       const body = formEncode({ user_id, ...fields });
       const user = await talentlmsFetch<Record<string, unknown>>('/edituser', {

@@ -21,6 +21,7 @@ are maintained manually as part of the PR review checklist.
 - **pagination**: List tools previously returned only the API's first page (20 items by default) with no way to fetch more, silently truncating tenants larger than one page.
 - **client**: Removed an unverified "2,000-10,000 calls/hour" rate-limit figure from the 429 error message; TalentLMS publishes plan-dependent limits and a burst cap but no fixed per-plan figures.
 - **reporting**: `get_talentlms_leaderboard` now pages through the full user list (1000 per request) instead of ranking only the first 1,000 users, so a top scorer beyond the first page is no longer dropped.
+- **users**: `update_talentlms_user` now validates `email` format, rejects empty `password` values, and validates `timezone` (IANA shape) and `deactivation_date` (`DD/MM/YYYY`; empty string clears). `create_talentlms_user` validates `email` and rejects empty `password` values the same way. The "no fields provided" precondition now surfaces with MCP `isError` instead of a plain `ok:false` payload.
 
 ### Security
 - **FOX-3490**: External text returned by the TalentLMS API (course/group descriptions, user names, bios, custom fields, test/survey answers, site name, ILT instructor/location, and similar user-authored fields) is now wrapped in `<untrusted-content source="...">` envelopes with close-tag breakout escaping, so the host model treats third-party text as data rather than instructions. Ids, statuses, timestamps, scores, and URLs are intentionally left raw so tool chaining keeps working.
