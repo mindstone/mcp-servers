@@ -16,6 +16,12 @@ import { wrapUntrustedJsonStrings } from "../utils/untrusted-content.js";
 // Cap page sizes well below the Chat API maximum (1000) to keep responses manageable
 const MAX_CHAT_PAGE_SIZE = 100;
 
+// Chat message text bodies are limited to 4096 characters by the Chat API.
+const MAX_CHAT_MESSAGE_TEXT_LENGTH = 4096;
+
+// Space resource names look like "spaces/AAAA..." — exactly one segment after the prefix.
+const SPACE_NAME_PATTERN = /^spaces\/[^/\s]+$/;
+
 // Singleton instances - Initialize or inject as per project pattern
 let chatService: ChatService;
 let accountManager: ReturnType<typeof getAccountManager>;
@@ -39,16 +45,10 @@ function capPageSize(pageSize: number | undefined): number | undefined {
 }
 
 function requireSpaceName(space: string | undefined): string {
-  if (!space) {
+  if (!space || !SPACE_NAME_PATTERN.test(space)) {
     throw new McpError(
       ErrorCode.InvalidParams,
-      'space parameter is required (e.g. "spaces/AAAA...")'
-    );
-  }
-  if (!space.startsWith('spaces/')) {
-    throw new McpError(
-      ErrorCode.InvalidParams,
-      'space must be a space resource name starting with "spaces/" (e.g. "spaces/AAAA...")'
+      'space must be a space resource name of the form "spaces/<id>" (e.g. "spaces/AAAA...")'
     );
   }
   return space;
@@ -133,6 +133,12 @@ export async function handleSendChatMessage(
     throw new McpError(
       ErrorCode.InvalidParams,
       'text parameter is required (the plain-text message body to send)'
+    );
+  }
+  if (text.length > MAX_CHAT_MESSAGE_TEXT_LENGTH) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      `text exceeds the Chat message limit of ${MAX_CHAT_MESSAGE_TEXT_LENGTH} characters (got ${text.length})`
     );
   }
 

@@ -182,6 +182,31 @@ describe('contacts write tools', () => {
     ).rejects.toMatchObject({ code: ErrorCode.InvalidParams });
   });
 
+  it('rejects a resource_name outside the documented people/<id> form', async () => {
+    const handlers = await loadHandlers();
+    await expect(
+      handlers.handleUpdateContact({
+        email: TEST_EMAIL,
+        resource_name: 'contacts/c1234567890',
+        phone_number: '+1 555 0100',
+      }),
+    ).rejects.toMatchObject({ code: ErrorCode.InvalidParams });
+  });
+
+  it('rejects a malformed email_address', async () => {
+    const handlers = await loadHandlers();
+    await expect(
+      handlers.handleCreateContact({ email: TEST_EMAIL, given_name: 'Jane', email_address: 'not-an-email' }),
+    ).rejects.toMatchObject({ code: ErrorCode.InvalidParams });
+  });
+
+  it('rejects a phone_number without any digit', async () => {
+    const handlers = await loadHandlers();
+    await expect(
+      handlers.handleCreateContact({ email: TEST_EMAIL, given_name: 'Jane', phone_number: 'call me maybe' }),
+    ).rejects.toMatchObject({ code: ErrorCode.InvalidParams });
+  });
+
   it('rejects an update with no fields to change', async () => {
     const handlers = await loadHandlers();
     await expect(
