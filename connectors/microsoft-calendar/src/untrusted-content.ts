@@ -19,7 +19,12 @@
  * file (and the call sites that import from it) is what satisfies that gate.
  */
 
-const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content[ \t]*>/gi;
+// NOTE: the shared reference uses `[ \t]*` here; this copy deliberately
+// widens the matcher to `\s*` so newline / carriage-return / form-feed
+// close-tag variants (`</untrusted-content\n>` etc.) are neutralised too.
+// This is a strict superset of the reference behaviour — it only escapes
+// MORE variants, never fewer. Keep everything else byte-for-byte in sync.
+const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content\s*>/gi;
 const ESCAPED_UNTRUSTED_CLOSE_TAG = '<\\/untrusted-content>';
 
 function escapeAttr(s: string): string {
