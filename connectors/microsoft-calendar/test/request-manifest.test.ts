@@ -58,6 +58,12 @@ const MANIFEST: ManifestRow[] = [
     args: { id: 'event-1' },
   },
   {
+    tool: 'cancel_event',
+    method: 'POST',
+    pathname: '/v1.0/me/events/:id/cancel',
+    args: { id: 'event-1', comment: 'Rescheduling' },
+  },
+  {
     tool: 'respond_to_event',
     method: 'POST',
     pathname: '/v1.0/me/events/:id/accept',

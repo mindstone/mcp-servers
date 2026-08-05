@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-microsoft-calendar.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-calendar)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Microsoft 365 Outlook Calendar MCP server — list, get, create, update, delete, respond to events, check free/busy, and list calendars via the Microsoft Graph API.
+Microsoft 365 Outlook Calendar MCP server — list, get, create, update, delete, cancel, and respond to events, check free/busy, find meeting times, and list calendars via the Microsoft Graph API.
 
 *Cohort-style Microsoft 365 calendar MCP. Reuses the OAuth surface owned by [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/) so the host signs in once and gets calendar plus mail plus files plus Teams plus SharePoint from the same credentials.*
 
@@ -11,7 +11,7 @@ Microsoft 365 Outlook Calendar MCP server — list, get, create, update, delete,
 
 - **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-calendar)
 - **Auth:** OAuth (host-orchestrated, shared with [`mcp-server-microsoft-mail`](../microsoft-mail/)) ([`MS_CLIENT_ID`](./server.json))
-- **Tools:** [9](./src/tools.ts) (events, calendars, free-busy, scheduling)
+- **Tools:** [10](./src/tools.ts) (events, calendars, free-busy, scheduling)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 - **Shared library:** [`@mindstone/mcp-server-microsoft-shared`](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-shared)
@@ -163,7 +163,7 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 }
 ```
 
-## Tools (9)
+## Tools (10)
 
 | Tool | Description |
 | ---- | ----------- |
@@ -172,6 +172,7 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 | `create_event` | Create a new calendar event (with optional Teams meeting). |
 | `update_event` | Update an existing calendar event. |
 | `delete_event` | Delete a calendar event. |
+| `cancel_event` | Cancel a meeting as organizer with an optional message to attendees. |
 | `respond_to_event` | Accept, decline, or tentatively accept an event invitation. |
 | `get_free_busy` | Check availability/free-busy status for users. |
 | `find_meeting_times` | Suggest slots when all given attendees are free. |

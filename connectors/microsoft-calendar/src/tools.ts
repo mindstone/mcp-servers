@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { callGraph } from './client.js';
 import { errorResponse, successJson, withErrorHandling } from './utils.js';
 import {
+  cancelEvent,
   createEvent,
   deleteEvent,
   findMeetingTimes,
@@ -307,6 +308,43 @@ export function registerCalendarTools(server: McpServer): void {
       }
       const result = await callGraph(extra, (c, signal) =>
         deleteEvent(c, { id: args.id!, notifyAttendees: args.notifyAttendees }, signal),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // cancel_event
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'cancel_event',
+    {
+      description:
+        'Cancel a meeting as its organizer, optionally sending a cancellation message to all attendees. The event moves to the Deleted Items folder. Prefer this over delete_event for meetings with attendees so they are notified.',
+      inputSchema: z.object({
+        id: z.string().optional().describe('Event ID'),
+        comment: z
+          .string()
+          .optional()
+          .describe('Cancellation message sent to attendees (e.g. "Cancelling — rescheduling to next week")'),
+      }).shape,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.id) {
+        return errorResponse({
+          error:
+            'Missing required parameter: "id" (event to cancel). Example: { "id": "AAMkAGI2...", "comment": "Rescheduling to next week" }. WARNING: This cancels the meeting and notifies attendees.',
+          action_required: 'Provide the event ID.',
+          next_step: 'list_events',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        cancelEvent(c, { id: args.id!, comment: args.comment }, signal),
       );
       return successJson(result);
     }),

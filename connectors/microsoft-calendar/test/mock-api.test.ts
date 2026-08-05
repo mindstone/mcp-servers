@@ -345,6 +345,34 @@ describe('microsoft-calendar mock-API integration', () => {
   });
 
   // -------------------------------------------------------------------------
+  // cancel_event
+  // -------------------------------------------------------------------------
+  it('cancel_event POSTs to /me/events/{id}/cancel with the comment', async () => {
+    const result = await client.callTool('cancel_event', {
+      id: 'event-1',
+      comment: 'Rescheduling to next week',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; success: boolean; message: string };
+    expect(json.ok).toBeUndefined();
+    expect(json.success).toBe(true);
+    expect(json.message).toContain('cancelled');
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.endsWith('/me/events/event-1/cancel'),
+    );
+    expect(call?.body).toMatchObject({ comment: 'Rescheduling to next week' });
+  });
+
+  it('cancel_event rejects missing id with WARNING guidance', async () => {
+    const result = await client.callTool('cancel_event', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('WARNING');
+    expect(json.next_step).toBe('list_events');
+  });
+
+  // -------------------------------------------------------------------------
   // get_free_busy
   // -------------------------------------------------------------------------
   it('get_free_busy POSTs to /me/calendar/getSchedule', async () => {

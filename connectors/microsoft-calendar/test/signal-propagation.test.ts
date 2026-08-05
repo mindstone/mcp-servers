@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Client } from '@mindstone/mcp-server-microsoft-shared';
 import {
+  cancelEvent,
   createEvent,
   deleteEvent,
   findMeetingTimes,
@@ -112,6 +113,13 @@ describe('Graph request signal propagation', () => {
     const { client, builder } = createMockClient();
     const signal = new AbortController().signal;
     await deleteEvent(client, { id: 'evt-1' }, signal);
+    expect(builder.options).toHaveBeenCalledWith({ signal });
+  });
+
+  it('cancelEvent passes signal to GraphRequest.options', async () => {
+    const { client, builder } = createMockClient();
+    const signal = new AbortController().signal;
+    await cancelEvent(client, { id: 'evt-1', comment: 'Rescheduling' }, signal);
     expect(builder.options).toHaveBeenCalledWith({ signal });
   });
 

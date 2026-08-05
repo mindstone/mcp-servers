@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ## [Unreleased]
 
 ### Added
+- `cancel_event` tool: organizer-side cancellation with an optional message to attendees (distinct from `delete_event`, which gives no message).
 - `update_event` now supports `addAttendees` / `removeAttendees`, merged against the event's current attendee list (Graph PATCH replaces the whole collection, so the connector reads it first).
 - `create_event` / `update_event` accept a `recurrence` object (Graph `pattern`/`range`, Zod-validated and passed through) for recurring events.
 - `find_meeting_times` tool: suggests slots within a window when all given attendees are free, computed from `getSchedule` free/busy data (deliberately not Graph's `findMeetingTimes` action, which is v1.0 but known-flaky). Slot start/end can be passed straight to `create_event`.

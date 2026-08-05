@@ -310,6 +310,11 @@ export interface DeleteEventArgs {
   notifyAttendees?: boolean;
 }
 
+export interface CancelEventArgs {
+  id: string;
+  comment?: string;
+}
+
 export interface RespondToEventArgs {
   id: string;
   response: 'accept' | 'decline' | 'tentative';
@@ -632,6 +637,22 @@ export async function deleteEvent(
   return {
     success: true,
     message: 'Event deleted successfully',
+  };
+}
+
+export async function cancelEvent(
+  client: Client,
+  args: CancelEventArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const body: Record<string, unknown> = {};
+  if (args.comment) {
+    body.comment = args.comment;
+  }
+  await client.api(`/me/events/${args.id}/cancel`).options({ signal }).post(body);
+  return {
+    success: true,
+    message: 'Event cancelled successfully',
   };
 }
 

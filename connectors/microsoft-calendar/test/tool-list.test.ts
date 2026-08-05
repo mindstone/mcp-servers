@@ -12,6 +12,7 @@ const EXPECTED_TOOLS = [
   'create_event',
   'update_event',
   'delete_event',
+  'cancel_event',
   'respond_to_event',
   'get_free_busy',
   'find_meeting_times',
@@ -29,6 +30,7 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
     openWorldHint: true,
   },
   delete_event: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+  cancel_event: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   respond_to_event: {
     readOnlyHint: false,
     destructiveHint: true,
@@ -59,7 +61,7 @@ describe('microsoft-calendar tools/list', () => {
     if (cfg) cfg.cleanup();
   });
 
-  it('registers exactly the 9 calendar tools in the locked surface', async () => {
+  it('registers exactly the 10 calendar tools in the locked surface', async () => {
     const response = await client.client.listTools();
     const names = response.tools.map((tool) => tool.name).sort();
     expect(names).toEqual([...EXPECTED_TOOLS].sort());
