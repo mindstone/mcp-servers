@@ -69,9 +69,11 @@ export function createFreshdeskHandlers(
         return HttpResponse.json({ message: 'Resource not found' }, { status: 404 });
       }
       if (id === 429) {
+        // Retry-After: 0 keeps the GET retry loop fast in tests; the
+        // client still exhausts its retries and surfaces RATE_LIMITED.
         return HttpResponse.json(
           { message: 'Rate limit exceeded' },
-          { status: 429, headers: { 'Retry-After': '60' } },
+          { status: 429, headers: { 'Retry-After': '0' } },
         );
       }
 

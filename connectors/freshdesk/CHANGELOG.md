@@ -17,6 +17,7 @@ are maintained manually as part of the PR review checklist.
 - Knowledge base read tools: `search_freshdesk_solutions` (keyword search via `/search/solutions`) and `get_freshdesk_solution_article` (full article body). Titles and bodies are returned inside untrusted-content envelopes.
 
 ### Changed
+- GET requests now retry in place on HTTP 429 (max 2 retries, honouring `Retry-After` capped at 30 seconds, with jitter) instead of failing immediately — plan-capped per-minute rate limits previously hard-failed under load. Writes are never retried automatically, so a retried POST cannot create duplicate tickets or replies.
 - Ticket subjects are now wrapped in untrusted-content envelopes in every output path (previously only search results wrapped them), and the envelope implementation now delegates to the canonical shared `wrapUntrusted` helper instead of a hand-rolled copy.
 - `reply_to_freshdesk_ticket` and `add_freshdesk_note` now declare `destructiveHint: true` — both write to production tickets (public replies are customer-facing).
 
