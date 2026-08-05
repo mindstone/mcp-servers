@@ -36,6 +36,11 @@ const knowledgeBaseSourcesSchema = {
  * between check and read. Open a descriptor once, confirm via fstat that the
  * opened inode (dev/ino) is the file the fence validated, re-check
  * regular-file and size bounds on the descriptor, and read through it.
+ *
+ * Same-inode mutation is still possible (a writer truncating/overwriting/
+ * growing the approved file keeps dev/ino), so after the read the descriptor
+ * is fstat'd AGAIN: a size or mtime move fails closed, and the byte bound is
+ * re-enforced on the bytes actually read.
  */
 async function readUploadFiles(filePaths: string[]): Promise<Array<{ name: string; data: Buffer }>> {
   const files: Array<{ name: string; data: Buffer }> = [];
@@ -74,7 +79,23 @@ async function readUploadFiles(filePaths: string[]): Promise<Array<{ name: strin
           'Split the document or remove unneeded sections, then retry with a file under 50MB.',
         );
       }
-      files.push({ name: path.basename(resolved.path), data: await handle.readFile() });
+      const data = await handle.readFile();
+      const afterRead = await handle.stat();
+      if (afterRead.size !== opened.size || afterRead.mtimeMs !== opened.mtimeMs) {
+        throw new ConnectorError(
+          `file_path changed while it was being read: ${inputPath}`,
+          'FILE_CHANGED_DURING_READ',
+          'The file was modified during the upload read. Retry the upload; if it keeps failing, check for another process modifying the file.',
+        );
+      }
+      if (data.length > MAX_KB_FILE_BYTES) {
+        throw new ConnectorError(
+          `file_path exceeds Retell's 50MB knowledge-base file limit (${Math.round(data.length / 1024 / 1024)}MB): ${inputPath}`,
+          'FILE_TOO_LARGE',
+          'Split the document or remove unneeded sections, then retry with a file under 50MB.',
+        );
+      }
+      files.push({ name: path.basename(resolved.path), data });
     } catch (err) {
       if (err instanceof ConnectorError) throw err;
       // Open/read failure (e.g. the file was deleted between the sandbox check

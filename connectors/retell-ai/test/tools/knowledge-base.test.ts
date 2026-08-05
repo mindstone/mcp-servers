@@ -243,6 +243,58 @@ describe('Knowledge base tools — Retell AI', () => {
     expect(parsed.code).toBe('FILE_CHANGED_DURING_READ');
   });
 
+  it('create_knowledge_base fails closed when the approved file is mutated mid-read (same inode)', async () => {
+    // Same-inode mutation keeps dev/ino, so the open-time identity check alone
+    // cannot catch it. The post-read fstat must detect the size/mtime move and
+    // fail closed before any bytes leave the workspace.
+    let createKbRequests = 0;
+    mswServer.use(
+      ...createRetellHandlers(),
+      http.post('https://api.retellai.com/create-knowledge-base', () => {
+        createKbRequests += 1;
+        return HttpResponse.json({ error_message: 'should never be reached' }, { status: 500 });
+      }),
+    );
+    const workspace = makeWorkspace();
+    const sourcePath = path.join(workspace, 'faq.txt');
+    fs.writeFileSync(sourcePath, 'Legitimate knowledge-base content.');
+    testClient = await createTestClient({
+      env: { RETELL_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '', MCP_WORKSPACE_PATH: workspace },
+    });
+
+    // Append to the SAME file (same inode) the moment the descriptor starts
+    // reading — the swap the open-time dev/ino check structurally cannot see.
+    const realOpen = fs.promises.open.bind(fs.promises);
+    vi.spyOn(fs.promises, 'open').mockImplementation((async (
+      target: fs.PathLike,
+      flags?: fs.OpenMode,
+      mode?: fs.Mode,
+    ) => {
+      const handle = await realOpen(target, flags, mode);
+      const realRead = handle.readFile.bind(handle);
+      handle.readFile = (async (...args: unknown[]) => {
+        fs.appendFileSync(sourcePath, ' appended mid-read');
+        return realRead(...(args as Parameters<typeof realRead>));
+      }) as typeof handle.readFile;
+      return handle;
+    }) as typeof fs.promises.open);
+
+    const result = await testClient.client.callTool({
+      name: 'create_knowledge_base',
+      arguments: {
+        knowledge_base_name: 'Mutated KB',
+        file_paths: [sourcePath],
+      },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const parsed = JSON.parse(text);
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.code).toBe('FILE_CHANGED_DURING_READ');
+    expect(parsed.error).toContain('changed while it was being read');
+    expect(createKbRequests).toBe(0);
+  });
+
   it('add_knowledge_base_sources adds texts to an existing knowledge base', async () => {
     mswServer.use(...createRetellHandlers());
     testClient = await createTestClient({
