@@ -89,8 +89,12 @@ export async function retellFetch<T>(
         detail = errBody.error_message || errBody.detail || errBody.message || '';
       } catch { /* not JSON */ }
 
+      // HTTP reason text is upstream-controlled metadata too: envelope it (or
+      // fall back to a trusted generic placeholder) so raw upstream text never
+      // reaches the model unwrapped (AGENTS.md security invariant #6).
+      const upstreamDetail = detail || response.statusText || '';
       throw new ConnectorError(
-        `Retell AI API error (HTTP ${response.status}): ${detail ? envelopeApiErrorDetail(detail) : response.statusText}`,
+        `Retell AI API error (HTTP ${response.status}): ${upstreamDetail ? envelopeApiErrorDetail(upstreamDetail) : 'no error detail returned'}`,
         `HTTP_${response.status}`,
         getErrorResolution(response.status, detail),
       );
@@ -101,7 +105,18 @@ export async function retellFetch<T>(
       return {} as T;
     }
 
-    return (await response.json()) as T;
+    // A malformed 2xx body must fail with a TRUSTED generic error: Node's JSON
+    // parse errors embed the start of the response body, so rethrowing the raw
+    // SyntaxError would leak upstream-authored bytes into model-visible output.
+    try {
+      return (await response.json()) as T;
+    } catch {
+      throw new ConnectorError(
+        `Retell AI API returned a malformed response (HTTP ${response.status}): expected JSON but the body could not be parsed`,
+        'INVALID_RESPONSE',
+        'The API returned an unexpected response body. Retry the request — if it persists, check https://status.retellai.com',
+      );
+    }
   } catch (error) {
     if (error instanceof ConnectorError) throw error;
     if (error instanceof Error && error.name === 'AbortError') {
