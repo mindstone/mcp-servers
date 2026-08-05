@@ -19,7 +19,15 @@
       "transport": {
         "type": "stdio"
       },
-      "environmentVariables": []
+      "environmentVariables": [
+        {
+          "name": "APPLE_SHORTCUTS_TIMEOUT_MS",
+          "description": "Maximum time in milliseconds to wait for a shortcuts CLI invocation before terminating it",
+          "isRequired": false,
+          "default": "120000",
+          "format": "number"
+        }
+      ]
     }
   ],
   "_meta": {

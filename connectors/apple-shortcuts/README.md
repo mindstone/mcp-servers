@@ -75,6 +75,14 @@ Run a named shortcut with optional text input.
 | `name` | string | Yes | Exact name or identifier of the shortcut |
 | `input` | string | No | Text content to send to the shortcut as its Magic Variable input. Provide the literal text — the connector stores it in a private, mode-`0o600` temporary file (under `os.tmpdir()`) and forwards that location to the macOS `shortcuts` CLI for you. The temporary file is removed once the shortcut returns. Do NOT supply a filename here. |
 
+## Configuration
+
+No credentials are required. One optional environment variable tunes runtime behavior:
+
+| Variable | Default | Description |
+|---|---|---|
+| `APPLE_SHORTCUTS_TIMEOUT_MS` | `120000` | Maximum time in milliseconds a `shortcuts` CLI invocation may run before the connector terminates it (SIGTERM, then SIGKILL after a 5s grace period). Raise this for shortcuts that legitimately take longer than two minutes. |
+
 ## Register in Rebel
 
 Add the connector in **Settings → Connectors** with:
@@ -84,5 +92,5 @@ Add the connector in **Settings → Connectors** with:
 ## Caveats
 
 - **macOS only** — the `shortcuts` CLI is not available on other platforms.
-- Shortcuts that open GUI dialogs or prompt for confirmation may block indefinitely.
+- Shortcuts that open GUI dialogs or prompt for confirmation cannot answer from the command line; they are terminated after `APPLE_SHORTCUTS_TIMEOUT_MS` (default 120s) instead of blocking forever.
 - Running a shortcut has the same system permissions as the logged-in user.

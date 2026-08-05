@@ -11,6 +11,9 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+- `APPLE_SHORTCUTS_TIMEOUT_MS` (default `120000`): `shortcuts` CLI invocations that exceed the timeout are terminated (SIGTERM, then SIGKILL after a 5s grace period) and reported as errors, instead of blocking the tool call forever when a shortcut opens a GUI dialog.
+
 ## [0.1.2] - 2026-05-14
 ### Added
 - **registry**: Cohort B + C backfill — 13 OSS connectors get server.json (12 also get mcpName). google-analytics, hubspot, outreach, quickbooks, salesforce, servicenow, slack, workday, zendesk, office (5-service consolidator), apple-shortcuts, browser-automation, email-imap each gain a registry-shaped server.json validated against registry.modelcontextprotocol.io. mcpName added to 12 of 13 package.json files; browser-automation deferred due to a concurrent agent's uncommitted 0.1.5→0.1.6 version bump in the same file.

@@ -29,7 +29,13 @@ const server = new McpServer({
 // CLI Invocation Helpers
 // =============================================================================
 
-export type ShortcutsRunResult = { stdout: string; stderr: string; exitCode: number };
+export type ShortcutsRunResult = {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  /** True when the process was terminated for exceeding the timeout. */
+  timedOut?: boolean;
+};
 
 /**
  * Function shape used to invoke the `shortcuts` CLI. Exposed so tests can
@@ -38,15 +44,68 @@ export type ShortcutsRunResult = { stdout: string; stderr: string; exitCode: num
  */
 export type ShortcutsRunner = (argv: string[]) => Promise<ShortcutsRunResult>;
 
+export const DEFAULT_TIMEOUT_MS = 120_000;
+const SIGKILL_GRACE_MS = 5_000;
+
+/**
+ * Resolve the `shortcuts` CLI timeout from `APPLE_SHORTCUTS_TIMEOUT_MS`.
+ * Anything unset, non-numeric, or <= 0 falls back to the default — a shortcut
+ * must never be allowed to hang a tool call forever.
+ */
+export function resolveTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.APPLE_SHORTCUTS_TIMEOUT_MS;
+  if (raw === undefined) return DEFAULT_TIMEOUT_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    logger.warn(
+      `Invalid APPLE_SHORTCUTS_TIMEOUT_MS "${raw}"; falling back to ${DEFAULT_TIMEOUT_MS}ms`
+    );
+    return DEFAULT_TIMEOUT_MS;
+  }
+  return Math.floor(parsed);
+}
+
 /**
  * Spawn the `shortcuts` CLI with given argv, returning stdout on success.
  * Uses argv array — no shell interpolation.
+ *
+ * The process is terminated (SIGTERM, then SIGKILL after a grace period) when
+ * it exceeds APPLE_SHORTCUTS_TIMEOUT_MS (default 120s): shortcuts that open
+ * GUI dialogs otherwise block the tool call indefinitely.
  */
 export const runShortcuts: ShortcutsRunner = (argv) => {
   return new Promise((resolve) => {
+    const timeoutMs = resolveTimeoutMs();
     const proc = spawn("shortcuts", argv, { shell: false });
     let stdout = "";
     let stderr = "";
+    let timedOut = false;
+    let settled = false;
+    let timeoutTimer: NodeJS.Timeout | undefined;
+    let killTimer: NodeJS.Timeout | undefined;
+
+    const finish = (result: ShortcutsRunResult) => {
+      if (settled) return;
+      settled = true;
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      if (killTimer) clearTimeout(killTimer);
+      resolve(result);
+    };
+
+    timeoutTimer = setTimeout(() => {
+      timedOut = true;
+      logger.warn(
+        `"shortcuts ${argv.join(" ")}" exceeded the ${timeoutMs}ms timeout; terminating`
+      );
+      proc.kill("SIGTERM");
+      killTimer = setTimeout(() => {
+        try {
+          proc.kill("SIGKILL");
+        } catch {
+          // process already exited
+        }
+      }, SIGKILL_GRACE_MS);
+    }, timeoutMs);
 
     proc.stdout?.on("data", (data: Buffer) => {
       stdout += data.toString();
@@ -57,11 +116,16 @@ export const runShortcuts: ShortcutsRunner = (argv) => {
     });
 
     proc.on("error", (err) => {
-      resolve({ stdout: "", stderr: err.message, exitCode: 1 });
+      finish({ stdout: "", stderr: err.message, exitCode: 1 });
     });
 
     proc.on("close", (code) => {
-      resolve({ stdout, stderr, exitCode: code ?? 0 });
+      finish({
+        stdout,
+        stderr,
+        exitCode: code ?? (timedOut ? 1 : 0),
+        ...(timedOut ? { timedOut: true } : {}),
+      });
     });
   });
 };
@@ -203,6 +267,20 @@ export function createRunShortcutHandler(runner: ShortcutsRunner = runShortcuts)
     try {
       const result = await runner(argv);
 
+      if (result.timedOut) {
+        return {
+          isError: true as const,
+          content: [
+            {
+              type: "text" as const,
+              text:
+                `Shortcut "${params.name}" did not finish within ${resolveTimeoutMs()}ms and was terminated. ` +
+                `Set APPLE_SHORTCUTS_TIMEOUT_MS to allow longer runs.`,
+            },
+          ],
+        };
+      }
+
       if (result.exitCode !== 0) {
         return {
           isError: true,
@@ -269,8 +347,9 @@ Returns:
   The stdout output from the shortcut, if any.
 
 Caveats:
-  - Shortcuts that open GUI dialogs or request user confirmation may block indefinitely.
-  - Shortcuts that take too long to run may cause the MCP request to time out.
+  - Runs are terminated after APPLE_SHORTCUTS_TIMEOUT_MS milliseconds (default 120000);
+    raise it for shortcuts that legitimately take longer.
+  - Shortcuts that open GUI dialogs or request user confirmation will hit that timeout.
   - Running shortcuts is not sandboxed — a shortcut has the same permissions as the logged-in user.
 
 Example:
