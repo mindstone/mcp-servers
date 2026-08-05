@@ -1,10 +1,13 @@
 /**
- * VAL-EMAIL-101..112 — `email_get_message` wraps returned bodies in
- * `<untrusted-content source="external-email">...</untrusted-content>` so the
- * host LLM treats third-party email content as untrusted (LLM01 mitigation).
+ * VAL-EMAIL-101..112 — `email_get_message` wraps attacker-controlled message
+ * fields in `<untrusted-content source="external-email">...</untrusted-content>`
+ * so the host LLM treats third-party email content as untrusted (LLM01
+ * mitigation).
  *
- * Wrapping applies to `textBody` and (when present) `htmlBody` only — never to
- * subject, headers, message-id, addresses, dates, or attachment metadata.
+ * Wrapping applies to `textBody` and (when present) `htmlBody`, plus the
+ * attacker-controlled header/metadata text fields: `subject`, `from`, `to`,
+ * and attachment filenames. Structural fields (uid, date, messageId, flags,
+ * attachment contentType/size) are NOT wrapped.
  */
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
@@ -239,10 +242,18 @@ describe('email_get_message — untrusted-content envelope (M2.6)', () => {
     );
   });
 
-  it('VAL-EMAIL-105 — subject and headers are NOT wrapped', async () => {
+  it('VAL-EMAIL-105 — subject and address headers are wrapped; date/messageId are not', async () => {
     const message = await getMessage(201);
-    const headerFields = ['subject', 'from', 'to', 'date', 'messageId'];
-    for (const field of headerFields) {
+    const wrappedFields = ['subject', 'from', 'to'];
+    for (const field of wrappedFields) {
+      const value = message[field];
+      expect(typeof value).toBe('string');
+      expect(value as string).toMatch(
+        /^<untrusted-content source="external-email">[\s\S]*<\/untrusted-content>$/,
+      );
+    }
+    const structuralFields = ['date', 'messageId'];
+    for (const field of structuralFields) {
       const value = message[field];
       if (typeof value === 'string') {
         expect(value).not.toContain('<untrusted-content');
@@ -251,13 +262,15 @@ describe('email_get_message — untrusted-content envelope (M2.6)', () => {
     }
   });
 
-  it('VAL-EMAIL-106 — attachment metadata is NOT wrapped', async () => {
+  it('VAL-EMAIL-106 — attachment filenames are wrapped; contentType/size are not', async () => {
     const message = await getMessage(204);
     const attachments = message.attachments as Array<Record<string, unknown>>;
     expect(attachments.length).toBe(1);
-    const serialised = JSON.stringify(attachments);
-    expect(serialised).not.toContain('<untrusted-content');
-    expect(serialised).not.toContain('</untrusted-content>');
+    expect(attachments[0]!.filename).toBe(
+      '<untrusted-content source="external-email">agenda.pdf</untrusted-content>',
+    );
+    expect(attachments[0]!.contentType).toBe('application/pdf');
+    expect(typeof attachments[0]!.size).toBe('number');
   });
 
   it('VAL-EMAIL-107 — HTML→text fallback path is also wrapped', async () => {
@@ -307,7 +320,7 @@ describe('email_get_message — untrusted-content envelope (M2.6)', () => {
     expect(description).toMatch(/(?:must not|do not|never)\s+follow/i);
   });
 
-  it('VAL-EMAIL-111 — email_search_messages summaries are NOT wrapped', async () => {
+  it('VAL-EMAIL-111 — email_search_messages summaries wrap subject and sender', async () => {
     await setupClient();
     const result = await testClient.callTool('email_search_messages', {
       mailbox: 'INBOX',
@@ -317,9 +330,12 @@ describe('email_get_message — untrusted-content envelope (M2.6)', () => {
     const messages = json.messages as Array<Record<string, unknown>>;
     expect(messages.length).toBeGreaterThan(0);
     for (const m of messages) {
-      const subject = m.subject;
-      if (typeof subject === 'string') {
-        expect(subject).not.toContain('<untrusted-content');
+      for (const field of ['subject', 'from']) {
+        const value = m[field];
+        expect(typeof value).toBe('string');
+        expect(value as string).toMatch(
+          /^<untrusted-content source="external-email">[\s\S]*<\/untrusted-content>$/,
+        );
       }
     }
   });

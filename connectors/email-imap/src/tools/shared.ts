@@ -8,7 +8,31 @@ import type { MessageAddressObject, MessageStructureObject } from 'imapflow';
 
 import type { ClientConfig } from '../types.js';
 import { getConnection } from '../imap-client.js';
-import { getPreset } from '../presets.js';
+import { getPreset, listPresetKeys } from '../presets.js';
+import { wrapUntrusted } from '../untrusted-content.js';
+
+/**
+ * Envelope source tag for every attacker-controlled string an email message
+ * carries (bodies, subjects, display names, attachment filenames). LLM01
+ * mitigation: the host LLM must treat these as DATA, not instructions.
+ * Wrapping is content-agnostic — applied even to empty or injection-shaped
+ * content — and the canonical helper neutralises embedded close-tag variants
+ * so the envelope cannot be broken out of (VAL-EMAIL-115 / VAL-CROSS-011 /
+ * VAL-CROSS-012).
+ */
+export const UNTRUSTED_EMAIL_SOURCE = 'external-email';
+
+/**
+ * Wrap one attacker-controlled email text field in the untrusted-content
+ * envelope. `null`/`undefined` pass through as `null` so optional fields
+ * keep their shape in the JSON response.
+ */
+export function wrapEmailField(text: string | null | undefined): string | null {
+  if (text === null || text === undefined) {
+    return null;
+  }
+  return wrapUntrusted(text, UNTRUSTED_EMAIL_SOURCE) ?? null;
+}
 
 /**
  * In-memory client config. Set by initClients(), read by tool handlers.
@@ -37,6 +61,8 @@ export interface AttachmentMetadata {
   filename: string | null;
   contentType: string;
   size: number;
+  /** MIME part identifier — pass to email_get_attachment to download. */
+  part: string;
 }
 
 /**
@@ -168,6 +194,7 @@ export function collectMessageParts(
     filename,
     contentType,
     size: typeof node.size === 'number' ? node.size : 0,
+    part: partIdentifier,
   });
 }
 
@@ -233,6 +260,45 @@ export async function resolveDraftsMailbox(): Promise<string> {
   const defaultMailbox = fallbackCandidates[0] ?? 'Drafts';
   await client.mailboxCreate(defaultMailbox);
   return defaultMailbox;
+}
+
+/**
+ * Resolve the trash mailbox name for the current account, or null when the
+ * account has none. Unlike resolveDraftsMailbox this NEVER auto-creates the
+ * mailbox: deletion fallbacks (\Deleted + expunge) are decided by the caller
+ * based on whether a trash mailbox actually exists.
+ */
+export async function resolveTrashMailbox(): Promise<string | null> {
+  const client = await getConnection();
+  const listedMailboxes = await client.list();
+
+  const specialUseTrash = listedMailboxes.find(
+    (mailbox) => mailbox.specialUse === '\\Trash',
+  );
+  if (specialUseTrash) {
+    return specialUseTrash.path;
+  }
+
+  const mailboxByLowerName = new Map<string, string>();
+  for (const mailbox of listedMailboxes) {
+    mailboxByLowerName.set(mailbox.path.toLowerCase(), mailbox.path);
+  }
+
+  const fallbackCandidates = uniquePreserveOrder([
+    'Trash',
+    'Deleted Messages',
+    'Deleted Items',
+    ...listPresetKeys().flatMap((key) => getPreset(key)?.folderFallbacks.trash ?? []),
+  ]);
+
+  for (const candidate of fallbackCandidates) {
+    const existing = mailboxByLowerName.get(candidate.toLowerCase());
+    if (existing) {
+      return existing;
+    }
+  }
+
+  return null;
 }
 
 /**

@@ -1,17 +1,22 @@
 /**
- * VAL-EMAIL-115 / VAL-CROSS-011 / VAL-CROSS-012 — `wrapUntrustedEmailBody`
- * MUST neutralise embedded close-tag variants of the `<untrusted-content>`
- * envelope inside body content so an attacker who controls an email body
- * cannot break out of the envelope and inject post-envelope instructions
- * that the LLM would otherwise treat as trusted.
+ * VAL-EMAIL-115 / VAL-CROSS-011 / VAL-CROSS-012 — the canonical `wrapUntrusted`
+ * helper (vendored at `src/untrusted-content.ts`) MUST neutralise embedded
+ * close-tag variants of the `<untrusted-content>` envelope inside email content
+ * so an attacker who controls an email body/subject cannot break out of the
+ * envelope and inject post-envelope instructions that the LLM would otherwise
+ * treat as trusted.
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  UNTRUSTED_EMAIL_OPEN,
-  UNTRUSTED_EMAIL_CLOSE,
-  wrapUntrustedEmailBody,
-} from '../src/tools/messages.js';
+import { wrapUntrusted } from '../src/untrusted-content.js';
+
+const UNTRUSTED_EMAIL_OPEN = '<untrusted-content source="external-email">';
+const UNTRUSTED_EMAIL_CLOSE = '</untrusted-content>';
+
+/** Wrap a string in the external-email envelope via the canonical helper. */
+function wrapUntrustedEmailBody(body: string): string {
+  return wrapUntrusted(body, 'external-email') ?? '';
+}
 
 const ESCAPED_CLOSE = '<\\/untrusted-content>';
 const CLOSE_TAG_RE_CI = /<\/untrusted-content/gi;
