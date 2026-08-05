@@ -654,18 +654,23 @@ const sidecarRequest = async (app, action, params = {}) => {
     }
 
     if (!response.ok) {
+      // The error body is authored by the sidecar (or an add-in relayed through
+      // it) — external, attacker-influenced text. Stamp it so `toMcpResult`
+      // wraps it in the untrusted-content envelope instead of emitting it
+      // verbatim (AGENTS.md security invariant #6).
       let detail;
       try {
         const payload = await response.json();
-        detail = payload?.error;
+        if (typeof payload?.error === 'string') detail = payload.error;
       } catch {
-        detail = await response.text();
+        const body = await response.text();
+        if (body) detail = body;
       }
-      return {
+      return stampUntrustedSource({
         success: false,
         error: detail || `Office sidecar request failed (HTTP ${response.status}).`,
         code: 'SIDECAR_ERROR',
-      };
+      }, app);
     }
 
     return stampUntrustedSource(await response.json(), app);
@@ -2212,7 +2217,7 @@ registerTool(TOOL_NAMES.updateTableCell, {
       "text"
     ]
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
 }, async (input) => {
   const result = await sidecarRequest('word', 'update_table_cell', {
     tableIndex: input.tableIndex,
@@ -2272,6 +2277,27 @@ registerTool(TOOL_NAMES.applyStyle, {
         "required": [
           "type"
         ],
+        "allOf": [
+          {
+            "if": {
+              "properties": { "type": { "const": "searchText" } },
+              "required": ["type"]
+            },
+            "then": {
+              "required": ["searchText"],
+              "properties": { "searchText": { "minLength": 1 } }
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "paragraphRange" } },
+              "required": ["type"]
+            },
+            "then": {
+              "required": ["startParagraph"]
+            }
+          }
+        ],
         "description": "Which paragraphs to style."
       }
     },
@@ -2280,7 +2306,7 @@ registerTool(TOOL_NAMES.applyStyle, {
       "target"
     ]
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
 }, async (input) => {
   const result = await sidecarRequest('word', 'apply_style', {
     style: input.style,
@@ -3570,7 +3596,7 @@ registerTool(TOOL_NAMES.excelCreatePivotTable, {
       "sourceRange"
     ]
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
 }, async (input) => {
   const result = await sidecarRequest('excel', 'create_pivot_table', {
     name: input.name,
@@ -3599,7 +3625,7 @@ registerTool(TOOL_NAMES.excelRefreshPivotTable, {
       }
     }
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
 }, async (input) => {
   const result = await sidecarRequest('excel', 'refresh_pivot_table', {
     name: input.name,
@@ -4240,7 +4266,7 @@ registerTool(TOOL_NAMES.pptApplyLayout, {
       "layout"
     ]
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
 }, async (input) => {
   const result = await sidecarRequest('powerpoint', 'apply_layout', {
     slideIndex: input.slideIndex, layout: input.layout,
@@ -4285,6 +4311,28 @@ registerTool(TOOL_NAMES.pptDeleteShape, {
         },
         "required": [
           "type"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": { "type": { "const": "shapeId" } },
+              "required": ["type"]
+            },
+            "then": {
+              "required": ["shapeId"],
+              "properties": { "shapeId": { "minLength": 1 } }
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "placeholder" } },
+              "required": ["type"]
+            },
+            "then": {
+              "required": ["placeholder"],
+              "properties": { "placeholder": { "minLength": 1 } }
+            }
+          }
         ],
         "description": "Which shape to delete."
       }
@@ -4341,6 +4389,28 @@ registerTool(TOOL_NAMES.pptFormatShape, {
         "required": [
           "type"
         ],
+        "allOf": [
+          {
+            "if": {
+              "properties": { "type": { "const": "shapeId" } },
+              "required": ["type"]
+            },
+            "then": {
+              "required": ["shapeId"],
+              "properties": { "shapeId": { "minLength": 1 } }
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "placeholder" } },
+              "required": ["type"]
+            },
+            "then": {
+              "required": ["placeholder"],
+              "properties": { "placeholder": { "minLength": 1 } }
+            }
+          }
+        ],
         "description": "Which shape to format."
       },
       "formatting": {
@@ -4382,7 +4452,8 @@ registerTool(TOOL_NAMES.pptFormatShape, {
             "description": "Rename the shape."
           }
         },
-        "description": "Formatting to apply. At least one property is required."
+        "description": "Formatting to apply. At least one property is required.",
+        "minProperties": 1
       }
     },
     "required": [
@@ -4391,7 +4462,7 @@ registerTool(TOOL_NAMES.pptFormatShape, {
       "formatting"
     ]
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
 }, async (input) => {
   const result = await sidecarRequest('powerpoint', 'format_shape', {
     slideIndex: input.slideIndex, target: input.target, formatting: input.formatting,
@@ -4435,6 +4506,8 @@ export const __test = {
   isLoopbackHostname,
   toMcpResult,
   stampUntrustedSource,
+  sidecarRequest,
+  server,
   packageVersion: PACKAGE_VERSION,
   setSpawnSidecarAndWaitForTests(fn: typeof defaultSpawnSidecarAndWait) {
     spawnSidecarAndWait = fn;

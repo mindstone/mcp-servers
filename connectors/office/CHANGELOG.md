@@ -19,9 +19,13 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 - The MCP server now reports the real `package.json` version instead of a hardcoded literal that had drifted a full release behind (reported `0.1.1` while the package was `0.2.0`).
+- Tighten tool input validation so malformed conditional arguments are rejected before anything is relayed to the Office sidecar: `rebel_office_word_apply_style` now requires `searchText` for `searchText` targets and `startParagraph` for `paragraphRange` targets, the PowerPoint shape tools require `shapeId`/`placeholder` matching their target type, and `rebel_office_powerpoint_format_shape` requires `formatting` to set at least one property. Previously these were only rejected inside the add-in, after the relay.
+- The six new content-mutating tools (`rebel_office_word_update_table_cell`, `rebel_office_word_apply_style`, `rebel_office_excel_create_pivot_table`, `rebel_office_excel_refresh_pivot_table`, `rebel_office_powerpoint_apply_layout`, `rebel_office_powerpoint_format_shape`) now advertise `destructiveHint: true`, matching both their README descriptions and the existing `rebel_office_powerpoint_delete_shape`.
 
 ### Security
 - Wrap all add-in-returned document/spreadsheet/slide content in `<untrusted-content source="microsoft-office-{app}">` envelopes at the `toMcpResult` boundary, and envelope add-in-relayed error messages (FOX-3490 remediation). Content authored inside Office files is attacker-influenced whenever the file came from somewhere else; the envelope marks it as data, not instructions. Locally generated guidance (sidecar unreachable, setup hints) is not enveloped.
+- Envelope non-2xx sidecar error bodies the same way: a failed sidecar/add-in response's `error` field or raw body is external, attacker-influenced text, and previously reached the model verbatim — including any embedded `</untrusted-content>` breakout payload.
+- Close-tag breakout escaping now neutralises every whitespace variant of `</untrusted-content>` (newline/CR/tab, not just spaces/tabs), so a wrapped payload cannot terminate its envelope early with e.g. `</untrusted-content\n>`.
 - Pin `@grpc/grpc-js` to `^1.14.4` via `overrides` to clear high-severity advisories GHSA-5375-pq7m-f5r2 / GHSA-99f4-grh7-6pcq (malformed-request crash) in the transitive OpenTelemetry OTLP-gRPC exporter chain (was 1.14.3).
 
 ## [0.2.0] - 2026-05-19
