@@ -9,7 +9,7 @@ Humaans HR platform MCP server for Model Context Protocol hosts. Query employee 
 
 - **Version:** [0.2.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-humaans)
 - **Auth:** API key ([`HUMAANS_API_KEY`](./server.json))
-- **Tools:** [13](./src/tools/) (people, job-roles, time-away, company)
+- **Tools:** [15](./src/tools/) (people, job-roles, time-away, company)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -114,7 +114,7 @@ node dist/index.js
 }
 ```
 
-## Tools (13)
+## Tools (15)
 
 ### Configuration
 - `configure_humaans_api_key` — Configure the Humaans API access token
@@ -134,6 +134,8 @@ node dist/index.js
 - `list_humaans_time_away_types` — List available time-away types
 - `list_humaans_time_away_allocations` — List time-away allocations (which policy applies to each person)
 - `cancel_humaans_time_away` — Cancel (permanently delete) a time-away entry
+- `approve_humaans_time_away` — Approve a pending time-away request (manager action)
+- `decline_humaans_time_away` — Decline a pending time-away request (manager action)
 
 ### Company
 - `list_humaans_locations` — List company locations/offices

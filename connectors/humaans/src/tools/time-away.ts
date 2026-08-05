@@ -271,4 +271,86 @@ RELATED TOOLS:
       });
     }),
   );
+
+  server.registerTool(
+    'approve_humaans_time_away',
+    {
+      description:
+        `Approve a pending time away request in Humaans (manager action).
+
+Sets the request status to approved. Use list_humaans_time_away with
+requestStatus="pending" to find requests awaiting review.
+
+Example: { "timeAwayId": "YLlqHE4DLvGtFJ7L2qro6bTF" }
+
+RELATED TOOLS:
+- decline_humaans_time_away: Decline the request instead
+- list_humaans_time_away: Find pending requests`,
+      inputSchema: z.object({
+        timeAwayId: z.string().min(1)
+          .describe('Time away entry ID (from list_humaans_time_away)'),
+        reviewNote: z.string().optional()
+          .describe('Optional note attached to the approval (visible to the employee)'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      if (!isConfigured()) return noApiKeyError();
+
+      const body: Record<string, unknown> = { requestStatus: 'approved' };
+      if (args.reviewNote) body.reviewNote = args.reviewNote;
+
+      const updated = await humaansFetch<Record<string, unknown>>(
+        `/time-away/${encodeURIComponent(args.timeAwayId)}`,
+        { method: 'PATCH', body: JSON.stringify(body) },
+      );
+
+      return JSON.stringify({
+        ok: true,
+        message: 'Time away request approved.',
+        timeAway: sanitizeTimeAwayEntry(updated, 'humaans:approve_humaans_time_away'),
+      });
+    }),
+  );
+
+  server.registerTool(
+    'decline_humaans_time_away',
+    {
+      description:
+        `Decline a pending time away request in Humaans (manager action).
+
+Sets the request status to declined. Consider including a reviewNote so the
+employee knows why.
+
+Example: { "timeAwayId": "YLlqHE4DLvGtFJ7L2qro6bTF", "reviewNote": "Dates clash with the release freeze" }
+
+RELATED TOOLS:
+- approve_humaans_time_away: Approve the request instead
+- list_humaans_time_away: Find pending requests`,
+      inputSchema: z.object({
+        timeAwayId: z.string().min(1)
+          .describe('Time away entry ID (from list_humaans_time_away)'),
+        reviewNote: z.string().optional()
+          .describe('Optional note explaining the decline (visible to the employee)'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      if (!isConfigured()) return noApiKeyError();
+
+      const body: Record<string, unknown> = { requestStatus: 'declined' };
+      if (args.reviewNote) body.reviewNote = args.reviewNote;
+
+      const updated = await humaansFetch<Record<string, unknown>>(
+        `/time-away/${encodeURIComponent(args.timeAwayId)}`,
+        { method: 'PATCH', body: JSON.stringify(body) },
+      );
+
+      return JSON.stringify({
+        ok: true,
+        message: 'Time away request declined.',
+        timeAway: sanitizeTimeAwayEntry(updated, 'humaans:decline_humaans_time_away'),
+      });
+    }),
+  );
 }

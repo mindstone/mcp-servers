@@ -267,4 +267,96 @@ describe('Humaans time away tools', () => {
     expect(result.isError).toBe(true);
     expect(requestMade).toBe(false);
   });
+
+  it('approve_humaans_time_away sets requestStatus to approved', async () => {
+    let capturedBody: Record<string, unknown> | null = null;
+    mswServer.use(
+      http.patch('https://app.humaans.io/api/time-away/:id', async ({ request, params }) => {
+        const auth = request.headers.get('Authorization');
+        if (auth !== `Bearer ${API_KEY}`) {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        capturedBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ id: params.id, ...capturedBody, reviewedAt: '2024-04-10' });
+      }),
+    );
+
+    testClient = await createTestClient({
+      env: { HUMAANS_API_KEY: API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('approve_humaans_time_away', {
+      timeAwayId: 'ta-002',
+      reviewNote: 'Enjoy the break',
+    });
+    const json = result.json as {
+      ok: boolean;
+      message: string;
+      timeAway: { requestStatus: string; reviewNote: string };
+    };
+
+    expect(json.ok).toBe(true);
+    expect(json.message).toContain('approved');
+    expect(capturedBody).toMatchObject({ requestStatus: 'approved', reviewNote: 'Enjoy the break' });
+    expect(json.timeAway.requestStatus).toBe('approved');
+    // reviewNote echoed by the API is external text and must be enveloped
+    expect(json.timeAway.reviewNote).toBe(
+      '<untrusted-content source="humaans:approve_humaans_time_away:reviewNote">Enjoy the break</untrusted-content>',
+    );
+  });
+
+  it('decline_humaans_time_away sets requestStatus to declined', async () => {
+    let capturedBody: Record<string, unknown> | null = null;
+    mswServer.use(
+      http.patch('https://app.humaans.io/api/time-away/:id', async ({ request, params }) => {
+        const auth = request.headers.get('Authorization');
+        if (auth !== `Bearer ${API_KEY}`) {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        capturedBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ id: params.id, ...capturedBody, reviewedAt: '2024-04-10' });
+      }),
+    );
+
+    testClient = await createTestClient({
+      env: { HUMAANS_API_KEY: API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('decline_humaans_time_away', {
+      timeAwayId: 'ta-002',
+      reviewNote: 'Dates clash with the release freeze',
+    });
+    const json = result.json as {
+      ok: boolean;
+      message: string;
+      timeAway: { requestStatus: string };
+    };
+
+    expect(json.ok).toBe(true);
+    expect(json.message).toContain('declined');
+    expect(capturedBody).toMatchObject({
+      requestStatus: 'declined',
+      reviewNote: 'Dates clash with the release freeze',
+    });
+    expect(json.timeAway.requestStatus).toBe('declined');
+  });
+
+  it('approve/decline are annotated as destructive writes', async () => {
+    await setup();
+    const toolsResult = await testClient.client.listTools();
+    for (const name of ['approve_humaans_time_away', 'decline_humaans_time_away']) {
+      const tool = toolsResult.tools.find((t) => t.name === name);
+      expect(tool?.annotations?.destructiveHint).toBe(true);
+      expect(tool?.annotations?.readOnlyHint).toBe(false);
+    }
+  });
+
+  it('approve_humaans_time_away returns error for non-existent entry', async () => {
+    await setup();
+    const result = await testClient.callTool('approve_humaans_time_away', { timeAwayId: 'non-existent' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; code: string };
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('NOT_FOUND');
+  });
 });
