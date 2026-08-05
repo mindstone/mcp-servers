@@ -123,9 +123,54 @@ export function createImapMock(options: ImapMockOptions = {}) {
       };
     }
 
-    async search(_criteria: unknown, _opts?: unknown) {
-      if (searchUids) return searchUids;
-      return messages.map((m) => m.uid);
+    async search(criteria: unknown, _opts?: unknown) {
+      const baseUids = searchUids ?? messages.map((m) => m.uid);
+      const filter = (criteria ?? {}) as {
+        seen?: boolean;
+        from?: string;
+        subject?: string;
+        since?: Date;
+        before?: Date;
+      };
+      const hasFilters =
+        filter.seen !== undefined ||
+        filter.from !== undefined ||
+        filter.subject !== undefined ||
+        filter.since !== undefined ||
+        filter.before !== undefined;
+      if (!hasFilters) {
+        return baseUids;
+      }
+      return messages
+        .filter((m) => {
+          if (!baseUids.includes(m.uid)) return false;
+          if (filter.seen !== undefined) {
+            const isSeen = m.flags?.has('\\Seen') ?? false;
+            if (isSeen !== filter.seen) return false;
+          }
+          if (filter.from !== undefined) {
+            const fromText = (m.envelope?.from ?? [])
+              .map((a) => `${a.name ?? ''} ${a.address ?? ''}`)
+              .join(' ')
+              .toLowerCase();
+            if (!fromText.includes(filter.from.toLowerCase())) return false;
+          }
+          if (filter.subject !== undefined) {
+            const subjectText = (m.envelope?.subject ?? '').toLowerCase();
+            if (!subjectText.includes(filter.subject.toLowerCase())) return false;
+          }
+          const date = m.envelope?.date;
+          if (filter.since !== undefined) {
+            // Instant comparison (real IMAP is day-granular; the mock keeps
+            // tests timezone-deterministic).
+            if (!date || date < filter.since) return false;
+          }
+          if (filter.before !== undefined) {
+            if (!date || date >= filter.before) return false;
+          }
+          return true;
+        })
+        .map((m) => m.uid);
     }
 
     fetch(_uids: number | number[], _opts?: unknown, _extraOpts?: unknown) {
