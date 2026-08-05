@@ -21,6 +21,8 @@
       "https://developer.vanta.com/api-reference/vendors/get-vendor-by-id.md",
       "https://developer.vanta.com/api-reference/integrations/list-resources.md",
       "https://developer.vanta.com/api-reference/integrations/list-connected-integrations.md",
+      "https://developer.vanta.com/api-reference/risk-scenarios/list-risk-scenarios.md",
+      "https://developer.vanta.com/api-reference/risk-scenarios/get-risk-scenario-by-id.md",
       "https://developer.vanta.com/api-reference/vendors/create-a-vendor.md",
       "https://developer.vanta.com/api-reference/vendors/update-vendor-by-id.md",
       "https://developer.vanta.com/api-reference/vulnerabilities/deactivate-vulnerability-monitoring-for-a-vulnerability.md",
@@ -160,6 +162,32 @@
         "pageSize",
         "pageCursor"
       ],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/risk-scenarios",
+      "queryParams": [
+        "pageSize",
+        "pageCursor",
+        "searchString",
+        "includeIgnored",
+        "ownerMatchesAny",
+        "categoryMatchesAny",
+        "ciaCategoryMatchesAny",
+        "treatmentTypeMatchesAny",
+        "inherentScoreGroupMatchesAny",
+        "residualScoreGroupMatchesAny",
+        "reviewStatusMatchesAny",
+        "type",
+        "orderBy"
+      ],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/risk-scenarios/{riskScenarioId}",
+      "queryParams": [],
       "requiredBodyFields": []
     },
     {

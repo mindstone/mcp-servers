@@ -16,6 +16,12 @@ import {
   vantaListFrameworks,
 } from './tools/frameworks.js';
 import { listIntegrationsSchema, vantaListIntegrations } from './tools/integrations.js';
+import {
+  getRiskScenarioSchema,
+  listRiskScenariosSchema,
+  vantaGetRiskScenario,
+  vantaListRiskScenarios,
+} from './tools/risks.js';
 import { listPeopleSchema, vantaListPeople } from './tools/people.js';
 import {
   getPolicySchema,
@@ -197,6 +203,20 @@ RETURNS:
     annotations: readOnlyAnnotations,
     inputSchema: listIntegrationsSchema,
   }, async (input) => textResult(await vantaListIntegrations(client, input)));
+
+  server.registerTool('vanta_list_risk_scenarios', {
+    title: 'List Vanta Risk Scenarios',
+    description: 'List risk scenarios from the Vanta risk register with optional search and include-ignored filters.',
+    annotations: readOnlyAnnotations,
+    inputSchema: listRiskScenariosSchema,
+  }, async (input) => textResult(await vantaListRiskScenarios(client, input)));
+
+  server.registerTool('vanta_get_risk_scenario', {
+    title: 'Get Vanta Risk Scenario',
+    description: 'Get details for one Vanta risk scenario by risk ID, including scores, treatment, and review status.',
+    annotations: readOnlyAnnotations,
+    inputSchema: getRiskScenarioSchema,
+  }, async (input) => textResult(await vantaGetRiskScenario(client, input)));
 
   server.registerTool('vanta_list_vendors', {
     title: 'List Vanta Vendors',

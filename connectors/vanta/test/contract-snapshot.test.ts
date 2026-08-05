@@ -7,6 +7,7 @@ import { vantaListControls, vantaGetControl } from '../src/tools/controls.js';
 import { vantaUploadDocument } from '../src/tools/documents.js';
 import { vantaListFrameworks, vantaGetFramework } from '../src/tools/frameworks.js';
 import { vantaListIntegrations } from '../src/tools/integrations.js';
+import { vantaListRiskScenarios, vantaGetRiskScenario } from '../src/tools/risks.js';
 import { vantaListPeople } from '../src/tools/people.js';
 import { vantaListPolicies, vantaGetPolicy } from '../src/tools/policies.js';
 import { vantaQueryTestResults } from '../src/tools/query-results.js';
@@ -118,6 +119,7 @@ const normalizeContractPath = (endpoint: string): string => {
   normalized = normalized.replace(/\/controls\/[^/]+$/, '/controls/{controlId}');
   normalized = normalized.replace(/\/frameworks\/[^/]+$/, '/frameworks/{frameworkId}');
   normalized = normalized.replace(/\/policies\/[^/]+$/, '/policies/{policyId}');
+  normalized = normalized.replace(/\/risk-scenarios\/[^/]+$/, '/risk-scenarios/{riskScenarioId}');
   normalized = normalized.replace(/\/vendors\/[^/]+$/, '/vendors/{vendorId}');
   if (!normalized.endsWith('/deactivate') && !normalized.endsWith('/reactivate')) {
     normalized = normalized.replace(/\/vulnerabilities\/[^/]+$/, '/vulnerabilities/{vulnerabilityId}');
@@ -137,6 +139,17 @@ const documentedButUnexercisedQueryParams: Record<string, string[]> = {
     'vulnerableAssetId',
   ],
   'GET /tests': ['integrationFilter', 'controlFilter', 'ownerFilter', 'categoryFilter', 'isInRollout'],
+  'GET /risk-scenarios': [
+    'ownerMatchesAny',
+    'categoryMatchesAny',
+    'ciaCategoryMatchesAny',
+    'treatmentTypeMatchesAny',
+    'inherentScoreGroupMatchesAny',
+    'residualScoreGroupMatchesAny',
+    'reviewStatusMatchesAny',
+    'type',
+    'orderBy',
+  ],
   'GET /people': [
     'tasksSummaryStatusMatchesAny',
     'taskTypeMatchesAny',
@@ -221,6 +234,13 @@ describe('Vanta contract snapshot', () => {
     await vantaListPolicies(client, { page_size: 10, page_cursor: 'cursor-policies' });
     await vantaGetPolicy(client, { policy_id: 'code-of-conduct-bsi' });
     await vantaListIntegrations(client, { page_size: 10, page_cursor: 'cursor-integrations' });
+    await vantaListRiskScenarios(client, {
+      search_string: 'data',
+      include_ignored: false,
+      page_size: 10,
+      page_cursor: 'cursor-risks',
+    });
+    await vantaGetRiskScenario(client, { risk_id: 'assets-not-identified-and-protected' });
     await vantaListVendors(client, {
       name: 'Acme',
       status: 'MANAGED',

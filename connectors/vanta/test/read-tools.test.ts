@@ -488,4 +488,111 @@ describe('Read tools — documented request contracts', () => {
     expect(payload.ok).toBe(false);
     expect(payload.code).toBe('API_ERROR');
   });
+
+  it('vanta_list_risk_scenarios sends documented filters and returns scenarios', async () => {
+    mswServer.use(
+      successTokenHandler,
+      http.get('https://api.vanta.com/v1/risk-scenarios', ({ request }) => {
+        expect(Object.fromEntries(new URL(request.url).searchParams)).toEqual({
+          searchString: 'data',
+          includeIgnored: 'false',
+          pageSize: '10',
+          pageCursor: 'risk-cursor',
+        });
+        return paginated([
+          {
+            riskId: 'assets-not-identified-and-protected',
+            description: 'Assets are not identified and protected according to company requirements.',
+            likelihood: 4,
+            impact: 4,
+            reviewStatus: 'DRAFT',
+            isArchived: false,
+          },
+        ]);
+      }),
+    );
+
+    const { createServer } = await import('../src/server.js');
+    testClient = await createInMemoryTestClient({
+      createServer,
+      env: {
+        VANTA_CLIENT_ID: MOCK_CLIENT_ID,
+        VANTA_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+      },
+    });
+
+    const result = await testClient.callTool('vanta_list_risk_scenarios', {
+      search_string: 'data',
+      include_ignored: false,
+      page_size: 10,
+      page_cursor: 'risk-cursor',
+    });
+    const payload = result.json as {
+      ok: boolean;
+      riskScenarios: Array<{ riskId: string; reviewStatus: string }>;
+      count: number;
+    };
+
+    expect(payload.ok).toBe(true);
+    expect(payload.count).toBe(1);
+    expect(payload.riskScenarios[0]?.riskId).toBe('assets-not-identified-and-protected');
+    expect(payload.riskScenarios[0]?.reviewStatus).toBe('DRAFT');
+  });
+
+  it('vanta_get_risk_scenario fetches a single scenario by risk ID', async () => {
+    mswServer.use(
+      successTokenHandler,
+      http.get('https://api.vanta.com/v1/risk-scenarios/assets-not-identified-and-protected', () =>
+        HttpResponse.json({
+          riskId: 'assets-not-identified-and-protected',
+          description: 'Assets are not identified and protected.',
+          treatment: 'Mitigate',
+          reviewStatus: 'APPROVED',
+        }),
+      ),
+    );
+
+    const { createServer } = await import('../src/server.js');
+    testClient = await createInMemoryTestClient({
+      createServer,
+      env: {
+        VANTA_CLIENT_ID: MOCK_CLIENT_ID,
+        VANTA_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+      },
+    });
+
+    const result = await testClient.callTool('vanta_get_risk_scenario', {
+      risk_id: 'assets-not-identified-and-protected',
+    });
+    const payload = result.json as { ok: boolean; riskScenario: { riskId: string; reviewStatus: string } };
+
+    expect(payload.ok).toBe(true);
+    expect(payload.riskScenario.riskId).toBe('assets-not-identified-and-protected');
+    expect(payload.riskScenario.reviewStatus).toBe('APPROVED');
+  });
+
+  it('vanta_get_risk_scenario surfaces a structured error for an unknown risk ID', async () => {
+    mswServer.use(
+      successTokenHandler,
+      http.get('https://api.vanta.com/v1/risk-scenarios/nope', () =>
+        HttpResponse.json({ message: 'not found' }, { status: 404 }),
+      ),
+      http.get('https://api.vanta.com/v1/risk-scenarios', () => paginated([])),
+    );
+
+    const { createServer } = await import('../src/server.js');
+    testClient = await createInMemoryTestClient({
+      createServer,
+      env: {
+        VANTA_CLIENT_ID: MOCK_CLIENT_ID,
+        VANTA_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+      },
+    });
+
+    const result = await testClient.callTool('vanta_get_risk_scenario', { risk_id: 'nope' });
+    const payload = result.json as { ok: boolean; code: string };
+
+    expect(payload.ok).toBe(false);
+    expect(payload.code).toBe('NOT_FOUND');
+  });
 });

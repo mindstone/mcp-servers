@@ -760,7 +760,7 @@ export class VantaApiClient {
 
   private itemMatchesId(candidate: unknown, id: string): boolean {
     if (!isRecord(candidate)) return false;
-    const idFields = ['id', 'uid', 'vulnerabilityId', 'testId', 'controlId', 'resourceId'];
+    const idFields = ['id', 'uid', 'vulnerabilityId', 'testId', 'controlId', 'resourceId', 'riskId'];
     return idFields.some((field) => candidate[field] === id);
   }
 
