@@ -469,10 +469,11 @@ export async function createDraft(
   };
 
   const response = await client.api('/me/messages').options({ signal }).post(draft);
+  const created = GraphMessageMutationSchema.parse(response);
 
   return {
     success: true,
-    draftId: response.id,
+    draftId: created.id,
     message: 'Draft created successfully',
   };
 }

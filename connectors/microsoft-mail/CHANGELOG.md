@@ -19,6 +19,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - `bcc` parameter on `send_email`, `compose_email`, and `create_draft`; the compose view now renders a BCC row (regenerated from `@mindstone/mcp-app-compose`).
 - `get_automatic_replies` and `set_automatic_replies` tools: read and set the out-of-office configuration via `mailboxSettings`, including scheduled windows. Both require the `MailboxSettings.Read`/`MailboxSettings.ReadWrite` Graph permissions; when the connected account lacks them the tools return an admin-consent-aware guidance envelope instead of a raw Graph 403.
 
+### Changed
+
+- Graph responses for the new tools (and `create_draft`) are validated with Zod at the boundary instead of cast, per the planned tightening noted in 0.1.1; pre-existing read tools still cast and remain tracked as planned debt.
+
 ## [0.2.0] - 2026-07-29
 
 ### Changed
