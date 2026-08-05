@@ -185,17 +185,22 @@ function formatActivity(
     ...Object.keys(activity.action ?? {}),
     ...(activity.access ? ['access'] : []),
   ];
+  // Everything here is display-only (no tool takes an activity ID or action
+  // name back as an argument), so every vendor-derived string is enveloped —
+  // including `action` keys, which are open-ended record keys from the wire.
   return {
-    id: activity.id,
-    time: activity.activityDateTime,
+    id: wrapUntrusted(activity.id, `microsoft-files:${sourceTool}:id`),
+    time: wrapUntrusted(activity.activityDateTime, `microsoft-files:${sourceTool}:time`),
     actor: wrapUntrusted(
       activity.actor?.user?.displayName ?? activity.actor?.application?.displayName,
       `microsoft-files:${sourceTool}:actor`,
     ),
-    actions,
+    actions: actions.map((action) =>
+      wrapUntrusted(action, `microsoft-files:${sourceTool}:action`),
+    ),
     item: activity.driveItem
       ? {
-          id: activity.driveItem.id,
+          id: wrapUntrusted(activity.driveItem.id, `microsoft-files:${sourceTool}:itemId`),
           name: wrapUntrusted(
             activity.driveItem.name,
             `microsoft-files:${sourceTool}:item`,
@@ -210,17 +215,22 @@ function formatPermission(
   sourceTool: string,
 ) {
   return {
+    // Structural, NOT enveloped: permission.id round-trips verbatim as the
+    // permissionId argument of revoke_file_permission, and link.webUrl is a
+    // functional URL the user opens. Enveloping them would break the flow.
     id: permission.id,
-    roles: permission.roles ?? [],
+    roles: (permission.roles ?? []).map((role) =>
+      wrapUntrusted(role, `microsoft-files:${sourceTool}:role`),
+    ),
     link: permission.link
       ? {
-          type: permission.link.type,
-          scope: permission.link.scope,
+          type: wrapUntrusted(permission.link.type, `microsoft-files:${sourceTool}:linkType`),
+          scope: wrapUntrusted(permission.link.scope, `microsoft-files:${sourceTool}:linkScope`),
           webUrl: permission.link.webUrl,
         }
       : undefined,
     grantedTo: (permission.grantedToIdentities ?? []).map((identity) => ({
-      id: identity.user?.id,
+      id: wrapUntrusted(identity.user?.id, `microsoft-files:${sourceTool}:userId`),
       displayName: wrapUntrusted(
         identity.user?.displayName,
         `microsoft-files:${sourceTool}:displayName`,
@@ -490,6 +500,8 @@ export async function uploadFile(
 }
 
 function formatUploadedItem(item: z.infer<typeof GraphUploadedItemSchema>) {
+  // `id` doubles as an item path for follow-up calls and `webUrl` is a
+  // functional link, so both stay structural (same contract as formatItem).
   return {
     success: true,
     id: item.id,
@@ -769,7 +781,7 @@ export async function readTextFile(
 
   if (!isText) {
     throw new FilesBusinessError(
-      `File appears to be binary (${mimeType}). Cannot read as text.`,
+      `File appears to be binary (${wrapUntrusted(mimeType || 'unknown', 'microsoft-files:read_text_file:mimeType')}). Cannot read as text.`,
       'download_file',
     );
   }
@@ -873,8 +885,13 @@ export async function listFileVersions(
   return {
     count: parsed.value.length,
     versions: parsed.value.map((version) => ({
+      // Structural, NOT enveloped: version.id round-trips verbatim as the
+      // versionId argument of restore_file_version.
       id: version.id,
-      modifiedAt: version.lastModifiedDateTime,
+      modifiedAt: wrapUntrusted(
+        version.lastModifiedDateTime,
+        'microsoft-files:list_file_versions:modifiedAt',
+      ),
       size: formatSize(version.size),
       lastModifiedBy: wrapUntrusted(
         version.lastModifiedBy?.user?.displayName,
@@ -995,8 +1012,14 @@ export async function readDocument(
     );
   }
   if (!isDocx && !isPptx) {
+    // mimeType/extension come from the vendor response; envelope the fragment
+    // before interpolating it into a model-visible error message.
+    const displayType = wrapUntrusted(
+      mimeType || extension || 'unknown',
+      'microsoft-files:read_document:mimeType',
+    );
     throw new FilesBusinessError(
-      `Unsupported document type (${mimeType || extension || 'unknown'}). read_document supports .docx and .pptx; use read_text_file for plain-text files or download_file otherwise.`,
+      `Unsupported document type (${displayType}). read_document supports .docx and .pptx; use read_text_file for plain-text files or download_file otherwise.`,
       'read_text_file',
     );
   }

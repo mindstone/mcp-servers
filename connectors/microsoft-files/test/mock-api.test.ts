@@ -498,7 +498,8 @@ describe('microsoft-files mock-API integration', () => {
     };
     expect(json.ok).toBeUndefined();
     expect(json.count).toBe(2);
-    expect(json.permissions[1]?.link?.scope).toBe('organization');
+    expect(json.permissions[1]?.link?.scope).toContain('untrusted-content');
+    expect(json.permissions[1]?.link?.scope).toContain('organization');
     const call = state.requests.find(
       (r) => r.method === 'GET' && r.pathname.includes('/me/drive/items/item-1/permissions'),
     );
@@ -619,7 +620,8 @@ describe('microsoft-files mock-API integration', () => {
     };
     expect(json.ok).toBeUndefined();
     expect(json.count).toBe(1);
-    expect(json.activities[0]?.actions).toEqual(['edit']);
+    expect(json.activities[0]?.actions[0]).toContain('untrusted-content');
+    expect(json.activities[0]?.actions[0]).toContain('edit');
     expect(json.activities[0]?.actor).toContain('untrusted-content');
     expect(json.activities[0]?.actor).toContain('Jane Doe');
     expect(json.activities[0]?.item?.name).toContain('report.docx');
