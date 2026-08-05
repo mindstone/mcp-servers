@@ -90,6 +90,19 @@ describe('microsoft-calendar mock-API integration', () => {
     expect(first?.attendees?.[0]?.email).toContain('bob@example.com');
   });
 
+  it('list_events fails closed on a malformed Graph payload', async () => {
+    mswServer.use(
+      http.get('https://graph.microsoft.com/v1.0/me/calendarView', () =>
+        HttpResponse.json({ value: [{ notAnEvent: true }] }),
+      ),
+    );
+    const result = await client.callTool('list_events', { top: 5 });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Unexpected response shape from Microsoft Graph');
+  });
+
   // -------------------------------------------------------------------------
   // get_event
   // -------------------------------------------------------------------------

@@ -1,7 +1,6 @@
 import {
   windowsToIanaTimezone,
   type Calendar,
-  type CalendarEvent,
   type Client,
 } from '@mindstone/mcp-server-microsoft-shared';
 import { z } from 'zod';
@@ -25,6 +24,99 @@ export class CalendarBusinessError extends Error {
     this.nextStep = nextStep;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Microsoft Graph response schemas (Zod). External payloads are validated at
+// the boundary instead of cast, per the repo rule "validate every tool input
+// and external response with Zod". Schemas are lenient (`.passthrough()`, most
+// fields optional) but fail closed on the shapes the formatters dereference.
+// Only code touched since 0.1.2 validates; the remaining casts in
+// getFreeBusy/listCalendars are tracked as planned debt in the CHANGELOG.
+// ---------------------------------------------------------------------------
+
+const GraphDateTimeSchema = z.object({
+  dateTime: z.string(),
+  timeZone: z.string().optional().default('UTC'),
+});
+
+const GraphEmailAddressSchema = z.object({
+  address: z.string().optional(),
+  name: z.string().optional(),
+});
+
+const GraphAttendeeSchema = z
+  .object({
+    type: z.string().optional(),
+    emailAddress: GraphEmailAddressSchema.optional(),
+    status: z.object({ response: z.string().optional() }).passthrough().optional(),
+  })
+  .passthrough();
+
+const GraphEventSchema = z
+  .object({
+    id: z.string(),
+    subject: z.string().optional(),
+    start: GraphDateTimeSchema,
+    end: GraphDateTimeSchema,
+    location: z.object({ displayName: z.string().optional() }).passthrough().optional(),
+    body: z
+      .object({ content: z.string().optional(), contentType: z.string().optional() })
+      .passthrough()
+      .optional(),
+    organizer: z.object({ emailAddress: GraphEmailAddressSchema }).passthrough().optional(),
+    attendees: z.array(GraphAttendeeSchema).optional(),
+    isAllDay: z.boolean().optional(),
+    webLink: z.string().optional(),
+    onlineMeeting: z.object({ joinUrl: z.string().optional() }).passthrough().optional(),
+  })
+  .passthrough();
+
+const GraphCreatedEventSchema = z
+  .object({
+    id: z.string(),
+    webLink: z.string().optional(),
+    onlineMeeting: z.object({ joinUrl: z.string().optional() }).passthrough().optional(),
+  })
+  .passthrough();
+
+const GraphAttachmentSchema = z
+  .object({
+    id: z.string(),
+    name: z.string().optional(),
+    contentType: z.string().optional(),
+    size: z.number().optional(),
+  })
+  .passthrough();
+
+const GraphScheduleSchema = z
+  .object({
+    scheduleId: z.string().optional(),
+    availabilityView: z.string().optional(),
+  })
+  .passthrough();
+
+/**
+ * Fail-closed boundary validation: a malformed Graph payload becomes a clean
+ * error envelope (via `withErrorHandling`) instead of a downstream TypeError
+ * or, worse, silently mis-rendered event data.
+ */
+function parseGraphResponse<S extends z.ZodType>(
+  schema: S,
+  data: unknown,
+  context: string,
+): z.infer<S> {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    const issue = result.error.issues[0];
+    const where = issue ? `${issue.path.join('.') || '(root)'}: ${issue.message}` : 'unknown issue';
+    throw new Error(
+      `Unexpected response shape from Microsoft Graph while reading ${context} (${where}).`,
+    );
+  }
+  return result.data;
+}
+
+type GraphCalendarEvent = z.infer<typeof GraphEventSchema>;
 
 // ---------------------------------------------------------------------------
 // Recurrence input schema — a Graph-shaped `recurrence` object
@@ -198,14 +290,14 @@ function formatTimeRange(
   return `${startTime}–${endTime}`;
 }
 
-export function formatEventsAsText(events: CalendarEvent[], tzInfo: TimezoneInfo): string {
+export function formatEventsAsText(events: GraphCalendarEvent[], tzInfo: TimezoneInfo): string {
   if (events.length === 0) {
     return 'No events found in the specified time range.';
   }
 
   const timezone = tzInfo.resolved;
 
-  const byDay = new Map<string, CalendarEvent[]>();
+  const byDay = new Map<string, GraphCalendarEvent[]>();
   for (const event of events) {
     const dateStr = event.start.dateTime;
     if (!dateStr) continue;
@@ -252,7 +344,7 @@ export function formatEventsAsText(events: CalendarEvent[], tzInfo: TimezoneInfo
     for (const event of dayEvents) {
       const time = formatTimeRange(event.start, event.end, event.isAllDay, timezone);
       const location = event.location?.displayName ? ` @ ${event.location.displayName}` : '';
-      lines.push(`  ${time} - ${event.subject}${location}`);
+      lines.push(`  ${time} - ${event.subject ?? '(no subject)'}${location}`);
       lines.push(`    [id: ${event.id}]`);
     }
     lines.push('');
@@ -382,7 +474,11 @@ export async function listEvents(
       .get(),
   ]);
 
-  const events: CalendarEvent[] = response.value ?? [];
+  const events = parseGraphResponse(
+    z.array(GraphEventSchema),
+    response.value ?? [],
+    'list_events',
+  );
 
   if (args.returnText) {
     return {
@@ -408,18 +504,12 @@ export async function listEvents(
       'microsoft-calendar:list_events:organizer',
     ),
     attendeeCount: event.attendees?.length ?? 0,
-    attendees: event.attendees?.map(
-      (a: {
-        emailAddress?: { address?: string; name?: string };
-        type?: string;
-        status?: { response?: string };
-      }) => ({
-        email: wrapUntrusted(a.emailAddress?.address, 'microsoft-calendar:list_events:attendees.email'),
-        name: wrapUntrusted(a.emailAddress?.name, 'microsoft-calendar:list_events:attendees.name'),
-        type: a.type,
-        status: a.status?.response,
-      }),
-    ),
+    attendees: event.attendees?.map((a) => ({
+      email: wrapUntrusted(a.emailAddress?.address, 'microsoft-calendar:list_events:attendees.email'),
+      name: wrapUntrusted(a.emailAddress?.name, 'microsoft-calendar:list_events:attendees.name'),
+      type: a.type,
+      status: a.status?.response,
+    })),
     isAllDay: event.isAllDay,
     webLink: event.webLink,
   }));
@@ -448,11 +538,12 @@ export async function getEvent(
   args: GetEventArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
-  const event = await client
+  const rawEvent = await client
     .api(`/me/events/${args.id}`)
     .options({ signal })
     .select('id,subject,start,end,location,body,organizer,attendees,isAllDay,webLink,onlineMeeting')
     .get();
+  const event = parseGraphResponse(GraphEventSchema, rawEvent, 'get_event');
 
   let attachments: unknown;
   if (args.includeAttachments) {
@@ -461,12 +552,11 @@ export async function getEvent(
       .options({ signal })
       .select('id,name,contentType,size')
       .get();
-    const parsedAttachments = (attachmentsResponse.value ?? []) as Array<{
-      id: string;
-      name?: string;
-      contentType?: string;
-      size?: number;
-    }>;
+    const parsedAttachments = parseGraphResponse(
+      z.array(GraphAttachmentSchema),
+      attachmentsResponse.value ?? [],
+      'get_event attachments',
+    );
     attachments = parsedAttachments.map((a) => ({
       id: a.id,
       name: wrapUntrusted(a.name, 'microsoft-calendar:get_event:attachments.name'),
@@ -487,13 +577,12 @@ export async function getEvent(
       event.organizer?.emailAddress,
       'microsoft-calendar:get_event:organizer',
     ),
-    attendees: event.attendees?.map(
-      (a: { emailAddress?: { address?: string; name?: string }; status?: { response?: string } }) => ({
-        email: wrapUntrusted(a.emailAddress?.address, 'microsoft-calendar:get_event:attendees.email'),
-        name: wrapUntrusted(a.emailAddress?.name, 'microsoft-calendar:get_event:attendees.name'),
-        status: a.status?.response,
-      }),
-    ),
+    attendees: event.attendees?.map((a) => ({
+      email: wrapUntrusted(a.emailAddress?.address, 'microsoft-calendar:get_event:attendees.email'),
+      name: wrapUntrusted(a.emailAddress?.name, 'microsoft-calendar:get_event:attendees.name'),
+      type: a.type,
+      status: a.status?.response,
+    })),
     isAllDay: event.isAllDay,
     webLink: event.webLink,
     onlineMeetingUrl: event.onlineMeeting?.joinUrl,
@@ -556,12 +645,13 @@ export async function createEvent(
   }
 
   const response = await client.api('/me/events').options({ signal }).post(event);
+  const created = parseGraphResponse(GraphCreatedEventSchema, response, 'create_event');
 
   return {
     success: true,
-    eventId: response.id,
-    webLink: response.webLink,
-    onlineMeetingUrl: response.onlineMeeting?.joinUrl,
+    eventId: created.id,
+    webLink: created.webLink,
+    onlineMeetingUrl: created.onlineMeeting?.joinUrl,
     message: 'Event created successfully',
   };
 }
@@ -618,12 +708,13 @@ export async function updateEvent(
       .options({ signal })
       .select('attendees')
       .get();
-    const currentAttendees = (current.attendees ?? []) as Array<{
-      type?: string;
-      emailAddress?: { address?: string; name?: string };
-    }>;
+    const currentEvent = parseGraphResponse(
+      z.object({ attendees: z.array(GraphAttendeeSchema).optional() }).passthrough(),
+      current,
+      'update_event current attendees',
+    );
     const removeSet = new Set((args.removeAttendees ?? []).map((e) => e.toLowerCase()));
-    const kept = currentAttendees
+    const kept = (currentEvent.attendees ?? [])
       .filter((a) => !removeSet.has((a.emailAddress?.address ?? '').toLowerCase()))
       .map((a) => ({
         emailAddress: { address: a.emailAddress?.address, name: a.emailAddress?.name },
@@ -853,10 +944,11 @@ export async function findMeetingTimes(
       endTime: { dateTime: endWall, timeZone: tzInfo.resolved },
       availabilityViewInterval: interval,
     });
-  const schedules = (response.value ?? []) as Array<{
-    scheduleId?: string;
-    availabilityView?: string;
-  }>;
+  const schedules = parseGraphResponse(
+    z.array(GraphScheduleSchema),
+    response.value ?? [],
+    'find_meeting_times schedules',
+  );
 
   const views = schedules.map((s) => s.availabilityView ?? '');
   const unresolvableAttendees = schedules

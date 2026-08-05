@@ -59,7 +59,11 @@ describe('Graph request signal propagation', () => {
 
   it('getEvent passes signal to GraphRequest.options', async () => {
     const { client, builder } = createMockClient();
-    builder.get.mockResolvedValueOnce({ id: 'evt-1' });
+    builder.get.mockResolvedValueOnce({
+      id: 'evt-1',
+      start: { dateTime: '2026-05-20T09:00:00', timeZone: 'UTC' },
+      end: { dateTime: '2026-05-20T10:00:00', timeZone: 'UTC' },
+    });
     const signal = new AbortController().signal;
     await getEvent(client, { id: 'evt-1' }, signal);
     expect(builder.options).toHaveBeenCalledWith({ signal });

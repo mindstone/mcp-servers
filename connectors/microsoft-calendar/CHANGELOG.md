@@ -14,6 +14,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - `find_meeting_times` tool: suggests slots within a window when all given attendees are free, computed from `getSchedule` free/busy data (deliberately not Graph's `findMeetingTimes` action, which is v1.0 but known-flaky). Slot start/end can be passed straight to `create_event`.
 - `list_events` JSON output now includes per-attendee RSVP detail (email, name, type, response status) alongside the existing `attendeeCount`.
 
+### Changed
+- Microsoft Graph responses on the event read/write paths (`list_events`, `get_event`, `create_event`, `update_event`, `find_meeting_times`) are now validated with Zod at the boundary; malformed payloads fail closed with a clear error instead of a downstream TypeError. The remaining casts (`get_free_busy`, `list_calendars`) are still planned debt.
+
 ## [0.1.2] - 2026-07-03
 
 ### Changed
