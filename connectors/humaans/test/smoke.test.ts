@@ -14,7 +14,7 @@ describe('Smoke test — tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 12 tools with correct names', async () => {
+  it('registers exactly 13 tools with correct names', async () => {
     mswServer.use(...createHumaansHandlers());
 
     testClient = await createTestClient({
@@ -27,8 +27,9 @@ describe('Smoke test — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(12);
+    expect(toolsResult.tools).toHaveLength(13);
     expect(toolNames).toEqual([
+      'cancel_humaans_time_away',
       'configure_humaans_api_key',
       'create_humaans_time_away',
       'get_humaans_company',

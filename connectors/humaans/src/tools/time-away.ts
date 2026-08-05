@@ -234,4 +234,41 @@ RELATED TOOLS:
       });
     }),
   );
+
+  server.registerTool(
+    'cancel_humaans_time_away',
+    {
+      description:
+        `Cancel a time away entry in Humaans (deletes it permanently).
+
+Use this to withdraw a time off request or remove an incorrect entry.
+The deletion cannot be undone — confirm the entry with list_humaans_time_away first.
+
+Example: { "timeAwayId": "YLlqHE4DLvGtFJ7L2qro6bTF" }
+
+RELATED TOOLS:
+- list_humaans_time_away: Find the timeAwayId to cancel
+- create_humaans_time_away: Create a new request instead`,
+      inputSchema: z.object({
+        timeAwayId: z.string().min(1)
+          .describe('Time away entry ID (from list_humaans_time_away)'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      if (!isConfigured()) return noApiKeyError();
+
+      const result = await humaansFetch<{ id: string; deleted: boolean }>(
+        `/time-away/${encodeURIComponent(args.timeAwayId)}`,
+        { method: 'DELETE' },
+      );
+
+      return JSON.stringify({
+        ok: true,
+        message: 'Time away entry cancelled.',
+        id: result.id,
+        deleted: result.deleted,
+      });
+    }),
+  );
 }

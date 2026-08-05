@@ -220,4 +220,51 @@ describe('Humaans time away tools', () => {
     expect(json.ok).toBe(true);
     expect(capturedPersonId).toBe('person-001');
   });
+
+  it('cancel_humaans_time_away deletes an entry', async () => {
+    await setup();
+    const result = await testClient.callTool('cancel_humaans_time_away', { timeAwayId: 'ta-001' });
+    const json = result.json as { ok: boolean; id: string; deleted: boolean };
+
+    expect(json.ok).toBe(true);
+    expect(json.id).toBe('ta-001');
+    expect(json.deleted).toBe(true);
+  });
+
+  it('cancel_humaans_time_away is annotated as destructive', async () => {
+    await setup();
+    const toolsResult = await testClient.client.listTools();
+    const tool = toolsResult.tools.find((t) => t.name === 'cancel_humaans_time_away');
+
+    expect(tool?.annotations?.destructiveHint).toBe(true);
+    expect(tool?.annotations?.readOnlyHint).toBe(false);
+  });
+
+  it('cancel_humaans_time_away returns error for non-existent entry', async () => {
+    await setup();
+    const result = await testClient.callTool('cancel_humaans_time_away', { timeAwayId: 'non-existent' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; code: string };
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('NOT_FOUND');
+  });
+
+  it('cancel_humaans_time_away rejects empty id before making an API request', async () => {
+    let requestMade = false;
+    mswServer.use(
+      http.delete('https://app.humaans.io/api/time-away/*', () => {
+        requestMade = true;
+        return HttpResponse.json({});
+      }),
+      ...createHumaansHandlers(),
+    );
+
+    testClient = await createTestClient({
+      env: { HUMAANS_API_KEY: API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('cancel_humaans_time_away', { timeAwayId: '' });
+    expect(result.isError).toBe(true);
+    expect(requestMade).toBe(false);
+  });
 });

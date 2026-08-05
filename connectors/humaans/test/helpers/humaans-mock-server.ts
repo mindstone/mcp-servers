@@ -129,6 +129,20 @@ export function createHumaansHandlers(expectedKey = 'test-humaans-key') {
       return HttpResponse.json(mockCreatedTimeAway, { status: 201 });
     }),
 
+    // DELETE /time-away/:id
+    http.delete(`${BASE}/time-away/:id`, ({ request, params }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+      const entry = mockTimeAway.find((t) => t.id === params.id);
+      if (!entry) {
+        return HttpResponse.json(
+          { code: 404, name: 'NotFound', message: 'Time away not found' },
+          { status: 404 },
+        );
+      }
+      return HttpResponse.json({ id: params.id, deleted: true });
+    }),
+
     // GET /time-away-types
     http.get(`${BASE}/time-away-types`, ({ request }) => {
       const authError = checkAuth(request);
