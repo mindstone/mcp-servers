@@ -21,6 +21,16 @@ are maintained manually as part of the PR review checklist.
 
 ### Security
 - **email-imap**: subject, from/to display names, and attachment filenames returned by `email_get_message`, `email_search_messages`, and `email_get_mailbox_status` are now wrapped in `<untrusted-content source="external-email">` envelopes (previously only message bodies were enveloped), closing the attacker-controlled-header injection gap. The connector's hand-rolled body wrapper was replaced by the canonical vendored `untrusted-content` helper.
+- **email-imap**: envelope the remaining server-supplied text fields — Message-ID headers, mailbox names and special-use values from IMAP LIST, and MIME `contentType`/`part` identifiers — and accept their enveloped form back on tool inputs (one envelope layer is stripped). External error text (IMAP/SMTP server responses, vendor SDK messages) is now returned inside an `<untrusted-content source="email-imap:external-error">` envelope instead of as raw model-visible text.
+- **email-imap**: re-vendor the canonical strong `untrusted-content` helper — the previous copy's close-tag escaping only covered spaces/tabs, so variants like `</untrusted-content\n>` (newline, carriage return, form feed, vertical tab) could break out of the envelope.
+- **email-imap**: outbound attachment reads are no longer check-then-use — files are opened once, verified with `fstat` plus a post-open canonical-containment and inode-identity re-check, and read through that same descriptor (nodemailer receives content buffers, never paths it could re-open after a swap).
+- **email-imap**: attachment downloads are created atomically with exclusive-create (`wx`) semantics and collision retry, so an entry planted or concurrently created after the filename is chosen is never overwritten, and a rename-and-replace of the download directory after validation fails closed.
+- **email-imap**: `email_save_draft`, `email_update_draft`, `email_create_mailbox`, and `email_rename_mailbox` now carry `destructiveHint: true` — they mutate the remote account and previously gave hosts no confirmation signal.
+- **email-imap**: `email_delete` no longer permanently expunges when the move to Trash fails — a failed recoverable move now aborts with a structured `TRASH_MOVE_FAILED` error and leaves the messages in place, instead of silently escalating to an irreversible delete.
+
+### Fixed
+- **email-imap**: mailbox create/rename/delete reject whitespace-only names at schema validation (trimmed before `min(1)`) instead of sending an empty name to the server.
+- **email-imap**: `email_search_messages` `limit` must now be an integer between 1 and 500 — fractional values previously truncated to a falsy zero and returned the entire result set.
 
 ## [0.2.3] - 2026-05-14
 ### Added
