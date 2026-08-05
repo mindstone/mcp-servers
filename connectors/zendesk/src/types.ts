@@ -122,6 +122,19 @@ export interface ZendeskOrganization {
   notes?: string;
 }
 
+export interface ZendeskHelpCenterArticle {
+  id: number;
+  title: string;
+  body?: string;
+  snippet?: string;
+  html_url?: string;
+  section_id?: number;
+  draft?: boolean;
+  vote_sum?: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ZendeskMacro {
   id: number;
   title: string;

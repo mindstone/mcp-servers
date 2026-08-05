@@ -8,6 +8,7 @@ import {
   makeOrganization,
   makeMacro,
   makeComment,
+  makeArticle,
 } from '../fixtures/zendesk-data.js';
 
 export interface ZendeskMockOptions {
@@ -31,6 +32,8 @@ export interface ZendeskMockOptions {
   macros?: Array<Record<string, unknown>>;
   /** Custom comments to return for ticket comments endpoint */
   comments?: Array<Record<string, unknown>>;
+  /** Custom Help Center articles to return */
+  articles?: Array<Record<string, unknown>>;
 }
 
 /**
@@ -52,6 +55,7 @@ export function createZendeskHandlers(subdomain: string, options: ZendeskMockOpt
   const defaultOrganizations = options.empty ? [] : (options.organizations ?? [makeOrganization()]);
   const defaultMacros = options.empty ? [] : (options.macros ?? [makeMacro()]);
   const defaultComments = options.empty ? [] : (options.comments ?? [makeComment()]);
+  const defaultArticles = options.empty ? [] : (options.articles ?? [makeArticle()]);
 
   return [
     // Search (used by search_zendesk_tickets, search_zendesk_users)
@@ -205,6 +209,22 @@ export function createZendeskHandlers(subdomain: string, options: ZendeskMockOpt
           },
         },
       });
+    }),
+
+    // Help Center article search (used by search_zendesk_help_center_articles)
+    http.get(`${base}/help_center/articles/search.json`, () => {
+      return HttpResponse.json({
+        results: defaultArticles,
+        count: defaultArticles.length,
+        next_page: null,
+      });
+    }),
+
+    // Get single Help Center article
+    http.get(`${base}/help_center/articles/:articleId.json`, ({ params }) => {
+      const articleId = Number(params.articleId);
+      const article = defaultArticles.find(a => (a as { id: number }).id === articleId) ?? makeArticle({ id: articleId });
+      return HttpResponse.json({ article });
     }),
 
     // OAuth token refresh (outside /api/v2)

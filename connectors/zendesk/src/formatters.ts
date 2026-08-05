@@ -7,6 +7,7 @@ import type {
   ZendeskTicketField,
   ZendeskMacro,
   ZendeskOrganization,
+  ZendeskHelpCenterArticle,
 } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
@@ -30,6 +31,7 @@ export const UNTRUSTED_TICKET_SOURCE = 'external-ticket';
 export const UNTRUSTED_USER_SOURCE = 'external-user';
 export const UNTRUSTED_ORG_SOURCE = 'external-organization';
 export const UNTRUSTED_MACRO_SOURCE = 'external-macro';
+export const UNTRUSTED_ARTICLE_SOURCE = 'external-help-center';
 
 export const UNTRUSTED_TICKET_OPEN = `<untrusted-content source="${UNTRUSTED_TICKET_SOURCE}">`;
 export const UNTRUSTED_TICKET_CLOSE = '</untrusted-content>';
@@ -103,6 +105,21 @@ export function wrapMacroFields(macro: ZendeskMacro): ZendeskMacro {
   if (wt !== undefined) wrapped.title = wt;
   const wd = wrapUntrusted(macro.description ?? undefined, UNTRUSTED_MACRO_SOURCE);
   if (wd !== undefined) wrapped.description = wd;
+  return wrapped;
+}
+
+/**
+ * Return a shallow clone of the Help Center article with the externally
+ * authored text fields wrapped: `title`, `body`, and `snippet`.
+ */
+export function wrapArticleFields(article: ZendeskHelpCenterArticle): ZendeskHelpCenterArticle {
+  const wrapped: ZendeskHelpCenterArticle = { ...article };
+  const wt = wrapUntrusted(article.title, UNTRUSTED_ARTICLE_SOURCE);
+  if (wt !== undefined) wrapped.title = wt;
+  const wb = wrapUntrusted(article.body, UNTRUSTED_ARTICLE_SOURCE);
+  if (wb !== undefined) wrapped.body = wb;
+  const ws = wrapUntrusted(article.snippet, UNTRUSTED_ARTICLE_SOURCE);
+  if (ws !== undefined) wrapped.snippet = ws;
   return wrapped;
 }
 

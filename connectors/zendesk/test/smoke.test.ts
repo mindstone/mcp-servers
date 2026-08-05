@@ -18,7 +18,7 @@ describe('Smoke test — infrastructure verification', () => {
     if (cleanup) cleanup();
   });
 
-  it('should list all 21 tools via MCP protocol', async () => {
+  it('should list all 23 tools via MCP protocol', async () => {
     // 1. Create temp config directory with a test account
     const tempConfig = createTempConfig({
       accounts: [API_TOKEN_ACCOUNT],
@@ -42,8 +42,8 @@ describe('Smoke test — infrastructure verification', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map(t => t.name).sort();
 
-    // 5. Assert we get all 21 tools
-    expect(toolsResult.tools).toHaveLength(21);
+    // 5. Assert we get all 23 tools
+    expect(toolsResult.tools).toHaveLength(23);
 
     // Verify the expected tool names are present
     expect(toolNames).toEqual([
@@ -52,6 +52,7 @@ describe('Smoke test — infrastructure verification', () => {
       'authenticate_zendesk_account',
       'create_zendesk_ticket',
       'export_zendesk_tickets',
+      'get_zendesk_help_center_article',
       'get_zendesk_macro',
       'get_zendesk_ticket',
       'get_zendesk_tickets_by_ids',
@@ -65,6 +66,7 @@ describe('Smoke test — infrastructure verification', () => {
       'list_zendesk_view_tickets',
       'list_zendesk_views',
       'remove_zendesk_account',
+      'search_zendesk_help_center_articles',
       'search_zendesk_tickets',
       'search_zendesk_users',
       'update_zendesk_ticket',

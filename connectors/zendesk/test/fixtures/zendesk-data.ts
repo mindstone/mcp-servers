@@ -13,6 +13,7 @@ import type {
   ZendeskView,
   ZendeskOrganization,
   ZendeskMacro,
+  ZendeskHelpCenterArticle,
 } from '../../src/types.js';
 
 export function makeTicket(overrides: Partial<ZendeskTicket> = {}): ZendeskTicket {
@@ -120,6 +121,22 @@ export function makeMacro(overrides: Partial<ZendeskMacro> = {}): ZendeskMacro {
     ],
     restriction: null,
     created_at: '2025-03-01T00:00:00Z',
+    updated_at: '2025-06-01T00:00:00Z',
+    ...overrides,
+  };
+}
+
+export function makeArticle(overrides: Partial<ZendeskHelpCenterArticle> = {}): ZendeskHelpCenterArticle {
+  return {
+    id: 900,
+    title: 'How to reset your password',
+    body: '<p>Go to Settings &gt; Security and choose Reset password.</p>',
+    snippet: 'Go to Settings > Security and choose Reset password.',
+    html_url: 'https://testcorp.zendesk.com/hc/en-us/articles/900',
+    section_id: 910,
+    draft: false,
+    vote_sum: 12,
+    created_at: '2025-01-01T00:00:00Z',
     updated_at: '2025-06-01T00:00:00Z',
     ...overrides,
   };
