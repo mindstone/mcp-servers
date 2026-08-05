@@ -49,7 +49,7 @@ export function registerGenerateTools(server: McpServer): void {
         image_size: z.enum(SUPPORTED_IMAGE_SIZES).optional().describe(IMAGE_SIZE_DESCRIPTION),
         save_path: z.string().optional().describe('Optional file path to save the image. IMPORTANT: Must be inside the workspace directory so the image can be displayed inline.'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     async (input): Promise<CallToolResult> => {
       if (!hasApiKey()) {

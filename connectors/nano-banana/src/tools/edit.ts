@@ -19,7 +19,7 @@ import {
   type ImageConfig,
 } from '../types.js';
 import { getSourceWorkspaceRoot, readSandboxedWorkspaceFile, resolveSavePath, resolveSourcePath } from './path-safety.js';
-import { fetchRemoteImage, isRemoteImageUrl } from './remote-image.js';
+import { fetchRemoteImage, isRemoteImageUrl, validateRemoteImageUrlWithDns } from './remote-image.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 
 const MODEL_DESCRIPTION =
@@ -47,9 +47,18 @@ function getMimeTypeFromPath(filePath: string): string | null {
  */
 export const MAX_REFERENCE_IMAGES = 14;
 
+/**
+ * Hard cap on the COMBINED byte size of all source images in one edit call.
+ * Each source is individually capped (remote: MAX_REMOTE_IMAGE_BYTES), but
+ * 14 near-max images would still pin several hundred MiB of live base64
+ * strings per call; this aggregate bound keeps per-call memory proportional.
+ */
+export const MAX_COMBINED_SOURCE_IMAGE_BYTES = 40 * 1024 * 1024;
+
 interface LoadedSourceImage {
   mimeType: string;
   base64: string;
+  bytes: number;
 }
 
 type LoadSourceResult =
@@ -65,7 +74,7 @@ type LoadSourceResult =
 async function loadRemoteSourceImage(rawSource: string): Promise<LoadSourceResult> {
   try {
     const remote = await fetchRemoteImage(rawSource);
-    return { ok: true, image: { mimeType: remote.mimeType, base64: remote.base64 } };
+    return { ok: true, image: { mimeType: remote.mimeType, base64: remote.base64, bytes: remote.bytes } };
   } catch (error) {
     if (error instanceof NanoBananaError) {
       return {
@@ -131,7 +140,7 @@ function loadLocalSourceImage(rawSource: string): LoadSourceResult {
     }
     const imageBuffer = readResult.content;
     console.error(`[NanoBanana] Read source image: ${imageBuffer.length} bytes, type: ${sourceMimeType}`);
-    return { ok: true, image: { mimeType: sourceMimeType, base64: imageBuffer.toString('base64') } };
+    return { ok: true, image: { mimeType: sourceMimeType, base64: imageBuffer.toString('base64'), bytes: imageBuffer.length } };
   } catch (readError) {
     const errMsg = readError instanceof Error ? readError.message : String(readError);
     return { ok: false, errorText: `Failed to read image file: ${errMsg}` };
@@ -162,7 +171,7 @@ export function registerEditTools(server: McpServer): void {
         image_size: z.enum(SUPPORTED_IMAGE_SIZES).optional().describe(IMAGE_SIZE_DESCRIPTION),
         save_path: z.string().optional().describe('Optional file path to save the edited image. IMPORTANT: Must be inside the workspace directory so the image can be displayed inline.'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     async (input): Promise<CallToolResult> => {
       if (!hasApiKey()) {
@@ -210,7 +219,43 @@ export function registerEditTools(server: McpServer): void {
         };
       }
 
+      // Security-validate EVERY source before the first network fetch or
+      // disk read: the whole input must fail closed before any I/O happens,
+      // so a mixed list like [validRemoteUrl, "http://invalid"] is rejected
+      // without fetching the first entry.
+      for (const rawSource of rawSources) {
+        if (isRemoteImageUrl(rawSource)) {
+          try {
+            await validateRemoteImageUrlWithDns(rawSource);
+          } catch (error) {
+            if (error instanceof NanoBananaError) {
+              return {
+                content: [{ type: 'text', text: JSON.stringify({ ok: false, error: error.message, code: error.code, resolution: error.resolution }, null, 2) }],
+                isError: true,
+              };
+            }
+            throw error;
+          }
+        } else {
+          const localCheck = resolveSourcePath(rawSource);
+          if (!localCheck.ok) {
+            return {
+              content: [{ type: 'text', text: JSON.stringify({ ok: false, error: localCheck.error }) }],
+              isError: true,
+            };
+          }
+          if (!getMimeTypeFromPath(localCheck.path)) {
+            const ext = path.extname(localCheck.path).toLowerCase() || '(no extension)';
+            return {
+              content: [{ type: 'text', text: `Unsupported image format: ${ext}. Supported formats: PNG, JPEG, WebP.` }],
+              isError: true,
+            };
+          }
+        }
+      }
+
       const loadedSources: LoadedSourceImage[] = [];
+      let combinedSourceBytes = 0;
       for (const rawSource of rawSources) {
         const loadResult = isRemoteImageUrl(rawSource)
           ? await loadRemoteSourceImage(rawSource)
@@ -218,6 +263,18 @@ export function registerEditTools(server: McpServer): void {
         if (!loadResult.ok) {
           return {
             content: [{ type: 'text', text: loadResult.errorText }],
+            isError: true,
+          };
+        }
+        combinedSourceBytes += loadResult.image.bytes;
+        if (combinedSourceBytes > MAX_COMBINED_SOURCE_IMAGE_BYTES) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({
+              ok: false,
+              error: `Source images exceed the combined size limit (${MAX_COMBINED_SOURCE_IMAGE_BYTES} bytes across all sources)`,
+              code: 'SOURCE_IMAGES_TOO_LARGE',
+              resolution: 'Use fewer or smaller source images, or downscale them below the combined limit.',
+            }, null, 2) }],
             isError: true,
           };
         }
