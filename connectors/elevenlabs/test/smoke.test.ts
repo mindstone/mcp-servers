@@ -22,6 +22,7 @@ const EXPECTED_TOOL_NAMES = [
   'generate_music_from_plan',
   'generate_sound_effect',
   'generate_speech',
+  'generate_speech_with_timestamps',
   'get_dubbing',
   'get_history_item_audio',
   'get_pronunciation_dictionary',
@@ -38,7 +39,7 @@ const EXPECTED_TOOL_NAMES = [
   'transcribe_audio',
 ].sort();
 
-/** Complete D-ANNOTATIONS table for all 31 tools. */
+/** Complete D-ANNOTATIONS table for all 32 tools. */
 const EXPECTED_ANNOTATIONS: Record<string, { readOnlyHint: boolean; destructiveHint: boolean }> = {
   add_pronunciation_dictionary: { readOnlyHint: false, destructiveHint: true },
   archive_pronunciation_dictionary: { readOnlyHint: false, destructiveHint: true },
@@ -57,6 +58,7 @@ const EXPECTED_ANNOTATIONS: Record<string, { readOnlyHint: boolean; destructiveH
   generate_music_from_plan: { readOnlyHint: false, destructiveHint: false },
   generate_sound_effect: { readOnlyHint: false, destructiveHint: false },
   generate_speech: { readOnlyHint: false, destructiveHint: false },
+  generate_speech_with_timestamps: { readOnlyHint: false, destructiveHint: false },
   get_dubbing: { readOnlyHint: true, destructiveHint: false },
   get_history_item_audio: { readOnlyHint: true, destructiveHint: false },
   get_pronunciation_dictionary: { readOnlyHint: true, destructiveHint: false },
@@ -84,7 +86,7 @@ describe('Smoke test — tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 31 tools with correct names', async () => {
+  it('registers exactly 32 tools with correct names', async () => {
     mswServer.use(...createElevenLabsHandlers());
 
     testClient = await createTestClient({
@@ -97,7 +99,7 @@ describe('Smoke test — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(31);
+    expect(toolsResult.tools).toHaveLength(32);
     expect(toolNames).toEqual(EXPECTED_TOOL_NAMES);
   });
 
@@ -149,7 +151,7 @@ describe('Smoke test — tool registration', () => {
 });
 
 describe('Spawned stdio smoke test', () => {
-  it('lists 31 tools from built dist/index.js', async () => {
+  it('lists 32 tools from built dist/index.js', async () => {
     const { createStdioTestClient } = await import('@mindstone/mcp-test-harness');
     const { join } = await import('path');
 
@@ -165,7 +167,7 @@ describe('Spawned stdio smoke test', () => {
 
     try {
       const toolsResult = await client.client.listTools();
-      expect(toolsResult.tools).toHaveLength(31);
+      expect(toolsResult.tools).toHaveLength(32);
     } finally {
       await client.close();
     }
