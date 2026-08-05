@@ -7,6 +7,21 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- `import_phone_number` and `delete_phone_number` tools, completing the telephony lifecycle: a Twilio number (Account SID + Auth Token) or SIP trunk number (inbound/outbound trunk config) can now be onboarded and later removed without leaving the agent loop. Numbers are E.164-validated before any upstream call; both tools carry `destructiveHint: true`.
+- `submit_conversation_feedback` tool: submits like/dislike feedback for a reviewed conversation, closing the quality-review loop against `POST /convai/conversations/{id}/feedback`.
+- `get_knowledge_base_rag_index_status` and `rebuild_knowledge_base_rag_index` tools: after uploading a knowledge-base document, agents can now check whether retrieval indexing has finished and trigger (re)indexing when it has not, instead of guessing when a document becomes retrievable.
+- `list_agent_tools` and `add_agent_tool` tools: workspace tools (webhook and client) can now be inventoried and created, so webhook wiring — the feature that makes ConvAI agents act on external systems — no longer requires the ElevenLabs dashboard. `add_agent_tool` fails closed when a webhook tool is missing its URL, accepts an `advanced_config` passthrough for the full platform schema, and carries `destructiveHint: true`.
+
+### Removed
+
+- Dead endpoint declarations in `src/endpoints.ts` (`get-signed-url`, agent widget, per-tool get) that no tool ever called. Every remaining declared endpoint is now wired to a tool.
+
+### Fixed
+
+- README Status section no longer claims a bootstrap placeholder version `0.0.0`; it now points at the released version and changelog, matching the sibling connectors.
+
 ## [0.1.2] - 2026-08-03
 
 ### Changed

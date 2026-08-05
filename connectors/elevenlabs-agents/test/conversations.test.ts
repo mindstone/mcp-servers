@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mswServer } from './helpers/setup.js';
-import { createElevenLabsAgentsHandlers, MOCK_API_KEY } from './helpers/elevenlabs-agents-mock-server.js';
+import { createElevenLabsAgentsHandlers, createConversationFeedbackCapturingHandler, MOCK_API_KEY } from './helpers/elevenlabs-agents-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
 
 describe('conversation tools', () => {
@@ -42,5 +42,41 @@ describe('conversation tools', () => {
     expect(audio.isError).toBeFalsy();
     expect(fs.existsSync(audio.json.file_path)).toBe(true);
     if (fs.existsSync(audio.json.file_path)) fs.unlinkSync(audio.json.file_path);
+  });
+
+  it('submits like/dislike feedback for a conversation', async () => {
+    const { handler, captured } = createConversationFeedbackCapturingHandler();
+    mswServer.use(handler, ...createElevenLabsAgentsHandlers());
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('submit_conversation_feedback', {
+      conversation_id: 'conv_custom_456',
+      feedback: 'dislike',
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(result.json).toMatchObject({
+      ok: true,
+      conversation_id: 'conv_custom_456',
+      feedback: 'dislike',
+    });
+    expect(captured.body).toEqual({ feedback: 'dislike' });
+  });
+
+  it('submit_conversation_feedback surfaces upstream errors', async () => {
+    mswServer.use(...createElevenLabsAgentsHandlers());
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('submit_conversation_feedback', {
+      conversation_id: 'trigger-404',
+      feedback: 'like',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.json).toMatchObject({ ok: false, code: 'HTTP_404' });
   });
 });

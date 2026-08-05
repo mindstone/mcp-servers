@@ -1151,7 +1151,7 @@ describe('tool sources reach the envelope helper', () => {
     const nodePath = await import('node:path');
     const nodeUrl = await import('node:url');
     const dir = nodePath.dirname(nodeUrl.fileURLToPath(import.meta.url));
-    const TOOLS = ['agents.ts', 'batch-calls.ts', 'calls.ts', 'conversations.ts', 'knowledge-base.ts', 'phone-numbers.ts'];
+    const TOOLS = ['agents.ts', 'agent-tools.ts', 'batch-calls.ts', 'calls.ts', 'conversations.ts', 'knowledge-base.ts', 'phone-numbers.ts'];
 
     for (const file of TOOLS) {
       const contents = nodeFs.readFileSync(nodePath.join(dir, '..', 'src', 'tools', file), 'utf8');

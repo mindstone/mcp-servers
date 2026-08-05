@@ -6,7 +6,7 @@ import {
   elevenLabsJson,
 } from '../client.js';
 import { ENDPOINTS } from '../endpoints.js';
-import { sanitizeKbDoc, sanitizeList } from '../sanitize.js';
+import { sanitizeAgentOrKbValue, sanitizeKbDoc, sanitizeList } from '../sanitize.js';
 import { ElevenLabsError } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 import { readSandboxedFile, sandboxedFileToBlob } from './file-input.js';
@@ -374,6 +374,103 @@ COST: FREE — no generation credits, but this is destructive.`,
         documentation_id: args.documentation_id,
         force: args.force ?? false,
         message: `Deleted knowledge-base document ${args.documentation_id}.`,
+      });
+    }),
+  );
+
+  server.registerTool(
+    'get_knowledge_base_rag_index_status',
+    {
+      description: `Get the RAG index status for one knowledge-base document, so you can tell when uploaded content is retrievable by agents.
+
+WHEN TO USE:
+- After add_knowledge_base_document, to confirm indexing has finished before testing retrieval
+- To diagnose why an agent is not using a document's content
+
+EXAMPLE: {"documentation_id": "doc_123"}
+
+RELATED TOOLS:
+- add_knowledge_base_document: upload the document first
+- rebuild_knowledge_base_rag_index: trigger indexing when the status is missing or failed
+- get_knowledge_base_doc: inspect the document itself
+
+RETURNS: indexes (per embedding model: status, progress_percentage, used bytes).
+
+FREE.`,
+      inputSchema: z.object({
+        documentation_id: z.string().min(1).describe('Knowledge-base document ID whose RAG indexes should be inspected.'),
+      }),
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args) => {
+      const apiKey = requireApiKey();
+      const result = await elevenLabsJson<unknown>(
+        apiKey,
+        ENDPOINTS.knowledgeBaseRagIndex(args.documentation_id),
+        { method: 'GET' },
+      );
+      const indexes = isObj(result) && Array.isArray(result.indexes) ? result.indexes : [];
+      return JSON.stringify({
+        ok: true,
+        documentation_id: args.documentation_id,
+        indexes: sanitizeList(indexes, sanitizeAgentOrKbValue, 'elevenlabs-agents:get_knowledge_base_rag_index_status'),
+        message: indexes.length > 0
+          ? `Found ${indexes.length} RAG index(es) for document ${args.documentation_id}.`
+          : `No RAG index found for document ${args.documentation_id}; call rebuild_knowledge_base_rag_index to start one.`,
+      });
+    }),
+  );
+
+  server.registerTool(
+    'rebuild_knowledge_base_rag_index',
+    {
+      description: `Trigger RAG indexing for one knowledge-base document (or read back its current index status when already indexed).
+
+WHEN TO USE:
+- Right after add_knowledge_base_document, so retrieval is ready before an agent is tested
+- When get_knowledge_base_rag_index_status shows a missing or failed index
+
+EXAMPLE: {"documentation_id": "doc_123"}
+
+RELATED TOOLS:
+- get_knowledge_base_rag_index_status: poll the status afterwards
+- add_knowledge_base_document: create the document first
+
+RETURNS: rag_index (id, model, status, progress_percentage, used bytes).
+
+COST: FREE — indexing consumes workspace compute, and calling this on an already-indexed document just returns the current status.`,
+      inputSchema: z.object({
+        documentation_id: z.string().min(1).describe('Knowledge-base document ID to (re)index.'),
+        model: z.enum(['e5_mistral_7b_instruct', 'multilingual_e5_large_instruct']).optional()
+          .describe('Embedding model to index with. Default: "e5_mistral_7b_instruct".'),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args) => {
+      const apiKey = requireApiKey();
+      const result = await elevenLabsJson<unknown>(
+        apiKey,
+        ENDPOINTS.knowledgeBaseRagIndex(args.documentation_id),
+        {
+          method: 'POST',
+          body: JSON.stringify({ model: args.model ?? 'e5_mistral_7b_instruct' }),
+        },
+      );
+      return JSON.stringify({
+        ok: true,
+        documentation_id: args.documentation_id,
+        rag_index: sanitizeAgentOrKbValue(result, 'elevenlabs-agents:rebuild_knowledge_base_rag_index'),
+        message: `RAG indexing requested for document ${args.documentation_id}.`,
       });
     }),
   );

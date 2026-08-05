@@ -6,9 +6,9 @@ ElevenLabs Conversational AI MCP server for Model Context Protocol hosts. Inspec
 
 ## Status
 
-- **Version:** bootstrap placeholder `0.0.0` until the first publish stage
+- **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs-agents)
 - **Auth:** API key ([`ELEVENLABS_API_KEY`](./server.json))
-- **Tools:** [24](./src/tools/) (configure, agents, conversations, phone numbers, outbound calls, batch calls, knowledge base)
+- **Tools:** [31](./src/tools/) (configure, agents, agent tools, conversations, phone numbers, outbound calls, batch calls, knowledge base)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -91,7 +91,7 @@ node dist/index.js
 }
 ```
 
-## Tools (24)
+## Tools (31)
 
 ### Configuration
 - `configure_elevenlabs_agents_api_key` — Save your ElevenLabs API key
@@ -105,15 +105,22 @@ node dist/index.js
 - `delete_agent` — Permanently remove an agent
 - `simulate_conversation` — Test an agent with a simulated user message before telephony work
 
+### Agent tools (workspace tools)
+- `list_agent_tools` — List webhook/client/system tools available to agents
+- `add_agent_tool` — Add a webhook or client tool to the workspace
+
 ### Conversations
 - `list_conversations` — List conversations, optionally filtered by agent/date/success
 - `get_conversation` — Get a full conversation transcript and analysis
 - `get_conversation_audio` — Download the conversation recording to a tmp file
+- `submit_conversation_feedback` — Submit like/dislike feedback on a reviewed conversation
 
 ### Phone numbers
 - `list_phone_numbers` — List configured phone numbers
 - `get_phone_number` — Get one phone number and its label/assignment
+- `import_phone_number` — Import a Twilio or SIP trunk number into the workspace
 - `update_phone_number` — Update one phone number label and/or assigned agent
+- `delete_phone_number` — Permanently remove an imported phone number
 
 ### Outbound calls
 - `make_outbound_call` — Place one outbound call after resolving the phone-number provider automatically
@@ -130,6 +137,8 @@ node dist/index.js
 - `get_knowledge_base_doc` — Get one knowledge-base document (metadata + /content body, capped ~50KB)
 - `add_knowledge_base_document` — Add a KB document in text, file, or URL mode
 - `delete_knowledge_base_document` — Delete a KB document, optionally with force
+- `get_knowledge_base_rag_index_status` — Check whether a document is indexed and retrievable
+- `rebuild_knowledge_base_rag_index` — Trigger (re)indexing of a KB document
 
 ## Security notes
 
