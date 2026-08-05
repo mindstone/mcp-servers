@@ -81,6 +81,11 @@ vanta-api.all:read vanta-api.all:write vanta-api.documents:upload
 - `vanta_list_vulnerabilities` / `vanta_get_vulnerability`
 - `vanta_list_tests` / `vanta_get_test`
 - `vanta_list_controls` / `vanta_get_control`
+- `vanta_list_frameworks` / `vanta_get_framework`
+- `vanta_list_policies` / `vanta_get_policy`
+- `vanta_list_integrations`
+- `vanta_list_risk_scenarios` / `vanta_get_risk_scenario`
+- `vanta_list_event_logs`
 - `vanta_list_people`
 - `vanta_query_test_results`
 - `vanta_get_compliance_summary`
@@ -114,6 +119,7 @@ Vanta accepts `.pdf`, `.docx`, `.jpg`, `.png`, and `.xlsx` files.
 
 This server enforces:
 
+- External text authored inside the Vanta tenant (names, descriptions, notes, remediation text, integration connection errors, people directory entries, risk custom fields) is wrapped in `<untrusted-content>` envelopes — with close-tag breakout escaping — before it reaches the model. Identifiers, statuses, dates, URLs, and pagination cursors stay verbatim so they can be quoted back into follow-up tool calls.
 - HTTPS-only URL validation on both upload tools (rejects `file:`, `localhost`, RFC1918, link-local incl. cloud metadata addresses, IPv6 loopback/ULA, and hostnames whose DNS records resolve to any of those).
 - Bounded document fetching: at most 3 redirects, **each hop re-validated** through the same URL guard, a 30-second timeout, and a 25 MB size cap enforced while streaming (a source cannot lie its way past the cap with a false `Content-Length`).
 - Content-Type handling is header sanitization, not byte-level MIME sniffing: untrustworthy source labels are replaced with `application/octet-stream`.
