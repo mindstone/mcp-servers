@@ -386,15 +386,19 @@ describe('microsoft-mail mock-API integration', () => {
     const json = result.json as {
       ok?: unknown;
       count: number;
-      attachments: Array<{ id: string; name: string; type: string }>;
+      attachments: Array<{ id: string; name: string; type: string; contentType: string }>;
     };
     expect(json.ok).toBeUndefined();
     expect(json.count).toBe(2);
-    expect(json.attachments[0]).toMatchObject({
-      id: 'att-1',
-      type: 'fileAttachment',
-    });
+    expect(json.attachments[0]!.id).toBe('att-1');
     expect(json.attachments[0]!.name).toContain('report.pdf');
+    // Upstream-authored fields are enveloped, not emitted raw.
+    expect(json.attachments[0]!.type).toBe(
+      '<untrusted-content source="microsoft-mail:list_attachments:type">fileAttachment</untrusted-content>',
+    );
+    expect(json.attachments[0]!.contentType).toBe(
+      '<untrusted-content source="microsoft-mail:list_attachments:contentType">application/pdf</untrusted-content>',
+    );
     const call = state.requests.find((r) =>
       r.pathname.endsWith('/me/messages/msg-1/attachments'),
     );
@@ -429,6 +433,10 @@ describe('microsoft-mail mock-API integration', () => {
       expect(json.savedTo.startsWith(workspace)).toBe(true);
       expect(json.size).toBe(16);
       expect(json.name).toContain('report.pdf');
+      const jsonWithType = result.json as { contentType: string };
+      expect(jsonWithType.contentType).toBe(
+        '<untrusted-content source="microsoft-mail:download_attachment:contentType">application/pdf</untrusted-content>',
+      );
       const written = await fs.readFile(json.savedTo);
       expect(written.toString('utf8')).toBe('hello attachment');
       const call = state.requests.find((r) =>

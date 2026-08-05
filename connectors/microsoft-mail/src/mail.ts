@@ -506,10 +506,13 @@ export async function listAttachments(
   const attachments = parsed.value.map((attachment) => ({
     id: attachment.id,
     name: wrapUntrusted(attachment.name, 'microsoft-mail:list_attachments:name'),
-    contentType: attachment.contentType,
+    contentType: wrapUntrusted(attachment.contentType, 'microsoft-mail:list_attachments:contentType'),
     size: attachment.size,
     isInline: attachment.isInline,
-    type: attachment['@odata.type']?.replace('#microsoft.graph.', ''),
+    type: wrapUntrusted(
+      attachment['@odata.type']?.replace('#microsoft.graph.', ''),
+      'microsoft-mail:list_attachments:type',
+    ),
   }));
 
   return {
@@ -686,9 +689,15 @@ export async function downloadAttachment(
   const sizeLimitMessage = `Attachment "${displayName}" exceeds the ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB download limit.`;
 
   if (attachment['@odata.type'] && !attachment['@odata.type'].endsWith('fileAttachment')) {
+    // The upstream @odata.type is an unconstrained string (see the schema) and
+    // just as attacker-controlled as the name — envelope it too.
+    const displayType = wrapUntrusted(
+      attachment['@odata.type'].replace('#microsoft.graph.', ''),
+      'microsoft-mail:download_attachment:type',
+    );
     throw new Error(
       `Attachment "${displayName}" is not a file attachment ` +
-        `(${attachment['@odata.type'].replace('#microsoft.graph.', '')}); inline download is not ` +
+        `(${displayType}); inline download is not ` +
         'supported for embedded-message or reference attachments. Open the message in Outlook to access it.',
     );
   }
@@ -717,7 +726,7 @@ export async function downloadAttachment(
     messageId: args.id,
     attachmentId: attachment.id,
     name: wrapUntrusted(attachment.name, 'microsoft-mail:download_attachment:name'),
-    contentType: attachment.contentType,
+    contentType: wrapUntrusted(attachment.contentType, 'microsoft-mail:download_attachment:contentType'),
     size: content.byteLength,
     savedTo: fullPath,
     message: `Attachment saved to ${fullPath}`,
