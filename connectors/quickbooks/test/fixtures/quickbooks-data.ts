@@ -165,3 +165,37 @@ export function createEmployeesQueryResponse(count = 2) {
     },
   };
 }
+
+export function createReportResponse(reportName = 'ProfitAndLoss') {
+  return {
+    Header: {
+      ReportName: reportName,
+      StartPeriod: '2026-01-01',
+      EndPeriod: '2026-03-31',
+      Currency: 'USD',
+    },
+    Columns: {
+      Column: [
+        { ColTitle: '', ColType: 'Account' },
+        { ColTitle: 'Total', ColType: 'Money' },
+      ],
+    },
+    Rows: {
+      Row: [
+        {
+          type: 'Section',
+          header: { ColData: [{ value: 'Income' }, { value: '' }] },
+          Rows: {
+            Row: [
+              {
+                type: 'Data',
+                ColData: [{ value: 'Consulting Revenue', id: '84' }, { value: '15000.00' }],
+              },
+            ],
+          },
+          Summary: { ColData: [{ value: 'Total Income' }, { value: '15000.00' }] },
+        },
+      ],
+    },
+  };
+}

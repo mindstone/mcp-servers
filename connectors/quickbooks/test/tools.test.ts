@@ -17,6 +17,7 @@ import {
   createVendorsQueryResponse,
   createAccountsQueryResponse,
   createEmployeesQueryResponse,
+  createReportResponse,
 } from './fixtures/quickbooks-data.js';
 
 function defaultEnv() {
@@ -297,6 +298,108 @@ describe('list_quickbooks_employees', () => {
     const json = result.json as Record<string, unknown>;
     expect(json.ok).toBe(true);
     expect(Array.isArray(json.employees)).toBe(true);
+  });
+});
+
+describe('get_quickbooks_report', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('runs a ProfitAndLoss report over a date range', async () => {
+    let capturedUrl = '';
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.get(`${PRODUCTION_API_BASE}/reports/:reportName`, ({ request, params }) => {
+        capturedUrl = request.url;
+        return HttpResponse.json(createReportResponse(params.reportName as string));
+      }),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('get_quickbooks_report', {
+      report: 'ProfitAndLoss',
+      startDate: '2026-01-01',
+      endDate: '2026-03-31',
+      accountingMethod: 'Accrual',
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    const report = json.report as { Header: { ReportName: string } };
+    // Report payloads are enveloped wholesale (arbitrary shape).
+    expect(report.Header.ReportName).toBe(
+      '<untrusted-content source="quickbooks:get_quickbooks_report:ProfitAndLoss">ProfitAndLoss</untrusted-content>',
+    );
+    expect(capturedUrl).toContain('start_date=2026-01-01');
+    expect(capturedUrl).toContain('end_date=2026-03-31');
+    expect(capturedUrl).toContain('accounting_method=Accrual');
+  });
+
+  it('maps asOfDate to report_date for aging reports', async () => {
+    let capturedUrl = '';
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.get(`${PRODUCTION_API_BASE}/reports/:reportName`, ({ request, params }) => {
+        capturedUrl = request.url;
+        return HttpResponse.json(createReportResponse(params.reportName as string));
+      }),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('get_quickbooks_report', {
+      report: 'AgedReceivables',
+      asOfDate: '2026-03-31',
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(capturedUrl).toContain('report_date=2026-03-31');
+    expect(capturedUrl).not.toContain('start_date');
+  });
+
+  it('envelopes report string values as untrusted content', async () => {
+    mswServer.use(...createQuickBooksHandlers());
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('get_quickbooks_report', { report: 'BalanceSheet' });
+    const json = result.json as {
+      report: { Rows: { Row: Array<{ Rows: { Row: Array<{ ColData: Array<{ value: string }> }> } }> } };
+    };
+    const cellValue = json.report.Rows.Row[0].Rows.Row[0].ColData[0].value;
+    expect(cellValue).toBe(
+      '<untrusted-content source="quickbooks:get_quickbooks_report:BalanceSheet">Consulting Revenue</untrusted-content>',
+    );
+  });
+
+  it('rejects an unknown report name before any outbound request', async () => {
+    let outboundRequestCount = 0;
+    mswServer.use(
+      http.post(TOKEN_URL, () => {
+        outboundRequestCount++;
+        return HttpResponse.json(createTokenResponse());
+      }),
+      http.get(`${PRODUCTION_API_BASE}/reports/:reportName`, () => {
+        outboundRequestCount++;
+        return HttpResponse.json(createReportResponse());
+      }),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('get_quickbooks_report', {
+      report: 'NotAReport',
+    } as Record<string, unknown>);
+    expect(result.isError).toBe(true);
+    expect(outboundRequestCount).toBe(0);
+  });
+
+  it('returns a structured error when the API fails', async () => {
+    mswServer.use(...createQuickBooksHandlers({ apiErrorStatus: 500 }));
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('get_quickbooks_report', { report: 'CashFlow' });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('SERVER_ERROR');
   });
 });
 

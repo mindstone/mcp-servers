@@ -15,6 +15,7 @@ import {
   createVendorsQueryResponse,
   createAccountsQueryResponse,
   createEmployeesQueryResponse,
+  createReportResponse,
 } from '../fixtures/quickbooks-data.js';
 
 export interface MockServerOptions {
@@ -84,6 +85,24 @@ export function createQuickBooksHandlers(options: MockServerOptions = {}): HttpH
 
       // Default: empty response
       return HttpResponse.json({ QueryResponse: {} });
+    }),
+
+    // Reports endpoint — must precede the generic /:entityType/:entityId
+    // handler below, which would otherwise swallow /reports/{name}.
+    http.get(`${apiBase}/reports/:reportName`, async ({ request, params }) => {
+      const authHeader = request.headers.get('Authorization');
+      if (!authHeader?.startsWith('Bearer ')) {
+        return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
+      if (options.apiErrorStatus) {
+        return HttpResponse.json(
+          { Fault: { Error: [{ Message: 'Mock API error', Detail: 'Test error detail' }] } },
+          { status: options.apiErrorStatus },
+        );
+      }
+
+      return HttpResponse.json(createReportResponse(params.reportName as string));
     }),
 
     // Entity detail endpoints
