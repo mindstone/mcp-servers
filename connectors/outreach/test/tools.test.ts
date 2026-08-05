@@ -126,6 +126,64 @@ describe('Tool tests — Outreach MCP server', () => {
     expect(result.json).toHaveProperty('status', 'updated');
   });
 
+  it('outreach_create_prospect accepts custom1..custom35 fields', async () => {
+    mswServer.use(...createOutreachHandlers());
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('outreach_create_prospect', {
+      email: 'new@acme.com',
+      last_name: 'Prospect',
+      custom_fields: { custom1: 'enterprise', custom35: 42 },
+    });
+    expect(result.isError).toBeFalsy();
+    expect(result.json).toHaveProperty('ok', true);
+    // Custom field values are external text on the way back: enveloped.
+    expect((result.json as Record<string, unknown>).custom1).toBe(
+      '<untrusted-content source="outreach:prospect:custom1">enterprise</untrusted-content>',
+    );
+    expect((result.json as Record<string, unknown>).custom35).toBe(42);
+  });
+
+  it('outreach_update_prospect rejects custom field keys outside custom1..custom35', async () => {
+    mswServer.use(...createOutreachHandlers());
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    for (const badKey of ['custom0', 'custom36', 'customField1']) {
+      const result = await testClient.callTool('outreach_update_prospect', {
+        id: '101',
+        custom_fields: { [badKey]: 'x' },
+      });
+      expect(result.isError, `expected ${badKey} to be rejected`).toBe(true);
+      expect(result.json).toHaveProperty('code', 'VALIDATION_ERROR');
+    }
+
+    // Boundary keys pass validation (request reaches the mock API).
+    const okResult = await testClient.callTool('outreach_update_prospect', {
+      id: '101',
+      custom_fields: { custom1: 'a', custom35: 'b' },
+    });
+    expect(okResult.isError).toBeFalsy();
+    expect(okResult.json).toHaveProperty('status', 'updated');
+  });
+
   // --- Sequences ---
 
   it('outreach_list_sequences returns sequences', async () => {

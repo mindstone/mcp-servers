@@ -10,6 +10,35 @@ import {
 } from '../client.js';
 import { ConnectorError, type JsonApiResource } from '../types.js';
 
+const CUSTOM_FIELD_KEY = /^custom([1-9]|[12][0-9]|3[0-5])$/;
+
+const customFieldsSchema = z
+  .record(z.union([z.string(), z.number(), z.boolean(), z.null()]))
+  .optional()
+  .describe('Outreach custom field values, keyed custom1 through custom35 (e.g. { "custom1": "enterprise" })');
+
+/**
+ * Merge validated custom1..custom35 fields into a prospect attributes payload.
+ * Key format is validated here (not just by Zod) so the error can name the
+ * offending key and the accepted range.
+ */
+function applyCustomFields(
+  attributes: Record<string, unknown>,
+  customFields: Record<string, string | number | boolean | null> | undefined,
+): void {
+  if (!customFields) return;
+  for (const [key, value] of Object.entries(customFields)) {
+    if (!CUSTOM_FIELD_KEY.test(key)) {
+      throw new ConnectorError(
+        `Invalid custom field key: ${key}`,
+        'VALIDATION_ERROR',
+        'Outreach prospect custom fields are named custom1 through custom35.',
+      );
+    }
+    attributes[key] = value;
+  }
+}
+
 export function registerProspectTools(server: McpServer): void {
   server.registerTool(
     'outreach_search_prospects',
@@ -92,6 +121,7 @@ COMMON MISTAKES: Don't forget to associate with an account via account_id if kno
         company: z.string().optional().describe('Company name'),
         account_id: z.string().optional().describe('Associated Outreach account ID'),
         tags: z.array(z.string()).optional().describe('Tags to apply'),
+        custom_fields: customFieldsSchema,
       }),
       annotations: {
         readOnlyHint: false,
@@ -116,6 +146,7 @@ COMMON MISTAKES: Don't forget to associate with an account via account_id if kno
       if (args.title) attributes.title = args.title;
       if (args.company) attributes.company = args.company;
       if (args.tags) attributes.tags = args.tags;
+      applyCustomFields(attributes, args.custom_fields);
 
       const body: Record<string, unknown> = {
         data: {
@@ -154,6 +185,7 @@ Only provided fields are updated. Use outreach_search_prospects to find the ID.`
         title: z.string().optional().describe('Job title'),
         company: z.string().optional().describe('Company name'),
         tags: z.array(z.string()).optional().describe('Tags to apply'),
+        custom_fields: customFieldsSchema,
       }),
       annotations: {
         readOnlyHint: false,
@@ -170,6 +202,7 @@ Only provided fields are updated. Use outreach_search_prospects to find the ID.`
       if (args.title) attributes.title = args.title;
       if (args.company) attributes.company = args.company;
       if (args.tags) attributes.tags = args.tags;
+      applyCustomFields(attributes, args.custom_fields);
 
       const body = { data: { type: 'prospect', id: args.id, attributes } };
       const response = await outreachFetch(`/prospects/${args.id}`, { method: 'PATCH', body });
