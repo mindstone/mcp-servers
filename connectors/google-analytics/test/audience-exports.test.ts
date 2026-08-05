@@ -55,12 +55,14 @@ describe('audience export tools', () => {
     );
   });
 
-  it('ga_create_audience_export is annotated as a non-read-only, non-destructive materialisation', async () => {
+  it('ga_create_audience_export is annotated as a destructive, non-idempotent materialisation', async () => {
     await setup();
     const toolsResult = await testClient.client.listTools();
     const tool = toolsResult.tools.find((entry) => entry.name === 'ga_create_audience_export');
     expect(tool?.annotations?.readOnlyHint).toBe(false);
-    expect(tool?.annotations?.destructiveHint).toBe(false);
+    // Quota-charging server-side materialisation must be marked destructive
+    // so hosts can gate it behind explicit user approval (invariant #7).
+    expect(tool?.annotations?.destructiveHint).toBe(true);
     expect(tool?.annotations?.idempotentHint).toBe(false);
   });
 

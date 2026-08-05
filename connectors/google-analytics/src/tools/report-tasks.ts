@@ -32,7 +32,10 @@ const READ_ONLY = {
 
 const CREATE_TASK = {
   readOnlyHint: false,
-  destructiveHint: false,
+  // Starting a report task materialises up to `limit` rows server-side and
+  // charges report-task quota tokens — a production-impacting, non-idempotent
+  // operation, so it is annotated destructive (invariant #7).
+  destructiveHint: true,
   idempotentHint: false,
   openWorldHint: true,
 } as const;

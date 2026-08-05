@@ -5,9 +5,10 @@
  * An audience export is a server-side snapshot of the users in an audience.
  * The workflow is: ga_create_audience_export -> poll ga_get_audience_export
  * until state is ACTIVE -> page rows with ga_query_audience_export. Creating
- * an export charges audience-export quota tokens but does not modify
- * property configuration, so these tools stay annotation-honest rather than
- * read-only: create is a non-idempotent materialisation, not a write.
+ * an export charges audience-export quota tokens, so the create tool is
+ * annotated non-read-only and destructive (production-impacting, quota-
+ * consuming materialisation) even though it does not modify property
+ * configuration.
  */
 
 import { z } from 'zod';
@@ -26,7 +27,10 @@ const READ_ONLY = {
 
 const CREATE_EXPORT = {
   readOnlyHint: false,
-  destructiveHint: false,
+  // Creating an audience export materialises a server-side snapshot and
+  // charges audience-export quota tokens — a production-impacting,
+  // non-idempotent operation, so it is annotated destructive (invariant #7).
+  destructiveHint: true,
   idempotentHint: false,
   openWorldHint: true,
 } as const;

@@ -75,7 +75,11 @@ describe('smoke — tool registration', () => {
         tool.annotations?.readOnlyHint,
         `${tool.name} readOnlyHint`,
       ).toBe(!creates.has(tool.name));
-      expect(tool.annotations?.destructiveHint, `${tool.name} destructiveHint`).toBe(false);
+      // The quota-charging creates are annotated destructive so hosts can gate
+      // them behind explicit user approval (invariant #7).
+      expect(tool.annotations?.destructiveHint, `${tool.name} destructiveHint`).toBe(
+        creates.has(tool.name),
+      );
     }
   });
 });
