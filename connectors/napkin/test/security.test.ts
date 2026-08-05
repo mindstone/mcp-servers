@@ -389,3 +389,160 @@ describe('VAL-NAPKIN — napkin_download_visual Bearer-leak hardening', () => {
     if (data.file_path) downloadedFiles.push(data.file_path);
   });
 });
+
+describe('VAL-NAPKIN — napkin_download_visual download-target hardening', () => {
+  let testClient: McpTestClient;
+  const downloadedFiles: string[] = [];
+  const createdDirs: string[] = [];
+  const createdLinks: string[] = [];
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    for (const f of downloadedFiles) {
+      try {
+        if (fs.existsSync(f)) fs.unlinkSync(f);
+      } catch { /* ignore */ }
+    }
+    downloadedFiles.length = 0;
+    for (const l of createdLinks) {
+      try {
+        fs.unlinkSync(l);
+      } catch { /* ignore */ }
+    }
+    createdLinks.length = 0;
+    for (const d of createdDirs.reverse()) {
+      try {
+        if (fs.existsSync(d)) fs.rmdirSync(d, { recursive: true } as fs.RmDirOptions);
+      } catch { /* ignore */ }
+    }
+    createdDirs.length = 0;
+  });
+
+  function makeWorkspace(): string {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'napkin-ws-'));
+    createdDirs.push(ws);
+    return ws;
+  }
+
+  function clientEnv(workspace: string) {
+    return {
+      NAPKIN_API_KEY: MOCK_API_KEY,
+      MCP_HOST_BRIDGE_STATE: '',
+      MCP_WORKSPACE_PATH: workspace,
+    };
+  }
+
+  it('VAL-NAPKIN-012 — an existing file is never silently overwritten', async () => {
+    const ws = makeWorkspace();
+    mswServer.use(...createNapkinHandlers());
+
+    testClient = await createTestClient({ env: clientEnv(ws) });
+
+    const first = await testClient.callTool('napkin_download_visual', {
+      file_url: `https://api.napkin.ai/v1/visual/${mockRequestId}/file/output.svg`,
+      filename: 'dup',
+    });
+    expect(first.isError).toBeFalsy();
+    const firstPath = (first.json as DownloadResult).file_path as string;
+    downloadedFiles.push(firstPath);
+    const originalContent = fs.readFileSync(firstPath);
+    // Distinct content so an overwrite would be detectable.
+    fs.writeFileSync(firstPath, 'original-user-content');
+
+    const second = await testClient.callTool('napkin_download_visual', {
+      file_url: `https://api.napkin.ai/v1/visual/${mockRequestId}/file/output.svg`,
+      filename: 'dup',
+    });
+
+    expect(second.isError).toBe(true);
+    expect((second.json as DownloadResult).code).toBe('FILE_EXISTS');
+    expect(fs.readFileSync(firstPath, 'utf8')).toBe('original-user-content');
+    expect(originalContent.length).toBeGreaterThan(0);
+  });
+
+  it('VAL-NAPKIN-013 — a pre-planted symlink at the destination is not followed', async () => {
+    const ws = makeWorkspace();
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'napkin-outside-'));
+    createdDirs.push(outside);
+    const victim = path.join(outside, 'victim.txt');
+    fs.writeFileSync(victim, 'victim-original');
+
+    const outputDir = path.join(ws, 'Chief-of-Staff', 'generated-visuals');
+    fs.mkdirSync(outputDir, { recursive: true });
+    try {
+      fs.symlinkSync(victim, path.join(outputDir, 'planted.svg'));
+    } catch {
+      // Symlink creation needs privileges on some platforms; skip there.
+      return;
+    }
+
+    mswServer.use(...createNapkinHandlers());
+    testClient = await createTestClient({ env: clientEnv(ws) });
+
+    const result = await testClient.callTool('napkin_download_visual', {
+      file_url: `https://api.napkin.ai/v1/visual/${mockRequestId}/file/output.svg`,
+      filename: 'planted',
+    });
+
+    expect(result.isError).toBe(true);
+    expect((result.json as DownloadResult).code).toBe('FILE_EXISTS');
+    // The write never passed through the symlink.
+    expect(fs.readFileSync(victim, 'utf8')).toBe('victim-original');
+  });
+
+  it('VAL-NAPKIN-014 — a symlinked output-directory component is rejected before any write', async () => {
+    const ws = makeWorkspace();
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'napkin-outside-'));
+    createdDirs.push(outside);
+
+    try {
+      fs.symlinkSync(outside, path.join(ws, 'Chief-of-Staff'), 'dir');
+    } catch {
+      // Symlink creation needs privileges on some platforms; skip there.
+      return;
+    }
+
+    mswServer.use(...createNapkinHandlers());
+    testClient = await createTestClient({ env: clientEnv(ws) });
+
+    const result = await testClient.callTool('napkin_download_visual', {
+      file_url: `https://api.napkin.ai/v1/visual/${mockRequestId}/file/output.svg`,
+      filename: 'escape',
+    });
+
+    expect(result.isError).toBe(true);
+    expect((result.json as DownloadResult).code).toBe('OUTPUT_PATH_REJECTED');
+    // Nothing was created through the symlink.
+    expect(fs.readdirSync(outside)).toHaveLength(0);
+  });
+
+  it('VAL-NAPKIN-015 — a symlinked MCP_WORKSPACE_PATH root still works (canonical root)', async () => {
+    const realRoot = makeWorkspace();
+    const link = path.join(os.tmpdir(), `napkin-wslink-${Date.now()}`);
+    try {
+      fs.symlinkSync(realRoot, link, 'dir');
+    } catch {
+      // Symlink creation needs privileges on some platforms; skip there.
+      return;
+    }
+    createdLinks.push(link);
+
+    mswServer.use(...createNapkinHandlers());
+    testClient = await createTestClient({ env: clientEnv(link) });
+
+    const result = await testClient.callTool('napkin_download_visual', {
+      file_url: `https://api.napkin.ai/v1/visual/${mockRequestId}/file/output.svg`,
+      filename: 'via-link',
+    });
+
+    expect(result.isError).toBeFalsy();
+    const data = result.json as DownloadResult;
+    expect(data.file_path).toContain('via-link.svg');
+    // The file lands under the canonical (real) root.
+    const canonicalRealRoot = fs.realpathSync(realRoot);
+    expect(data.file_path?.startsWith(canonicalRealRoot)).toBe(true);
+    if (data.file_path) downloadedFiles.push(data.file_path);
+  });
+});

@@ -127,7 +127,7 @@ node dist/index.js
 ### Generation
 - `napkin_generate_visual` — Generate a professional visual from text
 - `napkin_check_status` — Check the status of a visual generation request
-- `napkin_download_visual` — Download a generated visual file to disk
+- `napkin_download_visual` — Download a generated visual file to disk (existing files are never overwritten — pass a different `filename` or omit it to auto-generate one)
 
 ### Styles
 - `napkin_list_styles` — List the 15 built-in Napkin visual styles (IDs, descriptions, categories) to pick a `style_id` for `napkin_generate_visual`. Static catalog; no API key or network call required.

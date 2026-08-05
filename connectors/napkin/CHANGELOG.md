@@ -18,6 +18,9 @@ are maintained manually as part of the PR review checklist.
 - **napkin**: Map HTTP 410 responses (status/file URLs expire 30 minutes after generation) to a structured `EXPIRED` error with an actionable regenerate-and-download-promptly resolution, instead of generic `API_ERROR`/`DOWNLOAD_ERROR`.
 - **napkin**: Broaden the 403 `AUTH_FAILED` resolution — the vendor returns 403 ("user not found") for invalid keys too, not only for missing permissions, so the message now points at checking the key.
 
+### Security
+- **napkin**: Harden `napkin_download_visual`'s download target. The output directory is now canonicalised with canonical-prefix containment beneath `MCP_WORKSPACE_PATH` (or the home-directory fallback), so a symlinked `Chief-of-Staff`/`generated-visuals` component fails closed with an observable `OUTPUT_PATH_REJECTED` error instead of redirecting the write. Downloads are written to a fresh private staging directory (mode 0700) and hard-linked into place with exclusive-create semantics: existing files are never overwritten (`FILE_EXISTS` error) and a pre-planted symlink at the destination is never followed.
+
 ## [0.3.2] - 2026-05-14
 ### Added
 - **registry**: Cohort A backfill — 12 API-key OSS connectors get server.json + mcpName. fathom, humaans, kling, mixmax, nano-banana, napkin, pandadoc, freshdesk, elevenlabs, retell-ai, runway, talentlms each gain a registry-shaped server.json (validated against registry.modelcontextprotocol.io) and an mcpName field on package.json under the io.github.mindstone namespace.
