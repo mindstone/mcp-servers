@@ -11,6 +11,7 @@ import {
   createListItem,
   createSharingLink,
   createSiteList,
+  createSitePage,
   deleteLibraryItem,
   deleteListItem,
   downloadLibraryFile,
@@ -38,6 +39,7 @@ import {
   listSitePages,
   listSubsites,
   moveLibraryItem,
+  publishSitePage,
   readLibraryTextFile,
   readSitePage,
   renameLibraryItem,
@@ -46,6 +48,7 @@ import {
   searchSharePoint,
   updateFileMetadata,
   updateListItem,
+  updateSitePage,
   uploadLibraryFile,
 } from './sharepoint.js';
 
@@ -362,6 +365,61 @@ const TOOL_SPECS: SharePointToolSpec[] = [
     }),
     annotations: READ_ONLY_ANNOTATIONS,
     handler: readSitePage as SharePointHandler,
+  },
+  {
+    name: 'create_site_page',
+    description:
+      'Create a new SharePoint site page as a draft, optionally with simple HTML body content. ' +
+      'Call publish_site_page afterwards to make it visible. ' +
+      'Requires Sites.ReadWrite.All — an admin may need to approve this permission.',
+    inputSchema: z.object({
+      siteId: z.string().optional().describe('SharePoint site ID'),
+      title: z.string().optional().describe('Page title (e.g., "Q3 Update")'),
+      name: z
+        .string()
+        .optional()
+        .describe('Page file name (e.g., "q3-update.aspx"). Derived from the title when omitted.'),
+      description: z.string().optional().describe('Optional page description'),
+      pageLayout: z.enum(['article', 'home']).optional().describe('Page layout (default: "article")'),
+      promotionKind: z
+        .enum(['page', 'newsPost'])
+        .optional()
+        .describe('Promote as a normal page or a news post (default: page)'),
+      contentHtml: z
+        .string()
+        .optional()
+        .describe('Optional HTML body content, added as a single text web part (e.g., "<p>Summary…</p>")'),
+    }),
+    annotations: WRITE_ANNOTATIONS,
+    handler: createSitePage as SharePointHandler,
+  },
+  {
+    name: 'update_site_page',
+    description:
+      'Update a SharePoint site page\'s metadata (title, description, or promotion kind). Does not edit page body content.',
+    inputSchema: z.object({
+      siteId: z.string().optional().describe('SharePoint site ID'),
+      pageId: z.string().optional().describe('Page ID from list_site_pages or create_site_page'),
+      title: z.string().optional().describe('New page title'),
+      description: z.string().optional().describe('New page description'),
+      promotionKind: z
+        .enum(['page', 'newsPost'])
+        .optional()
+        .describe('Promote as a normal page or a news post'),
+    }),
+    annotations: IDP_WRITE_ANNOTATIONS,
+    handler: updateSitePage as SharePointHandler,
+  },
+  {
+    name: 'publish_site_page',
+    description:
+      'Publish a draft SharePoint site page so it becomes visible to readers. If a page approval flow is active, the page publishes after approval completes.',
+    inputSchema: z.object({
+      siteId: z.string().optional().describe('SharePoint site ID'),
+      pageId: z.string().optional().describe('Page ID from list_site_pages or create_site_page'),
+    }),
+    annotations: WRITE_ANNOTATIONS,
+    handler: publishSitePage as SharePointHandler,
   },
   {
     name: 'list_site_lists',

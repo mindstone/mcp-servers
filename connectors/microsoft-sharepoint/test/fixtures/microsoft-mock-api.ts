@@ -170,6 +170,35 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
         return HttpResponse.json(drive);
       }
 
+      if (method === 'POST' && /^\/v1\.0\/sites\/[^/]+\/pages$/.test(pathname)) {
+        return HttpResponse.json(
+          {
+            '@odata.type': '#microsoft.graph.sitePage',
+            id: 'page-new',
+            name: 'q3-update.aspx',
+            title: 'Q3 Update',
+            webUrl: 'https://contoso.sharepoint.com/sites/Marketing/SitePages/q3-update.aspx',
+            pageLayout: 'article',
+            publishingState: { level: 'checkout', versionId: '0.1' },
+          },
+          { status: 201 },
+        );
+      }
+
+      if (method === 'POST' && /\/microsoft\.graph\.sitePage\/publish$/.test(pathname)) {
+        return new HttpResponse(null, { status: 204 });
+      }
+
+      if (method === 'PATCH' && /\/microsoft\.graph\.sitePage$/.test(pathname)) {
+        return HttpResponse.json({
+          id: 'page-1',
+          title: 'Updated title',
+          name: 'home.aspx',
+          webUrl: 'https://contoso.sharepoint.com/sites/Marketing/SitePages/home.aspx',
+          publishingState: { level: 'draft', versionId: '1.1' },
+        });
+      }
+
       if (method === 'GET' && /^\/v1\.0\/sites\/[^/]+\/pages$/.test(pathname)) {
         return HttpResponse.json({
           value: [

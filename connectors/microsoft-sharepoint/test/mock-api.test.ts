@@ -146,6 +146,75 @@ describe('microsoft-sharepoint mock-API integration', () => {
     expect(json.contentHtml).toContain('Hello SharePoint');
   });
 
+  it('create_site_page POSTs a sitePage draft with derived name and text web part', async () => {
+    const result = await client.callTool('create_site_page', {
+      siteId: 'site-1',
+      title: 'Q3 Update',
+      contentHtml: '<p>Summary</p>',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; success: boolean; id: string; message: string };
+    expect(json.ok).toBeUndefined();
+    expect(json.success).toBe(true);
+    expect(json.message).toContain('draft');
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && /\/sites\/site-1\/pages$/.test(r.pathname),
+    );
+    expect(call).toBeDefined();
+    const body = call?.body as {
+      '@odata.type': string;
+      title: string;
+      name: string;
+      pageLayout: string;
+      canvasLayout: { horizontalSections: Array<{ columns: Array<{ webparts: Array<{ innerHtml: string }> }> }> };
+    };
+    expect(body['@odata.type']).toBe('#microsoft.graph.sitePage');
+    expect(body.name).toBe('q3-update.aspx');
+    expect(body.pageLayout).toBe('article');
+    expect(body.canvasLayout.horizontalSections[0]?.columns[0]?.webparts[0]?.innerHtml).toBe('<p>Summary</p>');
+  });
+
+  it('create_site_page rejects a missing title', async () => {
+    const result = await client.callTool('create_site_page', { siteId: 'site-1' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('title');
+  });
+
+  it('update_site_page PATCHes the sitePage cast endpoint', async () => {
+    const result = await client.callTool('update_site_page', {
+      siteId: 'site-1',
+      pageId: 'page-1',
+      title: 'Updated title',
+    });
+    expect(result.isError).not.toBe(true);
+    const call = state.requests.find(
+      (r) => r.method === 'PATCH' && /\/pages\/page-1\/microsoft\.graph\.sitePage$/.test(r.pathname),
+    );
+    expect(call).toBeDefined();
+    const body = call?.body as { '@odata.type': string; title: string };
+    expect(body['@odata.type']).toBe('#microsoft.graph.sitePage');
+    expect(body.title).toBe('Updated title');
+  });
+
+  it('update_site_page rejects a call with nothing to update', async () => {
+    const result = await client.callTool('update_site_page', { siteId: 'site-1', pageId: 'page-1' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Nothing to update');
+  });
+
+  it('publish_site_page POSTs to the publish endpoint', async () => {
+    const result = await client.callTool('publish_site_page', { siteId: 'site-1', pageId: 'page-1' });
+    expect(result.isError).not.toBe(true);
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && /\/pages\/page-1\/microsoft\.graph\.sitePage\/publish$/.test(r.pathname),
+    );
+    expect(call).toBeDefined();
+  });
+
   it('list/list-item mutation tools hit expected list endpoints', async () => {
     const createResult = await client.callTool('create_list_item', {
       siteId: 'site-1',

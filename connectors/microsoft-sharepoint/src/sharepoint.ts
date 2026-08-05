@@ -7,6 +7,7 @@ import {
   type SharePointDrive,
   type Client,
 } from '@mindstone/mcp-server-microsoft-shared';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
 
@@ -97,6 +98,22 @@ const GraphListSchema = z.object({
     .object({
       template: z.string().optional(),
       hidden: z.boolean().optional(),
+    })
+    .optional(),
+});
+
+const GraphSitePageSchema = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  webUrl: z.string().optional(),
+  pageLayout: z.string().optional(),
+  promotionKind: z.string().optional(),
+  publishingState: z
+    .object({
+      level: z.string().optional(),
+      versionId: z.string().optional(),
     })
     .optional(),
 });
@@ -856,6 +873,158 @@ export async function readSitePage(
       ? wrapUntrusted(contentParts.join('\n\n'), 'microsoft-sharepoint:read_site_page:contentHtml')
       : '(no text content found — page may be empty or use non-text web parts)',
     ...(contentWarning ? { contentWarning } : {}),
+  });
+}
+
+// -- Site page authoring tool implementations --
+
+function derivePageName(title: string): string {
+  const slug = title
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return `${slug || 'page'}.aspx`;
+}
+
+/** Single-section, single-column canvas layout holding one text web part. */
+function buildTextCanvasLayout(contentHtml: string): Record<string, unknown> {
+  return {
+    horizontalSections: [
+      {
+        layout: 'oneColumn',
+        id: '1',
+        emphasis: 'none',
+        columns: [
+          {
+            id: '1',
+            width: 12,
+            webparts: [{ id: randomUUID(), innerHtml: contentHtml }],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+interface CreateSitePageArgs {
+  siteId?: string;
+  title?: string;
+  name?: string;
+  description?: string;
+  pageLayout?: 'article' | 'home';
+  promotionKind?: 'page' | 'newsPost';
+  contentHtml?: string;
+}
+
+export async function createSitePage(
+  client: Client,
+  args: CreateSitePageArgs,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (!args.siteId || !args.title) {
+    return errorResult(
+      'Missing required parameters: "siteId" and "title". ' +
+      'Example: { "siteId": "contoso.sharepoint.com,abc123,def456", "title": "Q3 Update", ' +
+      '"contentHtml": "<p>Summary…</p>" }. ' +
+      'The page is created as a draft — call publish_site_page to make it visible.',
+    );
+  }
+
+  const body: Record<string, unknown> = {
+    '@odata.type': '#microsoft.graph.sitePage',
+    title: args.title,
+    name: args.name ?? derivePageName(args.title),
+    pageLayout: args.pageLayout ?? 'article',
+    ...(args.description ? { description: args.description } : {}),
+    ...(args.promotionKind ? { promotionKind: args.promotionKind } : {}),
+    ...(args.contentHtml ? { canvasLayout: buildTextCanvasLayout(args.contentHtml) } : {}),
+  };
+
+  const response = await client.api(`/sites/${args.siteId}/pages`).options({ signal }).post(body);
+  const page = GraphSitePageSchema.parse(response);
+
+  return successResult({
+    success: true,
+    id: page.id,
+    name: wrapUntrusted(page.name, 'microsoft-sharepoint:create_site_page:name'),
+    title: wrapUntrusted(page.title, 'microsoft-sharepoint:create_site_page:title'),
+    webUrl: page.webUrl,
+    publishingState: page.publishingState?.level,
+    message: 'Page created as a draft. Call publish_site_page to make it visible to readers.',
+  });
+}
+
+interface UpdateSitePageArgs {
+  siteId?: string;
+  pageId?: string;
+  title?: string;
+  description?: string;
+  promotionKind?: 'page' | 'newsPost';
+}
+
+export async function updateSitePage(
+  client: Client,
+  args: UpdateSitePageArgs,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (!args.siteId || !args.pageId) {
+    return errorResult(
+      'Missing required parameters: "siteId" and "pageId". ' +
+      'Example: { "siteId": "contoso.sharepoint.com,abc123,def456", "pageId": "abc123", "title": "New title" }',
+    );
+  }
+
+  const updates: Record<string, unknown> = { '@odata.type': '#microsoft.graph.sitePage' };
+  if (args.title !== undefined) updates.title = args.title;
+  if (args.description !== undefined) updates.description = args.description;
+  if (args.promotionKind !== undefined) updates.promotionKind = args.promotionKind;
+
+  if (Object.keys(updates).length === 1) {
+    return errorResult(
+      'Nothing to update. Provide at least one of: "title", "description", "promotionKind".',
+    );
+  }
+
+  const endpoint = `/sites/${args.siteId}/pages/${args.pageId}/microsoft.graph.sitePage`;
+  const response = await client.api(endpoint).options({ signal }).patch(updates);
+  const page = GraphSitePageSchema.parse(response);
+
+  return successResult({
+    success: true,
+    id: page.id,
+    title: wrapUntrusted(page.title, 'microsoft-sharepoint:update_site_page:title'),
+    webUrl: page.webUrl,
+    publishingState: page.publishingState?.level,
+    message: 'Page updated successfully. If the page was already published, call publish_site_page to publish the new version.',
+  });
+}
+
+interface PublishSitePageArgs {
+  siteId?: string;
+  pageId?: string;
+}
+
+export async function publishSitePage(
+  client: Client,
+  args: PublishSitePageArgs,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (!args.siteId || !args.pageId) {
+    return errorResult(
+      'Missing required parameters: "siteId" and "pageId". ' +
+      'Example: { "siteId": "contoso.sharepoint.com,abc123,def456", "pageId": "abc123" }',
+    );
+  }
+
+  const endpoint = `/sites/${args.siteId}/pages/${args.pageId}/microsoft.graph.sitePage/publish`;
+  await client.api(endpoint).options({ signal }).post({});
+
+  return successResult({
+    success: true,
+    message:
+      'Page published successfully. If a page approval flow is active on the page library, ' +
+      'the page becomes visible once the approval completes.',
   });
 }
 

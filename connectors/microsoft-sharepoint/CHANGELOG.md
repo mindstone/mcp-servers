@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Added
 
+- `create_site_page`, `update_site_page`, and `publish_site_page` tools for page authoring via the Graph sitePages API: create a draft page (optionally with simple HTML body content as a single text web part), update title/description/promotion kind, and publish. Pages are created as drafts; publishing is an explicit second step, and the publish response notes that an active page-approval flow defers visibility.
 - `list_list_columns` and `create_site_list` tools for list schema management: read a list's column definitions (name, derived type, required/hidden flags), and create new lists with an optional column schema (text/number/dateTime/boolean/choice columns).
 - `list_file_versions` tool listing the version history of a library file (version ID, size, modified date, modifier) via the Graph `versions` endpoint.
 - `list_item_permissions`, `invite_item_collaborators`, and `revoke_item_permission` tools for per-item permission management on library files/folders (Graph `permissions` and `invite` endpoints). Invitations default to `sendInvitation: false` (no surprise notification emails) and `requireSignIn: true`. Graph responses for these tools are parsed with Zod schemas rather than cast.
