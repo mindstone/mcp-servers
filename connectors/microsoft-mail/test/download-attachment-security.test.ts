@@ -4,7 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { mswServer } from './fixtures/setup.js';
 import { createMockApi, type MockApiState } from './fixtures/microsoft-mock-api.js';
-import { assertAttachmentDirIntact, resolveAttachmentDir } from '../src/mail.js';
+import {
+  assertAttachmentDirIntact,
+  pinAttachmentDir,
+  resolveAttachmentDir,
+  writeFileExclusive,
+} from '../src/mail.js';
 import {
   createMicrosoftConfigDir,
   createTestClient,
@@ -196,8 +201,10 @@ describe('download_attachment adversarial cases', () => {
 // The parent-directory replacement guard: a local attacker who swaps the
 // validated attachment directory (rename + symlink/directory replacement)
 // between canonicalization and the exclusive create must be detected, not
-// followed. These exercise assertAttachmentDirIntact directly; the
-// integration paths above cover the pre-validation cases.
+// followed. These exercise assertAttachmentDirIntact directly (the fallback
+// path used where descriptor-relative creates are unavailable); the
+// integration paths above cover the pre-validation cases, and the describe
+// below exercises the real write path under adversarial swap timing.
 describe('attachment directory replacement guard', () => {
   let workspace: string;
 
@@ -237,6 +244,129 @@ describe('attachment directory replacement guard', () => {
     await fs.mkdir(target.dir, { recursive: true });
     await expect(assertAttachmentDirIntact(target)).rejects.toThrow('replaced');
   });
+
+  it('fails closed with nothing written outside when the directory is swapped to a symlink before the write', async () => {
+    const target = await resolveAttachmentDir();
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-swap-out-'));
+    try {
+      await fs.rm(target.dir, { recursive: true });
+      await fs.symlink(outside, target.dir);
+      await expect(
+        writeFileExclusive(target, 'probe.txt', Buffer.from('mailbox bytes')),
+      ).rejects.toThrow(/replaced|escaped/);
+      // Whether the pinned descriptor rejected the swap (linux) or the
+      // fallback detected it after the create, nothing may be left outside.
+      expect(await fs.readdir(outside)).toEqual([]);
+    } finally {
+      await fs.rm(outside, { recursive: true, force: true });
+    }
+  });
+});
+
+// Descriptor-relative writes (linux): the attachment directory is pinned
+// behind an open descriptor and the create/verify/cleanup are addressed
+// through /proc/self/fd/<fd>/<name>, so a path swap at any point in the
+// sequence cannot move a byte — or a deletion — off the validated inode.
+// These exercise the real write path under adversarial swap timing, not
+// just the static identity check.
+describe('attachment write under adversarial swap timing (linux)', () => {
+  let workspace: string;
+
+  beforeEach(async () => {
+    workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-swap-race-'));
+    vi.stubEnv('MCP_WORKSPACE_PATH', workspace);
+  });
+
+  afterEach(async () => {
+    vi.unstubAllEnvs();
+    await fs.rm(workspace, { recursive: true, force: true });
+  });
+
+  it.runIf(process.platform === 'linux')(
+    'pins the validated inode: a create through the pinned descriptor ignores a swapped path',
+    async () => {
+      const target = await resolveAttachmentDir();
+      const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-pin-out-'));
+      const held = `${target.dir}-held`;
+      const pin = await pinAttachmentDir(target);
+      try {
+        expect(pin).toBeDefined();
+        // Attacker swaps the path: real directory renamed aside, symlink to
+        // an outside directory planted in its place.
+        await fs.rename(target.dir, held);
+        await fs.symlink(outside, target.dir);
+        // A create addressed relative to the pinned descriptor must land in
+        // the pinned inode (now reachable at `held`), never outside.
+        await fs.writeFile(`/proc/self/fd/${pin!.fd}/probe.txt`, 'bytes');
+        expect(await fs.readdir(outside)).toEqual([]);
+        await expect(fs.readFile(path.join(held, 'probe.txt'), 'utf8')).resolves.toBe('bytes');
+      } finally {
+        await pin?.close();
+        const lst = await fs.lstat(target.dir).catch(() => null);
+        if (lst?.isSymbolicLink()) await fs.rm(target.dir, { force: true });
+        await fs.rename(held, target.dir).catch(() => {});
+        await fs.rm(outside, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.runIf(process.platform === 'linux')(
+    'keeps every byte and every deletion inside the pinned directory under a concurrent swap',
+    async () => {
+      const target = await resolveAttachmentDir();
+      const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'microsoft-mail-race-out-'));
+      const held = `${target.dir}-held`;
+      // Victims that no cleanup may ever touch.
+      const victimInside = path.join(target.dir, 'victim-do-not-delete.txt');
+      const victimOutside = path.join(outside, 'victim-do-not-delete.txt');
+      await fs.writeFile(victimInside, 'precious');
+      await fs.writeFile(victimOutside, 'precious');
+
+      // Attacker loop: repeatedly replace the validated directory with a
+      // symlink to `outside`, then swap the real directory back.
+      let swapping = true;
+      const swapper = (async () => {
+        while (swapping) {
+          await fs.rename(target.dir, held).catch(() => {});
+          await fs.symlink(outside, target.dir).catch(() => {});
+          await fs.rm(target.dir, { force: true }).catch(() => {});
+          await fs.rename(held, target.dir).catch(() => {});
+        }
+      })();
+
+      const saved: string[] = [];
+      const content = Buffer.from('mailbox bytes');
+      try {
+        for (let i = 0; i < 40; i += 1) {
+          try {
+            saved.push(await writeFileExclusive(target, `probe-${i}.txt`, content));
+          } catch {
+            // Fail-closed is an acceptable outcome under an active swap; a
+            // misplaced write or deletion is not — asserted below.
+          }
+        }
+      } finally {
+        swapping = false;
+        await swapper;
+        // Restore rest state for the invariant checks.
+        const lst = await fs.lstat(target.dir).catch(() => null);
+        if (lst?.isSymbolicLink()) await fs.rm(target.dir, { force: true });
+        await fs.rename(held, target.dir).catch(() => {});
+      }
+
+      // No connector bytes ever landed outside the workspace, and the
+      // outside victim was never deleted by a swapped cleanup.
+      expect(await fs.readdir(outside)).toEqual(['victim-do-not-delete.txt']);
+      await expect(fs.readFile(victimOutside, 'utf8')).resolves.toBe('precious');
+      // The victim inside the real attachment directory survived too.
+      await expect(fs.readFile(victimInside, 'utf8')).resolves.toBe('precious');
+      // Every reported success really holds the bytes at the reported path.
+      for (const p of saved) {
+        await expect(fs.readFile(p)).resolves.toEqual(content);
+      }
+      await fs.rm(outside, { recursive: true, force: true });
+    },
+  );
 });
 
 async function pathExists(p: string): Promise<boolean> {

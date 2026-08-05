@@ -646,6 +646,56 @@ async function assertPathMatchesHandle(fullPath: string, handle: fs.FileHandle):
 }
 
 /**
+ * Pin the validated attachment directory behind an open file descriptor so
+ * the leaf create/write/cleanup below can be addressed RELATIVE TO THE
+ * DESCRIPTOR — `/proc/self/fd/<fd>/<name>` — instead of the swappable
+ * directory path. The kernel resolves that path against the pinned directory
+ * inode, so a rename-and-replace swap of `target.dir` (symlink to an outside
+ * directory, swap-back before cleanup, …) cannot redirect a single byte
+ * outside the workspace or make cleanup touch anything but the leaf we
+ * created in the pinned inode. This closes the race window that the
+ * path-based detect-and-refuse fallback can only report after the fact.
+ *
+ * Linux only: Node exposes no descriptor-relative file ops (no openat /
+ * RESOLVE_BENEATH), so `/proc/self/fd` is the only descriptor-relative
+ * mechanism available. Returns `undefined` when the mechanism is unavailable
+ * (non-Linux platform, or an unmounted /proc) so the caller falls back to
+ * path-based create with pre/post identity checks.
+ *
+ * A directory that cannot be opened, or whose live dev/ino no longer matches
+ * the validated identity, is a swap signal and fails closed (throws) rather
+ * than falling back: on Linux there is no legitimate reason the directory
+ * resolveAttachmentDir() just validated cannot be opened.
+ *
+ * Exported for tests.
+ */
+export async function pinAttachmentDir(
+  target: AttachmentDirTarget,
+): Promise<fs.FileHandle | undefined> {
+  if (process.platform !== 'linux') return undefined;
+  const procSelfFd = await fs
+    .stat('/proc/self/fd')
+    .then((s) => s.isDirectory())
+    .catch(() => false);
+  if (!procSelfFd) return undefined;
+  let dirHandle: fs.FileHandle;
+  try {
+    dirHandle = await fs.open(target.dir, 'r');
+  } catch {
+    // The directory resolveAttachmentDir() just validated cannot be opened —
+    // treat as a swap and fail closed rather than falling back to a
+    // path-based create.
+    throw new Error('Attachment directory was replaced after validation; refusing to write');
+  }
+  const identity = await dirHandle.stat();
+  if (!identity.isDirectory() || identity.dev !== target.dev || identity.ino !== target.ino) {
+    await dirHandle.close();
+    throw new Error('Attachment directory was replaced after validation; refusing to write');
+  }
+  return dirHandle;
+}
+
+/**
  * Atomically create `target.dir/filename` and write `content` through the
  * resulting file descriptor. `fs.open(..., 'wx')` (O_CREAT|O_EXCL) fails with
  * EEXIST on any existing entry — including a symlink or hardlink planted
@@ -656,59 +706,94 @@ async function assertPathMatchesHandle(fullPath: string, handle: fs.FileHandle):
  * O_EXCL protects the leaf entry, not the parent chain: a local attacker who
  * can rename the attachment directory and replace it with a symlink AFTER
  * resolveAttachmentDir() validated it could otherwise redirect the create
- * outside the workspace. Node offers no ancestor pinning (no openat /
- * RESOLVE_BENEATH), so the parent chain is re-verified against the pinned
- * directory identity after the create (before any bytes are written) and
- * again after the write, and the path is confirmed to still name the opened
- * descriptor. A detected swap fails closed and the misplaced file is removed
- * (unlink never follows symlinks, so cleanup cannot delete an attacker file
- * through a swapped path).
+ * outside the workspace. On Linux the directory is pinned behind an open
+ * descriptor (pinAttachmentDir) and the create, the post-write verification,
+ * and any cleanup all go through `/proc/self/fd/<fd>/<name>`, which the
+ * kernel resolves against the pinned inode — a path swap at any point in the
+ * sequence cannot move the write or the cleanup off the validated directory.
+ * The user-facing path is additionally confirmed to still resolve to the
+ * descriptor after the write, so a rename mid-write fails closed (with
+ * descriptor-relative cleanup) instead of reporting success with a dangling
+ * `savedTo`.
  *
- * Irreducible residual: a swap landing between the post-create verification
- * and the write syscall itself can still place bytes outside the workspace;
- * the post-write verification detects that state and removes the file, so
- * the tool reports failure rather than success — the guarantee is
- * detect-and-refuse, not prevention. Closing that last window would require
- * descriptor-relative opens, which Node does not expose.
+ * On platforms without descriptor-relative creates (macOS, Windows) the
+ * parent chain is instead re-verified against the pinned directory identity
+ * after the create (before any bytes are written) and again after the write,
+ * and the path is confirmed to still name the opened descriptor. A detected
+ * swap fails closed and the misplaced file is removed (unlink never follows
+ * symlinks, so cleanup cannot delete an attacker file through a swapped
+ * path).
+ *
+ * Irreducible residual (non-Linux only): a swap landing between the
+ * post-create verification and the write syscall itself can still place
+ * bytes outside the workspace; the post-write verification detects that
+ * state and removes the file, so the tool reports failure rather than
+ * success — on those platforms the guarantee is detect-and-refuse, not
+ * prevention. Closing that last window would require descriptor-relative
+ * opens, which Node only makes reachable through Linux `/proc/self/fd`.
+ *
+ * Exported for tests.
  */
-async function writeFileExclusive(
+export async function writeFileExclusive(
   target: AttachmentDirTarget,
   filename: string,
   content: Buffer,
 ): Promise<string> {
   const ext = path.extname(filename);
   const base = path.basename(filename, ext);
-  for (let attempt = 0; ; attempt += 1) {
-    const candidate = attempt === 0 ? filename : `${base}-${attempt}${ext}`;
-    const fullPath = path.join(target.dir, candidate);
-    // The filename is separator-free, but keep the canonical containment
-    // check so a future refactor cannot silently weaken the boundary.
-    const relative = path.relative(target.dir, fullPath);
-    if (relative.startsWith('..') || path.isAbsolute(relative)) {
-      throw new Error('Resolved attachment path escaped the attachment directory');
+  const pin = await pinAttachmentDir(target);
+  try {
+    for (let attempt = 0; ; attempt += 1) {
+      const candidate = attempt === 0 ? filename : `${base}-${attempt}${ext}`;
+      const fullPath = path.join(target.dir, candidate);
+      // The filename is separator-free, but keep the canonical containment
+      // check so a future refactor cannot silently weaken the boundary.
+      const relative = path.relative(target.dir, fullPath);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) {
+        throw new Error('Resolved attachment path escaped the attachment directory');
+      }
+      // With a pinned directory descriptor the create is addressed relative
+      // to the pinned inode; without one it is path-based and re-verified.
+      const createPath = pin ? `/proc/self/fd/${pin.fd}/${candidate}` : fullPath;
+      let handle: fs.FileHandle | undefined;
+      try {
+        handle = await fs.open(createPath, 'wx');
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'EEXIST') continue;
+        throw err;
+      }
+      try {
+        if (!pin) {
+          await assertAttachmentDirIntact(target);
+          await assertPathMatchesHandle(fullPath, handle);
+        }
+        await handle.writeFile(content);
+        if (pin) {
+          // Descriptor-relative sanity check, then confirm the user-facing
+          // path still names what we wrote (a rename mid-write must not
+          // surface a dangling savedTo).
+          await assertPathMatchesHandle(createPath, handle);
+          await assertPathMatchesHandle(fullPath, handle);
+        } else {
+          await assertAttachmentDirIntact(target);
+          await assertPathMatchesHandle(fullPath, handle);
+        }
+        return fullPath;
+      } catch (err) {
+        // We created this leaf (O_EXCL), so it is safe — and required — to
+        // remove it. With a pinned descriptor the unlink is relative to the
+        // pinned inode, so it removes exactly our leaf even if the directory
+        // path has been swapped or restored in the meantime; without one,
+        // unlink never follows symlinks, so cleanup cannot delete an
+        // attacker file through a swapped path.
+        await fs.unlink(createPath).catch(() => {});
+        throw err;
+      } finally {
+        await handle.close();
+      }
     }
-    let handle: fs.FileHandle | undefined;
-    try {
-      handle = await fs.open(fullPath, 'wx');
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === 'EEXIST') continue;
-      throw err;
-    }
-    try {
-      await assertAttachmentDirIntact(target);
-      await assertPathMatchesHandle(fullPath, handle);
-      await handle.writeFile(content);
-      await assertAttachmentDirIntact(target);
-      await assertPathMatchesHandle(fullPath, handle);
-      return fullPath;
-    } catch (err) {
-      // We created this leaf (O_EXCL), so it is safe — and required — to
-      // remove it wherever the parent chain pointed at creation time.
-      await fs.unlink(fullPath).catch(() => {});
-      throw err;
-    } finally {
-      await handle.close();
-    }
+  } finally {
+    await pin?.close();
   }
 }
 
