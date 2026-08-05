@@ -25,7 +25,7 @@
  *   - `replit_search_files` matched paths and matched content lines
  */
 
-const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content[ \t]*>/gi;
+const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content\s*>/gi;
 const ESCAPED_UNTRUSTED_CLOSE_TAG = '<\\/untrusted-content>';
 
 function escapeAttr(s: string): string {
