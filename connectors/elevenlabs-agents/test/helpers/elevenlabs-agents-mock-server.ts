@@ -17,6 +17,7 @@ import {
   mockPhoneNumber,
   mockRagIndex,
   mockSimulation,
+  mockWorkspaceTool,
 } from '../fixtures/elevenlabs-agents-data.js';
 
 const BASE_V1 = 'https://api.elevenlabs.io/v1';
@@ -403,6 +404,24 @@ export function createElevenLabsAgentsHandlers() {
       if (triggered) return triggered;
       return HttpResponse.json(mockRagIndex);
     }),
+
+    http.get(`${BASE_V1}/convai/tools`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      const trigger = listTriggerFromUrl(new URL(request.url));
+      const triggered = triggerResponse(trigger);
+      if (triggered) return triggered;
+      return HttpResponse.json({
+        tools: [mockWorkspaceTool],
+        next_cursor: 'cursor_tools_2',
+      });
+    }),
+
+    http.post(`${BASE_V1}/convai/tools`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      return HttpResponse.json(mockWorkspaceTool);
+    }),
   ];
 }
 
@@ -766,6 +785,19 @@ export function createRagIndexCapturingHandler() {
     if (authErr) return authErr;
     captured.body = (await request.json()) as JsonBody;
     return HttpResponse.json(mockRagIndex);
+  });
+
+  return { handler, captured };
+}
+
+export function createAddAgentToolCapturingHandler() {
+  const captured: { body?: JsonBody } = {};
+
+  const handler = http.post(`${BASE_V1}/convai/tools`, async ({ request }) => {
+    const authErr = requireAuth(request.headers.get('xi-api-key'));
+    if (authErr) return authErr;
+    captured.body = (await request.json()) as JsonBody;
+    return HttpResponse.json(mockWorkspaceTool);
   });
 
   return { handler, captured };

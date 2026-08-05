@@ -299,6 +299,16 @@ export function sanitizeAgent(agent: unknown, source: string): unknown {
 }
 
 /**
+ * Workspace tool configs (GET/POST /convai/tools). Tool names, descriptions,
+ * webhook URLs and header values are all workspace-collaborator-authored, so the
+ * same deny-by-default agent/KB walk applies with no key-specific exceptions.
+ */
+export function sanitizeAgentTool(tool: unknown, source: string): unknown {
+  if (!isObj(tool)) return sanitizeNonObjectRoot(tool, source, sanitizeAgentTool);
+  return sanitizeAgentOrKbValue(tool, source);
+}
+
+/**
  * No non-object-root guard needed: `sanitizeConversationValue` *is* the
  * deny-by-default walk, which already handles scalar, array, and object roots.
  */

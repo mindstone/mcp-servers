@@ -283,6 +283,24 @@ export const mockRagIndex = {
   document_model_index_usage: { used_bytes: 12345 },
 };
 
+/**
+ * Workspace tool entry returned by GET/POST /convai/tools. Name and description
+ * are collaborator-authored prose, so they stay hostile here to prove the
+ * deny-by-default walk envelopes them.
+ */
+export const mockWorkspaceTool = {
+  id: 'tool_test_123',
+  tool_config: {
+    type: 'webhook',
+    name: ATTACK_PAYLOAD,
+    description: ATTACK_PAYLOAD,
+    api_schema: {
+      url: 'https://example.com/webhook',
+      method: 'POST',
+    },
+  },
+};
+
 export const mockSimulation = {
   simulated_conversation: [
     {

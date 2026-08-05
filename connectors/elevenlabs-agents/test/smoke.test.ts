@@ -4,6 +4,7 @@ import { createElevenLabsAgentsHandlers, MOCK_API_KEY } from './helpers/elevenla
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
 
 const EXPECTED_TOOL_NAMES = [
+  'add_agent_tool',
   'add_knowledge_base_document',
   'cancel_batch_call',
   'configure_elevenlabs_agents_api_key',
@@ -20,6 +21,7 @@ const EXPECTED_TOOL_NAMES = [
   'get_knowledge_base_rag_index_status',
   'get_phone_number',
   'import_phone_number',
+  'list_agent_tools',
   'list_agents',
   'list_batch_calls',
   'list_conversations',
@@ -39,6 +41,7 @@ const EXPECTED_ANNOTATIONS: Record<
   string,
   { readOnlyHint: boolean; destructiveHint: boolean; idempotentHint?: boolean }
 > = {
+  add_agent_tool: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
   add_knowledge_base_document: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
   cancel_batch_call: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   configure_elevenlabs_agents_api_key: { readOnlyHint: false, destructiveHint: true },
@@ -55,6 +58,7 @@ const EXPECTED_ANNOTATIONS: Record<
   get_knowledge_base_rag_index_status: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
   get_phone_number: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
   import_phone_number: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+  list_agent_tools: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
   list_agents: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
   list_batch_calls: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
   list_conversations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
@@ -81,7 +85,7 @@ describe('Smoke test — ElevenLabs Agents tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 29 tools with correct names', async () => {
+  it('registers exactly 31 tools with correct names', async () => {
     mswServer.use(...createElevenLabsAgentsHandlers());
 
     testClient = await createTestClient({
@@ -94,7 +98,7 @@ describe('Smoke test — ElevenLabs Agents tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((tool) => tool.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(29);
+    expect(toolsResult.tools).toHaveLength(31);
     expect(toolNames).toEqual(EXPECTED_TOOL_NAMES);
   });
 
@@ -147,7 +151,7 @@ describe('Smoke test — ElevenLabs Agents tool registration', () => {
 });
 
 describe('Spawned stdio smoke test', () => {
-  it('lists 29 tools from built dist/index.js', async () => {
+  it('lists 31 tools from built dist/index.js', async () => {
     const { createStdioTestClient } = await import('@mindstone/mcp-test-harness');
     const { join } = await import('path');
 
@@ -163,7 +167,7 @@ describe('Spawned stdio smoke test', () => {
 
     try {
       const toolsResult = await client.client.listTools();
-      expect(toolsResult.tools).toHaveLength(29);
+      expect(toolsResult.tools).toHaveLength(31);
     } finally {
       await client.close();
     }
