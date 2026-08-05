@@ -24,11 +24,16 @@ export function registerIncidentTools(server: McpServer): void {
           .describe('ServiceNow encoded query (e.g., "active=true^priority=1")'),
         limit: z
           .number()
+          .int()
+          .min(1)
+          .max(1000)
           .optional()
           .default(20)
-          .describe('Max results to return (default: 20)'),
+          .describe('Max results to return (default: 20, max: 1000)'),
         offset: z
           .number()
+          .int()
+          .min(0)
           .optional()
           .default(0)
           .describe('Offset for pagination (default: 0)'),
@@ -111,11 +116,11 @@ export function registerIncidentTools(server: McpServer): void {
         short_description: z.string().min(1).describe('Brief description of the incident'),
         description: z.string().optional().describe('Detailed description'),
         urgency: z
-          .string()
+          .enum(['1', '2', '3'])
           .optional()
           .describe('Urgency: "1" (High), "2" (Medium), "3" (Low)'),
         impact: z
-          .string()
+          .enum(['1', '2', '3'])
           .optional()
           .describe('Impact: "1" (High), "2" (Medium), "3" (Low)'),
         assignment_group: z.string().optional().describe('Assignment group name'),
@@ -169,15 +174,15 @@ export function registerIncidentTools(server: McpServer): void {
         short_description: z.string().optional().describe('Brief description'),
         description: z.string().optional().describe('Detailed description'),
         state: z
-          .string()
+          .enum(['1', '2', '3', '6', '7'])
           .optional()
           .describe('State: "1" (New), "2" (In Progress), "3" (On Hold), "6" (Resolved), "7" (Closed)'),
         urgency: z
-          .string()
+          .enum(['1', '2', '3'])
           .optional()
           .describe('Urgency: "1" (High), "2" (Medium), "3" (Low)'),
         impact: z
-          .string()
+          .enum(['1', '2', '3'])
           .optional()
           .describe('Impact: "1" (High), "2" (Medium), "3" (Low)'),
         assigned_to: z.string().optional().describe('Assigned to user name or sys_id'),

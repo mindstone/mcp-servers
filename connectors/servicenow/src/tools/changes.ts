@@ -24,11 +24,16 @@ export function registerChangeTools(server: McpServer): void {
           .describe('ServiceNow encoded query (e.g., "state=implement^type=normal")'),
         limit: z
           .number()
+          .int()
+          .min(1)
+          .max(1000)
           .optional()
           .default(20)
-          .describe('Max results to return (default: 20)'),
+          .describe('Max results to return (default: 20, max: 1000)'),
         offset: z
           .number()
+          .int()
+          .min(0)
           .optional()
           .default(0)
           .describe('Offset for pagination (default: 0)'),
@@ -115,13 +120,13 @@ export function registerChangeTools(server: McpServer): void {
         short_description: z.string().min(1).describe('Brief description of the change'),
         description: z.string().optional().describe('Detailed description of the change'),
         type: z
-          .string()
+          .enum(['normal', 'standard', 'emergency'])
           .optional()
           .describe('Change type: "normal", "standard", or "emergency" (default: "normal")'),
         assignment_group: z.string().optional().describe('Assignment group name'),
         category: z.string().optional().describe('Change category'),
         risk: z
-          .string()
+          .enum(['1', '2', '3'])
           .optional()
           .describe('Risk: "1" (High), "2" (Medium), "3" (Low)'),
       }),

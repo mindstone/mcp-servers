@@ -10,10 +10,12 @@
  * The walk is deny-by-default: every string value is enveloped unless its key
  * names a structural value the connector recognises — a machine-generated
  * identifier, a timestamp, or an instance-controlled choice-list display
- * value. Structural values stay literal so identifiers (sys_id, number) can be
- * copied verbatim into follow-up tool calls. Free-text fields a record author
- * types (short_description, description, work_notes, names, emails, …) are
- * always enveloped, including fields this connector does not surface today.
+ * value — AND the value matches a conservative printable-character shape
+ * (anything else fails safe into an envelope). Structural values stay literal
+ * so identifiers (sys_id, number) can be copied verbatim into follow-up tool
+ * calls. Free-text fields a record author types (short_description,
+ * description, work_notes, names, emails, …) are always enveloped, including
+ * fields this connector does not surface today.
  */
 import { wrapUntrusted } from './untrusted-content.js';
 
@@ -61,6 +63,24 @@ const STRUCTURAL_LITERAL_KEYS = new Set([
   'order',
 ]);
 
+/**
+ * Conservative shape for a value allowed to stay literal under a structural
+ * key: printable identifier/choice-list/timestamp characters only — no angle
+ * brackets, quotes, backslash, or control characters, so a literal can never
+ * carry an envelope close-tag breakout. A structural value that does not match
+ * (e.g. an instance-customised choice-list display value containing markup)
+ * fails safe: it is enveloped like free text instead of passed through raw.
+ */
+const STRUCTURAL_VALUE_PATTERN = /^[\w .,:#+$()/-]{1,200}$/;
+
+function isStructuralLiteral(key: string | undefined, value: string): boolean {
+  return (
+    key !== undefined &&
+    STRUCTURAL_LITERAL_KEYS.has(key) &&
+    STRUCTURAL_VALUE_PATTERN.test(value)
+  );
+}
+
 function isObj(value: unknown): value is Obj {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -70,7 +90,7 @@ function sanitizeValue(value: unknown, source: string, key?: string): unknown {
     // An empty string carries no injectable content; leave it as-is rather
     // than emitting an empty envelope.
     if (value === '') return value;
-    if (key !== undefined && STRUCTURAL_LITERAL_KEYS.has(key)) return value;
+    if (isStructuralLiteral(key, value)) return value;
     return wrapUntrusted(value, key !== undefined ? `${source}:${key}` : source);
   }
   if (Array.isArray(value)) {

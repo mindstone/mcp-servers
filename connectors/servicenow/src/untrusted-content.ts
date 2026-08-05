@@ -9,17 +9,21 @@
  * VENDORED copy of the shared reference in `test-harness/src/untrusted-content.ts`
  * — connectors cannot `import` the test-harness at runtime (it is a
  * test/dev-only `file:` dependency that is never published into a connector's
- * `dist/`), so the helper lives in the connector's own runtime source. Keep
- * this byte-for-byte in sync with the shared reference; do NOT weaken the
- * escaping back to a simple `replaceAll` (that family misses whitespace / case
- * close-tag variants like `</untrusted-content >` / `</UNTRUSTED-CONTENT>`).
+ * `dist/`), so the helper lives in the connector's own runtime source. The
+ * close-tag escape machinery (regex, sentinel, `wrapUntrusted`) is kept
+ * byte-for-byte in sync with the shared reference; do NOT weaken the escaping
+ * back to a simple `replaceAll` or a space/tab-only character class (those
+ * families miss close-tag variants like `</untrusted-content >`,
+ * `</UNTRUSTED-CONTENT>`, or `</untrusted-content\n>`).
+ * `wrapUntrustedJsonStrings` intentionally differs from the reference: object
+ * keys are structural here and are NOT wrapped.
  *
  * `scripts/check-untrusted-coverage.mjs` greps for a reference to
  * `untrusted-content` in any connector that talks to an external system; this
  * file (and the call sites that import from it) is what satisfies that gate.
  */
 
-const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content[ \t]*>/gi;
+const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content\s*>/gi;
 const ESCAPED_UNTRUSTED_CLOSE_TAG = '<\\/untrusted-content>';
 
 function escapeAttr(s: string): string {

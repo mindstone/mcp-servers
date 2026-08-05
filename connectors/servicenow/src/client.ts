@@ -24,6 +24,10 @@ import {
   clearOAuthToken,
 } from './auth.js';
 import { ServiceNowError, REQUEST_TIMEOUT_MS } from './types.js';
+import { wrapUntrusted } from './untrusted-content.js';
+
+/** Bound on vendor error text surfaced to the model (chars). */
+const MAX_VENDOR_ERROR_CHARS = 500;
 
 /**
  * Returns the ServiceNow Table API base URL for the current instance.
@@ -222,8 +226,13 @@ export async function servicenowFetch<T>(
     } catch {
       errorText = await response.text().catch(() => 'Unknown error');
     }
+    // Vendor error text is instance-authored and can embed record content or
+    // prompt-injection payloads — envelope it (invariant #6) and bound its
+    // length so a hostile body cannot flood the model context.
+    const bounded = errorText.slice(0, MAX_VENDOR_ERROR_CHARS);
+    const safeErrorText = wrapUntrusted(bounded, 'servicenow:api-error');
     throw new ServiceNowError(
-      `ServiceNow API error (${response.status}): ${errorText}`,
+      `ServiceNow API error (${response.status}): ${safeErrorText}`,
       'API_ERROR',
       'Check the request parameters and try again.',
     );
@@ -243,6 +252,17 @@ export async function servicenowFetch<T>(
     );
   }
 
-  const body = (await response.json()) as { result: T };
+  // A JSON parse failure must not surface the parser's message — some runtimes
+  // embed a fragment of the offending (instance-authored) body in it.
+  let body: { result: T };
+  try {
+    body = (await response.json()) as { result: T };
+  } catch {
+    throw new ServiceNowError(
+      'ServiceNow returned a malformed JSON response.',
+      'MALFORMED_RESPONSE',
+      'The instance returned an invalid response. Try again; if it persists, check the instance status.',
+    );
+  }
   return body.result;
 }
