@@ -15,10 +15,15 @@ export const SLACK_API_BASE = 'https://slack.com/api';
  * sync with `src/**` references via the msw-manifest test.
  */
 export const SLACK_PRODUCTION_API_URLS: string[] = [
+  `${SLACK_API_BASE}/assistant.search.context`,
   `${SLACK_API_BASE}/auth.test`,
   `${SLACK_API_BASE}/bookmarks.add`,
   `${SLACK_API_BASE}/chat.postMessage`,
   `${SLACK_API_BASE}/chat.scheduleMessage`,
+  `${SLACK_API_BASE}/chat.scheduledMessages.list`,
+  `${SLACK_API_BASE}/chat.deleteScheduledMessage`,
+  `${SLACK_API_BASE}/chat.update`,
+  `${SLACK_API_BASE}/chat.delete`,
   `${SLACK_API_BASE}/conversations.create`,
   `${SLACK_API_BASE}/conversations.history`,
   `${SLACK_API_BASE}/conversations.info`,
@@ -28,9 +33,20 @@ export const SLACK_PRODUCTION_API_URLS: string[] = [
   `${SLACK_API_BASE}/conversations.open`,
   `${SLACK_API_BASE}/conversations.replies`,
   `${SLACK_API_BASE}/files.info`,
+  `${SLACK_API_BASE}/files.getUploadURLExternal`,
+  `${SLACK_API_BASE}/files.completeUploadExternal`,
   `${SLACK_API_BASE}/oauth.v2.access`,
+  `${SLACK_API_BASE}/pins.list`,
+  `${SLACK_API_BASE}/pins.add`,
+  `${SLACK_API_BASE}/pins.remove`,
   `${SLACK_API_BASE}/reactions.add`,
+  `${SLACK_API_BASE}/reactions.remove`,
+  `${SLACK_API_BASE}/emoji.list`,
   `${SLACK_API_BASE}/reminders.add`,
+  `${SLACK_API_BASE}/reminders.list`,
+  `${SLACK_API_BASE}/reminders.complete`,
+  `${SLACK_API_BASE}/reminders.delete`,
+  `${SLACK_API_BASE}/bookmarks.list`,
   `${SLACK_API_BASE}/search.messages`,
   `${SLACK_API_BASE}/users.info`,
   `${SLACK_API_BASE}/users.list`,
@@ -71,6 +87,41 @@ export function createSlackHandlers() {
         post_at: Math.floor(Date.now() / 1000) + 3600,
       }),
     ),
+    http.post(`${SLACK_API_BASE}/chat.scheduledMessages.list`, () =>
+      HttpResponse.json({
+        ok: true,
+        scheduled_messages: [
+          {
+            id: 'Q1234ABCD',
+            channel_id: 'C123TEST',
+            post_at: Math.floor(Date.now() / 1000) + 3600,
+            date_created: Math.floor(Date.now() / 1000),
+            text: 'Scheduled hello',
+          },
+        ],
+        response_metadata: { next_cursor: '' },
+      }),
+    ),
+    http.post(`${SLACK_API_BASE}/chat.deleteScheduledMessage`, () =>
+      HttpResponse.json({ ok: true }),
+    ),
+    http.post(`${SLACK_API_BASE}/chat.update`, async ({ request }) => {
+      const params = new URLSearchParams(await request.text());
+      return HttpResponse.json({
+        ok: true,
+        channel: params.get('channel') || 'C123TEST',
+        ts: params.get('ts') || '1704067200.123456',
+        text: params.get('text') || '',
+      });
+    }),
+    http.post(`${SLACK_API_BASE}/chat.delete`, async ({ request }) => {
+      const params = new URLSearchParams(await request.text());
+      return HttpResponse.json({
+        ok: true,
+        channel: params.get('channel') || 'C123TEST',
+        ts: params.get('ts') || '1704067200.123456',
+      });
+    }),
     http.post(`${SLACK_API_BASE}/conversations.open`, () =>
       HttpResponse.json({
         ok: true,
@@ -200,7 +251,57 @@ export function createSlackHandlers() {
         },
       }),
     ),
+    http.post(`${SLACK_API_BASE}/assistant.search.context`, () =>
+      HttpResponse.json({
+        ok: true,
+        results: {
+          messages: [
+            {
+              author_user_id: 'U123',
+              team_id: TEAM_ID,
+              channel_id: 'C123TEST',
+              channel_name: 'general',
+              message_ts: '1704067200.123456',
+              content: 'Searched message',
+              permalink: 'https://test.slack.com/archives/C123TEST/p1704067200123456',
+            },
+          ],
+        },
+        response_metadata: { next_cursor: '' },
+      }),
+    ),
     http.post(`${SLACK_API_BASE}/reactions.add`, () => HttpResponse.json({ ok: true })),
+    http.post(`${SLACK_API_BASE}/reactions.remove`, () => HttpResponse.json({ ok: true })),
+    http.post(`${SLACK_API_BASE}/emoji.list`, () =>
+      HttpResponse.json({
+        ok: true,
+        emoji: {
+          party_parrot: 'https://emoji.slack-edge.com/T123/party_parrot/abc123.gif',
+          shipit: 'alias:squirrel',
+        },
+      }),
+    ),
+    http.post(`${SLACK_API_BASE}/pins.list`, () =>
+      HttpResponse.json({
+        ok: true,
+        items: [
+          {
+            type: 'message',
+            channel: 'C123TEST',
+            created: 1704067300,
+            created_by: 'U123',
+            message: {
+              ts: '1704067200.123456',
+              user: 'U123',
+              text: 'Pinned announcement',
+              permalink: 'https://test.slack.com/archives/C123TEST/p1704067200123456',
+            },
+          },
+        ],
+      }),
+    ),
+    http.post(`${SLACK_API_BASE}/pins.add`, () => HttpResponse.json({ ok: true })),
+    http.post(`${SLACK_API_BASE}/pins.remove`, () => HttpResponse.json({ ok: true })),
     http.post(`${SLACK_API_BASE}/bookmarks.add`, async ({ request }) => {
       const body = await request.text();
       const params = new URLSearchParams(body);
@@ -224,6 +325,38 @@ export function createSlackHandlers() {
         },
       }),
     ),
+    http.post(`${SLACK_API_BASE}/reminders.list`, () =>
+      HttpResponse.json({
+        ok: true,
+        reminders: [
+          {
+            id: 'Rm123',
+            text: 'Test reminder',
+            user: 'U123',
+            time: Math.floor(Date.now() / 1000) + 3600,
+            complete_ts: 0,
+          },
+        ],
+      }),
+    ),
+    http.post(`${SLACK_API_BASE}/reminders.complete`, () => HttpResponse.json({ ok: true })),
+    http.post(`${SLACK_API_BASE}/reminders.delete`, () => HttpResponse.json({ ok: true })),
+    http.post(`${SLACK_API_BASE}/bookmarks.list`, () =>
+      HttpResponse.json({
+        ok: true,
+        bookmarks: [
+          {
+            id: 'Bk123',
+            channel_id: 'C123TEST',
+            title: 'Project dashboard',
+            link: 'https://example.com/dashboard',
+            type: 'link',
+            emoji: ':link:',
+            date_created: 1704067200,
+          },
+        ],
+      }),
+    ),
     http.post(`${SLACK_API_BASE}/files.info`, () =>
       HttpResponse.json({
         ok: true,
@@ -240,6 +373,31 @@ export function createSlackHandlers() {
     http.get(
       'https://files.slack.com/files-pri/:teamFile/download/:filename',
       () => HttpResponse.text('hello world!', { status: 200 }),
+    ),
+    http.post(`${SLACK_API_BASE}/files.getUploadURLExternal`, () =>
+      HttpResponse.json({
+        ok: true,
+        upload_url: 'https://files.slack.com/upload/v1/ABC123',
+        file_id: 'F0UPLOAD123',
+      }),
+    ),
+    http.post('https://files.slack.com/upload/v1/:uploadId', () =>
+      HttpResponse.text('OK', { status: 200 }),
+    ),
+    http.post(`${SLACK_API_BASE}/files.completeUploadExternal`, () =>
+      HttpResponse.json({
+        ok: true,
+        files: [
+          {
+            id: 'F0UPLOAD123',
+            name: 'upload.txt',
+            title: 'upload.txt',
+            mimetype: 'text/plain',
+            size: 12,
+            permalink: 'https://test.slack.com/files/U123/F0UPLOAD123/upload.txt',
+          },
+        ],
+      }),
     ),
     http.post(`${SLACK_API_BASE}/oauth.v2.access`, async ({ request }) => {
       const body = await request.text();

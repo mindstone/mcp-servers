@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- `list_scheduled_slack_messages` and `delete_scheduled_slack_message` — inspect and cancel pending scheduled messages. Closes the asymmetry where `schedule_slack_message` could create a scheduled message but nothing in the connector could list or cancel one.
+- `update_slack_message` and `delete_slack_message` — edit or permanently delete messages the connected user posted (`chat.update` / `chat.delete`). `delete_slack_message` carries `destructiveHint: true`.
+- `list_slack_pins`, `pin_slack_message`, and `unpin_slack_message` — read and manage a channel's pinned items (`pins.list` / `pins.add` / `pins.remove`). Pinned-message text is enveloped as untrusted content.
+- `list_slack_bookmarks` — read a channel's bookmarks bar (`bookmarks.list`), closing the add-only asymmetry. Bookmark titles are enveloped as untrusted content.
+- `list_slack_reminders`, `complete_slack_reminder`, and `delete_slack_reminder` — inspect and manage reminders (`reminders.list` / `reminders.complete` / `reminders.delete`), closing the add-only asymmetry. All three are marked EXPERIMENTAL like `add_slack_reminder`, since Slack has partially deprecated the reminders API.
+- `remove_slack_reaction` — undo your own reaction (`reactions.remove`).
+- `list_slack_emoji` — list the workspace's custom emoji (`emoji.list`) so agents can react with them by name.
+- `upload_slack_file` — upload a local file via Slack's 3-step external upload flow (`files.getUploadURLExternal` → byte POST → `files.completeUploadExternal`), with optional channel/thread sharing. Reads are constrained to `MCP_WORKSPACE_PATH` (or the system temp dir) with canonical-prefix, symlink-safe containment per the repo's file-read invariant; the Slack-supplied upload URL is validated as Slack-owned HTTPS before the local file bytes are sent, and redirects are followed manually with per-hop re-validation. 50MB cap. `destructiveHint: true`.
+
+### Changed
+
+- `search_slack_messages` and `get_slack_saved_messages` now prefer Slack's Real-Time Search API (`assistant.search.context`) over the legacy `search.messages` endpoint Slack officially discourages. The Real-Time Search API requires the granular `search:read.public/private/im/mpim` scopes; when the connected token lacks them (or the workspace refuses RTS), the connector falls back to legacy `search.messages` **loudly** — every search response carries a `search_backend` field, and legacy responses add a `search_backend_note` naming the refusal and the scopes needed to enable the recommended path. The probe result is cached per process, and deep `page` walks on the cursor-paginated RTS path are capped (rate-limit safety) with a `page_walk_truncated` marker.
+
 ## [0.2.0] - 2026-07-30
 
 ### Changed

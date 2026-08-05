@@ -67,6 +67,12 @@
           "isRequired": false,
           "default": "10",
           "format": "number"
+        },
+        {
+          "name": "MCP_WORKSPACE_PATH",
+          "description": "Workspace directory upload_slack_file reads are constrained to (defaults to the system temp dir when unset)",
+          "isRequired": false,
+          "format": "filepath"
         }
       ]
     }

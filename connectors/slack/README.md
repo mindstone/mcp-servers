@@ -11,7 +11,7 @@ Slack workspace MCP server — channels, messages, threads, reactions, users, fi
 
 - **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-slack)
 - **Auth:** OAuth (host-orchestrated) ([`SLACK_CLIENT_SECRET`](./server.json))
-- **Tools:** [25](./src/tools/) (messages, channels, threads, users, files)
+- **Tools:** [39](./src/tools/) (messages, channels, threads, users, files, pins)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -124,6 +124,7 @@ This server is designed to run alongside a host application that performs the Sl
 - `SLACK_CLIENT_SECRET` — OAuth Connected App client secret. Same conditions as `SLACK_CLIENT_ID`.
 - `SLACK_DISABLE_REFRESH` — Set to `1` to disable token refresh on this surface. The server will fail-closed with a structured `auth_required` response on token expiry instead of attempting an `oauth.v2.access` refresh. Use this on the cloud surface so desktop remains the sole refresh authority and avoids racing for single-use refresh tokens.
 - `SLACK_REQUEST_TIMEOUT_MS` — Override the default 60s upstream timeout. Must be a positive integer ≤ 300000 (5 minutes).
+- `MCP_WORKSPACE_PATH` — Directory that `upload_slack_file` reads are constrained to. Paths outside it (including symlinks pointing outside) are refused. Defaults to the system temp dir when unset.
 
 ### Authentication flow
 
@@ -192,20 +193,24 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 }
 ```
 
-## Tools (25)
+## Tools (39)
 
 ### Authentication
 - `authenticate_slack_workspace` — Returns structured auth_required response; the host drives OAuth.
 - `list_slack_workspaces` — Check Slack connection status (connected, token health, near-expiry).
 
 ### Messages
-- `search_slack_messages` — Search across all channels (Slack search modifiers supported).
-- `get_slack_saved_messages` — Get messages saved for later (uses `is:saved`).
+- `search_slack_messages` — Search across all channels (Slack search modifiers supported). Uses Slack's Real-Time Search API (`assistant.search.context`) when the connected app holds the granular `search:read.*` scopes; otherwise falls back to legacy `search.messages` and says so in the response (`search_backend` / `search_backend_note`).
+- `get_slack_saved_messages` — Get messages saved for later (uses `is:saved`). Same search-backend reporting as `search_slack_messages`.
 - `get_slack_message_by_link` — Retrieve a message from its permalink URL.
 - `compose_slack_message` — Open an inline editable compose form before sending; the form posts via `post_slack_message` when the user clicks Send.
 - `post_slack_message` — Post a message; DM recipient verification baked in. Self-DMs are blocked and redirected to `send_myself_a_note` (a user-token self-DM never notifies).
 - `reply_to_slack_thread` — Reply to an existing thread.
 - `schedule_slack_message` — Schedule a message for the future. Self-DMs are blocked (scheduled self-notes are not supported yet).
+- `list_scheduled_slack_messages` — List pending scheduled messages (optionally per channel), with the IDs needed to cancel them.
+- `delete_scheduled_slack_message` — Cancel a scheduled message before it posts.
+- `update_slack_message` — Edit a message you posted.
+- `delete_slack_message` — Permanently delete a message you posted.
 - `send_myself_a_note` — Send yourself a note that actually notifies you (posts a DM from the bot to the authenticated user). Use this for "jot something down" / reminders instead of a user-token self-DM.
 
 ### Channels
@@ -221,6 +226,13 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 
 ### Reactions
 - `add_slack_reaction` — Add an emoji reaction to a message.
+- `remove_slack_reaction` — Remove your own reaction from a message.
+- `list_slack_emoji` — List the workspace's custom emoji (name → URL/alias).
+
+### Pins
+- `list_slack_pins` — List messages pinned in a channel.
+- `pin_slack_message` — Pin a message to a channel.
+- `unpin_slack_message` — Remove a message from a channel's pinned items (the message itself is not deleted).
 
 ### Users
 - `list_slack_users` — List active users (auto-paginates name filter).
@@ -230,10 +242,15 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 
 ### Files
 - `download_slack_file` — Download a file attachment by ID or URL.
+- `upload_slack_file` — Upload a local file (workspace-constrained reads; max 50MB) and optionally share it to a channel or thread. Uses the 3-step external upload flow.
 
 ### Workspace
 - `add_slack_bookmark` — Add a bookmark to a channel.
+- `list_slack_bookmarks` — List a channel's bookmarks.
 - `add_slack_reminder` — \[EXPERIMENTAL\] Create a reminder (Slack API partially deprecated; prefer `schedule_slack_message`).
+- `list_slack_reminders` — \[EXPERIMENTAL\] List your reminders.
+- `complete_slack_reminder` — \[EXPERIMENTAL\] Mark a reminder complete.
+- `delete_slack_reminder` — \[EXPERIMENTAL\] Permanently delete a reminder.
 
 ## Security notes
 

@@ -5,6 +5,7 @@ import {
   registerChannelTools,
   registerFileTools,
   registerMessageTools,
+  registerPinTools,
   registerReactionTools,
   registerThreadTools,
   registerUserTools,
@@ -26,6 +27,7 @@ export function createServer(): McpServer {
   registerReactionTools(server);
   registerUserTools(server);
   registerFileTools(server);
+  registerPinTools(server);
   registerWorkspaceTools(server);
 
   server.registerResource(

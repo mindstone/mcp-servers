@@ -10,13 +10,14 @@
     ]
   },
   "tools": {
-    "count": 25,
+    "count": 39,
     "domains": [
       "messages",
       "channels",
       "threads",
       "users",
-      "files"
+      "files",
+      "pins"
     ]
   },
   "surface": "cloud-api",

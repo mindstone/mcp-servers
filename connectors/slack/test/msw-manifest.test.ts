@@ -37,8 +37,10 @@ const SRC_DIR = path.join(__dirname, '..', 'src');
 //   verifyClient.conversations.info(
 //   botClient.users.info(
 //   userClient.search.messages(
+// Nested groups are captured too:
+//   userClient.chat.scheduledMessages.list(  →  chat.scheduledMessages.list
 const CLIENT_CALL_PATTERN =
-  /\b(?:client|userClient|botClient|reader|userClientNoNull|verifyClient|tokenProvider|tp)\.([a-zA-Z]+)\.([a-zA-Z]+)\s*\(/g;
+  /\b(?:client|userClient|botClient|reader|userClientNoNull|verifyClient|tokenProvider|tp)\.([a-zA-Z]+)\.([a-zA-Z]+)(?:\.([a-zA-Z]+))?\s*\(/g;
 
 // Slack URLs sometimes appear as raw literals (e.g. oauth.v2.access). Catch them too.
 const RAW_URL_PATTERN = /https:\/\/slack\.com\/api\/([a-zA-Z0-9._]+)/g;
@@ -47,6 +49,11 @@ const RAW_URL_PATTERN = /https:\/\/slack\.com\/api\/([a-zA-Z0-9._]+)/g;
 // because they are paginate(...) usages where the group/method are passed as
 // a string. Add them here when we adopt them.
 const PAGINATE_PATTERN = /\bpaginate\(\s*['"`]([a-zA-Z]+)\.([a-zA-Z]+)['"`]/g;
+
+// Untyped WebClient calls — `apiCall('group.method', ...)` (used for methods
+// with no typed SDK wrapper, e.g. assistant.search.context). The full dotted
+// method name maps straight onto the URL path.
+const API_CALL_PATTERN = /\.apiCall\(\s*['"`]([a-zA-Z0-9.]+)['"`]/g;
 
 function walk(dir: string, files: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -73,11 +80,14 @@ function collectProductionUrls(): Set<string> {
   // server methods like server.registerTool) — filter aggressively to
   // avoid false positives.
   const SLACK_GROUPS = new Set([
+    'assistant',
     'auth',
     'bookmarks',
     'chat',
     'conversations',
+    'emoji',
     'files',
+    'pins',
     'reactions',
     'reminders',
     'search',
@@ -89,11 +99,12 @@ function collectProductionUrls(): Set<string> {
 
     // 1. Capture client.<group>.<method>(...) call sites.
     for (const m of contents.matchAll(CLIENT_CALL_PATTERN)) {
-      const [, group, method] = m;
+      const [, group, method, nestedMethod] = m;
       if (!SLACK_GROUPS.has(group)) continue;
       // `users.lookupByEmail` is a single method, but our generated URL
       // builder is correct: `users.lookupByEmail` → /users.lookupByEmail.
-      found.add(urlFor(group, method));
+      // Nested groups (chat.scheduledMessages.list) append their third segment.
+      found.add(urlFor(group, nestedMethod ? `${method}.${nestedMethod}` : method));
     }
 
     // 2. Capture client.paginate('group.method', ...) usages.
@@ -103,7 +114,15 @@ function collectProductionUrls(): Set<string> {
       found.add(urlFor(group, method));
     }
 
-    // 3. Capture raw URL literals (oauth.v2.access in tokenProvider).
+    // 3. Capture apiCall('group.method', ...) usages (full dotted method).
+    for (const m of contents.matchAll(API_CALL_PATTERN)) {
+      const method = m[1];
+      const group = method.split('.')[0];
+      if (!SLACK_GROUPS.has(group)) continue;
+      found.add(`${SLACK_API_BASE}/${method}`);
+    }
+
+    // 4. Capture raw URL literals (oauth.v2.access in tokenProvider).
     for (const m of contents.matchAll(RAW_URL_PATTERN)) {
       found.add(`${SLACK_API_BASE}/${m[1]}`);
     }
