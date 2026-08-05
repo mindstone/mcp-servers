@@ -260,6 +260,26 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
         ],
       });
     }),
+
+    // /me/mailboxSettings/automaticRepliesSetting (GET) — get_automatic_replies
+    http.get(`${GRAPH_BASE}/me/mailboxSettings/automaticRepliesSetting`, async ({ request }) => {
+      const url = new URL(request.url);
+      await capture(request, url.pathname, url.search);
+      return HttpResponse.json({
+        status: 'alwaysEnabled',
+        externalAudience: 'contactsOnly',
+        internalReplyMessage: 'I am away this week.',
+        externalReplyMessage: 'I will reply when I return.',
+      });
+    }),
+
+    // /me/mailboxSettings (PATCH) — set_automatic_replies
+    http.patch(`${GRAPH_BASE}/me/mailboxSettings`, async ({ request }) => {
+      const url = new URL(request.url);
+      await capture(request, url.pathname, url.search);
+      const body = (await request.clone().json()) as Record<string, unknown>;
+      return HttpResponse.json(body);
+    }),
   ];
 
   return { handlers, state };

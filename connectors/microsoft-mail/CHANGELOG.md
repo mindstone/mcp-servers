@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - `set_email_flag` tool: flags an email for follow-up, marks it complete, or clears the flag.
 - `get_conversation` tool: lists every message in a thread (oldest first) from a message ID or conversationId.
 - `bcc` parameter on `send_email`, `compose_email`, and `create_draft`; the compose view now renders a BCC row (regenerated from `@mindstone/mcp-app-compose`).
+- `get_automatic_replies` and `set_automatic_replies` tools: read and set the out-of-office configuration via `mailboxSettings`, including scheduled windows. Both require the `MailboxSettings.Read`/`MailboxSettings.ReadWrite` Graph permissions; when the connected account lacks them the tools return an admin-consent-aware guidance envelope instead of a raw Graph 403.
 
 ## [0.2.0] - 2026-07-29
 

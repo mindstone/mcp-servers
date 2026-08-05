@@ -1,6 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { callGraph } from './client.js';
+import { hasScope } from '@mindstone/mcp-server-microsoft-shared';
+import { callGraph, getTokenProvider } from './client.js';
 import { handleComposeEmail } from './compose.js';
 import {
   authRequiredJson,
@@ -15,6 +17,7 @@ import {
   deleteEmail,
   downloadAttachment,
   forwardEmail,
+  getAutomaticReplies,
   getConversation,
   getEmail,
   listAttachments,
@@ -26,6 +29,7 @@ import {
   searchEmails,
   sendDraft,
   sendEmail,
+  setAutomaticReplies,
   setEmailFlag,
   updateDraft,
 } from './mail.js';
@@ -33,6 +37,47 @@ import {
 const RecipientField = z.union([z.array(z.string()), z.string()]);
 
 const ImportanceEnum = z.enum(['low', 'normal', 'high']);
+
+// Automatic-replies management lives under MailboxSettings, a separate Graph
+// permission family from Mail.* that many tenants gate behind admin consent
+// (mirrors the SharePoint Sites.Read.All gate in microsoft-sharepoint).
+const MAILBOX_SETTINGS_READ_SCOPES = ['MailboxSettings.Read', 'MailboxSettings.ReadWrite'];
+const MAILBOX_SETTINGS_WRITE_SCOPE = 'MailboxSettings.ReadWrite';
+
+async function requireMailboxSettingsScope(write: boolean): Promise<CallToolResult | null> {
+  const guidance = {
+    action_required: `Call ${AUTH_TOOL_NAME} and grant the MailboxSettings permissions. Note: in many organizations an administrator must approve additional Microsoft Graph permissions.`,
+    next_step: AUTH_TOOL_NAME,
+  };
+  try {
+    const tokenData = await getTokenProvider().loadToken();
+    if (!tokenData) {
+      return errorResponse({
+        error: 'No Microsoft account connected.',
+        ...guidance,
+      });
+    }
+    const granted = write
+      ? hasScope(tokenData.scope, MAILBOX_SETTINGS_WRITE_SCOPE)
+      : MAILBOX_SETTINGS_READ_SCOPES.some((scope) => hasScope(tokenData.scope, scope));
+    if (!granted) {
+      return errorResponse({
+        error: `Automatic-replies management requires the ${
+          write ? MAILBOX_SETTINGS_WRITE_SCOPE : 'MailboxSettings.Read'
+        } permission, which this Microsoft connection has not granted.`,
+        ...guidance,
+      });
+    }
+    return null;
+  } catch (err) {
+    return errorResponse({
+      error: `Failed to check mailbox-settings permissions: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+      ...guidance,
+    });
+  }
+}
 
 // send_email accepts unknown keys so the handler can surface bundled-parity
 // alias guidance (`recipient`/`recipients`, `message`/`content`/`text`)
@@ -811,6 +856,113 @@ sign-in, Microsoft 365 tools become available.`,
             subject: args.subject,
             body: args.body,
             importance: args.importance,
+          },
+          signal,
+        ),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // get_automatic_replies
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'get_automatic_replies',
+    {
+      description:
+        'Read the current out-of-office (automatic replies) configuration: status, internal/external messages, and schedule. Requires the MailboxSettings.Read permission.',
+      inputSchema: z.object({}).strict().shape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (_args, extra) => {
+      const scopeError = await requireMailboxSettingsScope(false);
+      if (scopeError) return scopeError;
+      const result = await callGraph(extra, (c, signal) => getAutomaticReplies(c, signal));
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // set_automatic_replies
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'set_automatic_replies',
+    {
+      description:
+        'Turn out-of-office (automatic replies) on, off, or schedule it. Status "scheduled" requires scheduledStart and scheduledEnd. Requires the MailboxSettings.ReadWrite permission.',
+      inputSchema: z.object({
+        status: z
+          .enum(['disabled', 'alwaysEnabled', 'scheduled'])
+          .optional()
+          .describe(
+            '"alwaysEnabled" turns automatic replies on until changed, "scheduled" turns them on between scheduledStart and scheduledEnd, "disabled" turns them off',
+          ),
+        internalReplyMessage: z
+          .string()
+          .optional()
+          .describe('Reply sent to people inside the organization (HTML supported)'),
+        externalReplyMessage: z
+          .string()
+          .optional()
+          .describe('Reply sent to people outside the organization (HTML supported)'),
+        externalAudience: z
+          .enum(['none', 'contactsOnly', 'all'])
+          .optional()
+          .describe('Who outside the organization receives the external reply (default: none)'),
+        scheduledStart: z
+          .string()
+          .optional()
+          .describe(
+            'Start of the scheduled window as an ISO 8601 date-time (e.g. "2026-08-10T09:00:00Z"); interpreted as UTC',
+          ),
+        scheduledEnd: z
+          .string()
+          .optional()
+          .describe(
+            'End of the scheduled window as an ISO 8601 date-time (e.g. "2026-08-14T18:00:00Z"); interpreted as UTC',
+          ),
+      }).shape,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.status) {
+        return errorResponse({
+          error:
+            'Missing required parameter: "status" ("disabled", "alwaysEnabled", or "scheduled"). Example: { "status": "alwaysEnabled", "internalReplyMessage": "I am away until Friday." }',
+          action_required: 'Provide the automatic-replies status.',
+          next_step: 'set_automatic_replies',
+        });
+      }
+      if (args.status === 'scheduled' && (!args.scheduledStart || !args.scheduledEnd)) {
+        return errorResponse({
+          error:
+            'Status "scheduled" requires "scheduledStart" and "scheduledEnd" (ISO 8601 date-times, e.g. "2026-08-10T09:00:00Z").',
+          action_required: 'Provide scheduledStart and scheduledEnd.',
+          next_step: 'set_automatic_replies',
+        });
+      }
+      const scopeError = await requireMailboxSettingsScope(true);
+      if (scopeError) return scopeError;
+      const result = await callGraph(extra, (c, signal) =>
+        setAutomaticReplies(
+          c,
+          {
+            status: args.status!,
+            internalReplyMessage: args.internalReplyMessage,
+            externalReplyMessage: args.externalReplyMessage,
+            externalAudience: args.externalAudience,
+            scheduledStart: args.scheduledStart,
+            scheduledEnd: args.scheduledEnd,
           },
           signal,
         ),

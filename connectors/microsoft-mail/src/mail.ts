@@ -62,6 +62,23 @@ const GraphConversationListSchema = z
   .object({ value: z.array(GraphConversationMessageSchema).default([]) })
   .passthrough();
 
+const AutomaticRepliesSettingSchema = z
+  .object({
+    status: z.enum(['disabled', 'alwaysEnabled', 'scheduled']).optional(),
+    externalAudience: z.enum(['none', 'contactsOnly', 'all']).optional(),
+    internalReplyMessage: z.string().optional(),
+    externalReplyMessage: z.string().optional(),
+    scheduledStartDateTime: z
+      .object({ dateTime: z.string(), timeZone: z.string().optional() })
+      .passthrough()
+      .optional(),
+    scheduledEndDateTime: z
+      .object({ dateTime: z.string(), timeZone: z.string().optional() })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
 const WELL_KNOWN_FOLDERS: Record<string, string> = {
   inbox: 'inbox',
   'sent items': 'sentitems',
@@ -807,5 +824,79 @@ export async function getConversation(
     conversationId,
     count: formatted.length,
     messages: formatted,
+  };
+}
+
+export async function getAutomaticReplies(
+  client: Client,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const response = await client
+    .api('/me/mailboxSettings/automaticRepliesSetting')
+    .options({ signal })
+    .get();
+  const settings = AutomaticRepliesSettingSchema.parse(response);
+
+  return {
+    status: settings.status,
+    externalAudience: settings.externalAudience,
+    internalReplyMessage: wrapUntrusted(
+      settings.internalReplyMessage,
+      'microsoft-mail:get_automatic_replies:internalReplyMessage',
+    ),
+    externalReplyMessage: wrapUntrusted(
+      settings.externalReplyMessage,
+      'microsoft-mail:get_automatic_replies:externalReplyMessage',
+    ),
+    scheduledStart: settings.scheduledStartDateTime?.dateTime,
+    scheduledEnd: settings.scheduledEndDateTime?.dateTime,
+  };
+}
+
+export interface SetAutomaticRepliesArgs {
+  status: 'disabled' | 'alwaysEnabled' | 'scheduled';
+  internalReplyMessage?: string;
+  externalReplyMessage?: string;
+  externalAudience?: 'none' | 'contactsOnly' | 'all';
+  scheduledStart?: string;
+  scheduledEnd?: string;
+}
+
+export async function setAutomaticReplies(
+  client: Client,
+  args: SetAutomaticRepliesArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const setting: Record<string, unknown> = { status: args.status };
+  if (args.internalReplyMessage !== undefined) {
+    setting.internalReplyMessage = args.internalReplyMessage;
+  }
+  if (args.externalReplyMessage !== undefined) {
+    setting.externalReplyMessage = args.externalReplyMessage;
+  }
+  if (args.externalAudience !== undefined) {
+    setting.externalAudience = args.externalAudience;
+  }
+  if (args.status === 'scheduled') {
+    setting.scheduledStartDateTime = { dateTime: args.scheduledStart, timeZone: 'UTC' };
+    setting.scheduledEndDateTime = { dateTime: args.scheduledEnd, timeZone: 'UTC' };
+  }
+
+  const response = await client
+    .api('/me/mailboxSettings')
+    .options({ signal })
+    .patch({ automaticRepliesSetting: setting });
+  const updated = z
+    .object({ automaticRepliesSetting: AutomaticRepliesSettingSchema })
+    .passthrough()
+    .parse(response);
+
+  return {
+    success: true,
+    status: updated.automaticRepliesSetting.status ?? args.status,
+    message:
+      args.status === 'disabled'
+        ? 'Automatic replies turned off'
+        : 'Automatic replies updated',
   };
 }

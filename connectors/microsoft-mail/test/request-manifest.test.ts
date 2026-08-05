@@ -130,6 +130,18 @@ const MANIFEST: ManifestRow[] = [
     pathname: '/v1.0/me/messages',
     args: { conversationId: 'conv-1' },
   },
+  {
+    tool: 'get_automatic_replies',
+    method: 'GET',
+    pathname: '/v1.0/me/mailboxSettings/automaticRepliesSetting',
+    args: {},
+  },
+  {
+    tool: 'set_automatic_replies',
+    method: 'PATCH',
+    pathname: '/v1.0/me/mailboxSettings',
+    args: { status: 'disabled' },
+  },
 ];
 
 function matchPath(actual: string, pattern: string): boolean {
@@ -158,7 +170,9 @@ describe('request manifest — Graph endpoint contract', () => {
   let state: MockApiState;
 
   beforeAll(async () => {
-    cfg = createMicrosoftConfigDir();
+    cfg = createMicrosoftConfigDir({
+      scope: 'Mail.ReadWrite Mail.Send MailboxSettings.ReadWrite offline_access',
+    });
     client = await createTestClient({
       env: {
         MS_CLIENT_ID: 'mock-client-id',
