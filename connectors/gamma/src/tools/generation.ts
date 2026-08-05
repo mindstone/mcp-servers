@@ -18,7 +18,6 @@ import {
   type CardDimensions,
   type CardSplit,
   type AccessLevel,
-  type HeaderFooterOptions,
 } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 
