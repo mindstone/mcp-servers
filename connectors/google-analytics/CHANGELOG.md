@@ -19,9 +19,16 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 - `ga_list_bigquery_links` and `ga_get_global_site_tag` now call the Admin API v1alpha base: neither resource exists on the v1beta surface, so both tools would fail against the real API.
+- `ga_search_change_history_events` no longer silently truncates at the first 100 events — it follows `nextPageToken` until the result set is exhausted.
+- `dimension_filter` / `metric_filter` inputs are fail-closed validated against the GA4 `FilterExpression` structure instead of being passed through unvalidated.
 
 ### Security
 - External text is now returned inside `<untrusted-content>` envelopes: report dimension values (campaign names, page titles, custom-dimension values), user-authored admin display names/descriptions, audience and channel-group definition blobs, custom-definition metadata, and audience-export row values. Metric values and resource identifiers stay raw.
+- Vendor error text can no longer reach model-visible output raw: Google API error messages are enveloped (`ga4-api-error`), the `statusText` fallback is replaced with a sanitised status-only message, unparseable response bodies fail closed with `INVALID_API_RESPONSE` instead of leaking parser-generated body fragments, and unexpected runtime errors are logged to server stderr while the model receives a sanitised `UNEXPECTED_ERROR` message.
+- Vendor-echoed names used as structural output keys (report dimension/metric header names, audience-export dimension names) and pivot header blobs are enveloped with close-tag breakout escaping.
+- `reportMetadata.errorMessage` on report tasks is enveloped before returning.
+- `ga_create_audience_export` and `ga_create_report_task` are now annotated `destructiveHint: true` so hosts can gate these quota-charging server-side materialisations behind explicit user approval.
+- Audience-export and report-task API responses are validated against Zod schemas at the boundary instead of being TypeScript-cast only.
 
 ## [0.1.1] - 2026-05-14
 ### Added
