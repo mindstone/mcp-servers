@@ -231,7 +231,7 @@ export function registerEditTools(server: McpServer): void {
         }
         const errMsg = error instanceof Error ? error.message : String(error);
         return {
-          content: [{ type: 'text', text: JSON.stringify({ ok: false, error: `Network error: ${errMsg}` }) }],
+          content: [{ type: 'text', text: JSON.stringify({ ok: false, error: `Network error: ${errMsg}`, code: 'NETWORK_ERROR', resolution: 'Check your internet connection and try again. If the problem persists, the Gemini API may be temporarily unreachable.' }, null, 2) }],
           isError: true,
         };
       }
