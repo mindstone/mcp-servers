@@ -151,6 +151,38 @@ describe('gmail settings write/read tools', () => {
     ).rejects.toThrow(/epoch milliseconds/);
   });
 
+  it('rejects numeric Unix-seconds timestamps too', async () => {
+    const handlers = await loadHandlers();
+    await expect(
+      handlers.handleUpdateWorkspaceVacationResponder({
+        email: TEST_EMAIL,
+        enabled: false,
+        end_time: 1786464000, // seconds as a number — same 1000x-off hazard as the string form
+      }),
+    ).rejects.toThrow(/epoch milliseconds/);
+  });
+
+  it('accepts numeric epoch-millisecond timestamps', async () => {
+    let sentBody: Record<string, unknown> | undefined;
+    mswServer.use(
+      http.get('https://gmail.googleapis.com/gmail/v1/users/me/settings/vacation', () => HttpResponse.json({
+        enableAutoReply: false,
+        responseBodyPlainText: 'I am out.',
+      })),
+      http.put('https://gmail.googleapis.com/gmail/v1/users/me/settings/vacation', async ({ request }) => {
+        sentBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ enableAutoReply: true });
+      }),
+    );
+    const handlers = await loadHandlers();
+    await handlers.handleUpdateWorkspaceVacationResponder({
+      email: TEST_EMAIL,
+      enabled: true,
+      end_time: 1786464000000,
+    });
+    expect(sentBody?.endTime).toBe('1786464000000');
+  });
+
   it('accepts ISO date strings for start/end times', async () => {
     let sentBody: Record<string, unknown> | undefined;
     mswServer.use(

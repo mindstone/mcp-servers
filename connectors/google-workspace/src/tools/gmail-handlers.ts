@@ -830,14 +830,18 @@ export async function handleGetWorkspaceGmailSettings(params: { email?: string }
 
 /**
  * Parses a vacation start/end timestamp per the repo's epoch-ms rules: a number
- * (epoch ms), a digit-only string in the unambiguous epoch-ms window
- * [1e12, 1e14), or a parseable date string. Anything else is rejected.
+ * or digit-only string in the unambiguous epoch-ms window [1e12, 1e14), or a
+ * parseable date string. Anything else — notably Unix *seconds* like
+ * 1735689600, which would silently be 1000x off — is rejected.
  */
 function parseEpochMsField(value: unknown, fieldName: string): number | undefined {
   if (value === undefined || value === null) return undefined;
   if (typeof value === 'number') {
-    if (!Number.isFinite(value) || value <= 0) {
-      throw new McpError(ErrorCode.InvalidParams, `${fieldName} must be a positive epoch-ms number`);
+    if (!Number.isFinite(value) || value < 1e12 || value >= 1e14) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `${fieldName} numbers must be epoch milliseconds (e.g. 1735689600000), not seconds`
+      );
     }
     return value;
   }
