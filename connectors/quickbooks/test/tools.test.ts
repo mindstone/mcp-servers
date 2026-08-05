@@ -1118,3 +1118,173 @@ describe('Not configured returns actionable error', () => {
     expect(json.resolution).toBeDefined();
   });
 });
+
+
+describe('Input validation hardening (adversarial)', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  /** Registers handlers that count every outbound call to Intuit/QBO. */
+  function countOutbound() {
+    const counter = { count: 0 };
+    mswServer.use(
+      http.post(TOKEN_URL, () => {
+        counter.count++;
+        return HttpResponse.json(createTokenResponse());
+      }),
+      http.all(`${PRODUCTION_API_BASE}/*`, () => {
+        counter.count++;
+        return HttpResponse.json({ QueryResponse: {} });
+      }),
+    );
+    return counter;
+  }
+
+  it('rejects malformed dates on estimate, invoice, and report tools', async () => {
+    const outbound = countOutbound();
+    testClient = await createTestClient({ env: defaultEnv() });
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+
+    const badDates = ['2026-13-99', '2026-02-30', 'not-a-date', '2026-2-3', '2026/01/01'];
+    for (const bad of badDates) {
+      const estimate = await testClient.callTool('create_quickbooks_estimate', {
+        customerId: 'cust-001',
+        lines: [{ description: 'x', amount: 100 }],
+        expirationDate: bad,
+      });
+      expect(estimate.isError).toBe(true);
+
+      const invoice = await testClient.callTool('create_quickbooks_invoice', {
+        customerId: 'cust-001',
+        lines: [{ description: 'x', amount: 100 }],
+        dueDate: bad,
+      });
+      expect(invoice.isError).toBe(true);
+
+      const update = await testClient.callTool('update_quickbooks_invoice', {
+        invoiceId: 'inv-1',
+        dueDate: bad,
+      });
+      expect(update.isError).toBe(true);
+
+      const report = await testClient.callTool('get_quickbooks_report', {
+        report: 'ProfitAndLoss',
+        startDate: bad,
+      });
+      expect(report.isError).toBe(true);
+
+      const aging = await testClient.callTool('get_quickbooks_report', {
+        report: 'AgedReceivables',
+        asOfDate: bad,
+      });
+      expect(aging.isError).toBe(true);
+    }
+    expect(outbound.count).toBe(0);
+  });
+
+  it('rejects empty line arrays, non-positive amounts, and non-positive quantities', async () => {
+    const outbound = countOutbound();
+    testClient = await createTestClient({ env: defaultEnv() });
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+
+    const badLineSets: Array<Record<string, unknown>> = [
+      { lines: [] },
+      { lines: [{ description: 'x', amount: 0 }] },
+      { lines: [{ description: 'x', amount: -50 }] },
+      { lines: [{ description: 'x', amount: Number.POSITIVE_INFINITY }] },
+    ];
+    // qty is an invoice/estimate-only field (bill lines have no quantity).
+    const badQtyLineSets: Array<Record<string, unknown>> = [
+      { lines: [{ description: 'x', amount: 100, qty: 0 }] },
+      { lines: [{ description: 'x', amount: 100, qty: -2 }] },
+    ];
+    for (const bad of [...badLineSets, ...badQtyLineSets]) {
+      for (const tool of ['create_quickbooks_estimate', 'create_quickbooks_invoice']) {
+        const result = await testClient.callTool(tool, {
+          customerId: 'cust-001',
+          ...bad,
+        });
+        expect(result.isError).toBe(true);
+      }
+    }
+    for (const bad of badLineSets) {
+      const bill = await testClient.callTool('create_quickbooks_bill', {
+        vendorId: 'vend-001',
+        ...bad,
+      });
+      expect(bill.isError).toBe(true);
+    }
+    expect(outbound.count).toBe(0);
+  });
+
+  it('rejects malformed customer/item/vendor/account IDs before the POST', async () => {
+    const outbound = countOutbound();
+    testClient = await createTestClient({ env: defaultEnv() });
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+    const injected = "1' OR '1'='1";
+
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ['create_quickbooks_estimate', { customerId: injected, lines: [{ description: 'x', amount: 1 }] }],
+      ['create_quickbooks_estimate', { customerId: 'c1', lines: [{ description: 'x', amount: 1, itemId: injected }] }],
+      ['create_quickbooks_invoice', { customerId: injected, lines: [{ description: 'x', amount: 1 }] }],
+      ['create_quickbooks_invoice', { customerId: 'c1', lines: [{ description: 'x', amount: 1, itemId: injected }] }],
+      ['create_quickbooks_bill', { vendorId: injected, lines: [{ description: 'x', amount: 1 }] }],
+      ['create_quickbooks_bill', { vendorId: 'v1', lines: [{ description: 'x', amount: 1, accountId: injected }] }],
+    ];
+    for (const [tool, args] of cases) {
+      const result = await testClient.callTool(tool, args);
+      const json = result.json as Record<string, unknown>;
+      expect(json.ok).toBe(false);
+      expect(json.code).toBe('INVALID_INPUT');
+    }
+    expect(outbound.count).toBe(0);
+  });
+
+  it('rejects malformed email addresses on customer and vendor writes', async () => {
+    const outbound = countOutbound();
+    testClient = await createTestClient({ env: defaultEnv() });
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ['create_quickbooks_customer', { displayName: 'Acme', email: 'not-an-email' }],
+      ['update_quickbooks_customer', { customerId: 'c1', syncToken: '0', email: 'not-an-email' }],
+      ['create_quickbooks_vendor', { displayName: 'Acme', email: 'not-an-email' }],
+      ['update_quickbooks_vendor', { vendorId: 'v1', syncToken: '0', email: 'not-an-email' }],
+    ];
+    for (const [tool, args] of cases) {
+      const result = await testClient.callTool(tool, args);
+      expect(result.isError).toBe(true);
+    }
+    expect(outbound.count).toBe(0);
+  });
+
+  it('still accepts well-formed create inputs after hardening', async () => {
+    mswServer.use(...createQuickBooksHandlers());
+    testClient = await createTestClient({ env: defaultEnv() });
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+
+    const estimate = await testClient.callTool('create_quickbooks_estimate', {
+      customerId: 'cust-001',
+      lines: [{ description: 'Consulting', amount: 1500, qty: 2, itemId: 'item-9' }],
+      expirationDate: '2026-04-30',
+    });
+    expect((estimate.json as Record<string, unknown>).ok).toBe(true);
+
+    const invoice = await testClient.callTool('create_quickbooks_invoice', {
+      customerId: 'cust-001',
+      lines: [{ description: 'Consulting', amount: 1500 }],
+      dueDate: '2026-04-01',
+    });
+    expect((invoice.json as Record<string, unknown>).ok).toBe(true);
+
+    const customer = await testClient.callTool('create_quickbooks_customer', {
+      displayName: 'Acme Corp',
+      email: 'billing@example.com',
+    });
+    expect((customer.json as Record<string, unknown>).ok).toBe(true);
+  });
+});

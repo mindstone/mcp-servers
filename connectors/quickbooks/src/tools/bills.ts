@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeQboql, validateAlphanumericId, requireProdWritesEnabled } from '../utils.js';
+import { withErrorHandling, escapeQboql, validateAlphanumericId, requireProdWritesEnabled, qboDate } from '../utils.js';
 import { qboFetch, qboQuery } from '../client.js';
 import { QBO_MINOR_VERSION } from '../types.js';
 import { sanitizeQboEntity } from '../sanitize.js';
@@ -53,17 +53,21 @@ WORKFLOW:
       inputSchema: z.object({
         vendorId: z.string().describe('Vendor ID (required)'),
         lines: z.array(z.object({
-          description: z.string().describe('Line description'),
-          amount: z.number().describe('Line amount'),
+          description: z.string().min(1).describe('Line description'),
+          amount: z.number().finite().positive().describe('Line amount (must be > 0)'),
           accountId: z.string().optional().describe('Expense account ID'),
-        })).describe('Bill line items'),
-        dueDate: z.string().optional().describe('Due date (YYYY-MM-DD)'),
+        })).min(1).describe('Bill line items (at least one required)'),
+        dueDate: qboDate.optional().describe('Due date (YYYY-MM-DD)'),
         memo: z.string().optional().describe('Memo / notes'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       requireProdWritesEnabled();
+      validateAlphanumericId(args.vendorId, 'vendorId');
+      for (const line of args.lines) {
+        if (line.accountId) validateAlphanumericId(line.accountId, 'accountId');
+      }
       const billBody: Record<string, unknown> = {
         VendorRef: { value: args.vendorId },
         Line: args.lines.map((line) => ({

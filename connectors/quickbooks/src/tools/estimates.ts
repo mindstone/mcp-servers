@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeQboql, validateAlphanumericId, requireProdWritesEnabled } from '../utils.js';
+import { withErrorHandling, escapeQboql, validateAlphanumericId, requireProdWritesEnabled, qboDate } from '../utils.js';
 import { qboFetch, qboQuery } from '../client.js';
 import { QBO_MINOR_VERSION } from '../types.js';
 import { sanitizeQboEntity } from '../sanitize.js';
@@ -73,18 +73,22 @@ COMMON MISTAKES:
       inputSchema: z.object({
         customerId: z.string().describe('Customer ID (required)'),
         lines: z.array(z.object({
-          description: z.string().describe('Line description'),
-          amount: z.number().describe('Line amount'),
-          qty: z.number().optional().describe('Quantity (default: 1)'),
+          description: z.string().min(1).describe('Line description'),
+          amount: z.number().finite().positive().describe('Line amount (must be > 0)'),
+          qty: z.number().finite().positive().optional().describe('Quantity (default: 1, must be > 0)'),
           itemId: z.string().optional().describe('Item/service ID (optional)'),
-        })).describe('Estimate line items'),
-        expirationDate: z.string().optional().describe('Expiration date (YYYY-MM-DD)'),
+        })).min(1).describe('Estimate line items (at least one required)'),
+        expirationDate: qboDate.optional().describe('Expiration date (YYYY-MM-DD)'),
         memo: z.string().optional().describe('Customer memo / notes'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       requireProdWritesEnabled();
+      validateAlphanumericId(args.customerId, 'customerId');
+      for (const line of args.lines) {
+        if (line.itemId) validateAlphanumericId(line.itemId, 'itemId');
+      }
       const estimateBody: Record<string, unknown> = {
         CustomerRef: { value: args.customerId },
         Line: args.lines.map((line) => ({

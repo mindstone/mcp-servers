@@ -56,7 +56,7 @@ Example: { "displayName": "Acme Corp" }
 Example: { "displayName": "Jane Smith", "email": "jane@smith.com", "phone": "555-1234" }`,
       inputSchema: z.object({
         displayName: z.string().describe('Customer display name (required, must be unique)'),
-        email: z.string().optional().describe('Primary email address'),
+        email: z.string().email().optional().describe('Primary email address'),
         phone: z.string().optional().describe('Primary phone number'),
         companyName: z.string().optional().describe('Company name'),
       }),
@@ -97,7 +97,7 @@ Setting active to false deactivates the customer.`,
         syncToken: z.string().optional()
           .describe('Current SyncToken (omit to read it from QuickBooks first)'),
         displayName: z.string().optional().describe('New display name'),
-        email: z.string().optional().describe('New primary email address'),
+        email: z.string().email().optional().describe('New primary email address'),
         phone: z.string().optional().describe('New primary phone number'),
         companyName: z.string().optional().describe('New company name'),
         active: z.boolean().optional().describe('Set false to deactivate the customer'),
