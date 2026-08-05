@@ -26,6 +26,70 @@ function notConfiguredResponse(): string {
   });
 }
 
+// Workday's /workers collection documents only limit/offset — there is no
+// server-side search parameter — so `search` is applied client-side over
+// paged results, bounded to keep a wayward query from paging a huge tenant.
+const SEARCH_PAGE_SIZE = 100;
+const SEARCH_MAX_PAGES = 10; // scans at most 1000 workers
+
+function workerMatchesSearch(worker: Record<string, unknown>, needle: string): boolean {
+  for (const field of ['descriptor', 'primaryWorkEmail', 'businessTitle']) {
+    const value = worker[field];
+    if (typeof value === 'string' && value.toLowerCase().includes(needle)) return true;
+  }
+  return false;
+}
+
+async function searchWorkers(search: string, limit: number, offset: number): Promise<string> {
+  const needle = search.toLowerCase();
+  const matched: Record<string, unknown>[] = [];
+  let scanned = 0;
+  let exhausted = false;
+
+  for (let page = 0; page < SEARCH_MAX_PAGES; page++) {
+    const params = new URLSearchParams();
+    params.set('limit', String(SEARCH_PAGE_SIZE));
+    params.set('offset', String(page * SEARCH_PAGE_SIZE));
+
+    const result = await workdayFetch<{ data: Record<string, unknown>[]; total: number }>(
+      `/workers?${params.toString()}`,
+    );
+
+    const batch = result.data || [];
+    scanned += batch.length;
+    for (const worker of batch) {
+      if (workerMatchesSearch(worker, needle)) matched.push(worker);
+    }
+
+    if (batch.length < SEARCH_PAGE_SIZE || (result.total != null && scanned >= result.total)) {
+      exhausted = true;
+      break;
+    }
+  }
+
+  const workers = matched.slice(offset, offset + limit).map((w) => pickFields(w, WORKER_LIST_FIELDS));
+  const hint = paginationHint(matched.length, offset, workers.length);
+
+  return JSON.stringify({
+    ok: true,
+    workers,
+    count: workers.length,
+    total: matched.length,
+    search: {
+      query: search,
+      mode: 'client-side',
+      scannedWorkers: scanned,
+      ...(exhausted
+        ? {}
+        : {
+            scanLimitReached: true,
+            note: `Only the first ${scanned} workers were scanned; narrow the search term for better recall.`,
+          }),
+    },
+    pagination: hint,
+  });
+}
+
 export function registerWorkerTools(server: McpServer): void {
   server.registerTool(
     'list_workday_workers',
@@ -42,13 +106,19 @@ Pagination: Returns up to 'limit' results (default 50, max 100). Use 'offset' fo
 
 RELATED TOOLS:
 - get_workday_worker: Pass a worker's id to get their full profile
+- list_workday_direct_reports: See who reports to a worker
 - list_workday_organizations: Browse organizational structure
 
 COMMON MISTAKES:
-- search is a free-text filter (name, email, etc.) — not a Workday query language
+- search is a free-text filter matched client-side against name, email, and
+  business title (case-insensitive substring) — not a Workday query language.
+  Workday's /workers collection only supports limit/offset, so the connector
+  pages through workers and filters locally, scanning at most 1000 workers.
+  On larger tenants a search may miss workers beyond that scan window; narrow
+  with a more specific term.
 - Maximum limit is 100 per request; use offset for pagination`,
       inputSchema: z.object({
-        search: z.string().optional().describe('Free-text search filter (name, email, etc.)'),
+        search: z.string().optional().describe('Free-text filter on name, email, or title (case-insensitive substring, matched client-side over up to 1000 workers)'),
         limit: z.number().optional().describe('Max results per page (default 50, max 100)'),
         offset: z.number().optional().describe('Number of results to skip (for pagination, default 0)'),
       }),
@@ -59,11 +129,15 @@ COMMON MISTAKES:
 
       const limit = Math.min(Math.max(Number(args.limit) || 50, 1), 100);
       const offset = Math.max(Number(args.offset) || 0, 0);
+      const search = typeof args.search === 'string' ? args.search.trim() : '';
+
+      if (search) {
+        return searchWorkers(search, limit, offset);
+      }
 
       const params = new URLSearchParams();
       params.set('limit', String(limit));
       params.set('offset', String(offset));
-      if (args.search) params.set('search', args.search);
 
       const result = await workdayFetch<{ data: Record<string, unknown>[]; total: number }>(
         `/workers?${params.toString()}`,
