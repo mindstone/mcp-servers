@@ -3,7 +3,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
 import { elevenLabsBinaryDownload, elevenLabsJson } from '../client.js';
 import { ENDPOINTS, ELEVENLABS_API_V1_BASE } from '../endpoints.js';
-import { ElevenLabsError, type HistoryResponse } from '../types.js';
+import { historyResponseSchema, parseApiResponse } from '../api-schemas.js';
+import { ElevenLabsError } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
@@ -52,9 +53,13 @@ COST: FREE — read only.`,
       if (args.voice_id) params.set('voice_id', args.voice_id);
       if (args.search) params.set('search', args.search);
 
-      const data = await elevenLabsJson<HistoryResponse>(
-        apiKey,
-        `${ELEVENLABS_API_V1_BASE}${ENDPOINTS.HISTORY}?${params.toString()}`,
+      const data = parseApiResponse(
+        historyResponseSchema,
+        await elevenLabsJson<unknown>(
+          apiKey,
+          `${ELEVENLABS_API_V1_BASE}${ENDPOINTS.HISTORY}?${params.toString()}`,
+        ),
+        'history',
       );
 
       // text and voice_name are external content (the spoken text is whatever
@@ -62,7 +67,7 @@ COST: FREE — read only.`,
       // (AGENTS.md invariant #6). model_id, source, and content_type are
       // API-authored strings too; they are expected to be enum-like but are
       // not validated against a closed grammar, so they are enveloped as well.
-      const items = (data.history ?? []).map((item) => ({
+      const items = data.history.map((item) => ({
         history_item_id: item.history_item_id,
         date_unix: item.date_unix,
         date_iso: item.date_unix ? new Date(item.date_unix * 1000).toISOString() : undefined,

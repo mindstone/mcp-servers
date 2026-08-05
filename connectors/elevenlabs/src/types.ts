@@ -74,27 +74,6 @@ export interface TranscriptionWord {
   speaker_id?: string;
 }
 
-export interface HistoryItem {
-  history_item_id: string;
-  date_unix?: number;
-  character_count_change_from?: number;
-  character_count_change_to?: number;
-  content_type?: string;
-  request_id?: string;
-  voice_id?: string;
-  model_id?: string;
-  voice_name?: string;
-  voice_category?: string;
-  text?: string;
-  source?: string;
-}
-
-export interface HistoryResponse {
-  history: HistoryItem[];
-  has_more?: boolean;
-  last_history_item_id?: string;
-}
-
 export interface PronunciationDictionaryRule {
   string_to_replace: string;
   type: 'alias' | 'phoneme';
@@ -127,12 +106,6 @@ export interface CharacterAlignment {
   characters: string[];
   character_start_times_seconds: number[];
   character_end_times_seconds: number[];
-}
-
-export interface AudioWithTimestampsResponse {
-  audio_base64: string;
-  alignment?: CharacterAlignment | null;
-  normalized_alignment?: CharacterAlignment | null;
 }
 
 export interface AudioResult {

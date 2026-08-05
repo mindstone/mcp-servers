@@ -52,15 +52,26 @@ export const workspaceUsageResponseSchema = z.object({
 
 // ── Pronunciation dictionaries ────────────────────────────────────────────
 
-export const pronunciationDictionaryRuleResponseSchema = z.object({
-  string_to_replace: z.string(),
-  type: z.enum(['alias', 'phoneme']),
-  alias: z.string().optional(),
-  phoneme: z.string().optional(),
-  alphabet: z.string().optional(),
-  case_sensitive: z.boolean().optional(),
-  word_boundaries: z.boolean().optional(),
-});
+// Response rules are a discriminated union: an `alias` rule must carry `alias`,
+// a `phoneme` rule must carry `phoneme` and `alphabet`. Validating `type` alone
+// would let a drifted/hostile response omit the payload its type promises.
+export const pronunciationDictionaryRuleResponseSchema = z.discriminatedUnion('type', [
+  z.object({
+    string_to_replace: z.string(),
+    type: z.literal('alias'),
+    alias: z.string(),
+    case_sensitive: z.boolean().optional(),
+    word_boundaries: z.boolean().optional(),
+  }),
+  z.object({
+    string_to_replace: z.string(),
+    type: z.literal('phoneme'),
+    phoneme: z.string(),
+    alphabet: z.string(),
+    case_sensitive: z.boolean().optional(),
+    word_boundaries: z.boolean().optional(),
+  }),
+]);
 
 export const pronunciationDictionaryMetadataSchema = z.object({
   id: z.string(),
@@ -87,17 +98,100 @@ export const pronunciationDictionaryWithRulesSchema = pronunciationDictionaryMet
 
 // ── Speech-to-text ────────────────────────────────────────────────────────
 
+/**
+ * Closed grammars for API-authored identifier fields (fail-closed alternative
+ * to enveloping): anything outside the documented shape is rejected as
+ * INVALID_RESPONSE, so instruction-shaped text can never flow through them.
+ */
+/** Diarization speaker labels are documented as "speaker_0", "speaker_1", ... */
+const speakerIdSchema = z.string().regex(/^speaker_\d+$/);
+/** BCP-47-style language code ("en", "eng", "zh-CN"); no whitespace/underscores. */
+const languageCodeSchema = z.string().regex(/^[a-z]{2,3}(-[a-zA-Z0-9]{2,8})*$/);
+
 export const transcriptionWordSchema = z.object({
   text: z.string(),
   start: z.number().finite(),
   end: z.number().finite(),
   type: z.string().optional(),
-  speaker_id: z.string().optional(),
+  speaker_id: speakerIdSchema.optional(),
 });
 
 export const transcriptionResponseSchema = z.object({
   text: z.string(),
   words: z.array(transcriptionWordSchema).optional(),
-  language_code: z.string().optional(),
+  language_code: languageCodeSchema.optional(),
   language_probability: z.number().optional(),
+});
+
+// ── History ───────────────────────────────────────────────────────────────
+
+export const historyItemSchema = z.object({
+  history_item_id: z.string(),
+  date_unix: z.number().finite().optional(),
+  character_count_change_from: z.number().finite().optional(),
+  character_count_change_to: z.number().finite().optional(),
+  content_type: z.string().optional(),
+  request_id: z.string().optional(),
+  voice_id: z.string().optional(),
+  model_id: z.string().optional(),
+  voice_name: z.string().optional(),
+  voice_category: z.string().optional(),
+  text: z.string().optional(),
+  source: z.string().optional(),
+});
+
+export const historyResponseSchema = z.object({
+  history: z.array(historyItemSchema),
+  has_more: z.boolean().optional(),
+  last_history_item_id: z.string().optional(),
+});
+
+// ── Text-to-speech with timestamps ────────────────────────────────────────
+
+/** Canonical base64 (padding included); rejects whitespace and foreign chars. */
+const base64Schema = z
+  .string()
+  .min(1)
+  .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/);
+
+const alignmentTimesSchema = z.array(z.number().finite().nonnegative());
+
+export const characterAlignmentSchema = z
+  .object({
+    characters: z.array(z.string()),
+    character_start_times_seconds: alignmentTimesSchema,
+    character_end_times_seconds: alignmentTimesSchema,
+  })
+  .superRefine((alignment, ctx) => {
+    const starts = alignment.character_start_times_seconds;
+    const ends = alignment.character_end_times_seconds;
+    if (starts.length !== alignment.characters.length || ends.length !== alignment.characters.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'alignment arrays must have the same length as characters',
+      });
+      return;
+    }
+    for (let i = 0; i < starts.length; i += 1) {
+      if (ends[i] < starts[i]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `alignment end time precedes start time at index ${i}`,
+        });
+        return;
+      }
+      if (i > 0 && starts[i] < starts[i - 1]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `alignment start times are not non-decreasing at index ${i}`,
+        });
+        return;
+      }
+    }
+  });
+
+export const audioWithTimestampsResponseSchema = z.object({
+  audio_base64: base64Schema,
+  alignment: characterAlignmentSchema.nullable().optional(),
+  normalized_alignment: characterAlignmentSchema.nullable().optional(),
 });
