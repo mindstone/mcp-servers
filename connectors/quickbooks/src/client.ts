@@ -12,13 +12,14 @@ import { QuickBooksError, USER_AGENT, REQUEST_TIMEOUT_MS } from './types.js';
 import { getAccessToken, getBaseUrl, isConfigured, clearTokenCache } from './auth.js';
 
 /**
- * Make an authenticated JSON request to the QuickBooks Online API.
+ * Make an authenticated request to the QuickBooks Online API and return the
+ * raw Response. Callers parse the body (JSON entities vs binary documents).
  */
-export async function qboFetch<T>(
+async function qboRequest(
   entityPath: string,
   options: RequestInit = {},
   retryCount = 0,
-): Promise<T> {
+): Promise<Response> {
   if (!isConfigured()) {
     throw new QuickBooksError(
       'QuickBooks not configured. Call configure_quickbooks first.',
@@ -65,7 +66,7 @@ export async function qboFetch<T>(
         ? parseInt(retryAfter, 10) * 1000
         : Math.min(1000 * Math.pow(2, retryCount), 8000);
       await new Promise((resolve) => setTimeout(resolve, waitMs));
-      return qboFetch<T>(entityPath, options, retryCount + 1);
+      return qboRequest(entityPath, options, retryCount + 1);
     }
 
     let errorText: string;
@@ -127,7 +128,26 @@ export async function qboFetch<T>(
     );
   }
 
+  return response;
+}
+
+/**
+ * Make an authenticated JSON request to the QuickBooks Online API.
+ */
+export async function qboFetch<T>(
+  entityPath: string,
+  options: RequestInit = {},
+): Promise<T> {
+  const response = await qboRequest(entityPath, options);
   return await response.json() as T;
+}
+
+/**
+ * Fetch a binary document (e.g. an invoice PDF) from the QuickBooks Online API.
+ */
+export async function qboFetchBinary(entityPath: string, accept: string): Promise<Buffer> {
+  const response = await qboRequest(entityPath, { headers: { Accept: accept } });
+  return Buffer.from(await response.arrayBuffer());
 }
 
 /**

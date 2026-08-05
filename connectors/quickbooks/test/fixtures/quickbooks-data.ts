@@ -8,6 +8,9 @@ export const MOCK_REFRESH_TOKEN = 'test-refresh-token-abc123';
 export const MOCK_REALM_ID = '123456789';
 export const MOCK_ACCESS_TOKEN = 'test-access-token-xyz789';
 
+/** Minimal valid PDF header bytes for download tests. */
+export const MOCK_PDF_BYTES = new TextEncoder().encode('%PDF-1.4 mock invoice pdf');
+
 export const TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
 export const SANDBOX_API_BASE = `https://sandbox-quickbooks.api.intuit.com/v3/company/${MOCK_REALM_ID}`;
 export const PRODUCTION_API_BASE = `https://quickbooks.api.intuit.com/v3/company/${MOCK_REALM_ID}`;

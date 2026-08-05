@@ -301,6 +301,114 @@ describe('list_quickbooks_employees', () => {
   });
 });
 
+describe('send_quickbooks_invoice_email', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('sends an invoice email when the write gate is open', async () => {
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+    let capturedUrl = '';
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.post(`${PRODUCTION_API_BASE}/invoice/:invoiceId/send`, ({ request, params }) => {
+        capturedUrl = request.url;
+        return HttpResponse.json({
+          Invoice: { Id: params.invoiceId as string, EmailStatus: 'EmailSent' },
+        });
+      }),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('send_quickbooks_invoice_email', {
+      invoiceId: 'inv-001',
+      sendTo: 'billing@example.com',
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(json.message).toBe('Invoice sent.');
+    expect(capturedUrl).toContain('/invoice/inv-001/send');
+    expect(capturedUrl).toContain('sendTo=billing%40example.com');
+  });
+
+  it('refuses without QB_ALLOW_PROD_WRITES and never hits the API', async () => {
+    let postCount = 0;
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.post(`${PRODUCTION_API_BASE}/invoice/:invoiceId/send`, () => {
+        postCount++;
+        return HttpResponse.json({ Invoice: { Id: 'should-not-happen' } });
+      }),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('send_quickbooks_invoice_email', { invoiceId: 'inv-001' });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(String(json.error)).toContain('QB_ALLOW_PROD_WRITES');
+    expect(postCount).toBe(0);
+  });
+
+  it('rejects an invalid invoice ID', async () => {
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+    mswServer.use(...createQuickBooksHandlers());
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('send_quickbooks_invoice_email', {
+      invoiceId: "1' OR '1'='1",
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('INVALID_INPUT');
+  });
+});
+
+describe('download_quickbooks_invoice_pdf', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('downloads the invoice PDF to the temp directory', async () => {
+    mswServer.use(...createQuickBooksHandlers());
+    testClient = await createTestClient({ env: defaultEnv() });
+
+    const result = await testClient.callTool('download_quickbooks_invoice_pdf', { invoiceId: 'inv-001' });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(String(json.filePath)).toContain('quickbooks_invoice_inv-001.pdf');
+
+    const fs = await import('fs');
+    const content = fs.readFileSync(String(json.filePath));
+    expect(content.subarray(0, 4).toString()).toBe('%PDF');
+    fs.unlinkSync(String(json.filePath));
+  });
+
+  it('rejects an invalid invoice ID before any outbound request', async () => {
+    mswServer.use(...createQuickBooksHandlers());
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('download_quickbooks_invoice_pdf', {
+      invoiceId: '../../etc/passwd',
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('INVALID_INPUT');
+  });
+
+  it('returns a structured error when the API fails', async () => {
+    mswServer.use(...createQuickBooksHandlers({ apiErrorStatus: 404 }));
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('download_quickbooks_invoice_pdf', { invoiceId: 'nope' });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('NOT_FOUND');
+  });
+});
+
 describe('get_quickbooks_report', () => {
   let testClient: McpTestClient;
 

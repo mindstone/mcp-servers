@@ -2,10 +2,13 @@
  * QuickBooks invoice tools.
  */
 
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { withErrorHandling, escapeQboql, validateAlphanumericId, requireProdWritesEnabled } from '../utils.js';
-import { qboFetch, qboQuery } from '../client.js';
+import { qboFetch, qboFetchBinary, qboQuery } from '../client.js';
 import { QBO_MINOR_VERSION } from '../types.js';
 import { sanitizeQboEntity } from '../sanitize.js';
 
@@ -113,6 +116,82 @@ COMMON MISTAKES:
         ok: true,
         message: 'Invoice created.',
         invoice: sanitizeQboEntity(result.Invoice, 'quickbooks:create_quickbooks_invoice'),
+      });
+    }),
+  );
+
+  server.registerTool(
+    'send_quickbooks_invoice_email',
+    {
+      description: `Email an invoice to its customer via QuickBooks Online.
+
+Example: { "invoiceId": "123" }
+Example: { "invoiceId": "123", "sendTo": "billing@example.com" }
+
+WORKFLOW:
+1. Use list_quickbooks_invoices to find the invoice ID
+2. Send to the invoice's billing email, or override with sendTo
+
+Requires QB_ALLOW_PROD_WRITES=1 — this emails a real customer.`,
+      inputSchema: z.object({
+        invoiceId: z.string().describe('Invoice ID (required)'),
+        sendTo: z.string().email().optional()
+          .describe('Override recipient email (default: the invoice billing email)'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      requireProdWritesEnabled();
+      validateAlphanumericId(args.invoiceId, 'invoiceId');
+
+      const params = new URLSearchParams({ minorversion: QBO_MINOR_VERSION });
+      if (args.sendTo) params.set('sendTo', args.sendTo);
+
+      const result = await qboFetch<{ Invoice: Record<string, unknown> }>(
+        `/invoice/${encodeURIComponent(args.invoiceId)}/send?${params.toString()}`,
+        { method: 'POST' },
+      );
+      return JSON.stringify({
+        ok: true,
+        message: 'Invoice sent.',
+        invoice: sanitizeQboEntity(result.Invoice, 'quickbooks:send_quickbooks_invoice_email'),
+      });
+    }),
+  );
+
+  server.registerTool(
+    'download_quickbooks_invoice_pdf',
+    {
+      description: `Download an invoice as a PDF file from QuickBooks Online.
+
+Returns the local file path where the PDF has been saved (system temp directory).
+
+Example: { "invoiceId": "123" }
+
+WORKFLOW:
+1. Use list_quickbooks_invoices to find the invoice ID
+2. Download the PDF, then attach or share the saved file`,
+      inputSchema: z.object({
+        invoiceId: z.string().describe('Invoice ID (required)'),
+      }),
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      validateAlphanumericId(args.invoiceId, 'invoiceId');
+
+      const pdfBuffer = await qboFetchBinary(
+        `/invoice/${encodeURIComponent(args.invoiceId)}/pdf?minorversion=${QBO_MINOR_VERSION}`,
+        'application/pdf',
+      );
+      // invoiceId is alphanumeric-validated above, so the filename is safe.
+      const outputPath = path.join(os.tmpdir(), `quickbooks_invoice_${args.invoiceId}.pdf`);
+      fs.writeFileSync(outputPath, pdfBuffer);
+
+      return JSON.stringify({
+        ok: true,
+        filePath: outputPath,
+        fileSizeKb: Number((pdfBuffer.length / 1024).toFixed(1)),
+        message: `Invoice PDF downloaded to ${outputPath}`,
       });
     }),
   );
