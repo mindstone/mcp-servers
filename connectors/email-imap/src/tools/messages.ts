@@ -80,7 +80,13 @@ export function registerMessageTools(server: McpServer): void {
             'Pagination cursor: only return messages with a UID strictly lower than this value. ' +
               'Use `nextBeforeUid` from the previous response to page through older messages.',
           ),
-        limit: z.number().positive().optional().describe('Maximum number of messages to return'),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(500)
+          .optional()
+          .describe('Maximum number of messages to return (integer, max 500)'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
@@ -91,7 +97,7 @@ export function registerMessageTools(server: McpServer): void {
       const from = args.from?.trim() || undefined;
       const subject = args.subject?.trim() || undefined;
       const unread = args.unread ?? false;
-      const limit = args.limit !== undefined ? Math.trunc(args.limit) : undefined;
+      const limit = args.limit;
       const beforeUid = args.before_uid;
       const since = parseDateFilter(args.since, 'since');
       const before = parseDateFilter(args.before, 'before');

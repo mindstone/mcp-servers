@@ -151,14 +151,14 @@ export function registerMailboxTools(server: McpServer): void {
         'Create a new mailbox/folder. This mutates the remote account: hosts MUST require ' +
         'explicit user confirmation before each invocation.',
       inputSchema: z.object({
-        name: z.string().min(1).describe('Name of the mailbox/folder to create'),
+        name: z.string().trim().min(1).describe('Name of the mailbox/folder to create'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       ensureInitialized();
 
-      const name = args.name.trim();
+      const name = unwrapUntrusted(args.name).trim();
       if (name.toUpperCase() === 'INBOX') {
         throw new Error('INBOX always exists and cannot be created');
       }
@@ -183,16 +183,16 @@ export function registerMailboxTools(server: McpServer): void {
         'This mutates the remote account: hosts MUST require explicit user confirmation before ' +
         'each invocation.',
       inputSchema: z.object({
-        old_name: z.string().min(1).describe('Current mailbox/folder name'),
-        new_name: z.string().min(1).describe('New mailbox/folder name'),
+        old_name: z.string().trim().min(1).describe('Current mailbox/folder name'),
+        new_name: z.string().trim().min(1).describe('New mailbox/folder name'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       ensureInitialized();
 
-      const oldName = args.old_name.trim();
-      const newName = args.new_name.trim();
+      const oldName = unwrapUntrusted(args.old_name).trim();
+      const newName = unwrapUntrusted(args.new_name).trim();
       if (oldName.toUpperCase() === 'INBOX' || newName.toUpperCase() === 'INBOX') {
         throw new Error('INBOX cannot be renamed or used as a rename target');
       }
@@ -217,14 +217,14 @@ export function registerMailboxTools(server: McpServer): void {
         'action: hosts MUST require explicit user confirmation before each invocation. ' +
         'INBOX cannot be deleted.',
       inputSchema: z.object({
-        name: z.string().min(1).describe('Name of the mailbox/folder to delete'),
+        name: z.string().trim().min(1).describe('Name of the mailbox/folder to delete'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       ensureInitialized();
 
-      const name = args.name.trim();
+      const name = unwrapUntrusted(args.name).trim();
       if (name.toUpperCase() === 'INBOX') {
         throw new Error('INBOX cannot be deleted');
       }

@@ -90,6 +90,15 @@ describe('Mailbox management tools', () => {
       const result = await testClient.callTool('email_create_mailbox', {});
       expect(result.isError).toBe(true);
     });
+
+    it('rejects a whitespace-only name via schema validation (never reaches IMAP)', async () => {
+      await setupClient();
+
+      const result = await testClient.callTool('email_create_mailbox', {
+        name: '   ',
+      });
+      expect(result.isError).toBe(true);
+    });
   });
 
   describe('email_rename_mailbox', () => {
@@ -123,6 +132,16 @@ describe('Mailbox management tools', () => {
       const result = await testClient.callTool('email_rename_mailbox', {
         old_name: 'Receipts',
         new_name: 'INBOX',
+      });
+      expect(result.isError).toBe(true);
+    });
+
+    it('rejects whitespace-only names via schema validation (never reaches IMAP)', async () => {
+      await setupClient();
+
+      const result = await testClient.callTool('email_rename_mailbox', {
+        old_name: 'Receipts',
+        new_name: '\t\n ',
       });
       expect(result.isError).toBe(true);
     });
