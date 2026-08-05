@@ -119,10 +119,13 @@ export function registerCensorTools(server: McpServer): void {
       const payload: Record<string, unknown> = {
         ok: true,
         jobId: args.jobId,
-        status: body.status ?? '',
+        // Upstream status strings and the Retry-After header are
+        // attacker-controlled external text: the status is enveloped
+        // (invariant #6), and the raw header is never echoed — only the
+        // parsed numeric next_poll_after_seconds is surfaced.
+        status: wrapUntrusted(body.status, 'opus:get_censor_job_status:status') ?? '',
         category: classification.category,
         next_poll_after_seconds,
-        retry_after_header: retryAfterHeader,
         raw: wrapRawDump(body, 'opus:get_censor_job_status:raw'),
       };
       if (classification.category === 'unknown') {

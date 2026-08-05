@@ -1,5 +1,6 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { OpusError } from './types.js';
+import { wrapUntrusted } from './untrusted-content.js';
 
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
 
@@ -122,9 +123,20 @@ export function withErrorHandling<T>(
           isError: true,
         };
       }
+      // Unknown errors (network/runtime) may embed upstream-controlled text
+      // (e.g. a fetched URL inside a fetch failure message), so the message
+      // is enveloped before it becomes model-visible — invariant #6.
       const errorMessage = error instanceof Error ? error.message : String(error);
       return {
-        content: [{ type: 'text', text: JSON.stringify({ ok: false, error: errorMessage }) }],
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              ok: false,
+              error: wrapUntrusted(errorMessage, 'opus:unhandled-error') ?? 'Unknown error',
+            }),
+          },
+        ],
         isError: true,
       };
     }

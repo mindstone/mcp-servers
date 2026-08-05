@@ -166,10 +166,11 @@ export function registerSocialPostingTools(server: McpServer): void {
       const payload: Record<string, unknown> = {
         ok: true,
         jobId: body.jobId ?? args.jobId,
-        status: body.status ?? '',
+        // Enveloped per invariant #6 (see opus_get_censor_job_status); the
+        // raw Retry-After header is never echoed to the model.
+        status: wrapUntrusted(body.status, 'opus:get_social_copy_job:status') ?? '',
         category: classification.category,
         next_poll_after_seconds,
-        retry_after_header: retryAfterHeader,
       };
       if (classification.category === 'completed') {
         payload.title = wrapUntrusted(body.title, 'opus:get_social_copy_job:title');

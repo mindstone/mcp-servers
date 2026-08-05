@@ -22,6 +22,7 @@ import {
   KNOWN_JOB_STATUSES,
   type PollableJobResponse,
 } from './types.js';
+import { wrapUntrusted } from './untrusted-content.js';
 
 export const OPUS_API_BASE = 'https://api.opus.pro';
 
@@ -131,9 +132,13 @@ async function opusFetchRaw<T>(
   }
 
   if (response.status === 422) {
+    // The vendor body is attacker-controlled external text: envelope it
+    // (invariant #6) before embedding it in an error message that becomes
+    // model-visible via withErrorHandling. Bounded to keep errors readable.
     const text = await response.text().catch(() => '');
+    const wrappedBody = wrapUntrusted(text.slice(0, 1000), 'opus:api:validation_error_body');
     throw new OpusError(
-      `Validation error: ${text || 'check request parameters'}`,
+      `Validation error: ${wrappedBody ?? 'check request parameters'}`,
       'VALIDATION_ERROR',
       'The request body or parameters were rejected by the Opus API. Inspect the message and adjust the arguments.',
     );
@@ -278,7 +283,6 @@ export async function pollOpusJob<T extends PollableJobResponse>(
   body: T;
   classification: { category: 'pending' | 'completed' | 'failed' | 'unknown'; raw: string };
   next_poll_after_seconds: number;
-  retry_after_header: string | null;
 }> {
   // We need access to the raw response to read Retry-After.
   const response = (await opusFetch<Response>(endpoint, { rawResponse: true })) as Response;
@@ -294,7 +298,9 @@ export async function pollOpusJob<T extends PollableJobResponse>(
   const classification = classifyJobStatus(body.status);
   const next_poll_after_seconds = computeNextPollAfterSeconds(retryAfterHeader, attempt);
 
-  return { body, classification, next_poll_after_seconds, retry_after_header: retryAfterHeader };
+  // The raw Retry-After header is attacker-controlled external text and is
+  // deliberately NOT returned — callers surface the parsed numeric delay.
+  return { body, classification, next_poll_after_seconds };
 }
 
 /**

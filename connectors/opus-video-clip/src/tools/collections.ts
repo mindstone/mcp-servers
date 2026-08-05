@@ -94,7 +94,12 @@ export function registerCollectionTools(server: McpServer): void {
           ok: true,
           count: data.list?.length ?? 0,
           total: data.total,
-          next: data.next,
+          // The continuation token is upstream-controlled text hiding under a
+          // structural-looking key — envelop it when it's a string.
+          next:
+            typeof data.next === 'string'
+              ? wrapUntrusted(data.next, 'opus:get_collections:next')
+              : (data.next ?? null),
           collections: sanitizeList(data.list ?? [], sanitizeCollection, 'opus:get_collections'),
         },
         null,

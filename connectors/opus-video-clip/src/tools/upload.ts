@@ -6,6 +6,7 @@ import { opusFetch, opusFetchUnauthenticated } from '../client.js';
 import { OpusError, getUploadTimeoutMs } from '../types.js';
 import { resolveUploadSourcePath } from '../path-safety.js';
 import { sanitizeProject } from '../sanitize.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 import {
   ConclusionActionSchema,
@@ -170,8 +171,11 @@ async function putUploadBytes(
   }
 
   const errText = await response.text().catch(() => '');
+  // The GCS error body is upstream-controlled text embedded in a
+  // model-visible error message — envelope it (invariant #6).
+  const wrappedBody = wrapUntrusted(errText.slice(0, 200), 'opus:upload_video:gcs_error_body') ?? '';
   throw new OpusError(
-    `GCS upload PUT returned HTTP ${response.status}: ${errText.slice(0, 200)}`,
+    `GCS upload PUT returned HTTP ${response.status}: ${wrappedBody}`,
     'UPLOAD_FAILED',
     'Retry opus_upload_video. If the failure persists, check that the file is a valid MP4 and under 10GB.',
   );

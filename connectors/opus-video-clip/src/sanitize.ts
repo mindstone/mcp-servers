@@ -39,22 +39,55 @@ export function sanitizeList(
 }
 
 /**
- * Wrap free-text fields on a clip-project object (`error`, `title`, `name`,
- * and the user-supplied `uploadedVideoAttr.title` echo).
+ * Wrap free-text fields on a clip-project object.
+ *
+ * The upstream project object is spread through verbatim, so named-field
+ * wrapping alone is not enough: any string field the vendor adds (or an
+ * attacker injects via a compromised upstream) would survive unwrapped.
+ * Instead, EVERY string value anywhere in the object is enveloped except a
+ * small allowlist of structural fields — identifiers the model feeds back
+ * into later tool calls (…Id), bounded enums (stage, model, visibility,
+ * sourcePlatform), timestamps, and asset URLs (…url/…uri) surfaced for the
+ * user to open. This subsumes the previously named `error` / `title` /
+ * `name` / `uploadedVideoAttr.title` fields and is fail-closed for unknown
+ * future fields.
  */
-export function sanitizeProject(project: unknown, source: string): unknown {
-  if (!isObj(project)) return project;
-  const out: Obj = { ...project };
-  out.error = wrapStr(out.error, `${source}:error`);
-  out.title = wrapStr(out.title, `${source}:title`);
-  out.name = wrapStr(out.name, `${source}:name`);
-  if (isObj(out.uploadedVideoAttr)) {
-    out.uploadedVideoAttr = {
-      ...out.uploadedVideoAttr,
-      title: wrapStr(out.uploadedVideoAttr.title, `${source}:uploadedVideoAttr.title`),
-    };
+const STRUCTURAL_PROJECT_STRING_KEYS = new Set([
+  'id',
+  'stage',
+  'model',
+  'visibility',
+  'sourcePlatform',
+  'createdAt',
+  'updatedAt',
+]);
+
+function isStructuralProjectKey(key: string): boolean {
+  if (STRUCTURAL_PROJECT_STRING_KEYS.has(key)) return true;
+  if (key.endsWith('Id')) return true; // identifiers fed back into tool calls
+  return /url|uri/i.test(key); // asset/profile links surfaced for the user
+}
+
+function sanitizeProjectValue(value: unknown, source: string): unknown {
+  if (Array.isArray(value)) return value.map((item) => sanitizeProjectValue(item, source));
+  if (isObj(value)) return sanitizeProjectObject(value, source);
+  return value;
+}
+
+function sanitizeProjectObject(project: Obj, source: string): Obj {
+  const out: Obj = {};
+  for (const [key, value] of Object.entries(project)) {
+    out[key] =
+      typeof value === 'string' && !isStructuralProjectKey(key)
+        ? wrapUntrusted(value, `${source}:${key}`)
+        : sanitizeProjectValue(value, source);
   }
   return out;
+}
+
+export function sanitizeProject(project: unknown, source: string): unknown {
+  if (!isObj(project)) return project;
+  return sanitizeProjectObject(project, source);
 }
 
 /** Wrap the user-authored `title` on an exportable-clip object. */
