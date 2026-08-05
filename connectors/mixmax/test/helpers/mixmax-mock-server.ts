@@ -8,7 +8,9 @@ import {
   mockUser,
   mockSendResult,
   mockAddRecipientsResult,
+  mockCancelSequenceResult,
   mockSnippetSendResult,
+  mockReportResponse,
 } from '../fixtures/mixmax-data.js';
 
 const BASE = 'https://api.mixmax.com/v1';
@@ -57,6 +59,16 @@ export function createMixmaxHandlers(expectedToken = 'test-mixmax-token') {
       return HttpResponse.json({ error: 'Not found' }, { status: 404 });
     }),
 
+    // POST /sequences/:id/cancel
+    http.post(`${BASE}/sequences/:id/cancel`, async ({ request, params }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+      if (params.id === 'seq-001') {
+        return HttpResponse.json(mockCancelSequenceResult);
+      }
+      return HttpResponse.json({ error: 'Not found' }, { status: 404 });
+    }),
+
     // GET /messages
     http.get(`${BASE}/messages`, ({ request }) => {
       const authError = checkAuth(request);
@@ -72,6 +84,23 @@ export function createMixmaxHandlers(expectedToken = 'test-mixmax-token') {
       const authError = checkAuth(request);
       if (authError) return authError;
       return HttpResponse.json(mockSendResult);
+    }),
+
+    // DELETE /messages/:id
+    http.delete(`${BASE}/messages/:id`, ({ request, params }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+      if (params.id === 'msg-002') {
+        return new HttpResponse(null, { status: 200 });
+      }
+      return HttpResponse.json({ error: 'Not found' }, { status: 404 });
+    }),
+
+    // POST /reports/data/table
+    http.post(`${BASE}/reports/data/table`, async ({ request }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+      return HttpResponse.json(mockReportResponse);
     }),
 
     // GET /snippets
@@ -123,6 +152,9 @@ export function createMixmaxUnauthorizedHandlers() {
     http.post(`${BASE}/*`, () =>
       HttpResponse.json({ error: 'Unauthorized' }, { status: 401 }),
     ),
+    http.delete(`${BASE}/*`, () =>
+      HttpResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+    ),
   ];
 }
 
@@ -136,6 +168,10 @@ export function createMixmaxTimeoutHandlers() {
       return HttpResponse.json({});
     }),
     http.post(`${BASE}/*`, async () => {
+      await new Promise((resolve) => setTimeout(resolve, 60_000));
+      return HttpResponse.json({});
+    }),
+    http.delete(`${BASE}/*`, async () => {
       await new Promise((resolve) => setTimeout(resolve, 60_000));
       return HttpResponse.json({});
     }),

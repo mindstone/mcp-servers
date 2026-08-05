@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { mixmaxFetch } from '../client.js';
-import { withErrorHandling } from '../utils.js';
+import { withErrorHandling, parseApiResponse, epochMsField } from '../utils.js';
 import { isConfigured } from '../auth.js';
-import type { SnippetsResponse } from '../types.js';
+import { snippetsResponseSchema } from '../types.js';
+import { sanitizeSnippets } from '../sanitize.js';
 
 function noApiTokenError(): string {
   return JSON.stringify({
@@ -26,15 +27,14 @@ export function registerSnippetTools(server: McpServer): void {
 
 Returns for each snippet:
 - _id: Use with send_mixmax_snippet to send it
-- name: Template name
-- subject: Email subject line the template uses
-- body: HTML body content (check for template variables like {{first_name}})
-- isShared: Whether it's shared with the team or personal
+- name / title: Template name and title
+- isInline, source, createdAt
+
+NOTE: The list API does not return snippet bodies — review template content in Mixmax, or send a test to yourself first.
 
 WORKFLOW FOR SENDING A TEMPLATE:
 1. list_mixmax_snippets to browse available templates
-2. Review the body for template variables (e.g. {{first_name}}, {{company}})
-3. send_mixmax_snippet with the _id, recipients, and matching variables
+2. send_mixmax_snippet with the _id, recipients, and matching variables
 
 PAGINATION: Cursor-based. If hasNext is true, pass the "next" value as the next parameter.`,
       inputSchema: z.object({
@@ -49,12 +49,16 @@ PAGINATION: Cursor-based. If hasNext is true, pass the "next" value as the next 
       let path = `/snippets?limit=${args.limit}`;
       if (args.next) path += `&next=${encodeURIComponent(args.next)}`;
 
-      const data = await mixmaxFetch<SnippetsResponse>(path);
+      const data = parseApiResponse(
+        snippetsResponseSchema,
+        await mixmaxFetch<unknown>(path),
+        'snippets list',
+      );
 
       return JSON.stringify({
         ok: true,
-        snippets: data.results || [],
-        count: (data.results || []).length,
+        snippets: sanitizeSnippets(data.results),
+        count: data.results.length,
         hasNext: data.hasNext ?? false,
         ...(data.next ? { next: data.next } : {}),
       });
@@ -65,9 +69,9 @@ PAGINATION: Cursor-based. If hasNext is true, pass the "next" value as the next 
     'send_mixmax_snippet',
     {
       description:
-        `Send a Mixmax template (snippet) to one or more recipients.
+        `Send a Mixmax template (snippet) to one or more recipients, immediately or scheduled for later.
 
-IMPORTANT: Confirm with the user before sending — this sends a real email using the template content.
+IMPORTANT: Confirm with the user before sending — this sends (or schedules) a real email using the template content.
 
 WORKFLOW:
 1. list_mixmax_snippets to find the template and its _id
@@ -75,11 +79,14 @@ WORKFLOW:
 3. Confirm recipients and variable values with user
 4. Call this tool with matching variables
 
-NOTE: Variables are applied to ALL recipients equally. If you need different variables per recipient, send one at a time.`,
+SCHEDULING: Pass scheduledAt to place the message in the user's Mixmax Outbox for later sending instead of sending immediately. A scheduled send can be recalled with cancel_mixmax_message.
+
+NOTE: Variables are applied to ALL recipients equally. If you need different variables per recipient, send one at a time. Sending fails with an error if the template has variables that are left unresolved.`,
       inputSchema: z.object({
         snippetId: z.string().min(1).describe('The _id of the snippet/template (from list_mixmax_snippets)'),
         to: z.array(z.string().email()).min(1).describe('Recipient email addresses'),
         variables: z.record(z.unknown()).optional().describe('Template variables matching {{placeholders}} in the snippet body'),
+        scheduledAt: epochMsField().optional().describe('Unix timestamp in milliseconds (number, e.g. 1735689600000) or a parseable date string (e.g. "2026-01-01") to schedule the send for later. Omit to send immediately.'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
@@ -90,6 +97,7 @@ NOTE: Variables are applied to ALL recipients equally. If you need different var
         to: args.to.map((email) => ({ email })),
       };
       if (args.variables) payload.variables = args.variables;
+      if (args.scheduledAt !== undefined) payload.scheduledAt = args.scheduledAt;
 
       const data = await mixmaxFetch<Record<string, unknown>>(
         `/snippets/${encodeURIComponent(args.snippetId)}/send`,
@@ -101,7 +109,9 @@ NOTE: Variables are applied to ALL recipients equally. If you need different var
 
       return JSON.stringify({
         ok: true,
-        message: `Snippet sent to ${args.to.join(', ')}.`,
+        message: args.scheduledAt !== undefined
+          ? `Snippet scheduled to send to ${args.to.join(', ')} at ${new Date(args.scheduledAt).toISOString()}.`
+          : `Snippet sent to ${args.to.join(', ')}.`,
         result: data,
       });
     }),

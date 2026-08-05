@@ -79,9 +79,110 @@ describe('Mixmax sequence tools', () => {
     };
 
     expect(json.ok).toBe(true);
-    expect(json.sequence.name).toBe('Onboarding Drip');
+    // External-text fields arrive inside untrusted-content envelopes (FOX-3490)
+    expect(json.sequence.name).toBe('<untrusted-content source="mixmax:sequence.name">Onboarding Drip</untrusted-content>');
     expect(json.sequence.stages).toHaveLength(2);
-    expect(json.sequence.stages[0].subject).toBe('Welcome to Acme!');
+    expect(json.sequence.stages[0].subject).toBe('<untrusted-content source="mixmax:sequence.stages.subject">Welcome to Acme!</untrusted-content>');
+  });
+
+  it('remove_mixmax_sequence_recipients cancels recipients via /sequences/:id/cancel', async () => {
+    let capturedPayload: Record<string, unknown> = {};
+    mswServer.use(
+      http.post('https://api.mixmax.com/v1/sequences/seq-001/cancel', async ({ request }) => {
+        const token = request.headers.get('X-API-Token');
+        if (token !== API_TOKEN) {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        capturedPayload = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ recipients: ['alice@acme.com'] });
+      }),
+    );
+
+    testClient = await createTestClient({
+      env: { MIXMAX_API_TOKEN: API_TOKEN, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('remove_mixmax_sequence_recipients', {
+      sequenceId: 'seq-001',
+      emails: ['alice@acme.com'],
+    });
+    const json = result.json as { ok: boolean; message: string; removed: string[] };
+
+    expect(json.ok).toBe(true);
+    expect(json.message).toContain('1 recipient(s)');
+    expect(json.removed).toEqual(['alice@acme.com']);
+    expect(capturedPayload.emails).toEqual(['alice@acme.com']);
+  });
+
+  it('remove_mixmax_sequence_recipients rejects empty emails via Zod', async () => {
+    let requestMade = false;
+    mswServer.use(
+      http.post('https://api.mixmax.com/v1/sequences/*/cancel', () => {
+        requestMade = true;
+        return HttpResponse.json({});
+      }),
+    );
+
+    testClient = await createTestClient({
+      env: { MIXMAX_API_TOKEN: API_TOKEN, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('remove_mixmax_sequence_recipients', {
+      sequenceId: 'seq-001',
+      emails: [],
+    });
+    expect(result.isError).toBe(true);
+    expect(requestMade).toBe(false);
+  });
+
+  it('add_mixmax_sequence_recipients forwards scheduledAt', async () => {
+    let capturedPayload: Record<string, unknown> = {};
+    mswServer.use(
+      http.post('https://api.mixmax.com/v1/sequences/seq-001/recipients', async ({ request }) => {
+        const token = request.headers.get('X-API-Token');
+        if (token !== API_TOKEN) {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        capturedPayload = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json([{ email: 'alice@acme.com', status: 'success' }]);
+      }),
+    );
+
+    testClient = await createTestClient({
+      env: { MIXMAX_API_TOKEN: API_TOKEN, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('add_mixmax_sequence_recipients', {
+      sequenceId: 'seq-001',
+      recipients: [{ email: 'alice@acme.com' }],
+      scheduledAt: '2026-03-01T09:00:00Z',
+    });
+    const json = result.json as { ok: boolean };
+
+    expect(json.ok).toBe(true);
+    expect(capturedPayload.scheduledAt).toBe(new Date('2026-03-01T09:00:00Z').getTime());
+  });
+
+  it('add_mixmax_sequence_recipients rejects ambiguous scheduledAt (Unix seconds)', async () => {
+    let requestMade = false;
+    mswServer.use(
+      http.post('https://api.mixmax.com/v1/sequences/*/recipients', () => {
+        requestMade = true;
+        return HttpResponse.json([]);
+      }),
+    );
+
+    testClient = await createTestClient({
+      env: { MIXMAX_API_TOKEN: API_TOKEN, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('add_mixmax_sequence_recipients', {
+      sequenceId: 'seq-001',
+      recipients: [{ email: 'alice@acme.com' }],
+      scheduledAt: '1735689600',
+    });
+    expect(result.isError).toBe(true);
+    expect(requestMade).toBe(false);
   });
 
   it('add_mixmax_sequence_recipients adds recipients', async () => {

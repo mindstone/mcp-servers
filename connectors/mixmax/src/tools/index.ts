@@ -4,3 +4,4 @@ export { registerMessageTools } from './messages.js';
 export { registerSnippetTools } from './snippets.js';
 export { registerMeetingTools } from './meetings.js';
 export { registerUserTools } from './user.js';
+export { registerReportTools } from './reports.js';

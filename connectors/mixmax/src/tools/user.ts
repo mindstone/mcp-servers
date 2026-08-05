@@ -1,8 +1,10 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { mixmaxFetch } from '../client.js';
-import { withErrorHandling } from '../utils.js';
+import { withErrorHandling, parseApiResponse } from '../utils.js';
 import { isConfigured } from '../auth.js';
+import { userSchema } from '../types.js';
+import { sanitizeUser } from '../sanitize.js';
 
 function noApiTokenError(): string {
   return JSON.stringify({
@@ -38,9 +40,13 @@ USE CASES:
     withErrorHandling(async () => {
       if (!isConfigured()) return noApiTokenError();
 
-      const data = await mixmaxFetch<Record<string, unknown>>('/users/me');
+      const data = parseApiResponse(
+        userSchema,
+        await mixmaxFetch<unknown>('/users/me'),
+        'user profile',
+      );
 
-      return JSON.stringify({ ok: true, user: data });
+      return JSON.stringify({ ok: true, user: sanitizeUser(data) });
     }),
   );
 }

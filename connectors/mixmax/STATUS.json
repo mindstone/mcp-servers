@@ -10,12 +10,13 @@
     ]
   },
   "tools": {
-    "count": 10,
+    "count": 13,
     "domains": [
       "sequences",
       "messages",
       "snippets",
-      "meetings"
+      "meetings",
+      "reports"
     ]
   },
   "surface": "cloud-api",

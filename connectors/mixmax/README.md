@@ -3,13 +3,13 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-mixmax.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-mixmax)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Mixmax email productivity MCP server for Model Context Protocol hosts. Manage sequences, send tracked emails, use email templates (snippets), view meeting links, and monitor message engagement through a standardised MCP interface.
+Mixmax email productivity MCP server for Model Context Protocol hosts. Manage sequences, send tracked emails, use email templates (snippets), view meeting links, recall scheduled sends, and pull engagement analytics through a standardised MCP interface.
 
 ## Status
 
 - **Version:** [0.2.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-mixmax)
 - **Auth:** API key ([`MIXMAX_API_TOKEN`](./server.json))
-- **Tools:** [10](./src/tools/) (sequences, messages, snippets, meetings)
+- **Tools:** [13](./src/tools/) (sequences, messages, snippets, meetings, reports)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -114,7 +114,7 @@ node dist/index.js
 }
 ```
 
-## Tools (10)
+## Tools (13)
 
 ### Configuration
 - `configure_mixmax_api_key` — Configure the Mixmax API token
@@ -125,18 +125,23 @@ node dist/index.js
 ### Sequences
 - `list_mixmax_sequences` — List sequences (automated email drip campaigns)
 - `get_mixmax_sequence` — Get full details for a sequence including stages
-- `add_mixmax_sequence_recipients` — Add recipients to a sequence
+- `add_mixmax_sequence_recipients` — Add recipients to a sequence (optional `scheduledAt` for delayed activation)
+- `remove_mixmax_sequence_recipients` — Exit specific recipients from a sequence
 
 ### Messages
-- `list_mixmax_messages` — List emails sent through Mixmax with tracking data
-- `send_mixmax_email` — Send an email via Mixmax with open/click tracking
+- `list_mixmax_messages` — List drafts, scheduled sends, and sent emails
+- `send_mixmax_email` — Send an email via Mixmax immediately
+- `cancel_mixmax_message` — Recall a scheduled, not-yet-sent message
 
 ### Snippets
 - `list_mixmax_snippets` — List email templates (snippets)
-- `send_mixmax_snippet` — Send a template to recipients
+- `send_mixmax_snippet` — Send a template to recipients (optional `scheduledAt` to schedule the send)
 
 ### Meetings
 - `list_mixmax_meeting_types` — List meeting/scheduling link types
+
+### Reports
+- `get_mixmax_report` — Engagement analytics: per-sequence performance, message, and meeting stats
 
 ## Licence
 
