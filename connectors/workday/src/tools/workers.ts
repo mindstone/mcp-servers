@@ -8,6 +8,10 @@ import {
   WORKER_LIST_FIELDS,
   WORKER_DETAIL_FIELDS,
   NESTED_OBJECT_FIELDS,
+  workerIdSchema,
+  searchQuerySchema,
+  paginationLimitSchema,
+  paginationOffsetSchema,
   pickFields,
   paginationHint,
 } from '../types.js';
@@ -121,9 +125,9 @@ COMMON MISTAKES:
   with a more specific term.
 - Maximum limit is 100 per request; use offset for pagination`,
       inputSchema: z.object({
-        search: z.string().optional().describe('Free-text filter on name, email, or title (case-insensitive substring, matched client-side over up to 1000 workers)'),
-        limit: z.number().optional().describe('Max results per page (default 50, max 100)'),
-        offset: z.number().optional().describe('Number of results to skip (for pagination, default 0)'),
+        search: searchQuerySchema.optional().describe('Free-text filter on name, email, or title (case-insensitive substring, matched client-side over up to 1000 workers)'),
+        limit: paginationLimitSchema.optional().describe('Max results per page (default 50, max 100)'),
+        offset: paginationOffsetSchema.optional().describe('Number of results to skip (for pagination, default 0)'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
@@ -147,7 +151,7 @@ COMMON MISTAKES:
       );
 
       const workers = (result.data || []).map((w) => pickFields(w, WORKER_LIST_FIELDS));
-      const total = result.total || workers.length;
+      const total = result.total ?? workers.length;
       const hint = paginationHint(total, offset, workers.length);
 
       return JSON.stringify({ ok: true, workers, count: workers.length, total, pagination: hint });
@@ -172,7 +176,7 @@ RELATED TOOLS:
 - list_workday_workers: Search/browse workers to find IDs
 - list_workday_organizations: See org structure`,
       inputSchema: z.object({
-        worker_id: z.string().describe('Worker ID (from list_workday_workers)'),
+        worker_id: workerIdSchema.describe('Worker ID (from list_workday_workers)'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },

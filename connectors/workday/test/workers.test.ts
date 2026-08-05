@@ -185,7 +185,7 @@ describe('list_workday_workers', () => {
     expect(json.error).toContain('not configured');
   });
 
-  it('clamps limit to max 100', async () => {
+  it('rejects an over-max limit rather than silently clamping it', async () => {
     let capturedLimit: string | null = null;
 
     mswServer.use(
@@ -209,8 +209,10 @@ describe('list_workday_workers', () => {
       },
     });
 
-    await testClient.callTool('list_workday_workers', { limit: 500 });
-    expect(capturedLimit).toBe('100');
+    const result = await testClient.callTool('list_workday_workers', { limit: 500 });
+    // Fail-closed: the schema rejects over-max input before any request.
+    expect(result.isError).toBe(true);
+    expect(capturedLimit).toBeNull();
   });
 });
 

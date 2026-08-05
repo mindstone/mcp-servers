@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { ORG_LIST_FIELDS, LOCATION_FIELDS, NESTED_OBJECT_FIELDS, pickFields, paginationHint } from '../types.js';
+import { ORG_LIST_FIELDS, LOCATION_FIELDS, NESTED_OBJECT_FIELDS, paginationLimitSchema, paginationOffsetSchema, pickFields, paginationHint } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
 import { workdayFetch } from '../client.js';
@@ -37,8 +37,8 @@ RELATED TOOLS:
 - list_workday_workers: Browse workers in the organization
 - get_workday_worker: See which organization a worker belongs to`,
       inputSchema: z.object({
-        limit: z.number().optional().describe('Max results per page (default 50, max 100)'),
-        offset: z.number().optional().describe('Number of results to skip (for pagination, default 0)'),
+        limit: paginationLimitSchema.optional().describe('Max results per page (default 50, max 100)'),
+        offset: paginationOffsetSchema.optional().describe('Number of results to skip (for pagination, default 0)'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
@@ -59,7 +59,7 @@ RELATED TOOLS:
       );
 
       const organizations = (result.data || []).map((o) => pickFields(o, ORG_LIST_FIELDS));
-      const total = result.total || organizations.length;
+      const total = result.total ?? organizations.length;
       const hint = paginationHint(total, offset, organizations.length);
 
       return JSON.stringify({ ok: true, organizations, count: organizations.length, total, pagination: hint });
@@ -81,8 +81,8 @@ RELATED TOOLS:
 - get_workday_worker: See which location a worker is assigned to
 - list_workday_job_requisitions: See where open roles are located`,
       inputSchema: z.object({
-        limit: z.number().optional().describe('Max results per page (default 50, max 100)'),
-        offset: z.number().optional().describe('Number of results to skip (for pagination, default 0)'),
+        limit: paginationLimitSchema.optional().describe('Max results per page (default 50, max 100)'),
+        offset: paginationOffsetSchema.optional().describe('Number of results to skip (for pagination, default 0)'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
@@ -109,7 +109,7 @@ RELATED TOOLS:
         }
         return filtered;
       });
-      const total = result.total || locations.length;
+      const total = result.total ?? locations.length;
       const hint = paginationHint(total, offset, locations.length);
 
       return JSON.stringify({ ok: true, locations, count: locations.length, total, pagination: hint });

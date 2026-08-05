@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import { z } from 'zod';
 import { wrapUntrusted } from './untrusted-content.js';
 
 const require = createRequire(import.meta.url);
@@ -65,6 +66,25 @@ export const LOCATION_FIELDS = ['id', 'descriptor', 'name', 'inactive', 'isActiv
 export const JOB_FIELDS = ['id', 'descriptor', 'businessTitle', 'jobType', 'href'] as const;
 
 export const PAYROLL_FAMILY = 'payroll/v2';
+
+// ── Shared input schemas (fail-closed) ──
+//
+// Validated by the MCP SDK before the handler runs, so a malformed value
+// never reaches the network. IDs must be non-blank after trimming; pagination
+// must be an integer inside a bounded range — fractional or negative values
+// are rejected, not silently rewritten.
+
+export const workerIdSchema = z
+  .string()
+  .trim()
+  .min(1, 'worker_id must not be empty')
+  .max(256, 'worker_id is too long');
+
+export const searchQuerySchema = z.string().max(512, 'search is too long');
+
+export const paginationLimitSchema = z.number().int().min(1).max(100);
+
+export const paginationOffsetSchema = z.number().int().min(0).max(1_000_000);
 
 // ── Field allowlisting ──
 

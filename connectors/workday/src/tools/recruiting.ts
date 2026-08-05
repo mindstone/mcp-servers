@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { JOB_REQUISITION_FIELDS, NESTED_OBJECT_FIELDS, pickFields, paginationHint } from '../types.js';
+import { JOB_REQUISITION_FIELDS, NESTED_OBJECT_FIELDS, paginationLimitSchema, paginationOffsetSchema, pickFields, paginationHint } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured, getRecruitingApiFamily } from '../auth.js';
 import { workdayFetch } from '../client.js';
@@ -35,8 +35,8 @@ RELATED TOOLS:
 - list_workday_organizations: Browse the orgs a requisition belongs to
 - list_workday_jobs: See current worker job assignments`,
       inputSchema: z.object({
-        limit: z.number().optional().describe('Max results per page (default 50, max 100)'),
-        offset: z.number().optional().describe('Number of results to skip (for pagination, default 0)'),
+        limit: paginationLimitSchema.optional().describe('Max results per page (default 50, max 100)'),
+        offset: paginationOffsetSchema.optional().describe('Number of results to skip (for pagination, default 0)'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
@@ -75,7 +75,7 @@ RELATED TOOLS:
         }
         return filtered;
       });
-      const total = result.total || requisitions.length;
+      const total = result.total ?? requisitions.length;
       const hint = paginationHint(total, offset, requisitions.length);
 
       return JSON.stringify({ ok: true, job_requisitions: requisitions, count: requisitions.length, total, pagination: hint });
