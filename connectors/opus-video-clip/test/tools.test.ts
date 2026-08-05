@@ -252,7 +252,10 @@ describe('Opus tool behaviour (MSW-mocked)', () => {
       expect(status.isError).toBeFalsy();
       const data = status.json as { category: string; status: string };
       expect(data.category).toBe('completed');
-      expect(data.status).toBe('CONCLUDED');
+      // Upstream status strings are enveloped (invariant #6).
+      expect(data.status).toBe(
+        '<untrusted-content source="opus:get_censor_job_status:status">CONCLUDED</untrusted-content>',
+      );
     });
 
     it('treats UNKNOWN status as UPSTREAM_STATUS_UNKNOWN (not pending)', async () => {

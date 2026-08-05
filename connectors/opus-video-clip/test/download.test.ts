@@ -5,11 +5,14 @@ import * as os from 'os';
 import * as path from 'path';
 import { mswServer } from './helpers/setup.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
+import type { DnsLookupFn } from '../src/url-safety.js';
 import { MOCK_API_KEY } from './fixtures/opus-data.js';
 
 const CDN = 'https://ext.cdn.opus.pro';
 const CLIP_URL = `${CDN}/media/org_xxx/P2061602abcd/c.CU67da38/ehd.mp4?v=123`;
 const CLIP_BYTES = new TextEncoder().encode('fake-mp4-bytes');
+
+const PUBLIC_DNS_STUB: DnsLookupFn = async () => [{ address: '93.184.216.34', family: 4 }];
 
 let workspace: string;
 let testClient: McpTestClient | undefined;
@@ -19,6 +22,8 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  const { setDnsLookupForTesting } = await import('../src/url-safety.js');
+  setDnsLookupForTesting(null);
   if (testClient) {
     await testClient.close();
     testClient = undefined;
@@ -30,6 +35,11 @@ async function freshClient(): Promise<McpTestClient> {
   testClient = await createTestClient({
     env: { OPUS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '', MCP_WORKSPACE_PATH: workspace },
   });
+  // createTestClient resets the module registry, so the server uses a
+  // FRESH url-safety instance: the DNS anti-rebinding stub must be applied
+  // to that instance, after client creation.
+  const { setDnsLookupForTesting } = await import('../src/url-safety.js');
+  setDnsLookupForTesting(PUBLIC_DNS_STUB);
   return testClient;
 }
 

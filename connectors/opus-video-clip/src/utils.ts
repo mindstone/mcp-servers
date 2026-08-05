@@ -1,21 +1,132 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { OpusError } from './types.js';
+import { wrapUntrusted } from './untrusted-content.js';
 
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
 
-/** IPv4 patterns for private, loopback, and link-local addresses. */
-const PRIVATE_IP_PATTERNS = [
-  /^127\./,
-  /^10\./,
-  /^172\.(1[6-9]|2\d|3[01])\./,
-  /^192\.168\./,
-  /^169\.254\./,
-  /^0\./,
-];
+// ---------------------------------------------------------------------------
+// Non-public address classification
+// ---------------------------------------------------------------------------
+
+const parseIPv4 = (value: string): [number, number, number, number] | null => {
+  const match = value.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!match) return null;
+  const octets = match.slice(1, 5).map((s) => Number(s));
+  if (octets.some((n) => !Number.isFinite(n) || n < 0 || n > 255)) return null;
+  return octets as [number, number, number, number];
+};
+
+/**
+ * Returns a reason string if the IPv4 address is non-public, else null.
+ * Covers the complete non-public special-purpose registry, not just the
+ * RFC1918 trio — CGNAT (100.64.0.0/10), IETF protocol assignments
+ * (192.0.0.0/24), benchmarking, documentation, multicast, and reserved
+ * ranges are all reachable-or-abusable non-public space.
+ */
+const privateIPv4Reason = (octets: [number, number, number, number]): string | null => {
+  const [a, b, c] = octets;
+  if (a === 127) return 'loopback range (127.0.0.0/8)';
+  if (a === 10) return 'RFC1918 private range (10.0.0.0/8)';
+  if (a === 192 && b === 168) return 'RFC1918 private range (192.168.0.0/16)';
+  if (a === 172 && b >= 16 && b <= 31) return 'RFC1918 private range (172.16.0.0/12)';
+  if (a === 169 && b === 254) return 'link-local range (169.254.0.0/16, includes cloud metadata endpoints)';
+  if (a === 0) return 'unspecified range (0.0.0.0/8)';
+  if (a === 100 && b >= 64 && b <= 127) return 'shared/CGNAT range (100.64.0.0/10, RFC 6598)';
+  if (a === 198 && (b === 18 || b === 19)) return 'benchmarking range (198.18.0.0/15)';
+  if (a === 192 && b === 0 && c === 2) return 'documentation range (192.0.2.0/24, TEST-NET-1)';
+  if (a === 198 && b === 51 && c === 100) return 'documentation range (198.51.100.0/24, TEST-NET-2)';
+  if (a === 203 && b === 0 && c === 113) return 'documentation range (203.0.113.0/24, TEST-NET-3)';
+  if (a === 192 && b === 88 && c === 99) return '6to4 relay range (192.88.99.0/24)';
+  if (a === 192 && b === 0 && c === 0) return 'IETF protocol assignments (192.0.0.0/24)';
+  if (a === 192 && b === 31 && c === 196) return 'AS112-v4 range (192.31.196.0/24)';
+  if (a === 192 && b === 52 && c === 193) return 'AMT anycast range (192.52.193.0/24)';
+  if (a === 192 && b === 175 && c === 48) return 'AS112 direct delegation (192.175.48.0/24)';
+  if (a >= 224 && a <= 239) return 'multicast range (224.0.0.0/4)';
+  if (a >= 240) return 'reserved range (240.0.0.0/4)';
+  return null;
+};
+
+/**
+ * Returns a reason string if the IPv6 literal is non-public, else null.
+ * Handles canonical IPv6, IPv4-mapped IPv6 in BOTH dotted (`::ffff:a.b.c.d`)
+ * and hex (`::ffff:7f00:1` — the form WHATWG URL normalisation produces)
+ * forms, unspecified `::`, loopback `::1`, link-local fe80::/10, and
+ * unique-local fc00::/7.
+ */
+const privateIPv6Reason = (raw: string): string | null => {
+  const lower = raw.toLowerCase();
+
+  if (lower === '::' || lower === '0:0:0:0:0:0:0:0' || lower === '0000:0000:0000:0000:0000:0000:0000:0000') {
+    return 'IPv6 unspecified (::)';
+  }
+  if (lower === '::1' || lower === '0:0:0:0:0:0:0:1' || lower === '0000:0000:0000:0000:0000:0000:0000:0001') {
+    return 'IPv6 loopback (::1)';
+  }
+
+  // IPv4-mapped IPv6 in dotted form ::ffff:a.b.c.d
+  const mappedDot = lower.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  if (mappedDot) {
+    const octets = parseIPv4(mappedDot[1]);
+    if (!octets) return 'IPv4-mapped IPv6 (malformed)';
+    const v4Reason = privateIPv4Reason(octets);
+    return v4Reason ? `IPv4-mapped IPv6 (${v4Reason})` : null;
+  }
+
+  // IPv4-mapped IPv6 in hex form ::ffff:XXXX:YYYY — WHATWG URL parsing
+  // normalises ::ffff:127.0.0.1 to ::ffff:7f00:1, so the hex form MUST be
+  // handled or the mapped-v4 bypass stays open.
+  const mappedHex = lower.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (mappedHex) {
+    const hi = parseInt(mappedHex[1], 16);
+    const lo = parseInt(mappedHex[2], 16);
+    const octets: [number, number, number, number] = [
+      (hi >> 8) & 0xff,
+      hi & 0xff,
+      (lo >> 8) & 0xff,
+      lo & 0xff,
+    ];
+    const v4Reason = privateIPv4Reason(octets);
+    return v4Reason ? `IPv4-mapped IPv6 (${v4Reason})` : null;
+  }
+
+  // Link-local fe80::/10
+  if (/^fe[89ab][0-9a-f]?:/.test(lower)) return 'IPv6 link-local (fe80::/10)';
+  // Unique-local fc00::/7
+  if (/^f[cd][0-9a-f]{0,2}:/.test(lower)) return 'IPv6 unique-local (fc00::/7)';
+  // Documentation-only prefix; denying it keeps the guard fail-closed.
+  if (/^2001:0*db8(?::|$)/.test(lower)) return 'IPv6 documentation range (2001:db8::/32)';
+
+  return null;
+};
+
+/**
+ * Returns a reason string when `host` (a hostname or IP literal, with or
+ * without IPv6 brackets) names a loopback or non-public address, else
+ * null. Plain DNS names return null — callers that fetch must additionally
+ * run the DNS layer in `url-safety.ts`, which re-checks every resolved
+ * address through this same classifier.
+ */
+export function nonPublicAddressReason(host: string): string | null {
+  const lower = host.toLowerCase().replace(/^\[|\]$/g, '');
+
+  if (lower === 'localhost' || lower === 'localhost.localdomain') return 'loopback hostname';
+  if (lower.endsWith('.local')) return 'mDNS .local hostname';
+
+  const v4 = parseIPv4(lower);
+  if (v4) return privateIPv4Reason(v4);
+
+  // IPv6 literals contain ':'. Hex-only DNS names (e.g. dead.cafe) never do.
+  if (lower.includes(':') && /^[0-9a-f:.]+$/.test(lower)) {
+    return privateIPv6Reason(lower);
+  }
+
+  return null;
+}
 
 /**
  * Validate that a hostname/URL is safe for outbound requests. Rejects
- * private/loopback IPs, localhost, IPv6 loopback, and non-HTTPS schemes.
+ * private/loopback/reserved IPs (the full non-public special-purpose
+ * registry, IPv4 and IPv6), localhost, and non-HTTPS schemes.
  *
  * @returns The validated hostname (scheme stripped).
  * @throws OpusError if the hostname is unsafe.
@@ -76,14 +187,13 @@ export function validateHostname(input: string): string {
     );
   }
 
-  for (const pattern of PRIVATE_IP_PATTERNS) {
-    if (pattern.test(lower)) {
-      throw new OpusError(
-        `Private IP address "${hostname}" is not allowed.`,
-        'INVALID_HOSTNAME',
-        'Provide a valid public hostname.',
-      );
-    }
+  const denyReason = nonPublicAddressReason(lower);
+  if (denyReason) {
+    throw new OpusError(
+      `Private IP address "${hostname}" is not allowed.`,
+      'INVALID_HOSTNAME',
+      'Provide a valid public hostname.',
+    );
   }
 
   return hostname;
@@ -122,9 +232,20 @@ export function withErrorHandling<T>(
           isError: true,
         };
       }
+      // Unknown errors (network/runtime) may embed upstream-controlled text
+      // (e.g. a fetched URL inside a fetch failure message), so the message
+      // is enveloped before it becomes model-visible — invariant #6.
       const errorMessage = error instanceof Error ? error.message : String(error);
       return {
-        content: [{ type: 'text', text: JSON.stringify({ ok: false, error: errorMessage }) }],
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              ok: false,
+              error: wrapUntrusted(errorMessage, 'opus:unhandled-error') ?? 'Unknown error',
+            }),
+          },
+        ],
         isError: true,
       };
     }

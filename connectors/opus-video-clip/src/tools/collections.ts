@@ -33,7 +33,8 @@ export function registerCollectionTools(server: McpServer): void {
       inputSchema: z.object({
         collectionName: z.string().min(1).describe('Display name for the collection.'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      // destructiveHint: creates a collection on the production Opus account.
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       requireApiKey();
@@ -94,7 +95,12 @@ export function registerCollectionTools(server: McpServer): void {
           ok: true,
           count: data.list?.length ?? 0,
           total: data.total,
-          next: data.next,
+          // The continuation token is upstream-controlled text hiding under a
+          // structural-looking key — envelop it when it's a string.
+          next:
+            typeof data.next === 'string'
+              ? wrapUntrusted(data.next, 'opus:get_collections:next')
+              : (data.next ?? null),
           collections: sanitizeList(data.list ?? [], sanitizeCollection, 'opus:get_collections'),
         },
         null,

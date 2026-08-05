@@ -73,7 +73,10 @@ export const RenderPreferenceSchema = z
       })
       .optional(),
   })
-  .passthrough();
+  .strict()
+  .describe(
+    'Render preferences. Only the documented keys are accepted — unknown keys are rejected (fail-closed).',
+  );
 
 export const UploadedVideoAttrSchema = z
   .object({
@@ -110,7 +113,9 @@ export function registerProjectTools(server: McpServer): void {
         'When complete, call opus_get_clips to retrieve the generated clips. ' +
         'For local files, use opus_upload_video instead — it handles upload-link generation, GCS resumable upload, and project creation in a single tool call.',
       inputSchema: CreateProjectInputSchema,
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      // destructiveHint: creates a production (potentially billable)
+      // clipping project on the Opus account.
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       requireApiKey();
@@ -175,7 +180,7 @@ export function registerProjectTools(server: McpServer): void {
       description:
         'List the exportable clips for a given project or collection. ' +
         'Each clip has a full-clip id of the form `{projectId}.{curationId}`, plus preview/export URLs (`uriForPreview`, `uriForExport`) on Google Cloud Storage. ' +
-        'Choose `q: "findByProjectId"` and pass `projectId`, OR `q: "findByCollectionId"` and pass `collectionId`. Pagination via `pageNum` (starts at 1) and `pageSize`.',
+        'Choose `q: "findByProjectId"` and pass `projectId`, OR `q: "findByCollectionId"` and pass `collectionId`. Pagination via `pageNum` (starts at 1) and `pageSize`; the response echoes pagination inputs and surfaces upstream `total`/`next`/`limit` continuation metadata when available, so a truncated page is distinguishable from a complete list.',
       inputSchema: z
         .object({
           q: z
@@ -216,11 +221,18 @@ export function registerProjectTools(server: McpServer): void {
 
       type ClipsResponse =
         | ExportableClipRepresentation[]
-        | { data?: ExportableClipRepresentation[]; list?: ExportableClipRepresentation[] };
+        | {
+            data?: ExportableClipRepresentation[];
+            list?: ExportableClipRepresentation[];
+            total?: number;
+            next?: string | number | null;
+            limit?: number | null;
+          };
       const raw = await opusFetch<ClipsResponse>(
         `/api/exportable-clips?${params.toString()}`,
         { headers },
       );
+      const objectShape = !Array.isArray(raw) && raw !== null && typeof raw === 'object';
       const clips: ExportableClipRepresentation[] = Array.isArray(raw)
         ? raw
         : (raw.data ?? raw.list ?? []);
@@ -229,6 +241,20 @@ export function registerProjectTools(server: McpServer): void {
         {
           ok: true,
           count: clips.length,
+          // Pagination completion metadata: surface the upstream totals /
+          // continuation markers (when the endpoint returns its object
+          // shape) so a caller can distinguish "all clips" from a
+          // truncated page. A string `next` token is upstream-controlled
+          // text under a structural-looking key — envelop it.
+          total: objectShape ? (raw.total ?? null) : null,
+          next: objectShape
+            ? typeof raw.next === 'string'
+              ? wrapUntrusted(raw.next, 'opus:get_clips:next')
+              : (raw.next ?? null)
+            : null,
+          limit: objectShape ? (raw.limit ?? null) : null,
+          pageNum: args.pageNum ?? null,
+          pageSize: args.pageSize ?? null,
           clips: sanitizeList(clips, sanitizeClip, 'opus:get_clips'),
         },
         null,
@@ -249,7 +275,9 @@ export function registerProjectTools(server: McpServer): void {
         projectId: z.string().min(1),
         visibility: z.enum(SHARE_VISIBILITY).describe('"DEFAULT" or "PUBLIC"'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      // destructiveHint: PUBLIC visibility exposes the project to anyone
+      // with the link — a production-impacting change.
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       requireApiKey();

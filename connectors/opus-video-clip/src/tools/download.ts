@@ -4,30 +4,21 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { requireApiKey } from '../auth.js';
 import { OpusError, getApiTimeoutMs } from '../types.js';
 import { resolveDownloadTargetPath } from '../path-safety.js';
-import { validateHostname, withErrorHandling } from '../utils.js';
+import {
+  DOWNLOAD_ALLOWED_HOST_SUFFIXES,
+  validateOutboundUrlSync,
+  validateOutboundUrlWithDns,
+} from '../url-safety.js';
+import { withErrorHandling } from '../utils.js';
 
 const MAX_REDIRECTS = 5;
 
-/**
- * Validate a clip download URL (SSRF prevention): HTTPS only, no
- * private/loopback hosts. Returns null when valid, an error string otherwise.
- */
-function validateDownloadUrl(url: string): string | null {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return 'Invalid URL.';
-  }
-  if (parsed.protocol !== 'https:') {
-    return 'Only HTTPS URLs are supported for download.';
-  }
-  try {
-    validateHostname(parsed.hostname);
-  } catch (err) {
-    return err instanceof Error ? err.message : String(err);
-  }
-  return null;
+function urlRejected(message: string): OpusError {
+  return new OpusError(
+    `Download URL rejected: ${message}`,
+    'URL_REJECTED',
+    'Pass the uriForExport URL exactly as returned by opus_get_clips or opus_export_collection.',
+  );
 }
 
 export function registerDownloadTools(server: McpServer): void {
@@ -37,6 +28,7 @@ export function registerDownloadTools(server: McpServer): void {
       description:
         'Download an exported clip MP4 to a local file. ' +
         'Pass a `uriForExport` URL from opus_get_clips or opus_export_collection. ' +
+        'Only OpusClip CDN / Google Cloud Storage hosts are accepted; hostnames are DNS-resolved and every resolved address must be public. ' +
         'output_path MUST live inside the workspace sandbox (MCP_WORKSPACE_PATH when set, otherwise the system temp directory); ' +
         'paths outside it, `..` traversal, and symlinked targets are refused. ' +
         'By default, refuses to overwrite an existing file — pass overwrite: true to clobber.',
@@ -59,24 +51,36 @@ export function registerDownloadTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       requireApiKey();
 
-      const urlError = validateDownloadUrl(args.url);
-      if (urlError) {
-        throw new OpusError(
-          `Download URL rejected: ${urlError}`,
-          'URL_REJECTED',
-          'Pass the uriForExport URL exactly as returned by opus_get_clips or opus_export_collection.',
-        );
-      }
+      // SSRF pre-check (syntax, non-public literals, vendor host allow-list)
+      // plus DNS anti-rebinding before any file is created.
+      const syncError = validateOutboundUrlSync(args.url, DOWNLOAD_ALLOWED_HOST_SUFFIXES);
+      if (syncError) throw urlRejected(syncError);
+      const dnsError = await validateOutboundUrlWithDns(args.url, DOWNLOAD_ALLOWED_HOST_SUFFIXES);
+      if (dnsError) throw urlRejected(dnsError);
 
       // Sandbox the output path BEFORE any network call.
       const resolved = resolveDownloadTargetPath(args.output_path);
 
-      // Open with `wx` (atomic refuse-on-existing) unless overwrite is set,
-      // so the EEXIST refusal happens before we issue any network request.
-      const writeFlag = args.overwrite === true ? 'w' : 'wx';
+      // Open the output file synchronously so the refusal is atomic with
+      // the open and happens BEFORE any network request:
+      //   - create:    O_CREAT|O_EXCL  (refuse any pre-existing path)
+      //   - overwrite: O_CREAT|O_TRUNC (clobber a validated regular file)
+      // O_NOFOLLOW closes the swap race in which a symlink is planted at
+      // the target between the lstat pre-check and this open — with plain
+      // "w" the open would silently write through it. (O_NOFOLLOW is
+      // unavailable on some platforms, e.g. Windows; there the lstat
+      // pre-check plus the post-open fstat remain the mitigation.)
+      // O_NONBLOCK keeps an overwrite open of a raced-in FIFO from
+      // blocking forever; the fstat below then rejects it.
+      const overwrite = args.overwrite === true;
+      const nofollow = fs.constants.O_NOFOLLOW ?? 0;
+      const nonblock = fs.constants.O_NONBLOCK ?? 0;
+      const openFlags = overwrite
+        ? fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | nofollow | nonblock
+        : fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | nofollow;
       let fd: number;
       try {
-        fd = fs.openSync(resolved, writeFlag);
+        fd = fs.openSync(resolved, openFlags);
       } catch (openErr) {
         const e = openErr as NodeJS.ErrnoException;
         if (e && e.code === 'EEXIST') {
@@ -86,6 +90,13 @@ export function registerDownloadTools(server: McpServer): void {
             'Pass overwrite: true to replace the existing file, or pick a different output_path.',
           );
         }
+        if (e && e.code === 'ELOOP') {
+          throw new OpusError(
+            `Output path is a symbolic link, refusing to write through it: ${args.output_path}`,
+            'OUTPUT_PATH_IS_SYMLINK',
+            'Remove or rename the existing symlink before retrying. Downloads never write through a symlink at the target, even with overwrite=true.',
+          );
+        }
         throw new OpusError(
           `Could not open output_path for writing: ${e?.message || String(openErr)}`,
           'OUTPUT_OPEN_FAILED',
@@ -93,16 +104,51 @@ export function registerDownloadTools(server: McpServer): void {
         );
       }
 
+      // Validate the OPENED object: a raced-in FIFO/socket/device must not
+      // be written even if it slipped past the lstat pre-check. If we
+      // created the file, remove it again so the failure is atomic.
+      try {
+        const opened = fs.fstatSync(fd);
+        if (!opened.isFile()) {
+          try {
+            fs.closeSync(fd);
+          } catch {
+            /* best-effort */
+          }
+          if (!overwrite) {
+            try {
+              fs.unlinkSync(resolved);
+            } catch {
+              /* cleanup best-effort */
+            }
+          }
+          throw new OpusError(
+            `Output path is not a regular file: ${args.output_path}`,
+            'OUTPUT_PATH_NOT_REGULAR_FILE',
+            'Remove or rename the existing target, or pick a different output_path.',
+          );
+        }
+      } catch (statErr) {
+        if (!(statErr instanceof OpusError)) {
+          try {
+            fs.closeSync(fd);
+          } catch {
+            /* best-effort */
+          }
+        }
+        throw statErr;
+      }
+
       // Track fd ownership: once handed to `fs.createWriteStream({ fd })` the
-      // stream owns it. Until then any thrown error must close the fd and
-      // unlink the freshly created file so the failure is atomic.
+      // stream owns it. Until then any thrown error must close the fd and,
+      // when we created the file, unlink it so the failure is atomic.
       let fdReleased = false;
       let bytesWritten = 0;
       try {
         // SSRF-via-redirect defence: `redirect: 'manual'` so the runtime
         // never silently follows a 3xx (a signed CDN URL could otherwise
         // redirect to a private-network address); every hop is re-validated
-        // against the same HTTPS / no-private-host rule, depth-capped.
+        // against the same HTTPS / allow-list / DNS rules, depth-capped.
         let response: Response;
         let currentUrl = args.url;
         let redirectCount = 0;
@@ -138,13 +184,17 @@ export function registerDownloadTools(server: McpServer): void {
             try {
               nextUrl = new URL(location, currentUrl).toString();
             } catch {
+              // Do not echo the Location header: signed CDN query strings
+              // must not be copied into model-visible output.
               throw new OpusError(
-                'Refused to follow redirect: invalid Location header.',
+                'Refused to follow redirect: the redirect target is not a valid URL.',
                 'DOWNLOAD_REDIRECT_REFUSED',
                 'Download the clip manually from the uriForExport URL.',
               );
             }
-            const hopError = validateDownloadUrl(nextUrl);
+            const hopError =
+              validateOutboundUrlSync(nextUrl, DOWNLOAD_ALLOWED_HOST_SUFFIXES) ??
+              (await validateOutboundUrlWithDns(nextUrl, DOWNLOAD_ALLOWED_HOST_SUFFIXES));
             if (hopError) {
               throw new OpusError(
                 `Refused to follow redirect: ${hopError}`,
@@ -187,10 +237,12 @@ export function registerDownloadTools(server: McpServer): void {
           });
         } catch (streamErr) {
           fileHandle.destroy();
-          try {
-            fs.unlinkSync(resolved);
-          } catch {
-            /* cleanup best-effort */
+          if (!overwrite) {
+            try {
+              fs.unlinkSync(resolved);
+            } catch {
+              /* cleanup best-effort */
+            }
           }
           throw streamErr;
         }
@@ -201,10 +253,12 @@ export function registerDownloadTools(server: McpServer): void {
           } catch {
             /* best-effort */
           }
-          try {
-            fs.unlinkSync(resolved);
-          } catch {
-            /* cleanup best-effort */
+          if (!overwrite) {
+            try {
+              fs.unlinkSync(resolved);
+            } catch {
+              /* cleanup best-effort */
+            }
           }
         }
         throw err;

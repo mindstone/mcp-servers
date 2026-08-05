@@ -22,8 +22,24 @@ import {
   KNOWN_JOB_STATUSES,
   type PollableJobResponse,
 } from './types.js';
+import { wrapUntrusted } from './untrusted-content.js';
+import { UPLOAD_ALLOWED_HOST_SUFFIXES, validateOutboundUrlSync } from './url-safety.js';
 
 export const OPUS_API_BASE = 'https://api.opus.pro';
+
+/**
+ * Strip query string and fragment from a URL before logging. Signed /
+ * resumable-upload URLs carry bearer-like credentials in their query
+ * parameters; the origin + pathname is sufficient for request tracing.
+ */
+function redactUrlForLog(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return '[unparseable URL]';
+  }
+}
 
 export interface OpusFetchOptions extends Omit<RequestInit, 'signal'> {
   /** Optional caller AbortSignal — composed via AbortSignal.any() with our timeout. */
@@ -44,7 +60,10 @@ async function opusFetchRaw<T>(
   options: OpusFetchOptions = {},
   injectAuth: boolean = true,
 ): Promise<T> {
-  console.error(`[Opus API] ${options.method || 'GET'} ${url}`);
+  // Never log the full URL: GCS resumable/signed URLs carry bearer-like
+  // query credentials (upload_id, X-Goog-Signature, …). Method +
+  // origin + pathname is enough to trace a request.
+  console.error(`[Opus API] ${options.method || 'GET'} ${redactUrlForLog(url)}`);
 
   const timeoutMs = options.uploadTimeout ? getUploadTimeoutMs() : getApiTimeoutMs();
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
@@ -73,6 +92,11 @@ async function opusFetchRaw<T>(
   let response: Response;
   try {
     response = await fetch(url, {
+      // Never auto-follow redirects: the connector must see 3xx responses
+      // itself (GCS resumable uploads use 308 Resume Incomplete as a
+      // control signal, and silently following a redirect anywhere else
+      // would bypass the SSRF validation of the new destination).
+      redirect: 'manual',
       ...options,
       signal: fetchSignal,
       headers,
@@ -131,17 +155,32 @@ async function opusFetchRaw<T>(
   }
 
   if (response.status === 422) {
+    // The vendor body is attacker-controlled external text: envelope it
+    // (invariant #6) before embedding it in an error message that becomes
+    // model-visible via withErrorHandling. Bounded to keep errors readable.
     const text = await response.text().catch(() => '');
+    const wrappedBody = wrapUntrusted(text.slice(0, 1000), 'opus:api:validation_error_body');
     throw new OpusError(
-      `Validation error: ${text || 'check request parameters'}`,
+      `Validation error: ${wrappedBody ?? 'check request parameters'}`,
       'VALIDATION_ERROR',
       'The request body or parameters were rejected by the Opus API. Inspect the message and adjust the arguments.',
     );
   }
 
+  // rawResponse callers handle non-2xx statuses themselves (GCS resumable
+  // uploads treat 308 Resume Incomplete as a control signal carrying the
+  // committed offset, and wrap their own error bodies), so hand them the
+  // raw response rather than collapsing every non-2xx into API_ERROR.
+  // Auth/rate-limit/not-found/validation statuses above still throw first.
+  if (options.rawResponse) {
+    return response as unknown as T;
+  }
+
   if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    console.error(`Opus API error (${response.status}):`, errorText);
+    // Consume the body so the connection is released, but never log it:
+    // vendor error bodies are not proven secret-free.
+    await response.text().catch(() => '');
+    console.error(`Opus API error (HTTP ${response.status})`);
     const message =
       response.status >= 500
         ? 'Opus server error - try again later'
@@ -151,10 +190,6 @@ async function opusFetchRaw<T>(
       'API_ERROR',
       'Check the request parameters and try again. If the error persists, report to Opus support.',
     );
-  }
-
-  if (options.rawResponse) {
-    return response as unknown as T;
   }
 
   // 204 No Content / empty body — return an empty object cast as T.
@@ -193,16 +228,26 @@ export async function opusFetch<T>(
  * upload URL is signed; adding Bearer would be wrong and could leak the key
  * if a future Opus change ever pointed `upload_url` at a non-GCS host).
  *
- * Hosts of returned upload URLs are NOT validated against an allow-list
- * because GCS uses signed URLs across multiple subdomains that vary by
- * region and bucket. The connector defends against host-injection in two
- * other ways: (a) the upload URL is consumed only within `opus_upload_video`
- * and never persisted, and (b) the Bearer header is intentionally omitted.
+ * The URL is validated against the GCS host allow-list (HTTPS, no userinfo,
+ * no non-public IP literals) before any request is issued: the initiation
+ * and session URLs are upstream-supplied, so a poisoned Opus response must
+ * not be able to point the connector's fetch at an arbitrary host (SSRF).
+ * Combined with (a) the URLs being consumed only within `opus_upload_video`
+ * and never persisted, and (b) the intentional omission of the Bearer
+ * header, a non-GCS destination is both refused and useless.
  */
 export async function opusFetchUnauthenticated<T>(
   url: string,
   options: OpusFetchOptions = {},
 ): Promise<T> {
+  const urlError = validateOutboundUrlSync(url, UPLOAD_ALLOWED_HOST_SUFFIXES);
+  if (urlError) {
+    throw new OpusError(
+      `Upload URL rejected: ${urlError}`,
+      'URL_REJECTED',
+      'The Opus API returned an unexpected upload URL. Re-run opus_upload_video to get a fresh upload link.',
+    );
+  }
   return opusFetchRaw<T>(url, options, false);
 }
 
@@ -278,7 +323,6 @@ export async function pollOpusJob<T extends PollableJobResponse>(
   body: T;
   classification: { category: 'pending' | 'completed' | 'failed' | 'unknown'; raw: string };
   next_poll_after_seconds: number;
-  retry_after_header: string | null;
 }> {
   // We need access to the raw response to read Retry-After.
   const response = (await opusFetch<Response>(endpoint, { rawResponse: true })) as Response;
@@ -294,7 +338,9 @@ export async function pollOpusJob<T extends PollableJobResponse>(
   const classification = classifyJobStatus(body.status);
   const next_poll_after_seconds = computeNextPollAfterSeconds(retryAfterHeader, attempt);
 
-  return { body, classification, next_poll_after_seconds, retry_after_header: retryAfterHeader };
+  // The raw Retry-After header is attacker-controlled external text and is
+  // deliberately NOT returned — callers surface the parsed numeric delay.
+  return { body, classification, next_poll_after_seconds };
 }
 
 /**
