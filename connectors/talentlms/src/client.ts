@@ -7,8 +7,45 @@
  * Base URL: https://{domain}.talentlms.com/api/v1
  */
 
+import { z } from 'zod';
 import { TalentLMSError, REQUEST_TIMEOUT_MS } from './types.js';
 import { getApiKey, getDomain, isConfigured } from './auth.js';
+import { wrapUntrusted } from './untrusted-content.js';
+
+/** Shape of the TalentLMS error payload, validated at the boundary. */
+const apiErrorBodySchema = z
+  .object({
+    error: z
+      .object({
+        message: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
+/** Vendor error text is truncated before enveloping — it is diagnostic, not prose. */
+const MAX_VENDOR_ERROR_MESSAGE_CHARS = 500;
+
+/**
+ * Extract the vendor's error message from an error response, or null when the
+ * body carries none. The message is untrusted external content (invariant #6):
+ * callers must envelope it before it reaches model-visible output. The raw
+ * body is never returned — it can reflect submitted values (including
+ * passwords from create/update user calls) back into model output.
+ */
+async function readVendorErrorMessage(response: Response): Promise<string | null> {
+  try {
+    const parsed = apiErrorBodySchema.safeParse(await response.json());
+    const message = parsed.success ? parsed.data.error?.message : undefined;
+    if (!message) return null;
+    return message.length > MAX_VENDOR_ERROR_MESSAGE_CHARS
+      ? message.slice(0, MAX_VENDOR_ERROR_MESSAGE_CHARS)
+      : message;
+  } catch {
+    return null;
+  }
+}
 
 function getBaseUrl(): string {
   return `https://${getDomain()}.talentlms.com/api/v1`;
@@ -68,36 +105,37 @@ export async function talentlmsFetch<T>(
   }
 
   if (response.status === 401 || response.status === 403) {
-    let errorText: string;
-    try {
-      const errorBody = await response.json() as { error?: { message?: string } };
-      errorText = errorBody?.error?.message || 'Unauthorized';
-    } catch {
-      errorText = 'Unauthorized';
-    }
+    const vendorMessage = await readVendorErrorMessage(response);
+    const detail = vendorMessage ? `: ${wrapUntrusted(vendorMessage, 'talentlms:api-error')}` : '';
     throw new TalentLMSError(
-      `Authentication failed: ${errorText}`,
+      `Authentication failed${detail}`,
       'AUTH_FAILED',
       'Re-configure with configure_talentlms. Ensure Super Admin API access is enabled.',
     );
   }
 
   if (!response.ok) {
-    let errorText: string;
-    try {
-      const errorBody = await response.json() as { error?: { message?: string; type?: string } };
-      errorText = errorBody?.error?.message || JSON.stringify(errorBody);
-    } catch {
-      errorText = await response.text().catch(() => 'Unknown error');
-    }
+    const vendorMessage = await readVendorErrorMessage(response);
+    const detail = vendorMessage ? `: ${wrapUntrusted(vendorMessage, 'talentlms:api-error')}` : '';
     throw new TalentLMSError(
-      `TalentLMS API error (${response.status}): ${errorText}`,
+      `TalentLMS API error (${response.status})${detail}`,
       `HTTP_${response.status}`,
       'Check the request parameters and try again.',
     );
   }
 
-  return response.json() as Promise<T>;
+  // The runtime's JSON parse error can embed a fragment of the
+  // (vendor-controlled, potentially attacker-influenced) body; never let it
+  // propagate into model-visible output. Fail closed instead.
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw new TalentLMSError(
+      `TalentLMS returned a response that could not be parsed (HTTP ${response.status}).`,
+      'INVALID_API_RESPONSE',
+      'Try again. If the problem persists, the API response format may have changed — check for a connector update.',
+    );
+  }
 }
 
 /**
