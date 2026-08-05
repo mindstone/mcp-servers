@@ -24,6 +24,7 @@ are maintained manually as part of the PR review checklist.
 ### Security
 - **FOX-3490**: External text returned by the TalentLMS API (course/group descriptions, user names, bios, custom fields, test/survey answers, site name, ILT instructor/location, and similar user-authored fields) is now wrapped in `<untrusted-content source="...">` envelopes with close-tag breakout escaping, so the host model treats third-party text as data rather than instructions. Ids, statuses, timestamps, scores, and URLs are intentionally left raw so tool chaining keeps working.
 - **client**: Vendor error messages are enveloped before reaching model-visible error output, and the raw error body is never dumped into error text (a body echoing submitted values such as passwords can no longer leak). Unparseable response bodies fail closed with a connector-authored `INVALID_API_RESPONSE` error instead of propagating runtime parser fragments, and unexpected tool errors are logged to stderr while the model receives a sanitised generic message.
+- **envelope**: External-text wrapping is now fail-closed: every string in an API payload is enveloped by default, and only narrowly proven system-generated primitives (grammar-validated ids, enums, numerics, dates, HTTPS URLs) pass through raw. Unknown or future vendor fields — and hostile values under structural-looking keys — can no longer bypass the envelope. The `get_talentlms_course_sso_link` response now goes through the same wrapping instead of being returned raw.
 
 ## [0.3.0] - 2026-07-01
 

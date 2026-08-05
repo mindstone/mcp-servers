@@ -174,7 +174,7 @@ export function registerCourseTools(server: McpServer): void {
       const result = await talentlmsFetch<Record<string, unknown>>(
         `/gotocourse/user_id:${encodeURIComponent(args.user_id)},course_id:${encodeURIComponent(args.course_id)}`,
       );
-      return JSON.stringify({ ok: true, result });
+      return JSON.stringify({ ok: true, result: wrapExternalTextFields(result, 'talentlms:course-sso') });
     }),
   );
 }
