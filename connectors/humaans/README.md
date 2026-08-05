@@ -9,7 +9,7 @@ Humaans HR platform MCP server for Model Context Protocol hosts. Query employee 
 
 - **Version:** [0.2.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-humaans)
 - **Auth:** API key ([`HUMAANS_API_KEY`](./server.json))
-- **Tools:** [15](./src/tools/) (people, job-roles, time-away, company)
+- **Tools:** [16](./src/tools/) (people, job-roles, time-away, company, teams)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -114,7 +114,7 @@ node dist/index.js
 }
 ```
 
-## Tools (15)
+## Tools (16)
 
 ### Configuration
 - `configure_humaans_api_key` — Configure the Humaans API access token
@@ -123,6 +123,7 @@ node dist/index.js
 - `get_humaans_me` — Get the current authenticated user's profile
 - `list_humaans_people` — List employees
 - `get_humaans_person` — Get full employee profile by ID
+- `list_humaans_teams` — List team names with member counts (derived from the people directory; Humaans has no dedicated teams endpoint)
 
 ### Job roles
 - `list_humaans_job_roles` — List job role history for employees

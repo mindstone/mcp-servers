@@ -15,6 +15,7 @@ are maintained manually as part of the PR review checklist.
 - `list_humaans_time_away_allocations` — list time away allocations (the policy assignment behind each person's PTO balance), with `personId` filter and pagination.
 - `cancel_humaans_time_away` — cancel a time away entry via `DELETE /api/time-away/:id`; annotated `destructiveHint: true`. Closes the create-without-cancel asymmetry.
 - `approve_humaans_time_away` / `decline_humaans_time_away` — manager review workflow via `PATCH /api/time-away/:id` (`requestStatus` + optional `reviewNote`); annotated `destructiveHint: true`.
+- `list_humaans_teams` — list team names with member counts, enabling the existing `team` filter on `list_humaans_people`. Humaans has no dedicated teams endpoint, so the list is derived by scanning the people directory (bounded at 2500 people, flagged `partial` beyond that).
 
 ### Security
 - Envelope the free-text fields authored in Humaans — `note`/`reviewNote` on time-away entries and `note` on job roles — in `<untrusted-content>` wrappers (with close-tag breakout escaping) before they reach the model. These list/get responses previously returned the raw API objects unenveloped.
