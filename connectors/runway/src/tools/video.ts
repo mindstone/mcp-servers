@@ -21,6 +21,7 @@ export function registerVideoTools(server: McpServer): void {
         ratio: z.enum(['1280:720', '720:1280', '960:960', '1104:832', '832:1104', '1584:672']).optional().describe('Output resolution. Default: 1280:720.'),
         duration: z.number().optional().describe('Seconds. gen4: 2-10 (default 5). veo: 4,6,8 (default 8).'),
         audio: z.boolean().optional().describe('Generate audio (veo models only). Default: true.'),
+                negative_prompt: z.string().max(1000).optional().describe('What should NOT appear in the output (veo models only, max 1000 chars). Omit to use the default negative prompt.'),
         content_moderation: z.enum(['auto', 'low']).optional().describe('Public figure threshold.'),
         seed: z.number().int().optional().describe('Random seed (0-4294967295) for reproducibility.'),
       }),
@@ -49,6 +50,7 @@ export function registerVideoTools(server: McpServer): void {
       const body: Record<string, unknown> = { model, promptImage, ratio, duration };
       if (args.prompt_text) body.promptText = args.prompt_text;
       if (audio !== undefined && !isRunwayModel) body.audio = audio;
+      if (args.negative_prompt && !isRunwayModel) body.negativePrompt = args.negative_prompt;
       if (seed !== undefined) body.seed = seed;
       addContentModeration(body, args.content_moderation);
 
@@ -77,6 +79,7 @@ export function registerVideoTools(server: McpServer): void {
         ratio: z.enum(['1280:720', '720:1280']).optional().describe('Output resolution. Default: 1280:720.'),
         duration: z.number().optional().describe('Seconds. gen4.5: 2-10 (default 5). veo: 4,6,8 (default 8).'),
         audio: z.boolean().optional().describe('Generate audio (veo models only). Default: true.'),
+                negative_prompt: z.string().max(1000).optional().describe('What should NOT appear in the output (veo models only, max 1000 chars). Omit to use the default negative prompt.'),
         content_moderation: z.enum(['auto', 'low']).optional().describe('Public figure threshold.'),
         seed: z.number().int().optional().describe('Random seed (0-4294967295).'),
       }),
@@ -92,6 +95,7 @@ export function registerVideoTools(server: McpServer): void {
 
       const body: Record<string, unknown> = { model, promptText: args.prompt_text, ratio, duration };
       if (!isGen45) body.audio = audio;
+      if (args.negative_prompt && !isGen45) body.negativePrompt = args.negative_prompt;
       if (seed !== undefined) body.seed = seed;
       addContentModeration(body, args.content_moderation);
 
