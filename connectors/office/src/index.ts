@@ -2217,7 +2217,7 @@ registerTool(TOOL_NAMES.updateTableCell, {
       "text"
     ]
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
 }, async (input) => {
   const result = await sidecarRequest('word', 'update_table_cell', {
     tableIndex: input.tableIndex,
@@ -2285,7 +2285,7 @@ registerTool(TOOL_NAMES.applyStyle, {
       "target"
     ]
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
 }, async (input) => {
   const result = await sidecarRequest('word', 'apply_style', {
     style: input.style,
@@ -3575,7 +3575,7 @@ registerTool(TOOL_NAMES.excelCreatePivotTable, {
       "sourceRange"
     ]
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
 }, async (input) => {
   const result = await sidecarRequest('excel', 'create_pivot_table', {
     name: input.name,
@@ -3604,7 +3604,7 @@ registerTool(TOOL_NAMES.excelRefreshPivotTable, {
       }
     }
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
 }, async (input) => {
   const result = await sidecarRequest('excel', 'refresh_pivot_table', {
     name: input.name,
@@ -4245,7 +4245,7 @@ registerTool(TOOL_NAMES.pptApplyLayout, {
       "layout"
     ]
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
 }, async (input) => {
   const result = await sidecarRequest('powerpoint', 'apply_layout', {
     slideIndex: input.slideIndex, layout: input.layout,
@@ -4396,7 +4396,7 @@ registerTool(TOOL_NAMES.pptFormatShape, {
       "formatting"
     ]
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
 }, async (input) => {
   const result = await sidecarRequest('powerpoint', 'format_shape', {
     slideIndex: input.slideIndex, target: input.target, formatting: input.formatting,
@@ -4441,6 +4441,7 @@ export const __test = {
   toMcpResult,
   stampUntrustedSource,
   sidecarRequest,
+  server,
   packageVersion: PACKAGE_VERSION,
   setSpawnSidecarAndWaitForTests(fn: typeof defaultSpawnSidecarAndWait) {
     spawnSidecarAndWait = fn;

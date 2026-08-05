@@ -19,6 +19,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 - The MCP server now reports the real `package.json` version instead of a hardcoded literal that had drifted a full release behind (reported `0.1.1` while the package was `0.2.0`).
+- The six new content-mutating tools (`rebel_office_word_update_table_cell`, `rebel_office_word_apply_style`, `rebel_office_excel_create_pivot_table`, `rebel_office_excel_refresh_pivot_table`, `rebel_office_powerpoint_apply_layout`, `rebel_office_powerpoint_format_shape`) now advertise `destructiveHint: true`, matching both their README descriptions and the existing `rebel_office_powerpoint_delete_shape`.
 
 ### Security
 - Wrap all add-in-returned document/spreadsheet/slide content in `<untrusted-content source="microsoft-office-{app}">` envelopes at the `toMcpResult` boundary, and envelope add-in-relayed error messages (FOX-3490 remediation). Content authored inside Office files is attacker-influenced whenever the file came from somewhere else; the envelope marks it as data, not instructions. Locally generated guidance (sidecar unreachable, setup hints) is not enveloped.
