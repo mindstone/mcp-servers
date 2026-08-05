@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { registerConfigureTools, registerGenerationTools, registerDownloadTools } from './tools/index.js';
+import { registerConfigureTools, registerGenerationTools, registerDownloadTools, registerStylesTools } from './tools/index.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json') as { version: string };
@@ -14,6 +14,7 @@ export function createServer(): McpServer {
   registerConfigureTools(server);
   registerGenerationTools(server);
   registerDownloadTools(server);
+  registerStylesTools(server);
 
   return server;
 }

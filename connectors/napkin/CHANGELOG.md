@@ -11,6 +11,9 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+- **napkin**: Add `napkin_list_styles` tool exposing the 15 built-in Napkin style catalog (IDs, descriptions, categories) so models can pick a `style_id` without copying one from the app UI. Static catalog data — no API key or network call required.
+
 ### Fixed
 - **napkin**: Map HTTP 410 responses (status/file URLs expire 30 minutes after generation) to a structured `EXPIRED` error with an actionable regenerate-and-download-promptly resolution, instead of generic `API_ERROR`/`DOWNLOAD_ERROR`.
 

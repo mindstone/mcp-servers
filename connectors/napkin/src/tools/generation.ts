@@ -49,7 +49,10 @@ export function registerGenerationTools(server: McpServer): void {
           .string()
           .optional()
           .describe('Additional context to help generate better visuals (not shown in output)'),
-        style_id: z.string().optional().describe('Style identifier from Napkin'),
+        style_id: z
+          .string()
+          .optional()
+          .describe('Style identifier from Napkin — call napkin_list_styles to browse the 15 built-in styles'),
         visual_query: z
           .string()
           .optional()
