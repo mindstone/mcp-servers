@@ -50,6 +50,14 @@ export interface TemplateListResponse {
   results: Record<string, unknown>[];
 }
 
+export interface FolderListResponse {
+  results: Record<string, unknown>[];
+}
+
+export interface ContactListResponse {
+  results: Record<string, unknown>[];
+}
+
 export interface DocumentCreateResponse {
   id: string;
   name: string;

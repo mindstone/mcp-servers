@@ -224,7 +224,9 @@ describe('PandaDoc tool sources reach the envelope helper (static check)', () =>
     const path = await import('node:path');
     const url = await import('node:url');
     const dir = path.dirname(url.fileURLToPath(import.meta.url));
-    const TOOLS = ['documents.ts', 'templates.ts'];
+    // documents, templates, and discovery (folders/contacts) all return
+    // workspace-authored text.
+    const TOOLS = ['documents.ts', 'templates.ts', 'discovery.ts'];
 
     for (const f of TOOLS) {
       const contents = fs.readFileSync(path.join(dir, '..', 'src', 'tools', f), 'utf-8');

@@ -6,6 +6,8 @@ import {
   mockCreateFromTemplateResponse,
   mockSendResponse,
   mockSessionResponse,
+  mockDocumentFolders,
+  mockContacts,
 } from '../fixtures/pandadoc-data.js';
 
 const BASE = 'https://api.pandadoc.com/public/v1';
@@ -24,6 +26,28 @@ export function createPandaDocHandlers(expectedKey = 'test-pandadoc-key') {
   };
 
   return [
+    // GET /documents/folders — must precede the /documents/:id handler so
+    // the literal "folders" path isn't captured as a document id.
+    http.get(`${BASE}/documents/folders`, ({ request }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+      return HttpResponse.json({ results: mockDocumentFolders });
+    }),
+
+    // GET /contacts
+    http.get(`${BASE}/contacts`, ({ request }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+
+      const url = new URL(request.url);
+      const email = url.searchParams.get('email');
+      let filtered = mockContacts;
+      if (email) {
+        filtered = mockContacts.filter(c => c.email === email);
+      }
+      return HttpResponse.json({ results: filtered });
+    }),
+
     // GET /documents (list)
     http.get(`${BASE}/documents`, ({ request }) => {
       const authError = checkAuth(request);
