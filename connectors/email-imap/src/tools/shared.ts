@@ -8,7 +8,7 @@ import type { MessageAddressObject, MessageStructureObject } from 'imapflow';
 
 import type { ClientConfig } from '../types.js';
 import { getConnection } from '../imap-client.js';
-import { getPreset } from '../presets.js';
+import { getPreset, listPresetKeys } from '../presets.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 
 /**
@@ -257,6 +257,45 @@ export async function resolveDraftsMailbox(): Promise<string> {
   const defaultMailbox = fallbackCandidates[0] ?? 'Drafts';
   await client.mailboxCreate(defaultMailbox);
   return defaultMailbox;
+}
+
+/**
+ * Resolve the trash mailbox name for the current account, or null when the
+ * account has none. Unlike resolveDraftsMailbox this NEVER auto-creates the
+ * mailbox: deletion fallbacks (\Deleted + expunge) are decided by the caller
+ * based on whether a trash mailbox actually exists.
+ */
+export async function resolveTrashMailbox(): Promise<string | null> {
+  const client = await getConnection();
+  const listedMailboxes = await client.list();
+
+  const specialUseTrash = listedMailboxes.find(
+    (mailbox) => mailbox.specialUse === '\\Trash',
+  );
+  if (specialUseTrash) {
+    return specialUseTrash.path;
+  }
+
+  const mailboxByLowerName = new Map<string, string>();
+  for (const mailbox of listedMailboxes) {
+    mailboxByLowerName.set(mailbox.path.toLowerCase(), mailbox.path);
+  }
+
+  const fallbackCandidates = uniquePreserveOrder([
+    'Trash',
+    'Deleted Messages',
+    'Deleted Items',
+    ...listPresetKeys().flatMap((key) => getPreset(key)?.folderFallbacks.trash ?? []),
+  ]);
+
+  for (const candidate of fallbackCandidates) {
+    const existing = mailboxByLowerName.get(candidate.toLowerCase());
+    if (existing) {
+      return existing;
+    }
+  }
+
+  return null;
 }
 
 /**

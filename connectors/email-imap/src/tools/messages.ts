@@ -1,5 +1,5 @@
 /**
- * Message tools — search, get, move, and flag management.
+ * Message tools — search, get, move, delete, and flag management.
  */
 
 import { z } from 'zod';
@@ -15,6 +15,7 @@ import {
   collectMessageParts,
   ensureMailboxExists,
   wrapEmailField,
+  resolveTrashMailbox,
   type MessageParts,
 } from './shared.js';
 
@@ -322,6 +323,71 @@ export function registerMessageTools(server: McpServer): void {
             moved: uids.length,
           });
         }
+      } finally {
+        lock.release();
+      }
+    }),
+  );
+
+  // ── email_delete ────────────────────────────────────────────────
+
+  server.registerTool(
+    'email_delete',
+    {
+      description:
+        'Delete emails by UID. When the account has a Trash mailbox, messages are moved there ' +
+        '(recoverable); when no Trash mailbox exists, or the move fails, messages are marked ' +
+        '\\Deleted and expunged — PERMANENT. Deleting from the Trash mailbox always expunges ' +
+        'permanently. This is a destructive action: hosts MUST require explicit user ' +
+        'confirmation before each invocation.',
+      inputSchema: z.object({
+        uids: z
+          .array(z.number().int().positive())
+          .min(1)
+          .describe('Array of message UIDs to delete'),
+        mailbox: z.string().min(1).describe('Mailbox/folder containing the messages'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      ensureInitialized();
+
+      const { uids, mailbox } = args;
+
+      const lock = await getMailboxLock(mailbox);
+      try {
+        const client = await getConnection();
+        const trashMailbox = await resolveTrashMailbox();
+        const alreadyInTrash =
+          trashMailbox !== null &&
+          trashMailbox.toLowerCase() === mailbox.toLowerCase();
+
+        if (trashMailbox && !alreadyInTrash) {
+          try {
+            const moveResult = await client.messageMove(uids, trashMailbox, {
+              uid: true,
+            });
+            if (moveResult) {
+              return JSON.stringify({
+                ok: true,
+                deleted: uids.length,
+                method: 'trash',
+                trashMailbox,
+              });
+            }
+          } catch {
+            // MOVE unsupported or failed — fall through to expunge.
+          }
+        }
+
+        await client.messageFlagsAdd(uids, ['\\Deleted'], { uid: true });
+        await client.messageDelete(uids, { uid: true });
+
+        return JSON.stringify({
+          ok: true,
+          deleted: uids.length,
+          method: 'expunge',
+        });
       } finally {
         lock.release();
       }
