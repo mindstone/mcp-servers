@@ -174,6 +174,14 @@ export interface ContactWriteToolParams {
   notes?: string;
 }
 
+// Contact resource names follow the documented "people/<id>" form.
+const CONTACT_RESOURCE_NAME_PATTERN = /^people\/[^/\s]+$/;
+// Deliberately permissive email shape check — the People API is the authority;
+// this only catches clearly-malformed values before a network round-trip.
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Phone values are free-form upstream, but must contain at least one digit.
+const MAX_PHONE_LENGTH = 64;
+
 function readContactWriteFields(params: ContactWriteToolParams): Omit<CreateContactParams, 'email'> {
   const raw = params as unknown as Record<string, unknown>;
   return {
@@ -187,6 +195,22 @@ function readContactWriteFields(params: ContactWriteToolParams): Omit<CreateCont
     jobTitle: readAliasedString(raw, 'job_title', 'jobTitle'),
     notes: readAliasedString(raw, 'notes', 'notes')
   };
+}
+
+function validateContactWriteFields(fields: Omit<CreateContactParams, 'email'>): void {
+  if (fields.emailAddress !== undefined && !EMAIL_PATTERN.test(fields.emailAddress)) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'email_address must be a valid email address (e.g. "jane@example.com")'
+    );
+  }
+  if (fields.phoneNumber !== undefined
+    && (fields.phoneNumber.length > MAX_PHONE_LENGTH || !/\d/.test(fields.phoneNumber))) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'phone_number must contain at least one digit and be at most 64 characters'
+    );
+  }
 }
 
 function hasAnyWriteField(fields: Omit<CreateContactParams, 'email'>): boolean {
@@ -210,6 +234,7 @@ export async function handleCreateContact(
   await initializeServices();
   const email = await resolveEmail(params);
   const fields = readContactWriteFields(params);
+  validateContactWriteFields(fields);
 
   if (!hasAnyWriteField(fields)) {
     throw new McpError(
@@ -246,11 +271,12 @@ export async function handleUpdateContact(
   const raw = params as unknown as Record<string, unknown>;
   const resourceName = readAliasedString(raw, 'resource_name', 'resourceName');
   const fields = readContactWriteFields(params);
+  validateContactWriteFields(fields);
 
-  if (!resourceName) {
+  if (!resourceName || !CONTACT_RESOURCE_NAME_PATTERN.test(resourceName)) {
     throw new McpError(
       ErrorCode.InvalidParams,
-      'resource_name is required (e.g. "people/c1234567890" — get it from search_workspace_contacts)'
+      'resource_name is required in the form "people/c1234567890" — get it from search_workspace_contacts'
     );
   }
   if (!hasAnyWriteField(fields)) {

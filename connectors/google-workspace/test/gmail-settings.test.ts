@@ -151,6 +151,164 @@ describe('gmail settings write/read tools', () => {
     ).rejects.toThrow(/epoch milliseconds/);
   });
 
+  it('rejects numeric Unix-seconds timestamps too', async () => {
+    const handlers = await loadHandlers();
+    await expect(
+      handlers.handleUpdateWorkspaceVacationResponder({
+        email: TEST_EMAIL,
+        enabled: false,
+        end_time: 1786464000, // seconds as a number — same 1000x-off hazard as the string form
+      }),
+    ).rejects.toThrow(/epoch milliseconds/);
+  });
+
+  it('accepts numeric epoch-millisecond timestamps', async () => {
+    let sentBody: Record<string, unknown> | undefined;
+    mswServer.use(
+      http.get('https://gmail.googleapis.com/gmail/v1/users/me/settings/vacation', () => HttpResponse.json({
+        enableAutoReply: false,
+        responseBodyPlainText: 'I am out.',
+      })),
+      http.put('https://gmail.googleapis.com/gmail/v1/users/me/settings/vacation', async ({ request }) => {
+        sentBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ enableAutoReply: true });
+      }),
+    );
+    const handlers = await loadHandlers();
+    await handlers.handleUpdateWorkspaceVacationResponder({
+      email: TEST_EMAIL,
+      enabled: true,
+      end_time: 1786464000000,
+    });
+    expect(sentBody?.endTime).toBe('1786464000000');
+  });
+
+  it('preserves a pending scheduled end on an unrelated update', async () => {
+    const futureEnd = String(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    let sentBody: Record<string, unknown> | undefined;
+    mswServer.use(
+      http.get('https://gmail.googleapis.com/gmail/v1/users/me/settings/vacation', () => HttpResponse.json({
+        enableAutoReply: true,
+        responseSubject: 'Away',
+        responseBodyPlainText: 'I am out.',
+        endTime: futureEnd,
+      })),
+      http.put('https://gmail.googleapis.com/gmail/v1/users/me/settings/vacation', async ({ request }) => {
+        sentBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ enableAutoReply: true });
+      }),
+    );
+    const handlers = await loadHandlers();
+    await handlers.handleUpdateWorkspaceVacationResponder({
+      email: TEST_EMAIL,
+      enabled: true,
+      response_subject: 'Still away',
+    });
+    // The Gmail API replaces the whole resource — omitting endTime would erase the scheduled end.
+    expect(sentBody?.endTime).toBe(futureEnd);
+    expect(sentBody?.responseSubject).toBe('Still away');
+  });
+
+  it('clear_end_time explicitly removes a scheduled end', async () => {
+    const futureEnd = String(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    let sentBody: Record<string, unknown> | undefined;
+    mswServer.use(
+      http.get('https://gmail.googleapis.com/gmail/v1/users/me/settings/vacation', () => HttpResponse.json({
+        enableAutoReply: true,
+        responseBodyPlainText: 'I am out.',
+        endTime: futureEnd,
+      })),
+      http.put('https://gmail.googleapis.com/gmail/v1/users/me/settings/vacation', async ({ request }) => {
+        sentBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ enableAutoReply: true });
+      }),
+    );
+    const handlers = await loadHandlers();
+    await handlers.handleUpdateWorkspaceVacationResponder({
+      email: TEST_EMAIL,
+      enabled: true,
+      clear_end_time: true,
+    });
+    expect(sentBody && 'endTime' in sentBody).toBe(false);
+  });
+
+  it('rejects clear_end_time combined with end_time', async () => {
+    const handlers = await loadHandlers();
+    await expect(
+      handlers.handleUpdateWorkspaceVacationResponder({
+        email: TEST_EMAIL,
+        enabled: true,
+        end_time: '2026-08-10',
+        clear_end_time: true,
+      }),
+    ).rejects.toMatchObject({ code: ErrorCode.InvalidParams });
+  });
+
+  it('does not inherit an already-past scheduled end when re-enabling', async () => {
+    const pastEnd = String(Date.now() - 24 * 60 * 60 * 1000);
+    let sentBody: Record<string, unknown> | undefined;
+    mswServer.use(
+      http.get('https://gmail.googleapis.com/gmail/v1/users/me/settings/vacation', () => HttpResponse.json({
+        enableAutoReply: false,
+        responseBodyPlainText: 'I am out.',
+        endTime: pastEnd,
+      })),
+      http.put('https://gmail.googleapis.com/gmail/v1/users/me/settings/vacation', async ({ request }) => {
+        sentBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ enableAutoReply: true });
+      }),
+    );
+    const handlers = await loadHandlers();
+    await handlers.handleUpdateWorkspaceVacationResponder({ email: TEST_EMAIL, enabled: true });
+    // A stale end would violate the API's start < end constraint and expire the reply instantly.
+    expect(sentBody && 'endTime' in sentBody).toBe(false);
+  });
+
+  it('preserves an HTML-only body as HTML instead of flattening it to plain text', async () => {
+    let sentBody: Record<string, unknown> | undefined;
+    mswServer.use(
+      http.get('https://gmail.googleapis.com/gmail/v1/users/me/settings/vacation', () => HttpResponse.json({
+        enableAutoReply: true,
+        responseSubject: 'Away',
+        responseBodyHtml: '<div>I am <b>out</b>.</div>',
+      })),
+      http.put('https://gmail.googleapis.com/gmail/v1/users/me/settings/vacation', async ({ request }) => {
+        sentBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ enableAutoReply: true });
+      }),
+    );
+    const handlers = await loadHandlers();
+    await handlers.handleUpdateWorkspaceVacationResponder({
+      email: TEST_EMAIL,
+      enabled: true,
+      response_subject: 'Still away',
+    });
+    expect(sentBody?.responseBodyHtml).toBe('<div>I am <b>out</b>.</div>');
+    expect(sentBody && 'responseBodyPlainText' in sentBody).toBe(false);
+  });
+
+  it('treats an existing HTML body as satisfying the message requirement when enabling', async () => {
+    mswServer.use(
+      http.get('https://gmail.googleapis.com/gmail/v1/users/me/settings/vacation', () => HttpResponse.json({
+        enableAutoReply: false,
+        responseBodyHtml: '<div>I am out.</div>',
+      })),
+      http.put('https://gmail.googleapis.com/gmail/v1/users/me/settings/vacation', async ({ request }) => {
+        const sentBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({
+          enableAutoReply: sentBody.enableAutoReply,
+          responseBodyHtml: sentBody.responseBodyHtml,
+        });
+      }),
+    );
+    const handlers = await loadHandlers();
+    const result = await handlers.handleUpdateWorkspaceVacationResponder({
+      email: TEST_EMAIL,
+      enabled: true,
+    }) as { enabled: boolean };
+    expect(result.enabled).toBe(true);
+  });
+
   it('accepts ISO date strings for start/end times', async () => {
     let sentBody: Record<string, unknown> | undefined;
     mswServer.use(

@@ -10,7 +10,7 @@ import {
 } from '../modules/gmail/services/label.js';
 import { AttachmentService } from '../modules/attachments/service.js';
 import { ATTACHMENT_FOLDERS } from '../modules/attachments/types.js';
-import { lstatSync, readFileSync, realpathSync, statSync } from 'fs';
+import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, realpathSync } from 'fs';
 import path from 'path';
 import { McpToolResponse } from './types.js';
 import { wrapUntrustedContent, wrapUntrustedJsonStrings } from '../utils/untrusted-content.js';
@@ -155,15 +155,30 @@ export function resolveAttachmentFromPath(filePath: string): { content: string; 
     );
   }
 
-  const stats = statSync(candidateRealpath);
-  const content = readFileSync(candidateRealpath);
-  const ext = path.extname(candidateRealpath).toLowerCase();
-  return {
-    content: content.toString('base64'),
-    name: path.basename(candidateRealpath),
-    mimeType: MIME_TYPES[ext] || 'application/octet-stream',
-    size: stats.size,
-  };
+  // Open once and read through the fd: checking the path and then re-opening it
+  // by name would leave a swap race between the containment check and the read.
+  // O_NOFOLLOW (where the platform supports it) refuses a symlink planted in
+  // that window.
+  const fd = openSync(candidateRealpath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  try {
+    const stats = fstatSync(fd);
+    if (!stats.isFile()) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        'Attachment path must point to a regular file.'
+      );
+    }
+    const content = readFileSync(fd);
+    const ext = path.extname(candidateRealpath).toLowerCase();
+    return {
+      content: content.toString('base64'),
+      name: path.basename(candidateRealpath),
+      mimeType: MIME_TYPES[ext] || 'application/octet-stream',
+      size: stats.size,
+    };
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function processOutgoingAttachments(attachments?: OutgoingGmailAttachment[]): OutgoingGmailAttachment[] | undefined {
@@ -830,14 +845,18 @@ export async function handleGetWorkspaceGmailSettings(params: { email?: string }
 
 /**
  * Parses a vacation start/end timestamp per the repo's epoch-ms rules: a number
- * (epoch ms), a digit-only string in the unambiguous epoch-ms window
- * [1e12, 1e14), or a parseable date string. Anything else is rejected.
+ * or digit-only string in the unambiguous epoch-ms window [1e12, 1e14), or a
+ * parseable date string. Anything else — notably Unix *seconds* like
+ * 1735689600, which would silently be 1000x off — is rejected.
  */
 function parseEpochMsField(value: unknown, fieldName: string): number | undefined {
   if (value === undefined || value === null) return undefined;
   if (typeof value === 'number') {
-    if (!Number.isFinite(value) || value <= 0) {
-      throw new McpError(ErrorCode.InvalidParams, `${fieldName} must be a positive epoch-ms number`);
+    if (!Number.isFinite(value) || value < 1e12 || value >= 1e14) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `${fieldName} numbers must be epoch milliseconds (e.g. 1735689600000), not seconds`
+      );
     }
     return value;
   }
@@ -873,6 +892,8 @@ export interface UpdateVacationResponderToolParams {
   startTime?: number | string;
   end_time?: number | string;
   endTime?: number | string;
+  clear_end_time?: boolean;
+  clearEndTime?: boolean;
   contacts_only?: boolean;
   contactsOnly?: boolean;
   domain_only?: boolean;
@@ -894,6 +915,13 @@ export async function handleUpdateWorkspaceVacationResponder(params: UpdateVacat
 
   const startTime = parseEpochMsField(rawParams.start_time ?? rawParams.startTime, 'start_time');
   const endTime = parseEpochMsField(rawParams.end_time ?? rawParams.endTime, 'end_time');
+  const clearEndTime = readAliasedBoolean(rawParams, 'clear_end_time', 'clearEndTime') ?? false;
+  if (clearEndTime && endTime !== undefined) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'Pass either end_time or clear_end_time, not both'
+    );
+  }
   if (startTime !== undefined && endTime !== undefined && endTime <= startTime) {
     throw new McpError(ErrorCode.InvalidParams, 'end_time must be after start_time');
   }
@@ -907,6 +935,7 @@ export async function handleUpdateWorkspaceVacationResponder(params: UpdateVacat
         responseBody: readAliasedString(rawParams, 'response_body', 'responseBody'),
         startTime,
         endTime,
+        clearEndTime,
         contactsOnly: readAliasedBoolean(rawParams, 'contacts_only', 'contactsOnly'),
         domainOnly: readAliasedBoolean(rawParams, 'domain_only', 'domainOnly')
       });

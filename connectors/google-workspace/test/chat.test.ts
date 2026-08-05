@@ -257,6 +257,26 @@ describe('Chat handlers error handling', () => {
     });
   });
 
+  it('rejects malformed space resource names', async () => {
+    const handlers = await loadHandlers();
+
+    const barePrefix = handlers.handleSendChatMessage({ space: 'spaces/', text: 'hi' });
+    await expect(barePrefix).rejects.toMatchObject({ code: ErrorCode.InvalidParams });
+
+    const nestedPath = handlers.handleSendChatMessage({ space: 'spaces/AAAA/messages', text: 'hi' });
+    await expect(nestedPath).rejects.toMatchObject({ code: ErrorCode.InvalidParams });
+  });
+
+  it('rejects message text above the Chat API length limit', async () => {
+    const handlers = await loadHandlers();
+
+    const tooLong = handlers.handleSendChatMessage({ space: SPACE_NAME, text: 'x'.repeat(4097) });
+    await expect(tooLong).rejects.toMatchObject({ code: ErrorCode.InvalidParams });
+    await tooLong.catch((err: McpError) => {
+      expect(err.message).toContain('4096');
+    });
+  });
+
   it('rejects a space parameter that is not a space resource name', async () => {
     const handlers = await loadHandlers();
 

@@ -734,7 +734,10 @@ Attachments are NOT automatically carried over — you must explicitly download 
     - start_time: When to start replying — epoch milliseconds (number, e.g.
       1786032000000) or a parseable date string (e.g. "2026-08-07"). Defaults to
       now when enabling.
-    - end_time: When to stop replying (same formats). Omit for no scheduled end.
+    - end_time: When to stop replying (same formats). Omit to keep the currently
+      scheduled end (if any).
+    - clear_end_time: Set true to remove the scheduled end (open-ended auto-reply).
+      Cannot be combined with end_time.
     - contacts_only: Only auto-reply to people in the user's contacts
     - domain_only: Only auto-reply to people in the user's organization
 
@@ -766,7 +769,11 @@ Attachments are NOT automatically carried over — you must explicitly download 
         },
         end_time: {
           type: ['number', 'string'],
-          description: 'When to stop replying: Unix timestamp in milliseconds (number, e.g. 1786464000000) or a parseable date string (e.g. "2026-08-10"). Omit for no scheduled end.'
+          description: 'When to stop replying: Unix timestamp in milliseconds (number, e.g. 1786464000000) or a parseable date string (e.g. "2026-08-10"). Omit to keep the currently scheduled end (if any).'
+        },
+        clear_end_time: {
+          type: 'boolean',
+          description: 'Set true to remove the scheduled end time (open-ended auto-reply). Cannot be combined with end_time.'
         },
         contacts_only: {
           type: 'boolean',
