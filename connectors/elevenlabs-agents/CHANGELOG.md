@@ -7,6 +7,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- README Status section no longer claims a bootstrap placeholder version `0.0.0`; it now points at the released version and changelog, matching the sibling connectors.
+
 ## [0.1.2] - 2026-08-03
 
 ### Changed

@@ -6,7 +6,7 @@ ElevenLabs Conversational AI MCP server for Model Context Protocol hosts. Inspec
 
 ## Status
 
-- **Version:** bootstrap placeholder `0.0.0` until the first publish stage
+- **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs-agents)
 - **Auth:** API key ([`ELEVENLABS_API_KEY`](./server.json))
 - **Tools:** [24](./src/tools/) (configure, agents, conversations, phone numbers, outbound calls, batch calls, knowledge base)
 - **Surface:** cloud-api
