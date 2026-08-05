@@ -7,6 +7,11 @@ import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
 import { MAX_FILE_SIZE } from '../types.js';
 import { resolveUploadPath } from './path-safety.js';
+import {
+  sanitizeDocumentCompact,
+  sanitizeDocumentDetails,
+  sanitizeRecipients,
+} from '../sanitize.js';
 import type {
   DocumentListResponse,
   DocumentCreateResponse,
@@ -25,39 +30,51 @@ function noApiKeyError(): string {
   });
 }
 
-function formatDocumentCompact(doc: Record<string, unknown>): Record<string, unknown> {
-  return {
-    id: doc.id,
-    name: doc.name,
-    status: doc.status,
-    date_created: doc.date_created,
-    date_modified: doc.date_modified,
-    expiration_date: doc.expiration_date,
-    version: doc.version,
-  };
+function formatDocumentCompact(
+  doc: Record<string, unknown>,
+  source: string,
+): Record<string, unknown> {
+  return sanitizeDocumentCompact(
+    {
+      id: doc.id,
+      name: doc.name,
+      status: doc.status,
+      date_created: doc.date_created,
+      date_modified: doc.date_modified,
+      expiration_date: doc.expiration_date,
+      version: doc.version,
+    },
+    source,
+  ) as Record<string, unknown>;
 }
 
-function formatDocumentDetails(doc: Record<string, unknown>): Record<string, unknown> {
-  return {
-    id: doc.id,
-    name: doc.name,
-    status: doc.status,
-    date_created: doc.date_created,
-    date_modified: doc.date_modified,
-    date_completed: doc.date_completed,
-    date_sent: doc.date_sent,
-    expiration_date: doc.expiration_date,
-    version: doc.version,
-    created_by: doc.created_by,
-    template: doc.template,
-    recipients: doc.recipients,
-    fields: doc.fields,
-    tokens: doc.tokens,
-    metadata: doc.metadata,
-    tags: doc.tags,
-    grand_total: doc.grand_total,
-    linked_objects: doc.linked_objects,
-  };
+function formatDocumentDetails(
+  doc: Record<string, unknown>,
+  source: string,
+): Record<string, unknown> {
+  return sanitizeDocumentDetails(
+    {
+      id: doc.id,
+      name: doc.name,
+      status: doc.status,
+      date_created: doc.date_created,
+      date_modified: doc.date_modified,
+      date_completed: doc.date_completed,
+      date_sent: doc.date_sent,
+      expiration_date: doc.expiration_date,
+      version: doc.version,
+      created_by: doc.created_by,
+      template: doc.template,
+      recipients: doc.recipients,
+      fields: doc.fields,
+      tokens: doc.tokens,
+      metadata: doc.metadata,
+      tags: doc.tags,
+      grand_total: doc.grand_total,
+      linked_objects: doc.linked_objects,
+    },
+    source,
+  ) as Record<string, unknown>;
 }
 
 function paginationHint(count: number, page: number, pageSize: number): string {
@@ -116,7 +133,9 @@ RELATED TOOLS:
         `/documents?${params.toString()}`,
       );
 
-      const documents = (result.results || []).map(formatDocumentCompact);
+      const documents = (result.results || []).map((d) =>
+        formatDocumentCompact(d, 'pandadoc:list_documents'),
+      );
       const hint = paginationHint(documents.length, args.page, args.count);
 
       return JSON.stringify({ ok: true, documents, count: documents.length, pagination: hint });
@@ -153,7 +172,10 @@ WORKFLOW — After upload:
         `/documents/${encodeURIComponent(args.document_id)}`,
       );
 
-      return JSON.stringify({ ok: true, document: formatDocumentCompact(result) });
+      return JSON.stringify({
+        ok: true,
+        document: formatDocumentCompact(result, 'pandadoc:get_document_status'),
+      });
     }),
   );
 
@@ -183,7 +205,10 @@ RELATED TOOLS:
         `/documents/${encodeURIComponent(args.document_id)}/details`,
       );
 
-      return JSON.stringify({ ok: true, document: formatDocumentDetails(result) });
+      return JSON.stringify({
+        ok: true,
+        document: formatDocumentDetails(result, 'pandadoc:get_document_details'),
+      });
     }),
   );
 
@@ -249,7 +274,10 @@ RELATED TOOLS:
 
       return JSON.stringify({
         ok: true,
-        document: formatDocumentCompact(result as unknown as Record<string, unknown>),
+        document: formatDocumentCompact(
+          result as unknown as Record<string, unknown>,
+          'pandadoc:create_document_from_template',
+        ),
         info: result.info_message || 'Document created. Poll get_document_status until status is "document.draft" before sending.',
       });
     }),
@@ -421,7 +449,10 @@ RELATED TOOLS:
 
       return JSON.stringify({
         ok: true,
-        document: formatDocumentCompact(result as unknown as Record<string, unknown>),
+        document: formatDocumentCompact(
+          result as unknown as Record<string, unknown>,
+          'pandadoc:upload_document',
+        ),
         info: result.info_message || 'Document uploaded. Poll get_document_status until status is "document.draft" before sending.',
       });
     }),
@@ -480,10 +511,15 @@ RELATED TOOLS:
       return JSON.stringify({
         ok: true,
         document: {
-          id: result.id,
-          name: result.name,
-          status: result.status,
-          recipients: result.recipients,
+          ...(sanitizeDocumentCompact(
+            {
+              id: result.id,
+              name: result.name,
+              status: result.status,
+            },
+            'pandadoc:send_document',
+          ) as Record<string, unknown>),
+          recipients: sanitizeRecipients(result.recipients, 'pandadoc:send_document:recipients'),
         },
         message: 'Document sent successfully.',
       });

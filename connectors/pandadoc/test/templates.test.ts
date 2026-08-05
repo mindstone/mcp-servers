@@ -34,6 +34,8 @@ describe('PandaDoc template tools', () => {
     const json = result.json as { ok: boolean; templates: Array<{ id: string; name: string }> };
     expect(json.ok).toBe(true);
     expect(json.templates).toHaveLength(1);
-    expect(json.templates[0].name).toBe('NDA Template');
+    expect(json.templates[0].name).toBe(
+      '<untrusted-content source="pandadoc:list_templates:name">NDA Template</untrusted-content>',
+    );
   });
 });

@@ -37,7 +37,9 @@ describe('PandaDoc document tools', () => {
     const json = result.json as { ok: boolean; documents: Array<{ id: string; name: string }> };
     expect(json.ok).toBe(true);
     expect(json.documents).toHaveLength(1);
-    expect(json.documents[0].name).toBe('NDA Agreement');
+    expect(json.documents[0].name).toBe(
+      '<untrusted-content source="pandadoc:list_documents:name">NDA Agreement</untrusted-content>',
+    );
   });
 
   // ── get_document_status ─────────────────────────────────────────
@@ -89,10 +91,16 @@ describe('PandaDoc document tools', () => {
     expect(json.ok).toBe(true);
     expect(json.document.id).toBe('doc-1');
     expect(json.document.recipients).toHaveLength(1);
-    expect(json.document.recipients[0].email).toBe('jane@client.com');
+    expect(json.document.recipients[0].email).toBe(
+      '<untrusted-content source="pandadoc:get_document_details:recipients">jane@client.com</untrusted-content>',
+    );
     expect(json.document.fields).toHaveLength(1);
-    expect(json.document.tags).toContain('sales');
-    expect(json.document.grand_total.amount).toBe('5000');
+    expect(json.document.tags).toContain(
+      '<untrusted-content source="pandadoc:get_document_details:tags">sales</untrusted-content>',
+    );
+    expect(json.document.grand_total.amount).toBe(
+      '<untrusted-content source="pandadoc:get_document_details:grand_total">5000</untrusted-content>',
+    );
   });
 
   it('get_document_details with invalid ID returns error', async () => {
