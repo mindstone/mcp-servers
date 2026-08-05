@@ -27,6 +27,7 @@ are maintained manually as part of the PR review checklist.
 ### Fixed
 - API responses are now Zod-validated against the expected JSON:API envelope structure instead of being blindly cast; a malformed 200 body surfaces a structured `INVALID_RESPONSE` error instead of confusing downstream failures.
 - `outreach_list_tasks` now filters on the API's actual task `state` attribute (`filter[state]`, values `incomplete`/`completed`); the previous `filter[status]` matched nothing, so status filtering silently returned unfiltered results.
+- `page_offset` parameter descriptions now state that the value is a record offset (the API's `page[offset]`), not a page index.
 
 ### Changed
 - The default OAuth scope set (`OUTREACH_OAUTH_SCOPES` fallback) now also requests `sequenceStates.all`, `sequenceSteps.read`, `sequenceTemplates.read`, `templates.read`, `calls.read`, and `mailboxes.read`, covering the new sequence-content, enrollment-management, calls, and mailboxes tools — and fixing the sequence-enroll tool's previously undeclared `sequenceStates` scope. Accounts connected before this change need to re-run `outreach_connect_account` to pick up the new scopes.

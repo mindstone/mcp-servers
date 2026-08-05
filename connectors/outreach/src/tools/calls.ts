@@ -21,7 +21,7 @@ logged call outcome. Useful for meeting prep and reviewing recent activity.`,
         prospect_id: z.string().optional().describe('Filter calls for a specific prospect'),
         user_id: z.string().optional().describe('Filter calls made by a specific Outreach user'),
         limit: z.number().min(1).max(50).default(25).optional().describe('Max results (default 25, max 50)'),
-        page_offset: z.number().min(0).optional().describe('Page offset for pagination'),
+        page_offset: z.number().min(0).optional().describe('Record offset into the result list for pagination (maps to the API\'s page[offset]; e.g. 25 for the second page with limit 25)'),
       }),
       annotations: {
         readOnlyHint: true,
