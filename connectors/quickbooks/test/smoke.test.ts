@@ -27,6 +27,9 @@ const EXPECTED_TOOLS = [
   'list_quickbooks_invoices',
   'list_quickbooks_vendors',
   'query_quickbooks',
+  'update_quickbooks_customer',
+  'update_quickbooks_invoice',
+  'update_quickbooks_vendor',
   'send_quickbooks_invoice_email',
 ].sort();
 
@@ -41,7 +44,7 @@ describe('Smoke test — tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 18 tools with correct names', async () => {
+  it('registers exactly 21 tools with correct names', async () => {
     mswServer.use(...createQuickBooksHandlers());
 
     testClient = await createTestClient({
@@ -58,13 +61,13 @@ describe('Smoke test — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(18);
+    expect(toolsResult.tools).toHaveLength(21);
     expect(toolNames).toEqual(EXPECTED_TOOLS);
   });
 });
 
 describe('Spawned stdio smoke test', () => {
-  it('lists 18 tools from built dist/index.js', async () => {
+  it('lists 21 tools from built dist/index.js', async () => {
     const { createStdioTestClient } = await import('@mindstone/mcp-test-harness');
     const { join } = await import('path');
 
@@ -84,7 +87,7 @@ describe('Spawned stdio smoke test', () => {
 
     try {
       const toolsResult = await client.client.listTools();
-      expect(toolsResult.tools).toHaveLength(18);
+      expect(toolsResult.tools).toHaveLength(21);
     } finally {
       await client.close();
     }

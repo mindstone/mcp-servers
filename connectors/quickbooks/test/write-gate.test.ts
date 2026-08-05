@@ -483,6 +483,9 @@ describe('VAL-QB-302 — every destructiveHint:true tool is gated', () => {
         lines: [{ description: 'x', amount: 1 }],
       },
       send_quickbooks_invoice_email: { invoiceId: 'inv-1' },
+      update_quickbooks_invoice: { invoiceId: 'inv-1', memo: 'Net 30' },
+      update_quickbooks_customer: { customerId: 'c1', email: 'ap@example.com' },
+      update_quickbooks_vendor: { vendorId: 'v1', email: 'ap@example.com' },
     };
 
     for (const t of destructive) {

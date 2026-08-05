@@ -8,8 +8,8 @@ import * as path from 'path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { withErrorHandling, escapeQboql, validateAlphanumericId, requireProdWritesEnabled } from '../utils.js';
-import { qboFetch, qboFetchBinary, qboQuery } from '../client.js';
-import { QBO_MINOR_VERSION } from '../types.js';
+import { qboFetch, qboFetchBinary, qboQuery, qboSparseUpdate } from '../client.js';
+import { QBO_MINOR_VERSION, QuickBooksError } from '../types.js';
 import { sanitizeQboEntity } from '../sanitize.js';
 
 export function registerInvoiceTools(server: McpServer): void {
@@ -116,6 +116,51 @@ COMMON MISTAKES:
         ok: true,
         message: 'Invoice created.',
         invoice: sanitizeQboEntity(result.Invoice, 'quickbooks:create_quickbooks_invoice'),
+      });
+    }),
+  );
+
+  server.registerTool(
+    'update_quickbooks_invoice',
+    {
+      description: `Sparse-update an existing invoice in QuickBooks Online (header fields only — line items cannot be sparse-updated).
+
+Example: { "invoiceId": "123", "dueDate": "2026-04-01" }
+Example: { "invoiceId": "123", "memo": "Net 30", "privateNote": "Chased 2026-03-01" }
+
+Requires QB_ALLOW_PROD_WRITES=1. If syncToken is omitted the invoice is read
+first to obtain the current one (QuickBooks rejects stale SyncTokens).`,
+      inputSchema: z.object({
+        invoiceId: z.string().describe('Invoice ID (required)'),
+        syncToken: z.string().optional()
+          .describe('Current SyncToken (omit to read it from QuickBooks first)'),
+        dueDate: z.string().optional().describe('New due date (YYYY-MM-DD)'),
+        memo: z.string().optional().describe('New customer memo'),
+        privateNote: z.string().optional().describe('New private note (not visible to the customer)'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      requireProdWritesEnabled();
+      validateAlphanumericId(args.invoiceId, 'invoiceId');
+
+      const fields: Record<string, unknown> = {};
+      if (args.dueDate) fields.DueDate = args.dueDate;
+      if (args.memo) fields.CustomerMemo = { value: args.memo };
+      if (args.privateNote) fields.PrivateNote = args.privateNote;
+      if (Object.keys(fields).length === 0) {
+        throw new QuickBooksError(
+          'Nothing to update: provide at least one of dueDate, memo, privateNote.',
+          'INVALID_INPUT',
+          'Pass at least one field to update.',
+        );
+      }
+
+      const invoice = await qboSparseUpdate('invoice', 'Invoice', args.invoiceId, args.syncToken, fields);
+      return JSON.stringify({
+        ok: true,
+        message: 'Invoice updated.',
+        invoice: sanitizeQboEntity(invoice, 'quickbooks:update_quickbooks_invoice'),
       });
     }),
   );

@@ -8,7 +8,7 @@
  * Base URL: https://{host}/v3/company/{realmId}
  */
 
-import { QuickBooksError, USER_AGENT, REQUEST_TIMEOUT_MS } from './types.js';
+import { QuickBooksError, USER_AGENT, REQUEST_TIMEOUT_MS, QBO_MINOR_VERSION } from './types.js';
 import { getAccessToken, getBaseUrl, isConfigured, clearTokenCache } from './auth.js';
 
 /**
@@ -148,6 +148,45 @@ export async function qboFetch<T>(
 export async function qboFetchBinary(entityPath: string, accept: string): Promise<Buffer> {
   const response = await qboRequest(entityPath, { headers: { Accept: accept } });
   return Buffer.from(await response.arrayBuffer());
+}
+
+/**
+ * Sparse-update a QuickBooks entity: POST { Id, SyncToken, sparse: true, ...fields }
+ * to the entity endpoint. When `syncToken` is not supplied the entity is read
+ * first to obtain the current one (QBO rejects updates with a stale SyncToken).
+ * Returns the updated entity object.
+ */
+export async function qboSparseUpdate(
+  entityPath: string,
+  entityKey: string,
+  id: string,
+  syncToken: string | undefined,
+  fields: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  let token = syncToken;
+  if (token === undefined) {
+    const current = await qboFetch<Record<string, Record<string, unknown>>>(
+      `/${entityPath}/${encodeURIComponent(id)}?minorversion=${QBO_MINOR_VERSION}`,
+    );
+    const entity = current[entityKey] ?? current;
+    if (typeof entity?.SyncToken !== 'string') {
+      throw new QuickBooksError(
+        `Could not read the current SyncToken for ${entityKey} ${id}.`,
+        'SYNC_TOKEN_UNAVAILABLE',
+        'Verify the entity ID is correct with get_quickbooks_entity, then retry.',
+      );
+    }
+    token = entity.SyncToken;
+  }
+
+  const result = await qboFetch<Record<string, Record<string, unknown>>>(
+    `/${entityPath}?minorversion=${QBO_MINOR_VERSION}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ Id: id, SyncToken: token, sparse: true, ...fields }),
+    },
+  );
+  return result[entityKey] ?? {};
 }
 
 /**

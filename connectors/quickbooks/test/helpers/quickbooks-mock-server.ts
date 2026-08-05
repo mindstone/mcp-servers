@@ -167,7 +167,7 @@ export function createQuickBooksHandlers(options: MockServerOptions = {}): HttpH
       const capitalized = entityType.charAt(0).toUpperCase() + entityType.slice(1);
 
       return HttpResponse.json({
-        [capitalized]: { Id: entityId, DisplayName: `Test ${capitalized}`, Active: true },
+        [capitalized]: { Id: entityId, SyncToken: '0', DisplayName: `Test ${capitalized}`, Active: true },
       });
     }),
 
