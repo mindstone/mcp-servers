@@ -5,10 +5,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createInMemoryClientPair,
   importConnectorModule,
+  makeImageBase64,
 } from './helpers.js';
 
 const cleanupTargets: string[] = [];
-const IMAGE_BASE64 = Buffer.alloc(128, 1).toString('base64');
 
 const makeTempDir = async (label: string): Promise<string> => {
   const dir = await fs.mkdtemp(path.join('/tmp', `Acme-${label}-`));
@@ -21,18 +21,33 @@ interface CapturedRequest {
   body: unknown;
 }
 
+// The connector verifies that upstream bytes match the requested format, so
+// the mock must answer with correctly-signed payloads per output_format.
+const requestedOutputFormat = (body: unknown): 'png' | 'jpeg' | 'webp' => {
+  let format: unknown;
+  if (typeof body === 'string') {
+    format = (JSON.parse(body) as { output_format?: unknown }).output_format;
+  } else if (body instanceof FormData) {
+    format = body.get('output_format');
+  }
+  return format === 'jpeg' || format === 'webp' ? format : 'png';
+};
+
 const mockOpenAIImageResponses = (
   captured: CapturedRequest[],
 ): ReturnType<typeof vi.spyOn> =>
   vi
     .spyOn(globalThis, 'fetch')
     .mockImplementation(async (input, init) => {
+      const body = (init as RequestInit | undefined)?.body;
       captured.push({
         url: String(input),
-        body: (init as RequestInit | undefined)?.body,
+        body,
       });
       return new Response(
-        JSON.stringify({ data: [{ b64_json: IMAGE_BASE64 }] }),
+        JSON.stringify({
+          data: [{ b64_json: makeImageBase64(requestedOutputFormat(body)) }],
+        }),
         {
           status: 200,
           headers: { 'Content-Type': 'application/json' },

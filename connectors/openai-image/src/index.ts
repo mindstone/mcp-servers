@@ -11,6 +11,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { logger, redactSensitiveInLogs } from './logger.js';
+import { wrapUntrusted } from './untrusted-content.js';
 
 const require = createRequire(import.meta.url);
 const packageJson = require('../package.json') as { version: string };
@@ -81,12 +82,18 @@ interface OpenAIErrorData {
   };
 }
 
-interface OpenAIImageResponse {
-  data?: Array<{
-    b64_json?: string;
-    [key: string]: unknown;
-  }>;
-}
+// External responses are validated with Zod (repo convention) rather than
+// cast: a malformed success body fails closed with an observable NETWORK_ERROR
+// instead of flowing unknown shapes into the image-mapping code.
+const openAIImageResponseSchema = z
+  .object({
+    data: z
+      .array(z.object({ b64_json: z.string().optional() }).passthrough())
+      .optional(),
+  })
+  .passthrough();
+
+type OpenAIImageResponse = z.infer<typeof openAIImageResponseSchema>;
 
 interface LoadedLocalImage {
   path: string;
@@ -227,13 +234,42 @@ if (!KNOWN_MODELS.has(configuredModel())) {
   );
 }
 
-const sanitizeUserFacingText = (value: string): string => {
-  const redacted = redactSensitiveInLogs(value);
-  const redactedText = typeof redacted === 'string' ? redacted : String(redacted);
-  return redactedText.replace(
+// AGENTS.md security invariant #6: values a caller controls (tool arguments
+// such as image_paths/mask_path, or env config such as OPENAI_IMAGE_MODEL) are
+// enveloped before they are echoed into model-visible error text, so a crafted
+// value carrying a close-tag variant cannot terminate the result envelope and
+// be re-read as instructions. The raw text stays intact inside the envelope —
+// fence errors deliberately keep the full supplied path so the caller can
+// self-correct.
+const envelopeEchoedValue = (value: string, source: string): string =>
+  wrapUntrusted(value, source) ?? value;
+
+const envelopeToolInput = (value: string): string =>
+  envelopeEchoedValue(value, 'openai-image:tool-input');
+
+const envelopeConfiguredModel = (value: string): string =>
+  envelopeEchoedValue(value, 'openai-image:config:model');
+
+// Splits on whole `<untrusted-content …>…</untrusted-content>` spans so the
+// path-collapsing below never mangles an envelope's own close tag.
+const UNTRUSTED_ENVELOPE_SPAN =
+  /(<untrusted-content source="[^"]*">[\s\S]*?<\/untrusted-content>)/u;
+
+const collapseAbsolutePaths = (text: string): string =>
+  text.replace(
     /(?:[A-Za-z]:\\|\/)[^\s"'`]+/gu,
     (match) => path.basename(match.replace(/[\\/]+$/u, '')) || '<path>',
   );
+
+const sanitizeUserFacingText = (value: string): string => {
+  const redacted = redactSensitiveInLogs(value);
+  const redactedText = typeof redacted === 'string' ? redacted : String(redacted);
+  return redactedText
+    .split(UNTRUSTED_ENVELOPE_SPAN)
+    .map((segment, index) =>
+      index % 2 === 1 ? segment : collapseAbsolutePaths(segment),
+    )
+    .join('');
 };
 
 const toErrorPayload = (error: unknown): ToolErrorPayload => {
@@ -519,6 +555,42 @@ export const validateBase64ImageData = (
   return buffer;
 };
 
+// Upstream image bytes must match the format the file extension and inline
+// MIME type will claim — otherwise arbitrary bytes could be persisted as
+// `.png`/`.jpg`/`.webp` and served to downstream consumers under a false type.
+const IMAGE_FORMAT_SIGNATURES: Record<
+  string,
+  Array<{ offset: number; bytes: number[] }>
+> = {
+  png: [{ offset: 0, bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] }],
+  jpg: [{ offset: 0, bytes: [0xff, 0xd8, 0xff] }],
+  webp: [
+    { offset: 0, bytes: [0x52, 0x49, 0x46, 0x46] }, // 'RIFF'
+    { offset: 8, bytes: [0x57, 0x45, 0x42, 0x50] }, // 'WEBP'
+  ],
+};
+
+const ensureBufferMatchesImageFormat = (
+  buffer: Buffer,
+  extension: string,
+): void => {
+  const signatures = IMAGE_FORMAT_SIGNATURES[extension];
+  if (!signatures) {
+    return;
+  }
+
+  const matches = signatures.every(({ offset, bytes }) =>
+    bytes.every((byte, byteIndex) => buffer[offset + byteIndex] === byte),
+  );
+  if (!matches) {
+    throw new OpenAIImageToolError(
+      'INVALID_IMAGE_DATA',
+      'Image data returned by the upstream image API does not match the requested format.',
+      'Try the request again with a simpler prompt.',
+    );
+  }
+};
+
 export const saveImageToDisk = async (
   saveDir: string,
   prompt: string,
@@ -529,18 +601,50 @@ export const saveImageToDisk = async (
 ): Promise<string> => {
   await ensureOutputDirectoryIsAllowed(saveDir);
   await fs.promises.mkdir(saveDir, { recursive: true });
+  const canonicalSaveDir = await canonicalizeAllowedOutputDirectory(saveDir);
   const buffer = validateBase64ImageData(b64);
+  ensureBufferMatchesImageFormat(buffer, extension);
 
+  // Open-then-verify (write side of the MED-1 pattern): the fence approved the
+  // canonical directory above, but a local race could swap the directory for a
+  // symlink between validation and the write. Open the output file with 'wx'
+  // (fresh inode, descriptor-pinned), then re-canonicalise the directory and
+  // refuse before any bytes flow if it no longer resolves to the approved
+  // directory. Writes go through the descriptor, so a later path swap cannot
+  // redirect the bytes.
   const writeAttempt = async (): Promise<string> => {
     const filename = generateFilename(prompt, index, count, extension);
     const savePath = path.join(saveDir, filename);
-    await fs.promises.writeFile(savePath, buffer, { flag: 'wx', mode: 0o600 });
-    const stats = await fs.promises.stat(savePath);
-    if (stats.size === 0) {
-      throw new OpenAIImageToolError(
-        'WRITE_FAILED',
-        'Generated image file was empty after write.',
-        'Try the request again.',
+    const handle = await fs.promises.open(savePath, 'wx', 0o600);
+    let directorySwapped = false;
+    try {
+      const postOpenCanonicalDir = await fs.promises
+        .realpath(saveDir)
+        .catch(() => null);
+      if (postOpenCanonicalDir !== canonicalSaveDir) {
+        directorySwapped = true;
+      } else {
+        await handle.writeFile(buffer);
+        const stats = await handle.stat();
+        if (stats.size === 0) {
+          throw new OpenAIImageToolError(
+            'WRITE_FAILED',
+            'Generated image file was empty after write.',
+            'Try the request again.',
+          );
+        }
+      }
+    } finally {
+      await handle.close().catch(() => undefined);
+    }
+
+    if (directorySwapped) {
+      // The fresh empty file may have landed outside the fence; remove it best
+      // effort (the random filename makes collateral unlink infeasible).
+      await fs.promises.unlink(savePath).catch(() => undefined);
+      throw new WorkspaceFenceToolError(
+        'Generated image folder changed while the image was being saved.',
+        'Check the output folder for symbolic links or other changes, then try again.',
       );
     }
     return savePath;
@@ -549,6 +653,9 @@ export const saveImageToDisk = async (
   try {
     return await writeAttempt();
   } catch (firstError) {
+    if (firstError instanceof OpenAIImageToolError) {
+      throw firstError;
+    }
     if (getErrorCode(firstError) !== 'EEXIST') {
       throw new OpenAIImageToolError(
         'WRITE_FAILED',
@@ -560,6 +667,9 @@ export const saveImageToDisk = async (
     try {
       return await writeAttempt();
     } catch (secondError) {
+      if (secondError instanceof OpenAIImageToolError) {
+        throw secondError;
+      }
       if (getErrorCode(secondError) === 'EEXIST') {
         throw new OpenAIImageToolError(
           'WRITE_FAILED',
@@ -598,17 +708,18 @@ const getLocalImageReadError = (
   inputPath: string,
   error: unknown,
 ): string => {
+  const safeInputPath = envelopeToolInput(inputPath);
   const code = getErrorCode(error);
   if (code === 'ENOENT') {
-    return `${imageLabel} not found: ${inputPath}`;
+    return `${imageLabel} not found: ${safeInputPath}`;
   }
   if (code === 'EACCES' || code === 'EPERM') {
-    return `${imageLabel} permission denied: ${inputPath}`;
+    return `${imageLabel} permission denied: ${safeInputPath}`;
   }
   if (code === 'ELOOP') {
-    return `${imageLabel} path contains a symbolic link loop: ${inputPath}`;
+    return `${imageLabel} path contains a symbolic link loop: ${safeInputPath}`;
   }
-  return `Failed to read ${imageLabel.toLowerCase()}: ${inputPath} — ${getErrorMessage(error)}`;
+  return `Failed to read ${imageLabel.toLowerCase()}: ${safeInputPath} — ${getErrorMessage(error)}`;
 };
 
 const isInsideZone = (realPath: string, zoneRoot: string): boolean => {
@@ -659,8 +770,8 @@ const formatWorkspaceContainmentError = (
 ): WorkspaceFenceToolError => {
   const message =
     reason === 'outside'
-      ? `${subject} is outside your workspace and folders linked as Spaces. Path: ${inputPath}. Workspace: ${workspacePath}.`
-      : `${subject} could not be verified safely. Path: ${inputPath}. Workspace: ${workspacePath}.`;
+      ? `${subject} is outside your workspace and folders linked as Spaces. Path: ${envelopeToolInput(inputPath)}. Workspace: ${workspacePath}.`
+      : `${subject} could not be verified safely. Path: ${envelopeToolInput(inputPath)}. Workspace: ${workspacePath}.`;
   return new WorkspaceFenceToolError(
     message,
     'Move or copy the file into your workspace or a folder linked as a Space, then try again.',
@@ -737,6 +848,62 @@ const ensureOutputDirectoryIsAllowed = async (
       workspacePath,
     );
   }
+};
+
+// After `mkdir` the output directory exists, so its canonical path can be
+// resolved in full (no deepest-existing-ancestor approximation). Re-verify
+// containment against that canonical path and return it; the write path then
+// compares the directory's canonical identity again after opening the output
+// file, closing the check-then-use window between validation and write.
+const canonicalizeAllowedOutputDirectory = async (
+  saveDir: string,
+): Promise<string> => {
+  const workspacePath = WORKSPACE_PATH;
+
+  let canonicalDir: string;
+  try {
+    canonicalDir = await fs.promises.realpath(saveDir);
+  } catch (error) {
+    if (!workspacePath) {
+      throw new OpenAIImageToolError(
+        'WRITE_FAILED',
+        'Failed to access the generated image folder.',
+        'Check folder permissions and available disk space, then try again.',
+      );
+    }
+    throw formatWorkspaceContainmentError(
+      'Generated image folder',
+      saveDir,
+      workspacePath,
+      'unverifiable',
+    );
+  }
+
+  if (!workspacePath) {
+    return canonicalDir;
+  }
+
+  let workspaceRealPath: string;
+  try {
+    workspaceRealPath = await fs.promises.realpath(workspacePath);
+  } catch {
+    throw formatWorkspaceContainmentError(
+      'Generated image folder',
+      saveDir,
+      workspacePath,
+      'unverifiable',
+    );
+  }
+
+  if (!(await isInsideConfiguredCanonicalZone(canonicalDir, workspaceRealPath))) {
+    throw formatWorkspaceContainmentError(
+      'Generated image folder',
+      saveDir,
+      workspacePath,
+    );
+  }
+
+  return canonicalDir;
 };
 
 export const resolveWorkspaceScopedImagePath = async (
@@ -841,6 +1008,7 @@ const loadLocalEditImage = async (
   options?: { pngOnly?: boolean },
 ): Promise<LoadedLocalImage> => {
   const imageLabel = options?.pngOnly ? 'Mask image' : 'Reference image';
+  const safeInputPath = envelopeToolInput(inputPath);
   const resolvedPathResult = await resolveWorkspaceScopedImagePath(
     inputPath,
     imageLabel,
@@ -867,11 +1035,11 @@ const loadLocalEditImage = async (
   }
 
   if (stats.size === 0) {
-    throw workspaceFenceError(`${imageLabel} is empty (0 bytes): ${inputPath}`);
+    throw workspaceFenceError(`${imageLabel} is empty (0 bytes): ${safeInputPath}`);
   }
 
   if (stats.size > MAX_LOCAL_IMAGE_BYTES) {
-    throw workspaceFenceError(`${imageLabel} exceeds 25MB limit: ${inputPath}`);
+    throw workspaceFenceError(`${imageLabel} exceeds 25MB limit: ${safeInputPath}`);
   }
 
   const mime = options?.pngOnly ? 'image/png' : getSupportedImageMime(realPath);
@@ -892,20 +1060,20 @@ const loadLocalEditImage = async (
     const openedStats = await handle.stat();
     if (openedStats.dev !== stats.dev || openedStats.ino !== stats.ino) {
       throw workspaceFenceError(
-        `${imageLabel} changed while it was being verified: ${inputPath}`,
+        `${imageLabel} changed while it was being verified: ${safeInputPath}`,
       );
     }
     if (openedStats.size === 0) {
-      throw workspaceFenceError(`${imageLabel} is empty (0 bytes): ${inputPath}`);
+      throw workspaceFenceError(`${imageLabel} is empty (0 bytes): ${safeInputPath}`);
     }
     if (openedStats.size > MAX_LOCAL_IMAGE_BYTES) {
-      throw workspaceFenceError(`${imageLabel} exceeds 25MB limit: ${inputPath}`);
+      throw workspaceFenceError(`${imageLabel} exceeds 25MB limit: ${safeInputPath}`);
     }
 
     const data = await handle.readFile();
     if (data.length === 0 || data.length > MAX_LOCAL_IMAGE_BYTES) {
       throw workspaceFenceError(
-        `${imageLabel} size changed while it was being read: ${inputPath}`,
+        `${imageLabel} size changed while it was being read: ${safeInputPath}`,
       );
     }
 
@@ -968,7 +1136,7 @@ const toOpenAIHttpError = (
   if (status === 403) {
     return new OpenAIImageToolError(
       'MODEL_UNAVAILABLE',
-      `This OpenAI account is not verified for model ${model}.`,
+      `This OpenAI account is not verified for model ${envelopeConfiguredModel(model)}.`,
       'Verify your OpenAI organization access for this model, or switch OPENAI_IMAGE_MODEL.',
     );
   }
@@ -1035,6 +1203,20 @@ const networkOrTimeoutError = (controller: FetchAbortController): OpenAIImageToo
   );
 };
 
+const parseOpenAIImageResponse = async (
+  response: Response,
+): Promise<OpenAIImageResponse> => {
+  const parsedBody = openAIImageResponseSchema.safeParse(await response.json());
+  if (!parsedBody.success) {
+    throw new OpenAIImageToolError(
+      'NETWORK_ERROR',
+      'OpenAI image API returned an unexpected response.',
+      'Try again in a moment. If this persists, check OpenAI status and your account permissions.',
+    );
+  }
+  return parsedBody.data;
+};
+
 const postOpenAIJson = async (
   endpointPath: string,
   apiKey: string,
@@ -1066,7 +1248,7 @@ const postOpenAIJson = async (
     throw toOpenAIHttpError(response.status, message, model);
   }
 
-  return (await response.json()) as OpenAIImageResponse;
+  return parseOpenAIImageResponse(response);
 };
 
 const postOpenAIMultipart = async (
@@ -1099,7 +1281,7 @@ const postOpenAIMultipart = async (
     throw toOpenAIHttpError(response.status, message, model);
   }
 
-  return (await response.json()) as OpenAIImageResponse;
+  return parseOpenAIImageResponse(response);
 };
 
 interface ImageOutputOptions {
@@ -1151,7 +1333,7 @@ const ensureTransparentBackgroundSupported = (
   if (modelKnownToRejectTransparency(model)) {
     throw new OpenAIImageToolError(
       'INVALID_INPUT',
-      `Model ${model} does not support transparent backgrounds.`,
+      `Model ${envelopeConfiguredModel(model)} does not support transparent backgrounds.`,
       'Set OPENAI_IMAGE_MODEL to gpt-image-1.5 (or gpt-image-1), or omit the background option.',
     );
   }
