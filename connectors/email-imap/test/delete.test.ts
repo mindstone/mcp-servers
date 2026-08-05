@@ -66,8 +66,11 @@ describe('email_delete', () => {
     expect(json.ok).toBe(true);
     expect(json.deleted).toBe(1);
     expect(json.method).toBe('trash');
-    // Fixture trash mailbox: 'Deleted Messages' (specialUse \Trash).
-    expect(json.trashMailbox).toBe('Deleted Messages');
+    // Fixture trash mailbox: 'Deleted Messages' (specialUse \Trash) — the
+    // server-supplied mailbox path is enveloped in the response.
+    expect(json.trashMailbox).toBe(
+      '<untrusted-content source="external-email">Deleted Messages</untrusted-content>',
+    );
   });
 
   it('expunges permanently when deleting from the Trash mailbox itself', async () => {

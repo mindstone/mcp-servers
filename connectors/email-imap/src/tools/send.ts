@@ -27,6 +27,7 @@ import {
   ensureInitialized,
   generateMessageId,
   resolveDraftsMailbox,
+  wrapEmailField,
 } from './shared.js';
 import {
   checkRateLimit,
@@ -367,7 +368,7 @@ export function registerSendTools(server: McpServer): void {
       return JSON.stringify({
         ok: true,
         messageId: draft.messageId,
-        mailbox: draft.mailbox,
+        mailbox: wrapEmailField(draft.mailbox),
         ...(draft.uid !== undefined ? { uid: draft.uid } : {}),
       });
     }),

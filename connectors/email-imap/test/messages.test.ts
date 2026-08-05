@@ -210,7 +210,9 @@ describe('Message tools', () => {
       expect(attachments[0]!.filename).toBe(
         '<untrusted-content source="external-email">agenda.pdf</untrusted-content>',
       );
-      expect(attachments[0]!.contentType).toBe('application/pdf');
+      expect(attachments[0]!.contentType).toBe(
+        '<untrusted-content source="external-email">application/pdf</untrusted-content>',
+      );
     });
 
     it('validates uid must be positive integer', async () => {

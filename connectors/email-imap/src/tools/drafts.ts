@@ -98,7 +98,9 @@ export function registerDraftTools(server: McpServer): void {
 
         drafts.sort((a, b) => b.uid - a.uid);
 
-        return JSON.stringify({ ok: true, mailbox: draftsMailbox, drafts });
+        // The resolved Drafts mailbox path is server-supplied text, so it is
+        // enveloped before reaching the model.
+        return JSON.stringify({ ok: true, mailbox: wrapEmailField(draftsMailbox), drafts });
       } finally {
         lock.release();
       }
@@ -142,7 +144,7 @@ export function registerDraftTools(server: McpServer): void {
       return JSON.stringify({
         ok: true,
         messageId: draft.messageId,
-        mailbox: draft.mailbox,
+        mailbox: wrapEmailField(draft.mailbox),
         replacedUid: uid,
         ...(draft.uid !== undefined ? { uid: draft.uid } : {}),
       });
@@ -178,7 +180,7 @@ export function registerDraftTools(server: McpServer): void {
         lock.release();
       }
 
-      return JSON.stringify({ ok: true, deleted: 1, mailbox: draftsMailbox });
+      return JSON.stringify({ ok: true, deleted: 1, mailbox: wrapEmailField(draftsMailbox) });
     }),
   );
 }

@@ -62,7 +62,9 @@ describe('Draft tools', () => {
 
       const json = result.json as Record<string, unknown>;
       expect(json.ok).toBe(true);
-      expect(json.mailbox).toBe('Drafts');
+      expect(json.mailbox).toBe(
+        '<untrusted-content source="external-email">Drafts</untrusted-content>',
+      );
       const drafts = json.drafts as Array<Record<string, unknown>>;
       expect(drafts.length).toBe(3);
       expect(drafts.map((d) => d.uid)).toEqual([103, 102, 101]);
@@ -87,7 +89,9 @@ describe('Draft tools', () => {
 
       const json = result.json as Record<string, unknown>;
       expect(json.ok).toBe(true);
-      expect(json.mailbox).toBe('Drafts');
+      expect(json.mailbox).toBe(
+        '<untrusted-content source="external-email">Drafts</untrusted-content>',
+      );
       expect(json.replacedUid).toBe(101);
       expect(typeof json.messageId).toBe('string');
       // Mock append() reports uid 999 for the new draft.
@@ -126,7 +130,9 @@ describe('Draft tools', () => {
       const json = result.json as Record<string, unknown>;
       expect(json.ok).toBe(true);
       expect(json.deleted).toBe(1);
-      expect(json.mailbox).toBe('Drafts');
+      expect(json.mailbox).toBe(
+        '<untrusted-content source="external-email">Drafts</untrusted-content>',
+      );
     });
 
     it('is annotated destructiveHint: true', async () => {

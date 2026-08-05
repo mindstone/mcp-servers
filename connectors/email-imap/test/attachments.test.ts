@@ -138,7 +138,9 @@ describe('email_get_attachment', () => {
 
     const json = result.json as Record<string, unknown>;
     expect(json.ok).toBe(true);
-    expect(json.contentType).toBe('application/pdf');
+    expect(json.contentType).toBe(
+      '<untrusted-content source="external-email">application/pdf</untrusted-content>',
+    );
     expect(json.sizeBytes).toBe(Buffer.byteLength('PDF-CONTENT-402'));
 
     const savedPath = json.path as string;
@@ -192,6 +194,22 @@ describe('email_get_attachment', () => {
     expect(result.isError).toBe(true);
     const json = result.json as Record<string, unknown>;
     expect(json.error as string).toContain('No attachment part "9"');
+  });
+
+  it('accepts an enveloped part identifier round-tripped from email_get_message', async () => {
+    await setupClient();
+
+    const result = await testClient.callTool('email_get_attachment', {
+      mailbox: 'INBOX',
+      uid: 402,
+      part: '<untrusted-content source="external-email">2</untrusted-content>',
+    });
+    expect(result.isError).toBeFalsy();
+
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(json.part).toBe('2');
+    expect(fs.readFileSync(json.path as string, 'utf8')).toBe('PDF-CONTENT-402');
   });
 
   it('errors when the message has no attachments', async () => {

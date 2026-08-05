@@ -1,5 +1,6 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { EmailImapError } from './types.js';
+import { wrapUntrusted } from './untrusted-content.js';
 
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
 
@@ -8,7 +9,10 @@ type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
  *
  * - On success: returns the string result as a text content block.
  * - On EmailImapError: returns a structured JSON error with code and resolution.
- * - On unknown error: returns a generic error message.
+ * - On any other error: the message may carry IMAP/SMTP server response text,
+ *   vendor SDK strings, mailbox names, or recipient data — all of it
+ *   attacker-influenceable — so it is returned inside an untrusted-content
+ *   envelope (AGENTS.md invariant #6) rather than as raw model-visible text.
  *
  * Secrets are never exposed in error messages.
  */
@@ -37,8 +41,10 @@ export function withErrorHandling<T>(
         };
       }
       const errorMessage = error instanceof Error ? error.message : String(error);
+      const enveloped =
+        wrapUntrusted(errorMessage, 'email-imap:external-error') ?? 'Unknown error';
       return {
-        content: [{ type: 'text', text: JSON.stringify({ ok: false, error: errorMessage }) }],
+        content: [{ type: 'text', text: JSON.stringify({ ok: false, error: enveloped }) }],
         isError: true,
       };
     }

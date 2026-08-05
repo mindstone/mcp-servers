@@ -59,8 +59,16 @@ describe('Mailbox tools', () => {
     const mailboxes = json.mailboxes as Array<Record<string, unknown>>;
     expect(mailboxes.length).toBeGreaterThanOrEqual(4);
 
-    const inbox = mailboxes.find((m) => m.name === 'INBOX');
+    // Mailbox names are server-supplied and returned enveloped.
+    const inbox = mailboxes.find(
+      (m) =>
+        m.name ===
+        '<untrusted-content source="external-email">INBOX</untrusted-content>',
+    );
     expect(inbox).toBeDefined();
+    expect(inbox!.specialUse).toBe(
+      '<untrusted-content source="external-email">\\Inbox</untrusted-content>',
+    );
     expect(inbox!.messages).toBe(10);
     expect(inbox!.unseen).toBe(3);
   });
