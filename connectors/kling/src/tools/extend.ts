@@ -3,6 +3,10 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { klingFetch } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { taskCreatedResponseSchema } from '../types.js';
+import { unwrapUntrusted, wrapUntrusted } from '../untrusted-content.js';
+
+/** Envelope source label for vendor-controlled strings in tool output. */
+const KLING_SOURCE = 'kling-api';
 
 export function registerExtendTools(server: McpServer): void {
   // ─── extend_kling_video ─────────────────────────────────────────
@@ -50,7 +54,7 @@ export function registerExtendTools(server: McpServer): void {
         });
       }
 
-      const body: Record<string, unknown> = { video_id: args.video_id };
+      const body: Record<string, unknown> = { video_id: unwrapUntrusted(args.video_id) };
       if (args.prompt) body.prompt = args.prompt;
       if (args.negative_prompt) body.negative_prompt = args.negative_prompt;
       if (args.callback_url) body.callback_url = args.callback_url;
@@ -60,12 +64,13 @@ export function registerExtendTools(server: McpServer): void {
         body: JSON.stringify(body),
       });
 
+      const taskId = wrapUntrusted(result.task_id, KLING_SOURCE)!;
       return JSON.stringify({
         ok: true,
-        task_id: result.task_id,
+        task_id: taskId,
         task_type: 'video-extend',
         status: 'submitted',
-        message: `Video extension started. Use check_kling_task with task_id "${result.task_id}" and task_type "video-extend" to poll for completion.`,
+        message: `Video extension started. Use check_kling_task with task_id "${taskId}" and task_type "video-extend" to poll for completion.`,
         nextPollSeconds: 30,
       });
     }),

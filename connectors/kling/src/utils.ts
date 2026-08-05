@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { redactSecrets } from './auth.js';
 import { KlingError } from './types.js';
 
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
@@ -9,7 +10,10 @@ type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
  *
  * - On success: returns the string result as a text content block.
  * - On KlingError: returns a structured JSON error with code and resolution.
- * - On unknown error: returns a generic error message.
+ * - On unknown error: logs a credential-redacted detail line to stderr and
+ *   returns a generic message — runtime error text (e.g. JSON parser
+ *   failures) can embed fragments of a vendor response or local paths, which
+ *   must not reach model-visible output.
  *
  * Secrets are never exposed in error messages.
  */
@@ -38,8 +42,18 @@ export function withErrorHandling<T>(
         };
       }
       const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('[kling] Unexpected tool error:', redactSecrets(errorMessage));
       return {
-        content: [{ type: 'text', text: JSON.stringify({ ok: false, error: errorMessage }) }],
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              ok: false,
+              error:
+                'An unexpected error occurred while running the tool. Details are in the connector logs.',
+            }),
+          },
+        ],
         isError: true,
       };
     }

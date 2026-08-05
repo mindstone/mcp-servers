@@ -3,9 +3,13 @@ import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import { createKlingHandlers, mockTaskId, mockVideoId } from './helpers/kling-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
+import { wrapUntrusted } from '../src/untrusted-content.js';
 
 const ACCESS_KEY = 'test-access-key';
 const SECRET_KEY = 'test-secret-key-at-least-32-chars-long';
+
+/** Vendor-controlled strings reach the model enveloped (invariant #6). */
+const enveloped = (s: string) => wrapUntrusted(s, 'kling-api');
 
 const BASE = 'https://api-singapore.klingai.com/v1';
 const ORIGIN = 'https://api-singapore.klingai.com';
@@ -75,13 +79,13 @@ describe('list_kling_tasks', () => {
     expect(capturedUrl).toContain('pageSize=10');
 
     const succeeded = json.tasks[0];
-    expect(succeeded.task_id).toBe(mockTaskId);
+    expect(succeeded.task_id).toBe(enveloped(mockTaskId));
     expect(succeeded.task_status).toBe('succeed');
     expect(succeeded.created_at).toBe(1722769557708);
     const videos = succeeded.videos as Array<{ id: string; url: string }>;
-    expect(videos[0].id).toBe(mockVideoId);
-    // The prompt echoed in task_info must not be surfaced (envelope-exemption
-    // scope: IDs, status, and URLs only).
+    expect(videos[0].id).toBe(enveloped(mockVideoId));
+    // The prompt echoed in task_info must not be surfaced; every string that
+    // IS surfaced is enveloped so the model treats it as data.
     expect(JSON.stringify(json)).not.toContain('secret prompt');
     expect(succeeded.task_info).toBeUndefined();
   });
@@ -205,9 +209,9 @@ describe('get_kling_balance', () => {
     };
     expect(json.ok).toBe(true);
     expect(json.resource_packs).toHaveLength(1);
-    expect(json.resource_packs[0].name).toBe('Video Generation - 100 entries');
+    expect(json.resource_packs[0].name).toBe(enveloped('Video Generation - 100 entries'));
     expect(json.resource_packs[0].remaining_quantity).toBe(118);
-    expect(json.resource_packs[0].status).toBe('online');
+    expect(json.resource_packs[0].status).toBe(enveloped('online'));
     expect(captured.url).toBe(
       `${ORIGIN}/account/costs?start_time=1726124664368&end_time=1727366400000`,
     );

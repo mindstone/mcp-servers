@@ -2,7 +2,11 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { klingFetch } from '../client.js';
 import { KLING_API_BASE, accountCostsResponseSchema } from '../types.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import { epochMsField, withErrorHandling } from '../utils.js';
+
+/** Envelope source label for vendor-controlled strings in tool output. */
+const KLING_SOURCE = 'kling-api';
 
 export function registerAccountTools(server: McpServer): void {
   // ─── get_kling_balance ──────────────────────────────────────────
@@ -32,13 +36,15 @@ export function registerAccountTools(server: McpServer): void {
         accountCostsResponseSchema,
       );
 
+      // Resource-pack fields are vendor-controlled strings — envelope them
+      // before they reach model-visible output (invariant #6).
       const packs = (data.resource_pack_subscribe_infos ?? []).map((pack) => {
         const entry: Record<string, unknown> = {
-          name: pack.resource_pack_name,
-          type: pack.resource_pack_type,
+          name: wrapUntrusted(pack.resource_pack_name, KLING_SOURCE),
+          type: wrapUntrusted(pack.resource_pack_type, KLING_SOURCE),
           total_quantity: pack.total_quantity,
           remaining_quantity: pack.remaining_quantity,
-          status: pack.status,
+          status: wrapUntrusted(pack.status, KLING_SOURCE),
         };
         if (pack.invalid_time) entry.expires_at = pack.invalid_time;
         return entry;

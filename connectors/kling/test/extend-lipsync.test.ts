@@ -11,9 +11,13 @@ import {
   mockVideoId,
 } from './helpers/kling-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
+import { wrapUntrusted } from '../src/untrusted-content.js';
 
 const ACCESS_KEY = 'test-access-key';
 const SECRET_KEY = 'test-secret-key-at-least-32-chars-long';
+
+/** Vendor-controlled strings reach the model enveloped (invariant #6). */
+const enveloped = (s: string) => wrapUntrusted(s, 'kling-api');
 
 const BASE = 'https://api-singapore.klingai.com/v1';
 
@@ -52,7 +56,7 @@ describe('extend_kling_video', () => {
 
     const json = result.json as { ok: boolean; task_id: string; task_type: string };
     expect(json.ok).toBe(true);
-    expect(json.task_id).toBe(mockExtendTaskId);
+    expect(json.task_id).toBe(enveloped(mockExtendTaskId));
     expect(json.task_type).toBe('video-extend');
     expect(capturedBody).toBeDefined();
     expect(capturedBody!.video_id).toBe(mockVideoId);
@@ -104,12 +108,12 @@ describe('extend_kling_video', () => {
     const json = result.json as {
       ok: boolean;
       status: string;
-      video: { id: string; url: string; duration: string };
+      videos: Array<{ id: string; url: string; duration: string }>;
     };
     expect(json.ok).toBe(true);
     expect(json.status).toBe('succeed');
-    expect(json.video.id).toBe('video-extended-789');
-    expect(json.video.url).toContain('klingai.com');
+    expect(json.videos[0].id).toBe(enveloped('video-extended-789'));
+    expect(json.videos[0].url).toContain('klingai.com');
   });
 });
 
@@ -148,7 +152,7 @@ describe('generate_kling_lip_sync', () => {
 
     const json = result.json as { ok: boolean; task_id: string; task_type: string };
     expect(json.ok).toBe(true);
-    expect(json.task_id).toBe(mockLipSyncTaskId);
+    expect(json.task_id).toBe(enveloped(mockLipSyncTaskId));
     expect(json.task_type).toBe('lip-sync');
     const input = capturedBody!.input as Record<string, unknown>;
     expect(input.mode).toBe('text2video');
@@ -273,10 +277,10 @@ describe('generate_kling_lip_sync', () => {
       task_type: 'lip-sync',
     });
 
-    const json = result.json as { ok: boolean; status: string; video: { url: string } };
+    const json = result.json as { ok: boolean; status: string; videos: Array<{ url: string }> };
     expect(json.ok).toBe(true);
     expect(json.status).toBe('succeed');
-    expect(json.video.url).toContain('klingai.com');
+    expect(json.videos[0].url).toContain('klingai.com');
   });
 });
 
@@ -297,8 +301,8 @@ describe('check_kling_task — video id surfacing', () => {
       task_type: 'text2video',
     });
 
-    const json = result.json as { ok: boolean; video: { id: string } };
+    const json = result.json as { ok: boolean; videos: Array<{ id: string }> };
     expect(json.ok).toBe(true);
-    expect(json.video.id).toBe(mockVideoId);
+    expect(json.videos[0].id).toBe(enveloped(mockVideoId));
   });
 });

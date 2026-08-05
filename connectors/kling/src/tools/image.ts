@@ -4,6 +4,10 @@ import { klingFetch } from '../client.js';
 import { encodeLocalImage } from '../media.js';
 import { withErrorHandling } from '../utils.js';
 import { taskCreatedResponseSchema } from '../types.js';
+import { wrapUntrusted } from '../untrusted-content.js';
+
+/** Envelope source label for vendor-controlled strings in tool output. */
+const KLING_SOURCE = 'kling-api';
 
 const IMAGE_MODEL_ENUM = ['kling-v2-1', 'kling-v2', 'kling-v1-5', 'kling-v1'] as const;
 
@@ -112,12 +116,13 @@ export function registerImageTools(server: McpServer): void {
         body: JSON.stringify(body),
       });
 
+      const taskId = wrapUntrusted(result.task_id, KLING_SOURCE)!;
       return JSON.stringify({
         ok: true,
-        task_id: result.task_id,
+        task_id: taskId,
         task_type: 'image',
         status: 'submitted',
-        message: `Image generation started. Use check_kling_task with task_id "${result.task_id}" and task_type "image" to poll for completion.`,
+        message: `Image generation started. Use check_kling_task with task_id "${taskId}" and task_type "image" to poll for completion.`,
         nextPollSeconds: 15,
       });
     }),

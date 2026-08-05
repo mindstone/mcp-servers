@@ -6,6 +6,7 @@ import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import { createKlingHandlers, mockI2vTaskId } from './helpers/kling-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
+import { wrapUntrusted } from '../src/untrusted-content.js';
 
 const ACCESS_KEY = 'test-access-key';
 const SECRET_KEY = 'test-secret-key-at-least-32-chars-long';
@@ -73,7 +74,7 @@ describe('generate_kling_image_to_video — local image input', () => {
 
     const json = result.json as { ok: boolean; task_id: string };
     expect(json.ok).toBe(true);
-    expect(json.task_id).toBe(mockI2vTaskId);
+    expect(json.task_id).toBe(wrapUntrusted(mockI2vTaskId, 'kling-api'));
     expect(captured.body).toBeDefined();
     expect(captured.body!.image).toBe(PNG_BYTES.toString('base64'));
   });

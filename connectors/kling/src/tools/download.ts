@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { assertDownloadPathInRoot, validateDownloadUrl } from '../download-sandbox.js';
 import { KlingError, getRequestTimeoutMs } from '../types.js';
+import { unwrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
 export function registerDownloadTools(server: McpServer): void {
@@ -32,7 +33,8 @@ export function registerDownloadTools(server: McpServer): void {
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      const url = args.url;
+      // Accept URLs echoed back from this connector's own enveloped output.
+      const url = unwrapUntrusted(args.url);
       const outputPath = args.output_path;
       const overwrite = args.overwrite === true;
 
