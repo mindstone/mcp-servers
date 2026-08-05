@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { requireApiKey, elevenLabsFetch, elevenLabsJson } from '../client.js';
 import { ENDPOINTS } from '../endpoints.js';
+import { redactCredentialValues } from '../redact.js';
 import { sanitizeList, sanitizePhoneNumber } from '../sanitize.js';
 import { validateE164 } from '../schema-helpers.js';
 import { ElevenLabsError } from '../types.js';
@@ -270,16 +271,36 @@ COMMON MISTAKES:
       }
 
       const apiKey = requireApiKey();
-      const result = await elevenLabsJson<unknown>(
-        apiKey,
-        ENDPOINTS.PHONE_NUMBERS,
-        { method: 'POST', body: JSON.stringify(body) },
+      // If ElevenLabs reflects the submitted credentials back — under a
+      // non-credential-shaped key, or quoted inside an error detail — the exact
+      // values are stripped before anything becomes model-visible. (Values
+      // under credential-shaped keys are redacted by the sanitizer itself.)
+      const submittedSecrets = [args.twilio_sid, args.twilio_token];
+      let result: unknown;
+      try {
+        result = await elevenLabsJson<unknown>(
+          apiKey,
+          ENDPOINTS.PHONE_NUMBERS,
+          { method: 'POST', body: JSON.stringify(body) },
+        );
+      } catch (error) {
+        if (error instanceof ElevenLabsError) {
+          throw new ElevenLabsError(
+            redactCredentialValues(error.message, submittedSecrets),
+            error.code,
+            redactCredentialValues(error.resolution, submittedSecrets),
+          );
+        }
+        throw error;
+      }
+      return redactCredentialValues(
+        JSON.stringify({
+          ok: true,
+          phone_number: sanitizePhoneNumber(result, 'elevenlabs-agents:import_phone_number'),
+          message: `Imported phone number ${args.phone_number} from provider ${args.provider}.`,
+        }),
+        submittedSecrets,
       );
-      return JSON.stringify({
-        ok: true,
-        phone_number: sanitizePhoneNumber(result, 'elevenlabs-agents:import_phone_number'),
-        message: `Imported phone number ${args.phone_number} from provider ${args.provider}.`,
-      });
     }),
   );
 
