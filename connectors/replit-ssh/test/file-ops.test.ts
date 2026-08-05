@@ -402,6 +402,24 @@ describe('Replit SSH MCP — file operations against a fake SFTP backend', () =>
       expect(line.match(/<\/untrusted-content>/g)).toHaveLength(1); // only the envelope's own close tag
     });
 
+    it('caps per-file line matches and flags the overflow observably', async () => {
+      const hotLines = Array.from({ length: 20 }, (_, i) => `needle on line ${i + 1}`).join('\n');
+      fake.addFile('hot.txt', hotLines + '\n');
+      fake.addFile('calm.txt', 'needle once\nplain line\n');
+      const res = await call<{
+        ok: boolean;
+        matches: Array<{ path: string; lineMatches?: Array<{ lineNumber: number }>; lineMatchesTruncated?: boolean }>;
+      }>('replit_search_files', { host: 'h.replit.dev', user: 'u', content_contains: 'needle' });
+      expect(res.ok).toBe(true);
+      const hot = res.matches.find((m) => m.path.includes('hot.txt'))!;
+      expect(hot.lineMatches).toHaveLength(5);
+      expect(hot.lineMatches![0].lineNumber).toBe(1);
+      expect(hot.lineMatchesTruncated).toBe(true);
+      const calm = res.matches.find((m) => m.path.includes('calm.txt'))!;
+      expect(calm.lineMatches).toHaveLength(1);
+      expect(calm.lineMatchesTruncated).toBeUndefined();
+    });
+
     it('skips binary files for content search', async () => {
       fake.addFile('logo.png', Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x6e, 0x65, 0x65, 0x64, 0x6c, 0x65]));
       const res = await call<{ ok: boolean; matches: unknown[] }>('replit_search_files', {

@@ -29,6 +29,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   `DELETE_DISABLED` otherwise, because deletion on Replit is irreversible
   (no trash). Declared in `server.json`.
 
+### Fixed
+
+- `replit_search_files` — per-file content line matches are now capped at 5;
+  a file with more matching lines carries `lineMatchesTruncated: true` on the
+  match instead of returning an unbounded list (a hot file with the needle on
+  every line could previously flood the tool response).
+
 ## [0.1.2] - 2026-05-20
 
 ### Security
