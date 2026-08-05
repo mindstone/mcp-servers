@@ -202,6 +202,35 @@ describe('HubSpot MCP - custom object tools', () => {
     ).toHaveLength(0);
   });
 
+  it('rejects an objectId with path traversal before any API call', async () => {
+    mockApi.clearLog();
+    const raw = await client.callToolRaw('get_hubspot_object', {
+      objectType: 'p_widgets',
+      objectId: '../../../../crm/v3/owners',
+    });
+    expect(raw.isError).toBe(true);
+    const text = raw.content.find((c): c is { type: 'text'; text: string } => c.type === 'text');
+    expect(text!.text).toContain('objectId');
+
+    // No request may leave the connector for an invalid object id — in
+    // particular nothing may be rerouted onto the owners API.
+    expect(mockApi.requestLog.filter((r) => r.pathname.includes('owners'))).toHaveLength(0);
+  });
+
+  it('rejects an objectId with query/fragment characters before any API call', async () => {
+    mockApi.clearLog();
+    for (const objectId of ['widget-1?archived=true', 'widget-1#x']) {
+      const raw = await client.callToolRaw('get_hubspot_object', {
+        objectType: 'p_widgets',
+        objectId,
+      });
+      expect(raw.isError).toBe(true);
+      const text = raw.content.find((c): c is { type: 'text'; text: string } => c.type === 'text');
+      expect(text!.text).toContain('objectId');
+    }
+    expect(mockApi.requestLog).toHaveLength(0);
+  });
+
   it('maps a custom-object 403 to the honest capability-denied error', async () => {
     const raw = await client.callToolRaw('search_hubspot_object', {
       objectType: 'p_secret',

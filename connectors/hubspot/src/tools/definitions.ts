@@ -2144,7 +2144,7 @@ REQUIRES the crm.objects.custom.read OAuth scope for custom object types.`,
       type: 'object',
       properties: {
         objectType: { type: 'string', pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$', description: 'Object type name (e.g. "p_widgets", "2-1234567")' },
-        objectId: { type: 'string', description: 'HubSpot record ID (numeric string)' },
+        objectId: { type: 'string', pattern: '^[a-zA-Z0-9_-]{1,64}$', description: 'HubSpot record ID (numeric string)' },
         properties: { ...PROPERTIES_ARRAY_SCHEMA, description: 'Properties to return' },
         associations: { type: 'array', items: { type: 'string' }, description: 'Associated object types to include (e.g. ["contacts", "deals"])' }
       },

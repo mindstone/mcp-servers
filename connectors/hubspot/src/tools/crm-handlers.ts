@@ -1,4 +1,4 @@
-import { getHubSpotClientAsync, SearchFilter, SearchRequest, HubSpotApiError, assertHubSpotObjectType } from '../api/hubspot-client.js';
+import { getHubSpotClientAsync, SearchFilter, SearchRequest, HubSpotApiError, assertHubSpotObjectType, assertHubSpotObjectId } from '../api/hubspot-client.js';
 import { injectHostMetadata } from '../utils/user-context.js';
 import {
   buildHubSpotCapabilityDeniedError,
@@ -1008,6 +1008,9 @@ export async function handleSearchCustomObjects(args: CustomObjectSearchArgs) {
 
 export async function handleGetCustomObject(args: { objectType: string; objectId: string } & GetArgs) {
   assertHubSpotObjectType(args.objectType, 'objectType');
+  // objectId is raw path material too — validate before any client work so a
+  // traversal/query payload can't reroute the authenticated GET.
+  assertHubSpotObjectId(args.objectId, 'objectId');
   return getObject(args.objectType, args.objectId, args);
 }
 

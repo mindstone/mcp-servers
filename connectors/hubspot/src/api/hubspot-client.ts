@@ -519,9 +519,12 @@ export class HubSpotClient {
     return this.request('GET', `${HUBSPOT_API_PREFIXES.oauthV1}/access-tokens/${this.accessToken}`);
   }
 
-  // Generic CRUD operations for any object type
+  // Generic CRUD operations for any object type. objectType/objectId reach
+  // path interpolation, so every method validates the safe shape AND encodes
+  // the segment (same assertion+encoding pairing as the association methods).
   async createObject(objectType: string, properties: Record<string, string>): Promise<CrmObject> {
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${objectType}`, { properties });
+    assertHubSpotObjectType(objectType, 'objectType');
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(objectType)}`, { properties });
   }
 
   async getObject(
@@ -530,42 +533,52 @@ export class HubSpotClient {
     properties?: string[],
     associations?: string[]
   ): Promise<CrmObject> {
+    assertHubSpotObjectType(objectType, 'objectType');
+    assertHubSpotObjectId(objectId, 'objectId');
     const search = new URLSearchParams();
     if (properties && properties.length > 0) search.set('properties', properties.join(','));
     if (associations && associations.length > 0) search.set('associations', associations.join(','));
     const qs = search.toString();
     const suffix = qs ? `?${qs}` : '';
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${objectType}/${objectId}${suffix}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(objectType)}/${encodeURIComponent(objectId)}${suffix}`);
   }
 
   async updateObject(objectType: string, objectId: string, properties: Record<string, string>): Promise<CrmObject> {
-    return this.request('PATCH', `${HUBSPOT_API_PREFIXES.crmObjects}/${objectType}/${objectId}`, { properties });
+    assertHubSpotObjectType(objectType, 'objectType');
+    assertHubSpotObjectId(objectId, 'objectId');
+    return this.request('PATCH', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(objectType)}/${encodeURIComponent(objectId)}`, { properties });
   }
 
   async deleteObject(objectType: string, objectId: string): Promise<void> {
-    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.crmObjects}/${objectType}/${objectId}`);
+    assertHubSpotObjectType(objectType, 'objectType');
+    assertHubSpotObjectId(objectId, 'objectId');
+    await this.request('DELETE', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(objectType)}/${encodeURIComponent(objectId)}`);
   }
 
   async listObjects(objectType: string, limit = 10, after?: string, properties?: string[]): Promise<ListResponse<CrmObject>> {
+    assertHubSpotObjectType(objectType, 'objectType');
     const params = new URLSearchParams();
     params.set('limit', String(limit));
     if (after) params.set('after', after);
     if (properties) params.set('properties', properties.join(','));
-    
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${objectType}?${params.toString()}`);
+
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(objectType)}?${params.toString()}`);
   }
 
   async searchObjects(objectType: string, searchRequest: SearchRequest): Promise<ListResponse<CrmObject>> {
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${objectType}/search`, searchRequest);
+    assertHubSpotObjectType(objectType, 'objectType');
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(objectType)}/search`, searchRequest);
   }
 
   // Batch operations
   async batchCreateObjects(objectType: string, inputs: Array<{ properties: Record<string, string> }>): Promise<BatchResponse<CrmObject>> {
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${objectType}/batch/create`, { inputs });
+    assertHubSpotObjectType(objectType, 'objectType');
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(objectType)}/batch/create`, { inputs });
   }
 
   async batchUpdateObjects(objectType: string, inputs: Array<{ id: string; properties: Record<string, string> }>): Promise<BatchResponse<CrmObject>> {
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${objectType}/batch/update`, { inputs });
+    assertHubSpotObjectType(objectType, 'objectType');
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(objectType)}/batch/update`, { inputs });
   }
 
   // Associations
@@ -732,14 +745,17 @@ export class HubSpotClient {
     return this.request('GET', `${HUBSPOT_API_PREFIXES.crmPipelines}/${objectType}/${pipelineId}`);
   }
 
-  // Engagements (calls, emails, meetings)
+  // Engagements (calls, emails, meetings). engagementType is always an
+  // internal constant, but engagementId is tool input — validate and encode it
+  // like every other caller-controlled path segment.
   async searchEngagements(engagementType: string, searchRequest: SearchRequest): Promise<ListResponse<CrmObject>> {
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${engagementType}/search`, searchRequest);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(engagementType)}/search`, searchRequest);
   }
 
   async getEngagement(engagementType: string, engagementId: string, properties?: string[]): Promise<CrmObject> {
+    assertHubSpotObjectId(engagementId, 'engagementId');
     const params = properties ? `?properties=${properties.join(',')}` : '';
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${engagementType}/${engagementId}${params}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(engagementType)}/${encodeURIComponent(engagementId)}${params}`);
   }
 
   async createEngagement(engagementType: string, properties: Record<string, string>, associations?: Array<{ to: { id: string }; types: Array<{ associationCategory: string; associationTypeId: number }> }>): Promise<CrmObject> {
@@ -747,7 +763,7 @@ export class HubSpotClient {
     if (associations) {
       body.associations = associations;
     }
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${engagementType}`, body);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(engagementType)}`, body);
   }
 
   async listEngagements(engagementType: string, limit = 10, after?: string, properties?: string[]): Promise<ListResponse<CrmObject>> {
@@ -755,7 +771,7 @@ export class HubSpotClient {
     params.set('limit', String(limit));
     if (after) params.set('after', after);
     if (properties) params.set('properties', properties.join(','));
-    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${engagementType}?${params.toString()}`);
+    return this.request('GET', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(engagementType)}?${params.toString()}`);
   }
 
   // Create object with associations (for line items → deals)
@@ -764,11 +780,12 @@ export class HubSpotClient {
     properties: Record<string, string>,
     associations?: Array<{ to: { id: string }; types: Array<{ associationCategory: string; associationTypeId: number }> }>
   ): Promise<CrmObject> {
+    assertHubSpotObjectType(objectType, 'objectType');
     const body: { properties: Record<string, string>; associations?: typeof associations } = { properties };
     if (associations && associations.length > 0) {
       body.associations = associations;
     }
-    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${objectType}`, body);
+    return this.request('POST', `${HUBSPOT_API_PREFIXES.crmObjects}/${encodeURIComponent(objectType)}`, body);
   }
 
   // Forms API - Marketing v3
