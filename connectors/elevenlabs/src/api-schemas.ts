@@ -101,3 +101,76 @@ export const transcriptionResponseSchema = z.object({
   language_code: z.string().optional(),
   language_probability: z.number().optional(),
 });
+
+// ── History ───────────────────────────────────────────────────────────────
+
+export const historyItemSchema = z.object({
+  history_item_id: z.string(),
+  date_unix: z.number().finite().optional(),
+  character_count_change_from: z.number().finite().optional(),
+  character_count_change_to: z.number().finite().optional(),
+  content_type: z.string().optional(),
+  request_id: z.string().optional(),
+  voice_id: z.string().optional(),
+  model_id: z.string().optional(),
+  voice_name: z.string().optional(),
+  voice_category: z.string().optional(),
+  text: z.string().optional(),
+  source: z.string().optional(),
+});
+
+export const historyResponseSchema = z.object({
+  history: z.array(historyItemSchema),
+  has_more: z.boolean().optional(),
+  last_history_item_id: z.string().optional(),
+});
+
+// ── Text-to-speech with timestamps ────────────────────────────────────────
+
+/** Canonical base64 (padding included); rejects whitespace and foreign chars. */
+const base64Schema = z
+  .string()
+  .min(1)
+  .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/);
+
+const alignmentTimesSchema = z.array(z.number().finite().nonnegative());
+
+export const characterAlignmentSchema = z
+  .object({
+    characters: z.array(z.string()),
+    character_start_times_seconds: alignmentTimesSchema,
+    character_end_times_seconds: alignmentTimesSchema,
+  })
+  .superRefine((alignment, ctx) => {
+    const starts = alignment.character_start_times_seconds;
+    const ends = alignment.character_end_times_seconds;
+    if (starts.length !== alignment.characters.length || ends.length !== alignment.characters.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'alignment arrays must have the same length as characters',
+      });
+      return;
+    }
+    for (let i = 0; i < starts.length; i += 1) {
+      if (ends[i] < starts[i]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `alignment end time precedes start time at index ${i}`,
+        });
+        return;
+      }
+      if (i > 0 && starts[i] < starts[i - 1]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `alignment start times are not non-decreasing at index ${i}`,
+        });
+        return;
+      }
+    }
+  });
+
+export const audioWithTimestampsResponseSchema = z.object({
+  audio_base64: base64Schema,
+  alignment: characterAlignmentSchema.nullable().optional(),
+  normalized_alignment: characterAlignmentSchema.nullable().optional(),
+});

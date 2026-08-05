@@ -124,6 +124,101 @@ describe('external response validation (fail-closed)', () => {
     await expectInvalidResponse('transcribe_audio', { file_path: clipPath });
   });
 
+  it('list_history rejects a non-array history field', async () => {
+    mswServer.use(
+      http.get(`${BASE_V1}/history`, () =>
+        HttpResponse.json({ history: 'not-an-array', has_more: false }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('list_history', {});
+  });
+
+  it('list_history rejects an item without history_item_id', async () => {
+    mswServer.use(
+      http.get(`${BASE_V1}/history`, () =>
+        HttpResponse.json({ history: [{ voice_name: 'no id' }], has_more: false }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('list_history', {});
+  });
+
+  it('generate_speech_with_timestamps rejects invalid base64 audio', async () => {
+    mswServer.use(
+      http.post(`${BASE_V1}/text-to-speech/:voiceId/with-timestamps`, () =>
+        HttpResponse.json({ audio_base64: 'not valid base64!!!', alignment: null }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('generate_speech_with_timestamps', {
+      text: 'Hello.',
+      voice_id: 'voice-rachel-001',
+    });
+  });
+
+  it('generate_speech_with_timestamps rejects mismatched alignment array lengths', async () => {
+    mswServer.use(
+      http.post(`${BASE_V1}/text-to-speech/:voiceId/with-timestamps`, () =>
+        HttpResponse.json({
+          audio_base64: Buffer.from(makeFakeAudioBuffer(64)).toString('base64'),
+          alignment: {
+            characters: ['a', 'b'],
+            character_start_times_seconds: [0, 0.1],
+            character_end_times_seconds: [0.1],
+          },
+        }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('generate_speech_with_timestamps', {
+      text: 'Hello.',
+      voice_id: 'voice-rachel-001',
+    });
+  });
+
+  it('generate_speech_with_timestamps rejects negative alignment timestamps', async () => {
+    mswServer.use(
+      http.post(`${BASE_V1}/text-to-speech/:voiceId/with-timestamps`, () =>
+        HttpResponse.json({
+          audio_base64: Buffer.from(makeFakeAudioBuffer(64)).toString('base64'),
+          alignment: {
+            characters: ['a'],
+            character_start_times_seconds: [-0.5],
+            character_end_times_seconds: [0.1],
+          },
+        }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('generate_speech_with_timestamps', {
+      text: 'Hello.',
+      voice_id: 'voice-rachel-001',
+    });
+  });
+
+  it('generate_speech_with_timestamps rejects non-monotonic alignment start times', async () => {
+    mswServer.use(
+      http.post(`${BASE_V1}/text-to-speech/:voiceId/with-timestamps`, () =>
+        HttpResponse.json({
+          audio_base64: Buffer.from(makeFakeAudioBuffer(64)).toString('base64'),
+          normalized_alignment: {
+            characters: ['a', 'b'],
+            character_start_times_seconds: [0.5, 0.1],
+            character_end_times_seconds: [0.6, 0.2],
+          },
+        }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('generate_speech_with_timestamps', {
+      text: 'Hello.',
+      voice_id: 'voice-rachel-001',
+    });
+    // Parse fails before any artifact write: only the clip fixture exists.
+    expect(fs.readdirSync(workspaceDir)).toEqual(['clip.mp3']);
+  });
+
   it('the INVALID_RESPONSE error does not echo raw upstream values', async () => {
     mswServer.use(
       http.post(`${BASE_V1}/speech-to-text`, () =>

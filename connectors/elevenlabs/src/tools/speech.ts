@@ -4,10 +4,10 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
 import { elevenLabsJson, elevenLabsAudio, extensionFromContentType } from '../client.js';
 import { ENDPOINTS, voicesV2Url } from '../endpoints.js';
+import { audioWithTimestampsResponseSchema, parseApiResponse } from '../api-schemas.js';
 import {
   ElevenLabsError,
   VOICE_NOT_FOUND_RESOLUTION,
-  type AudioWithTimestampsResponse,
   type CharacterAlignment,
   type VoicesResponse,
 } from '../types.js';
@@ -339,19 +339,15 @@ COST: ~1 credit per 100 characters.`,
         body.pronunciation_dictionary_locators = args.pronunciation_dictionary_locators;
       }
 
-      const data = await elevenLabsJson<AudioWithTimestampsResponse>(
-        apiKey,
-        ENDPOINTS.textToSpeechWithTimestamps(voiceId, outputFormat),
-        { method: 'POST', body: JSON.stringify(body) },
+      const data = parseApiResponse(
+        audioWithTimestampsResponseSchema,
+        await elevenLabsJson<unknown>(
+          apiKey,
+          ENDPOINTS.textToSpeechWithTimestamps(voiceId, outputFormat),
+          { method: 'POST', body: JSON.stringify(body) },
+        ),
+        'speech-with-timestamps',
       );
-
-      if (!data.audio_base64) {
-        throw new ElevenLabsError(
-          'ElevenLabs returned no audio for the with-timestamps request',
-          'INVALID_RESPONSE',
-          'Retry with a shorter text or a different model_id.',
-        );
-      }
 
       // Persist artifacts inside the workspace sandbox (MCP_WORKSPACE_PATH
       // when set, else os.tmpdir()) via the shared canonical-containment
