@@ -831,7 +831,13 @@ const createToolError = (errorMessage) => ({
   isError: true,
 });
 
-server.registerTool = (name, config, handler) => {
+/**
+ * Register a tool into the local registry that backs the ListTools/CallTool
+ * request handlers below. This is deliberately a plain function, not the SDK's
+ * `McpServer#registerTool` — this server manages its own registry (see the
+ * file header for why the SDK's Zod-based registration is not used here).
+ */
+const registerTool = (name, config, handler) => {
   if (registeredTools.has(name)) {
     throw new Error(`Tool ${name} is already registered`);
   }
@@ -1021,7 +1027,7 @@ const uninstallManifest = () => {
 // ---------------------------------------------------------------------------
 
 // 0a. rebel_office_setup — (Re-)install or uninstall the Office add-in
-server.registerTool(TOOL_NAMES.setup, {
+registerTool(TOOL_NAMES.setup, {
   title: 'Install or repair Office add-in',
   description:
     'Re-installs or uninstalls the Rebel add-in in Microsoft Office (Word, Excel, PowerPoint).\n\n' +
@@ -1121,7 +1127,7 @@ server.registerTool(TOOL_NAMES.setup, {
 });
 
 // 0b. rebel_office_status — Check connection status
-server.registerTool(TOOL_NAMES.status, {
+registerTool(TOOL_NAMES.status, {
   title: 'Check Office connection status',
   description:
     'Check which Office applications are currently connected to Rebel. Returns connection ' +
@@ -1174,7 +1180,7 @@ server.registerTool(TOOL_NAMES.status, {
 });
 
 // 1. rebel_office_word_read_document
-server.registerTool(TOOL_NAMES.readDocument, {
+registerTool(TOOL_NAMES.readDocument, {
   title: 'Read Word document',
   description:
     'Read the content of the currently open Word document. Returns the full text organized by ' +
@@ -1225,7 +1231,7 @@ server.registerTool(TOOL_NAMES.readDocument, {
 });
 
 // 2. rebel_office_word_get_document_structure
-server.registerTool(TOOL_NAMES.getDocumentStructure, {
+registerTool(TOOL_NAMES.getDocumentStructure, {
   title: 'Get document outline',
   description:
     'Get the outline structure of the currently open Word document — headings, sections, and ' +
@@ -1258,7 +1264,7 @@ server.registerTool(TOOL_NAMES.getDocumentStructure, {
 });
 
 // 3. rebel_office_word_get_selection
-server.registerTool(TOOL_NAMES.getSelection, {
+registerTool(TOOL_NAMES.getSelection, {
   title: 'Get selected text',
   description:
     'Get the currently selected text in the Word document. Returns the text content and location ' +
@@ -1284,7 +1290,7 @@ server.registerTool(TOOL_NAMES.getSelection, {
 });
 
 // 4. rebel_office_word_find_text
-server.registerTool(TOOL_NAMES.findText, {
+registerTool(TOOL_NAMES.findText, {
   title: 'Find text in document',
   description:
     'Search for text occurrences in the document. Returns matching locations with surrounding ' +
@@ -1340,7 +1346,7 @@ server.registerTool(TOOL_NAMES.findText, {
 });
 
 // 5. rebel_office_word_insert_text
-server.registerTool(TOOL_NAMES.insertText, {
+registerTool(TOOL_NAMES.insertText, {
   title: 'Insert text',
   description:
     'Insert text into the document at a specified location. Can insert at the beginning, end, ' +
@@ -1402,7 +1408,7 @@ server.registerTool(TOOL_NAMES.insertText, {
 });
 
 // 6. rebel_office_word_replace_text
-server.registerTool(TOOL_NAMES.replaceText, {
+registerTool(TOOL_NAMES.replaceText, {
   title: 'Find and replace text',
   description:
     'Find and replace text throughout the document. Supports case-sensitive and whole-word matching.\n\n' +
@@ -1462,7 +1468,7 @@ server.registerTool(TOOL_NAMES.replaceText, {
 });
 
 // 7. rebel_office_word_format_text
-server.registerTool(TOOL_NAMES.formatText, {
+registerTool(TOOL_NAMES.formatText, {
   title: 'Format text',
   description:
     'Apply formatting to text at a specified location — a paragraph range, the current selection, ' +
@@ -1596,7 +1602,7 @@ server.registerTool(TOOL_NAMES.formatText, {
 });
 
 // 8. rebel_office_word_insert_table
-server.registerTool(TOOL_NAMES.insertTable, {
+registerTool(TOOL_NAMES.insertTable, {
   title: 'Insert table',
   description:
     'Insert a table into the document. Provide headers and rows of data. The table is inserted ' +
@@ -1667,7 +1673,7 @@ server.registerTool(TOOL_NAMES.insertTable, {
 });
 
 // 9. rebel_office_word_insert_image
-server.registerTool(TOOL_NAMES.insertImage, {
+registerTool(TOOL_NAMES.insertImage, {
   title: 'Insert image',
   description:
     'Insert an image into the document from a file path or base64 data. The image is inserted ' +
@@ -1754,7 +1760,7 @@ server.registerTool(TOOL_NAMES.insertImage, {
 });
 
 // 10. rebel_office_word_insert_break
-server.registerTool(TOOL_NAMES.insertBreak, {
+registerTool(TOOL_NAMES.insertBreak, {
   title: 'Insert page/section break',
   description:
     'Insert a page break or section break into the document. Page breaks start a new page; ' +
@@ -1798,7 +1804,7 @@ server.registerTool(TOOL_NAMES.insertBreak, {
 });
 
 // 11. rebel_office_word_set_header_footer
-server.registerTool(TOOL_NAMES.setHeaderFooter, {
+registerTool(TOOL_NAMES.setHeaderFooter, {
   title: 'Set header or footer',
   description:
     'Set the header or footer text for the document. Can target the first page, odd pages, or ' +
@@ -1865,7 +1871,7 @@ server.registerTool(TOOL_NAMES.setHeaderFooter, {
 });
 
 // 12. rebel_office_word_get_properties
-server.registerTool(TOOL_NAMES.getProperties, {
+registerTool(TOOL_NAMES.getProperties, {
   title: 'Get document properties',
   description:
     "Get the document's metadata properties — title, author, creation date, last modified, " +
@@ -1888,7 +1894,7 @@ server.registerTool(TOOL_NAMES.getProperties, {
 });
 
 // 13. rebel_office_word_get_comments
-server.registerTool(TOOL_NAMES.getComments, {
+registerTool(TOOL_NAMES.getComments, {
   title: 'Read comments',
   description:
     'Read all comments in the document. Returns each comment with its author, date, associated ' +
@@ -1920,7 +1926,7 @@ server.registerTool(TOOL_NAMES.getComments, {
 });
 
 // 14. rebel_office_word_add_comment
-server.registerTool(TOOL_NAMES.addComment, {
+registerTool(TOOL_NAMES.addComment, {
   title: 'Add comment',
   description:
     'Add a comment to the document at a specified location — the current selection, a paragraph, ' +
@@ -1990,7 +1996,7 @@ server.registerTool(TOOL_NAMES.addComment, {
 });
 
 // 15. rebel_office_word_resolve_comment
-server.registerTool(TOOL_NAMES.resolveComment, {
+registerTool(TOOL_NAMES.resolveComment, {
   title: 'Resolve or delete comment',
   description:
     'Resolve or delete a comment by its ID. Resolving marks a comment as addressed without ' +
@@ -2034,7 +2040,7 @@ server.registerTool(TOOL_NAMES.resolveComment, {
 });
 
 // 16. rebel_office_word_get_tracked_changes
-server.registerTool(TOOL_NAMES.getTrackedChanges, {
+registerTool(TOOL_NAMES.getTrackedChanges, {
   title: 'Read tracked changes',
   description:
     'Read tracked changes (revisions) in the document. Returns each change with its type ' +
@@ -2067,7 +2073,7 @@ server.registerTool(TOOL_NAMES.getTrackedChanges, {
 });
 
 // 17. rebel_office_word_accept_reject_changes
-server.registerTool(TOOL_NAMES.acceptRejectChanges, {
+registerTool(TOOL_NAMES.acceptRejectChanges, {
   title: 'Accept or reject tracked changes',
   description:
     'Accept or reject tracked changes in the document. Can target specific changes by ID, all ' +
@@ -2140,7 +2146,7 @@ server.registerTool(TOOL_NAMES.acceptRejectChanges, {
 // ---------------------------------------------------------------------------
 
 // 18. rebel_office_excel_read_range
-server.registerTool(TOOL_NAMES.excelReadRange, {
+registerTool(TOOL_NAMES.excelReadRange, {
   title: 'Read Excel range',
   description:
     'Read cell values from a range in the active workbook. Returns data as a 2D array with ' +
@@ -2193,7 +2199,7 @@ server.registerTool(TOOL_NAMES.excelReadRange, {
 });
 
 // 19. rebel_office_excel_write_range
-server.registerTool(TOOL_NAMES.excelWriteRange, {
+registerTool(TOOL_NAMES.excelWriteRange, {
   title: 'Write Excel range',
   description:
     'Write values to cells in the active workbook. Provide data as a 2D array of values. ' +
@@ -2252,7 +2258,7 @@ server.registerTool(TOOL_NAMES.excelWriteRange, {
 });
 
 // 20. rebel_office_excel_get_worksheets
-server.registerTool(TOOL_NAMES.excelGetWorksheets, {
+registerTool(TOOL_NAMES.excelGetWorksheets, {
   title: 'List worksheets',
   description:
     'List all worksheets in the active workbook with their names, positions, visibility, and ' +
@@ -2270,7 +2276,7 @@ server.registerTool(TOOL_NAMES.excelGetWorksheets, {
 });
 
 // 21. rebel_office_excel_add_worksheet
-server.registerTool(TOOL_NAMES.excelAddWorksheet, {
+registerTool(TOOL_NAMES.excelAddWorksheet, {
   title: 'Add worksheet',
   description:
     'Add a new worksheet to the workbook. Optionally specify a name and position. Returns the ' +
@@ -2308,7 +2314,7 @@ server.registerTool(TOOL_NAMES.excelAddWorksheet, {
 });
 
 // 22. rebel_office_excel_delete_worksheet
-server.registerTool(TOOL_NAMES.excelDeleteWorksheet, {
+registerTool(TOOL_NAMES.excelDeleteWorksheet, {
   title: 'Delete worksheet',
   description:
     'Delete a worksheet from the workbook. **This permanently removes the sheet and all its ' +
@@ -2333,7 +2339,7 @@ server.registerTool(TOOL_NAMES.excelDeleteWorksheet, {
 });
 
 // 23. rebel_office_excel_read_table
-server.registerTool(TOOL_NAMES.excelReadTable, {
+registerTool(TOOL_NAMES.excelReadTable, {
   title: 'Read Excel table',
   description:
     'Read data from a named Excel table (ListObject). Returns headers and rows with type ' +
@@ -2380,7 +2386,7 @@ server.registerTool(TOOL_NAMES.excelReadTable, {
 });
 
 // 24. rebel_office_excel_create_table
-server.registerTool(TOOL_NAMES.excelCreateTable, {
+registerTool(TOOL_NAMES.excelCreateTable, {
   title: 'Create Excel table',
   description:
     'Convert a cell range into a named Excel table with headers. Tables enable structured ' +
@@ -2421,7 +2427,7 @@ server.registerTool(TOOL_NAMES.excelCreateTable, {
 });
 
 // 25. rebel_office_excel_set_formula
-server.registerTool(TOOL_NAMES.excelSetFormula, {
+registerTool(TOOL_NAMES.excelSetFormula, {
   title: 'Set formula',
   description:
     'Set a formula in one or more cells. Supports standard Excel formulas (SUM, VLOOKUP, IF, etc.), ' +
@@ -2466,7 +2472,7 @@ server.registerTool(TOOL_NAMES.excelSetFormula, {
 });
 
 // 26. rebel_office_excel_get_formulas
-server.registerTool(TOOL_NAMES.excelGetFormulas, {
+registerTool(TOOL_NAMES.excelGetFormulas, {
   title: 'Read formulas',
   description:
     'Read the formulas (not computed values) from a range of cells. Returns the formula strings ' +
@@ -2499,7 +2505,7 @@ server.registerTool(TOOL_NAMES.excelGetFormulas, {
 });
 
 // 27. rebel_office_excel_create_chart
-server.registerTool(TOOL_NAMES.excelCreateChart, {
+registerTool(TOOL_NAMES.excelCreateChart, {
   title: 'Create chart',
   description:
     'Create a chart from data in the workbook. Supports bar, column, line, pie, area, scatter, ' +
@@ -2589,7 +2595,7 @@ server.registerTool(TOOL_NAMES.excelCreateChart, {
 });
 
 // 28. rebel_office_excel_format_range
-server.registerTool(TOOL_NAMES.excelFormatRange, {
+registerTool(TOOL_NAMES.excelFormatRange, {
   title: 'Format Excel range',
   description:
     'Apply formatting to a cell range — font, colors, borders, number format, alignment, and fill.\n\n' +
@@ -2714,7 +2720,7 @@ server.registerTool(TOOL_NAMES.excelFormatRange, {
 });
 
 // 29. rebel_office_excel_add_conditional_formatting
-server.registerTool(TOOL_NAMES.excelAddConditionalFormatting, {
+registerTool(TOOL_NAMES.excelAddConditionalFormatting, {
   title: 'Add conditional formatting',
   description:
     'Add conditional formatting rules to a range. Supports color scales, data bars, icon sets, ' +
@@ -2843,7 +2849,7 @@ server.registerTool(TOOL_NAMES.excelAddConditionalFormatting, {
 });
 
 // 30. rebel_office_excel_sort_range
-server.registerTool(TOOL_NAMES.excelSortRange, {
+registerTool(TOOL_NAMES.excelSortRange, {
   title: 'Sort range or table',
   description:
     'Sort a range or table by one or more columns. Supports ascending/descending order and ' +
@@ -2901,7 +2907,7 @@ server.registerTool(TOOL_NAMES.excelSortRange, {
 });
 
 // 31. rebel_office_excel_filter_table
-server.registerTool(TOOL_NAMES.excelFilterTable, {
+registerTool(TOOL_NAMES.excelFilterTable, {
   title: 'Filter table',
   description:
     'Apply or clear auto-filter on an Excel table or range. Filter by specific values, ' +
@@ -2989,7 +2995,7 @@ server.registerTool(TOOL_NAMES.excelFilterTable, {
 });
 
 // 32. rebel_office_excel_get_named_ranges
-server.registerTool(TOOL_NAMES.excelGetNamedRanges, {
+registerTool(TOOL_NAMES.excelGetNamedRanges, {
   title: 'List named ranges and tables',
   description:
     'List all named ranges and tables in the workbook. Returns name, scope (workbook or worksheet), ' +
@@ -3008,7 +3014,7 @@ server.registerTool(TOOL_NAMES.excelGetNamedRanges, {
 });
 
 // 33. rebel_office_excel_insert_rows_columns
-server.registerTool(TOOL_NAMES.excelInsertRowsColumns, {
+registerTool(TOOL_NAMES.excelInsertRowsColumns, {
   title: 'Insert rows or columns',
   description:
     'Insert new rows or columns into a worksheet. Existing data shifts to accommodate the insertion.\n\n' +
@@ -3054,7 +3060,7 @@ server.registerTool(TOOL_NAMES.excelInsertRowsColumns, {
 });
 
 // 34. rebel_office_excel_delete_rows_columns
-server.registerTool(TOOL_NAMES.excelDeleteRowsColumns, {
+registerTool(TOOL_NAMES.excelDeleteRowsColumns, {
   title: 'Delete rows or columns',
   description:
     'Delete rows or columns from a worksheet. **This permanently removes the data in those ' +
@@ -3100,7 +3106,7 @@ server.registerTool(TOOL_NAMES.excelDeleteRowsColumns, {
 });
 
 // 35. rebel_office_excel_merge_cells
-server.registerTool(TOOL_NAMES.excelMergeCells, {
+registerTool(TOOL_NAMES.excelMergeCells, {
   title: 'Merge or unmerge cells',
   description:
     'Merge or unmerge cells in a range. Merged cells combine into a single cell displaying the ' +
@@ -3141,7 +3147,7 @@ server.registerTool(TOOL_NAMES.excelMergeCells, {
 });
 
 // 36. rebel_office_excel_auto_fit
-server.registerTool(TOOL_NAMES.excelAutoFit, {
+registerTool(TOOL_NAMES.excelAutoFit, {
   title: 'Auto-fit columns or rows',
   description:
     'Auto-fit column widths or row heights to fit content. Makes data readable without manual ' +
@@ -3178,7 +3184,7 @@ server.registerTool(TOOL_NAMES.excelAutoFit, {
 });
 
 // 37. rebel_office_excel_add_data_validation
-server.registerTool(TOOL_NAMES.excelAddDataValidation, {
+registerTool(TOOL_NAMES.excelAddDataValidation, {
   title: 'Add data validation',
   description:
     'Add data validation rules to a cell range. Restricts what values can be entered — dropdown ' +
@@ -3287,7 +3293,7 @@ server.registerTool(TOOL_NAMES.excelAddDataValidation, {
 });
 
 // 38. rebel_office_excel_get_comments
-server.registerTool(TOOL_NAMES.excelGetComments, {
+registerTool(TOOL_NAMES.excelGetComments, {
   title: 'Read Excel comments',
   description:
     'Read all comments in the workbook or a specific worksheet. Returns each comment with its ' +
@@ -3317,7 +3323,7 @@ server.registerTool(TOOL_NAMES.excelGetComments, {
 });
 
 // 39. rebel_office_excel_add_comment
-server.registerTool(TOOL_NAMES.excelAddComment, {
+registerTool(TOOL_NAMES.excelAddComment, {
   title: 'Add Excel comment',
   description:
     'Add a comment to a specific cell. Comments appear as threaded discussions anchored to cells. ' +
@@ -3364,7 +3370,7 @@ server.registerTool(TOOL_NAMES.excelAddComment, {
 // ---------------------------------------------------------------------------
 
 // 40. rebel_office_powerpoint_get_slides
-server.registerTool(TOOL_NAMES.pptGetSlides, {
+registerTool(TOOL_NAMES.pptGetSlides, {
   title: 'List slides',
   description:
     'List all slides in the active presentation with summaries — slide number, layout, title text ' +
@@ -3391,7 +3397,7 @@ server.registerTool(TOOL_NAMES.pptGetSlides, {
 });
 
 // 41. rebel_office_powerpoint_get_slide_content
-server.registerTool(TOOL_NAMES.pptGetSlideContent, {
+registerTool(TOOL_NAMES.pptGetSlideContent, {
   title: 'Get slide content',
   description:
     'Get the full content of a specific slide — all shapes, text boxes, images, and their properties ' +
@@ -3418,7 +3424,7 @@ server.registerTool(TOOL_NAMES.pptGetSlideContent, {
 });
 
 // 42. rebel_office_powerpoint_add_slide
-server.registerTool(TOOL_NAMES.pptAddSlide, {
+registerTool(TOOL_NAMES.pptAddSlide, {
   title: 'Add slide',
   description:
     'Add a new slide to the presentation. Specify a layout and optional initial content (title, ' +
@@ -3462,7 +3468,7 @@ server.registerTool(TOOL_NAMES.pptAddSlide, {
 });
 
 // 43. rebel_office_powerpoint_delete_slide
-server.registerTool(TOOL_NAMES.pptDeleteSlide, {
+registerTool(TOOL_NAMES.pptDeleteSlide, {
   title: 'Delete slide',
   description:
     'Delete a slide from the presentation by index. **This permanently removes the slide and all ' +
@@ -3487,7 +3493,7 @@ server.registerTool(TOOL_NAMES.pptDeleteSlide, {
 });
 
 // 44. rebel_office_powerpoint_reorder_slides
-server.registerTool(TOOL_NAMES.pptReorderSlides, {
+registerTool(TOOL_NAMES.pptReorderSlides, {
   title: 'Reorder slides',
   description:
     'Move a slide to a new position in the presentation. Reorders the slide deck without modifying ' +
@@ -3520,7 +3526,7 @@ server.registerTool(TOOL_NAMES.pptReorderSlides, {
 });
 
 // 45. rebel_office_powerpoint_add_text_box
-server.registerTool(TOOL_NAMES.pptAddTextBox, {
+registerTool(TOOL_NAMES.pptAddTextBox, {
   title: 'Add text box',
   description:
     'Add a text box to a slide at a specified position. Configure font, size, color, and alignment.\n\n' +
@@ -3621,7 +3627,7 @@ server.registerTool(TOOL_NAMES.pptAddTextBox, {
 });
 
 // 46. rebel_office_powerpoint_add_image
-server.registerTool(TOOL_NAMES.pptAddImage, {
+registerTool(TOOL_NAMES.pptAddImage, {
   title: 'Add image to slide',
   description:
     'Add an image to a slide from a file path or base64 data. Position and size the image ' +
@@ -3707,7 +3713,7 @@ server.registerTool(TOOL_NAMES.pptAddImage, {
 });
 
 // 47. rebel_office_powerpoint_add_shape
-server.registerTool(TOOL_NAMES.pptAddShape, {
+registerTool(TOOL_NAMES.pptAddShape, {
   title: 'Add shape',
   description:
     'Add a geometric shape to a slide. Supports rectangles, circles, arrows, stars, callouts, ' +
@@ -3787,7 +3793,7 @@ server.registerTool(TOOL_NAMES.pptAddShape, {
 });
 
 // 48. rebel_office_powerpoint_update_text
-server.registerTool(TOOL_NAMES.pptUpdateText, {
+registerTool(TOOL_NAMES.pptUpdateText, {
   title: 'Update text in shape',
   description:
     'Update existing text in a shape or placeholder on a slide. Identify the target by shape ID ' +
@@ -3889,7 +3895,7 @@ server.registerTool(TOOL_NAMES.pptUpdateText, {
 });
 
 // 49. rebel_office_powerpoint_get_speaker_notes
-server.registerTool(TOOL_NAMES.pptGetSpeakerNotes, {
+registerTool(TOOL_NAMES.pptGetSpeakerNotes, {
   title: 'Read speaker notes',
   description:
     'Read speaker notes for one or all slides. Returns the notes text for each slide.\n\n' +
@@ -3912,7 +3918,7 @@ server.registerTool(TOOL_NAMES.pptGetSpeakerNotes, {
 });
 
 // 50. rebel_office_powerpoint_set_speaker_notes
-server.registerTool(TOOL_NAMES.pptSetSpeakerNotes, {
+registerTool(TOOL_NAMES.pptSetSpeakerNotes, {
   title: 'Set speaker notes',
   description:
     'Set or update the speaker notes for a slide. Replaces any existing notes.\n\n' +
@@ -3946,7 +3952,7 @@ server.registerTool(TOOL_NAMES.pptSetSpeakerNotes, {
 });
 
 // 51. rebel_office_powerpoint_get_presentation_properties
-server.registerTool(TOOL_NAMES.pptGetPresentationProperties, {
+registerTool(TOOL_NAMES.pptGetPresentationProperties, {
   title: 'Get presentation properties',
   description:
     "Get the presentation's metadata — title, slide dimensions, slide count, layout names, and " +
