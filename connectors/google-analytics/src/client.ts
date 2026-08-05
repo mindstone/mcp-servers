@@ -10,6 +10,7 @@ import {
   ADMIN_BASE_URL,
   ADMIN_ALPHA_BASE_URL,
   DATA_BASE_URL,
+  DATA_ALPHA_BASE_URL,
   GoogleAnalyticsError,
   USER_AGENT,
   DEFAULT_REQUEST_TIMEOUT_MS,
@@ -28,6 +29,7 @@ export const Bases = {
   admin: ADMIN_BASE_URL,
   adminAlpha: ADMIN_ALPHA_BASE_URL,
   data: DATA_BASE_URL,
+  dataAlpha: DATA_ALPHA_BASE_URL,
 } as const;
 
 /**

@@ -8,6 +8,7 @@ import { http, HttpResponse } from 'msw';
 const ADMIN_BETA = 'https://analyticsadmin.googleapis.com/v1beta';
 const ADMIN_ALPHA = 'https://analyticsadmin.googleapis.com/v1alpha';
 const DATA_BETA = 'https://analyticsdata.googleapis.com/v1beta';
+const DATA_ALPHA = 'https://analyticsdata.googleapis.com/v1alpha';
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -371,6 +372,56 @@ export function createGoogleHandlers() {
           rowCount: 2,
         },
         rowCount: 2,
+      });
+    }),
+
+    http.post(new RegExp(`^${escapeRegex(DATA_ALPHA)}/properties/[^/]+/reportTasks$`), async ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      const body = (await request.json()) as { reportDefinition?: { limit?: string } };
+      return HttpResponse.json({
+        name: 'properties/200/reportTasks/800',
+        reportDefinition: body.reportDefinition,
+        reportMetadata: {
+          state: 'CREATING',
+          beginCreatingTime: '2026-08-01T00:00:00Z',
+          creationQuotaTokensCharged: 5,
+        },
+      });
+    }),
+
+    http.get(new RegExp(`^${escapeRegex(DATA_ALPHA)}/properties/[^/]+/reportTasks/[^/]+$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        name: 'properties/200/reportTasks/800',
+        reportMetadata: {
+          state: 'ACTIVE',
+          taskRowCount: 2,
+          totalRowCount: 300000,
+          beginCreatingTime: '2026-08-01T00:00:00Z',
+          creationQuotaTokensCharged: 5,
+        },
+      });
+    }),
+
+    http.post(new RegExp(`^${escapeRegex(DATA_ALPHA)}/properties/[^/]+/reportTasks/[^/]+:query$`), ({ request }) => {
+      const err = checkAuth(request);
+      if (err) return err;
+      return HttpResponse.json({
+        rowCount: 2,
+        dimensionHeaders: [{ name: 'country' }],
+        metricHeaders: [{ name: 'totalUsers' }],
+        rows: [
+          {
+            dimensionValues: [{ value: 'United Kingdom' }],
+            metricValues: [{ value: '634' }],
+          },
+          {
+            dimensionValues: [{ value: 'United States' }],
+            metricValues: [{ value: '628' }],
+          },
+        ],
       });
     }),
   ];

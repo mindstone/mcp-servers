@@ -1,0 +1,108 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, it, expect, afterAll } from 'vitest';
+import './helpers/mock-auth.js';
+import { mswServer } from './helpers/setup.js';
+import { createGoogleHandlers } from './helpers/google-mock-server.js';
+import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
+
+const FIXTURE_ADC = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'fixtures/fake-adc.json',
+);
+
+interface TextContent {
+  type: 'text';
+  text: string;
+}
+
+function parseToolResult(result: { content: unknown }) {
+  const content = result.content as TextContent[];
+  return JSON.parse(content[0].text) as Record<string, unknown>;
+}
+
+describe('report task tools', () => {
+  let testClient: McpTestClient;
+
+  async function setup() {
+    mswServer.use(...createGoogleHandlers());
+    testClient = await createTestClient({
+      env: {
+        GOOGLE_APPLICATION_CREDENTIALS: FIXTURE_ADC,
+        GA4_PROPERTY_ID: '200',
+      },
+    });
+  }
+
+  afterAll(async () => {
+    if (testClient) await testClient.close();
+  });
+
+  it('ga_create_report_task starts a task and returns its metadata', async () => {
+    await setup();
+    const result = await testClient.client.callTool({
+      name: 'ga_create_report_task',
+      arguments: {
+        property_id: '200',
+        dimensions: ['country'],
+        metrics: ['totalUsers'],
+        limit: 100000,
+      },
+    });
+    const parsed = parseToolResult(result);
+    expect(parsed.ok).toBe(true);
+    const task = parsed.reportTask as Record<string, unknown>;
+    expect(task.name).toBe('properties/200/reportTasks/800');
+    expect(task.state).toBe('CREATING');
+  });
+
+  it('ga_create_report_task is annotated as a non-read-only, non-destructive materialisation', async () => {
+    await setup();
+    const toolsResult = await testClient.client.listTools();
+    const tool = toolsResult.tools.find((entry) => entry.name === 'ga_create_report_task');
+    expect(tool?.annotations?.readOnlyHint).toBe(false);
+    expect(tool?.annotations?.destructiveHint).toBe(false);
+    expect(tool?.annotations?.idempotentHint).toBe(false);
+  });
+
+  it('ga_get_report_task accepts a full resource name and reports ACTIVE state', async () => {
+    await setup();
+    const result = await testClient.client.callTool({
+      name: 'ga_get_report_task',
+      arguments: { task_id: 'properties/200/reportTasks/800' },
+    });
+    const parsed = parseToolResult(result);
+    expect(parsed.ok).toBe(true);
+    const task = parsed.reportTask as Record<string, unknown>;
+    expect(task.state).toBe('ACTIVE');
+    expect(task.taskRowCount).toBe(2);
+    expect(task.totalRowCount).toBe(300000);
+  });
+
+  it('ga_query_report_task returns rows with enveloped dimension values', async () => {
+    await setup();
+    const result = await testClient.client.callTool({
+      name: 'ga_query_report_task',
+      arguments: { task_id: '800', offset: 0, limit: 1000 },
+    });
+    const parsed = parseToolResult(result);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.rowCount).toBe(2);
+    const rows = parsed.rows as Array<Record<string, string>>;
+    expect(rows[0].country).toBe(
+      '<untrusted-content source="ga4-report">United Kingdom</untrusted-content>',
+    );
+    expect(rows[0].totalUsers).toBe('634');
+  });
+
+  it('returns a structured error when task_id is empty', async () => {
+    await setup();
+    const result = await testClient.client.callTool({
+      name: 'ga_get_report_task',
+      arguments: { property_id: '200', task_id: 'reportTasks/' },
+    });
+    const parsed = parseToolResult(result);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.code).toBe('REPORT_TASK_ID_REQUIRED');
+  });
+});

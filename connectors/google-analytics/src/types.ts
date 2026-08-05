@@ -18,6 +18,13 @@ export const ADMIN_ALPHA_BASE_URL = 'https://analyticsadmin.googleapis.com/v1alp
 /** Default base URL for the GA Data API. v1beta is generally available. */
 export const DATA_BASE_URL = 'https://analyticsdata.googleapis.com/v1beta';
 
+/**
+ * v1alpha base URL for the GA Data API — only used for endpoints that are
+ * not yet promoted to v1beta. Currently only `reportTasks`. Keep this
+ * surface narrow; alpha endpoints can change without notice.
+ */
+export const DATA_ALPHA_BASE_URL = 'https://analyticsdata.googleapis.com/v1alpha';
+
 /** Threshold above which run_report warns and asks for explicit opt-in. */
 export const DEFAULT_ROW_WARNING_THRESHOLD = 2500;
 

@@ -4,6 +4,7 @@ import {
   registerAccountTools,
   registerAdminTools,
   registerAudienceExportTools,
+  registerReportTaskTools,
   registerReportTools,
   registerSchemaTools,
 } from './tools/index.js';
@@ -22,6 +23,7 @@ export function createServer(): McpServer {
   registerReportTools(server);
   registerAdminTools(server);
   registerAudienceExportTools(server);
+  registerReportTaskTools(server);
 
   return server;
 }

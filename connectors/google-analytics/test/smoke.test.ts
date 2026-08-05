@@ -16,7 +16,7 @@ describe('smoke — tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 31 tools with ga_ prefix', async () => {
+  it('registers exactly 34 tools with ga_ prefix', async () => {
     testClient = await createTestClient({
       env: {
         GOOGLE_APPLICATION_CREDENTIALS: FIXTURE_ADC,
@@ -26,12 +26,13 @@ describe('smoke — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((tool) => tool.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(31);
+    expect(toolsResult.tools).toHaveLength(34);
     expect(toolNames).toEqual(
       [
         'ga_batch_run_reports',
         'ga_check_compatibility',
         'ga_create_audience_export',
+        'ga_create_report_task',
         'ga_get_audience_export',
         'ga_get_custom_dimensions_and_metrics',
         'ga_get_data_retention_settings',
@@ -42,6 +43,7 @@ describe('smoke — tool registration', () => {
         'ga_get_property_details',
         'ga_get_property_quotas_snapshot',
         'ga_get_property_schema',
+        'ga_get_report_task',
         'ga_list_account_summaries',
         'ga_list_audience_exports',
         'ga_list_audiences',
@@ -55,6 +57,7 @@ describe('smoke — tool registration', () => {
         'ga_list_metric_categories',
         'ga_list_properties',
         'ga_query_audience_export',
+        'ga_query_report_task',
         'ga_run_pivot_report',
         'ga_run_realtime_report',
         'ga_run_report',
@@ -66,7 +69,7 @@ describe('smoke — tool registration', () => {
 
   it('marks every tool read-only except the server-side materialisation creates', async () => {
     const toolsResult = await testClient.client.listTools();
-    const creates = new Set(['ga_create_audience_export']);
+    const creates = new Set(['ga_create_audience_export', 'ga_create_report_task']);
     for (const tool of toolsResult.tools) {
       expect(
         tool.annotations?.readOnlyHint,
