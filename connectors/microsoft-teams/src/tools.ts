@@ -7,6 +7,8 @@ import { callGraph, getTokenProvider } from './client.js';
 import { errorResponse, successJson, withErrorHandling } from './utils.js';
 import { AUTH_TOOL_NAME } from './types.js';
 import {
+  createChat,
+  findUser,
   getChat,
   getPresence,
   listChannelMessages,
@@ -209,6 +211,46 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
     },
     withErrorHandling(async (args, extra) =>
       successJson(await callGraph(extra, (c, signal) => sendChatMessage(c, args, signal))),
+    ),
+  );
+
+  server.registerTool(
+    'find_user',
+    {
+      description:
+        'Look up people in the organization by display name or email address. Use this to resolve a colleague to a user ID or email before creating a chat. Requires the User.ReadBasic.All Graph permission.',
+      inputSchema: z
+        .object({
+          query: z.string().describe('Display name or email address of the person to find'),
+        })
+        .strict(),
+      annotations: READ_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) => {
+      const gate = await requireScopesGranted(['User.ReadBasic.All'], 'Looking up users');
+      if (gate) return gate;
+      return successJson(await callGraph(extra, (c, signal) => findUser(c, args, signal)));
+    }),
+  );
+
+  server.registerTool(
+    'create_chat',
+    {
+      description:
+        'Create a new 1:1 or group chat with one or more colleagues (by email address or user ID) and return the new chat ID, which can then be used with send_chat_message.',
+      inputSchema: z
+        .object({
+          members: z
+            .array(z.string())
+            .min(1)
+            .describe('Email addresses or user IDs of the other participants (one for a 1:1 chat, several for a group chat)'),
+          topic: z.string().optional().describe('Chat topic (group chats only)'),
+        })
+        .strict(),
+      annotations: WRITE_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) =>
+      successJson(await callGraph(extra, (c, signal) => createChat(c, args, signal))),
     ),
   );
 

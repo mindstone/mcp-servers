@@ -195,6 +195,83 @@ describe('microsoft-teams mock-API integration', () => {
     });
   });
 
+  it('find_user resolves an email address to a user', async () => {
+    const result = await client.callTool('find_user', { query: 'alice@example.com' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      count: number;
+      users: Array<{ id: string; displayName: string; email: string }>;
+    };
+    expect(json.count).toBe(1);
+    expect(json.users[0]?.id).toBe('user-1');
+    expect(json.users[0]?.displayName).toContain('Alice Anderson');
+    const call = state.requests.find((r) => r.method === 'GET' && r.pathname.includes('/users/'));
+    expect(call).toBeDefined();
+  });
+
+  it('find_user returns an empty result for an unknown email', async () => {
+    const result = await client.callTool('find_user', { query: 'missing@example.com' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { count: number; users: unknown[] };
+    expect(json.count).toBe(0);
+    expect(json.users).toEqual([]);
+  });
+
+  it('find_user searches by display name with $search', async () => {
+    const result = await client.callTool('find_user', { query: 'Alice' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      count: number;
+      users: Array<{ id: string; email: string }>;
+    };
+    expect(json.count).toBe(2);
+    expect(json.users[1]?.email).toContain('aaron@example.com');
+    const call = state.requests.find(
+      (r) => r.method === 'GET' && r.pathname.endsWith('/v1.0/users'),
+    );
+    expect(call?.search).toMatch(/\$search=/);
+    expect(decodeURIComponent(call?.search ?? '')).toContain('"displayName:Alice"');
+  });
+
+  it('create_chat creates a 1:1 chat binding the caller and the member', async () => {
+    const result = await client.callTool('create_chat', { members: ['alice@example.com'] });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { success: boolean; chatId: string; chatType: string };
+    expect(json.success).toBe(true);
+    expect(json.chatId).toBe('chat-new');
+    expect(json.chatType).toBe('oneOnOne');
+    const call = state.requests.find((r) => r.method === 'POST' && r.pathname.endsWith('/v1.0/chats'));
+    const body = call?.body as {
+      chatType: string;
+      topic?: string;
+      'members@odata.bind': Array<{ 'user@odata.bind': string }>;
+    };
+    expect(body.chatType).toBe('oneOnOne');
+    expect(body.topic).toBeUndefined();
+    expect(body['members@odata.bind']).toHaveLength(2);
+    expect(body['members@odata.bind'][0]?.['user@odata.bind']).toBe(
+      'https://graph.microsoft.com/v1.0/me',
+    );
+    expect(body['members@odata.bind'][1]?.['user@odata.bind']).toBe(
+      'https://graph.microsoft.com/v1.0/users/alice%40example.com',
+    );
+  });
+
+  it('create_chat creates a group chat with a topic', async () => {
+    const result = await client.callTool('create_chat', {
+      members: ['alice@example.com', 'aaron@example.com'],
+      topic: 'Launch plan',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { success: boolean; chatType: string };
+    expect(json.success).toBe(true);
+    expect(json.chatType).toBe('group');
+    const call = state.requests.find((r) => r.method === 'POST' && r.pathname.endsWith('/v1.0/chats'));
+    const body = call?.body as { chatType: string; topic?: string };
+    expect(body.chatType).toBe('group');
+    expect(body.topic).toBe('Launch plan');
+  });
+
   it('send_chat_message rejects unknown keys (strict schema)', async () => {
     // F8: the input schema is `.strict()`, so an unexpected argument is refused
     // at the protocol boundary rather than silently forwarded to Graph. The SDK

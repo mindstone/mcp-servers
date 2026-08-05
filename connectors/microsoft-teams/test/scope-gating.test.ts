@@ -90,6 +90,16 @@ describe('scope gating for admin-consent Graph permissions', () => {
     expect(json.missing_scopes).toEqual(['ChannelMessage.Send']);
   });
 
+  it('find_user reports the missing User.ReadBasic.All scope', async () => {
+    const result = await client.callTool('find_user', { query: 'alice@example.com' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; missing_scopes: string[] };
+    expect(json.ok).toBe(false);
+    expect(json.missing_scopes).toEqual(['User.ReadBasic.All']);
+    const call = state.requests.find((r) => r.pathname.includes('/users'));
+    expect(call).toBeUndefined();
+  });
+
   it('ungated chat tools still work under the base scope set', async () => {
     const result = await client.callTool('list_chats', { top: 1 });
     expect(result.isError).not.toBe(true);

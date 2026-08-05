@@ -426,3 +426,137 @@ export async function replyToChannelMessage(
     message: 'Reply sent successfully',
   };
 }
+
+// ---------------------------------------------------------------------------
+// User lookup and chat creation
+// ---------------------------------------------------------------------------
+
+const graphUserSchema = z
+  .object({
+    id: z.string(),
+    displayName: z.string().nullish(),
+    mail: z.string().nullish(),
+    userPrincipalName: z.string().nullish(),
+  })
+  .passthrough();
+
+const graphUserCollectionSchema = z
+  .object({
+    value: z.array(graphUserSchema).nullish(),
+  })
+  .passthrough();
+
+function formatUser(user: z.infer<typeof graphUserSchema>, tool: string): Record<string, unknown> {
+  return {
+    id: user.id,
+    displayName: wrapUntrusted(user.displayName ?? undefined, `microsoft-teams:${tool}:displayName`),
+    email: wrapUntrusted(
+      user.mail ?? user.userPrincipalName ?? undefined,
+      `microsoft-teams:${tool}:email`,
+    ),
+  };
+}
+
+export async function findUser(
+  client: Client,
+  args: ArgBag,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const query = requireStringArg(args, 'query', 'name or email address', 'find_user');
+
+  if (query.includes('@')) {
+    try {
+      const user = graphUserSchema.parse(
+        await client
+          .api(`/users/${encodeURIComponent(query)}`)
+          .options({ signal })
+          .select('id,displayName,mail,userPrincipalName')
+          .get(),
+      );
+      return { count: 1, users: [formatUser(user, 'find_user')] };
+    } catch (err) {
+      // A 404 here means "no such user", which is a result, not a failure.
+      if ((err as { statusCode?: number })?.statusCode === 404) {
+        return { count: 0, users: [] };
+      }
+      throw err;
+    }
+  }
+
+  // $search on /users requires the ConsistencyLevel: eventual header; strip
+  // characters that would break out of the quoted search expression.
+  const safeQuery = query.replace(/["\\]/g, ' ').trim();
+  const response = graphUserCollectionSchema.parse(
+    await client
+      .api('/users')
+      .options({ signal })
+      .header('ConsistencyLevel', 'eventual')
+      .search(`"displayName:${safeQuery}"`)
+      .select('id,displayName,mail,userPrincipalName')
+      .top(10)
+      .get(),
+  );
+  const users = response.value ?? [];
+  return { count: users.length, users: users.map((user) => formatUser(user, 'find_user')) };
+}
+
+function requireStringArrayArg(args: ArgBag, name: string, label: string, nextStep: string): string[] {
+  const value = args[name];
+  if (Array.isArray(value) && value.length > 0) {
+    const members = value.map((entry) => (typeof entry === 'string' ? entry.trim() : ''));
+    if (members.every((entry) => entry.length > 0)) return members;
+  }
+  throw new TeamsBusinessError(
+    `Missing required parameter: "${name}" (${label}). Provide a non-empty array of email addresses or user IDs.`,
+    nextStep,
+  );
+}
+
+const createdChatSchema = z
+  .object({
+    id: z.string(),
+    chatType: z.string().nullish(),
+  })
+  .passthrough();
+
+export async function createChat(
+  client: Client,
+  args: ArgBag,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const members = [...new Set(requireStringArrayArg(args, 'members', 'chat participants', 'create_chat'))];
+  const topic = stringArg(args, 'topic');
+  const chatType = members.length === 1 ? 'oneOnOne' : 'group';
+
+  const memberBindings = [
+    {
+      '@odata.type': '#microsoft.graph.aadUserConversationMember',
+      roles: ['owner'],
+      'user@odata.bind': 'https://graph.microsoft.com/v1.0/me',
+    },
+    ...members.map((member) => ({
+      '@odata.type': '#microsoft.graph.aadUserConversationMember',
+      roles: ['owner'],
+      'user@odata.bind': `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(member)}`,
+    })),
+  ];
+
+  const chat = createdChatSchema.parse(
+    await client
+      .api('/chats')
+      .options({ signal })
+      .post({
+        chatType,
+        // Topic is only valid on group chats.
+        ...(chatType === 'group' && topic ? { topic } : {}),
+        'members@odata.bind': memberBindings,
+      }),
+  );
+
+  return {
+    success: true,
+    chatId: chat.id,
+    chatType: chat.chatType ?? chatType,
+    message: 'Chat created successfully',
+  };
+}

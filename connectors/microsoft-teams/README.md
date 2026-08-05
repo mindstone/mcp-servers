@@ -11,7 +11,7 @@ Microsoft 365 Teams MCP server — list and read Teams chats, send chat messages
 
 - **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-teams)
 - **Auth:** OAuth (host-orchestrated, shared with [`mcp-server-microsoft-mail`](../microsoft-mail/)) ([`MS_CLIENT_ID`](./server.json))
-- **Tools:** [11](./src/tools.ts) (chats, messages, teams, channels, presence)
+- **Tools:** [13](./src/tools.ts) (chats, messages, teams, channels, users, presence)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 - **Shared library:** [`@mindstone/mcp-server-microsoft-shared`](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-shared)
@@ -164,7 +164,7 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 }
 ```
 
-## Tools (11)
+## Tools (13)
 
 | Tool | Description |
 | ---- | ----------- |
@@ -173,6 +173,8 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 | `list_chat_messages` | List recent messages from a chat. |
 | `send_chat_message` | Send a message to a chat. |
 | `compose_chat_message` | Open an inline editable compose form before sending; the form posts via `send_chat_message` when the user clicks Send. |
+| `find_user` | Look up people by display name or email. Requires `User.ReadBasic.All`. |
+| `create_chat` | Create a 1:1 or group chat by member email/user ID and return the new chat ID. |
 | `list_teams` | List teams you are a member of. |
 | `list_channels` | List channels in a team. |
 | `list_channel_messages` | List recent messages in a channel. Requires `ChannelMessage.Read.All`. |

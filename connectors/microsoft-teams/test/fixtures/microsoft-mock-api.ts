@@ -195,6 +195,49 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
       },
     ),
 
+    http.get(`${GRAPH_BASE}/users/:userId`, async ({ request, params }) => {
+      await capture(request);
+      const userId = String(params.userId);
+      if (userId === 'missing%40example.com' || userId === 'missing@example.com') {
+        return HttpResponse.json(
+          { error: { code: 'Request_ResourceNotFound', message: 'Resource not found' } },
+          { status: 404 },
+        );
+      }
+      return HttpResponse.json({
+        id: 'user-1',
+        displayName: 'Alice Anderson',
+        mail: 'alice@example.com',
+        userPrincipalName: 'alice@example.com',
+      });
+    }),
+
+    http.get(`${GRAPH_BASE}/users`, async ({ request }) => {
+      await capture(request);
+      return HttpResponse.json({
+        value: [
+          {
+            id: 'user-1',
+            displayName: 'Alice Anderson',
+            mail: 'alice@example.com',
+            userPrincipalName: 'alice@example.com',
+          },
+          {
+            id: 'user-2',
+            displayName: 'Aaron Baker',
+            mail: null,
+            userPrincipalName: 'aaron@example.com',
+          },
+        ],
+      });
+    }),
+
+    http.post(`${GRAPH_BASE}/chats`, async ({ request }) => {
+      await capture(request);
+      const body = (await request.clone().json()) as { chatType?: string };
+      return HttpResponse.json({ id: 'chat-new', chatType: body.chatType ?? 'oneOnOne' });
+    }),
+
     http.get(`${GRAPH_BASE}/me/presence`, async ({ request }) => {
       await capture(request);
       return HttpResponse.json({

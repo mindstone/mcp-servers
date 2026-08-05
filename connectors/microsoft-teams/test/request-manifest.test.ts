@@ -71,6 +71,18 @@ const MANIFEST: ManifestRow[] = [
     args: { teamId: 'team-1', channelId: 'channel-1', messageId: 'channel-msg-1', content: 'Agreed' },
   },
   {
+    tool: 'find_user',
+    method: 'GET',
+    pathname: '/v1.0/users/:userId',
+    args: { query: 'alice@example.com' },
+  },
+  {
+    tool: 'create_chat',
+    method: 'POST',
+    pathname: '/v1.0/chats',
+    args: { members: ['alice@example.com'] },
+  },
+  {
     tool: 'get_presence',
     method: 'GET',
     pathname: '/v1.0/me/presence',

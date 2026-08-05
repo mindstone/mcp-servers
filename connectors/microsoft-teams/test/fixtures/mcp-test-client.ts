@@ -48,7 +48,7 @@ export function createMicrosoftConfigDir(
   const refreshToken = options.refreshToken;
   const scope =
     options.scope ??
-    'Chat.Read Chat.ReadWrite Channel.ReadBasic.All ChannelMessage.Read.All ChannelMessage.Send offline_access';
+    'Chat.Read Chat.ReadWrite Channel.ReadBasic.All ChannelMessage.Read.All ChannelMessage.Send User.ReadBasic.All Presence.Read.All Presence.ReadWrite offline_access';
 
   const tempConfig = createTempConfig({
     prefix: 'microsoft-teams-mcp-test-',
