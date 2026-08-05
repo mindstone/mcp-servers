@@ -13,7 +13,7 @@ Runway ML MCP server for Model Context Protocol hosts. Generate AI video, images
 
 | Field | Value |
 |-------|-------|
-| Version | 0.3.2 |
+| Version | 0.4.0 |
 | Auth | API key (`RUNWAYML_API_SECRET`) |
 | Tools | 23 (video, image, audio, voices, tasks) |
 | Surface | cloud API |
