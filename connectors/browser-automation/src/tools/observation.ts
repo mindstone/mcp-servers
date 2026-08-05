@@ -68,7 +68,9 @@ Use the -i flag (default) to see only interactive elements, keeping output focus
         };
       }
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify({ ok: true, message: 'Screenshot taken', note: data }) }],
+        // Short stdout is not an image — it is CLI/page-derived text and must
+        // be enveloped like every other external string.
+        content: [{ type: 'text' as const, text: JSON.stringify({ ok: true, message: 'Screenshot taken', note: wrapUntrusted(data, 'browser-automation:screenshot') }) }],
       };
     }),
   );

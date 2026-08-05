@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { ConnectorError, DEFAULT_TIMEOUT_MS, SESSION_NAME } from './types.js';
+import { wrapUntrusted } from './untrusted-content.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -71,6 +72,29 @@ function resolveHeaded(optionHeaded: boolean | undefined, env: Record<string, st
  * type/press/scroll/select/hover, eval, back/forward, wait, close).
  */
 const NPX_FALLBACK_VERSION = '0.33.2';
+
+/**
+ * Build the ConnectorError message for a failed CLI invocation.
+ *
+ * stdout/stderr from the CLI can carry page-derived, attacker-controlled
+ * text (including prompt injection and forged envelope close tags), so the
+ * detail is wrapped in an untrusted-content envelope before it can reach the
+ * model. When neither stream has content, fall back to a static description
+ * naming only the subcommand: Node's own error message echoes the full
+ * argument vector, which may carry sensitive values (URLs with userinfo,
+ * typed text, evaluation scripts).
+ */
+function cliFailureMessage(
+  command: string,
+  stderr: string | undefined,
+  stdout: string | undefined,
+): string {
+  const detail = stderr?.trim() || stdout?.trim() || '';
+  if (!detail) {
+    return `agent-browser ${command} exited with a non-zero status and produced no error output`;
+  }
+  return `agent-browser ${command} failed: ${wrapUntrusted(detail, 'browser-automation:cli-error')}`;
+}
 
 /**
  * Execute an agent-browser CLI command.
@@ -146,11 +170,9 @@ export async function execAgentBrowser(
         }
 
         // npx ran but the underlying CLI exited non-zero — propagate as CLI_ERROR
-        // with the actual stderr for diagnosis.
-        const npxStderr = npxErr.stderr?.trim() ?? '';
-        const npxStdout = npxErr.stdout?.trim() ?? '';
+        // with the (enveloped) stderr for diagnosis.
         throw new ConnectorError(
-          npxStderr || npxStdout || npxErr.message || String(npxError),
+          cliFailureMessage(args[0], npxErr.stderr, npxErr.stdout),
           'CLI_ERROR',
           'The agent-browser CLI command failed (via npx fallback). ' +
           'Check the error details above. ' +
@@ -159,20 +181,20 @@ export async function execAgentBrowser(
       }
     }
 
-    // Timeout
+    // Timeout — name only the subcommand: the full argument vector may carry
+    // sensitive values (URLs with userinfo, selectors, filenames, typed
+    // values, evaluation scripts) and must not be echoed to the model.
     if (err.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' || (err as { killed?: boolean }).killed) {
       throw new ConnectorError(
-        `Command timed out after ${timeoutMs}ms: agent-browser ${args.join(' ')}`,
+        `Command timed out after ${timeoutMs}ms: agent-browser ${args[0]}`,
         'TIMEOUT',
         'The browser operation took too long. Try a simpler action or increase the timeout.',
       );
     }
 
-    // Other errors — include stderr for diagnostics
-    const stderr = err.stderr?.trim() ?? '';
-    const stdout = err.stdout?.trim() ?? '';
+    // Other errors — include the (enveloped) stderr for diagnostics
     throw new ConnectorError(
-      stderr || stdout || err.message || String(error),
+      cliFailureMessage(args[0], err.stderr, err.stdout),
       'CLI_ERROR',
       'The agent-browser CLI command failed. Check that agent-browser is installed and the browser session is active.',
     );
