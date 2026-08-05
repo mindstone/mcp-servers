@@ -49,3 +49,55 @@ export const workspaceUsageResponseSchema = z.object({
   column_units: z.array(z.string().nullable()).optional(),
   rows: z.array(z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))),
 });
+
+// ── Pronunciation dictionaries ────────────────────────────────────────────
+
+export const pronunciationDictionaryRuleResponseSchema = z.object({
+  string_to_replace: z.string(),
+  type: z.enum(['alias', 'phoneme']),
+  alias: z.string().optional(),
+  phoneme: z.string().optional(),
+  alphabet: z.string().optional(),
+  case_sensitive: z.boolean().optional(),
+  word_boundaries: z.boolean().optional(),
+});
+
+export const pronunciationDictionaryMetadataSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable().optional(),
+  latest_version_id: z.string().optional(),
+  latest_version_rules_num: z.number().optional(),
+  version_id: z.string().optional(),
+  version_rules_num: z.number().optional(),
+  permission_on_resource: z.string().nullable().optional(),
+  creation_time_unix: z.number().optional(),
+  archived_time_unix: z.number().nullable().optional(),
+});
+
+export const pronunciationDictionaryListResponseSchema = z.object({
+  pronunciation_dictionaries: z.array(pronunciationDictionaryMetadataSchema),
+  has_more: z.boolean().optional(),
+  next_cursor: z.string().nullable().optional(),
+});
+
+export const pronunciationDictionaryWithRulesSchema = pronunciationDictionaryMetadataSchema.extend({
+  rules: z.array(pronunciationDictionaryRuleResponseSchema).optional(),
+});
+
+// ── Speech-to-text ────────────────────────────────────────────────────────
+
+export const transcriptionWordSchema = z.object({
+  text: z.string(),
+  start: z.number().finite(),
+  end: z.number().finite(),
+  type: z.string().optional(),
+  speaker_id: z.string().optional(),
+});
+
+export const transcriptionResponseSchema = z.object({
+  text: z.string(),
+  words: z.array(transcriptionWordSchema).optional(),
+  language_code: z.string().optional(),
+  language_probability: z.number().optional(),
+});

@@ -4,8 +4,13 @@ import { getApiKey } from '../auth.js';
 import { elevenLabsFetch, elevenLabsJson } from '../client.js';
 import { ENDPOINTS, ELEVENLABS_API_V1_BASE } from '../endpoints.js';
 import {
+  parseApiResponse,
+  pronunciationDictionaryListResponseSchema,
+  pronunciationDictionaryMetadataSchema,
+  pronunciationDictionaryWithRulesSchema,
+} from '../api-schemas.js';
+import {
   ElevenLabsError,
-  type PronunciationDictionaryListResponse,
   type PronunciationDictionaryMetadata,
   type PronunciationDictionaryRule,
   type PronunciationDictionaryWithRules,
@@ -104,9 +109,13 @@ COST: FREE — read only.`,
       if (args.cursor) params.set('cursor', args.cursor);
       if (args.include_archived != null) params.set('include_archived', String(args.include_archived));
 
-      const data = await elevenLabsJson<PronunciationDictionaryListResponse>(
-        apiKey,
-        `${ELEVENLABS_API_V1_BASE}${ENDPOINTS.PRONUNCIATION_DICTIONARIES}?${params.toString()}`,
+      const data = parseApiResponse(
+        pronunciationDictionaryListResponseSchema,
+        await elevenLabsJson<unknown>(
+          apiKey,
+          `${ELEVENLABS_API_V1_BASE}${ENDPOINTS.PRONUNCIATION_DICTIONARIES}?${params.toString()}`,
+        ),
+        'pronunciation dictionary list',
       );
 
       const dictionaries = (data.pronunciation_dictionaries ?? []).map((d) =>
@@ -156,9 +165,13 @@ COST: FREE — read only.`,
 
       let data: PronunciationDictionaryWithRules;
       try {
-        data = await elevenLabsJson<PronunciationDictionaryWithRules>(
-          apiKey,
-          ENDPOINTS.pronunciationDictionary(args.pronunciation_dictionary_id),
+        data = parseApiResponse(
+          pronunciationDictionaryWithRulesSchema,
+          await elevenLabsJson<unknown>(
+            apiKey,
+            ENDPOINTS.pronunciationDictionary(args.pronunciation_dictionary_id),
+          ),
+          'pronunciation dictionary',
         );
       } catch (error) {
         if (error instanceof ElevenLabsError && error.code === 'HTTP_404') {
@@ -211,17 +224,21 @@ COST: FREE — metadata write only (no credits).`,
       const apiKey = getApiKey();
       if (!apiKey) throw AUTH_REQUIRED();
 
-      const data = await elevenLabsJson<PronunciationDictionaryMetadata & { version_id?: string }>(
-        apiKey,
-        ENDPOINTS.PRONUNCIATION_DICTIONARIES_ADD_FROM_RULES,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            name: args.name,
-            ...(args.description ? { description: args.description } : {}),
-            rules: args.rules,
-          }),
-        },
+      const data = parseApiResponse(
+        pronunciationDictionaryMetadataSchema,
+        await elevenLabsJson<unknown>(
+          apiKey,
+          ENDPOINTS.PRONUNCIATION_DICTIONARIES_ADD_FROM_RULES,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              name: args.name,
+              ...(args.description ? { description: args.description } : {}),
+              rules: args.rules,
+            }),
+          },
+        ),
+        'pronunciation dictionary creation',
       );
 
       return JSON.stringify({

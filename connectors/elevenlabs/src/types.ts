@@ -74,13 +74,6 @@ export interface TranscriptionWord {
   speaker_id?: string;
 }
 
-export interface TranscriptionResponse {
-  text: string;
-  words?: TranscriptionWord[];
-  language_code?: string;
-  language_probability?: number;
-}
-
 export interface HistoryItem {
   history_item_id: string;
   date_unix?: number;
@@ -124,12 +117,6 @@ export interface PronunciationDictionaryMetadata {
   created_by?: string;
   creation_time_unix?: number;
   archived_time_unix?: number | null;
-}
-
-export interface PronunciationDictionaryListResponse {
-  pronunciation_dictionaries: PronunciationDictionaryMetadata[];
-  has_more?: boolean;
-  next_cursor?: string | null;
 }
 
 export interface PronunciationDictionaryWithRules extends PronunciationDictionaryMetadata {

@@ -3,7 +3,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
 import { elevenLabsJson } from '../client.js';
 import { ENDPOINTS } from '../endpoints.js';
-import { ElevenLabsError, type TranscriptionResponse, type TranscriptionWord } from '../types.js';
+import { parseApiResponse, transcriptionResponseSchema } from '../api-schemas.js';
+import { ElevenLabsError, type TranscriptionWord } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 import { readSandboxedFile, sandboxedFileToBlob } from './file-input.js';
@@ -118,13 +119,17 @@ COST: Credits based on audio duration.`,
         formData.append('timestamps_granularity', args.timestamps_granularity);
       }
 
-      const data = await elevenLabsJson<TranscriptionResponse>(
-        apiKey,
-        ENDPOINTS.SPEECH_TO_TEXT,
-        {
-          method: 'POST',
-          body: formData,
-        },
+      const data = parseApiResponse(
+        transcriptionResponseSchema,
+        await elevenLabsJson<unknown>(
+          apiKey,
+          ENDPOINTS.SPEECH_TO_TEXT,
+          {
+            method: 'POST',
+            body: formData,
+          },
+        ),
+        'transcription',
       );
 
       // AGENTS.md invariant #6: the transcript is whatever was SPOKEN in the
