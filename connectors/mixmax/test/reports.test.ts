@@ -33,30 +33,32 @@ describe('Mixmax report tool', () => {
     const json = result.json as {
       ok: boolean;
       type: string;
-      buckets: Array<{
-        key: { _id: string; name: string };
-        sent: number;
-        opened: number;
-        ownerName: string;
-      }>;
+      buckets: Array<Record<string, unknown>>;
       count: number;
-      totals: { sent: number };
-      extra: { hasNext: boolean };
+      totals: Record<string, unknown>;
+      extra: Record<string, unknown>;
     };
+
+    // Report blobs are vendor data: every string key AND value is enveloped
+    // (strong canonical helper — FOX-3490), so look fields up by wrapped key.
+    const w =
+      (source: string) =>
+      (s: string): string =>
+        `<untrusted-content source="${source}">${s}</untrusted-content>`;
+    const wb = w('mixmax:report.bucket');
 
     expect(json.ok).toBe(true);
     expect(json.type).toBe('sequences');
     expect(json.buckets).toHaveLength(1);
-    expect(json.buckets[0].sent).toBe(169);
-    // External-text fields inside buckets are enveloped (FOX-3490)
-    expect(json.buckets[0].key.name).toBe(
-      '<untrusted-content source="mixmax:report.bucket">Onboarding Drip</untrusted-content>',
-    );
-    expect(json.buckets[0].ownerName).toBe(
-      '<untrusted-content source="mixmax:report.bucket">Team Member</untrusted-content>',
-    );
-    expect(json.totals.sent).toBe(169);
-    expect(json.extra.hasNext).toBe(false);
+    expect(json.buckets[0][wb('sent')]).toBe(169);
+    const bucketKey = json.buckets[0][wb('key')] as Record<string, unknown>;
+    expect(bucketKey[wb('name')]).toBe(wb('Onboarding Drip'));
+    expect(json.buckets[0][wb('ownerName')]).toBe(wb('Team Member'));
+
+    const wt = w('mixmax:report.totals');
+    expect(json.totals[wt('sent')]).toBe(169);
+    const we = w('mixmax:report.extra');
+    expect(json.extra[we('hasNext')]).toBe(false);
   });
 
   it('get_mixmax_report forwards query parameters to the report API', async () => {

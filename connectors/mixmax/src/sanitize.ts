@@ -88,11 +88,12 @@ export function sanitizeSequences(sequences: unknown): unknown {
   return Array.isArray(sequences) ? sequences.map(sanitizeSequence) : sequences;
 }
 
-/** Wrap the free-text fields of a meeting type. */
+/** Wrap the free-text fields of a meeting type (name, booking-link slug). */
 export function sanitizeMeetingType(meetingType: unknown): unknown {
   if (!isObj(meetingType)) return meetingType;
   const out: Obj = { ...meetingType };
   wrapField(out, 'name', `${SOURCE}:meetingtype.name`);
+  wrapField(out, 'link', `${SOURCE}:meetingtype.link`);
   return out;
 }
 
@@ -106,7 +107,33 @@ export function sanitizeUser(user: unknown): unknown {
   const out: Obj = { ...user };
   wrapField(out, 'name', `${SOURCE}:user.name`);
   wrapField(out, 'email', `${SOURCE}:user.email`);
+  wrapField(out, 'plan', `${SOURCE}:user.plan`);
+  if (Array.isArray(out.integrations)) {
+    out.integrations = out.integrations.map((i) =>
+      typeof i === 'string' ? wrapUntrusted(i, `${SOURCE}:user.integrations`) : i,
+    );
+  }
   return out;
+}
+
+/**
+ * Wrap the vendor-provided recipient emails returned by the sequence-cancel
+ * endpoint before they reach the model.
+ */
+export function sanitizeRemovedRecipients(recipients: unknown): unknown {
+  return Array.isArray(recipients)
+    ? recipients.map((r) =>
+        typeof r === 'string' ? wrapUntrusted(r, `${SOURCE}:sequence.cancel.recipient`) : r,
+      )
+    : recipients;
+}
+
+/**
+ * Wrap a whole vendor response blob (write results, report totals/extra) —
+ * every string key AND value is external text here.
+ */
+export function sanitizeVendorBlob(value: unknown, source: string): unknown {
+  return wrapUntrustedJsonStrings(value, `${SOURCE}:${source}`);
 }
 
 /**

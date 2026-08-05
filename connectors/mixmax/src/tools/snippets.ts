@@ -4,7 +4,8 @@ import { mixmaxFetch } from '../client.js';
 import { withErrorHandling, parseApiResponse, epochMsField } from '../utils.js';
 import { isConfigured } from '../auth.js';
 import { snippetsResponseSchema } from '../types.js';
-import { sanitizeSnippets } from '../sanitize.js';
+import { sanitizeSnippets, sanitizeVendorBlob } from '../sanitize.js';
+import { unwrapUntrusted, wrapUntrusted } from '../untrusted-content.js';
 
 function noApiTokenError(): string {
   return JSON.stringify({
@@ -47,7 +48,9 @@ PAGINATION: Cursor-based. If hasNext is true, pass the "next" value as the next 
       if (!isConfigured()) return noApiTokenError();
 
       let path = `/snippets?limit=${args.limit}`;
-      if (args.next) path += `&next=${encodeURIComponent(args.next)}`;
+      // Cursors are enveloped on output (they are vendor strings); accept the
+      // wrapped form back and unwrap before sending it to the API.
+      if (args.next) path += `&next=${encodeURIComponent(unwrapUntrusted(args.next))}`;
 
       const data = parseApiResponse(
         snippetsResponseSchema,
@@ -60,7 +63,7 @@ PAGINATION: Cursor-based. If hasNext is true, pass the "next" value as the next 
         snippets: sanitizeSnippets(data.results),
         count: data.results.length,
         hasNext: data.hasNext ?? false,
-        ...(data.next ? { next: data.next } : {}),
+        ...(data.next ? { next: wrapUntrusted(data.next, 'mixmax:snippets.next') } : {}),
       });
     }),
   );
@@ -112,7 +115,7 @@ NOTE: Variables are applied to ALL recipients equally. If you need different var
         message: args.scheduledAt !== undefined
           ? `Snippet scheduled to send to ${args.to.join(', ')} at ${new Date(args.scheduledAt).toISOString()}.`
           : `Snippet sent to ${args.to.join(', ')}.`,
-        result: data,
+        result: sanitizeVendorBlob(data, 'snippets.send.result'),
       });
     }),
   );

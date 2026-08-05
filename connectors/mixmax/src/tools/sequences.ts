@@ -8,7 +8,8 @@ import {
   sequenceDetailSchema,
   cancelSequenceResponseSchema,
 } from '../types.js';
-import { sanitizeSequences, sanitizeSequence } from '../sanitize.js';
+import { sanitizeSequences, sanitizeSequence, sanitizeRemovedRecipients, sanitizeVendorBlob } from '../sanitize.js';
+import { unwrapUntrusted, wrapUntrusted } from '../untrusted-content.js';
 
 function noApiTokenError(): string {
   return JSON.stringify({
@@ -51,7 +52,9 @@ PAGINATION: Cursor-based. If hasNext is true, pass the "next" value as the next 
       if (!isConfigured()) return noApiTokenError();
 
       let path = `/sequences?limit=${args.limit}`;
-      if (args.next) path += `&next=${encodeURIComponent(args.next)}`;
+      // Cursors are enveloped on output (they are vendor strings); accept the
+      // wrapped form back and unwrap before sending it to the API.
+      if (args.next) path += `&next=${encodeURIComponent(unwrapUntrusted(args.next))}`;
 
       const data = parseApiResponse(
         sequencesResponseSchema,
@@ -64,7 +67,7 @@ PAGINATION: Cursor-based. If hasNext is true, pass the "next" value as the next 
         sequences: sanitizeSequences(data.results),
         count: data.results.length,
         hasNext: data.hasNext ?? false,
-        ...(data.next ? { next: data.next } : {}),
+        ...(data.next ? { next: wrapUntrusted(data.next, 'mixmax:sequences.next') } : {}),
       });
     }),
   );
@@ -144,7 +147,7 @@ TEMPLATE VARIABLES: If the sequence stages use variables like {{first_name}}, pa
       return JSON.stringify({
         ok: true,
         message: `Added ${args.recipients.length} recipient(s) to sequence.`,
-        result: data,
+        result: sanitizeVendorBlob(data, 'sequences.add-recipients.result'),
       });
     }),
   );
@@ -184,7 +187,7 @@ NOTE: An explicit email list is required; this tool cannot cancel an entire sequ
         'sequence cancel',
       );
 
-      const removed = data.recipients ?? [];
+      const removed = sanitizeRemovedRecipients(data.recipients) as string[];
       return JSON.stringify({
         ok: true,
         message: `Removed ${removed.length} recipient(s) from sequence.`,

@@ -110,7 +110,10 @@ describe('Mixmax sequence tools', () => {
 
     expect(json.ok).toBe(true);
     expect(json.message).toContain('1 recipient(s)');
-    expect(json.removed).toEqual(['alice@acme.com']);
+    // Vendor-provided recipient emails are enveloped as external text
+    expect(json.removed).toEqual([
+      '<untrusted-content source="mixmax:sequence.cancel.recipient">alice@acme.com</untrusted-content>',
+    ]);
     expect(capturedPayload.emails).toEqual(['alice@acme.com']);
   });
 
