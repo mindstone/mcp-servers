@@ -73,6 +73,27 @@ const mockKnowledgeBase = {
   enable_auto_refresh: false,
 };
 
+const mockChat = {
+  chat_id: 'chat_test_001',
+  agent_id: 'chat_agent_test_321',
+  chat_status: 'ended',
+  chat_type: 'api_chat',
+  start_timestamp: 1704067200000,
+  end_timestamp: 1704067260000,
+  transcript: 'Agent: Hi there!\nUser: Hello, I have a question about my order.',
+  message_with_tool_calls: [
+    { message_id: 'msg_1', role: 'agent', content: 'Hi there!', created_timestamp: 1704067200000 },
+    { message_id: 'msg_2', role: 'user', content: 'Hello, I have a question about my order.', created_timestamp: 1704067210000 },
+  ],
+  metadata: {},
+  chat_analysis: {
+    chat_summary: 'The user asked about their order.',
+    user_sentiment: 'Neutral',
+    chat_successful: true,
+    custom_analysis_data: {},
+  },
+};
+
 function requireAuth(authHeader: string | null): HttpResponse | null {
   if (!authHeader || !authHeader.startsWith('Bearer ') || authHeader.split(' ')[1] !== MOCK_API_KEY) {
     return HttpResponse.json(
@@ -83,17 +104,23 @@ function requireAuth(authHeader: string | null): HttpResponse | null {
   return null;
 }
 
+/** Last request body seen by the POST /v3/list-chats mock (for filter assertions). */
+export let lastListChatsBody: Record<string, unknown> | null = null;
+
 export function createRetellHandlers() {
   return [
     // --- Agents ---
-    http.post(`${RETELL_API_BASE}/v2/list-agents`, ({ request }) => {
+    http.post(`${RETELL_API_BASE}/v2/list-agents`, async ({ request }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;
+      const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+      const channel = ((body.filter_criteria as Record<string, Record<string, unknown>> | undefined)
+        ?.channel?.value as string | undefined) ?? 'voice';
       return HttpResponse.json({
         items: [{
-          agent_id: mockAgent.agent_id,
-          agent_name: mockAgent.agent_name,
-          channel: 'voice',
+          agent_id: channel === 'chat' ? 'chat_agent_test_321' : mockAgent.agent_id,
+          agent_name: channel === 'chat' ? 'Chat Test Agent' : mockAgent.agent_name,
+          channel,
           response_engine_type: 'retell-llm',
           voice_id: mockAgent.voice_id,
           voice_name: 'Sarah',
@@ -371,6 +398,28 @@ export function createRetellHandlers() {
         status: 'refreshing_in_progress',
         uploaded_files: files,
       });
+    }),
+
+    // --- Chats ---
+    http.post(`${RETELL_API_BASE}/v3/list-chats`, async ({ request }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+      lastListChatsBody = body;
+      return HttpResponse.json({
+        items: [mockChat],
+        has_more: false,
+        pagination_key: 'chats_page_2',
+      });
+    }),
+
+    http.get(`${RETELL_API_BASE}/get-chat/:chatId`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      if (params.chatId === 'nonexistent') {
+        return HttpResponse.json({ error_message: 'Chat not found' }, { status: 404 });
+      }
+      return HttpResponse.json({ ...mockChat, chat_id: params.chatId });
     }),
 
   ];

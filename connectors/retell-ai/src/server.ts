@@ -7,6 +7,7 @@ import {
   registerLlmTools,
   registerVoiceTools,
   registerKnowledgeBaseTools,
+  registerChatTools,
   registerConfigTools,
 } from './tools/index.js';
 
@@ -42,6 +43,7 @@ export function createServer(): McpServer {
   registerLlmTools(server);
   registerVoiceTools(server);
   registerKnowledgeBaseTools(server);
+  registerChatTools(server);
   registerConfigTools(server);
 
   return server;

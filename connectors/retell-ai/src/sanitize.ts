@@ -240,6 +240,50 @@ export function sanitizePhoneNumber(num: unknown, source: string): unknown {
   return { ...num, nickname: wrapStr(num.nickname, `${source}:nickname`) };
 }
 
+/** Wrap the analysis text fields a chat user can influence. */
+function sanitizeChatAnalysis(analysis: unknown, source: string): unknown {
+  if (!isObj(analysis)) return analysis;
+  const out: Obj = { ...analysis };
+  out.chat_summary = wrapStr(out.chat_summary, `${source}:chat_analysis.chat_summary`);
+  out.custom_analysis_data = wrapJsonStrings(
+    out.custom_analysis_data,
+    `${source}:chat_analysis.custom_analysis_data`,
+  );
+  return out;
+}
+
+/**
+ * Wrap the external-text fields on a Retell chat object. A chat `transcript`
+ * is written by the end user chatting with the agent — the same trust level
+ * as a phone caller — so transcript / message content / chat analysis get the
+ * same envelope treatment as call objects.
+ */
+export function sanitizeChat(chat: unknown, source: string): unknown {
+  if (!isObj(chat)) return chat;
+  const out: Obj = { ...chat };
+
+  out.agent_name = wrapStr(out.agent_name, `${source}:agent_name`);
+  out.transcript = wrapStr(out.transcript, `${source}:transcript`);
+  out.message_with_tool_calls = sanitizeTranscriptTurns(
+    out.message_with_tool_calls,
+    'message_with_tool_calls',
+    source,
+  );
+  out.chat_analysis = sanitizeChatAnalysis(out.chat_analysis, source);
+  out.metadata = wrapJsonStrings(out.metadata, `${source}:metadata`);
+  out.retell_llm_dynamic_variables = wrapJsonStrings(
+    out.retell_llm_dynamic_variables,
+    `${source}:retell_llm_dynamic_variables`,
+  );
+  out.collected_dynamic_variables = wrapJsonStrings(
+    out.collected_dynamic_variables,
+    `${source}:collected_dynamic_variables`,
+  );
+  out.custom_attributes = wrapJsonStrings(out.custom_attributes, `${source}:custom_attributes`);
+
+  return out;
+}
+
 /** Wrap external-text fields on a batch-call object (`name`). */
 export function sanitizeBatchCall(batch: unknown, source: string): unknown {
   if (!isObj(batch)) return batch;

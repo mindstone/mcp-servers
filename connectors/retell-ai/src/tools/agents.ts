@@ -4,6 +4,57 @@ import { retellFetch, requireApiKey } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { sanitizeAgent, sanitizeAgentVersion, sanitizeList } from '../sanitize.js';
 
+export interface ListAgentsArgs {
+  limit?: number;
+  sort_order?: 'ascending' | 'descending';
+  pagination_key?: string;
+}
+
+/**
+ * Shared implementation for list_agents / list_chat_agents against the
+ * unified POST /v2/list-agents endpoint (the legacy GET /list-agents and
+ * /list-chat-agents were deprecated by Retell in 2026). `channel` pins the
+ * agent type; `source` is the untrusted-content envelope namespace.
+ */
+export async function listAgentsByChannel(
+  channel: 'voice' | 'chat',
+  args: ListAgentsArgs,
+  source: string,
+): Promise<Record<string, unknown>> {
+  requireApiKey();
+  const params = new URLSearchParams();
+  if (args.limit !== undefined) params.set('limit', String(args.limit));
+  if (args.sort_order) params.set('sort_order', args.sort_order);
+  if (args.pagination_key) params.set('pagination_key', args.pagination_key);
+  const qs = params.toString();
+
+  const result = await retellFetch<unknown>(
+    `/v2/list-agents${qs ? `?${qs}` : ''}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        filter_criteria: { channel: { type: 'string', op: 'eq', value: channel } },
+      }),
+    },
+  );
+
+  const resultObj = (result && typeof result === 'object' && !Array.isArray(result))
+    ? result as Record<string, unknown>
+    : null;
+  const items = resultObj && Array.isArray(resultObj.items)
+    ? (resultObj.items as unknown[])
+    : (Array.isArray(result) ? result as unknown[] : []);
+
+  return {
+    ok: true,
+    agents: sanitizeList(items, sanitizeAgent, source),
+    count: items.length,
+    pagination_key: resultObj?.pagination_key,
+    has_more: resultObj?.has_more,
+    message: `Found ${items.length} ${channel} agent(s).`,
+  };
+}
+
 export function registerAgentTools(server: McpServer): void {
   server.registerTool(
     'get_agent',
@@ -93,41 +144,8 @@ RETURNS: agents, count, pagination_key, has_more. Each agent summary includes ag
       },
     },
     withErrorHandling(async (args) => {
-      requireApiKey();
-      const params = new URLSearchParams();
-      if (args.limit !== undefined) params.set('limit', String(args.limit));
-      if (args.sort_order) params.set('sort_order', args.sort_order);
-      if (args.pagination_key) params.set('pagination_key', args.pagination_key);
-      const qs = params.toString();
-
-      // POST /v2/list-agents (unified voice+chat listing; the legacy GET
-      // /list-agents was deprecated by Retell in 2026). Channel is pinned to
-      // voice so this tool keeps its original scope.
-      const result = await retellFetch<unknown>(
-        `/v2/list-agents${qs ? `?${qs}` : ''}`,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            filter_criteria: { channel: { type: 'string', op: 'eq', value: 'voice' } },
-          }),
-        },
-      );
-
-      const resultObj = (result && typeof result === 'object' && !Array.isArray(result))
-        ? result as Record<string, unknown>
-        : null;
-      const items = resultObj && Array.isArray(resultObj.items)
-        ? (resultObj.items as unknown[])
-        : (Array.isArray(result) ? result as unknown[] : []);
-
-      return JSON.stringify({
-        ok: true,
-        agents: sanitizeList(items, sanitizeAgent, 'retell:list_agents'),
-        count: items.length,
-        pagination_key: resultObj?.pagination_key,
-        has_more: resultObj?.has_more,
-        message: `Found ${items.length} voice agent(s).`,
-      });
+      const response = await listAgentsByChannel('voice', args, 'retell:list_agents');
+      return JSON.stringify(response);
     }),
   );
 
