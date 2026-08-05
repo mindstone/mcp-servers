@@ -10,7 +10,7 @@ import {
 } from '../modules/gmail/services/label.js';
 import { AttachmentService } from '../modules/attachments/service.js';
 import { ATTACHMENT_FOLDERS } from '../modules/attachments/types.js';
-import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, realpathSync } from 'fs';
+import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, realpathSync, statSync } from 'fs';
 import path from 'path';
 import { McpToolResponse } from './types.js';
 import { wrapUntrustedContent, wrapUntrustedJsonStrings } from '../utils/untrusted-content.js';
@@ -155,6 +155,20 @@ export function resolveAttachmentFromPath(filePath: string): { content: string; 
     );
   }
 
+  // Pin the identity (device + inode) of the object that passed containment.
+  // O_NOFOLLOW only refuses a symlink in the FINAL path component — an
+  // attacker who swaps an intermediate directory for an out-of-workspace
+  // symlink between this check and the open would otherwise redirect the read.
+  // Re-verifying the opened descriptor's identity against the validated one
+  // fails closed on any such swap (ancestor-directory or final-component).
+  const validatedStats = statSync(candidateRealpath);
+  if (!validatedStats.isFile()) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'Attachment path must point to a regular file.'
+    );
+  }
+
   // Open once and read through the fd: checking the path and then re-opening it
   // by name would leave a swap race between the containment check and the read.
   // O_NOFOLLOW (where the platform supports it) refuses a symlink planted in
@@ -168,6 +182,16 @@ export function resolveAttachmentFromPath(filePath: string): { content: string; 
         'Attachment path must point to a regular file.'
       );
     }
+    if (stats.dev !== validatedStats.dev || stats.ino !== validatedStats.ino) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        'Attachment file changed while it was being verified; refusing to read it.'
+      );
+    }
+    // Irreducible residual: an attacker who can already write the validated
+    // in-workspace file can mutate its content in place (same inode) between
+    // this check and the read. That is not a containment escape — the bytes
+    // still come from the approved workspace file — so it is out of scope here.
     const content = readFileSync(fd);
     const ext = path.extname(candidateRealpath).toLowerCase();
     return {
