@@ -5,7 +5,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { withErrorHandling, escapeQboql, validateAlphanumericId, requireProdWritesEnabled, qboDate } from '../utils.js';
-import { qboFetch, qboQuery } from '../client.js';
+import { qboFetch, qboQueryPage, truncationNote } from '../client.js';
 import { QBO_MINOR_VERSION } from '../types.js';
 import { sanitizeQboEntity } from '../sanitize.js';
 
@@ -45,11 +45,13 @@ WORKFLOW:
 
       const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
       const query = `SELECT * FROM Estimate${where} ORDERBY TxnDate DESC`;
-      const estimates = await qboQuery('Estimate', query, limit);
+      const page = await qboQueryPage('Estimate', query, limit);
       return JSON.stringify({
         ok: true,
-        estimates: sanitizeQboEntity(estimates, 'quickbooks:list_quickbooks_estimates'),
-        count: estimates.length,
+        estimates: sanitizeQboEntity(page.rows, 'quickbooks:list_quickbooks_estimates'),
+        count: page.rows.length,
+        hasMore: page.hasMore,
+        ...(page.hasMore ? { note: truncationNote(limit) } : {}),
       });
     }),
   );

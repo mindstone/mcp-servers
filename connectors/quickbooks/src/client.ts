@@ -209,3 +209,32 @@ export async function qboQuery<T>(
   const result = await qboFetch<{ QueryResponse: Record<string, T[]> }>(`/query?query=${encoded}`);
   return result.QueryResponse[entity] || [];
 }
+
+export interface QboQueryPage<T> {
+  rows: T[];
+  /** True when more rows exist beyond the requested limit. */
+  hasMore: boolean;
+}
+
+/**
+ * Run a QuickBooks query and report whether the result was truncated at
+ * `limit`. Requests one extra row as a probe so `hasMore` is exact rather
+ * than a "returned count equals limit" guess; the probe row is sliced off.
+ */
+export async function qboQueryPage<T>(
+  entity: string,
+  query: string,
+  limit: number,
+  offset = 1,
+): Promise<QboQueryPage<T>> {
+  const rows = await qboQuery<T>(entity, query, limit + 1, offset);
+  return { rows: rows.slice(0, limit), hasMore: rows.length > limit };
+}
+
+/**
+ * Standard truncation note for list-tool output, so the model knows the
+ * page is partial instead of silently treating it as complete.
+ */
+export function truncationNote(limit: number): string {
+  return `Results truncated at ${limit}. Narrow the filters or pass a higher limit (max 1000) to see more.`;
+}

@@ -5,7 +5,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { withErrorHandling, escapeQboql, requireProdWritesEnabled, validateAlphanumericId } from '../utils.js';
-import { qboFetch, qboQuery, qboSparseUpdate } from '../client.js';
+import { qboFetch, qboQueryPage, qboSparseUpdate, truncationNote } from '../client.js';
 import { QBO_MINOR_VERSION, QuickBooksError } from '../types.js';
 import { sanitizeQboEntity } from '../sanitize.js';
 
@@ -37,11 +37,13 @@ Example: { "searchTerm": "Office" }`,
 
       const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
       const query = `SELECT * FROM Vendor${where} ORDERBY DisplayName`;
-      const vendors = await qboQuery('Vendor', query, limit);
+      const page = await qboQueryPage('Vendor', query, limit);
       return JSON.stringify({
         ok: true,
-        vendors: sanitizeQboEntity(vendors, 'quickbooks:list_quickbooks_vendors'),
-        count: vendors.length,
+        vendors: sanitizeQboEntity(page.rows, 'quickbooks:list_quickbooks_vendors'),
+        count: page.rows.length,
+        hasMore: page.hasMore,
+        ...(page.hasMore ? { note: truncationNote(limit) } : {}),
       });
     }),
   );

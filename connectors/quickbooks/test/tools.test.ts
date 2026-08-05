@@ -524,6 +524,42 @@ describe('list_quickbooks_estimates', () => {
     await testClient.callTool('list_quickbooks_estimates', { status: 'Pending' });
     expect(capturedQuery).toContain("TxnStatus = 'Pending'");
   });
+
+  it('signals truncation instead of silently returning one page', async () => {
+    // The fixture always has 2 estimates; with limit 1 the connector's
+    // probe row proves more rows exist.
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.get(`${PRODUCTION_API_BASE}/query`, () =>
+        HttpResponse.json(createEstimatesQueryResponse()),
+      ),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('list_quickbooks_estimates', { limit: 1 });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(json.count).toBe(1);
+    expect(json.hasMore).toBe(true);
+    expect(String(json.note)).toContain('truncated');
+  });
+
+  it('reports hasMore false (and no note) when the page is complete', async () => {
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.get(`${PRODUCTION_API_BASE}/query`, () =>
+        HttpResponse.json(createEstimatesQueryResponse()),
+      ),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('list_quickbooks_estimates', {});
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(json.count).toBe(2);
+    expect(json.hasMore).toBe(false);
+    expect(json.note).toBeUndefined();
+  });
 });
 
 describe('create_quickbooks_estimate', () => {

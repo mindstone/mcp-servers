@@ -5,7 +5,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { withErrorHandling, escapeQboql, validateAlphanumericId, requireProdWritesEnabled, qboDate } from '../utils.js';
-import { qboFetch, qboQuery } from '../client.js';
+import { qboFetch, qboQueryPage, truncationNote } from '../client.js';
 import { QBO_MINOR_VERSION } from '../types.js';
 import { sanitizeQboEntity } from '../sanitize.js';
 
@@ -30,11 +30,13 @@ Example: { "vendorId": "123" }`,
       if (args.vendorId) validateAlphanumericId(args.vendorId, 'vendorId');
       const where = args.vendorId ? ` WHERE VendorRef = '${escapeQboql(args.vendorId)}'` : '';
       const query = `SELECT * FROM Bill${where} ORDERBY TxnDate DESC`;
-      const bills = await qboQuery('Bill', query, limit);
+      const page = await qboQueryPage('Bill', query, limit);
       return JSON.stringify({
         ok: true,
-        bills: sanitizeQboEntity(bills, 'quickbooks:list_quickbooks_bills'),
-        count: bills.length,
+        bills: sanitizeQboEntity(page.rows, 'quickbooks:list_quickbooks_bills'),
+        count: page.rows.length,
+        hasMore: page.hasMore,
+        ...(page.hasMore ? { note: truncationNote(limit) } : {}),
       });
     }),
   );

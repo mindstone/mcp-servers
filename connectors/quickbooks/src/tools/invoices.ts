@@ -8,7 +8,7 @@ import * as path from 'path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { withErrorHandling, escapeQboql, validateAlphanumericId, requireProdWritesEnabled, qboDate } from '../utils.js';
-import { qboFetch, qboFetchBinary, qboQuery, qboSparseUpdate } from '../client.js';
+import { qboFetch, qboFetchBinary, qboQueryPage, qboSparseUpdate, truncationNote } from '../client.js';
 import { QBO_MINOR_VERSION, QuickBooksError } from '../types.js';
 import { sanitizeQboEntity } from '../sanitize.js';
 
@@ -52,11 +52,13 @@ WORKFLOW:
 
       const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
       const query = `SELECT * FROM Invoice${where} ORDERBY TxnDate DESC`;
-      const invoices = await qboQuery('Invoice', query, limit);
+      const page = await qboQueryPage('Invoice', query, limit);
       return JSON.stringify({
         ok: true,
-        invoices: sanitizeQboEntity(invoices, 'quickbooks:list_quickbooks_invoices'),
-        count: invoices.length,
+        invoices: sanitizeQboEntity(page.rows, 'quickbooks:list_quickbooks_invoices'),
+        count: page.rows.length,
+        hasMore: page.hasMore,
+        ...(page.hasMore ? { note: truncationNote(limit) } : {}),
       });
     }),
   );
