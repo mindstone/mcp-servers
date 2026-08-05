@@ -10,6 +10,9 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ### Changed
 - Write tools (create/update/delete, history notes) now refuse to run unless `XERO_ALLOW_WRITES=1` is set in the host environment — a secure-by-default guard against accidental writes to a real Xero organisation. Read-only tools are unaffected. Set `XERO_ALLOW_WRITES=1` to opt in.
 
+### Security
+- Wrap all tool output text in `<untrusted-content>` envelopes with close-tag breakout escaping, so Xero-authored text (contact names, line item descriptions, history details, validation messages) is presented to the model as data, not instructions.
+
 ### Fixed
 - Report the actual package version in the MCP server metadata instead of a hardcoded `1.0.0`.
 
