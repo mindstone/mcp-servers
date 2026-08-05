@@ -62,6 +62,48 @@ describe('Smoke test — tool registration', () => {
       'update_freshdesk_ticket',
     ]);
   });
+
+  it('marks production-impacting writes with destructiveHint: true', async () => {
+    const tempConfig = createTempConfig({
+      accounts: [
+        {
+          domain: 'testacme',
+          apiKey: 'mock-test-key',
+          agentEmail: 'agent@testacme.freshdesk.com',
+          authenticatedAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+      defaultAccount: 'testacme',
+      defaultAccountKey: 'defaultDomain',
+    });
+    cleanupConfig = tempConfig.cleanup;
+
+    testClient = await createTestClient({
+      env: {
+        FRESHDESK_CONFIG_PATH: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const toolsResult = await testClient.client.listTools();
+    const writeTools = [
+      'configure_freshdesk',
+      'create_freshdesk_ticket',
+      'update_freshdesk_ticket',
+      'reply_to_freshdesk_ticket',
+      'add_freshdesk_note',
+      'remove_freshdesk_account',
+    ];
+
+    for (const name of writeTools) {
+      const tool = toolsResult.tools.find((t) => t.name === name);
+      expect(tool, `${name} should be registered`).toBeDefined();
+      expect(
+        tool!.annotations?.destructiveHint,
+        `${name} should declare destructiveHint: true`,
+      ).toBe(true);
+    }
+  });
 });
 
 describe('Spawned stdio smoke test', () => {

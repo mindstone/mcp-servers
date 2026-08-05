@@ -397,7 +397,8 @@ export function registerTicketTools(server: McpServer): void {
         body: z.string().min(1).describe('Reply body (HTML supported)'),
         domain: z.string().optional().describe('Freshdesk domain (optional if only one account)'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      // Public, customer-facing write — destructiveHint per repo invariant #7.
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = getAccount(args.domain);
@@ -431,7 +432,9 @@ export function registerTicketTools(server: McpServer): void {
         domain: z.string().optional().describe('Freshdesk domain (optional if only one account)'),
         private: z.boolean().optional().describe('Private note (default: true)'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      // Writes to a production ticket (optionally customer-visible) —
+      // destructiveHint per repo invariant #7.
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const account = getAccount(args.domain);
