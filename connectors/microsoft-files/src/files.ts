@@ -7,6 +7,7 @@ import {
   extractPptxText,
 } from './office-text.js';
 import { wrapUntrusted } from './untrusted-content.js';
+import { validateUploadSessionUrl } from './upload-url.js';
 import { FilesBusinessError } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -41,6 +42,26 @@ function buildDriveItemEndpoint(path: string, suffix = ''): string {
     return `/me/drive/root:${path}${suffix}`;
   }
   return `/me/drive/items/${path}${suffix}`;
+}
+
+/**
+ * Fail-closed guard for numeric limits. The tool input schemas already reject
+ * non-positive/non-integer values, but these functions are also reachable
+ * directly, and an invalid limit must be rejected BEFORE any network call —
+ * never discovered indirectly after a fetch.
+ */
+function assertPositiveIntegerLimit(
+  value: number | undefined,
+  name: string,
+  nextStep: string,
+): void {
+  if (value === undefined) return;
+  if (!Number.isFinite(value) || !Number.isInteger(value) || value < 1) {
+    throw new FilesBusinessError(
+      `"${name}" must be a positive integer. Got: ${String(value)}`,
+      nextStep,
+    );
+  }
 }
 
 // Simple PUT /content is capped at 4 MiB by Graph; larger payloads go through
@@ -104,7 +125,10 @@ const GraphPermissionSchema = z
   .passthrough();
 
 const GraphPermissionListSchema = z
-  .object({ value: z.array(GraphPermissionSchema) })
+  .object({
+    value: z.array(GraphPermissionSchema),
+    '@odata.nextLink': z.string().optional(),
+  })
   .passthrough();
 
 const GraphDriveItemVersionSchema = z
@@ -120,7 +144,10 @@ const GraphDriveItemVersionSchema = z
   .passthrough();
 
 const GraphDriveItemVersionListSchema = z
-  .object({ value: z.array(GraphDriveItemVersionSchema) })
+  .object({
+    value: z.array(GraphDriveItemVersionSchema),
+    '@odata.nextLink': z.string().optional(),
+  })
   .passthrough();
 
 const GraphItemActivitySchema = z
@@ -147,7 +174,10 @@ const GraphItemActivitySchema = z
   .passthrough();
 
 const GraphItemActivityListSchema = z
-  .object({ value: z.array(GraphItemActivitySchema) })
+  .object({
+    value: z.array(GraphItemActivitySchema),
+    '@odata.nextLink': z.string().optional(),
+  })
   .passthrough();
 
 const GraphUploadedItemSchema = z
@@ -184,17 +214,22 @@ function formatActivity(
     ...Object.keys(activity.action ?? {}),
     ...(activity.access ? ['access'] : []),
   ];
+  // Everything here is display-only (no tool takes an activity ID or action
+  // name back as an argument), so every vendor-derived string is enveloped —
+  // including `action` keys, which are open-ended record keys from the wire.
   return {
-    id: activity.id,
-    time: activity.activityDateTime,
+    id: wrapUntrusted(activity.id, `microsoft-files:${sourceTool}:id`),
+    time: wrapUntrusted(activity.activityDateTime, `microsoft-files:${sourceTool}:time`),
     actor: wrapUntrusted(
       activity.actor?.user?.displayName ?? activity.actor?.application?.displayName,
       `microsoft-files:${sourceTool}:actor`,
     ),
-    actions,
+    actions: actions.map((action) =>
+      wrapUntrusted(action, `microsoft-files:${sourceTool}:action`),
+    ),
     item: activity.driveItem
       ? {
-          id: activity.driveItem.id,
+          id: wrapUntrusted(activity.driveItem.id, `microsoft-files:${sourceTool}:itemId`),
           name: wrapUntrusted(
             activity.driveItem.name,
             `microsoft-files:${sourceTool}:item`,
@@ -209,17 +244,22 @@ function formatPermission(
   sourceTool: string,
 ) {
   return {
+    // Structural, NOT enveloped: permission.id round-trips verbatim as the
+    // permissionId argument of revoke_file_permission, and link.webUrl is a
+    // functional URL the user opens. Enveloping them would break the flow.
     id: permission.id,
-    roles: permission.roles ?? [],
+    roles: (permission.roles ?? []).map((role) =>
+      wrapUntrusted(role, `microsoft-files:${sourceTool}:role`),
+    ),
     link: permission.link
       ? {
-          type: permission.link.type,
-          scope: permission.link.scope,
+          type: wrapUntrusted(permission.link.type, `microsoft-files:${sourceTool}:linkType`),
+          scope: wrapUntrusted(permission.link.scope, `microsoft-files:${sourceTool}:linkScope`),
           webUrl: permission.link.webUrl,
         }
       : undefined,
     grantedTo: (permission.grantedToIdentities ?? []).map((identity) => ({
-      id: identity.user?.id,
+      id: wrapUntrusted(identity.user?.id, `microsoft-files:${sourceTool}:userId`),
       displayName: wrapUntrusted(
         identity.user?.displayName,
         `microsoft-files:${sourceTool}:displayName`,
@@ -342,6 +382,7 @@ export async function listFiles(
   args: ListFilesArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
+  assertPositiveIntegerLimit(args.top, 'top', 'list_files');
   const top = Math.min(args.top ?? 50, 200);
   let endpoint: string;
 
@@ -418,6 +459,7 @@ export async function searchFiles(
   args: SearchFilesArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
+  assertPositiveIntegerLimit(args.top, 'top', 'search_files');
   const top = Math.min(args.top ?? 25, 100);
 
   const response = await client
@@ -489,6 +531,8 @@ export async function uploadFile(
 }
 
 function formatUploadedItem(item: z.infer<typeof GraphUploadedItemSchema>) {
+  // `id` doubles as an item path for follow-up calls and `webUrl` is a
+  // functional link, so both stay structural (same contract as formatItem).
   return {
     success: true,
     id: item.id,
@@ -517,6 +561,10 @@ async function uploadViaSession(
       item: { '@microsoft.graph.conflictBehavior': 'replace' },
     });
   const { uploadUrl } = GraphUploadSessionSchema.parse(sessionResponse);
+  // The upload URL comes from the upstream response and chunk PUTs carry user
+  // file bytes without the bearer token, so the destination is validated
+  // against the vendor-host policy before any byte leaves the connector.
+  const safeUploadUrl = validateUploadSessionUrl(uploadUrl);
 
   let item: z.infer<typeof GraphUploadedItemSchema> | null = null;
   for (let start = 0; start < bytes.length; start += UPLOAD_CHUNK_BYTES) {
@@ -525,8 +573,11 @@ async function uploadViaSession(
     // ArrayBufferLike, which the DOM BodyInit union rejects.
     const chunk = new Uint8Array(end - start);
     chunk.set(bytes.subarray(start, end));
-    const response = await fetch(uploadUrl, {
+    const response = await fetch(safeUploadUrl, {
       method: 'PUT',
+      // Reject redirects outright: a redirect hop could otherwise retarget
+      // the preauthenticated chunk PUT to a non-vendor host.
+      redirect: 'error',
       headers: {
         'Content-Length': String(end - start),
         'Content-Range': `bytes ${start}-${end - 1}/${bytes.length}`,
@@ -666,6 +717,7 @@ export async function getRecent(
   args: GetRecentArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
+  assertPositiveIntegerLimit(args.top, 'top', 'get_recent');
   const top = Math.min(args.top ?? 25, 100);
 
   const response = await client
@@ -688,6 +740,7 @@ export async function getShared(
   args: GetSharedArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
+  assertPositiveIntegerLimit(args.top, 'top', 'get_shared');
   const top = Math.min(args.top ?? 25, 100);
 
   const response = await client
@@ -731,6 +784,7 @@ export async function readTextFile(
   args: ReadTextFileArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
+  assertPositiveIntegerLimit(args.maxSize, 'maxSize', 'read_text_file');
   const maxSize = args.maxSize ?? 100 * 1024;
 
   const endpoint = buildDriveItemEndpoint(args.path);
@@ -761,7 +815,7 @@ export async function readTextFile(
 
   if (!isText) {
     throw new FilesBusinessError(
-      `File appears to be binary (${mimeType}). Cannot read as text.`,
+      `File appears to be binary (${wrapUntrusted(mimeType || 'unknown', 'microsoft-files:read_text_file:mimeType')}). Cannot read as text.`,
       'download_file',
     );
   }
@@ -783,6 +837,63 @@ export async function readTextFile(
 // ---------------------------------------------------------------------------
 // Permission management (invite / list / revoke)
 // ---------------------------------------------------------------------------
+
+// Graph collection endpoints page their results via @odata.nextLink. Follow
+// the chain so results are not silently truncated, but bound the page count
+// so a huge or hostile collection cannot pin the connector in a fetch loop;
+// the caller surfaces `truncated: true` when the bound is hit.
+const MAX_LIST_PAGES = 10;
+
+// nextLink is an absolute URL supplied by the upstream and the SDK attaches
+// the bearer token to whatever it fetches, so only ever follow links back to
+// the Graph host itself. A link anywhere else is treated as the end of the
+// collection (results so far are still returned, flagged truncated).
+function isGraphHostUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' && parsed.hostname === 'graph.microsoft.com';
+  } catch {
+    return false;
+  }
+}
+
+interface PagedValues<S extends { value: unknown[] }> {
+  value: S['value'];
+  truncated: boolean;
+}
+
+async function collectPagedValues<S extends { value: unknown[]; '@odata.nextLink'?: string }>(
+  client: Client,
+  endpoint: string,
+  schema: z.ZodType<S>,
+  signal: AbortSignal,
+): Promise<PagedValues<S>> {
+  const all: unknown[] = [];
+  let next: string | undefined = endpoint;
+  let pages = 0;
+  let truncated = false;
+  while (next) {
+    if (pages >= MAX_LIST_PAGES) {
+      truncated = true;
+      break;
+    }
+    const parsed: S = schema.parse(await client.api(next).options({ signal }).get());
+    all.push(...parsed.value);
+    pages += 1;
+    const nextLink: string | undefined = parsed['@odata.nextLink'];
+    if (nextLink === undefined) {
+      next = undefined;
+    } else if (isGraphHostUrl(nextLink)) {
+      next = nextLink;
+    } else {
+      // Hostile or malformed continuation link: stop, keep the valid pages,
+      // and flag the truncation instead of fetching an arbitrary URL.
+      next = undefined;
+      truncated = true;
+    }
+  }
+  return { value: all as S['value'], truncated };
+}
 
 export async function inviteToFile(
   client: Client,
@@ -818,13 +929,17 @@ export async function listFilePermissions(
   signal: AbortSignal,
 ): Promise<unknown> {
   const endpoint = buildDriveItemEndpoint(args.path, '/permissions');
-  const response = await client.api(endpoint).options({ signal }).get();
-
-  const parsed = GraphPermissionListSchema.parse(response);
+  const { value, truncated } = await collectPagedValues(
+    client,
+    endpoint,
+    GraphPermissionListSchema,
+    signal,
+  );
 
   return {
-    count: parsed.value.length,
-    permissions: parsed.value.map((permission) =>
+    count: value.length,
+    truncated,
+    permissions: value.map((permission) =>
       formatPermission(permission, 'list_file_permissions'),
     ),
   };
@@ -858,15 +973,24 @@ export async function listFileVersions(
   signal: AbortSignal,
 ): Promise<unknown> {
   const endpoint = buildDriveItemEndpoint(args.path, '/versions');
-  const response = await client.api(endpoint).options({ signal }).get();
-
-  const parsed = GraphDriveItemVersionListSchema.parse(response);
+  const { value, truncated } = await collectPagedValues(
+    client,
+    endpoint,
+    GraphDriveItemVersionListSchema,
+    signal,
+  );
 
   return {
-    count: parsed.value.length,
-    versions: parsed.value.map((version) => ({
+    count: value.length,
+    truncated,
+    versions: value.map((version) => ({
+      // Structural, NOT enveloped: version.id round-trips verbatim as the
+      // versionId argument of restore_file_version.
       id: version.id,
-      modifiedAt: version.lastModifiedDateTime,
+      modifiedAt: wrapUntrusted(
+        version.lastModifiedDateTime,
+        'microsoft-files:list_file_versions:modifiedAt',
+      ),
       size: formatSize(version.size),
       lastModifiedBy: wrapUntrusted(
         version.lastModifiedBy?.user?.displayName,
@@ -906,13 +1030,17 @@ export async function listFileActivities(
   const endpoint = args.path
     ? buildDriveItemEndpoint(args.path, '/activities')
     : '/me/drive/activities';
-  const response = await client.api(endpoint).options({ signal }).get();
-
-  const parsed = GraphItemActivityListSchema.parse(response);
+  const { value, truncated } = await collectPagedValues(
+    client,
+    endpoint,
+    GraphItemActivityListSchema,
+    signal,
+  );
 
   return {
-    count: parsed.value.length,
-    activities: parsed.value.map((activity) =>
+    count: value.length,
+    truncated,
+    activities: value.map((activity) =>
       formatActivity(activity, 'list_file_activities'),
     ),
   };
@@ -933,7 +1061,18 @@ const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingm
 const PPTX_MIME =
   'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
-async function fetchDriveItemBytes(endpoint: string, signal: AbortSignal): Promise<Buffer> {
+/**
+ * Download a drive item's bytes with a hard size ceiling. The caller's
+ * metadata pre-check is advisory only (Graph metadata can be stale or
+ * inconsistent), so the body itself is independently bounded: a declared
+ * content-length over the cap fails fast, and the stream is cancelled the
+ * moment it overruns.
+ */
+async function fetchDriveItemBytes(
+  endpoint: string,
+  signal: AbortSignal,
+  maxBytes: number,
+): Promise<Buffer> {
   const token = await getAccessToken();
   const response = await fetch(`${GRAPH_BASE_URL}${endpoint}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -947,7 +1086,33 @@ async function fetchDriveItemBytes(endpoint: string, signal: AbortSignal): Promi
     err.statusCode = response.status;
     throw err;
   }
-  return Buffer.from(await response.arrayBuffer());
+  const declaredLength = Number(response.headers.get('content-length') ?? 0);
+  if (declaredLength > maxBytes) {
+    throw new FilesBusinessError(
+      `File download exceeds the maximum size of ${formatSize(maxBytes)}.`,
+      'read_document',
+    );
+  }
+  if (!response.body) {
+    return Buffer.from(await response.arrayBuffer());
+  }
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new FilesBusinessError(
+        `File download exceeds the maximum size of ${formatSize(maxBytes)}.`,
+        'read_document',
+      );
+    }
+    chunks.push(Buffer.from(value));
+  }
+  return Buffer.concat(chunks);
 }
 
 export async function readDocument(
@@ -955,6 +1120,8 @@ export async function readDocument(
   args: ReadDocumentArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
+  assertPositiveIntegerLimit(args.maxSize, 'maxSize', 'read_document');
+  assertPositiveIntegerLimit(args.maxChars, 'maxChars', 'read_document');
   const maxSize = args.maxSize ?? DEFAULT_READ_DOCUMENT_MAX_BYTES;
   const maxChars = args.maxChars ?? DEFAULT_READ_DOCUMENT_MAX_CHARS;
 
@@ -987,13 +1154,23 @@ export async function readDocument(
     );
   }
   if (!isDocx && !isPptx) {
+    // mimeType/extension come from the vendor response; envelope the fragment
+    // before interpolating it into a model-visible error message.
+    const displayType = wrapUntrusted(
+      mimeType || extension || 'unknown',
+      'microsoft-files:read_document:mimeType',
+    );
     throw new FilesBusinessError(
-      `Unsupported document type (${mimeType || extension || 'unknown'}). read_document supports .docx and .pptx; use read_text_file for plain-text files or download_file otherwise.`,
+      `Unsupported document type (${displayType}). read_document supports .docx and .pptx; use read_text_file for plain-text files or download_file otherwise.`,
       'read_text_file',
     );
   }
 
-  const bytes = await fetchDriveItemBytes(buildDriveItemEndpoint(args.path, '/content'), signal);
+  const bytes = await fetchDriveItemBytes(
+    buildDriveItemEndpoint(args.path, '/content'),
+    signal,
+    maxSize,
+  );
 
   let text: string;
   try {

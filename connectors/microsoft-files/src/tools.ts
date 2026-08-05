@@ -41,7 +41,7 @@ export function registerFilesTools(server: McpServer): void {
           .string()
           .optional()
           .describe('Folder path (e.g., "/Documents") or item ID'),
-        top: z.number().optional().describe('Max items to return (default: 50)'),
+        top: z.number().int().positive().optional().describe('Max items to return (default: 50)'),
       }).shape,
       annotations: {
         readOnlyHint: true,
@@ -130,7 +130,7 @@ export function registerFilesTools(server: McpServer): void {
       description: 'Search for files in OneDrive by name or content.',
       inputSchema: z.object({
         query: z.string().optional().describe('Search query'),
-        top: z.number().optional().describe('Max results (default: 25)'),
+        top: z.number().int().positive().optional().describe('Max results (default: 25)'),
       }).shape,
       annotations: {
         readOnlyHint: true,
@@ -361,7 +361,7 @@ export function registerFilesTools(server: McpServer): void {
     {
       description: 'Get recently accessed files.',
       inputSchema: z.object({
-        top: z.number().optional().describe('Max items (default: 25)'),
+        top: z.number().int().positive().optional().describe('Max items (default: 25)'),
       }).shape,
       annotations: {
         readOnlyHint: true,
@@ -385,7 +385,7 @@ export function registerFilesTools(server: McpServer): void {
     {
       description: 'Get files shared with you by others.',
       inputSchema: z.object({
-        top: z.number().optional().describe('Max items (default: 25)'),
+        top: z.number().int().positive().optional().describe('Max items (default: 25)'),
       }).shape,
       annotations: {
         readOnlyHint: true,
@@ -448,6 +448,8 @@ export function registerFilesTools(server: McpServer): void {
         path: z.string().optional().describe('File path or ID'),
         maxSize: z
           .number()
+          .int()
+          .positive()
           .optional()
           .describe('Max bytes to read (default: 100KB)'),
       }).shape,
@@ -715,10 +717,14 @@ export function registerFilesTools(server: McpServer): void {
         path: z.string().optional().describe('Document path or item ID'),
         maxSize: z
           .number()
+          .int()
+          .positive()
           .optional()
           .describe('Max file bytes to download (default: 20MB)'),
         maxChars: z
           .number()
+          .int()
+          .positive()
           .optional()
           .describe('Max extracted characters to return (default: 100000)'),
       }).shape,

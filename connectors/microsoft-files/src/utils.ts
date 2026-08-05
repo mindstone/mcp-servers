@@ -6,6 +6,17 @@ import {
 } from '@mindstone/mcp-server-microsoft-shared';
 import type { AuthRequiredReason } from '@mindstone/mcp-server-microsoft-shared';
 import { AUTH_TOOL_NAME, FilesBusinessError, REQUEST_TIMEOUT_MS, getMsPackageId } from './types.js';
+import { wrapUntrusted } from './untrusted-content.js';
+
+/**
+ * `formatGraphError` (shared package) extracts the vendor error body verbatim
+ * (`parsed.error.message`). That text is attacker-controllable, so it is
+ * enveloped here — connector-side, at the single funnel where Graph failures
+ * become model-visible output — before it can reach a tool response.
+ */
+function wrapGraphError(err: unknown): string {
+  return wrapUntrusted(formatGraphError(err), 'microsoft-files:error') ?? '';
+}
 
 /**
  * Compose a per-call abort signal with the cohort timeout.
@@ -204,7 +215,7 @@ export function buildErrorResponse(err: unknown): CallToolResult {
           text: JSON.stringify({
             ...buildAuthRequiredResponse(),
             reason,
-            error: formatGraphError(err),
+            error: wrapGraphError(err),
             package_id: getMsPackageId(),
           }),
         },
@@ -217,7 +228,7 @@ export function buildErrorResponse(err: unknown): CallToolResult {
       {
         type: 'text',
         text: errorJson({
-          error: formatGraphError(err),
+          error: wrapGraphError(err),
           action_required:
             'Retry the call. If it continues to fail, run authenticate_microsoft_account to refresh the connection.',
           next_step: AUTH_TOOL_NAME,

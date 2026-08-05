@@ -196,8 +196,11 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 - No authentication tool of its own; sign-in is delegated to [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/) so the cohort has a single OAuth surface.
 - Token-provider refresh failures map to the structured `auth_required` response so the host can drive reauth without crashing.
 - `upload_file` enforces empty-content validation in line with the bundled connector to reject zero-byte uploads as a misuse.
-- Binary uploads chunk to the preauthenticated upload-session URL **without** the Graph access token, as Graph requires.
-- Content authored in Microsoft 365 (file names, grantee identities, activity actors, extracted document text) is returned inside `<untrusted-content>` envelopes; Graph responses on the permission/version/activity/upload/document paths are Zod-validated at the boundary.
+- Binary uploads chunk to the preauthenticated upload-session URL **without** the Graph access token, as Graph requires. The session URL is validated before any byte is sent: HTTPS on the default port, no userinfo, Microsoft OneDrive/SharePoint hosts only, and redirects are rejected rather than followed.
+- Content authored in Microsoft 365 (file names, grantee identities, activity actors and action keys, permission roles, extracted document text, and Graph error messages) is returned inside `<untrusted-content>` envelopes; Graph responses on the permission/version/activity/upload/document paths are Zod-validated at the boundary. Functional identifiers (permission/version/item IDs) and `webUrl`s stay structural so they can round-trip into follow-up tool calls.
+- Permission/version/activity lists follow `@odata.nextLink` pagination (bounded, with an explicit `truncated` flag); continuation links are only followed back to the Graph host so the access token cannot leak to another origin.
+- `read_document` downloads are byte-capped mid-stream (not just by advertised metadata size) and Office ZIP inflation is bounded per-entry and cumulatively, so ZIP bombs cannot expand in memory.
+- Numeric limits (`top`, `maxSize`, `maxChars`) must be positive integers and are rejected before any network request.
 - Per-tool Graph calls run under a composed caller + cohort timeout signal.
 
 ## Licence
