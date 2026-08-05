@@ -74,6 +74,21 @@ export function createNapkinUnauthorizedHandlers() {
 }
 
 /**
+ * Creates handlers that return 410 (expired status/file URLs) for all
+ * Napkin API requests. Mirrors the vendor's 30-minute status/file expiry.
+ */
+export function createNapkinExpiredHandlers() {
+  return [
+    http.get(`${BASE}/visual/:id/status`, () =>
+      HttpResponse.json({ error: 'Request expired' }, { status: 410 }),
+    ),
+    http.get(`${BASE}/visual/:id/file/*`, () =>
+      HttpResponse.json({ error: 'File expired' }, { status: 410 }),
+    ),
+  ];
+}
+
+/**
  * Creates handlers that time out for all Napkin API requests.
  */
 export function createNapkinTimeoutHandlers() {

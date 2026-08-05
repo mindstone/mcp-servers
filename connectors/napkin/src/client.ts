@@ -216,6 +216,16 @@ async function napkinFetch<T>(
     );
   }
 
+  // Handle expired resources — Napkin status/file URLs expire 30 minutes
+  // after generation (documented 410 on the status endpoint).
+  if (response.status === 410) {
+    throw new NapkinError(
+      'Resource expired',
+      'EXPIRED',
+      'Napkin request status expires 30 minutes after generation. Start over with napkin_generate_visual, then poll napkin_check_status and download promptly.',
+    );
+  }
+
   // Handle other errors
   if (!response.ok) {
     const errorText = await response.text().catch(() => '');
@@ -326,6 +336,14 @@ export async function downloadFile(
       );
     }
     throw error;
+  }
+
+  if (response.status === 410) {
+    throw new NapkinError(
+      'Download URL expired',
+      'EXPIRED',
+      'Napkin file URLs expire 30 minutes after generation. Call napkin_generate_visual again and download promptly once napkin_check_status returns "completed".',
+    );
   }
 
   if (!response.ok) {
