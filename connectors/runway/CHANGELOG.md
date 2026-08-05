@@ -11,6 +11,9 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+- **runway**: Replace sunset model identifiers. The Runway API retired `gen3a_turbo` and `gen4_aleph` on 2026-07-30 and requests using them now fail. `generate_video_from_image` no longer offers `gen3a_turbo` (use `gen4_turbo` or `gen4.5` instead), and `generate_video_from_video` now submits with `aleph2` (Aleph 2.0) at 28 credits/sec (56 credit minimum); an optional `reference_image` is sent as a keyframe at second 0.
+
 ## [0.3.2] - 2026-05-14
 ### Added
 - **registry**: Cohort A backfill — 12 API-key OSS connectors get server.json + mcpName. fathom, humaans, kling, mixmax, nano-banana, napkin, pandadoc, freshdesk, elevenlabs, retell-ai, runway, talentlms each gain a registry-shaped server.json (validated against registry.modelcontextprotocol.io) and an mcpName field on package.json under the io.github.mindstone namespace.

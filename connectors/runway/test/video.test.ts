@@ -56,6 +56,7 @@ describe('Video generation tools', () => {
       const postBody = capturedBodies.find(c => c.url.includes('/text_to_video'))?.body as Record<string, unknown>;
       expect(postBody.contentModeration).toEqual({ publicFigureThreshold: 'low' });
     });
+
   });
 
   describe('generate_video_from_image', () => {
@@ -109,6 +110,7 @@ describe('Video generation tools', () => {
       expect(promptImage[0]).toEqual({ uri: 'https://example.com/start.jpg', position: 'first' });
       expect(promptImage[1]).toEqual({ uri: 'https://example.com/end.jpg', position: 'last' });
     });
+
   });
 
   describe('generate_video_from_video', () => {
@@ -129,7 +131,30 @@ describe('Video generation tools', () => {
       const data = JSON.parse(result.text);
       expect(data.ok).toBe(true);
       expect(data.task_id).toBe('task-vid2vid-001');
-      expect(data.model).toBe('gen4_aleph');
+      expect(data.model).toBe('aleph2');
+
+      const postBody = capturedBodies.find(c => c.url.includes('/video_to_video'))?.body as Record<string, unknown>;
+      expect(postBody.model).toBe('aleph2');
+    });
+
+    it('maps reference_image to an aleph2 keyframe at second 0', async () => {
+      const { handlers, capturedBodies } = createBodyCapturingHandlers(MOCK_API_KEY);
+      mswServer.use(...handlers);
+
+      testClient = await createTestClient({
+        env: { RUNWAYML_API_SECRET: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('generate_video_from_video', {
+        video: 'https://example.com/input.mp4',
+        prompt_text: 'Make it look like a watercolor painting',
+        reference_image: 'https://example.com/style.jpg',
+      });
+
+      expect(result.isError).toBeFalsy();
+      const postBody = capturedBodies.find(c => c.url.includes('/video_to_video'))?.body as Record<string, unknown>;
+      expect(postBody.keyframes).toEqual([{ uri: 'https://example.com/style.jpg', seconds: 0 }]);
+      expect(postBody.references).toBeUndefined();
     });
   });
 
