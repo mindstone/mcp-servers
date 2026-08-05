@@ -121,17 +121,25 @@ export async function listEmails(
   const queryParams: string[] = [
     `$top=${top}`,
     '$select=id,subject,from,receivedDateTime,bodyPreview,isRead,hasAttachments,importance',
-    '$orderby=receivedDateTime desc',
   ];
 
+  // Microsoft Graph rejects $filter combined with $orderby (HTTP 400
+  // InefficientFilter), like the $search limitation noted in searchEmails.
+  // With a filter present, results are sorted client-side below instead.
   if (args.filter) {
     queryParams.push(`$filter=${args.filter}`);
+  } else {
+    queryParams.push('$orderby=receivedDateTime desc');
   }
 
   endpoint += '?' + queryParams.join('&');
 
   const response = await client.api(endpoint).options({ signal }).get();
   const emails: EmailMessage[] = response.value ?? [];
+  if (args.filter) {
+    // Newest first, matching the $orderby the unfiltered path sends.
+    emails.sort((a, b) => b.receivedDateTime.localeCompare(a.receivedDateTime));
+  }
 
   const formatted = emails.map((email) => ({
     id: email.id,
@@ -789,11 +797,13 @@ export async function getConversation(
   }
 
   const top = Math.min(args.top ?? 25, 100);
+  // Microsoft Graph rejects $filter combined with $orderby (HTTP 400
+  // InefficientFilter), like the $search limitation noted in searchEmails.
+  // The conversation is sorted client-side below, oldest first.
   const endpoint =
     '/me/messages?' +
     [
       `$filter=conversationId eq '${conversationId}'`,
-      '$orderby=receivedDateTime asc',
       `$top=${top}`,
       '$select=id,subject,from,receivedDateTime,bodyPreview,isRead,hasAttachments',
     ].join('&');
@@ -801,25 +811,27 @@ export async function getConversation(
   const response = await client.api(endpoint).options({ signal }).get();
   const parsed = GraphConversationListSchema.parse(response);
 
-  const formatted = parsed.value.map((email) => ({
-    id: email.id,
-    subject: wrapUntrusted(email.subject, 'microsoft-mail:get_conversation:subject'),
-    from: wrapUntrusted(
-      email.from?.emailAddress?.address,
-      'microsoft-mail:get_conversation:from',
-    ),
-    fromName: wrapUntrusted(
-      email.from?.emailAddress?.name,
-      'microsoft-mail:get_conversation:fromName',
-    ),
-    receivedAt: email.receivedDateTime,
-    preview: wrapUntrusted(
-      email.bodyPreview?.substring(0, 200),
-      'microsoft-mail:get_conversation:preview',
-    ),
-    isRead: email.isRead,
-    hasAttachments: email.hasAttachments,
-  }));
+  const formatted = [...parsed.value]
+    .sort((a, b) => (a.receivedDateTime ?? '').localeCompare(b.receivedDateTime ?? ''))
+    .map((email) => ({
+      id: email.id,
+      subject: wrapUntrusted(email.subject, 'microsoft-mail:get_conversation:subject'),
+      from: wrapUntrusted(
+        email.from?.emailAddress?.address,
+        'microsoft-mail:get_conversation:from',
+      ),
+      fromName: wrapUntrusted(
+        email.from?.emailAddress?.name,
+        'microsoft-mail:get_conversation:fromName',
+      ),
+      receivedAt: email.receivedDateTime,
+      preview: wrapUntrusted(
+        email.bodyPreview?.substring(0, 200),
+        'microsoft-mail:get_conversation:preview',
+      ),
+      isRead: email.isRead,
+      hasAttachments: email.hasAttachments,
+    }));
 
   return {
     conversationId,

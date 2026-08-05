@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { http, HttpResponse } from 'msw';
 import { mswServer } from './fixtures/setup.js';
 import { createMockApi, type MockApiState } from './fixtures/microsoft-mock-api.js';
 import {
@@ -563,5 +564,115 @@ describe('microsoft-mail mock-API integration', () => {
     expect(json.ok).toBe(false);
     expect(json.error).toContain('Missing required parameter');
     expect(json.next_step).toBe('list_emails');
+  });
+
+  // Regression coverage for Graph's InefficientFilter rejection: any $filter
+  // combined with $orderby is refused with HTTP 400, so filtered requests must
+  // not send $orderby and must sort the returned page client-side instead.
+  describe('filter without $orderby (Graph InefficientFilter regression)', () => {
+    const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
+
+    function captureInto(state: MockApiState, request: Request): void {
+      const url = new URL(request.url);
+      state.requests.push({
+        method: request.method,
+        url: request.url,
+        pathname: url.pathname,
+        search: url.search,
+        body: null,
+      });
+    }
+
+    it('list_emails without a filter still sends $orderby=receivedDateTime desc', async () => {
+      const result = await client.callTool('list_emails', { top: 5 });
+      expect(result.isError).not.toBe(true);
+      const call = state.requests.find((r) =>
+        r.pathname.includes('/me/mailFolders/inbox/messages'),
+      );
+      expect(decodeURIComponent(call?.search ?? '')).toContain('$orderby=receivedDateTime desc');
+    });
+
+    it('list_emails with a filter omits $orderby and sorts newest first client-side', async () => {
+      // Out-of-order page: Graph's default ordering is not guaranteed, so the
+      // tool must restore the documented newest-first order itself.
+      mswServer.use(
+        http.get(`${GRAPH_BASE}/me/mailFolders/:folder/messages`, async ({ request }) => {
+          captureInto(state, request);
+          return HttpResponse.json({
+            value: [
+              { id: 'older', subject: 'Older', receivedDateTime: '2026-05-18T08:00:00Z' },
+              { id: 'newer', subject: 'Newer', receivedDateTime: '2026-05-19T12:00:00Z' },
+            ],
+          });
+        }),
+      );
+      const result = await client.callTool('list_emails', {
+        top: 10,
+        filter: 'hasAttachments eq true',
+      });
+      expect(result.isError).not.toBe(true);
+      const call = state.requests.find((r) =>
+        r.pathname.includes('/me/mailFolders/inbox/messages'),
+      );
+      expect(call).toBeDefined();
+      expect(decodeURIComponent(call?.search ?? '')).toContain('$filter=hasAttachments eq true');
+      expect(call?.search).not.toMatch(/\$orderby=/i);
+      const json = result.json as { emails: Array<{ id: string }> };
+      expect(json.emails.map((e) => e.id)).toEqual(['newer', 'older']);
+    });
+
+    it('get_conversation omits $orderby and sorts oldest first client-side', async () => {
+      mswServer.use(
+        http.get(`${GRAPH_BASE}/me/messages`, async ({ request }) => {
+          captureInto(state, request);
+          return HttpResponse.json({
+            value: [
+              { id: 'later', subject: 'Later', receivedDateTime: '2026-05-19T12:00:00Z' },
+              { id: 'earlier', subject: 'Earlier', receivedDateTime: '2026-05-18T08:00:00Z' },
+            ],
+          });
+        }),
+      );
+      const result = await client.callTool('get_conversation', { conversationId: 'conv-1' });
+      expect(result.isError).not.toBe(true);
+      const call = state.requests.find(
+        (r) => r.method === 'GET' && r.pathname.endsWith('/me/messages'),
+      );
+      expect(call).toBeDefined();
+      expect(decodeURIComponent(call?.search ?? '')).toContain("conversationId eq 'conv-1'");
+      expect(call?.search).not.toMatch(/\$orderby=/i);
+      const json = result.json as { messages: Array<{ id: string }> };
+      expect(json.messages.map((m) => m.id)).toEqual(['earlier', 'later']);
+    });
+
+    it('an InefficientFilter 400 gets filter-focused guidance, not a re-auth prompt', async () => {
+      mswServer.use(
+        http.get(`${GRAPH_BASE}/me/mailFolders/:folder/messages`, () =>
+          HttpResponse.json(
+            {
+              error: {
+                code: 'InefficientFilter',
+                message: 'The restriction or sort order is too complex for this operation.',
+              },
+            },
+            { status: 400 },
+          ),
+        ),
+      );
+      const result = await client.callTool('list_emails', {
+        filter: 'hasAttachments eq true',
+      });
+      expect(result.isError).toBe(true);
+      const json = result.json as {
+        ok: boolean;
+        error: string;
+        action_required: string;
+        next_step: string;
+      };
+      expect(json.ok).toBe(false);
+      expect(json.action_required).toContain('$filter');
+      expect(json.action_required).not.toContain('refresh the connection');
+      expect(json.next_step).not.toBe('authenticate_microsoft_account');
+    });
   });
 });
