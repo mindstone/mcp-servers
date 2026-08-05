@@ -678,4 +678,75 @@ describe('Read tools — documented request contracts', () => {
     expect(payload.action_required).toBe('No Vanta resource matches the supplied ID.');
     expect(pages).toBe(2);
   });
+
+  it('vanta_list_event_logs sends the documented startDate filter', async () => {
+    mswServer.use(
+      successTokenHandler,
+      http.get('https://api.vanta.com/v1/event-logs', ({ request }) => {
+        expect(Object.fromEntries(new URL(request.url).searchParams)).toEqual({
+          startDate: '2026-05-03T00:00:00Z',
+          pageSize: '10',
+          pageCursor: 'event-cursor',
+        });
+        return paginated([
+          {
+            id: '69fbbae3e16190a288ee8eb0',
+            actor: { id: '69fbbaf987273a4b462580e9', type: 'USER' },
+            date: '2026-05-03T21:08:22.385Z',
+            action: 'LOGIN_USER',
+            targets: [{ id: 'email', type: 'LOGIN_METHOD' }],
+          },
+        ]);
+      }),
+    );
+
+    const { createServer } = await import('../src/server.js');
+    testClient = await createInMemoryTestClient({
+      createServer,
+      env: {
+        VANTA_CLIENT_ID: MOCK_CLIENT_ID,
+        VANTA_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+      },
+    });
+
+    const result = await testClient.callTool('vanta_list_event_logs', {
+      start_date: '2026-05-03T00:00:00Z',
+      page_size: 10,
+      page_cursor: 'event-cursor',
+    });
+    const payload = result.json as {
+      ok: boolean;
+      eventLogs: Array<{ id: string; action: string }>;
+      count: number;
+    };
+
+    expect(payload.ok).toBe(true);
+    expect(payload.count).toBe(1);
+    expect(payload.eventLogs[0]?.id).toBe('69fbbae3e16190a288ee8eb0');
+    expect(payload.eventLogs[0]?.action).toBe('LOGIN_USER');
+  });
+
+  it('vanta_list_event_logs surfaces a structured error when the API fails', async () => {
+    mswServer.use(
+      successTokenHandler,
+      http.get('https://api.vanta.com/v1/event-logs', () =>
+        HttpResponse.json({ message: 'server error' }, { status: 500 }),
+      ),
+    );
+
+    const { createServer } = await import('../src/server.js');
+    testClient = await createInMemoryTestClient({
+      createServer,
+      env: {
+        VANTA_CLIENT_ID: MOCK_CLIENT_ID,
+        VANTA_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+      },
+    });
+
+    const result = await testClient.callTool('vanta_list_event_logs', {});
+    const payload = result.json as { ok: boolean; code: string };
+
+    expect(payload.ok).toBe(false);
+    expect(payload.code).toBe('API_ERROR');
+  });
 });

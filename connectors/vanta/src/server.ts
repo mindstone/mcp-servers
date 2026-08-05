@@ -38,6 +38,7 @@ import {
   vantaListTests,
 } from './tools/tests.js';
 import { uploadDocumentSchema, vantaUploadDocument } from './tools/documents.js';
+import { listEventLogsSchema, vantaListEventLogs } from './tools/event-logs.js';
 import {
   attachVendorDocumentSchema,
   createVendorSchema,
@@ -217,6 +218,13 @@ RETURNS:
     annotations: readOnlyAnnotations,
     inputSchema: getRiskScenarioSchema,
   }, async (input) => textResult(await vantaGetRiskScenario(client, input)));
+
+  server.registerTool('vanta_list_event_logs', {
+    title: 'List Vanta Event Logs',
+    description: 'List audit event logs from the Vanta account (actor, action, targets, date) with an optional start-date filter.',
+    annotations: readOnlyAnnotations,
+    inputSchema: listEventLogsSchema,
+  }, async (input) => textResult(await vantaListEventLogs(client, input)));
 
   server.registerTool('vanta_list_vendors', {
     title: 'List Vanta Vendors',

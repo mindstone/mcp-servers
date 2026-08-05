@@ -10,7 +10,7 @@
     ]
   },
   "tools": {
-    "count": 24,
+    "count": 25,
     "domains": [
       "vulnerabilities",
       "tests",
@@ -19,6 +19,7 @@
       "policies",
       "integrations",
       "risk scenarios",
+      "event logs",
       "people",
       "vendors",
       "documents",

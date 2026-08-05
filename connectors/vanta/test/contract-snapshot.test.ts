@@ -6,6 +6,7 @@ import { VantaApiClient, buildQueryParams, setDnsLookupForTesting } from '../src
 import { vantaListControls, vantaGetControl } from '../src/tools/controls.js';
 import { vantaUploadDocument } from '../src/tools/documents.js';
 import { vantaListFrameworks, vantaGetFramework } from '../src/tools/frameworks.js';
+import { vantaListEventLogs } from '../src/tools/event-logs.js';
 import { vantaListIntegrations } from '../src/tools/integrations.js';
 import { vantaListRiskScenarios, vantaGetRiskScenario } from '../src/tools/risks.js';
 import { vantaListPeople } from '../src/tools/people.js';
@@ -241,6 +242,11 @@ describe('Vanta contract snapshot', () => {
       page_cursor: 'cursor-risks',
     });
     await vantaGetRiskScenario(client, { risk_id: 'assets-not-identified-and-protected' });
+    await vantaListEventLogs(client, {
+      start_date: '2026-05-03T00:00:00Z',
+      page_size: 10,
+      page_cursor: 'cursor-events',
+    });
     await vantaListVendors(client, {
       name: 'Acme',
       status: 'MANAGED',

@@ -17,6 +17,7 @@ const EXPECTED_TOOLS = [
   'vanta_get_vendor',
   'vanta_get_vulnerability',
   'vanta_list_controls',
+  'vanta_list_event_logs',
   'vanta_list_frameworks',
   'vanta_list_integrations',
   'vanta_list_people',
