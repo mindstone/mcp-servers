@@ -269,6 +269,38 @@ describe('external response validation (fail-closed)', () => {
     expect(fs.readdirSync(workspaceDir)).toEqual(['clip.mp3']);
   });
 
+  it('get_pronunciation_dictionary rejects an alias rule without alias', async () => {
+    mswServer.use(
+      http.get(`${BASE_V1}/pronunciation-dictionaries/:dictionaryId`, () =>
+        HttpResponse.json({
+          id: 'pd-1',
+          name: 'D',
+          rules: [{ string_to_replace: 'x', type: 'alias' }],
+        }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('get_pronunciation_dictionary', {
+      pronunciation_dictionary_id: 'pd-1',
+    });
+  });
+
+  it('get_pronunciation_dictionary rejects a phoneme rule without phoneme and alphabet', async () => {
+    mswServer.use(
+      http.get(`${BASE_V1}/pronunciation-dictionaries/:dictionaryId`, () =>
+        HttpResponse.json({
+          id: 'pd-1',
+          name: 'D',
+          rules: [{ string_to_replace: 'x', type: 'phoneme' }],
+        }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('get_pronunciation_dictionary', {
+      pronunciation_dictionary_id: 'pd-1',
+    });
+  });
+
   it('the INVALID_RESPONSE error does not echo raw upstream values', async () => {
     mswServer.use(
       http.post(`${BASE_V1}/speech-to-text`, () =>

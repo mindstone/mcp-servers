@@ -52,15 +52,26 @@ export const workspaceUsageResponseSchema = z.object({
 
 // ── Pronunciation dictionaries ────────────────────────────────────────────
 
-export const pronunciationDictionaryRuleResponseSchema = z.object({
-  string_to_replace: z.string(),
-  type: z.enum(['alias', 'phoneme']),
-  alias: z.string().optional(),
-  phoneme: z.string().optional(),
-  alphabet: z.string().optional(),
-  case_sensitive: z.boolean().optional(),
-  word_boundaries: z.boolean().optional(),
-});
+// Response rules are a discriminated union: an `alias` rule must carry `alias`,
+// a `phoneme` rule must carry `phoneme` and `alphabet`. Validating `type` alone
+// would let a drifted/hostile response omit the payload its type promises.
+export const pronunciationDictionaryRuleResponseSchema = z.discriminatedUnion('type', [
+  z.object({
+    string_to_replace: z.string(),
+    type: z.literal('alias'),
+    alias: z.string(),
+    case_sensitive: z.boolean().optional(),
+    word_boundaries: z.boolean().optional(),
+  }),
+  z.object({
+    string_to_replace: z.string(),
+    type: z.literal('phoneme'),
+    phoneme: z.string(),
+    alphabet: z.string(),
+    case_sensitive: z.boolean().optional(),
+    word_boundaries: z.boolean().optional(),
+  }),
+]);
 
 export const pronunciationDictionaryMetadataSchema = z.object({
   id: z.string(),

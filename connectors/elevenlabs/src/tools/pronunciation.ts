@@ -55,7 +55,12 @@ function shapeDictionaryMetadata(
     description: wrapUntrusted(d.description ?? undefined, `${sourcePrefix}:description`),
     latest_version_id: d.latest_version_id,
     latest_version_rules_num: d.latest_version_rules_num,
-    permission_on_resource: d.permission_on_resource,
+    // API-authored string not validated against a closed grammar — envelope it
+    // like name/description (AGENTS.md invariant #6).
+    permission_on_resource: wrapUntrusted(
+      d.permission_on_resource ?? undefined,
+      `${sourcePrefix}:permission_on_resource`,
+    ),
     creation_time_unix: d.creation_time_unix,
     archived: d.archived_time_unix != null,
     archived_time_unix: d.archived_time_unix ?? undefined,
