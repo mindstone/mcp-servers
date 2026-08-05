@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { fathomFetch } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import {
   type MeetingsListResponse,
   type MeetingItem,
@@ -30,15 +31,18 @@ function noApiKeyError(): string {
  */
 async function findMeetingByRecordingId(
   recordingId: number,
-  maxPages: number = 10,
+  options: { includeActionItems?: boolean; maxPages?: number } = {},
 ): Promise<MeetingItem | null> {
+  const maxPages = options.maxPages ?? 10;
   let cursor: string | undefined;
   let pageCount = 0;
 
   do {
-    const path = cursor
-      ? `/meetings?cursor=${encodeURIComponent(cursor)}`
-      : '/meetings';
+    const params = new URLSearchParams();
+    if (options.includeActionItems) params.set('include_action_items', 'true');
+    if (cursor) params.set('cursor', cursor);
+    const qs = params.toString();
+    const path = qs ? `/meetings?${qs}` : '/meetings';
     const response = await fathomFetch<MeetingsListResponse>(path);
     pageCount++;
 
@@ -69,6 +73,49 @@ function getSpeakerName(entry: TranscriptEntry): string {
   return speaker.display_name || speaker.name || speaker.matched_calendar_invitee_email || speaker.email || 'Unknown';
 }
 
+/**
+ * Wrap every caller-controllable text field of a meeting (titles, attendee
+ * names, AI summary, action items) in an untrusted-content envelope.
+ * Meeting content is authored by meeting participants, not by the user, so
+ * the host LLM must see it as data, not instructions (invariant #6).
+ * Connector-controlled metadata (ids, timestamps, URLs, emails) stays raw.
+ */
+function sanitizeMeeting(meeting: MeetingItem): MeetingItem {
+  return {
+    ...meeting,
+    title: wrapUntrusted(meeting.title, 'fathom:meeting:title') ?? meeting.title,
+    meeting_title:
+      meeting.meeting_title == null
+        ? meeting.meeting_title
+        : (wrapUntrusted(meeting.meeting_title, 'fathom:meeting:title') ?? null),
+    calendar_invitees: (meeting.calendar_invitees || []).map((invitee) => ({
+      ...invitee,
+      name: wrapUntrusted(invitee.name, 'fathom:meeting:invitee_name'),
+    })),
+    recorded_by: meeting.recorded_by
+      ? {
+          ...meeting.recorded_by,
+          name: wrapUntrusted(meeting.recorded_by.name, 'fathom:meeting:recorder_name'),
+        }
+      : meeting.recorded_by,
+    default_summary: meeting.default_summary
+      ? {
+          template_name: wrapUntrusted(meeting.default_summary.template_name, 'fathom:meeting:summary_template'),
+          markdown_formatted: wrapUntrusted(meeting.default_summary.markdown_formatted, 'fathom:meeting:summary'),
+        }
+      : meeting.default_summary,
+    action_items: meeting.action_items
+      ? meeting.action_items.map((item) => ({
+          ...item,
+          description: wrapUntrusted(item.description, 'fathom:meeting:action_item') ?? item.description,
+          assignee: item.assignee
+            ? { ...item.assignee, name: wrapUntrusted(item.assignee.name, 'fathom:meeting:assignee_name') }
+            : item.assignee,
+        }))
+      : meeting.action_items,
+  };
+}
+
 export function registerMeetingTools(server: McpServer): void {
   server.registerTool(
     'list_fathom_meetings',
@@ -88,6 +135,7 @@ Server-side filters (use these to narrow results efficiently):
 - calendar_invitees_domains: Filter by attendee email domains (e.g., find all meetings with acme.com)
 - meeting_type: 'internal' (same org) or 'external' (with outsiders)
 - created_after/created_before: Date range filters (ISO format)
+- include_action_items: Also return each meeting's action items (default false)
 
 NOTE: Fathom does NOT have server-side keyword search. To find meetings by keyword, list meetings with filters then examine results yourself, or use get_fathom_transcript to search transcript content.
 
@@ -100,6 +148,7 @@ Rate limit: Fathom allows ~60 API calls/minute.`,
         meeting_type: z.enum(['all', 'internal', 'external']).optional().describe('Filter by meeting type'),
         created_after: z.string().optional().describe('ISO date string — only return meetings created after this date'),
         created_before: z.string().optional().describe('ISO date string — only return meetings created before this date'),
+        include_action_items: z.boolean().default(false).describe('Include each meeting\'s action items in the response'),
         limit: z.number().min(1).max(100).default(25).describe('Maximum number of results per page'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
@@ -121,6 +170,7 @@ Rate limit: Fathom allows ~60 API calls/minute.`,
       if (args.meeting_type) params.set('meeting_type', args.meeting_type);
       if (args.created_after) params.set('created_after', args.created_after);
       if (args.created_before) params.set('created_before', args.created_before);
+      if (args.include_action_items) params.set('include_action_items', 'true');
 
       let cursor: string | undefined;
       do {
@@ -136,7 +186,7 @@ Rate limit: Fathom allows ~60 API calls/minute.`,
         }
       } while (cursor);
 
-      const trimmedMeetings = meetings.slice(0, limit);
+      const trimmedMeetings = meetings.slice(0, limit).map(sanitizeMeeting);
       const hasMore = stoppedEarly || meetings.length > limit;
 
       return JSON.stringify({
@@ -162,6 +212,7 @@ Returns:
 - Recording URL and shareable link
 - Calendar invitees with names/emails
 - AI-generated summary (if available)
+- Action items with assignees and completion status (if available)
 
 Note: Searches through up to 10 pages of recent meetings. For older meetings,
 use list_fathom_meetings with created_after/created_before date filters first.
@@ -177,7 +228,7 @@ Rate limit: May use 1-11 API calls depending on meeting position in history.`,
       if (!isConfigured()) return noApiKeyError();
 
       const recordingId = args.recording_id;
-      const meeting = await findMeetingByRecordingId(recordingId);
+      const meeting = await findMeetingByRecordingId(recordingId, { includeActionItems: true });
 
       if (!meeting) {
         return JSON.stringify({
@@ -210,11 +261,13 @@ Rate limit: May use 1-11 API calls depending on meeting position in history.`,
         }
       }
 
+      const sanitized = sanitizeMeeting(meeting);
+
       return JSON.stringify({
         ok: true,
         meeting: {
-          title: meeting.title,
-          meeting_title: meeting.meeting_title,
+          title: sanitized.title,
+          meeting_title: sanitized.meeting_title,
           recording_id: meeting.recording_id,
           url: meeting.url,
           share_url: meeting.share_url,
@@ -223,9 +276,15 @@ Rate limit: May use 1-11 API calls depending on meeting position in history.`,
           scheduled_end_time: meeting.scheduled_end_time,
           recording_start_time: meeting.recording_start_time,
           recording_end_time: meeting.recording_end_time,
-          calendar_invitees: meeting.calendar_invitees,
-          recorded_by: meeting.recorded_by,
-          summary,
+          calendar_invitees: sanitized.calendar_invitees,
+          recorded_by: sanitized.recorded_by,
+          action_items: sanitized.action_items ?? null,
+          summary: summary
+            ? {
+                template_name: wrapUntrusted(summary.template_name, 'fathom:meeting:summary_template'),
+                markdown_formatted: wrapUntrusted(summary.markdown_formatted, 'fathom:meeting:summary'),
+              }
+            : null,
         },
       });
     }),
@@ -299,9 +358,20 @@ Use list_fathom_meetings first to find the recording_id.`,
         args.start_entry + entries.length < (matchedIndices ? matchedIndices.size : totalCount);
 
       if (args.format === 'json') {
+        const wrappedEntries = entries.map((entry) => ({
+          ...entry,
+          text: wrapUntrusted(entry.text, 'fathom:transcript:text') ?? entry.text,
+          speaker: entry.speaker
+            ? {
+                ...entry.speaker,
+                name: wrapUntrusted(entry.speaker.name, 'fathom:transcript:speaker'),
+                display_name: wrapUntrusted(entry.speaker.display_name, 'fathom:transcript:speaker'),
+              }
+            : entry.speaker,
+        }));
         return JSON.stringify({
           ok: true,
-          transcript: entries,
+          transcript: wrappedEntries,
           count: entries.length,
           totalCount,
           hasMore,
@@ -311,7 +381,8 @@ Use list_fathom_meetings first to find the recording_id.`,
         });
       }
 
-      // Text format (default)
+      // Text format (default). Transcript lines are caller-controllable speech,
+      // so the whole body goes out inside one untrusted-content envelope.
       const lines = entries.map((entry) => {
         const timestamp = formatTimestamp(entry);
         const speaker = getSpeakerName(entry);
@@ -323,7 +394,8 @@ Use list_fathom_meetings first to find the recording_id.`,
         ? `Transcript: ${directMatchCount} matches for "${args.search_query}" (showing ${entries.length} entries with context, ${totalCount} total in transcript)`
         : `Transcript (${entries.length} of ${totalCount} entries)`;
 
-      return `${header}${hasMore ? ' - more available with start_entry parameter' : ''}\n\n${lines.join('\n')}`;
+      const body = wrapUntrusted(lines.join('\n'), 'fathom:transcript') ?? '';
+      return `${header}${hasMore ? ' - more available with start_entry parameter' : ''}\n\n${body}`;
     }),
   );
 
@@ -363,7 +435,7 @@ Rate limit: May use 1-11 API calls depending on meeting position in history.`,
       }
 
       const participants = (meeting.calendar_invitees || []).map((invitee) => ({
-        name: invitee.name || null,
+        name: wrapUntrusted(invitee.name, 'fathom:meeting:invitee_name') ?? null,
         email: invitee.email,
         email_domain: invitee.email_domain || null,
         is_external: invitee.is_external ?? false,
@@ -372,9 +444,116 @@ Rate limit: May use 1-11 API calls depending on meeting position in history.`,
       return JSON.stringify({
         ok: true,
         recording_id: recordingId,
-        title: meeting.title,
+        title: wrapUntrusted(meeting.title, 'fathom:meeting:title') ?? meeting.title,
         participants,
         count: participants.length,
+      });
+    }),
+  );
+
+  server.registerTool(
+    'get_fathom_action_items',
+    {
+      description:
+        `List action items across your Fathom meetings — answers "what are my open action items from this week's calls?".
+
+Returns a flat list of action items, each with:
+- description, completed status, recording timestamp + playback URL
+- assignee name/email
+- the meeting it came from (recording_id, title, scheduled time)
+
+By default only open (incomplete) items are returned; set include_completed=true for all.
+
+Server-side filters (same as list_fathom_meetings):
+- teams, recorded_by, calendar_invitees_domains, meeting_type
+- created_after/created_before: Date range filters (ISO format)
+
+Note: Fathom has no single-meeting action-item endpoint, so this scans up to
+10 pages of meetings. Narrow with date filters for speed.
+Rate limit: May use 1-10 API calls depending on filters and result volume.`,
+      inputSchema: z.object({
+        teams: z.array(z.string()).optional().describe('Filter by team names (e.g., ["Sales", "Engineering"])'),
+        recorded_by: z.array(z.string()).optional().describe('Filter by email addresses of recorders'),
+        calendar_invitees_domains: z.array(z.string()).optional().describe('Filter by attendee email domains'),
+        meeting_type: z.enum(['all', 'internal', 'external']).optional().describe('Filter by meeting type'),
+        created_after: z.string().optional().describe('ISO date string — only include meetings created after this date'),
+        created_before: z.string().optional().describe('ISO date string — only include meetings created before this date'),
+        include_completed: z.boolean().default(false).describe('Include completed action items (default: only open items)'),
+        limit: z.number().int().min(1).max(200).default(50).describe('Maximum number of action items to return'),
+      }),
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      if (!isConfigured()) return noApiKeyError();
+
+      const params = new URLSearchParams();
+      params.set('include_action_items', 'true');
+      if (args.teams) args.teams.forEach((t) => params.append('teams[]', t));
+      if (args.recorded_by) args.recorded_by.forEach((r) => params.append('recorded_by[]', r));
+      if (args.calendar_invitees_domains) {
+        args.calendar_invitees_domains.forEach((d) => params.append('calendar_invitees_domains[]', d));
+      }
+      if (args.meeting_type) params.set('meeting_type', args.meeting_type);
+      if (args.created_after) params.set('created_after', args.created_after);
+      if (args.created_before) params.set('created_before', args.created_before);
+
+      const maxPages = 10;
+      let cursor: string | undefined;
+      let pageCount = 0;
+      let meetingsScanned = 0;
+      let limitReached = false;
+
+      const items: Array<Record<string, unknown>> = [];
+
+      do {
+        if (cursor) params.set('cursor', cursor);
+        const response = await fathomFetch<MeetingsListResponse>(`/meetings?${params.toString()}`);
+        pageCount++;
+
+        for (const meeting of response.items || []) {
+          meetingsScanned++;
+          for (const item of meeting.action_items || []) {
+            if (!args.include_completed && item.completed) continue;
+            if (items.length >= args.limit) {
+              limitReached = true;
+              break;
+            }
+            items.push({
+              description: wrapUntrusted(item.description, 'fathom:action_item:description') ?? item.description,
+              completed: item.completed ?? false,
+              user_generated: item.user_generated ?? false,
+              recording_timestamp: item.recording_timestamp ?? null,
+              recording_playback_url: item.recording_playback_url ?? null,
+              assignee: item.assignee
+                ? {
+                    name: wrapUntrusted(item.assignee.name, 'fathom:action_item:assignee_name') ?? null,
+                    email: item.assignee.email ?? null,
+                  }
+                : null,
+              meeting: {
+                recording_id: meeting.recording_id,
+                title: wrapUntrusted(meeting.title, 'fathom:meeting:title') ?? meeting.title,
+                scheduled_start_time: meeting.scheduled_start_time,
+              },
+            });
+          }
+          if (limitReached) break;
+        }
+
+        cursor = response.next_cursor || undefined;
+      } while (!limitReached && cursor && pageCount < maxPages);
+
+      const hasMore = limitReached || (cursor !== undefined && cursor !== '' && pageCount >= maxPages);
+
+      return JSON.stringify({
+        ok: true,
+        action_items: items,
+        count: items.length,
+        meetingsScanned,
+        hasMore,
+        ...(hasMore
+          ? { hint: 'More results may exist. Narrow with created_after/created_before or raise limit.' }
+          : {}),
       });
     }),
   );

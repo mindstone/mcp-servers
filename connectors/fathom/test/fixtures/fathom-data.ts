@@ -21,6 +21,24 @@ export const mockMeetings = [
       { name: 'Bob', email: 'bob@example.com', email_domain: 'example.com', is_external: false },
     ],
     recorded_by: { name: 'Alice', email: 'alice@example.com', email_domain: 'example.com', team: null },
+    action_items: [
+      {
+        description: 'Send the updated proposal to the client',
+        user_generated: false,
+        completed: false,
+        recording_timestamp: '00:10:45',
+        recording_playback_url: 'https://fathom.video/recordings/101#t=645',
+        assignee: { name: 'Alice', email: 'alice@example.com', team: null },
+      },
+      {
+        description: 'Book the sprint retrospective',
+        user_generated: true,
+        completed: true,
+        recording_timestamp: '00:18:02',
+        recording_playback_url: 'https://fathom.video/recordings/101#t=1082',
+        assignee: { name: 'Bob', email: 'bob@example.com', team: null },
+      },
+    ],
   },
   {
     title: 'Sprint Review',

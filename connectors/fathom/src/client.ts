@@ -8,16 +8,27 @@
 import { getApiKey } from './auth.js';
 import { FathomError, FATHOM_API_BASE, REQUEST_TIMEOUT_MS } from './types.js';
 
+const MAX_RATE_LIMIT_RETRIES = 3;
+// Bound the wait so a busy rate-limit window cannot stall a tool call for
+// minutes; Fathom's window is 60s, so a Retry-After beyond this is pathological.
+const MAX_RATE_LIMIT_WAIT_MS = 60_000;
+
 /**
  * Make an authenticated request to the Fathom API.
  *
+ * Retries 429 responses up to MAX_RATE_LIMIT_RETRIES times, honouring the
+ * Retry-After header (falling back to exponential backoff) — the same
+ * posture the official Fathom SDKs take.
+ *
  * @param path  API path relative to base, e.g. `/meetings`
  * @param options  Additional fetch options
+ * @param retryCount  Internal retry counter for rate-limit handling
  * @returns Parsed JSON response
  */
 export async function fathomFetch<T>(
   path: string,
   options: RequestInit = {},
+  retryCount = 0,
 ): Promise<T> {
   const key = getApiKey();
   if (!key) {
@@ -61,10 +72,18 @@ export async function fathomFetch<T>(
   }
 
   if (response.status === 429) {
+    if (retryCount < MAX_RATE_LIMIT_RETRIES) {
+      const retryAfterSeconds = parseInt(response.headers.get('Retry-After') ?? '', 10);
+      const waitMs = Number.isFinite(retryAfterSeconds)
+        ? Math.min(retryAfterSeconds * 1000, MAX_RATE_LIMIT_WAIT_MS)
+        : Math.min(1000 * Math.pow(2, retryCount), 8000);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      return fathomFetch<T>(path, options, retryCount + 1);
+    }
     const retryAfter = response.headers.get('Retry-After');
     const waitTime = retryAfter ? `${retryAfter} seconds` : 'a moment';
     throw new FathomError(
-      `Rate limited by Fathom API. Please wait ${waitTime} before retrying.`,
+      `Rate limited by Fathom API after ${MAX_RATE_LIMIT_RETRIES} retries. Please wait ${waitTime} before retrying.`,
       'RATE_LIMITED',
       `Wait ${waitTime} and try again. Fathom limits API requests to 60 calls per minute.`,
     );
@@ -86,6 +105,9 @@ export async function fathomFetch<T>(
       'Check the request parameters and try again.',
     );
   }
+
+  // 204 No Content (e.g. webhook deletion) has no body to parse.
+  if (response.status === 204) return undefined as T;
 
   return response.json() as Promise<T>;
 }

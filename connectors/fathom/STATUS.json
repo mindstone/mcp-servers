@@ -10,11 +10,14 @@
     ]
   },
   "tools": {
-    "count": 7,
+    "count": 12,
     "domains": [
       "meetings",
       "transcripts",
-      "teams"
+      "action-items",
+      "recordings",
+      "teams",
+      "webhooks"
     ]
   },
   "surface": "cloud-api",

@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { fathomFetch } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import type { TeamsResponse, TeamMembersResponse } from '../types.js';
 
 function noApiKeyError(): string {
@@ -40,10 +41,14 @@ Use this to find team names for filtering meetings with list_fathom_meetings or 
 
         const items = response.items || [];
         for (const item of items) {
+          // Team names are org-authored text — envelope before returning.
           if (typeof item === 'string') {
-            allTeams.push({ name: item });
+            allTeams.push({ name: wrapUntrusted(item, 'fathom:team:name') ?? item });
           } else {
-            allTeams.push(item);
+            allTeams.push({
+              ...item,
+              name: wrapUntrusted(item.name, 'fathom:team:name') ?? item.name,
+            });
           }
         }
 
@@ -83,7 +88,12 @@ Use list_fathom_teams first to get available team names.`,
         const path = `/team_members?team=${teamParam}${cursorParam}`;
         const response = await fathomFetch<TeamMembersResponse>(path);
 
-        members.push(...(response.items || []));
+        for (const item of response.items || []) {
+          members.push({
+            ...item,
+            name: wrapUntrusted(item.name, 'fathom:team:member_name'),
+          });
+        }
         cursor = response.next_cursor || undefined;
       } while (cursor);
 

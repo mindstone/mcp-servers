@@ -34,6 +34,19 @@ export interface TranscriptResponse {
   transcript: TranscriptEntry[];
 }
 
+export interface ActionItem {
+  description: string;
+  user_generated?: boolean;
+  completed?: boolean;
+  recording_timestamp?: string;
+  recording_playback_url?: string;
+  assignee?: {
+    name?: string;
+    email?: string;
+    team?: string | null;
+  };
+}
+
 export interface MeetingItem {
   title: string;
   meeting_title: string | null;
@@ -63,16 +76,7 @@ export interface MeetingItem {
     template_name?: string;
     markdown_formatted?: string;
   } | null;
-  action_items?: Array<{
-    description: string;
-    user_generated?: boolean;
-    completed?: boolean;
-    recording_timestamp?: string;
-    assignee?: {
-      name?: string;
-      email?: string;
-    };
-  }> | null;
+  action_items?: ActionItem[] | null;
 }
 
 export interface MeetingsListResponse {
@@ -109,4 +113,38 @@ export interface SummaryResponse {
     template_name?: string;
     markdown_formatted?: string;
   };
+}
+
+export interface RecordingDownloadFile {
+  url: string;
+  content_type?: string;
+  file_size_bytes?: number;
+  expires_at?: string;
+}
+
+export interface RecordingDownload {
+  download_id: string;
+  recording_id: number;
+  status: 'processing' | 'completed' | 'failed' | 'expired';
+  video?: RecordingDownloadFile;
+  audio?: RecordingDownloadFile;
+  failure_reason?: 'generation_failed' | 'generation_timeout';
+}
+
+export type WebhookTrigger =
+  | 'my_recordings'
+  | 'shared_external_recordings'
+  | 'my_shared_with_team_recordings'
+  | 'shared_team_recordings';
+
+export interface Webhook {
+  id: string;
+  url: string;
+  secret: string;
+  created_at?: string;
+  include_transcript?: boolean;
+  include_crm_matches?: boolean;
+  include_summary?: boolean;
+  include_action_items?: boolean;
+  triggered_for?: WebhookTrigger[];
 }

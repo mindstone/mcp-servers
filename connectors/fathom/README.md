@@ -11,7 +11,7 @@ List and search meetings, view details, read transcripts, and manage teams via F
 
 - **Version:** [0.2.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-fathom)
 - **Auth:** API key ([`FATHOM_API_KEY`](./server.json))
-- **Tools:** [7](./src/tools/) (meetings, transcripts, teams)
+- **Tools:** [12](./src/tools/) (meetings, transcripts, action items, recordings, teams, webhooks)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -25,21 +25,24 @@ When we built this in early 2026, Fathom had not published an official MCP serve
 
 Tools the host calls:
 1. `list_fathom_meetings` — filtered by date range, finds the meeting and returns its ID.
-2. `get_fathom_transcript` — fetches the transcript for that meeting ID.
+2. `get_fathom_meeting` — fetches details, summary, and action items for that meeting ID. (For a cross-meeting view — "what are my open action items from customer calls this week?" — the host calls `get_fathom_action_items` directly.)
 
 Response (trimmed):
 
 ```json
 {
   "meeting": {
-    "id": "mtg_01HXX...",
-    "title": "Q3 planning",
-    "scheduled_start": "2026-05-18T15:00:00Z"
-  },
-  "transcript": [
-    { "t": "00:02", "speaker": "Alice", "text": "First topic is hiring..." },
-    { "t": "00:47", "speaker": "Bob",   "text": "Let's lock the JD by Friday." }
-  ]
+    "recording_id": 123456789,
+    "title": "<untrusted-content source=\"fathom:meeting:title\">Q3 planning</untrusted-content>",
+    "scheduled_start_time": "2026-05-18T15:00:00Z",
+    "action_items": [
+      {
+        "description": "<untrusted-content source=\"fathom:meeting:action_item\">Lock the JD by Friday</untrusted-content>",
+        "completed": false,
+        "assignee": { "name": "<untrusted-content source=\"fathom:meeting:assignee_name\">Bob</untrusted-content>", "email": "bob@example.com" }
+      }
+    ]
+  }
 }
 ```
 
@@ -144,20 +147,34 @@ node dist/index.js
 }
 ```
 
-## Tools (7)
+## Tools (12)
 
 ### Configuration
 - `configure_fathom_api_key` — Configure the Fathom API key
 
 ### Meetings
-- `list_fathom_meetings` — List meetings with server-side filtering
-- `get_fathom_meeting` — Get details for a single meeting
+- `list_fathom_meetings` — List meetings with server-side filtering (optionally including action items)
+- `get_fathom_meeting` — Get details for a single meeting, including summary and action items
 - `get_fathom_transcript` — Get the transcript for a meeting
 - `get_fathom_meeting_participants` — List the participants of a meeting
+- `get_fathom_action_items` — List action items across meetings (open items by default)
+
+### Recordings
+- `request_fathom_recording_download` — Start async generation of a downloadable recording file
+- `get_fathom_recording_download_status` — Poll a download for its short-lived signed URL
 
 ### Teams
 - `list_fathom_teams` — List all accessible teams
 - `list_fathom_team_members` — List members of a specific team
+
+### Webhooks
+- `create_fathom_webhook` — Push new-meeting data (summary, transcript, action items) to an HTTPS URL you control
+- `delete_fathom_webhook` — Delete a webhook by id
+
+All caller-controllable text returned by these tools (meeting titles, attendee
+names, AI summaries, transcript lines, action item descriptions, team names) is
+wrapped in `<untrusted-content>` envelopes so the host treats meeting content as
+data, not instructions.
 
 ## Licence
 

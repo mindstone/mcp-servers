@@ -31,8 +31,12 @@ describe('Fathom team tools', () => {
 
     expect(json.ok).toBe(true);
     expect(json.teams).toHaveLength(2);
-    expect(json.teams[0]!.name).toBe('Engineering');
-    expect(json.teams[1]!.name).toBe('Sales');
+    expect(json.teams[0]!.name).toBe(
+      '<untrusted-content source="fathom:team:name">Engineering</untrusted-content>',
+    );
+    expect(json.teams[1]!.name).toBe(
+      '<untrusted-content source="fathom:team:name">Sales</untrusted-content>',
+    );
     expect(json.count).toBe(2);
   });
 
