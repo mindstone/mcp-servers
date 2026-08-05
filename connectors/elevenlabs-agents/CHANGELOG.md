@@ -14,6 +14,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - `get_knowledge_base_rag_index_status` and `rebuild_knowledge_base_rag_index` tools: after uploading a knowledge-base document, agents can now check whether retrieval indexing has finished and trigger (re)indexing when it has not, instead of guessing when a document becomes retrievable.
 - `list_agent_tools` and `add_agent_tool` tools: workspace tools (webhook and client) can now be inventoried and created, so webhook wiring — the feature that makes ConvAI agents act on external systems — no longer requires the ElevenLabs dashboard. `add_agent_tool` fails closed when a webhook tool is missing its URL, accepts an `advanced_config` passthrough for the full platform schema, and carries `destructiveHint: true`.
 
+### Removed
+
+- Dead endpoint declarations in `src/endpoints.ts` (`get-signed-url`, agent widget, per-tool get) that no tool ever called. Every remaining declared endpoint is now wired to a tool.
+
 ### Fixed
 
 - README Status section no longer claims a bootstrap placeholder version `0.0.0`; it now points at the released version and changelog, matching the sibling connectors.

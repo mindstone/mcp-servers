@@ -2,14 +2,13 @@
  * Canonical ElevenLabs Conversational AI endpoint paths.
  *
  * Every `/v1/convai/*` path used by this connector lives here so a wrong path
- * is a one-line fix. Keep this file ahead of the staged implementation: later
- * write-side stages extend it rather than hard-coding paths in tool modules.
+ * is a one-line fix. Declarations without a tool behind them are removed
+ * rather than kept as forward-looking signposts.
  */
 
 export const ELEVENLABS_API_V1_BASE = 'https://api.elevenlabs.io/v1';
 
 export const ENDPOINTS = {
-  SIGNED_URL: '/convai/conversation/get-signed-url',
   AGENTS: '/convai/agents',
   AGENTS_CREATE: '/convai/agents/create',
   CONVERSATIONS: '/convai/conversations',
@@ -27,7 +26,6 @@ export const ENDPOINTS = {
   agentDuplicate: (agentId: string) => `/convai/agents/${encodeURIComponent(agentId)}/duplicate`,
   agentSimulateConversation: (agentId: string) =>
     `/convai/agents/${encodeURIComponent(agentId)}/simulate-conversation`,
-  agentWidget: (agentId: string) => `/convai/agents/${encodeURIComponent(agentId)}/widget`,
   conversation: (conversationId: string) => `/convai/conversations/${encodeURIComponent(conversationId)}`,
   conversationAudio: (conversationId: string) =>
     `/convai/conversations/${encodeURIComponent(conversationId)}/audio`,
@@ -43,5 +41,4 @@ export const ENDPOINTS = {
   batchCall: (batchId: string) => `/convai/batch-calling/${encodeURIComponent(batchId)}`,
   batchCallCancel: (batchId: string) => `/convai/batch-calling/${encodeURIComponent(batchId)}/cancel`,
   batchCallRetry: (batchId: string) => `/convai/batch-calling/${encodeURIComponent(batchId)}/retry`,
-  tool: (toolId: string) => `/convai/tools/${encodeURIComponent(toolId)}`,
 } as const;
