@@ -169,6 +169,20 @@ function detectTokenProviderAuthReason(err: unknown): AuthRequiredReason | null 
 }
 
 /**
+ * Graph rejects a $filter it cannot service efficiently (including $filter
+ * combined with $orderby) with HTTP 400 InefficientFilter. Retry and re-auth
+ * cannot help — only a simpler query can — so this failure class gets honest
+ * guidance instead of the generic retry/re-auth copy below.
+ */
+function isInefficientFilterError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const graphErr = err as Error & { code?: string };
+  const code = (graphErr.code ?? '').toLowerCase();
+  const msg = err.message.toLowerCase();
+  return code.includes('inefficientfilter') || msg.includes('sort order is too complex');
+}
+
+/**
  * Map a Microsoft Graph error / shared TokenProvider error into the right
  * tool response. Returns `auth_required` for token-related failures, the
  * generic recovery-guidance envelope otherwise.
@@ -196,6 +210,14 @@ export function buildErrorResponse(err: unknown): CallToolResult {
       ],
       isError: true,
     };
+  }
+  if (isInefficientFilterError(err)) {
+    return errorResponse({
+      error: formatGraphError(err),
+      action_required:
+        'Simplify or remove the $filter argument and retry. Microsoft Graph cannot service this filter (for example when combined with a sort order), so retrying as-is or re-authenticating will not help.',
+      next_step: 'list_emails',
+    });
   }
   return {
     content: [

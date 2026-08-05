@@ -23,6 +23,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 - Graph responses for the new tools (and `create_draft`) are validated with Zod at the boundary instead of cast, per the planned tightening noted in 0.1.1; pre-existing read tools still cast and remain tracked as planned debt.
 
+### Fixed
+
+- `get_conversation` and `list_emails` (when a `filter` is supplied) no longer send `$orderby` alongside `$filter`: Microsoft Graph rejects that combination with HTTP 400 `InefficientFilter`, which made `get_conversation` fail on every live call and `list_emails` fail for any filtered query. Results are now sorted client-side by `receivedDateTime` (oldest first for conversations, newest first for `list_emails`), preserving the documented order. The unfiltered `list_emails` path still lets Graph sort server-side.
+- Error guidance for Graph's `InefficientFilter` rejection now names the actual cause (the filter is too complex, e.g. combined with a sort order) and suggests simplifying or removing the `filter`, instead of pointing at retry/re-authentication, which cannot resolve this failure class.
+
 ## [0.2.0] - 2026-07-29
 
 ### Changed
