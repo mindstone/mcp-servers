@@ -149,3 +149,16 @@ export const userSchema = z
   .passthrough();
 export type MixmaxUser = z.infer<typeof userSchema>;
 
+/**
+ * POST /reports/data/table response. Buckets/totals are flexible aggregation
+ * shapes (they vary by report type), so they are typed as records; the `aggs`
+ * key (raw search-engine internals) is deliberately not surfaced to the model.
+ */
+export const reportResponseSchema = z
+  .object({
+    buckets: z.array(z.record(z.unknown())).default([]),
+    totals: z.record(z.unknown()).optional(),
+    extra: z.record(z.unknown()).optional(),
+  })
+  .passthrough();
+export type ReportResponse = z.infer<typeof reportResponseSchema>;

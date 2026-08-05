@@ -11,6 +11,17 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+- `remove_mixmax_sequence_recipients` — exit specific recipients from a sequence (POST /sequences/:id/cancel); destructiveHint, explicit email list required.
+- `cancel_mixmax_message` — recall a scheduled, not-yet-sent message (DELETE /messages/:id); destructiveHint.
+- `get_mixmax_report` — analytics over messages, meetings, and per-sequence performance (POST /reports/data/table), with query/groupBy/pagination support.
+- `scheduledAt` option on `send_mixmax_snippet` (schedule into the Mixmax Outbox instead of sending immediately) and on `add_mixmax_sequence_recipients` (delayed sequence activation).
+
+### Changed
+- External-text fields in tool responses (message subjects/bodies/recipients, snippet names/titles, sequence names and stage content, meeting type names, user name/email, report bucket strings) are now wrapped in `<untrusted-content>` envelopes per the repo's prompt-injection hardening invariant (FOX-3490).
+- API responses are validated with Zod at the boundary; unexpected shapes surface a structured `INVALID_API_RESPONSE` error instead of passing garbage through.
+- Tool descriptions aligned with the actual Mixmax API response shapes (message recipient/timestamp fields, meeting type `durationMin`/`link`, snippet list fields, and where open/click aggregates actually come from).
+
 ## [0.2.2] - 2026-05-14
 ### Added
 - **registry**: Cohort A backfill — 12 API-key OSS connectors get server.json + mcpName. fathom, humaans, kling, mixmax, nano-banana, napkin, pandadoc, freshdesk, elevenlabs, retell-ai, runway, talentlms each gain a registry-shaped server.json (validated against registry.modelcontextprotocol.io) and an mcpName field on package.json under the io.github.mindstone namespace.

@@ -17,7 +17,7 @@ describe('Smoke test — tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 12 tools with correct names', async () => {
+  it('registers exactly 13 tools with correct names', async () => {
     mswServer.use(...createMixmaxHandlers());
 
     testClient = await createTestClient({
@@ -30,11 +30,12 @@ describe('Smoke test — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(12);
+    expect(toolsResult.tools).toHaveLength(13);
     expect(toolNames).toEqual([
       'add_mixmax_sequence_recipients',
       'cancel_mixmax_message',
       'configure_mixmax_api_key',
+      'get_mixmax_report',
       'get_mixmax_sequence',
       'get_mixmax_user',
       'list_mixmax_meeting_types',
@@ -56,7 +57,7 @@ describe('Smoke test — spawned stdio', () => {
     if (stdioClient) await stdioClient.close();
   });
 
-  it('spawned dist/index.js lists exactly 12 tools', async () => {
+  it('spawned dist/index.js lists exactly 13 tools', async () => {
     // Verify built artifact exists
     expect(existsSync(distPath)).toBe(true);
 
@@ -71,13 +72,14 @@ describe('Smoke test — spawned stdio', () => {
     });
 
     const toolsResult = await stdioClient.client.listTools();
-    expect(toolsResult.tools).toHaveLength(12);
+    expect(toolsResult.tools).toHaveLength(13);
 
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
     expect(toolNames).toEqual([
       'add_mixmax_sequence_recipients',
       'cancel_mixmax_message',
       'configure_mixmax_api_key',
+      'get_mixmax_report',
       'get_mixmax_sequence',
       'get_mixmax_user',
       'list_mixmax_meeting_types',
