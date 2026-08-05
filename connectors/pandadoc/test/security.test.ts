@@ -221,11 +221,86 @@ describe('PandaDoc M3.7 — upload_document sandbox + send_document warning', ()
   });
 
   // ── VAL-PANDADOC-203 ────────────────────────────────────────────
-  it('VAL-PANDADOC-203 — realpathSync wired into upload path (static)', async () => {
+  it('VAL-PANDADOC-203 — upload validates and reads through ONE open descriptor (static)', async () => {
     const documentsTs = fs.readFileSync(
       path.resolve(__dirname, '../src/tools/documents.ts'),
       'utf-8',
     );
-    expect(documentsTs).toMatch(/realpathSync/);
+    // The sandbox-validated path must be opened once, and both the size
+    // check and the read must go through that descriptor — a stat-then-read
+    // pair of path-based calls is a check-then-use race.
+    expect(documentsTs).toMatch(/fs\.openSync\(resolvedPath, 'r'\)/);
+    expect(documentsTs).toMatch(/fs\.fstatSync\(fd\)/);
+    expect(documentsTs).toMatch(/fs\.readFileSync\(fd\)/);
+    expect(documentsTs).not.toMatch(/fs\.readFileSync\(resolvedPath/);
+  });
+
+  // ── VAL-PANDADOC-204 ────────────────────────────────────────────
+  it('VAL-PANDADOC-204 — a directory with a .pdf name is refused via fstat (no upload)', async () => {
+    const workspace = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pd-ws-')));
+    const dirAsFile = path.join(workspace, 'looks-like.pdf');
+    fs.mkdirSync(dirAsFile);
+
+    const upload = uploadHandler();
+    mswServer.use(upload.handler, ...createPandaDocHandlers());
+    testClient = await createTestClient({
+      env: {
+        PANDADOC_API_KEY: 'test-pandadoc-key',
+        MCP_HOST_BRIDGE_STATE: '',
+        MCP_WORKSPACE_PATH: workspace,
+      },
+    });
+
+    const result = await testClient.callTool('upload_document', { file_path: dirAsFile });
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toMatch(/regular file/i);
+    expect(upload.getCallCount()).toBe(0);
+  });
+
+  // ── VAL-PANDADOC-205 ────────────────────────────────────────────
+  it('VAL-PANDADOC-205 — download canonicalises a symlinked TMPDIR and never overwrites', async () => {
+    // Point TMPDIR at a SYMLINK to a real directory: the download must land
+    // under the canonical target, not the lexical (attacker-chosen) alias.
+    const realDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pd-dl-real-')));
+    const linkPath = path.join(os.tmpdir(), `pd-dl-link-${process.pid}-${Date.now()}`);
+    fs.symlinkSync(realDir, linkPath);
+    vi.stubEnv('TMPDIR', linkPath);
+
+    // Plant a file at the OLD deterministic path: a download must not touch it.
+    const legacyPath = path.join(realDir, 'pandadoc_doc-1.pdf');
+    fs.writeFileSync(legacyPath, 'sentinel');
+
+    mswServer.use(...createPandaDocHandlers());
+    testClient = await createTestClient({
+      env: { PANDADOC_API_KEY: 'test-pandadoc-key', MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    try {
+      const first = await testClient.callTool('download_document', { document_id: 'doc-1' });
+      const firstJson = first.json as { ok: boolean; file_path: string };
+      expect(firstJson.ok).toBe(true);
+      // Canonical containment: under the real directory, never the symlink alias.
+      expect(firstJson.file_path.startsWith(realDir + path.sep)).toBe(true);
+      expect(firstJson.file_path.startsWith(linkPath)).toBe(false);
+
+      // A second download of the same document must NOT overwrite the first.
+      const second = await testClient.callTool('download_document', { document_id: 'doc-1' });
+      const secondJson = second.json as { ok: boolean; file_path: string };
+      expect(secondJson.ok).toBe(true);
+      expect(secondJson.file_path).not.toBe(firstJson.file_path);
+      expect(fs.existsSync(firstJson.file_path)).toBe(true);
+      expect(fs.readFileSync(firstJson.file_path, 'utf-8')).toBe('PDF_CONTENT_MOCK');
+      expect(fs.readFileSync(secondJson.file_path, 'utf-8')).toBe('PDF_CONTENT_MOCK');
+
+      // The planted legacy-name file is untouched.
+      expect(fs.readFileSync(legacyPath, 'utf-8')).toBe('sentinel');
+
+      fs.unlinkSync(firstJson.file_path);
+      fs.unlinkSync(secondJson.file_path);
+    } finally {
+      try { fs.unlinkSync(linkPath); } catch { /* noop */ }
+      fs.rmSync(realDir, { recursive: true, force: true });
+    }
   });
 });
