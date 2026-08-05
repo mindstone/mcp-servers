@@ -11,6 +11,9 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Security
+- `gamma_list_themes` and `gamma_list_folders` now return workspace-authored theme and folder names inside `<untrusted-content>` envelopes with close-tag breakout escaping (repo security invariant #6). IDs, cursors, and keywords remain raw.
+
 ### Fixed
 - Removed a duplicated `### Changed` heading in the 0.3.3 entry.
 
