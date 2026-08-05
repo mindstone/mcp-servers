@@ -81,6 +81,24 @@ const mockUser = {
   },
 };
 
+const mockCall = {
+  id: '1101',
+  type: 'call',
+  attributes: {
+    state: 'completed',
+    direction: 'outbound',
+    outcome: 'completed',
+    note: 'Discussed renewal timeline',
+    answeredAt: '2026-04-20T14:00:15Z',
+    completedAt: '2026-04-20T14:32:00Z',
+  },
+  relationships: {
+    prospect: { data: { id: '101', type: 'prospect' } },
+    user: { data: { id: '601', type: 'user' } },
+    callDisposition: { data: { id: '1201', type: 'callDisposition' } },
+  },
+};
+
 const mockSequenceState = {
   id: '701',
   type: 'sequenceState',
@@ -323,6 +341,13 @@ export function createOutreachHandlers() {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;
       return HttpResponse.json(jsonApiList([mockMailing]));
+    }),
+
+    // --- Calls ---
+    http.get(`${OUTREACH_API_BASE}/calls`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      return HttpResponse.json(jsonApiList([mockCall]));
     }),
 
     // --- Users ---

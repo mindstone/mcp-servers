@@ -498,6 +498,34 @@ describe('Tool tests — Outreach MCP server', () => {
     expect(result.json).toHaveProperty('ok', true);
   });
 
+  // --- Calls ---
+
+  it('outreach_list_calls returns calls with disposition link', async () => {
+    mswServer.use(...createOutreachHandlers());
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('outreach_list_calls', { prospect_id: '101' });
+    expect(result.isError).toBeFalsy();
+    expect(result.json).toHaveProperty('ok', true);
+    const records = (result.json as Record<string, unknown>).records as Record<string, unknown>[];
+    expect(records.length).toBeGreaterThan(0);
+    expect(records[0].outcome).toBe('completed');
+    expect(records[0].callDisposition_id).toBe('1201');
+    // Call notes are user-authored: enveloped.
+    expect(records[0].note).toBe(
+      '<untrusted-content source="outreach:call:note">Discussed renewal timeline</untrusted-content>',
+    );
+  });
+
   // --- Users ---
 
   it('outreach_list_users returns users', async () => {

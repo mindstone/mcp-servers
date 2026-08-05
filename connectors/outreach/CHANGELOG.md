@@ -18,6 +18,7 @@ are maintained manually as part of the PR review checklist.
 - `outreach_create_prospect` / `outreach_update_prospect` now accept a `custom_fields` object mapped to Outreach's `custom1`..`custom35` prospect attributes, with out-of-range keys rejected up front.
 - `outreach_create_task` — create a task (note, optional action type, due date, prospect, owner).
 - `outreach_complete_task` — mark a task completed (`destructiveHint: true`, matching the connector's mutate-existing-record convention).
+- `outreach_list_calls` — list calls with direction, outcome, notes, and linked call-disposition ID, filterable by prospect or user.
 
 ### Security
 - Envelope all external, user-authored text returned by the Outreach API (names, emails, subjects, bodies, notes, tags, custom fields) in `<untrusted-content>` envelopes with close-tag breakout escaping, via the single `formatResource` chokepoint (FOX-3490). Vendor-generated structure (ids, timestamps, lifecycle enums) is left raw; every other attribute is enveloped fail-closed.

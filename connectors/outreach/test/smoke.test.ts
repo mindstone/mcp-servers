@@ -16,6 +16,7 @@ const EXPECTED_TOOLS = [
   'outreach_get_sequence',
   'outreach_get_sequence_template',
   'outreach_list_accounts',
+  'outreach_list_calls',
   'outreach_list_connected_accounts',
   'outreach_list_mailings',
   'outreach_list_sequence_steps',
@@ -68,7 +69,7 @@ describe('Smoke test — Outreach MCP server', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(20);
+    expect(toolsResult.tools).toHaveLength(21);
     expect(toolNames).toEqual(EXPECTED_TOOLS);
   });
 
@@ -117,6 +118,7 @@ describe('Smoke test — Outreach MCP server', () => {
       'outreach_get_sequence_template',
       'outreach_list_accounts',
       'outreach_get_account',
+      'outreach_list_calls',
       'outreach_list_tasks',
       'outreach_list_mailings',
       'outreach_list_users',
