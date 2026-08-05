@@ -155,3 +155,36 @@ export const mockContacts = [
     postal_code: null,
   },
 ];
+
+export const mockContentLibraryItems = [
+  {
+    id: 'cli-1',
+    name: 'Standard Pricing Table',
+    date_created: '2026-01-10T08:00:00.000000Z',
+    date_modified: '2026-02-10T08:00:00.000000Z',
+    version: '2',
+  },
+  {
+    id: 'cli-2',
+    name: 'Mutual NDA Clause',
+    date_created: '2026-01-20T08:00:00.000000Z',
+    date_modified: '2026-01-20T08:00:00.000000Z',
+    version: '1',
+  },
+];
+
+export const mockContentLibraryItemDetails = {
+  id: 'cli-1',
+  name: 'Standard Pricing Table',
+  date_created: '2026-01-10T08:00:00.000000Z',
+  date_modified: '2026-02-10T08:00:00.000000Z',
+  content_date_modified: '2026-02-10T08:00:00.000000Z',
+  created_by: { id: 'user-1', email: 'admin@co.com', first_name: 'Admin', last_name: 'User' },
+  metadata: { department: 'sales' },
+  tokens: [{ name: 'Client.CompanyName', value: '' }],
+  fields: [],
+  pricing: { tables: [] },
+  tags: ['approved'],
+  roles: [],
+  version: '2',
+};

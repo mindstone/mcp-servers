@@ -19,6 +19,8 @@ are maintained manually as part of the PR review checklist.
 - `list_document_folders` — list document folders (`GET /documents/folders`, with `parent_uuid` paging into subfolders) so `folder_uuid` inputs are discoverable in-product instead of requiring out-of-band knowledge.
 - `list_contacts` — list workspace contacts (`GET /contacts`, optional exact-email filter) to discover existing recipients before creating or sending documents.
 - `create_document_from_url` — create a document from a publicly accessible HTTPS PDF URL (`POST /documents` with `url`), sidestepping the local-file sandbox of `upload_document` for cloud-hosted files. Supports recipients, fields, tokens, metadata, tags, and `folder_uuid`; marked `destructiveHint: true`.
+- `list_content_library_items` — search/list content library items (`GET /content-library-items` with q/id/folder/tag/deleted filters) for proposal assembly from approved reusable blocks.
+- `get_content_library_item_details` — full content library item details (`GET /content-library-items/{id}/details`): roles, fields, tokens, pricing, metadata, and tags.
 
 ## [0.2.2] - 2026-05-14
 ### Added

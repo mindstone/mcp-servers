@@ -8,6 +8,8 @@ import {
   mockSessionResponse,
   mockDocumentFolders,
   mockContacts,
+  mockContentLibraryItems,
+  mockContentLibraryItemDetails,
 } from '../fixtures/pandadoc-data.js';
 
 const BASE = 'https://api.pandadoc.com/public/v1';
@@ -46,6 +48,32 @@ export function createPandaDocHandlers(expectedKey = 'test-pandadoc-key') {
         filtered = mockContacts.filter(c => c.email === email);
       }
       return HttpResponse.json({ results: filtered });
+    }),
+
+    // GET /content-library-items (list) — must precede the /:id handlers.
+    http.get(`${BASE}/content-library-items`, ({ request }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+
+      const url = new URL(request.url);
+      const q = url.searchParams.get('q');
+      let filtered = mockContentLibraryItems;
+      if (q) {
+        filtered = mockContentLibraryItems.filter(i => i.name.toLowerCase().includes(q.toLowerCase()));
+      }
+      return HttpResponse.json({ results: filtered });
+    }),
+
+    // GET /content-library-items/:id/details
+    http.get(`${BASE}/content-library-items/:id/details`, ({ request, params }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+
+      const id = params.id as string;
+      if (id === 'cli-1') {
+        return HttpResponse.json(mockContentLibraryItemDetails);
+      }
+      return HttpResponse.json({ type: 'not_found', detail: 'Content library item not found' }, { status: 404 });
     }),
 
     // GET /documents (list)

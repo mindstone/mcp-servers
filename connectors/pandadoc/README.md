@@ -9,7 +9,7 @@ PandaDoc document automation MCP server for Model Context Protocol hosts. Create
 
 - **Version:** [0.2.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-pandadoc)
 - **Auth:** API key ([`PANDADOC_API_KEY`](./server.json))
-- **Tools:** [13](./src/tools/) (documents, templates, folders, contacts)
+- **Tools:** [15](./src/tools/) (documents, templates, folders, contacts, content library)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -114,7 +114,7 @@ node dist/index.js
 }
 ```
 
-## Tools (13)
+## Tools (15)
 
 ### Configuration
 - `configure_pandadoc_api_key` — Configure the PandaDoc API key
@@ -136,6 +136,10 @@ node dist/index.js
 ### Folders & Contacts
 - `list_document_folders` — List document folders (discover folder UUIDs for create/filter inputs)
 - `list_contacts` — List workspace contacts (discover recipients)
+
+### Content Library
+- `list_content_library_items` — Search/list reusable content library blocks
+- `get_content_library_item_details` — Get a content library item's fields, tokens, pricing, and metadata
 
 ## Licence
 

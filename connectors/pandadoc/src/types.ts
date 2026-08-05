@@ -58,6 +58,10 @@ export interface ContactListResponse {
   results: Record<string, unknown>[];
 }
 
+export interface ContentLibraryItemListResponse {
+  results: Record<string, unknown>[];
+}
+
 export interface DocumentCreateResponse {
   id: string;
   name: string;
