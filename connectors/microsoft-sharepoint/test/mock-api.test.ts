@@ -400,13 +400,17 @@ describe('microsoft-sharepoint mock-API integration', () => {
     const json = result.json as {
       ok?: unknown;
       count: number;
+      truncated: boolean;
       columns: Array<{ name?: string; displayName?: string; type: string; required: boolean }>;
     };
     expect(json.ok).toBeUndefined();
     expect(json.count).toBe(2);
+    expect(json.truncated).toBe(false);
     expect(json.columns[0]?.type).toBe('text');
     expect(json.columns[1]?.type).toBe('choice');
     expect(json.columns[1]?.required).toBe(true);
+    // Both the internal column name and the display name are tenant-controlled.
+    expect(json.columns[0]?.name).toContain('<untrusted-content');
     expect(json.columns[1]?.displayName).toContain('<untrusted-content');
   });
 
@@ -488,6 +492,7 @@ describe('microsoft-sharepoint mock-API integration', () => {
     const json = result.json as {
       ok?: unknown;
       count: number;
+      truncated: boolean;
       permissions: Array<{
         id: string;
         roles: Array<string | undefined>;
@@ -498,6 +503,7 @@ describe('microsoft-sharepoint mock-API integration', () => {
     };
     expect(json.ok).toBeUndefined();
     expect(json.count).toBe(1);
+    expect(json.truncated).toBe(false);
     expect(json.permissions[0]?.id).toBe('perm-1');
     expect(json.permissions[0]?.grantedTo[0]?.displayName).toContain('<untrusted-content');
     expect(json.permissions[0]?.grantedTo[0]?.displayName).toContain('Alice Example');

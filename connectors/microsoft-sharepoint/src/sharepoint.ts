@@ -62,6 +62,39 @@ export function validateVendorUrl(rawUrl: unknown): URL | null {
   return allowed ? url : null;
 }
 
+// -- Collection pagination --
+
+/** Cap on auto-followed collection items so a huge or hostile collection cannot pin a tool call. */
+const MAX_COLLECTION_ITEMS = 1000;
+
+/**
+ * Parse a Graph collection page and follow `@odata.nextLink` continuations
+ * (each vendor-host validated; the Graph client passes absolute URLs through)
+ * until the collection is exhausted or capped. `truncated: true` marks the
+ * result as a prefix rather than the complete collection, so callers never
+ * mistake "first page only" for "everything".
+ */
+async function fetchGraphCollection<S extends z.ZodTypeAny>(
+  client: Client,
+  itemSchema: S,
+  firstResponse: unknown,
+  signal: AbortSignal,
+): Promise<{ items: z.infer<S>[]; truncated: boolean }> {
+  const pageSchema = z.object({
+    value: z.array(itemSchema),
+    '@odata.nextLink': z.string().optional(),
+  });
+  let page = pageSchema.parse(firstResponse);
+  const items = [...page.value];
+  let nextLink = page['@odata.nextLink'];
+  while (nextLink !== undefined && items.length < MAX_COLLECTION_ITEMS && validateVendorUrl(nextLink)) {
+    page = pageSchema.parse(await client.api(nextLink).options({ signal }).get());
+    items.push(...page.value);
+    nextLink = page['@odata.nextLink'];
+  }
+  return { items, truncated: nextLink !== undefined };
+}
+
 const GraphIdentitySchema = z.object({
   displayName: z.string().optional(),
   email: z.string().optional(),
@@ -1478,12 +1511,21 @@ export async function listListColumns(
     .api(`/sites/${args.siteId}/lists/${args.listId}/columns`)
     .options({ signal })
     .get();
-  const columns = parseGraphCollection(GraphColumnDefinitionSchema, response);
+  const { items: columns, truncated } = await fetchGraphCollection(
+    client,
+    GraphColumnDefinitionSchema,
+    response,
+    signal,
+  );
 
   return successResult({
     siteId: args.siteId,
     listId: args.listId,
     count: columns.length,
+    truncated,
+    ...(truncated
+      ? { note: 'Result capped — this list has more columns than returned here.' }
+      : {}),
     columns: columns.map((column) => ({
       id: column.id,
       name: wrapUntrusted(column.name, 'microsoft-sharepoint:list_list_columns:name'),
@@ -1754,12 +1796,21 @@ export async function listFileVersions(
   const top = Math.min(args.top ?? 50, 200);
   const endpoint = `${buildDriveEndpoint(args.driveId, args.itemId)}/versions`;
   const response = await client.api(endpoint).options({ signal }).top(top).get();
-  const versions = parseGraphCollection(GraphDriveItemVersionSchema, response);
+  const { items: versions, truncated } = await fetchGraphCollection(
+    client,
+    GraphDriveItemVersionSchema,
+    response,
+    signal,
+  );
 
   return successResult({
     driveId: args.driveId,
     itemId: args.itemId,
     count: versions.length,
+    truncated,
+    ...(truncated
+      ? { note: 'Result capped — this file has more versions than returned here.' }
+      : {}),
     versions: versions.map((version) => ({
       id: version.id,
       size: formatSize(version.size),
@@ -1793,12 +1844,21 @@ export async function listItemPermissions(
 
   const endpoint = `${buildDriveEndpoint(args.driveId, args.itemId)}/permissions`;
   const response = await client.api(endpoint).options({ signal }).get();
-  const permissions = parseGraphCollection(GraphPermissionSchema, response);
+  const { items: permissions, truncated } = await fetchGraphCollection(
+    client,
+    GraphPermissionSchema,
+    response,
+    signal,
+  );
 
   return successResult({
     driveId: args.driveId,
     itemId: args.itemId,
     count: permissions.length,
+    truncated,
+    ...(truncated
+      ? { note: 'Result capped — this item has more permissions than returned here.' }
+      : {}),
     permissions: permissions.map((permission) => formatPermission(permission, 'list_item_permissions')),
   });
 }
@@ -2179,7 +2239,18 @@ export async function getSitesDelta(
   args: GetSitesDeltaArgs,
   signal: AbortSignal,
 ): Promise<ToolResult> {
-  const endpoint = args.deltaLink || '/sites/delta()';
+  let endpoint = '/sites/delta()';
+  if (args.deltaLink) {
+    // deltaLink is caller-supplied and is fetched WITH the user's auth header,
+    // so only follow vendor-issued continuation URLs — anything else would
+    // exfiltrate the access token to a third-party host.
+    if (!validateVendorUrl(args.deltaLink)) {
+      return errorResult(
+        'Invalid "deltaLink": provide the HTTPS deltaLink/nextLink URL returned by a previous get_sites_delta call (Microsoft Graph host).',
+      );
+    }
+    endpoint = args.deltaLink;
+  }
 
   try {
     const response = await client.api(endpoint).options({ signal }).get();

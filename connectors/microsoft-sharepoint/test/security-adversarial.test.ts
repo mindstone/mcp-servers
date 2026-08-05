@@ -171,4 +171,105 @@ describe('microsoft-sharepoint adversarial hardening', () => {
     });
   });
 
+  describe('pagination', () => {
+    it('list_list_columns follows a vendor nextLink and merges pages', async () => {
+      mswServer.use(
+        http.get(/^https:\/\/graph\.microsoft\.com\/v1\.0\/sites\/[^/]+\/lists\/[^/]+\/columns$/, ({ request }) => {
+          const url = new URL(request.url);
+          if (url.searchParams.get('$skiptoken') === 'page2') {
+            return HttpResponse.json({
+              value: [{ id: 'col-3', name: 'PageTwo', displayName: 'Page Two', text: {} }],
+            });
+          }
+          return HttpResponse.json({
+            value: [{ id: 'col-1', name: 'Title', displayName: 'Title', text: {} }],
+            '@odata.nextLink':
+              'https://graph.microsoft.com/v1.0/sites/site-1/lists/list-1/columns?$skiptoken=page2',
+          });
+        }),
+      );
+      const result = await client.callTool('list_list_columns', { siteId: 'site-1', listId: 'list-1' });
+      expect(result.isError).not.toBe(true);
+      const json = result.json as { count: number; truncated: boolean; columns: Array<{ id: string }> };
+      expect(json.count).toBe(2);
+      expect(json.truncated).toBe(false);
+      expect(json.columns.map((c) => c.id)).toEqual(['col-1', 'col-3']);
+    });
+
+    it('list_item_permissions marks a hostile nextLink as truncated and never fetches it', async () => {
+      let evilHit = false;
+      mswServer.use(
+        http.get(/^https:\/\/graph\.microsoft\.com\/v1\.0\/drives\/[^/]+\/items\/[^/]+\/permissions$/, () =>
+          HttpResponse.json({
+            value: [{ id: 'perm-1', roles: ['read'] }],
+            '@odata.nextLink': 'https://evil.example.com/permissions?page=2',
+          }),
+        ),
+        http.all(/^https:\/\/evil\.example\.com\/.*/, () => {
+          evilHit = true;
+          return HttpResponse.json({ value: [] });
+        }),
+      );
+      const result = await client.callTool('list_item_permissions', { driveId: 'drive-1', itemId: 'item-1' });
+      expect(result.isError).not.toBe(true);
+      const json = result.json as { count: number; truncated: boolean; note?: string };
+      expect(json.count).toBe(1);
+      expect(json.truncated).toBe(true);
+      expect(json.note).toContain('capped');
+      expect(evilHit).toBe(false);
+    });
+
+    it('list_file_versions follows a vendor nextLink across pages', async () => {
+      mswServer.use(
+        http.get(/^https:\/\/graph\.microsoft\.com\/v1\.0\/drives\/[^/]+\/items\/[^/]+\/versions$/, ({ request }) => {
+          const url = new URL(request.url);
+          if (url.searchParams.get('$skiptoken') === 'v2') {
+            return HttpResponse.json({
+              value: [{ id: '3.0', size: 62, lastModifiedDateTime: '2026-05-20T10:00:00Z' }],
+            });
+          }
+          return HttpResponse.json({
+            value: [{ id: '1.0', size: 42, lastModifiedDateTime: '2026-05-18T10:00:00Z' }],
+            '@odata.nextLink':
+              'https://graph.microsoft.com/v1.0/drives/drive-1/items/item-1/versions?$skiptoken=v2',
+          });
+        }),
+      );
+      const result = await client.callTool('list_file_versions', { driveId: 'drive-1', itemId: 'item-1' });
+      expect(result.isError).not.toBe(true);
+      const json = result.json as { count: number; truncated: boolean; versions: Array<{ id: string }> };
+      expect(json.count).toBe(2);
+      expect(json.truncated).toBe(false);
+      expect(json.versions.map((v) => v.id)).toEqual(['1.0', '3.0']);
+    });
+  });
+
+  describe('get_sites_delta caller-supplied deltaLink', () => {
+    it('rejects a non-vendor deltaLink instead of fetching it with credentials', async () => {
+      let evilHit = false;
+      mswServer.use(
+        http.all(/^https:\/\/evil\.example\.com\/.*/, () => {
+          evilHit = true;
+          return HttpResponse.json({ value: [] });
+        }),
+      );
+      const result = await client.callTool('get_sites_delta', {
+        deltaLink: 'https://evil.example.com/sites/delta?token=steal-me',
+      });
+      expect(result.isError).toBe(true);
+      const json = result.json as ErrorJson;
+      expect(json.error).toContain('deltaLink');
+      expect(evilHit).toBe(false);
+    });
+
+    it('follows the vendor-issued deltaLink from a previous call', async () => {
+      const first = await client.callTool('get_sites_delta', {});
+      expect(first.isError).not.toBe(true);
+      const firstJson = first.json as { deltaLink: string };
+      const second = await client.callTool('get_sites_delta', { deltaLink: firstJson.deltaLink });
+      expect(second.isError).not.toBe(true);
+      const followUp = state.requests.find((r) => r.pathname === '/v1.0/sites/delta(token)');
+      expect(followUp).toBeDefined();
+    });
+  });
 });
