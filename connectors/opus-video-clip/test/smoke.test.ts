@@ -10,6 +10,7 @@ const EXPECTED_TOOLS = [
   'opus_create_project',
   'opus_create_social_copy_job',
   'opus_delete_collection',
+  'opus_download_clip',
   'opus_export_collection',
   'opus_get_brand_templates',
   'opus_get_censor_job_status',
@@ -45,7 +46,7 @@ describe('Smoke test — Opus connector', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 21 tools with the expected names', async () => {
+  it('registers exactly 22 tools with the expected names', async () => {
     testClient = await freshClient({ OPUS_API_KEY: 'mock-opus-key' });
 
     const toolsResult = await testClient.client.listTools();
@@ -64,7 +65,7 @@ describe('Smoke test — Opus connector', () => {
 });
 
 describe('Spawned stdio smoke test', () => {
-  it('lists 21 tools from built dist/index.js', async () => {
+  it('lists 22 tools from built dist/index.js', async () => {
     const { createStdioTestClient } = await import('@mindstone/mcp-test-harness');
     const { join } = await import('path');
 
@@ -80,7 +81,7 @@ describe('Spawned stdio smoke test', () => {
 
     try {
       const toolsResult = await client.client.listTools();
-      expect(toolsResult.tools).toHaveLength(21);
+      expect(toolsResult.tools).toHaveLength(22);
     } finally {
       await client.close();
     }

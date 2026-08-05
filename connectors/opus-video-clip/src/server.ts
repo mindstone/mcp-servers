@@ -8,6 +8,7 @@ import {
   registerCensorTools,
   registerCollectionTools,
   registerCollectionContentTools,
+  registerDownloadTools,
   registerSocialPostingTools,
 } from './tools/index.js';
 
@@ -27,6 +28,7 @@ export function createServer(): McpServer {
   registerCensorTools(server);
   registerCollectionTools(server);
   registerCollectionContentTools(server);
+  registerDownloadTools(server);
   registerSocialPostingTools(server);
 
   return server;

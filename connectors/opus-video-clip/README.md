@@ -81,11 +81,11 @@ node dist/index.js
 
 ### Local-file sandbox
 
-`opus_upload_video` reads are confined to a workspace sandbox:
-`MCP_WORKSPACE_PATH` when set, otherwise the system temp directory. Paths
-outside the sandbox — including `..` traversal and symlinks that escape it —
-are refused. Place source videos inside the workspace (or temp) directory
-before uploading.
+`opus_upload_video` (reads) and `opus_download_clip` (writes) are confined to a
+workspace sandbox: `MCP_WORKSPACE_PATH` when set, otherwise the system temp
+directory. Paths outside the sandbox — including `..` traversal and symlinks
+that escape it — are refused. Place source videos inside the workspace (or
+temp) directory before uploading, and pick download targets inside it.
 
 ## Host configuration examples
 
@@ -121,7 +121,7 @@ before uploading.
 }
 ```
 
-## Tools (21)
+## Tools (22)
 
 ### Configuration
 - `configure_opus_api_key` — Configure the OpusClip API key
@@ -136,7 +136,10 @@ before uploading.
 - `opus_share_project` — Update a project's sharing visibility
 
 ### Upload
-- `opus_upload_video` — Upload a local video file and create a clip project (orchestrates the 4-step GCS resumable upload)
+- `opus_upload_video` — Upload a local video file and create a clip project (orchestrates the 4-step GCS resumable upload; reads confined to the workspace sandbox)
+
+### Downloads
+- `opus_download_clip` — Download an exported clip MP4 to a local file inside the workspace sandbox
 
 ### Censor jobs
 - `opus_create_censor_job` — Create a censor job for a clip

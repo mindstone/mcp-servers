@@ -8,6 +8,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- `opus_download_clip` — download an exported clip MP4 (`uriForExport` URL)
+  to a local file, with SSRF validation (HTTPS only, no private/loopback
+  hosts, manual redirect handling with per-hop re-validation) and a
+  workspace-confined write target.
 - `MCP_WORKSPACE_PATH` declared in `server.json` (optional).
 
 ### Changed
@@ -31,6 +35,8 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   strings, and raw debug dumps — is now wrapped in
   `<untrusted-content source="…">` envelopes with close-tag breakout
   escaping (AGENTS.md invariant #6).
+- `opus_download_clip` writes are confined to the same workspace sandbox and
+  never write through a symlink at the target path.
 
 ## [0.1.0] - 2026-05-19
 
