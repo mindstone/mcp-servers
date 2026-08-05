@@ -11,7 +11,7 @@ Zendesk Support MCP server — tickets, users, comments, macros, account setup, 
 
 - **Version:** [0.3.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-zendesk)
 - **Auth:** Hybrid (API token or OAuth) ([`ZENDESK_CLIENT_SECRET`](./server.json))
-- **Tools:** [20](./src/tools/) (tickets, users, comments, macros)
+- **Tools:** [21](./src/tools/) (tickets, users, comments, macros, views)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -185,7 +185,7 @@ EOF
 }
 ```
 
-## Tools (20)
+## Tools (21)
 
 ### Account management
 - `list_zendesk_accounts` — List connected accounts with auth status
@@ -212,6 +212,7 @@ EOF
 - `list_zendesk_groups` — List agent groups
 - `list_zendesk_ticket_fields` — List ticket fields including custom fields
 - `list_zendesk_views` — List saved ticket views
+- `list_zendesk_view_tickets` — Execute a view and list its tickets
 - `list_zendesk_organizations` — List organizations
 
 ### Macros

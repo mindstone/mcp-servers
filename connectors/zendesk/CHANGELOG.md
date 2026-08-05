@@ -14,6 +14,9 @@ are maintained manually as part of the PR review checklist.
 ### Security
 - Migrated the untrusted-content envelope from the connector-local hand-rolled implementation to the canonical shared helper (`src/untrusted-content.ts`, vendored from the connector template per security invariant #6) and extended coverage: ticket subjects are now enveloped in every read path (previously only search results), and user names/emails, organization names, and macro titles are enveloped as well.
 
+### Added
+- `list_zendesk_view_tickets` — execute a Zendesk view and list its tickets (`GET /api/v2/views/{id}/tickets.json`), closing the gap where `list_zendesk_views` advertised finding tickets by view but no tool could run one.
+
 ### Changed
 - Reworked `README.md` to explain when to choose this local Zendesk connector, what support workflows it helps with, and how it handles customer-authored ticket content.
 

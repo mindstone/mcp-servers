@@ -151,6 +151,15 @@ export function createZendeskHandlers(subdomain: string, options: ZendeskMockOpt
       return HttpResponse.json({ views: defaultViews });
     }),
 
+    // View tickets (used by list_zendesk_view_tickets)
+    http.get(`${base}/views/:viewId/tickets.json`, () => {
+      return HttpResponse.json({
+        tickets: defaultTickets,
+        count: defaultTickets.length,
+        next_page: null,
+      });
+    }),
+
     // Organizations
     http.get(`${base}/organizations.json`, () => {
       return HttpResponse.json({
