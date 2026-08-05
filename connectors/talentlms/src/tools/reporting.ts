@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { talentlmsFetch } from '../client.js';
 import { withErrorHandling } from '../utils.js';
+import { wrapExternalTextFields } from '../envelope.js';
 
 export function registerReportingTools(server: McpServer): void {
   server.registerTool(
@@ -15,7 +16,7 @@ export function registerReportingTools(server: McpServer): void {
     },
     withErrorHandling(async () => {
       const info = await talentlmsFetch<Record<string, unknown>>('/siteinfo');
-      return JSON.stringify({ ok: true, siteInfo: info });
+      return JSON.stringify({ ok: true, siteInfo: wrapExternalTextFields(info, 'talentlms:siteinfo') });
     }),
   );
 
@@ -32,7 +33,7 @@ export function registerReportingTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const timeline = await talentlmsFetch<Array<Record<string, unknown>>>(`/gettimeline/type:${args.type}`);
-      return JSON.stringify({ ok: true, timeline, count: timeline.length });
+      return JSON.stringify({ ok: true, timeline: wrapExternalTextFields(timeline, 'talentlms:timeline'), count: timeline.length });
     }),
   );
 
@@ -56,7 +57,8 @@ export function registerReportingTools(server: McpServer): void {
       const result = await talentlmsFetch<Record<string, unknown>>(
         `/getuserstatusincourse/course_id:${encodeURIComponent(args.course_id)},user_id:${encodeURIComponent(args.user_id)}`,
       );
-      return JSON.stringify({ ok: true, progress: result });
+      return JSON.stringify({ ok: true, progress: wrapExternalTextFields(result, 'talentlms:user-progress') });
     }),
   );
+
 }

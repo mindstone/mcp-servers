@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { talentlmsFetch } from '../client.js';
 import { withErrorHandling } from '../utils.js';
+import { wrapExternalTextFields } from '../envelope.js';
 
 export function registerAssessmentTools(server: McpServer): void {
   server.registerTool(
@@ -23,7 +24,7 @@ export function registerAssessmentTools(server: McpServer): void {
       const result = await talentlmsFetch<Record<string, unknown>>(
         `/gettestanswers/test_id:${encodeURIComponent(args.test_id)},user_id:${encodeURIComponent(args.user_id)}`,
       );
-      return JSON.stringify({ ok: true, testAnswers: result });
+      return JSON.stringify({ ok: true, testAnswers: wrapExternalTextFields(result, 'talentlms:test-answers') });
     }),
   );
 
@@ -43,7 +44,7 @@ export function registerAssessmentTools(server: McpServer): void {
       const result = await talentlmsFetch<Record<string, unknown>>(
         `/getsurveyanswers/survey_id:${encodeURIComponent(args.survey_id)},user_id:${encodeURIComponent(args.user_id)}`,
       );
-      return JSON.stringify({ ok: true, surveyAnswers: result });
+      return JSON.stringify({ ok: true, surveyAnswers: wrapExternalTextFields(result, 'talentlms:survey-answers') });
     }),
   );
 
@@ -65,7 +66,7 @@ export function registerAssessmentTools(server: McpServer): void {
       const sessions = await talentlmsFetch<Array<Record<string, unknown>>>(
         `/getiltsessions/ilt_id:${encodeURIComponent(args.ilt_id)}`,
       );
-      return JSON.stringify({ ok: true, sessions, count: sessions.length });
+      return JSON.stringify({ ok: true, sessions: wrapExternalTextFields(sessions, 'talentlms:ilt-sessions'), count: sessions.length });
     }),
   );
 }

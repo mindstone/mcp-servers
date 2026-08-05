@@ -8,9 +8,9 @@ export const MOCK_DOMAIN = 'acme';
 // ─── Users ──────────────────────────────────────────────
 
 export const mockUsers = [
-  { id: '1', login: 'jdoe', first_name: 'Jane', last_name: 'Doe', email: 'jane@acme.com', role: 'learner', status: 'active', last_updated: '2026-02-01' },
-  { id: '2', login: 'bsmith', first_name: 'Bob', last_name: 'Smith', email: 'bob@acme.com', role: 'admin', status: 'active', last_updated: '2026-02-10' },
-  { id: '3', login: 'cjones', first_name: 'Carol', last_name: 'Jones', email: 'carol@acme.com', role: 'learner', status: 'inactive', last_updated: '2026-01-15' },
+  { id: '1', login: 'jdoe', first_name: 'Jane', last_name: 'Doe', email: 'jane@acme.com', role: 'learner', status: 'active', last_updated: '2026-02-01', points: '120', level: '2' },
+  { id: '2', login: 'bsmith', first_name: 'Bob', last_name: 'Smith', email: 'bob@acme.com', role: 'admin', status: 'active', last_updated: '2026-02-10', points: '450', level: '5' },
+  { id: '3', login: 'cjones', first_name: 'Carol', last_name: 'Jones', email: 'carol@acme.com', role: 'learner', status: 'inactive', last_updated: '2026-01-15', points: '30', level: '1' },
 ];
 
 export const mockUserFull = {
@@ -18,9 +18,14 @@ export const mockUserFull = {
   bio: 'Engineering lead',
   timezone: 'Europe/Athens',
   created_on: '2025-06-01',
+  custom_field_1: 'Blue team',
   courses: [
     { id: '10', name: 'Onboarding 101', role: 'learner', completion_status: 'completed', completion_percentage: '100', total_time: '3600', last_accessed: '2026-01-20' },
     { id: '20', name: 'Security Training', role: 'learner', completion_status: 'incomplete', completion_percentage: '45', total_time: '1200', last_accessed: '2026-02-15' },
+  ],
+  certifications: [
+    { course_id: '20', course_name: 'Security Training', unique_id: 'abc123', issued_date: '2026-01-10', expiration_date: '2027-01-10' },
+    { course_id: '10', course_name: 'Onboarding 101', unique_id: 'def456', issued_date: '2025-06-15', expiration_date: 'Never' },
   ],
 };
 

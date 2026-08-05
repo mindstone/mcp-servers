@@ -39,8 +39,8 @@ describe('Reporting tools', () => {
     expect(data.ok).toBe(true);
     expect(data.branches).toHaveLength(2);
     expect(data.count).toBe(2);
-    expect(data.branches[0].name).toBe('EMEA');
-    expect(data.branches[1].name).toBe('APAC');
+    expect(data.branches[0].name).toBe('<untrusted-content source="talentlms:branches">EMEA</untrusted-content>');
+    expect(data.branches[1].name).toBe('<untrusted-content source="talentlms:branches">APAC</untrusted-content>');
   });
 
   it('get_talentlms_site_info returns site stats', async () => {
@@ -51,7 +51,7 @@ describe('Reporting tools', () => {
     expect(data.ok).toBe(true);
     expect(data.siteInfo.total_users).toBe('150');
     expect(data.siteInfo.total_courses).toBe('25');
-    expect(data.siteInfo.site_name).toBe('Acme LMS');
+    expect(data.siteInfo.site_name).toBe('<untrusted-content source="talentlms:siteinfo">Acme LMS</untrusted-content>');
   });
 
   it('get_talentlms_timeline returns user timeline', async () => {
@@ -77,4 +77,5 @@ describe('Reporting tools', () => {
     expect(data.progress.units[0].status).toBe('completed');
     expect(data.progress.units[1].status).toBe('incomplete');
   });
+
 });

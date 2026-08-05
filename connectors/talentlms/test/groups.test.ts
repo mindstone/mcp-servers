@@ -39,7 +39,17 @@ describe('Group tools', () => {
     expect(data.ok).toBe(true);
     expect(data.groups).toHaveLength(2);
     expect(data.count).toBe(2);
-    expect(data.groups[0].name).toBe('Sales Team');
+    expect(data.groups[0].name).toBe('<untrusted-content source="talentlms:groups">Sales Team</untrusted-content>');
+  });
+
+  it('list_talentlms_groups forwards page_size and page_number', async () => {
+    const client = await getClient();
+    const result = await client.callTool('list_talentlms_groups', { page_size: 1, page_number: 2 });
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(data.ok).toBe(true);
+    expect(data.groups).toHaveLength(1);
+    expect(data.groups[0].id).toBe('6');
   });
 
   it('get_talentlms_group returns group with members and courses', async () => {
@@ -48,7 +58,7 @@ describe('Group tools', () => {
     const data = JSON.parse(result.content[0].text as string);
 
     expect(data.ok).toBe(true);
-    expect(data.group.name).toBe('Sales Team');
+    expect(data.group.name).toBe('<untrusted-content source="talentlms:group">Sales Team</untrusted-content>');
     expect(data.group.users).toHaveLength(2);
     expect(data.group.courses).toHaveLength(1);
   });

@@ -1,27 +1,32 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { talentlmsFetch, formEncode } from '../client.js';
-import { withErrorHandling } from '../utils.js';
+import { withErrorHandling, paginationFields, paginatedPath } from '../utils.js';
+import { wrapExternalTextFields } from '../envelope.js';
 
 export function registerUserTools(server: McpServer): void {
   server.registerTool(
     'list_talentlms_users',
     {
       description:
-        'List all users in TalentLMS.\n\n' +
+        'List users in TalentLMS.\n\n' +
+        'TalentLMS returns 20 users per page by default; pass page_size (max 1000) and page_number to page through larger tenants.\n\n' +
         'Returns: id, login, first_name, last_name, email, role, status, last_updated.\n\n' +
         'RELATED TOOLS:\n' +
         '- get_talentlms_user: Get full profile by ID\n' +
         '- get_talentlms_user_courses: See courses a user is enrolled in',
-      inputSchema: z.object({}),
+      inputSchema: z.object({ ...paginationFields }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
-    withErrorHandling(async () => {
-      const users = await talentlmsFetch<Array<Record<string, unknown>>>('/users');
-      const compact = users.map(u => ({
-        id: u.id, login: u.login, first_name: u.first_name, last_name: u.last_name,
-        email: u.email, role: u.role, status: u.status, last_updated: u.last_updated,
-      }));
+    withErrorHandling(async (args) => {
+      const users = await talentlmsFetch<Array<Record<string, unknown>>>(paginatedPath('/users', args));
+      const compact = wrapExternalTextFields(
+        users.map(u => ({
+          id: u.id, login: u.login, first_name: u.first_name, last_name: u.last_name,
+          email: u.email, role: u.role, status: u.status, last_updated: u.last_updated,
+        })),
+        'talentlms:users',
+      );
       return JSON.stringify({ ok: true, users: compact, count: compact.length });
     }),
   );
@@ -51,7 +56,7 @@ export function registerUserTools(server: McpServer): void {
         ? `/users/id:${encodeURIComponent(userId)}`
         : `/users/email:${encodeURIComponent(email!)}`;
       const user = await talentlmsFetch<Record<string, unknown>>(path);
-      return JSON.stringify({ ok: true, user });
+      return JSON.stringify({ ok: true, user: wrapExternalTextFields(user, 'talentlms:user') });
     }),
   );
 
@@ -92,7 +97,7 @@ export function registerUserTools(server: McpServer): void {
         method: 'POST',
         body,
       });
-      return JSON.stringify({ ok: true, message: 'User created.', user });
+      return JSON.stringify({ ok: true, message: 'User created.', user: wrapExternalTextFields(user, 'talentlms:user') });
     }),
   );
 
@@ -112,7 +117,7 @@ export function registerUserTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       const path = `/usersetstatus/user_id:${encodeURIComponent(args.user_id)},status:${args.status}`;
       const result = await talentlmsFetch<Record<string, unknown>>(path);
-      return JSON.stringify({ ok: true, message: `User status set to ${args.status}.`, result });
+      return JSON.stringify({ ok: true, message: `User status set to ${args.status}.`, result: wrapExternalTextFields(result, 'talentlms:user') });
     }),
   );
 
@@ -131,7 +136,10 @@ export function registerUserTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const user = await talentlmsFetch<Record<string, unknown>>(`/users/id:${encodeURIComponent(args.user_id)}`);
-      const courses = (user.courses as Array<Record<string, unknown>>) || [];
+      const courses = wrapExternalTextFields(
+        (user.courses as Array<Record<string, unknown>>) || [],
+        'talentlms:user-courses',
+      );
       return JSON.stringify({ ok: true, courses, count: courses.length });
     }),
   );

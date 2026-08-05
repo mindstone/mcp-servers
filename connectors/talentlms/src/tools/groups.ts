@@ -1,23 +1,25 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { talentlmsFetch, formEncode } from '../client.js';
-import { withErrorHandling } from '../utils.js';
+import { withErrorHandling, paginationFields, paginatedPath } from '../utils.js';
+import { wrapExternalTextFields } from '../envelope.js';
 
 export function registerGroupTools(server: McpServer): void {
   server.registerTool(
     'list_talentlms_groups',
     {
       description:
-        'List all groups in TalentLMS.\n\n' +
+        'List groups in TalentLMS.\n\n' +
+        'TalentLMS returns 20 groups per page by default; pass page_size (max 1000) and page_number to page through larger tenants.\n\n' +
         'Returns: id, name, description, creator_id, created_on, key (enrollment key).\n\n' +
         'RELATED TOOLS:\n' +
         '- get_talentlms_group: Get group details including members and courses',
-      inputSchema: z.object({}),
+      inputSchema: z.object({ ...paginationFields }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
-    withErrorHandling(async () => {
-      const groups = await talentlmsFetch<Array<Record<string, unknown>>>('/groups');
-      return JSON.stringify({ ok: true, groups, count: groups.length });
+    withErrorHandling(async (args) => {
+      const groups = await talentlmsFetch<Array<Record<string, unknown>>>(paginatedPath('/groups', args));
+      return JSON.stringify({ ok: true, groups: wrapExternalTextFields(groups, 'talentlms:groups'), count: groups.length });
     }),
   );
 
@@ -34,7 +36,7 @@ export function registerGroupTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const group = await talentlmsFetch<Record<string, unknown>>(`/groups/id:${encodeURIComponent(args.group_id)}`);
-      return JSON.stringify({ ok: true, group });
+      return JSON.stringify({ ok: true, group: wrapExternalTextFields(group, 'talentlms:group') });
     }),
   );
 
@@ -59,7 +61,7 @@ export function registerGroupTools(server: McpServer): void {
         method: 'POST',
         body,
       });
-      return JSON.stringify({ ok: true, message: 'Group created.', group });
+      return JSON.stringify({ ok: true, message: 'Group created.', group: wrapExternalTextFields(group, 'talentlms:group') });
     }),
   );
 

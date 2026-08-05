@@ -50,8 +50,8 @@ describe('Assessment tools', () => {
 
     expect(data.ok).toBe(true);
     expect(data.surveyAnswers.questions).toHaveLength(2);
-    expect(data.surveyAnswers.questions[0].answer).toBe('5/5');
-    expect(data.surveyAnswers.questions[1].answer).toBe('Great course!');
+    expect(data.surveyAnswers.questions[0].answer).toBe('<untrusted-content source="talentlms:survey-answers">5/5</untrusted-content>');
+    expect(data.surveyAnswers.questions[1].answer).toBe('<untrusted-content source="talentlms:survey-answers">Great course!</untrusted-content>');
   });
 
   it('get_talentlms_ilt_sessions returns ILT sessions', async () => {
@@ -62,7 +62,7 @@ describe('Assessment tools', () => {
     expect(data.ok).toBe(true);
     expect(data.sessions).toHaveLength(1);
     expect(data.count).toBe(1);
-    expect(data.sessions[0].instructor).toBe('Bob Smith');
-    expect(data.sessions[0].location).toBe('Room A');
+    expect(data.sessions[0].instructor).toBe('<untrusted-content source="talentlms:ilt-sessions">Bob Smith</untrusted-content>');
+    expect(data.sessions[0].location).toBe('<untrusted-content source="talentlms:ilt-sessions">Room A</untrusted-content>');
   });
 });

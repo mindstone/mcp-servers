@@ -1,28 +1,33 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { talentlmsFetch, formEncode } from '../client.js';
-import { withErrorHandling } from '../utils.js';
+import { withErrorHandling, paginationFields, paginatedPath } from '../utils.js';
+import { wrapExternalTextFields } from '../envelope.js';
 
 export function registerCourseTools(server: McpServer): void {
   server.registerTool(
     'list_talentlms_courses',
     {
       description:
-        'List all courses in TalentLMS.\n\n' +
+        'List courses in TalentLMS.\n\n' +
+        'TalentLMS returns 20 courses per page by default; pass page_size (max 1000) and page_number to page through larger catalogues.\n\n' +
         'Returns: id, name, code, category_id, description, status, creation_date, price, creator_id.\n\n' +
         'RELATED TOOLS:\n' +
         '- get_talentlms_course: Get full course details\n' +
         '- get_talentlms_course_users: See enrolled users',
-      inputSchema: z.object({}),
+      inputSchema: z.object({ ...paginationFields }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
-    withErrorHandling(async () => {
-      const courses = await talentlmsFetch<Array<Record<string, unknown>>>('/courses');
-      const compact = courses.map(c => ({
-        id: c.id, name: c.name, code: c.code, category_id: c.category_id,
-        description: c.description, status: c.status, creation_date: c.creation_date,
-        price: c.price, creator_id: c.creator_id,
-      }));
+    withErrorHandling(async (args) => {
+      const courses = await talentlmsFetch<Array<Record<string, unknown>>>(paginatedPath('/courses', args));
+      const compact = wrapExternalTextFields(
+        courses.map(c => ({
+          id: c.id, name: c.name, code: c.code, category_id: c.category_id,
+          description: c.description, status: c.status, creation_date: c.creation_date,
+          price: c.price, creator_id: c.creator_id,
+        })),
+        'talentlms:courses',
+      );
       return JSON.stringify({ ok: true, courses: compact, count: compact.length });
     }),
   );
@@ -43,7 +48,7 @@ export function registerCourseTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const course = await talentlmsFetch<Record<string, unknown>>(`/courses/id:${encodeURIComponent(args.course_id)}`);
-      return JSON.stringify({ ok: true, course });
+      return JSON.stringify({ ok: true, course: wrapExternalTextFields(course, 'talentlms:course') });
     }),
   );
 
@@ -75,7 +80,7 @@ export function registerCourseTools(server: McpServer): void {
         method: 'POST',
         body,
       });
-      return JSON.stringify({ ok: true, message: 'Course created.', course });
+      return JSON.stringify({ ok: true, message: 'Course created.', course: wrapExternalTextFields(course, 'talentlms:course') });
     }),
   );
 
@@ -95,7 +100,10 @@ export function registerCourseTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const course = await talentlmsFetch<Record<string, unknown>>(`/courses/id:${encodeURIComponent(args.course_id)}`);
-      const users = (course.users as Array<Record<string, unknown>>) || [];
+      const users = wrapExternalTextFields(
+        (course.users as Array<Record<string, unknown>>) || [],
+        'talentlms:course-users',
+      );
       return JSON.stringify({ ok: true, users, count: users.length });
     }),
   );

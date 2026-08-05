@@ -39,11 +39,23 @@ describe('User tools', () => {
     expect(data.ok).toBe(true);
     expect(data.users).toHaveLength(3);
     expect(data.count).toBe(3);
-    expect(data.users[0].first_name).toBe('Jane');
+    expect(data.users[0].first_name).toBe('<untrusted-content source="talentlms:users">Jane</untrusted-content>');
     expect(data.users[0]).toHaveProperty('id');
+    expect(data.users[0].id).toBe('1');
     expect(data.users[0]).toHaveProperty('email');
     expect(data.users[0]).toHaveProperty('role');
     expect(data.users[0]).toHaveProperty('status');
+  });
+
+  it('list_talentlms_users forwards page_size and page_number', async () => {
+    const client = await getClient();
+    const result = await client.callTool('list_talentlms_users', { page_size: 1, page_number: 2 });
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(data.ok).toBe(true);
+    expect(data.users).toHaveLength(1);
+    expect(data.users[0].id).toBe('2');
+    expect(data.users[0].login).toBe('<untrusted-content source="talentlms:users">bsmith</untrusted-content>');
   });
 
   it('get_talentlms_user by ID returns full profile', async () => {
@@ -53,7 +65,7 @@ describe('User tools', () => {
 
     expect(data.ok).toBe(true);
     expect(data.user.id).toBe('1');
-    expect(data.user.first_name).toBe('Jane');
+    expect(data.user.first_name).toBe('<untrusted-content source="talentlms:user">Jane</untrusted-content>');
     expect(data.user.courses).toHaveLength(2);
   });
 
@@ -126,8 +138,9 @@ describe('User tools', () => {
     expect(data.ok).toBe(true);
     expect(data.courses).toHaveLength(2);
     expect(data.count).toBe(2);
-    expect(data.courses[0].name).toBe('Onboarding 101');
+    expect(data.courses[0].name).toBe('<untrusted-content source="talentlms:user-courses">Onboarding 101</untrusted-content>');
     expect(data.courses[0].completion_status).toBe('completed');
     expect(data.courses[1].completion_percentage).toBe('45');
   });
+
 });
