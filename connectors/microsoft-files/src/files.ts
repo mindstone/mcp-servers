@@ -7,6 +7,7 @@ import {
   extractPptxText,
 } from './office-text.js';
 import { wrapUntrusted } from './untrusted-content.js';
+import { validateUploadSessionUrl } from './upload-url.js';
 import { FilesBusinessError } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -517,6 +518,10 @@ async function uploadViaSession(
       item: { '@microsoft.graph.conflictBehavior': 'replace' },
     });
   const { uploadUrl } = GraphUploadSessionSchema.parse(sessionResponse);
+  // The upload URL comes from the upstream response and chunk PUTs carry user
+  // file bytes without the bearer token, so the destination is validated
+  // against the vendor-host policy before any byte leaves the connector.
+  const safeUploadUrl = validateUploadSessionUrl(uploadUrl);
 
   let item: z.infer<typeof GraphUploadedItemSchema> | null = null;
   for (let start = 0; start < bytes.length; start += UPLOAD_CHUNK_BYTES) {
@@ -525,8 +530,11 @@ async function uploadViaSession(
     // ArrayBufferLike, which the DOM BodyInit union rejects.
     const chunk = new Uint8Array(end - start);
     chunk.set(bytes.subarray(start, end));
-    const response = await fetch(uploadUrl, {
+    const response = await fetch(safeUploadUrl, {
       method: 'PUT',
+      // Reject redirects outright: a redirect hop could otherwise retarget
+      // the preauthenticated chunk PUT to a non-vendor host.
+      redirect: 'error',
       headers: {
         'Content-Length': String(end - start),
         'Content-Range': `bytes ${start}-${end - 1}/${bytes.length}`,

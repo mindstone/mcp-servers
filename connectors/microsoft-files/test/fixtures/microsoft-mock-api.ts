@@ -216,14 +216,16 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
       async ({ request }) => {
         await capture(request);
         return HttpResponse.json({
-          uploadUrl: 'https://upload.example.com/session-abc',
+          // Vendor-host-shaped URL: the connector refuses chunk PUTs to any
+          // non-OneDrive/SharePoint host, so the fixture must use one.
+          uploadUrl: 'https://contoso-my.sharepoint.com/upload/session-abc',
           expirationDateTime: '2026-05-19T11:00:00Z',
         });
       },
     ),
 
     // Preauthenticated upload-session URL — chunked PUTs for large uploads
-    http.put('https://upload.example.com/session-abc', async ({ request }) => {
+    http.put('https://contoso-my.sharepoint.com/upload/session-abc', async ({ request }) => {
       await capture(request);
       const match = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(
         request.headers.get('content-range') ?? '',
