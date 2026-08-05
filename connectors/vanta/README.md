@@ -108,7 +108,7 @@ Vanta accepts `.pdf`, `.docx`, `.jpg`, `.png`, and `.xlsx` files.
 
 - **Uploads land as drafts.** Vanta files an API upload against a document as a draft; the document must be submitted for review in Vanta before auditors can see the evidence. The tool result says so via `submission_required`, but the connector has no tool that submits.
 - **No document creation.** `vanta_upload_document` attaches a file to a document that already exists in Vanta; it cannot create the document.
-- **Single-page ID fallback.** When a direct `GET` by ID returns 404, the connector scans only the first 100 records before reporting not-found.
+- **Bounded ID fallback scan.** When a direct `GET` by ID returns 404, the connector cursor-paginates the collection looking for the ID, up to 50 pages (5,000 records). Beyond that bound it reports not-found with a partial-scan note instead of silently giving up at the first page.
 
 ## Safety
 

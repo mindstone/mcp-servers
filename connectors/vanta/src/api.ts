@@ -31,6 +31,9 @@ const DEFAULT_RESPONSE_SIZE_CAP_BYTES = 25 * 1024;
 const MAX_RESPONSE_BODY_BYTES = 2 * 1024 * 1024; // 2MB pre-parse safety cap
 const MAX_RETRY_AFTER_MS = 120_000; // Never wait more than 2 minutes on Retry-After
 const VALID_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
+// Upper bound for the getById fallback scan: 50 pages x 100 records = 5,000
+// records, which is also one full minute of the shared rate-limit budget.
+const MAX_FALLBACK_SCAN_PAGES = 50;
 
 const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000; // Refresh 5 min before expiry
 const TOKEN_TTL_MS = 60 * 60 * 1000; // Vanta tokens last 1 hour
@@ -731,20 +734,44 @@ export class VantaApiClient {
       }
     }
 
-    // Fallback: single-page scan when direct GET returns 404. Most Vanta endpoints
-    // support direct GET; this covers edge cases. Full cursor pagination deferred.
-    const page = await this.getPaginated<T>(endpoint, { page_size: MAX_PAGE_SIZE });
-    const item = page.data.find((candidate) => this.itemMatchesId(candidate, id));
-    if (!item) {
-      throw new VantaApiError(
-        'NOT_FOUND',
-        `No Vanta item found with ID "${id}".`,
-        'No Vanta resource matches the supplied ID.',
-        'Call the corresponding list tool to confirm the ID exists, then retry.',
-        404,
-      );
+    // Fallback: cursor-paginated scan when direct GET returns 404. Most Vanta
+    // endpoints support direct GET; this covers edge cases. The scan follows
+    // cursors until the item is found or the collection is exhausted, bounded
+    // by MAX_FALLBACK_SCAN_PAGES so one lookup cannot burn the shared
+    // 50-req/min budget on a huge collection. Hitting the bound reports a
+    // partial scan instead of a false not-found.
+    let pageCursor: string | undefined;
+    let scannedAll = false;
+    for (let scanned = 0; scanned < MAX_FALLBACK_SCAN_PAGES; scanned++) {
+      const page = await this.getPaginated<T>(endpoint, {
+        page_size: MAX_PAGE_SIZE,
+        page_cursor: pageCursor,
+      });
+      const item = page.data.find((candidate) => this.itemMatchesId(candidate, id));
+      if (item) {
+        return item;
+      }
+      if (!page.pageInfo.hasNextPage) {
+        scannedAll = true;
+        break;
+      }
+      if (!page.pageInfo.endCursor) {
+        break; // more pages claimed but no cursor to advance with
+      }
+      pageCursor = page.pageInfo.endCursor;
     }
-    return item;
+
+    throw new VantaApiError(
+      'NOT_FOUND',
+      `No Vanta item found with ID "${id}".`,
+      scannedAll
+        ? 'No Vanta resource matches the supplied ID.'
+        : `The fallback scan covered only the first ${MAX_FALLBACK_SCAN_PAGES * MAX_PAGE_SIZE} records.`,
+      scannedAll
+        ? 'Call the corresponding list tool to confirm the ID exists, then retry.'
+        : 'Call the corresponding list tool and page with page_cursor to confirm the ID exists, then retry.',
+      404,
+    );
   }
 
   validateId(id: string): void {

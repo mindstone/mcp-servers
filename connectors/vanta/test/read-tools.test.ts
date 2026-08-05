@@ -595,4 +595,87 @@ describe('Read tools — documented request contracts', () => {
     expect(payload.ok).toBe(false);
     expect(payload.code).toBe('NOT_FOUND');
   });
+
+  it('getById fallback scan follows cursors past the first page', async () => {
+    const seenCursors: Array<string | null> = [];
+    mswServer.use(
+      successTokenHandler,
+      http.get('https://api.vanta.com/v1/vendors/vendor_target', () =>
+        HttpResponse.json({ message: 'not found' }, { status: 404 }),
+      ),
+      http.get('https://api.vanta.com/v1/vendors', ({ request }) => {
+        const cursor = new URL(request.url).searchParams.get('pageCursor');
+        seenCursors.push(cursor);
+        if (!cursor) {
+          return HttpResponse.json({
+            results: {
+              data: [{ id: 'vendor_other', name: 'Other' }],
+              pageInfo: { endCursor: 'cursor-2', hasNextPage: true },
+            },
+          });
+        }
+        return HttpResponse.json({
+          results: {
+            data: [{ id: 'vendor_target', name: 'Target' }],
+            pageInfo: { endCursor: null, hasNextPage: false },
+          },
+        });
+      }),
+    );
+
+    const { createServer } = await import('../src/server.js');
+    testClient = await createInMemoryTestClient({
+      createServer,
+      env: {
+        VANTA_CLIENT_ID: MOCK_CLIENT_ID,
+        VANTA_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+      },
+    });
+
+    const result = await testClient.callTool('vanta_get_vendor', { vendor_id: 'vendor_target' });
+    const payload = result.json as { ok: boolean; vendor: { id: string } };
+
+    expect(payload.ok).toBe(true);
+    expect(payload.vendor.id).toBe('vendor_target');
+    expect(seenCursors).toEqual([null, 'cursor-2']);
+  });
+
+  it('getById fallback scan reports NOT_FOUND after exhausting every page', async () => {
+    let pages = 0;
+    mswServer.use(
+      successTokenHandler,
+      http.get('https://api.vanta.com/v1/vendors/vendor_missing', () =>
+        HttpResponse.json({ message: 'not found' }, { status: 404 }),
+      ),
+      http.get('https://api.vanta.com/v1/vendors', ({ request }) => {
+        pages += 1;
+        const cursor = new URL(request.url).searchParams.get('pageCursor');
+        return HttpResponse.json({
+          results: {
+            data: [{ id: 'vendor_other', name: 'Other' }],
+            pageInfo: cursor
+              ? { endCursor: null, hasNextPage: false }
+              : { endCursor: 'cursor-2', hasNextPage: true },
+          },
+        });
+      }),
+    );
+
+    const { createServer } = await import('../src/server.js');
+    testClient = await createInMemoryTestClient({
+      createServer,
+      env: {
+        VANTA_CLIENT_ID: MOCK_CLIENT_ID,
+        VANTA_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+      },
+    });
+
+    const result = await testClient.callTool('vanta_get_vendor', { vendor_id: 'vendor_missing' });
+    const payload = result.json as { ok: boolean; code: string; action_required: string };
+
+    expect(payload.ok).toBe(false);
+    expect(payload.code).toBe('NOT_FOUND');
+    expect(payload.action_required).toBe('No Vanta resource matches the supplied ID.');
+    expect(pages).toBe(2);
+  });
 });
