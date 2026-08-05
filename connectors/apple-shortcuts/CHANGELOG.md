@@ -21,6 +21,12 @@ are maintained manually as part of the PR review checklist.
 - Re-synced the vendored `untrusted-content` envelope helper with the canonical reference (it had drifted in comments and helper surface while claiming to be byte-for-byte identical) and added direct adversarial unit tests covering exact/uppercase/space/tab/newline/CR close-tag breakout variants and idempotency.
 - Shortcut names echoed in `apple_shortcuts_run` / `apple_shortcuts_view` confirmation, error, and timeout messages are now wrapped in `<untrusted-content>` envelopes. A name picked up from the list output is attacker-controllable text and previously reached the model outside the trust boundary.
 - `apple_shortcuts_run` is now annotated `destructiveHint: true` (AGENTS.md invariant #7). A shortcut executes with the logged-in user's permissions and can send messages, delete files, make purchases, control devices, or call remote APIs; the tool previously declared itself non-destructive.
+- Timeout warnings no longer log the full `shortcuts` argv (which contains the user-authored shortcut name and the temporary input path), and the invalid-`APPLE_SHORTCUTS_TIMEOUT_MS` warning no longer echoes the raw environment value.
+- Captured CLI stdout/stderr is now bounded at 1,000,000 characters per stream; excess output is dropped with a truncation marker, so a shortcut emitting unbounded output cannot exhaust memory before the timeout fires.
+
+### Fixed
+- Timeout handling now settles the tool call even when signal delivery fails or the process never emits `close` after SIGKILL (previously the call could hang forever), and signal-delivery failures are logged.
+- `APPLE_SHORTCUTS_TIMEOUT_MS` values that floor below 1ms now fall back to the default (they previously caused near-instant termination), and values above Node's timer range are clamped instead of overflowing to a 1ms timeout.
 
 ### Changed
 - Tool registration moved behind an exported `createServer(runner?)` factory so tests (and embedders) can inject a fake `shortcuts` CLI runner; the stdio entrypoint is unchanged.

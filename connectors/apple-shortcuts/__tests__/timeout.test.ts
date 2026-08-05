@@ -18,21 +18,28 @@ import { runShortcuts, resolveTimeoutMs, DEFAULT_TIMEOUT_MS } from "../dist/inde
 
 type Handler = (...args: unknown[]) => void;
 
-function createFakeProc() {
+function createFakeProc(opts: { killResult?: boolean } = {}) {
   const handlers: Record<string, Handler[]> = {};
   const killed: string[] = [];
+  const register = (key: string) => (event: string, cb: Handler) => {
+    (handlers[`${key}:${event}`] ??= []).push(cb);
+  };
   return {
     killed,
-    stdout: { on: vi.fn() },
-    stderr: { on: vi.fn() },
+    stdout: { on: register("stdout") },
+    stderr: { on: register("stderr") },
     on(event: string, cb: Handler) {
       (handlers[event] ??= []).push(cb);
     },
     kill(signal?: string) {
       killed.push(signal ?? "SIGTERM");
+      return opts.killResult ?? true;
     },
     emit(event: string, ...args: unknown[]) {
       for (const cb of handlers[event] ?? []) cb(...args);
+    },
+    emitData(stream: "stdout" | "stderr", text: string) {
+      for (const cb of handlers[`${stream}:data`] ?? []) cb(Buffer.from(text));
     },
   };
 }
@@ -158,5 +165,109 @@ describe("runShortcuts timeout", () => {
     } finally {
       errSpy.mockRestore();
     }
+  });
+
+  it("clamps sub-millisecond and timer-overflowing values into a valid range", () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      // 0.5 floors to 0, which would fire the timeout immediately.
+      expect(resolveTimeoutMs({ APPLE_SHORTCUTS_TIMEOUT_MS: "0.5" })).toBe(DEFAULT_TIMEOUT_MS);
+      // Above 2^31-1 Node clamps the delay to 1ms — clamp to the top of the
+      // valid timer range instead.
+      expect(resolveTimeoutMs({ APPLE_SHORTCUTS_TIMEOUT_MS: "999999999999" })).toBe(
+        2_147_483_647
+      );
+      expect(resolveTimeoutMs({ APPLE_SHORTCUTS_TIMEOUT_MS: "300000" })).toBe(300000);
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it("returns accumulated stdout/stderr when the run times out", async () => {
+    const proc = createFakeProc();
+    spawnMock.mockReturnValue(proc as never);
+
+    const pending = runShortcuts(["run", "Chatterbox"]);
+    proc.emitData("stdout", "partial-out");
+    proc.emitData("stderr", "partial-err");
+    await vi.advanceTimersByTimeAsync(1000);
+    proc.emit("close", null);
+
+    const result = await pending;
+    expect(result.timedOut).toBe(true);
+    expect(result.stdout).toBe("partial-out");
+    expect(result.stderr).toBe("partial-err");
+  });
+
+  it("bounds captured output and marks it truncated", async () => {
+    const proc = createFakeProc();
+    spawnMock.mockReturnValue(proc as never);
+
+    const pending = runShortcuts(["list"]);
+    proc.emitData("stdout", "x".repeat(1_500_000));
+    proc.emitData("stdout", "y".repeat(100));
+    proc.emitData("stderr", "e".repeat(1_500_000));
+    proc.emit("close", 0);
+
+    const result = await pending;
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.length).toBeLessThan(1_000_100);
+    expect(result.stdout).toContain("[output truncated");
+    expect(result.stdout).not.toContain("y");
+    expect(result.stderr).toContain("[output truncated");
+  });
+
+  it("settles after a failed SIGTERM/SIGKILL delivery and no close event", async () => {
+    const proc = createFakeProc({ killResult: false });
+    spawnMock.mockReturnValue(proc as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const pending = runShortcuts(["run", "Unkillable"]);
+      proc.emitData("stdout", "kept-output");
+      await vi.advanceTimersByTimeAsync(1000); // SIGTERM (fails)
+      await vi.advanceTimersByTimeAsync(5000); // SIGKILL (fails)
+      await vi.advanceTimersByTimeAsync(5000); // backstop settles
+
+      const result = await pending;
+      expect(result.timedOut).toBe(true);
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toBe("kept-output");
+
+      const logged = errSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+      expect(logged).toContain("SIGTERM delivery failed");
+      expect(logged).toContain("SIGKILL delivery failed");
+      expect(logged).not.toContain("Unkillable");
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it("settles when the process never emits close after SIGKILL", async () => {
+    const proc = createFakeProc();
+    spawnMock.mockReturnValue(proc as never);
+
+    const pending = runShortcuts(["run", "Ghost"]);
+    await vi.advanceTimersByTimeAsync(1000); // SIGTERM
+    await vi.advanceTimersByTimeAsync(5000); // SIGKILL
+    expect(proc.killed).toEqual(["SIGTERM", "SIGKILL"]);
+    await vi.advanceTimersByTimeAsync(5000); // backstop settles without close
+
+    const result = await pending;
+    expect(result.timedOut).toBe(true);
+    expect(result.exitCode).toBe(1);
+  });
+
+  it("an error event after the timeout settles the call exactly once", async () => {
+    const proc = createFakeProc();
+    spawnMock.mockReturnValue(proc as never);
+
+    const pending = runShortcuts(["run", "Flaky"]);
+    await vi.advanceTimersByTimeAsync(1000); // SIGTERM
+    proc.emit("error", new Error("spawn blew up"));
+    proc.emit("close", 1); // must be ignored after settling
+
+    const result = await pending;
+    expect(result.stderr).toBe("spawn blew up");
+    expect(result.exitCode).toBe(1);
   });
 });

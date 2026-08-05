@@ -43,11 +43,21 @@ export type ShortcutsRunner = (argv: string[]) => Promise<ShortcutsRunResult>;
 
 export const DEFAULT_TIMEOUT_MS = 120_000;
 const SIGKILL_GRACE_MS = 5_000;
+/**
+ * Upper bound for `setTimeout`: Node clamps delays above 2^31-1ms to 1ms,
+ * which would turn a large configured timeout into an instant termination.
+ */
+const MAX_TIMEOUT_MS = 2_147_483_647;
+/** Per-stream capture bound; output beyond this is dropped (see runShortcuts). */
+export const MAX_CAPTURED_OUTPUT_CHARS = 1_000_000;
+const TRUNCATION_MARKER = "\n[output truncated: exceeded 1000000 character capture limit]";
 
 /**
  * Resolve the `shortcuts` CLI timeout from `APPLE_SHORTCUTS_TIMEOUT_MS`.
- * Anything unset, non-numeric, or <= 0 falls back to the default — a shortcut
- * must never be allowed to hang a tool call forever.
+ * Anything unset, non-numeric, <= 0, or below 1ms after flooring falls back
+ * to the default — a shortcut must never be allowed to hang a tool call
+ * forever, nor be terminated instantly by accident. Values above the Node
+ * timer range are clamped to it.
  */
 export function resolveTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env.APPLE_SHORTCUTS_TIMEOUT_MS;
@@ -61,7 +71,14 @@ export function resolveTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
     );
     return DEFAULT_TIMEOUT_MS;
   }
-  return Math.floor(parsed);
+  const floored = Math.floor(parsed);
+  if (floored < 1) {
+    logger.warn(
+      `Invalid APPLE_SHORTCUTS_TIMEOUT_MS (below 1ms after rounding); falling back to ${DEFAULT_TIMEOUT_MS}ms`
+    );
+    return DEFAULT_TIMEOUT_MS;
+  }
+  return Math.min(floored, MAX_TIMEOUT_MS);
 }
 
 /**
@@ -70,7 +87,13 @@ export function resolveTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
  *
  * The process is terminated (SIGTERM, then SIGKILL after a grace period) when
  * it exceeds APPLE_SHORTCUTS_TIMEOUT_MS (default 120s): shortcuts that open
- * GUI dialogs otherwise block the tool call indefinitely.
+ * GUI dialogs otherwise block the tool call indefinitely. If signal delivery
+ * fails or the process never emits `close` after SIGKILL, the call settles
+ * anyway after a further grace period rather than hanging forever.
+ *
+ * Captured stdout/stderr are bounded at MAX_CAPTURED_OUTPUT_CHARS per stream;
+ * further output is dropped and a truncation marker appended, so a shortcut
+ * emitting unbounded output cannot exhaust memory before the timeout fires.
  */
 export const runShortcuts: ShortcutsRunner = (argv) => {
   return new Promise((resolve) => {
@@ -82,13 +105,23 @@ export const runShortcuts: ShortcutsRunner = (argv) => {
     let settled = false;
     let timeoutTimer: NodeJS.Timeout | undefined;
     let killTimer: NodeJS.Timeout | undefined;
+    let settleTimer: NodeJS.Timeout | undefined;
 
     const finish = (result: ShortcutsRunResult) => {
       if (settled) return;
       settled = true;
       if (timeoutTimer) clearTimeout(timeoutTimer);
       if (killTimer) clearTimeout(killTimer);
+      if (settleTimer) clearTimeout(settleTimer);
       resolve(result);
+    };
+
+    const tryKill = (signal: "SIGTERM" | "SIGKILL"): boolean => {
+      try {
+        return proc.kill(signal);
+      } catch {
+        return false;
+      }
     };
 
     timeoutTimer = setTimeout(() => {
@@ -99,22 +132,40 @@ export const runShortcuts: ShortcutsRunner = (argv) => {
       logger.warn(
         `"shortcuts ${argv[0]}" exceeded the ${timeoutMs}ms timeout; terminating`
       );
-      proc.kill("SIGTERM");
+      if (!tryKill("SIGTERM")) {
+        logger.warn(`SIGTERM delivery failed for "shortcuts ${argv[0]}"; escalating`);
+      }
       killTimer = setTimeout(() => {
-        try {
-          proc.kill("SIGKILL");
-        } catch {
-          // process already exited
+        if (!tryKill("SIGKILL")) {
+          logger.warn(`SIGKILL delivery failed for "shortcuts ${argv[0]}"`);
         }
+        // Backstop: an unkillable (or already-reaped-without-close) process
+        // must not leave the tool call pending forever.
+        settleTimer = setTimeout(() => {
+          logger.warn(
+            `"shortcuts ${argv[0]}" did not exit after SIGKILL; releasing the tool call`
+          );
+          finish({ stdout, stderr, exitCode: 1, timedOut: true });
+        }, SIGKILL_GRACE_MS);
       }, SIGKILL_GRACE_MS);
     }, timeoutMs);
 
     proc.stdout?.on("data", (data: Buffer) => {
+      if (stdout.length >= MAX_CAPTURED_OUTPUT_CHARS) return;
       stdout += data.toString();
+      if (stdout.length > MAX_CAPTURED_OUTPUT_CHARS) {
+        stdout = stdout.slice(0, MAX_CAPTURED_OUTPUT_CHARS) + TRUNCATION_MARKER;
+        logger.warn(`"shortcuts ${argv[0]}" stdout exceeded the capture limit; truncating`);
+      }
     });
 
     proc.stderr?.on("data", (data: Buffer) => {
+      if (stderr.length >= MAX_CAPTURED_OUTPUT_CHARS) return;
       stderr += data.toString();
+      if (stderr.length > MAX_CAPTURED_OUTPUT_CHARS) {
+        stderr = stderr.slice(0, MAX_CAPTURED_OUTPUT_CHARS) + TRUNCATION_MARKER;
+        logger.warn(`"shortcuts ${argv[0]}" stderr exceeded the capture limit; truncating`);
+      }
     });
 
     proc.on("error", (err) => {
