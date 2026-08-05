@@ -6,6 +6,7 @@ import {
   type JsonApiResource,
 } from './types.js';
 import { getActiveToken, refreshTokenIfNeeded, getAuthMode } from './auth.js';
+import { wrapUntrustedJsonStrings } from './untrusted-content.js';
 
 function getErrorResolution(status: number, detail?: string): string {
   const msg = (detail || '').toLowerCase();
@@ -127,10 +128,51 @@ export async function outreachFetch(
 // JSON:API Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * String-valued attribute keys whose values are vendor-generated structure
+ * (timestamps, lifecycle enums) rather than user-authored prose. Everything
+ * else is treated as external text and enveloped per AGENTS.md security
+ * invariant #6 — fail-closed, so prospect custom fields (`custom1..custom35`)
+ * and any attribute Outreach adds later are enveloped by default.
+ */
+const STRUCTURAL_ATTRIBUTES = new Set([
+  'addedAt',
+  'answeredAt',
+  'bouncedAt',
+  'clickedAt',
+  'completedAt',
+  'createdAt',
+  'deliveredAt',
+  'dueAt',
+  'engagedAt',
+  'finishedAt',
+  'lastContactedAt',
+  'lastEngagedAt',
+  'openedAt',
+  'pausedAt',
+  'repliedAt',
+  'scheduledAt',
+  'stateChangedAt',
+  'touchedAt',
+  'updatedAt',
+  'action',
+  'direction',
+  'outcome',
+  'sequenceType',
+  'state',
+  'status',
+  'stepType',
+  'taskType',
+]);
+
 export function formatResource(resource: JsonApiResource): Record<string, unknown> {
   const result: Record<string, unknown> = { id: resource.id, type: resource.type };
   if (resource.attributes) {
-    Object.assign(result, resource.attributes);
+    for (const [key, value] of Object.entries(resource.attributes)) {
+      result[key] = STRUCTURAL_ATTRIBUTES.has(key)
+        ? value
+        : wrapUntrustedJsonStrings(value, `outreach:${resource.type}:${key}`);
+    }
   }
   if (resource.relationships) {
     for (const [key, rel] of Object.entries(resource.relationships)) {

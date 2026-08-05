@@ -16,6 +16,7 @@ const mockProspect = {
     title: 'VP Sales',
     company: 'Acme Corp',
     tags: ['lead'],
+    createdAt: '2026-01-15T10:00:00Z',
   },
   relationships: {
     account: { data: { id: '201', type: 'account' } },
