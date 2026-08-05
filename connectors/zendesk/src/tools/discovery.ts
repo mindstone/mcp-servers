@@ -235,4 +235,47 @@ Use organization IDs when:
       });
     }),
   );
+
+  server.registerTool(
+    'get_zendesk_organization',
+    {
+      description: `Get a single Zendesk organization by ID.
+
+Returns organization details including name, domains, notes, and timestamps.
+Use list_zendesk_organizations to find organization IDs.
+
+Useful for customer context: see which company a requester belongs to before
+a meeting or when triaging their tickets.`,
+      inputSchema: {
+        organization_id: z.number().describe('Organization ID (use list_zendesk_organizations to find it)'),
+        subdomain: z.string().optional().describe('Zendesk subdomain (optional if only one account connected)'),
+        response_format: z.enum(['concise', 'detailed']).optional().describe('Response format (default: detailed)'),
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      const account = await getAccount(args.subdomain);
+      if (!account) return noAccountError();
+
+      if (!args.organization_id) {
+        return JSON.stringify({
+          ok: false,
+          error: 'organization_id is required',
+          resolution: 'Provide the numeric ID of the organization. Use list_zendesk_organizations to find organization IDs.',
+        });
+      }
+
+      const response = await zendeskFetch<{ organization: ZendeskOrganization }>(
+        account,
+        `/organizations/${args.organization_id}.json`,
+      );
+      const organization = wrapOrganizationFields(response.organization);
+      const format = args.response_format || 'detailed';
+      if (format === 'concise') {
+        const domains = organization.domain_names?.length ? ` [${organization.domain_names.join(', ')}]` : '';
+        return `${organization.name} (ID: ${organization.id})${domains}`;
+      }
+      return JSON.stringify({ ok: true, organization });
+    }),
+  );
 }

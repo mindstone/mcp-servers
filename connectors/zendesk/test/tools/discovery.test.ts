@@ -109,4 +109,33 @@ describe('Discovery tools', () => {
       expect(result.text).toContain('Acme Corp');
     });
   });
+
+  describe('get_zendesk_organization', () => {
+    it('should return an organization by ID with wrapped name', async () => {
+      const result = await testClient.callTool('get_zendesk_organization', {
+        organization_id: 500,
+        response_format: 'detailed',
+      });
+      expect(result.isError).toBeFalsy();
+      const data = result.json as { ok: boolean; organization: { id: number; name: string } };
+      expect(data.ok).toBe(true);
+      expect(data.organization.id).toBe(500);
+      expect(data.organization.name).toBe(
+        '<untrusted-content source="external-organization">Acme Corp</untrusted-content>',
+      );
+    });
+
+    it('should return a structured 404 error for a missing organization', async () => {
+      const base = `https://${API_TOKEN_ACCOUNT.subdomain}.zendesk.com/api/v2`;
+      mswServer.use(
+        http.get(`${base}/organizations/424242.json`, () => {
+          return HttpResponse.json({ error: 'RecordNotFound' }, { status: 404 });
+        }),
+      );
+      const result = await testClient.callTool('get_zendesk_organization', { organization_id: 424242 });
+      const data = result.json as { ok: boolean; code?: string };
+      expect(data.ok).toBe(false);
+      expect(data.code).toBe('NOT_FOUND');
+    });
+  });
 });

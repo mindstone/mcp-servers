@@ -129,6 +129,18 @@ export function createZendeskHandlers(subdomain: string, options: ZendeskMockOpt
       return HttpResponse.json({ user });
     }),
 
+    // Create or update user
+    http.post(`${base}/users/create_or_update.json`, async ({ request }) => {
+      const body = await request.json() as { user: Record<string, unknown> };
+      const user = makeUser({
+        id: 101,
+        name: body.user?.name as string ?? 'New User',
+        email: body.user?.email as string ?? 'new@example.com',
+        organization_id: body.user?.organization_id as number | undefined,
+      });
+      return HttpResponse.json({ user }, { status: 201 });
+    }),
+
     // Show many users
     http.get(`${base}/users/show_many.json`, ({ request }) => {
       const url = new URL(request.url);
@@ -171,6 +183,15 @@ export function createZendeskHandlers(subdomain: string, options: ZendeskMockOpt
         count: defaultOrganizations.length,
         next_page: null,
       });
+    }),
+
+    // Get single organization
+    http.get(`${base}/organizations/:organizationId.json`, ({ params }) => {
+      const organizationId = Number(params.organizationId);
+      const organization =
+        defaultOrganizations.find(o => (o as { id: number }).id === organizationId)
+        ?? makeOrganization({ id: organizationId });
+      return HttpResponse.json({ organization });
     }),
 
     // Macros - list

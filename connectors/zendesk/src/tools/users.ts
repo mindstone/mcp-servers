@@ -93,4 +93,68 @@ Returns full user details including name, email, role, phone, organization, and 
       return JSON.stringify({ ok: true, user });
     }),
   );
+
+  server.registerTool(
+    'create_or_update_zendesk_user',
+    {
+      description: `Create a Zendesk user, or update the existing user with the same email.
+
+Uses the Zendesk create_or_update endpoint: if a user with the given email
+already exists, that user is updated; otherwise a new user is created.
+Useful for adding a new customer contact before filing tickets on their
+behalf.
+
+Use search_zendesk_users first if you only need to check whether the user exists.
+
+Example:
+{
+  "name": "Jane Doe",
+  "email": "jane@example.com",
+  "organization_id": 500
+}`,
+      inputSchema: {
+        name: z.string().describe('Full name of the user'),
+        email: z.string().describe('Email address — the identity key for create-or-update'),
+        subdomain: z.string().optional().describe('Zendesk subdomain (optional if only one account connected)'),
+        phone: z.string().optional().describe('Phone number'),
+        organization_id: z.number().optional().describe('Organization ID (use list_zendesk_organizations to find)'),
+        role: z.enum(['end-user', 'agent', 'admin']).optional().describe('User role (Zendesk defaults to end-user when omitted)'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      const account = await getAccount(args.subdomain);
+      if (!account) return noAccountError();
+
+      if (!args.name || !args.email) {
+        return JSON.stringify({ ok: false, error: 'name and email are required' });
+      }
+
+      const user: Record<string, unknown> = {
+        name: args.name,
+        email: args.email,
+        ...(args.phone ? { phone: args.phone } : {}),
+        ...(args.organization_id ? { organization_id: args.organization_id } : {}),
+        ...(args.role ? { role: args.role } : {}),
+      };
+
+      const response = await zendeskFetch<{ user: ZendeskUser }>(account, '/users/create_or_update.json', {
+        method: 'POST',
+        body: JSON.stringify({ user }),
+      });
+
+      const wrappedUser = wrapUserFields(response.user);
+      return JSON.stringify({
+        ok: true,
+        message: `User ${response.user.id} created or updated`,
+        user: {
+          id: response.user.id,
+          name: wrappedUser.name,
+          email: wrappedUser.email,
+          role: response.user.role,
+          organization_id: response.user.organization_id,
+        },
+      });
+    }),
+  );
 }
