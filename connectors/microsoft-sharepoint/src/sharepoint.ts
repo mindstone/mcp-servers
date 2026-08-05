@@ -18,6 +18,50 @@ function parseGraphCollection<S extends z.ZodTypeAny>(itemSchema: S, response: u
   return z.object({ value: z.array(itemSchema) }).parse(response).value;
 }
 
+// -- Vendor URL validation (SSRF guard) --
+
+/**
+ * Hosts that legitimately serve pre-authenticated Graph upload sessions and
+ * continuation links, including sovereign-cloud variants. Anything else is not
+ * a vendor destination.
+ */
+const VENDOR_HOST_SUFFIXES = [
+  'graph.microsoft.com',
+  'sharepoint.com',
+  'graph.microsoft.us',
+  'graph.microsoft.cn',
+  'graph.microsoft.de',
+  'sharepoint.us',
+  'sharepoint.cn',
+  'sharepoint-mil.us',
+  'sharepoint.de',
+] as const;
+
+/**
+ * Validate a vendor-issued (or caller-supplied continuation) absolute URL
+ * before following it with the user's auth header or file bytes attached.
+ * Requires HTTPS, forbids embedded credentials and IP-literal hosts — IP
+ * literals are never legitimate vendor targets, and rejecting them forecloses
+ * loopback / private-network destinations without DNS lookups (an attacker
+ * cannot repoint an allow-listed Microsoft hostname without already
+ * controlling the vendor). Returns the parsed URL when safe, null otherwise.
+ */
+export function validateVendorUrl(rawUrl: unknown): URL | null {
+  if (typeof rawUrl !== 'string') return null;
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:') return null;
+  if (url.username !== '' || url.password !== '') return null;
+  const host = url.hostname.toLowerCase();
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.startsWith('[')) return null;
+  const allowed = VENDOR_HOST_SUFFIXES.some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
+  return allowed ? url : null;
+}
+
 const GraphIdentitySchema = z.object({
   displayName: z.string().optional(),
   email: z.string().optional(),
@@ -103,7 +147,7 @@ const GraphListSchema = z.object({
 });
 
 const GraphUploadSessionSchema = z.object({
-  uploadUrl: z.string(),
+  uploadUrl: z.string().url(),
 });
 
 const GraphUploadedItemSchema = z.object({
@@ -628,9 +672,20 @@ export async function uploadLibraryFileBinary(
       },
     });
   const { uploadUrl } = GraphUploadSessionSchema.parse(sessionResponse);
+  // The uploadUrl is a pre-authenticated bearer capability returned by Graph.
+  // A compromised or spoofed Graph response must not be able to point the
+  // upload at a non-vendor host (SSRF / data exfiltration), so validate the
+  // destination before streaming user bytes to it.
+  if (!validateVendorUrl(uploadUrl)) {
+    throw new Error(
+      'Graph returned an upload session URL that is not a trusted Microsoft HTTPS endpoint. Refusing to upload.',
+    );
+  }
 
-  // The uploadUrl is pre-authenticated by Graph; chunks go to it directly
-  // without an Authorization header.
+  // Chunks go to the pre-authenticated uploadUrl directly, without an
+  // Authorization header. Redirects are never auto-followed: a redirect
+  // target would not be re-validated, and Graph upload sessions answer
+  // 200/201/202 — a 3xx here is anomalous and fails closed.
   let start = 0;
   let uploaded: z.infer<typeof GraphUploadedItemSchema> | null = null;
   while (start < buffer.length) {
@@ -643,6 +698,7 @@ export async function uploadLibraryFileBinary(
       },
       body: new Uint8Array(buffer.subarray(start, end)),
       signal,
+      redirect: 'manual',
     });
 
     if (response.status === 202) {
@@ -653,11 +709,14 @@ export async function uploadLibraryFileBinary(
       uploaded = GraphUploadedItemSchema.parse(await response.json());
       break;
     }
-    const errorBody = await response.text().catch(() => '');
-    throw new Error(
-      `Upload session failed with HTTP ${response.status}` +
-      (errorBody ? `: ${errorBody.slice(0, 500)}` : ''),
-    );
+    if (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) {
+      throw new Error(
+        `Upload session returned an unexpected redirect (HTTP ${response.status}). Refusing to follow it.`,
+      );
+    }
+    // Fixed diagnostic only: the vendor error body is attacker-controllable
+    // text and must not be embedded into model-visible error output.
+    throw new Error(`Upload session failed with HTTP ${response.status}.`);
   }
 
   if (!uploaded) {

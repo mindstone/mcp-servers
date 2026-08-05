@@ -11,6 +11,7 @@ import {
   REQUEST_TIMEOUT_MS,
   getMsPackageId,
 } from './types.js';
+import { wrapUntrusted } from './untrusted-content.js';
 
 /**
  * Compose a per-call abort signal with the cohort timeout.
@@ -181,6 +182,16 @@ function detectTokenProviderAuthReason(err: unknown): AuthRequiredReason | null 
 }
 
 /**
+ * `formatGraphError` embeds vendor error-body text (the parsed Graph
+ * `error.message`, or the raw exception message). That text is
+ * attacker-controllable, so envelope it before it reaches model-visible
+ * output — the model must treat it as data, not instructions.
+ */
+function formatModelVisibleError(err: unknown): string {
+  return wrapUntrusted(formatGraphError(err), 'microsoft-sharepoint:graph-error') ?? 'Unknown error';
+}
+
+/**
  * Map a Microsoft Graph error / shared TokenProvider error into the right
  * tool response. Returns `auth_required` for token-related failures, the
  * generic recovery-guidance envelope otherwise.
@@ -201,7 +212,7 @@ export function buildErrorResponse(err: unknown): CallToolResult {
           text: JSON.stringify({
             ...buildAuthRequiredResponse(),
             reason,
-            error: formatGraphError(err),
+            error: formatModelVisibleError(err),
             package_id: getMsPackageId(),
           }),
         },
@@ -214,7 +225,7 @@ export function buildErrorResponse(err: unknown): CallToolResult {
       {
         type: 'text',
         text: errorJson({
-          error: formatGraphError(err),
+          error: formatModelVisibleError(err),
           action_required:
             'Retry the call. If it continues to fail, run authenticate_sharepoint to refresh permissions.',
           next_step: AUTH_TOOL_NAME,
