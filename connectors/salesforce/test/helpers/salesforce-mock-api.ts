@@ -129,6 +129,20 @@ export function createSalesforceHandlers() {
           }],
         });
       }
+      if (soql.includes('FROM CampaignMember')) {
+        return HttpResponse.json({
+          totalSize: 1,
+          done: true,
+          records: [{ Id: '00v000000000001', CampaignId: '701000000000001', ContactId: '003000000000001', Status: 'Sent', attributes: { type: 'CampaignMember' } }],
+        });
+      }
+      if (soql.includes('FROM Campaign')) {
+        return HttpResponse.json({
+          totalSize: 1,
+          done: true,
+          records: [{ Id: '701000000000001', Name: 'Q3 Webinar Series', Type: 'Webinar', Status: 'In Progress', IsActive: true, attributes: { type: 'Campaign' } }],
+        });
+      }
       if (soql.includes('FROM User')) {
         return HttpResponse.json({
           totalSize: 1,

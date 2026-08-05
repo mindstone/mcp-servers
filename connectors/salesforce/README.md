@@ -11,7 +11,7 @@ Salesforce CRM MCP server — accounts, contacts, opportunities, leads, tasks, u
 
 - **Version:** [0.1.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-salesforce)
 - **Auth:** OAuth (local 127.0.0.1 callback) or static access token ([`SALESFORCE_CLIENT_SECRET`](./server.json), [`SALESFORCE_ACCESS_TOKEN`](./server.json))
-- **Tools:** [34](./src/tools/) (accounts, contacts, opportunities, leads, tasks, cases, events, search, notes, query)
+- **Tools:** [36](./src/tools/) (accounts, contacts, opportunities, leads, tasks, cases, events, search, notes, campaigns, query)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -135,7 +135,7 @@ Then call `salesforce_connect_account` to start the OAuth flow.
 - `SALESFORCE_OAUTH_PORT` — OAuth callback port (`0` = OS-assigned; default: `0`)
 - `SALESFORCE_OAUTH_SCOPES` — Space-separated OAuth scopes. Leave unset to use the connector default.
 
-## Available Tools (34)
+## Available Tools (36)
 
 ### Account Management
 - `salesforce_connect_account` — Connect a Salesforce account via OAuth
@@ -183,6 +183,10 @@ Then call `salesforce_connect_account` to start the OAuth flow.
 ### Notes
 - `salesforce_get_notes` — Get notes attached to a record
 - `salesforce_create_note` — Create a note, optionally attached to a record
+
+### Campaigns
+- `salesforce_get_campaigns` — Get marketing campaigns with filters
+- `salesforce_get_campaign_members` — Get leads/contacts in a campaign
 
 ### Users
 - `salesforce_get_users` — Get Salesforce users
