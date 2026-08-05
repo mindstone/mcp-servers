@@ -99,9 +99,6 @@ Use list_zendesk_macros to find macro IDs.`,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      const account = await getAccount(args.subdomain);
-      if (!account) return noAccountError();
-
       if (!args.macro_id) {
         return JSON.stringify({
           ok: false,
@@ -109,6 +106,9 @@ Use list_zendesk_macros to find macro IDs.`,
           resolution: 'Provide the numeric ID of the macro. Use list_zendesk_macros to find macro IDs.',
         });
       }
+
+      const account = await getAccount(args.subdomain);
+      if (!account) return noAccountError();
 
       const response = await zendeskFetch<{ macro: ZendeskMacro }>(account, `/macros/${args.macro_id}.json`);
       const macro = wrapMacroFields(response.macro);
@@ -146,9 +146,6 @@ Example:
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      const account = await getAccount(args.subdomain);
-      if (!account) return noAccountError();
-
       if (!args.ticket_id || !args.macro_id) {
         return JSON.stringify({
           ok: false,
@@ -156,6 +153,9 @@ Example:
           resolution: 'Provide both the ticket ID and the macro ID. Use list_zendesk_macros to find macro IDs.',
         });
       }
+
+      const account = await getAccount(args.subdomain);
+      if (!account) return noAccountError();
 
       const preview = await zendeskFetch<ZendeskMacroApplyResult>(
         account,
