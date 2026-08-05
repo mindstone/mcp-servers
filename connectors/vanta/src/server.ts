@@ -15,6 +15,7 @@ import {
   vantaGetFramework,
   vantaListFrameworks,
 } from './tools/frameworks.js';
+import { listIntegrationsSchema, vantaListIntegrations } from './tools/integrations.js';
 import { listPeopleSchema, vantaListPeople } from './tools/people.js';
 import {
   getPolicySchema,
@@ -189,6 +190,13 @@ RETURNS:
     annotations: readOnlyAnnotations,
     inputSchema: getPolicySchema,
   }, async (input) => textResult(await vantaGetPolicy(client, input)));
+
+  server.registerTool('vanta_list_integrations', {
+    title: 'List Vanta Integrations',
+    description: 'List integrations connected to Vanta with per-connection health (disabled flag and connection error message).',
+    annotations: readOnlyAnnotations,
+    inputSchema: listIntegrationsSchema,
+  }, async (input) => textResult(await vantaListIntegrations(client, input)));
 
   server.registerTool('vanta_list_vendors', {
     title: 'List Vanta Vendors',

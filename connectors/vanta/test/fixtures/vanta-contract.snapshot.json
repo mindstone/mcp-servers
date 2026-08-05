@@ -20,6 +20,7 @@
       "https://developer.vanta.com/api-reference/vendors/list-vendors.md",
       "https://developer.vanta.com/api-reference/vendors/get-vendor-by-id.md",
       "https://developer.vanta.com/api-reference/integrations/list-resources.md",
+      "https://developer.vanta.com/api-reference/integrations/list-connected-integrations.md",
       "https://developer.vanta.com/api-reference/vendors/create-a-vendor.md",
       "https://developer.vanta.com/api-reference/vendors/update-vendor-by-id.md",
       "https://developer.vanta.com/api-reference/vulnerabilities/deactivate-vulnerability-monitoring-for-a-vulnerability.md",
@@ -150,6 +151,15 @@
       "method": "GET",
       "path": "/policies/{policyId}",
       "queryParams": [],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/integrations",
+      "queryParams": [
+        "pageSize",
+        "pageCursor"
+      ],
       "requiredBodyFields": []
     },
     {

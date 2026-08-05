@@ -6,6 +6,7 @@ import { VantaApiClient, buildQueryParams, setDnsLookupForTesting } from '../src
 import { vantaListControls, vantaGetControl } from '../src/tools/controls.js';
 import { vantaUploadDocument } from '../src/tools/documents.js';
 import { vantaListFrameworks, vantaGetFramework } from '../src/tools/frameworks.js';
+import { vantaListIntegrations } from '../src/tools/integrations.js';
 import { vantaListPeople } from '../src/tools/people.js';
 import { vantaListPolicies, vantaGetPolicy } from '../src/tools/policies.js';
 import { vantaQueryTestResults } from '../src/tools/query-results.js';
@@ -219,6 +220,7 @@ describe('Vanta contract snapshot', () => {
     await vantaGetFramework(client, { framework_id: 'soc2' });
     await vantaListPolicies(client, { page_size: 10, page_cursor: 'cursor-policies' });
     await vantaGetPolicy(client, { policy_id: 'code-of-conduct-bsi' });
+    await vantaListIntegrations(client, { page_size: 10, page_cursor: 'cursor-integrations' });
     await vantaListVendors(client, {
       name: 'Acme',
       status: 'MANAGED',

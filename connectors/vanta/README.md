@@ -41,7 +41,7 @@ After clicking the button, your host will prompt you to fill: `VANTA_CLIENT_ID`,
 
 - **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-vanta)
 - **Auth:** OAuth client-credentials grant (`VANTA_CLIENT_ID` + `VANTA_CLIENT_SECRET`)
-- **Tools:** 21 (15 read + 6 write across vulnerabilities, tests, controls, frameworks, policies, people, vendors, documents, compliance summary)
+- **Tools:** 22 (16 read + 6 write across vulnerabilities, tests, controls, frameworks, policies, integrations, people, vendors, documents, compliance summary)
 - **Surface:** cloud-api
 - **Regions:** `VANTA_REGION` is accepted for backward compatibility; all standard tenants (US, EU, AU) share one API host (`api.vanta.com`). The knob routes nothing in this package.
 

@@ -407,4 +407,85 @@ describe('Read tools — documented request contracts', () => {
     expect(payload.ok).toBe(false);
     expect(payload.code).toBe('NOT_FOUND');
   });
+
+  it('vanta_list_integrations returns connection health per integration', async () => {
+    mswServer.use(
+      successTokenHandler,
+      http.get('https://api.vanta.com/v1/integrations', ({ request }) => {
+        expect(Object.fromEntries(new URL(request.url).searchParams)).toEqual({
+          pageSize: '10',
+          pageCursor: 'integration-cursor',
+        });
+        return paginated([
+          {
+            integrationId: 'asana',
+            displayName: 'Asana',
+            resourceKinds: ['AsanaAccount'],
+            connections: [
+              {
+                connectionId: '62ffd6793ef7978318baefa8',
+                isDisabled: true,
+                connectionErrorMessage: 'Authorization Error connecting to Asana',
+              },
+            ],
+          },
+        ]);
+      }),
+    );
+
+    const { createServer } = await import('../src/server.js');
+    testClient = await createInMemoryTestClient({
+      createServer,
+      env: {
+        VANTA_CLIENT_ID: MOCK_CLIENT_ID,
+        VANTA_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+      },
+    });
+
+    const result = await testClient.callTool('vanta_list_integrations', {
+      page_size: 10,
+      page_cursor: 'integration-cursor',
+    });
+    const payload = result.json as {
+      ok: boolean;
+      integrations: Array<{
+        integrationId: string;
+        connections: Array<{ isDisabled: boolean; connectionErrorMessage: string }>;
+      }>;
+      count: number;
+    };
+
+    expect(payload.ok).toBe(true);
+    expect(payload.count).toBe(1);
+    expect(payload.integrations[0]?.integrationId).toBe('asana');
+    expect(payload.integrations[0]?.connections[0]?.isDisabled).toBe(true);
+    // Integration error text is external content and must be enveloped.
+    expect(payload.integrations[0]?.connections[0]?.connectionErrorMessage).toBe(
+      '<untrusted-content source="vanta:connectionErrorMessage">Authorization Error connecting to Asana</untrusted-content>',
+    );
+  });
+
+  it('vanta_list_integrations surfaces a structured error when the API fails', async () => {
+    mswServer.use(
+      successTokenHandler,
+      http.get('https://api.vanta.com/v1/integrations', () =>
+        HttpResponse.json({ message: 'server error' }, { status: 500 }),
+      ),
+    );
+
+    const { createServer } = await import('../src/server.js');
+    testClient = await createInMemoryTestClient({
+      createServer,
+      env: {
+        VANTA_CLIENT_ID: MOCK_CLIENT_ID,
+        VANTA_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+      },
+    });
+
+    const result = await testClient.callTool('vanta_list_integrations', {});
+    const payload = result.json as { ok: boolean; code: string };
+
+    expect(payload.ok).toBe(false);
+    expect(payload.code).toBe('API_ERROR');
+  });
 });
