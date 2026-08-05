@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Added
 
 - `list_scheduled_slack_messages` and `delete_scheduled_slack_message` — inspect and cancel pending scheduled messages. Closes the asymmetry where `schedule_slack_message` could create a scheduled message but nothing in the connector could list or cancel one.
+- `update_slack_message` and `delete_slack_message` — edit or permanently delete messages the connected user posted (`chat.update` / `chat.delete`). `delete_slack_message` carries `destructiveHint: true`.
 
 ### Changed
 

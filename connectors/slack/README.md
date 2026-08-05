@@ -208,6 +208,8 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 - `schedule_slack_message` — Schedule a message for the future. Self-DMs are blocked (scheduled self-notes are not supported yet).
 - `list_scheduled_slack_messages` — List pending scheduled messages (optionally per channel), with the IDs needed to cancel them.
 - `delete_scheduled_slack_message` — Cancel a scheduled message before it posts.
+- `update_slack_message` — Edit a message you posted.
+- `delete_slack_message` — Permanently delete a message you posted.
 - `send_myself_a_note` — Send yourself a note that actually notifies you (posts a DM from the bot to the authenticated user). Use this for "jot something down" / reminders instead of a user-token self-DM.
 
 ### Channels

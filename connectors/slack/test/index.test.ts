@@ -39,6 +39,7 @@ const ALL_TOOLS = [
   'compose_slack_message',
   'create_slack_channel',
   'delete_scheduled_slack_message',
+  'delete_slack_message',
   'download_slack_file',
   'get_slack_channel_history',
   'get_slack_message_by_link',
@@ -59,6 +60,7 @@ const ALL_TOOLS = [
   'schedule_slack_message',
   'search_slack_messages',
   'send_myself_a_note',
+  'update_slack_message',
 ];
 
 const READ_ONLY_TOOLS = [
@@ -85,6 +87,8 @@ const DESTRUCTIVE_TOOLS = [
   'invite_user_to_channel',
   'schedule_slack_message',
   'delete_scheduled_slack_message',
+  'update_slack_message',
+  'delete_slack_message',
   'add_slack_bookmark',
   'add_slack_reminder',
   // Mutate Slack state — read position (mark) or open new DM channel (open).
@@ -148,7 +152,7 @@ describe('Slack MCP — smoke & registration', () => {
     if (cfg) cfg.cleanup();
   });
 
-  it('registers all 27 tools', async () => {
+  it('registers all 29 tools', async () => {
     const result = await client.client.listTools();
     const names = result.tools.map((t) => t.name).sort();
     expect(names).toEqual(ALL_TOOLS);

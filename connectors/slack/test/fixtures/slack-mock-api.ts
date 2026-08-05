@@ -22,6 +22,8 @@ export const SLACK_PRODUCTION_API_URLS: string[] = [
   `${SLACK_API_BASE}/chat.scheduleMessage`,
   `${SLACK_API_BASE}/chat.scheduledMessages.list`,
   `${SLACK_API_BASE}/chat.deleteScheduledMessage`,
+  `${SLACK_API_BASE}/chat.update`,
+  `${SLACK_API_BASE}/chat.delete`,
   `${SLACK_API_BASE}/conversations.create`,
   `${SLACK_API_BASE}/conversations.history`,
   `${SLACK_API_BASE}/conversations.info`,
@@ -92,6 +94,23 @@ export function createSlackHandlers() {
     http.post(`${SLACK_API_BASE}/chat.deleteScheduledMessage`, () =>
       HttpResponse.json({ ok: true }),
     ),
+    http.post(`${SLACK_API_BASE}/chat.update`, async ({ request }) => {
+      const params = new URLSearchParams(await request.text());
+      return HttpResponse.json({
+        ok: true,
+        channel: params.get('channel') || 'C123TEST',
+        ts: params.get('ts') || '1704067200.123456',
+        text: params.get('text') || '',
+      });
+    }),
+    http.post(`${SLACK_API_BASE}/chat.delete`, async ({ request }) => {
+      const params = new URLSearchParams(await request.text());
+      return HttpResponse.json({
+        ok: true,
+        channel: params.get('channel') || 'C123TEST',
+        ts: params.get('ts') || '1704067200.123456',
+      });
+    }),
     http.post(`${SLACK_API_BASE}/conversations.open`, () =>
       HttpResponse.json({
         ok: true,

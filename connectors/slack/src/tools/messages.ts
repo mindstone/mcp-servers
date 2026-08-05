@@ -1182,4 +1182,109 @@ never be sent.`,
       });
     }),
   );
+
+  // ---------------------------------------------------------------------
+  // update_slack_message
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'update_slack_message',
+    {
+      description: `Edit a message you posted in Slack.
+
+Get the message timestamp from get_slack_channel_history (use the ts_slack
+value). Only your own messages can be edited (workspace admins may edit
+others').`,
+      inputSchema: z
+        .object({
+          channel: z.string().min(1).describe('Channel — channel ID or #channel-name'),
+          ts: z
+            .string()
+            .min(1)
+            .describe('Message timestamp to edit — use the ts_slack value from get_slack_channel_history.'),
+          text: z.string().min(1).describe('Replacement message text (supports Slack markdown)'),
+        })
+        .strict(),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args) => {
+      const userClient = await getSlackUserClient();
+      if (!userClient) {
+        return errorJson({
+          error: 'Editing messages requires user authorization.',
+          action_required:
+            'Reconnect Slack via authenticate_slack_workspace to grant chat:write.',
+          next_step: 'authenticate_slack_workspace',
+        });
+      }
+      const channelId = await resolveChannelId(args.channel);
+      const result = await userClient.chat.update({
+        channel: channelId,
+        ts: args.ts,
+        text: args.text,
+      });
+      return JSON.stringify({
+        ok: true,
+        channel: result.channel,
+        ts_slack: result.ts,
+        ts_iso: result.ts ? slackTsToDatetime(result.ts) : undefined,
+        note: 'Message edited.',
+      });
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // delete_slack_message
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'delete_slack_message',
+    {
+      description: `Permanently delete a message you posted in Slack.
+
+Get the message timestamp from get_slack_channel_history (use the ts_slack
+value). This cannot be undone. Only your own messages can be deleted
+(workspace admins may delete others').`,
+      inputSchema: z
+        .object({
+          channel: z.string().min(1).describe('Channel — channel ID or #channel-name'),
+          ts: z
+            .string()
+            .min(1)
+            .describe('Message timestamp to delete — use the ts_slack value from get_slack_channel_history.'),
+        })
+        .strict(),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args) => {
+      const userClient = await getSlackUserClient();
+      if (!userClient) {
+        return errorJson({
+          error: 'Deleting messages requires user authorization.',
+          action_required:
+            'Reconnect Slack via authenticate_slack_workspace to grant chat:write.',
+          next_step: 'authenticate_slack_workspace',
+        });
+      }
+      const channelId = await resolveChannelId(args.channel);
+      const result = await userClient.chat.delete({
+        channel: channelId,
+        ts: args.ts,
+      });
+      return JSON.stringify({
+        ok: true,
+        channel: result.channel,
+        ts_slack: result.ts,
+        note: 'Message permanently deleted.',
+      });
+    }),
+  );
 }
