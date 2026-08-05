@@ -1,6 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
   abortableSignal,
@@ -11,7 +10,7 @@ import {
 } from '../utils.js';
 import { getSlackReaderClient, getSlackUserClient, getTokenProvider } from '../client.js';
 import { resolveChannelId } from '../helpers.js';
-import { resolveUploadSourcePath } from '../upload-path-safety.js';
+import { readUploadSourceFile } from '../upload-path-safety.js';
 import { notConnectedJson } from './auth.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 
@@ -150,7 +149,7 @@ default (max 50MB via max_size_mb). Don't pass message permalinks or thread_ts.`
       );
       if (!downloadResponse.ok) {
         return errorJson({
-          error: `Download failed: ${downloadResponse.status} ${downloadResponse.statusText}`,
+          error: `Download failed: Slack returned HTTP ${downloadResponse.status}`,
           action_required: 'Verify the file is still available and you have access.',
           next_step: 'retry',
           file_id: fileId,
@@ -259,28 +258,20 @@ Max file size: 50MB.`,
         });
       }
 
-      const resolved = resolveUploadSourcePath(args.file_path);
-      if (!resolved.ok) {
+      // Race-resistant confined read: validates containment, then opens the
+      // canonical path once (no-follow), enforces regular-file + size cap via
+      // fstat on that descriptor, and reads through it — so a hostile process
+      // swapping the path after validation cannot redirect the upload outside
+      // the workspace or past the size cap. See upload-path-safety.ts.
+      const source = await readUploadSourceFile(args.file_path, UPLOAD_MAX_SIZE_BYTES);
+      if (!source.ok) {
+        const isSize = source.error.startsWith('File too large');
         return errorJson({
-          error: resolved.error,
-          action_required:
-            'Place the file inside the workspace directory and retry with that path.',
-          next_step: 'retry_with_workspace_path',
-        });
-      }
-      const stat = await fs.promises.stat(resolved.path);
-      if (stat.isDirectory()) {
-        return errorJson({
-          error: 'file_path points to a directory, not a file.',
-          action_required: 'Pass a path to a regular file inside the workspace directory.',
-          next_step: 'retry_with_file_path',
-        });
-      }
-      if (stat.size > UPLOAD_MAX_SIZE_BYTES) {
-        return errorJson({
-          error: `File too large (${(stat.size / 1024 / 1024).toFixed(2)}MB exceeds the 50MB upload cap)`,
-          action_required: 'Upload a smaller file, or share it via a link instead.',
-          next_step: 'retry_with_smaller_file',
+          error: source.error,
+          action_required: isSize
+            ? 'Upload a smaller file, or share it via a link instead.'
+            : 'Place a regular file inside the workspace directory and retry with that path.',
+          next_step: isSize ? 'retry_with_smaller_file' : 'retry_with_workspace_path',
         });
       }
       if (args.thread_ts && !args.channel) {
@@ -298,8 +289,8 @@ Max file size: 50MB.`,
         });
       }
 
-      const filename = args.filename || path.basename(resolved.path);
-      const buffer = await fs.promises.readFile(resolved.path);
+      const filename = args.filename || path.basename(source.path);
+      const buffer = source.buffer;
 
       // Step 1: reserve the upload URL.
       const uploadReservation = await userClient.files.getUploadURLExternal({
@@ -327,7 +318,7 @@ Max file size: 50MB.`,
       const uploadResponse = await postSlackFileToUploadUrl(uploadUrl, buffer);
       if (!uploadResponse.ok) {
         return errorJson({
-          error: `Upload failed: ${uploadResponse.status} ${uploadResponse.statusText}`,
+          error: `Upload failed: Slack returned HTTP ${uploadResponse.status}`,
           action_required: 'Retry the upload. If it persists, verify the files:write scope.',
           next_step: 'retry',
           file_id: fileId,

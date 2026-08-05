@@ -86,12 +86,18 @@ type SearchBackend = 'assistant.search.context' | 'search.messages';
  * these we cache the legacy backend for the process lifetime; re-auth with
  * the granular scopes restarts the probe because the cache is keyed by team
  * and a token-refresh does not add scopes.
+ *
+ * Every code in this set must be INSTALLATION- or WORKSPACE-scoped —
+ * otherwise one crafted query that triggers a resource-specific refusal would
+ * poison backend selection for every later search in the process. That is why
+ * `access_denied` is deliberately NOT here: Slack can return it for
+ * query- or resource-specific denials, not just installation capability, so
+ * it surfaces as an ordinary error instead of pinning the process to legacy.
  */
 const RTS_FALLBACK_ERROR_CODES: ReadonlySet<string> = new Set([
   'missing_scope',
   'not_allowed_token_type',
   'feature_not_enabled',
-  'access_denied',
   'deprecated_endpoint',
   'method_deprecated',
 ]);
