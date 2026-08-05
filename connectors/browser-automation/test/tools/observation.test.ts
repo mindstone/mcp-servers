@@ -131,3 +131,172 @@ describe('Observation tools — untrusted-content envelopes', () => {
   });
 });
 
+
+describe('browser_get_text', () => {
+  let testClient: McpTestClient | undefined;
+  let capturedArgs: string[][];
+
+  beforeEach(async () => {
+    vi.resetModules();
+    capturedArgs = [];
+    const childProcess = await import('node:child_process');
+    const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
+
+    mockExecFile.mockImplementation((_cmd: string, args: string[], _opts: unknown, callback: Function) => {
+      capturedArgs.push(args);
+      callback(null, 'Some page text', '');
+    });
+  });
+
+  afterEach(async () => {
+    if (testClient) {
+      await testClient.close();
+      testClient = undefined;
+    }
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it('defaults to the body selector and returns enveloped text', async () => {
+    testClient = await createTestClient({ env: { AGENT_BROWSER_SHOW_WINDOW: 'false' } });
+
+    const result = await testClient.client.callTool({ name: 'browser_get_text', arguments: {} });
+    const parsed = parseResult(result);
+
+    expect(parsed.ok).toBe(true);
+    expect(capturedArgs[0]).toEqual(['get', 'text', 'body']);
+    expect(parsed.text).toMatch(ENVELOPE_OPEN);
+    expect(parsed.text).toContain('Some page text');
+  });
+
+  it('passes a ref through as the selector', async () => {
+    testClient = await createTestClient({ env: { AGENT_BROWSER_SHOW_WINDOW: 'false' } });
+
+    const result = await testClient.client.callTool({
+      name: 'browser_get_text',
+      arguments: { ref: '@e2' },
+    });
+    const parsed = parseResult(result);
+
+    expect(parsed.ok).toBe(true);
+    expect(capturedArgs[0]).toEqual(['get', 'text', '@e2']);
+  });
+
+  it('surfaces CLI errors as structured error results', async () => {
+    const childProcess = await import('node:child_process');
+    const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: unknown, callback: Function) => {
+      callback(Object.assign(new Error('boom'), { stderr: 'no such element' }), '', 'no such element');
+    });
+
+    testClient = await createTestClient();
+
+    const result = await testClient.client.callTool({ name: 'browser_get_text', arguments: {} });
+    const parsed = parseResult(result);
+
+    expect(parsed.ok).toBe(false);
+    expect(result.isError).toBe(true);
+    expect(parsed.code).toBe('CLI_ERROR');
+  });
+});
+
+describe('browser_pdf', () => {
+  let testClient: McpTestClient | undefined;
+  let workspace: string;
+  let capturedArgs: string[][];
+
+  beforeEach(async () => {
+    vi.resetModules();
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-pdf-test-'));
+    capturedArgs = [];
+    const childProcess = await import('node:child_process');
+    const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
+
+    mockExecFile.mockImplementation((_cmd: string, args: string[], _opts: unknown, callback: Function) => {
+      capturedArgs.push(args);
+      callback(null, '', '');
+    });
+  });
+
+  afterEach(async () => {
+    if (testClient) {
+      await testClient.close();
+      testClient = undefined;
+    }
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    fs.rmSync(workspace, { recursive: true, force: true });
+  });
+
+  it('saves the PDF inside the workspace and returns the resolved path', async () => {
+    testClient = await createTestClient({
+      env: { AGENT_BROWSER_SHOW_WINDOW: 'false', MCP_WORKSPACE_PATH: workspace },
+    });
+
+    const result = await testClient.client.callTool({
+      name: 'browser_pdf',
+      arguments: { file_path: 'reports/page.pdf' },
+    });
+    const parsed = parseResult(result);
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.file_path).toBe(path.join(workspace, 'reports', 'page.pdf'));
+    expect(capturedArgs[0]).toEqual(['pdf', path.join(workspace, 'reports', 'page.pdf')]);
+  });
+
+  it('rejects path traversal outside the workspace before invoking the CLI', async () => {
+    testClient = await createTestClient({
+      env: { AGENT_BROWSER_SHOW_WINDOW: 'false', MCP_WORKSPACE_PATH: workspace },
+    });
+
+    const result = await testClient.client.callTool({
+      name: 'browser_pdf',
+      arguments: { file_path: '../../outside.pdf' },
+    });
+    const parsed = parseResult(result);
+
+    expect(parsed.ok).toBe(false);
+    expect(result.isError).toBe(true);
+    expect(parsed.code).toBe('PATH_OUTSIDE_WORKSPACE');
+    expect(capturedArgs).toHaveLength(0);
+  });
+
+  it('rejects absolute paths outside the workspace', async () => {
+    testClient = await createTestClient({
+      env: { AGENT_BROWSER_SHOW_WINDOW: 'false', MCP_WORKSPACE_PATH: workspace },
+    });
+
+    const result = await testClient.client.callTool({
+      name: 'browser_pdf',
+      arguments: { file_path: '/etc/cron.d/page.pdf' },
+    });
+    const parsed = parseResult(result);
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.code).toBe('PATH_OUTSIDE_WORKSPACE');
+    expect(capturedArgs).toHaveLength(0);
+  });
+
+  it('rejects an in-workspace symlink that escapes the workspace', async () => {
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-pdf-outside-'));
+    try {
+      fs.symlinkSync(outsideDir, path.join(workspace, 'escape'));
+
+      testClient = await createTestClient({
+        env: { AGENT_BROWSER_SHOW_WINDOW: 'false', MCP_WORKSPACE_PATH: workspace },
+      });
+
+      const result = await testClient.client.callTool({
+        name: 'browser_pdf',
+        arguments: { file_path: 'escape/page.pdf' },
+      });
+      const parsed = parseResult(result);
+
+      expect(parsed.ok).toBe(false);
+      expect(parsed.code).toBe('PATH_OUTSIDE_WORKSPACE');
+      expect(capturedArgs).toHaveLength(0);
+    } finally {
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+});

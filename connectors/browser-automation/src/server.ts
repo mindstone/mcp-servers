@@ -5,6 +5,7 @@ import {
   registerInteractionTools,
   registerObservationTools,
   registerSessionTools,
+  registerFileTools,
 } from './tools/index.js';
 
 export function createServer(): McpServer {
@@ -17,6 +18,7 @@ export function createServer(): McpServer {
   registerInteractionTools(server);
   registerObservationTools(server);
   registerSessionTools(server);
+  registerFileTools(server);
 
   return server;
 }

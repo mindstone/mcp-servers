@@ -39,6 +39,12 @@
           "description": "Set to 1 to register the browser_evaluate tool (off by default for security)",
           "isRequired": false,
           "format": "string"
+        },
+        {
+          "name": "MCP_WORKSPACE_PATH",
+          "description": "Workspace directory for browser_pdf outputs and browser_upload sources. Defaults to os.tmpdir() when unset.",
+          "isRequired": false,
+          "format": "filepath"
         }
       ]
     }

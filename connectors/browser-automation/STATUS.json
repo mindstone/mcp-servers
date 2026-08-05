@@ -8,12 +8,13 @@
     "envVars": []
   },
   "tools": {
-    "count": 18,
+    "count": 21,
     "domains": [
       "navigation",
       "observation",
       "interaction",
-      "sessions"
+      "sessions",
+      "files"
     ]
   },
   "surface": "browser-automation",
