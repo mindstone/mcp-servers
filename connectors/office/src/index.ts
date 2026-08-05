@@ -26,6 +26,7 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
+import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -653,7 +654,7 @@ const sidecarRequest = async (app, action, params = {}) => {
       };
     }
 
-    return await response.json();
+    return stampUntrustedSource(await response.json(), app);
   } catch (err) {
     const msg = err && err.message ? err.message : String(err);
     if (msg.includes('ECONNREFUSED') || msg.includes('fetch failed')) {
@@ -674,18 +675,52 @@ const sidecarRequest = async (app, action, params = {}) => {
 /**
  * Wrap a sidecar response into MCP tool result format.
  * Success → text content. Error → text content with isError flag.
+ *
+ * AGENTS.md security invariant #6: document/spreadsheet/slide content returned
+ * by the add-in is authored inside Office files — attacker-influenced whenever
+ * the file came from somewhere else. `sidecarRequest` stamps each add-in
+ * payload with its source app; here every string in the payload (and any
+ * add-in-relayed error message) is wrapped in the canonical
+ * `<untrusted-content>` envelope before it reaches the model. Locally
+ * generated errors (sidecar unreachable, etc.) carry no stamp and pass
+ * through unwrapped.
  */
+const UNTRUSTED_SOURCE = Symbol('officeUntrustedSource');
+
+const untrustedSourceForApp = (app) => `microsoft-office-${app}`;
+
+/**
+ * Stamp a sidecar JSON payload with its source app. The stamp is a
+ * non-enumerable Symbol-keyed property, so it never appears in
+ * JSON.stringify output or in `wrapUntrustedJsonStrings`' object walk.
+ */
+const stampUntrustedSource = (payload, app) => {
+  if (payload && typeof payload === 'object') {
+    Object.defineProperty(payload, UNTRUSTED_SOURCE, {
+      value: untrustedSourceForApp(app),
+      enumerable: false,
+      configurable: true,
+    });
+  }
+  return payload;
+};
+
 const toMcpResult = (result) => {
+  const source =
+    result && typeof result === 'object' && typeof result[UNTRUSTED_SOURCE] === 'string'
+      ? result[UNTRUSTED_SOURCE]
+      : null;
   if (result.success === false) {
+    const message = result.error || 'Unknown error';
     return {
-      content: [{ type: 'text', text: result.error || 'Unknown error' }],
+      content: [{ type: 'text', text: source ? wrapUntrusted(message, source) : message }],
       isError: true,
     };
   }
   // Return the data payload as formatted JSON text
   const data = result.data !== undefined ? result.data : result;
   return {
-    content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+    content: [{ type: 'text', text: JSON.stringify(source ? wrapUntrustedJsonStrings(data, source) : data, null, 2) }],
   };
 };
 
@@ -3946,6 +3981,8 @@ export const __test = {
   loopbackHttpsAgent,
   loopbackHttpsRequest,
   isLoopbackHostname,
+  toMcpResult,
+  stampUntrustedSource,
   setSpawnSidecarAndWaitForTests(fn: typeof defaultSpawnSidecarAndWait) {
     spawnSidecarAndWait = fn;
   },
