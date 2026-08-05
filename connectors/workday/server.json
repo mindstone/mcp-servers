@@ -50,8 +50,8 @@
         },
         {
           "name": "WORKDAY_REFRESH_TOKEN",
-          "description": "Workday OAuth 2.0 refresh token",
-          "isRequired": true,
+          "description": "Workday OAuth 2.0 refresh token (optional; enables the refresh_token grant)",
+          "isRequired": false,
           "isSecret": true,
           "format": "string"
         }
