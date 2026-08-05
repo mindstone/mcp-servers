@@ -69,7 +69,13 @@ export function registerGenerationTools(server: McpServer): void {
           .optional()
           .describe('generate: expand, condense: summarize, preserve: keep exact text'),
         theme_id: z.string().optional().describe('Theme ID from gamma_list_themes'),
-        num_cards: z.number().optional().describe('Number of slides/cards (1-75)'),
+        num_cards: z
+          .number()
+          .int()
+          .min(1)
+          .max(75)
+          .optional()
+          .describe('Number of slides/cards (1-75)'),
         card_split: z
           .enum(['auto', 'inputTextBreaks'])
           .optional()
@@ -122,7 +128,9 @@ export function registerGenerationTools(server: McpServer): void {
           .optional()
           .describe('Access level for external viewers'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      // Creates content in the user's Gamma workspace and may consume
+      // credits — a production-impacting write (AGENTS.md invariant #7).
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
@@ -209,7 +217,9 @@ export function registerGenerationTools(server: McpServer): void {
           .optional()
           .describe('Auto-export format'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      // Creates content in the user's Gamma workspace and may consume
+      // credits — a production-impacting write (AGENTS.md invariant #7).
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const apiKey = requireApiKey();
@@ -274,6 +284,8 @@ export function registerGenerationTools(server: McpServer): void {
           exportRequests.delete(args.generation_id);
 
           // Extended polling: export URL not yet available
+          let pollingFailures = 0;
+          let lastPollingError: string | undefined;
           for (let i = 1; i <= EXPORT_POLL_MAX_ATTEMPTS; i++) {
             console.error(
               `[gamma] Waiting for export URL (attempt ${i}/${EXPORT_POLL_MAX_ATTEMPTS})...`,
@@ -283,6 +295,15 @@ export function registerGenerationTools(server: McpServer): void {
             try {
               status = await getGenerationStatus(apiKey, args.generation_id);
             } catch (error) {
+              // Count and remember failures so an exhausted poll is reported
+              // as "polling failed", not silently presented as a plain
+              // export-URL timeout. GammaError messages are connector-authored
+              // (sanitized); anything else is reported generically.
+              pollingFailures++;
+              lastPollingError =
+                error instanceof GammaError
+                  ? `${error.code}: ${error.message}`
+                  : 'unexpected polling error';
               const errMsg = error instanceof Error ? error.message : String(error);
               console.error(
                 `[gamma] Polling error on attempt ${i}/${EXPORT_POLL_MAX_ATTEMPTS}: ${errMsg}`,
@@ -324,7 +345,14 @@ export function registerGenerationTools(server: McpServer): void {
             // Timeout — URL never appeared
             response.gamma_url = wrapUntrusted(status.gammaUrl, 'gamma:generation.url');
             if (status.credits) response.credits = status.credits;
-            response.message = `Export file (${exportFormat}) was requested but the URL was not available after polling. The presentation was created successfully — you can export manually at: ${wrapUntrusted(status.gammaUrl, 'gamma:generation.url')}`;
+            if (pollingFailures > 0) {
+              // Observable degradation: the caller can tell the export URL may
+              // simply never have been checked successfully.
+              response.export_polling_failures = pollingFailures;
+              response.message = `Export file (${exportFormat}) was requested but the URL was not available after polling, and ${pollingFailures} status check(s) failed (last: ${lastPollingError}). The presentation was created successfully — you can export manually at: ${wrapUntrusted(status.gammaUrl, 'gamma:generation.url')}`;
+            } else {
+              response.message = `Export file (${exportFormat}) was requested but the URL was not available after polling. The presentation was created successfully — you can export manually at: ${wrapUntrusted(status.gammaUrl, 'gamma:generation.url')}`;
+            }
           }
         } else {
           // No export requested, or export URL already present

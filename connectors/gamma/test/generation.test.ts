@@ -531,3 +531,130 @@ describe('Gamma export polling', () => {
     expect(data.message).toBe('Generation complete! Access your content at the URL above.');
   });
 });
+
+describe('Tool annotations and input bounds', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('marks workspace-writing tools as destructive and reads as read-only', async () => {
+    testClient = await createTestClient({
+      env: { GAMMA_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const { tools } = await testClient.client.listTools();
+    const byName = new Map(tools.map((t) => [t.name, t]));
+
+    // gamma_generate / gamma_create_from_template create workspace content and
+    // may consume credits — destructiveHint must be true (invariant #7).
+    expect(byName.get('gamma_generate')?.annotations?.destructiveHint).toBe(true);
+    expect(byName.get('gamma_generate')?.annotations?.readOnlyHint).toBe(false);
+    expect(byName.get('gamma_create_from_template')?.annotations?.destructiveHint).toBe(true);
+    // Pure reads stay non-destructive.
+    expect(byName.get('gamma_get_status')?.annotations?.readOnlyHint).toBe(true);
+    expect(byName.get('gamma_get_status')?.annotations?.destructiveHint).toBe(false);
+    expect(byName.get('gamma_list_themes')?.annotations?.readOnlyHint).toBe(true);
+    expect(byName.get('gamma_list_folders')?.annotations?.readOnlyHint).toBe(true);
+  });
+
+  it.each([0, 76, 2.5, -3])(
+    'rejects out-of-range num_cards=%s via Zod before any outbound request',
+    async (numCards) => {
+      let requestMade = false;
+      mswServer.use(
+        http.post(`${BASE}/generations`, () => {
+          requestMade = true;
+          return HttpResponse.json({ generationId: 'should-not-reach' });
+        }),
+      );
+
+      testClient = await createTestClient({
+        env: { GAMMA_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('gamma_generate', {
+        input_text: 'test num_cards bounds',
+        num_cards: numCards,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(requestMade).toBe(false);
+    },
+  );
+
+  it('accepts an in-range num_cards', async () => {
+    mswServer.use(...createGammaHandlers());
+    testClient = await createTestClient({
+      env: { GAMMA_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('gamma_generate', {
+      input_text: 'test num_cards ok',
+      num_cards: 10,
+    });
+    expect(result.isError).toBeFalsy();
+  });
+});
+
+describe('Export polling failure observability', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('surfaces polling failures instead of reporting a plain export timeout', async () => {
+    const genId = 'gen-poll-errors';
+    let statusCalls = 0;
+    mswServer.use(
+      http.post(`${BASE}/generations`, ({ request }) => {
+        if (!request.headers.get('x-api-key'))
+          return HttpResponse.json({}, { status: 401 });
+        return HttpResponse.json({ generationId: genId });
+      }),
+      http.get(`${BASE}/generations/${genId}`, ({ request }) => {
+        if (!request.headers.get('x-api-key'))
+          return HttpResponse.json({}, { status: 401 });
+        statusCalls++;
+        if (statusCalls === 1) {
+          // Initial status: completed but export URL not yet available.
+          return HttpResponse.json({ generationId: genId, status: 'completed' });
+        }
+        // Every extended-poll call fails.
+        return HttpResponse.text('upstream boom', { status: 500 });
+      }),
+    );
+
+    testClient = await createTestClient({
+      env: {
+        GAMMA_API_KEY: MOCK_API_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        GAMMA_EXPORT_POLL_INTERVAL_MS: '50',
+        GAMMA_EXPORT_POLL_MAX_ATTEMPTS: '3',
+      },
+    });
+
+    await testClient.callTool('gamma_generate', {
+      input_text: 'test polling failures',
+      export_as: 'pdf',
+    });
+
+    const statusResult = await testClient.callTool('gamma_get_status', {
+      generation_id: genId,
+    });
+
+    expect(statusResult.isError).toBeFalsy();
+    const data = statusResult.json as {
+      status: string;
+      message: string;
+      export_polling_failures?: number;
+    };
+    expect(data.export_polling_failures).toBe(3);
+    expect(data.message).toContain('3 status check(s) failed');
+    expect(data.message).toContain('API_ERROR');
+  });
+});
