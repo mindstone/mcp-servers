@@ -81,7 +81,7 @@ describe('automatic replies with MailboxSettings permission', () => {
     });
   });
 
-  it('set_automatic_replies scheduled wraps the window in dateTime/timeZone', async () => {
+  it('set_automatic_replies scheduled converts the window to zone-less UTC', async () => {
     const result = await client.callTool('set_automatic_replies', {
       status: 'scheduled',
       scheduledStart: '2026-08-10T09:00:00Z',
@@ -95,10 +95,84 @@ describe('automatic replies with MailboxSettings permission', () => {
     expect(call?.body).toMatchObject({
       automaticRepliesSetting: {
         status: 'scheduled',
-        scheduledStartDateTime: { dateTime: '2026-08-10T09:00:00Z', timeZone: 'UTC' },
-        scheduledEndDateTime: { dateTime: '2026-08-14T18:00:00Z', timeZone: 'UTC' },
+        // Graph's dateTimeTimeZone pairs a zone-less wall-clock string with
+        // the declared timeZone, so UTC instants are sent without "Z".
+        scheduledStartDateTime: { dateTime: '2026-08-10T09:00:00', timeZone: 'UTC' },
+        scheduledEndDateTime: { dateTime: '2026-08-14T18:00:00', timeZone: 'UTC' },
       },
     });
+  });
+
+  it('set_automatic_replies scheduled converts explicit offsets to UTC', async () => {
+    const result = await client.callTool('set_automatic_replies', {
+      status: 'scheduled',
+      scheduledStart: '2026-08-10T09:00:00+02:00',
+      scheduledEnd: '2026-08-14T18:00:00+02:00',
+    });
+    expect(result.isError).not.toBe(true);
+    const call = state.requests.find(
+      (r) => r.method === 'PATCH' && r.pathname.endsWith('/me/mailboxSettings'),
+    );
+    expect(call?.body).toMatchObject({
+      automaticRepliesSetting: {
+        scheduledStartDateTime: { dateTime: '2026-08-10T07:00:00', timeZone: 'UTC' },
+        scheduledEndDateTime: { dateTime: '2026-08-14T16:00:00', timeZone: 'UTC' },
+      },
+    });
+  });
+
+  it('set_automatic_replies scheduled rejects non-ISO datetimes without calling Graph', async () => {
+    const result = await client.callTool('set_automatic_replies', {
+      status: 'scheduled',
+      scheduledStart: 'next Monday',
+      scheduledEnd: '2026-08-14T18:00:00Z',
+    });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('scheduledStart');
+    expect(
+      state.requests.some((r) => r.method === 'PATCH' && r.pathname.endsWith('/me/mailboxSettings')),
+    ).toBe(false);
+  });
+
+  it('set_automatic_replies scheduled requires start before end', async () => {
+    const result = await client.callTool('set_automatic_replies', {
+      status: 'scheduled',
+      scheduledStart: '2026-08-14T18:00:00Z',
+      scheduledEnd: '2026-08-10T09:00:00Z',
+    });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('earlier than');
+    expect(
+      state.requests.some((r) => r.method === 'PATCH' && r.pathname.endsWith('/me/mailboxSettings')),
+    ).toBe(false);
+  });
+
+  it('set_automatic_replies surfaces a Graph 403 (stale token scope) without re-auth guidance', async () => {
+    const { http, HttpResponse } = await import('msw');
+    mswServer.use(
+      http.patch(
+        'https://graph.microsoft.com/v1.0/me/mailboxSettings',
+        () =>
+          HttpResponse.json(
+            { error: { code: 'ErrorAccessDenied', message: 'Access is denied.' } },
+            { status: 403 },
+          ),
+      ),
+    );
+    const result = await client.callTool('set_automatic_replies', { status: 'disabled' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; action_required?: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Access is denied');
+    // A 403 here is a permissions problem on the Graph side; the envelope must
+    // not blindly prescribe re-authentication as the fix for every failure.
+    expect(json.action_required ?? '').not.toContain(
+      'If it continues to fail, run authenticate_microsoft_account',
+    );
   });
 
   it('set_automatic_replies scheduled without a window returns guidance', async () => {
@@ -115,6 +189,48 @@ describe('automatic replies with MailboxSettings permission', () => {
     const json = result.json as { ok: boolean; error: string };
     expect(json.ok).toBe(false);
     expect(json.error).toContain('Missing required parameter');
+  });
+});
+
+describe('automatic replies with MailboxSettings.Read only', () => {
+  let client: McpTestClient;
+  let cfg: MicrosoftTestConfig;
+
+  beforeAll(async () => {
+    cfg = createMicrosoftConfigDir({
+      scope: `MailboxSettings.Read ${BASE_SCOPE}`,
+    });
+    client = await createTestClient({
+      env: {
+        MS_CLIENT_ID: 'mock-client-id',
+        MS_CONFIG_DIR: cfg.configPath,
+      },
+    });
+  });
+
+  beforeEach(() => {
+    const mock = createMockApi();
+    mswServer.use(...mock.handlers);
+  });
+
+  afterAll(async () => {
+    if (client) await client.close();
+    if (cfg) cfg.cleanup();
+  });
+
+  it('get_automatic_replies is allowed with the read scope', async () => {
+    const result = await client.callTool('get_automatic_replies', {});
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { status: string };
+    expect(json.status).toBe('alwaysEnabled');
+  });
+
+  it('set_automatic_replies still requires the ReadWrite scope', async () => {
+    const result = await client.callTool('set_automatic_replies', { status: 'disabled' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('MailboxSettings.ReadWrite');
   });
 });
 

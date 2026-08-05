@@ -174,14 +174,14 @@ Until the host has written `${MS_CONFIG_DIR}/credentials/<account>.token.json` a
 | Tool | Description |
 | ---- | ----------- |
 | `authenticate_microsoft_account` | Emit the structured `auth_required` handoff so the host runs the Microsoft 365 OAuth flow. |
-| `list_emails` | List emails in a folder, ordered by most recent. |
+| `list_emails` | List emails in a folder, ordered by most recent (see ordering note below). |
 | `get_email` | Read a single email by message ID. |
 | `list_attachments` | List attachment metadata (ID, name, type, size) for a message. |
 | `download_attachment` | Save a file attachment into the workspace (or OS temp directory). |
 | `send_email` | Send a new email message (supports CC and BCC). |
 | `compose_email` | Open an editable draft in an interactive compose view; nothing is sent until the user clicks Send. |
 | `search_emails` | Search emails using Microsoft Search syntax. |
-| `get_conversation` | List every message in a thread, oldest first. |
+| `get_conversation` | List messages in a thread, oldest first (see ordering note below). |
 | `reply_to_email` | Reply (or reply-all) to an existing email. |
 | `forward_email` | Forward an email to additional recipients. |
 | `delete_email` | Move an email to Deleted Items, or hard-delete it. |
@@ -200,13 +200,19 @@ Until the host has written `${MS_CONFIG_DIR}/credentials/<account>.token.json` a
 
 Mail tools run on the `Mail.ReadWrite` + `Mail.Send` delegated grants. The automatic-replies tools additionally need `MailboxSettings.Read` / `MailboxSettings.ReadWrite`; in many organizations an administrator must approve that permission, and the tools return a guidance envelope (rather than a raw Graph 403) when the connected account lacks it.
 
+### Ordering and validation notes
+
+- **Filtered listing is page-local.** Microsoft Graph rejects `$filter` combined with `$orderby`, so when `list_emails` is called with a `filter` (and always for `get_conversation`) the connector sorts only the returned page client-side: Graph applies `$top` first, so the result is the sorted view of whichever page Graph returned, not a globally ordered scan of the mailbox. Unfiltered `list_emails` still sorts server-side.
+- **Recipients are validated.** `to`/`cc`/`bcc` entries must be email addresses (trimmed, max 254 chars, max 500 recipients per field); invalid entries are rejected before any Graph call.
+- **Scheduled out-of-office windows** require ISO 8601 date-times; explicit offsets are converted to UTC (zone-less values are treated as UTC) and the start must be earlier than the end.
+
 ## Security notes
 
 - Token files are written by the host with mode `0600`; this server reads them via the cohort-shared library, which fails closed on malformed files.
 - `MICROSOFT_DISABLE_REFRESH=1` is the default on cloud surfaces so the desktop session remains the sole refresh-token authority and avoids racing for single-use refresh tokens.
 - Successful tool responses drop the OSS-only `ok:true` wrapper to match the bundled `successResult` shape; manual validation/business errors return `isError:true` with a `{ ok:false, error, action_required, next_step }` payload so the host's recovery layer can act on them.
 - Per-tool Graph calls run under a composed caller + cohort timeout signal via `.options({signal})` plus a `Promise.race` wrapper for defence-in-depth.
-- `download_attachment` writes only inside `MCP_WORKSPACE_PATH` (or the OS temp directory when unset) using canonical-prefix containment on the symlink-resolved directory, rejects anything but a plain filename, and caps downloads at 25 MB.
+- `download_attachment` writes only inside `MCP_WORKSPACE_PATH` (or the OS temp directory when unset) using canonical-prefix containment on the symlink-resolved directory, rejects anything but a plain filename, and caps downloads at 25 MB. Attachment bytes are streamed from the `$value` endpoint with a hard byte cap (never fully materialized past the limit), files are created with an exclusive open so a pre-existing file or symlink at the destination is never written through, and the attacker-controlled attachment name is wrapped in an untrusted-content envelope on every error path.
 
 ## Licence
 

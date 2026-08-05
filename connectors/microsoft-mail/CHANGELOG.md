@@ -25,8 +25,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Fixed
 
-- `get_conversation` and `list_emails` (when a `filter` is supplied) no longer send `$orderby` alongside `$filter`: Microsoft Graph rejects that combination with HTTP 400 `InefficientFilter`, which made `get_conversation` fail on every live call and `list_emails` fail for any filtered query. Results are now sorted client-side by `receivedDateTime` (oldest first for conversations, newest first for `list_emails`), preserving the documented order. The unfiltered `list_emails` path still lets Graph sort server-side.
+- `get_conversation` and `list_emails` (when a `filter` is supplied) no longer send `$orderby` alongside `$filter`: Microsoft Graph rejects that combination with HTTP 400 `InefficientFilter`, which made `get_conversation` fail on every live call and `list_emails` fail for any filtered query. Results are now sorted client-side by `receivedDateTime` (oldest first for conversations, newest first for `list_emails`). Note the sort is page-local: Graph applies `$top` before the client-side sort, so a filtered result is the sorted view of the returned page rather than a globally ordered scan (now documented in the README). The unfiltered `list_emails` path still lets Graph sort server-side.
 - Error guidance for Graph's `InefficientFilter` rejection now names the actual cause (the filter is too complex, e.g. combined with a sort order) and suggests simplifying or removing the `filter`, instead of pointing at retry/re-authentication, which cannot resolve this failure class.
+- Generic non-auth failures (filesystem errors, malformed Graph responses, validation failures) no longer advise running `authenticate_microsoft_account`; the guidance now explains that re-authentication only helps for token/auth/permission errors.
+- `set_automatic_replies` scheduled windows are validated and normalized: inputs must be ISO 8601 date-times, explicit offsets are converted to UTC (previously an offset such as `+02:00` was passed through verbatim while declaring `timeZone: 'UTC'`, mislabeling the instant), and a start that is not earlier than the end is rejected before calling Graph.
+- Recipient fields (`to`/`cc`/`bcc` on `send_email`, `compose_email`, `create_draft`, `update_draft`, `forward_email`) now require trimmed, well-formed email addresses (max 254 chars each, max 500 per field) instead of accepting arbitrary strings.
+
+### Security
+
+- `download_attachment` no longer materializes the full attachment JSON (with inline base64 `contentBytes`) in memory: metadata is fetched without `contentBytes`, an oversized declared size is rejected up front, and the bytes are streamed from the `$value` endpoint with a hard 25 MB cap that aborts the stream the moment it is exceeded.
+- `download_attachment` now writes with an atomic exclusive create (`O_CREAT|O_EXCL` through the opened file descriptor) instead of a check-then-`writeFile` sequence, so a symlink or hardlink planted at the destination path can no longer cause an arbitrary file overwrite; the no-overwrite suffixing is preserved. A symlinked attachment directory escaping the workspace is also refused before any directory is created.
+- Attacker-controlled attachment names are now wrapped in an untrusted-content envelope on every `download_attachment` error path (previously interpolated raw into model-visible error text).
+- Graph responses that fail Zod boundary validation no longer echo raw issue details (which can contain attacker-controlled values) into model-visible error text; the failure class is reported and field paths are logged locally instead.
 
 ## [0.2.0] - 2026-07-29
 
