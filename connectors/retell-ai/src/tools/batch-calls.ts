@@ -63,7 +63,7 @@ RELATED TOOLS:
 - update_retell_llm/publish_agent: Prepare the campaign prompt
 - list_calls/get_call: Track individual call outcomes
 
-RETURNS: batch_call_id, name, from_number, scheduled_timestamp, total_task_count, call_time_window when set. Use list_calls to track the individual calls afterwards.
+RETURNS: batch_call_id, name, from_number, scheduled_timestamp, total_task_count, call_time_window when set, and warnings when the pre-call prompt check finds unmatched dynamic variables or could not run. Use list_calls to track the individual calls afterwards.
 COST: Each task uses phone minutes from your Retell AI plan.`,
       inputSchema: {
         from_number: z.string().describe('Caller phone number in E.164 format (e.g. +14155551234). Must be registered in Retell with an outbound agent binding. Use list_phone_numbers to find available numbers.'),
@@ -100,25 +100,38 @@ COST: Each task uses phone minutes from your Retell AI plan.`,
       if (args.reserved_concurrency !== undefined) body.reserved_concurrency = args.reserved_concurrency;
       if (args.call_time_window) body.call_time_window = args.call_time_window;
 
-      // Merge per-task dynamic-variable keys into one set for the best-effort
-      // prompt-placeholder check (the check only inspects keys, not values).
-      const mergedDynamicVariables: Record<string, unknown> = {};
+      // Group tasks by the agent that will actually run their prompt: tasks
+      // without an override use from_number's default outbound agent; each
+      // distinct override_agent_id gets its own prompt check. Variable KEYS
+      // are merged per group (the check inspects keys, not values).
+      const varsByAgent = new Map<string | undefined, Record<string, unknown>>();
       for (const task of args.tasks) {
-        Object.assign(mergedDynamicVariables, task.retell_llm_dynamic_variables);
+        if (!task.retell_llm_dynamic_variables) continue;
+        const agentKey = task.override_agent_id || undefined;
+        const merged = varsByAgent.get(agentKey) ?? {};
+        Object.assign(merged, task.retell_llm_dynamic_variables);
+        varsByAgent.set(agentKey, merged);
       }
 
-      const [result, dynamicVarWarnings] = await Promise.all([
-        retellFetch<Record<string, unknown>>(
-          '/create-batch-call',
-          { method: 'POST', body: JSON.stringify(body) },
+      // Run every distinct agent's prompt check BEFORE the create call — the
+      // campaign must not be created while validation is still in flight.
+      // A failed check never blocks the batch (the tool is destructive by
+      // explicit user request) but always surfaces an explicit warning.
+      const checkResults = await Promise.all(
+        [...varsByAgent.entries()].map(([overrideAgentId, dynamicVariables]) =>
+          checkDynamicVariableReferences({
+            fromNumber: args.from_number,
+            dynamicVariables,
+            overrideAgentId,
+          }),
         ),
-        Object.keys(mergedDynamicVariables).length > 0
-          ? checkDynamicVariableReferences({
-              fromNumber: args.from_number,
-              dynamicVariables: mergedDynamicVariables,
-            })
-          : Promise.resolve(null),
-      ]);
+      );
+      const dynamicVarWarnings = checkResults.flatMap((warnings) => warnings ?? []);
+
+      const result = await retellFetch<Record<string, unknown>>(
+        '/create-batch-call',
+        { method: 'POST', body: JSON.stringify(body) },
+      );
 
       const response: Record<string, unknown> = {
         ok: true,

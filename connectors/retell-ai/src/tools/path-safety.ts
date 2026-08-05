@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 
 export type ResolveResult =
-  | { ok: true; path: string }
+  | { ok: true; path: string; stat: fs.Stats }
   | { ok: false; error: string };
 
 /**
@@ -65,7 +65,10 @@ function canonicalisePrefix(absoluteLexical: string): string {
 /**
  * Validate that `inputPath` resolves to a real file inside the upload
  * workspace root, even after symlink resolution. Returns the canonical
- * path on success.
+ * path plus the validated file's stat (dev/ino identity) on success — the
+ * caller MUST open the path once, `fstat` the descriptor, and confirm the
+ * opened inode matches `stat` before reading, so a path swap between
+ * validation and read fails closed.
  *
  * Security rules:
  *  - `~` is expanded to `os.homedir()` lexically. The expanded path must
@@ -124,5 +127,18 @@ export function resolveUploadPath(inputPath: string): ResolveResult {
     };
   }
 
-  return { ok: true, path: canonical };
+  // Capture the validated file's identity (dev/ino) so the caller can verify
+  // the descriptor it opens is the SAME file this fence approved — closing
+  // the check-then-use window between validation and read (TOCTOU).
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(canonical);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { ok: false, error: `File not found: ${inputPath}` };
+    }
+    throw err;
+  }
+
+  return { ok: true, path: canonical, stat };
 }

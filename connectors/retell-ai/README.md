@@ -172,8 +172,11 @@ and get explicit user confirmation before invoking it. Consider checking
 `file_paths`. Reads are constrained to `MCP_WORKSPACE_PATH` (or the system
 temp directory when unset) using canonical-prefix containment: `..`
 traversal, absolute paths outside the sandbox, and symlinks that escape it
-are rejected before any disk read. Retell limits uploads to 25 files, 50MB
-each.
+are rejected before any disk read. The read itself is open-then-validate:
+the connector opens a descriptor, confirms the opened inode is the file the
+sandbox approved, and reads through that descriptor, so a file swapped in
+between validation and read fails closed. Retell limits uploads to 25
+files, 50MB each.
 
 ### Delete tools are permanent
 

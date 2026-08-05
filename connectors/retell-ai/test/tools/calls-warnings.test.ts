@@ -106,7 +106,7 @@ describe('create_phone_call — dynamic-variable warnings', () => {
     expect(parsed.warnings).toBeUndefined();
   });
 
-  it('still places the call even when the warning lookup fails', async () => {
+  it('still places the call when the warning lookup fails, with an explicit degradation warning', async () => {
     mswServer.use(
       http.get(`${RETELL_API_BASE}/get-agent/:agentId`, () =>
         HttpResponse.json({ error_message: 'Internal error' }, { status: 500 }),
@@ -131,7 +131,9 @@ describe('create_phone_call — dynamic-variable warnings', () => {
 
     expect(parsed.ok).toBe(true);
     expect(parsed.call_id).toBe('call_phone_001');
-    expect(parsed.warnings).toBeUndefined();
+    // Fail-open but observable: the failed check surfaces as a warning.
+    expect(parsed.warnings).toBeInstanceOf(Array);
+    expect(parsed.warnings[0]).toContain('prompt check could not run');
   });
 
   it('resolves agent via phone number binding when no override_agent_id is passed', async () => {

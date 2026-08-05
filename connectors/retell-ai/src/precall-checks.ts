@@ -36,11 +36,15 @@ function extractReferencedTokens(...prompts: Array<string | undefined>): Set<str
  * Inspect the live prompt that will actually run for an outbound call and
  * return warnings the agent should see in the response payload.
  *
- * Defensive: any lookup error is swallowed and the function returns `null`,
- * because the warning is best-effort and must never block placing a call.
+ * Fail-open but OBSERVABLE: a lookup error never blocks placing a call (the
+ * call tools are annotated destructive and the user asked for the call), but
+ * it never disappears silently either — a failed check produces an explicit
+ * "could not run" warning string so the degradation is visible in the tool
+ * response.
  *
- * Returns null if no warning is warranted or the check could not run; a
- * non-empty array of human-readable warning strings otherwise.
+ * Returns null if no warning is warranted; a non-empty array of
+ * human-readable warning strings otherwise (including when the check itself
+ * could not run).
  */
 export async function checkDynamicVariableReferences(input: {
   fromNumber: string;
@@ -92,8 +96,11 @@ export async function checkDynamicVariableReferences(input: {
     return [
       `Live prompt on agent ${agentId} (llm_id=${llmId}) does not reference these dynamic variable(s): [${unreferenced.join(', ')}]. They will be silently dropped. Other passed variables [${dynamicKeys.filter((k) => !unreferenced.includes(k)).join(', ')}] are referenced and will substitute. To use all variables, update_retell_llm to add the missing {{var_name}} tokens, then publish_agent.`,
     ];
-  } catch {
-    return null;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    return [
+      `Dynamic-variable prompt check could not run: ${reason}. The call proceeds WITHOUT validating the passed dynamic variables against the live prompt — unmatched variables are silently dropped. Verify the prompt's {{placeholders}} with get_retell_llm before relying on them.`,
+    ];
   }
 }
 
