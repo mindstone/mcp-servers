@@ -13,7 +13,7 @@ Voice agent phone calls, batch calling campaigns, call management, agent configu
 
 | Field | Value |
 |-------|-------|
-| Version | 0.2.4 |
+| Version | 0.3.0 |
 | Auth | API key (`RETELL_API_KEY`) |
 | Tools | 32 (calls, agents, llms, voices, knowledge-bases, chats) |
 | Surface | cloud API |

@@ -9,7 +9,7 @@ Voice agent phone calls, batch calling campaigns, call management, agent configu
 
 ## Status
 
-- **Version:** [0.2.4](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-retell-ai)
+- **Version:** [0.3.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-retell-ai)
 - **Auth:** API key ([`RETELL_API_KEY`](./server.json))
 - **Tools:** [32](./src/tools/) (calls, agents, llms, voices, knowledge bases, chats)
 - **Surface:** cloud-api
