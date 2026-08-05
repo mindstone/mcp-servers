@@ -24,6 +24,11 @@ are maintained manually as part of the PR review checklist.
 ### Changed
 - `check_kling_task` accepts all task types (`text2video`, `image2video`, `video-extend`, `lip-sync`, `image`), returns image URLs for image tasks, and surfaces the generated video `id` needed by `extend_kling_video` and `generate_kling_lip_sync`.
 
+### Security
+- All Kling API responses are now validated fail-closed with Zod (envelope + per-endpoint `data` schema); malformed JSON or a shape-drifting payload surfaces as a generic `INVALID_RESPONSE` error instead of an unchecked type cast or raw parser text.
+- `klingFetch` no longer sends the bearer JWT to arbitrary absolute URLs: only the exact Kling API origin is accepted (the `/account/costs` endpoint at the domain root keeps working).
+- Vendor-supplied error messages are credential-redacted (access key, secret key, and the live JWT) and wrapped in `<untrusted-content>` envelopes before they can reach model-visible output.
+
 ## [0.3.2] - 2026-05-14
 ### Added
 - **registry**: Cohort A backfill — 12 API-key OSS connectors get server.json + mcpName. fathom, humaans, kling, mixmax, nano-banana, napkin, pandadoc, freshdesk, elevenlabs, retell-ai, runway, talentlms each gain a registry-shaped server.json (validated against registry.modelcontextprotocol.io) and an mcpName field on package.json under the io.github.mindstone namespace.

@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { klingFetch } from '../client.js';
 import { encodeLocalImage } from '../media.js';
 import { withErrorHandling } from '../utils.js';
-import type { VideoGenerationResponse } from '../types.js';
+import { taskCreatedResponseSchema } from '../types.js';
 
 const IMAGE_MODEL_ENUM = ['kling-v2-1', 'kling-v2', 'kling-v1-5', 'kling-v1'] as const;
 
@@ -107,7 +107,7 @@ export function registerImageTools(server: McpServer): void {
       }
       if (args.callback_url) body.callback_url = args.callback_url;
 
-      const result = await klingFetch<VideoGenerationResponse>('/images/generations', {
+      const result = await klingFetch('/images/generations', taskCreatedResponseSchema, {
         method: 'POST',
         body: JSON.stringify(body),
       });

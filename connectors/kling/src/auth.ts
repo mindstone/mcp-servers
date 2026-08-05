@@ -78,6 +78,26 @@ export async function getJwtToken(): Promise<string> {
 }
 
 /**
+ * Replace any occurrence of the configured credentials (access key, secret
+ * key, cached JWT) in `text` with `[redacted]`. Applied to vendor-supplied
+ * error text before it reaches model-visible output or logs, so a vendor
+ * response that echoes our credentials cannot leak them.
+ *
+ * Values shorter than 8 chars are skipped: redacting a near-empty string
+ * would mangle unrelated text, and such a value is not a usable credential.
+ */
+export function redactSecrets(text: string): string {
+  let out = text;
+  const candidates = [accessKey, secretKey, cachedToken?.jwt];
+  for (const secret of candidates) {
+    if (secret && secret.length >= 8) {
+      out = out.split(secret).join('[redacted]');
+    }
+  }
+  return out;
+}
+
+/**
  * Clear the cached JWT token. Used when credentials are updated.
  */
 export function clearTokenCache(): void {

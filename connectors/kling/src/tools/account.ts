@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { klingFetch } from '../client.js';
-import { KLING_API_BASE, type AccountCostsResponse } from '../types.js';
+import { KLING_API_BASE, accountCostsResponseSchema } from '../types.js';
 import { epochMsField, withErrorHandling } from '../utils.js';
 
 export function registerAccountTools(server: McpServer): void {
@@ -27,8 +27,9 @@ export function registerAccountTools(server: McpServer): void {
       // The account costs endpoint is documented at the domain root
       // (/account/costs), not under /v1 — hence the absolute URL.
       const origin = new URL(KLING_API_BASE).origin;
-      const data = await klingFetch<AccountCostsResponse>(
+      const data = await klingFetch(
         `${origin}/account/costs?start_time=${args.start_time}&end_time=${args.end_time}`,
+        accountCostsResponseSchema,
       );
 
       const packs = (data.resource_pack_subscribe_infos ?? []).map((pack) => {

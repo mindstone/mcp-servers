@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { klingFetch } from '../client.js';
 import { withErrorHandling } from '../utils.js';
-import type { VideoGenerationResponse } from '../types.js';
+import { taskCreatedResponseSchema } from '../types.js';
 
 export function registerExtendTools(server: McpServer): void {
   // ─── extend_kling_video ─────────────────────────────────────────
@@ -55,7 +55,7 @@ export function registerExtendTools(server: McpServer): void {
       if (args.negative_prompt) body.negative_prompt = args.negative_prompt;
       if (args.callback_url) body.callback_url = args.callback_url;
 
-      const result = await klingFetch<VideoGenerationResponse>('/videos/video-extend', {
+      const result = await klingFetch('/videos/video-extend', taskCreatedResponseSchema, {
         method: 'POST',
         body: JSON.stringify(body),
       });

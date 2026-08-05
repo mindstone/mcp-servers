@@ -128,7 +128,7 @@ describe('list_kling_tasks', () => {
     expect(result.isError).toBe(true);
     const json = result.json as { ok: boolean; code: string };
     expect(json.ok).toBe(false);
-    expect(json.code).toBe('UNEXPECTED_RESPONSE');
+    expect(json.code).toBe('INVALID_RESPONSE');
   });
 
   it('surfaces API errors with the standard contract', async () => {

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { klingFetch } from '../client.js';
-import { KlingError, TASK_TYPE_PATHS, type KlingTaskType, type TaskListItem } from '../types.js';
+import { TASK_TYPE_PATHS, taskListResponseSchema, type KlingTaskType } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 
 export function registerTaskListTools(server: McpServer): void {
@@ -41,17 +41,12 @@ export function registerTaskListTools(server: McpServer): void {
       const page = args.page || 1;
       const pageSize = args.page_size || 30;
 
-      const data = await klingFetch<TaskListItem[]>(
+      // The response is schema-validated inside klingFetch (fail-closed); a
+      // non-array payload surfaces as a generic INVALID_RESPONSE error.
+      const data = await klingFetch(
         `${TASK_TYPE_PATHS[taskType]}?pageNum=${page}&pageSize=${pageSize}`,
+        taskListResponseSchema,
       );
-
-      if (!Array.isArray(data)) {
-        throw new KlingError(
-          'Unexpected response shape from the Kling task list endpoint',
-          'UNEXPECTED_RESPONSE',
-          'The Kling API may have changed. Try again, or check a specific task with check_kling_task.',
-        );
-      }
 
       // Surface only IDs, status, timestamps, and result URLs — task_info
       // echoes the caller's prompt and is deliberately not returned.

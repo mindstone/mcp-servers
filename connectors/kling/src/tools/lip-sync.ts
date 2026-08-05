@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { klingFetch } from '../client.js';
 import { encodeLocalAudio } from '../media.js';
 import { withErrorHandling } from '../utils.js';
-import type { VideoGenerationResponse } from '../types.js';
+import { taskCreatedResponseSchema } from '../types.js';
 
 export function registerLipSyncTools(server: McpServer): void {
   // ─── generate_kling_lip_sync ────────────────────────────────────
@@ -158,7 +158,7 @@ export function registerLipSyncTools(server: McpServer): void {
       const body: Record<string, unknown> = { input };
       if (args.callback_url) body.callback_url = args.callback_url;
 
-      const result = await klingFetch<VideoGenerationResponse>('/videos/lip-sync', {
+      const result = await klingFetch('/videos/lip-sync', taskCreatedResponseSchema, {
         method: 'POST',
         body: JSON.stringify(body),
       });

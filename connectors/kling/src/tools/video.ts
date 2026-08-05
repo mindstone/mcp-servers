@@ -3,7 +3,12 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { klingFetch } from '../client.js';
 import { encodeLocalImage } from '../media.js';
 import { withErrorHandling } from '../utils.js';
-import { TASK_TYPE_PATHS, type VideoGenerationResponse, type TaskStatusResponse } from '../types.js';
+import {
+  TASK_TYPE_PATHS,
+  taskCreatedResponseSchema,
+  taskStatusResponseSchema,
+  type TaskStatusResponse,
+} from '../types.js';
 
 const MODEL_ENUM = [
   'kling-v2-6',
@@ -92,7 +97,7 @@ export function registerVideoTools(server: McpServer): void {
         body.callback_url = args.callback_url;
       }
 
-      const result = await klingFetch<VideoGenerationResponse>('/videos/text2video', {
+      const result = await klingFetch('/videos/text2video', taskCreatedResponseSchema, {
         method: 'POST',
         body: JSON.stringify(body),
       });
@@ -218,7 +223,7 @@ export function registerVideoTools(server: McpServer): void {
         body.callback_url = args.callback_url;
       }
 
-      const result = await klingFetch<VideoGenerationResponse>('/videos/image2video', {
+      const result = await klingFetch('/videos/image2video', taskCreatedResponseSchema, {
         method: 'POST',
         body: JSON.stringify(body),
       });
@@ -268,10 +273,11 @@ export function registerVideoTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const taskType = args.task_type || 'text2video';
+      const taskId = args.task_id;
 
       let result: TaskStatusResponse;
       try {
-        result = await klingFetch<TaskStatusResponse>(`${TASK_TYPE_PATHS[taskType]}/${args.task_id}`);
+        result = await klingFetch(`${TASK_TYPE_PATHS[taskType]}/${taskId}`, taskStatusResponseSchema);
       } catch (error) {
         // Legacy fallback: if a video task is not found with the given type,
         // try the alternative video type (text2video <-> image2video).
@@ -283,7 +289,7 @@ export function registerVideoTools(server: McpServer): void {
           ((error as { code: string }).code === 'HTTP_404' ||
             (error as { code: string }).code === 'KLING_1201')
         ) {
-          result = await klingFetch<TaskStatusResponse>(`${TASK_TYPE_PATHS[altType]}/${args.task_id}`);
+          result = await klingFetch(`${TASK_TYPE_PATHS[altType]}/${taskId}`, taskStatusResponseSchema);
         } else {
           throw error;
         }

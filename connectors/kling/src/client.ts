@@ -3,15 +3,45 @@
  *
  * Centralises JWT Bearer auth injection, error handling, rate-limit
  * messaging, and timeout handling for all Kling API calls.
+ *
+ * Security properties enforced here for every call:
+ *  - Absolute URLs are accepted only on the exact Kling API origin, so the
+ *    bearer JWT can never be sent to a caller-supplied host.
+ *  - Every response body is validated fail-closed with Zod (envelope, then
+ *    the per-endpoint `data` schema) before it reaches tool code. Malformed
+ *    JSON or a shape mismatch surfaces as a generic INVALID_RESPONSE error —
+ *    raw parser messages can embed fragments of the vendor payload and must
+ *    never reach model-visible output.
+ *  - Vendor-supplied error messages are credential-redacted and wrapped in an
+ *    `<untrusted-content>` envelope (AGENTS.md invariant #6) before they can
+ *    reach model-visible output.
  */
 
-import { isConfigured, getJwtToken } from './auth.js';
+import { z } from 'zod';
+import { isConfigured, getJwtToken, redactSecrets } from './auth.js';
+import { wrapUntrusted } from './untrusted-content.js';
 import {
   KlingError,
   KLING_API_BASE,
   getRequestTimeoutMs,
-  type KlingApiResponse,
+  klingEnvelopeSchema,
+  klingVendorErrorSchema,
 } from './types.js';
+
+/** Exact origin the bearer JWT may be sent to. Derived from the fixed base. */
+const KLING_API_ORIGIN = new URL(KLING_API_BASE).origin;
+
+/** Envelope source label for vendor-authored error text. */
+const VENDOR_ERROR_SOURCE = 'kling-api-error';
+
+/**
+ * Vendor error text is attacker-controllable: redact any echoed credentials,
+ * then envelope it so the model treats it as data, not instructions.
+ */
+function sanitizeVendorMessage(message: string): string {
+  // wrapUntrusted only returns undefined for undefined input.
+  return wrapUntrusted(redactSecrets(message), VENDOR_ERROR_SOURCE)!;
+}
 
 /**
  * Get user-friendly resolution for common Kling error codes.
@@ -49,16 +79,61 @@ function getErrorResolution(code: number, message?: string): string {
 }
 
 /**
+ * Resolve the request URL. Relative paths are prefixed with the fixed Kling
+ * API base. Absolute https:// URLs are permitted ONLY on the exact Kling API
+ * origin — needed for the account costs endpoint, which Kling documents at
+ * the domain root (/account/costs) rather than under /v1. Any other absolute
+ * URL is refused so the bearer JWT can never leak to a third-party host.
+ */
+function resolveApiUrl(path: string): string {
+  if (!path.startsWith('https://')) {
+    return `${KLING_API_BASE}${path}`;
+  }
+  let origin: string;
+  try {
+    origin = new URL(path).origin;
+  } catch {
+    throw new KlingError(
+      'Invalid API URL',
+      'INVALID_URL',
+      'Internal connector error: a malformed absolute URL was requested.',
+    );
+  }
+  if (origin !== KLING_API_ORIGIN) {
+    throw new KlingError(
+      'Refused to send Kling credentials to a URL outside the Kling API origin',
+      'URL_ORIGIN_REFUSED',
+      'Internal connector error: only Kling API URLs may be requested with authentication.',
+    );
+  }
+  return path;
+}
+
+function invalidResponseError(detail: string): KlingError {
+  // Detail (issue counts, HTTP status) goes to stderr only; the model-visible
+  // message stays generic and free of vendor-controlled content.
+  console.error(`[kling] ${detail}`);
+  return new KlingError(
+    'Kling API returned an unexpected response shape',
+    'INVALID_RESPONSE',
+    'The Kling API response did not match the expected schema. If this persists, the API may have changed — check for a connector update.',
+  );
+}
+
+/**
  * Make an authenticated request to the Kling API.
  *
  * @param path  API path relative to base, e.g. `/videos/text2video`
+ * @param schema  Zod schema the response `data` payload must satisfy
  * @param options  Additional fetch options
- * @returns Parsed response data (unwrapped from Kling's { code, message, data } envelope)
+ * @returns Parsed, schema-validated response data (unwrapped from Kling's
+ *   { code, message, data } envelope)
  */
-export async function klingFetch<T>(
+export async function klingFetch<S extends z.ZodTypeAny>(
   path: string,
+  schema: S,
   options: RequestInit = {},
-): Promise<T> {
+): Promise<z.infer<S>> {
   if (!isConfigured()) {
     throw new KlingError(
       'Kling API credentials not configured',
@@ -68,10 +143,7 @@ export async function klingFetch<T>(
   }
 
   const jwt = await getJwtToken();
-  // A full https:// URL bypasses the base prefix — needed for the account
-  // costs endpoint, which Kling documents at the domain root (/account/costs)
-  // rather than under /v1.
-  const url = path.startsWith('https://') ? path : `${KLING_API_BASE}${path}`;
+  const url = resolveApiUrl(path);
 
   let response: Response;
 
@@ -110,23 +182,18 @@ export async function klingFetch<T>(
 
   // Handle rate limiting
   if (response.status === 429) {
-    let bodyText: string | undefined;
+    let vendor: z.infer<typeof klingVendorErrorSchema> | undefined;
     try {
-      bodyText = await response.text();
+      const parsed = klingVendorErrorSchema.safeParse(await response.json());
+      if (parsed.success) vendor = parsed.data;
     } catch {
-      /* ignore */
+      /* non-JSON body — fall through to the generic rate-limit message */
     }
-    let parsed: KlingApiResponse<T> | undefined;
-    try {
-      parsed = bodyText ? JSON.parse(bodyText) : undefined;
-    } catch {
-      /* ignore */
-    }
-    if (parsed?.code && parsed.message) {
+    if (vendor && vendor.message) {
       throw new KlingError(
-        parsed.message,
-        `KLING_${parsed.code}`,
-        getErrorResolution(parsed.code, parsed.message),
+        sanitizeVendorMessage(vendor.message),
+        `KLING_${vendor.code}`,
+        getErrorResolution(vendor.code, vendor.message),
       );
     }
     const retryAfter = response.headers.get('Retry-After');
@@ -146,25 +213,23 @@ export async function klingFetch<T>(
     );
   }
 
-  // Handle non-OK responses that may not be JSON
+  // Handle non-OK responses that may not be JSON. The vendor body is only
+  // surfaced through a sanitized, enveloped message — never verbatim.
   if (!response.ok) {
-    let bodyText: string;
+    let vendor: z.infer<typeof klingVendorErrorSchema> | undefined;
     try {
-      bodyText = await response.text();
-    } catch {
-      bodyText = '';
-    }
-    let parsed: KlingApiResponse<T> | undefined;
-    try {
-      parsed = JSON.parse(bodyText);
+      const parsed = klingVendorErrorSchema.safeParse(await response.json());
+      if (parsed.success) vendor = parsed.data;
     } catch {
       /* not JSON */
     }
-    if (parsed?.code !== undefined) {
+    if (vendor) {
       throw new KlingError(
-        parsed.message || `Kling API error (HTTP ${response.status})`,
-        `KLING_${parsed.code}`,
-        getErrorResolution(parsed.code, parsed.message),
+        vendor.message
+          ? sanitizeVendorMessage(vendor.message)
+          : `Kling API error (HTTP ${response.status})`,
+        `KLING_${vendor.code}`,
+        getErrorResolution(vendor.code, vendor.message),
       );
     }
     throw new KlingError(
@@ -176,16 +241,38 @@ export async function klingFetch<T>(
     );
   }
 
-  const data = (await response.json()) as KlingApiResponse<T>;
+  let rawBody: unknown;
+  try {
+    rawBody = await response.json();
+  } catch {
+    throw invalidResponseError(`malformed JSON body (HTTP ${response.status}) for ${path}`);
+  }
 
-  // Kling API returns code 0 for success
-  if (data.code !== 0) {
-    throw new KlingError(
-      data.message || `Kling API error: ${data.code}`,
-      `KLING_${data.code}`,
-      getErrorResolution(data.code, data.message),
+  const envelope = klingEnvelopeSchema.safeParse(rawBody);
+  if (!envelope.success) {
+    throw invalidResponseError(
+      `response failed envelope validation for ${path} (${envelope.error.issues.length} issue(s))`,
     );
   }
 
-  return data.data;
+  // Kling API returns code 0 for success
+  if (envelope.data.code !== 0) {
+    const vendorMessage = envelope.data.message;
+    throw new KlingError(
+      vendorMessage
+        ? sanitizeVendorMessage(vendorMessage)
+        : `Kling API error: ${envelope.data.code}`,
+      `KLING_${envelope.data.code}`,
+      getErrorResolution(envelope.data.code, vendorMessage),
+    );
+  }
+
+  const parsed = schema.safeParse(envelope.data.data);
+  if (!parsed.success) {
+    throw invalidResponseError(
+      `response data failed schema validation for ${path} (${parsed.error.issues.length} issue(s))`,
+    );
+  }
+
+  return parsed.data;
 }
