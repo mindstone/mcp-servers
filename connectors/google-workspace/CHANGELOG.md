@@ -26,6 +26,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Security
 
+- The `<untrusted-content>` envelope helper now neutralises every case/whitespace close-tag variant (`</UNTRUSTED-CONTENT>`, `</untrusted-content >`, tab variants), not just the exact lowercase `</untrusted-content>` spelling — attacker-controlled Google text (Chat messages, Meet transcripts, Gmail signatures/vacation text, Contacts fields, Drive Activity titles) can no longer terminate the envelope from inside the payload. The helper is the canonical strong implementation (identical to the connector template's), is idempotent for same-source re-wraps, and its escaped form changes from the `&#47;` entity to a backslash-escaped slash.
 - Path-based Gmail attachment reads no longer have a check-then-use race window: after the workspace-containment check the file is opened once (with `O_NOFOLLOW` where supported) and read through the same file descriptor, so a path swapped for an out-of-workspace symlink between check and read is refused.
 
 ## [0.2.0] - 2026-07-29

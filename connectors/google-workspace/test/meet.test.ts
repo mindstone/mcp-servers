@@ -284,7 +284,7 @@ describe('Meet handlers happy paths', () => {
       transcript: 'transcript-1',
     });
     const text = result.transcriptEntries?.[0]?.text ?? '';
-    expect(text).toContain('<&#47;untrusted-content>');
+    expect(text).toContain('<\\/untrusted-content>');
     // Exactly one real close tag in the wrapped string: the envelope's own.
     expect(text.match(/<\/untrusted-content>/g)).toHaveLength(1);
   });
