@@ -319,6 +319,56 @@ describe('microsoft-teams mock-API integration', () => {
     });
   });
 
+  it('get_user_presence returns a colleague presence', async () => {
+    const result = await client.callTool('get_user_presence', { userId: 'alice@example.com' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      userId: string;
+      availability: string;
+      activity: string;
+      statusMessage: string;
+    };
+    expect(json.userId).toBe('alice@example.com');
+    expect(json.availability).toBe('Busy');
+    expect(json.activity).toBe('InAMeeting');
+    expect(json.statusMessage).toContain('Focus time');
+    const call = state.requests.find(
+      (r) => r.method === 'GET' && r.pathname.includes('/users/') && r.pathname.endsWith('/presence'),
+    );
+    expect(call).toBeDefined();
+  });
+
+  it('set_presence posts preferred presence with a duration', async () => {
+    const result = await client.callTool('set_presence', {
+      availability: 'DoNotDisturb',
+      durationMinutes: 60,
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { success: boolean; availability: string; durationMinutes: number };
+    expect(json.success).toBe(true);
+    expect(json.availability).toBe('DoNotDisturb');
+    expect(json.durationMinutes).toBe(60);
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.endsWith('/me/presence/setUserPreferredPresence'),
+    );
+    expect(call?.body).toMatchObject({
+      availability: 'DoNotDisturb',
+      activity: 'DoNotDisturb',
+      expirationDuration: 'PT60M',
+    });
+  });
+
+  it('set_presence without a duration omits expirationDuration', async () => {
+    const result = await client.callTool('set_presence', { availability: 'Available' });
+    expect(result.isError).not.toBe(true);
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.endsWith('/me/presence/setUserPreferredPresence'),
+    );
+    const body = call?.body as Record<string, unknown>;
+    expect(body.availability).toBe('Available');
+    expect('expirationDuration' in body).toBe(false);
+  });
+
   it('send_chat_message rejects unknown keys (strict schema)', async () => {
     // F8: the input schema is `.strict()`, so an unexpected argument is refused
     // at the protocol boundary rather than silently forwarded to Graph. The SDK

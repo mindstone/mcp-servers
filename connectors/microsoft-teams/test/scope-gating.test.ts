@@ -100,6 +100,26 @@ describe('scope gating for admin-consent Graph permissions', () => {
     expect(call).toBeUndefined();
   });
 
+  it('get_user_presence reports the missing Presence.Read.All scope', async () => {
+    const result = await client.callTool('get_user_presence', { userId: 'alice@example.com' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; missing_scopes: string[] };
+    expect(json.ok).toBe(false);
+    expect(json.missing_scopes).toEqual(['Presence.Read.All']);
+    const call = state.requests.find((r) => r.pathname.includes('/presence'));
+    expect(call).toBeUndefined();
+  });
+
+  it('set_presence reports the missing Presence.ReadWrite scope', async () => {
+    const result = await client.callTool('set_presence', { availability: 'Busy' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; missing_scopes: string[] };
+    expect(json.ok).toBe(false);
+    expect(json.missing_scopes).toEqual(['Presence.ReadWrite']);
+    const call = state.requests.find((r) => r.pathname.includes('setUserPreferredPresence'));
+    expect(call).toBeUndefined();
+  });
+
   it('ungated chat tools still work under the base scope set', async () => {
     const result = await client.callTool('list_chats', { top: 1 });
     expect(result.isError).not.toBe(true);

@@ -11,16 +11,19 @@ import {
   findUser,
   getChat,
   getPresence,
+  getUserPresence,
   listChannelMessages,
   listChannels,
   listChats,
   listChatMessages,
   listTeams,
+  PRESENCE_AVAILABILITY_VALUES,
   replyToChannelMessage,
   replyToChatMessage,
   searchMessages,
   sendChannelMessage,
   sendChatMessage,
+  setPresence,
 } from './teams.js';
 
 /**
@@ -393,5 +396,49 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
     withErrorHandling(async (args, extra) =>
       successJson(await callGraph(extra, (c, signal) => getPresence(c, args, signal))),
     ),
+  );
+
+  server.registerTool(
+    'get_user_presence',
+    {
+      description:
+        "Get a colleague's current presence status (available, busy, in a meeting, etc.). Requires the Presence.Read.All Graph permission, which may need tenant admin approval.",
+      inputSchema: z
+        .object({
+          userId: z.string().describe('User ID or email address of the colleague'),
+        })
+        .strict(),
+      annotations: READ_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) => {
+      const gate = await requireScopesGranted(['Presence.Read.All'], "Reading a colleague's presence");
+      if (gate) return gate;
+      return successJson(await callGraph(extra, (c, signal) => getUserPresence(c, args, signal)));
+    }),
+  );
+
+  server.registerTool(
+    'set_presence',
+    {
+      description:
+        'Set your own presence status (e.g. Busy, DoNotDisturb, Away), optionally for a limited duration. Requires the Presence.ReadWrite Graph permission.',
+      inputSchema: z
+        .object({
+          availability: z
+            .enum(PRESENCE_AVAILABILITY_VALUES)
+            .describe('Presence availability to set'),
+          durationMinutes: z
+            .number()
+            .optional()
+            .describe('How long the status applies, in minutes (5-480). Omit to keep it until changed.'),
+        })
+        .strict(),
+      annotations: WRITE_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) => {
+      const gate = await requireScopesGranted(['Presence.ReadWrite'], 'Setting presence');
+      if (gate) return gate;
+      return successJson(await callGraph(extra, (c, signal) => setPresence(c, args, signal)));
+    }),
   );
 }

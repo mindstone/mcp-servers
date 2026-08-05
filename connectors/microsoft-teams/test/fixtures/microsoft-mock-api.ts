@@ -274,6 +274,24 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
       });
     }),
 
+    http.get(`${GRAPH_BASE}/users/:userId/presence`, async ({ request }) => {
+      await capture(request);
+      return HttpResponse.json({
+        availability: 'Busy',
+        activity: 'InAMeeting',
+        statusMessage: {
+          message: {
+            content: 'Focus time',
+          },
+        },
+      });
+    }),
+
+    http.post(`${GRAPH_BASE}/me/presence/setUserPreferredPresence`, async ({ request }) => {
+      await capture(request);
+      return HttpResponse.json({});
+    }),
+
     http.get(`${GRAPH_BASE}/me/presence`, async ({ request }) => {
       await capture(request);
       return HttpResponse.json({

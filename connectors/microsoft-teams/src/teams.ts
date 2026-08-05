@@ -299,6 +299,78 @@ export async function getPresence(
   };
 }
 
+const presenceSchema = z
+  .object({
+    availability: z.string().nullish(),
+    activity: z.string().nullish(),
+    statusMessage: z
+      .object({
+        message: z
+          .object({
+            content: z.string().nullish(),
+          })
+          .nullish(),
+      })
+      .nullish(),
+  })
+  .passthrough();
+
+export async function getUserPresence(
+  client: Client,
+  args: ArgBag,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const userId = requireStringArg(args, 'userId', 'user ID or email', 'get_user_presence');
+  const presence = presenceSchema.parse(
+    await client.api(`/users/${encodeURIComponent(userId)}/presence`).options({ signal }).get(),
+  );
+  return {
+    userId,
+    availability: presence.availability,
+    activity: presence.activity,
+    statusMessage: wrapUntrusted(
+      presence.statusMessage?.message?.content ?? undefined,
+      'microsoft-teams:get_user_presence:statusMessage',
+    ),
+  };
+}
+
+export const PRESENCE_AVAILABILITY_VALUES = [
+  'Available',
+  'Busy',
+  'DoNotDisturb',
+  'BeRightBack',
+  'Away',
+  'Offline',
+] as const;
+
+export async function setPresence(
+  client: Client,
+  args: ArgBag,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const availability = requireStringArg(
+    args,
+    'availability',
+    `presence availability (${PRESENCE_AVAILABILITY_VALUES.join(', ')})`,
+    'set_presence',
+  );
+  const duration = numberArg(args, 'durationMinutes');
+  const durationMinutes = duration == null ? undefined : Math.round(Math.max(5, Math.min(duration, 480)));
+
+  const body: Record<string, unknown> = { availability, activity: availability };
+  if (durationMinutes != null) body.expirationDuration = `PT${durationMinutes}M`;
+
+  await client.api('/me/presence/setUserPreferredPresence').options({ signal }).post(body);
+
+  return {
+    success: true,
+    availability,
+    ...(durationMinutes != null ? { durationMinutes } : {}),
+    message: `Presence set to ${availability}`,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Channel messages
 // ---------------------------------------------------------------------------

@@ -6,6 +6,7 @@ All notable changes to this connector will be documented in this file.
 
 ### Added
 
+- `get_user_presence` (a colleague's availability; requires `Presence.Read.All`) and `set_presence` (set your own status via `setUserPreferredPresence`, with an optional duration; requires `Presence.ReadWrite`).
 - `reply_to_message` — threaded replies to a specific chat message.
 - `search_messages` — keyword search across chat and channel messages via the Graph `/search/query` `chatMessage` entity (works with the already-granted `Chat.Read` permission).
 - `find_user` (resolve colleagues by display name or email; requires `User.ReadBasic.All`) and `create_chat` (start a 1:1 or group chat by member email/user ID, returning the chat ID for use with `send_chat_message`) — together they enable "message a colleague" flows that previously required an existing chat ID.

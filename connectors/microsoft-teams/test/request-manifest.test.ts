@@ -100,6 +100,18 @@ const MANIFEST: ManifestRow[] = [
     pathname: '/v1.0/me/presence',
     args: {},
   },
+  {
+    tool: 'get_user_presence',
+    method: 'GET',
+    pathname: '/v1.0/users/:userId/presence',
+    args: { userId: 'alice@example.com' },
+  },
+  {
+    tool: 'set_presence',
+    method: 'POST',
+    pathname: '/v1.0/me/presence/setUserPreferredPresence',
+    args: { availability: 'Busy' },
+  },
 ];
 
 function matchPath(actual: string, pattern: string): boolean {
