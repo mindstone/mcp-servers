@@ -60,7 +60,7 @@ describe('Freshdesk solutions (knowledge base)', () => {
     });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
 
-    expect(text).toContain('Knowledge base articles (2)');
+    expect(text).toContain('Knowledge base articles (2, page 1)');
     expect(text).toContain('#500:');
     expect(text).toContain('[Published]');
     expect(text).toContain('#501:');
@@ -109,6 +109,51 @@ describe('Freshdesk solutions (knowledge base)', () => {
 
     expect(result.isError).toBe(true);
     expect(requestCount).toBe(0);
+  });
+
+  it('search_freshdesk_solutions signals possible truncation on a full page', async () => {
+    const tc = createConfig();
+    // Freshdesk search returns at most 30 results per page; a full page
+    // cannot be presented as the complete result set.
+    const fullPage = Array.from({ length: 30 }, (_, i) => makeArticle(1000 + i));
+    mswServer.use(
+      http.get('https://testacme.freshdesk.com/api/v2/search/solutions', () =>
+        HttpResponse.json(fullPage),
+      ),
+    );
+    testClient = await createTestClient({ env: makeFreshdeskTestEnv(tc.configPath) });
+
+    const result = await testClient.client.callTool({
+      name: 'search_freshdesk_solutions',
+      arguments: { term: 'password' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+
+    expect(text).toContain('Knowledge base articles (30, page 1)');
+    expect(text).toContain('More results may be available');
+  });
+
+  it('search_freshdesk_solutions passes the page parameter and reports hasMore', async () => {
+    const tc = createConfig();
+    let seenPage: string | null = null;
+    mswServer.use(
+      http.get('https://testacme.freshdesk.com/api/v2/search/solutions', ({ request }) => {
+        seenPage = new URL(request.url).searchParams.get('page');
+        return HttpResponse.json([makeArticle(500)]);
+      }),
+    );
+    testClient = await createTestClient({ env: makeFreshdeskTestEnv(tc.configPath) });
+
+    const result = await testClient.client.callTool({
+      name: 'search_freshdesk_solutions',
+      arguments: { term: 'password', page: 2, response_format: 'detailed' },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const parsed = JSON.parse(text);
+
+    expect(seenPage).toBe('2');
+    expect(parsed.page).toBe(2);
+    expect(parsed.hasMore).toBe(false);
   });
 
   // ─── get_freshdesk_solution_article ────────────────────────────

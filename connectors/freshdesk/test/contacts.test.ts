@@ -85,9 +85,12 @@ describe('Freshdesk contacts & companies', () => {
     expect(parsed.contacts[1].job_title).toBe(
       `${CONTACT_ENVELOPE_OPEN}Support Manager${ENVELOPE_CLOSE}`,
     );
-    // Connector-controlled metadata stays raw.
+    // Every vendor-authored string is enveloped — including email, which the
+    // requester controls. Numeric ids stay raw.
+    expect(parsed.contacts[1].email).toBe(
+      `${CONTACT_ENVELOPE_OPEN}jane@example.com${ENVELOPE_CLOSE}`,
+    );
     expect(parsed.contacts[1].id).toBe(101);
-    expect(parsed.contacts[1].email).toBe('jane@example.com');
   });
 
   it('list_freshdesk_contacts filters by email', async () => {
@@ -160,7 +163,9 @@ describe('Freshdesk contacts & companies', () => {
 
     expect(text).toContain('Contact #101');
     expect(text).toContain(`${CONTACT_ENVELOPE_OPEN}Jane Customer${ENVELOPE_CLOSE}`);
-    expect(text).toContain('Email: jane@example.com');
+    expect(text).toContain(
+      `Email: ${CONTACT_ENVELOPE_OPEN}jane@example.com${ENVELOPE_CLOSE}`,
+    );
     expect(text).toContain('Company ID: 900');
   });
 
@@ -239,8 +244,8 @@ describe('Freshdesk contacts & companies', () => {
 
     expect(text).toContain('Company #900');
     expect(text).toContain(`Name: ${COMPANY_ENVELOPE_OPEN}Acme Corp${ENVELOPE_CLOSE}`);
-    expect(text).toContain('Domains: acme.example.com');
-    expect(text).toContain('Industry: Software');
+    expect(text).toContain(`Domains: ${COMPANY_ENVELOPE_OPEN}acme.example.com${ENVELOPE_CLOSE}`);
+    expect(text).toContain(`Industry: ${COMPANY_ENVELOPE_OPEN}Software${ENVELOPE_CLOSE}`);
   });
 
   it('get_freshdesk_company envelopes a hostile company note', async () => {

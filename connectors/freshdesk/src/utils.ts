@@ -81,9 +81,24 @@ export function withErrorHandling<T>(
           isError: true,
         };
       }
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      // Unknown exceptions can embed attacker-controlled fragments (e.g. a
+      // JSON parse error quoting the vendor response body), so the raw message
+      // never reaches model-visible output. It is still logged locally so the
+      // failure stays observable.
+      console.error('[Freshdesk] Unexpected error in tool handler:', error);
       return {
-        content: [{ type: 'text', text: JSON.stringify({ ok: false, error: errorMessage }) }],
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              ok: false,
+              error: 'An unexpected error occurred while processing the request.',
+              code: 'INTERNAL_ERROR',
+              resolution:
+                'Try again. If the problem persists, reconnect your Freshdesk account in your MCP host\'s settings.',
+            }),
+          },
+        ],
         isError: true,
       };
     }

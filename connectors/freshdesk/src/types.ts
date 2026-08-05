@@ -209,13 +209,23 @@ export function sourceToString(source: number): string {
 
 /**
  * Parse a status value that may be a number or a human-readable string.
+ *
+ * Fail-closed: returns `undefined` for anything that is not a positive
+ * integer (Freshdesk custom statuses have numeric ids beyond the defaults)
+ * or an exact default-status name. Callers performing writes MUST reject
+ * `undefined` instead of silently omitting the field. Numeric strings must
+ * be all digits — `parseInt` alone would silently coerce `"3garbage"` to 3.
  */
 export function parseStatus(input: unknown): number | undefined {
-  if (typeof input === 'number') return input;
+  if (typeof input === 'number') {
+    return Number.isInteger(input) && input > 0 ? input : undefined;
+  }
   if (typeof input === 'string') {
-    const num = parseInt(input, 10);
-    if (!isNaN(num)) return num;
-    const lower = input.toLowerCase();
+    const trimmed = input.trim();
+    if (/^\d+$/.test(trimmed)) {
+      return parseInt(trimmed, 10);
+    }
+    const lower = trimmed.toLowerCase();
     for (const [key, value] of Object.entries(STATUS_MAP)) {
       if (value.toLowerCase() === lower) return parseInt(key, 10);
     }
@@ -225,13 +235,22 @@ export function parseStatus(input: unknown): number | undefined {
 
 /**
  * Parse a priority value that may be a number or a human-readable string.
+ *
+ * Fail-closed: Freshdesk priorities are a fixed set (1-4), so anything else
+ * returns `undefined`. Callers performing writes MUST reject `undefined`
+ * instead of silently omitting the field.
  */
 export function parsePriority(input: unknown): number | undefined {
-  if (typeof input === 'number') return input;
+  if (typeof input === 'number') {
+    return Number.isInteger(input) && PRIORITY_MAP[input] !== undefined ? input : undefined;
+  }
   if (typeof input === 'string') {
-    const num = parseInt(input, 10);
-    if (!isNaN(num)) return num;
-    const lower = input.toLowerCase();
+    const trimmed = input.trim();
+    if (/^\d+$/.test(trimmed)) {
+      const num = parseInt(trimmed, 10);
+      return PRIORITY_MAP[num] !== undefined ? num : undefined;
+    }
+    const lower = trimmed.toLowerCase();
     for (const [key, value] of Object.entries(PRIORITY_MAP)) {
       if (value.toLowerCase() === lower) return parseInt(key, 10);
     }

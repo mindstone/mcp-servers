@@ -21,6 +21,16 @@ are maintained manually as part of the PR review checklist.
 - Ticket subjects are now wrapped in untrusted-content envelopes in every output path (previously only search results wrapped them), and the envelope implementation now delegates to the canonical shared `wrapUntrusted` helper instead of a hand-rolled copy.
 - `reply_to_freshdesk_ticket` and `add_freshdesk_note` now declare `destructiveHint: true` — both write to production tickets (public replies are customer-facing).
 
+### Security
+- Every Freshdesk-authored string is now enveloped in all output paths — not just names/descriptions/bodies: ticket type, requester email, tags, string-valued `custom_fields` (keys included), contact email/phone/mobile/tags, company domains/industry/tier/health score, agent contact fields, group type, ticket-field label/name/type/choices, article tags, and vendor-echoed subjects in create/update responses were previously returned raw.
+- Error handling no longer exposes vendor-controlled bytes: error response bodies are never logged or surfaced, the `Retry-After` header is reduced to a parsed non-negative integer before it reaches the rate-limit message, a non-JSON success body becomes a fixed connector-authored error, and unexpected exceptions return a generic `INTERNAL_ERROR` (the underlying detail is still logged locally on stderr).
+- Request logging now records method and path only; query strings carrying contact-email filters and search terms are no longer written to logs.
+- Invalid `status`/`priority` values on ticket create/update are rejected with `INVALID_STATUS`/`INVALID_PRIORITY` before any request is made, instead of being silently omitted while the write still went through. IDs and pagination inputs are validated as bounded positive integers (`page` ≥ 1, `per_page` within the documented cap, IDs positive integers).
+
+### Fixed
+- `search_freshdesk_solutions` gains a `page` parameter and reports `hasMore` (plus a "more results may be available" hint in concise output) on full pages, instead of presenting a truncated first page as the complete result set.
+- `accounts.json` is now read open-once through a file descriptor (open + fstat + read), closing the check-then-use window between the old existence check and the read; a missing, deleted, or non-regular file fails closed to "no accounts".
+
 ## [0.2.2] - 2026-05-14
 ### Added
 - **registry**: Cohort A backfill — 12 API-key OSS connectors get server.json + mcpName. fathom, humaans, kling, mixmax, nano-banana, napkin, pandadoc, freshdesk, elevenlabs, retell-ai, runway, talentlms each gain a registry-shaped server.json (validated against registry.modelcontextprotocol.io) and an mcpName field on package.json under the io.github.mindstone namespace.

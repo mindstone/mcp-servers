@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getAccount } from '../auth.js';
 import { freshdeskFetch } from '../client.js';
 import type { FreshdeskTicketField } from '../types.js';
-import { formatTicketField } from '../formatters.js';
+import { formatTicketField, wrapTicketFieldUntrustedFields } from '../formatters.js';
 import { withErrorHandling } from '../utils.js';
 
 export function registerFieldTools(server: McpServer): void {
@@ -48,7 +48,7 @@ export function registerFieldTools(server: McpServer): void {
 
       return JSON.stringify({
         ok: true,
-        ticket_fields: fields,
+        ticket_fields: fields.map(wrapTicketFieldUntrustedFields),
         count: fields.length,
       });
     }),
