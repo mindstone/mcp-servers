@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- `replit_search_files` — recursive search over SFTP by file-name substring
+  and/or text-content substring (case-insensitive). Content matches return
+  line numbers and the matching lines; binary files and files over 1 MB are
+  skipped for content search. Bounded by `max_results` (default 50, max 200),
+  `max_depth` (default 4, max 10), and a global visited-entry cap, with a
+  `truncated` flag when a cap is hit. Matched paths and lines are wrapped in
+  `<untrusted-content>` envelopes like the other read tools.
+- `replit_stat` — file/directory metadata (type, size, permissions,
+  mtime/atime) without reading file contents.
+- `replit_move` — move or rename a file or directory. Pre-checks the
+  destination and fails with `DESTINATION_EXISTS` instead of overwriting.
+- `replit_delete_file` — permanently delete a file (files only; directories
+  are refused). Carries `destructiveHint: true` and additionally requires the
+  `MCP_REPLIT_SSH_ALLOW_DELETE=1` environment opt-in, failing closed with
+  `DELETE_DISABLED` otherwise, because deletion on Replit is irreversible
+  (no trash). Declared in `server.json`.
+
 ## [0.1.2] - 2026-05-20
 
 ### Security

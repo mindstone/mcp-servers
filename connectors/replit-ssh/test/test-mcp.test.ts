@@ -66,6 +66,30 @@ const EXPECTED_ANNOTATIONS: Record<string, {
     idempotentHint: true,
     openWorldHint: true,
   },
+  replit_search_files: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
+  replit_stat: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
+  replit_move: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
+  replit_delete_file: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   replit_setup_ssh: {
     readOnlyHint: false,
     destructiveHint: true,
@@ -117,15 +141,19 @@ describe('Replit SSH MCP — mock tests', () => {
   // ── Tool registration & schemas ─────────────────────────────────────────────
 
   describe('tool registration', () => {
-    it('registers all five tools', async () => {
+    it('registers all nine tools', async () => {
       client = await createTestClient(tempHome);
       const tools = await listTools(client);
       const names = tools.map((t) => t.name).sort();
       expect(names).toEqual([
         'replit_check_connection',
+        'replit_delete_file',
         'replit_list_files',
+        'replit_move',
         'replit_read_file',
+        'replit_search_files',
         'replit_setup_ssh',
+        'replit_stat',
         'replit_write_file',
       ]);
     });
@@ -195,6 +223,44 @@ describe('Replit SSH MCP — mock tests', () => {
       expect(tool.inputSchema.properties).toHaveProperty('backup_existing_config');
       expect(tool.inputSchema.required ?? []).not.toContain('force_regenerate');
       expect(tool.inputSchema.required ?? []).not.toContain('backup_existing_config');
+    });
+
+    it('replit_search_files schema exposes needles and caps, all optional', async () => {
+      client = await createTestClient(tempHome);
+      const tools = await listTools(client);
+      const tool = tools.find((t) => t.name === 'replit_search_files')!;
+      expect(tool.inputSchema.properties).toHaveProperty('name_contains');
+      expect(tool.inputSchema.properties).toHaveProperty('content_contains');
+      expect(tool.inputSchema.properties).toHaveProperty('max_results');
+      expect(tool.inputSchema.properties).toHaveProperty('max_depth');
+      expect(tool.inputSchema.required).toEqual(expect.arrayContaining(['host', 'user']));
+      for (const optional of ['path', 'name_contains', 'content_contains', 'max_results', 'max_depth']) {
+        expect(tool.inputSchema.required ?? []).not.toContain(optional);
+      }
+    });
+
+    it('replit_stat schema requires path', async () => {
+      client = await createTestClient(tempHome);
+      const tools = await listTools(client);
+      const tool = tools.find((t) => t.name === 'replit_stat')!;
+      expect(tool.inputSchema.required).toEqual(expect.arrayContaining(['host', 'user', 'path']));
+    });
+
+    it('replit_move schema requires source_path + destination_path', async () => {
+      client = await createTestClient(tempHome);
+      const tools = await listTools(client);
+      const tool = tools.find((t) => t.name === 'replit_move')!;
+      expect(tool.inputSchema.required).toEqual(
+        expect.arrayContaining(['host', 'user', 'source_path', 'destination_path']),
+      );
+    });
+
+    it('replit_delete_file schema requires path and documents the env opt-in', async () => {
+      client = await createTestClient(tempHome);
+      const tools = await listTools(client);
+      const tool = tools.find((t) => t.name === 'replit_delete_file')!;
+      expect(tool.inputSchema.required).toEqual(expect.arrayContaining(['host', 'user', 'path']));
+      expect(tool.description).toContain('MCP_REPLIT_SSH_ALLOW_DELETE');
     });
   });
 
@@ -368,6 +434,52 @@ describe('Replit SSH MCP — mock tests', () => {
       });
       expect(result.isError).toBe(true);
     });
+
+    it('replit_move rejects .. traversal in source and destination', async () => {
+      client = await createTestClient(tempHome);
+      const res = await callToolJson<StructuredError>(client, 'replit_move', {
+        host: REPLIT_HOST,
+        user: REPLIT_USER,
+        source_path: '../escape.txt',
+        destination_path: 'b.txt',
+      });
+      expect(res.ok).toBe(false);
+      expect(res.code).toBe('PATH_INVALID');
+      expect(res.error).toContain('Path traversal');
+
+      const res2 = await callToolJson<StructuredError>(client, 'replit_move', {
+        host: REPLIT_HOST,
+        user: REPLIT_USER,
+        source_path: 'a.txt',
+        destination_path: '../escape.txt',
+      });
+      expect(res2.ok).toBe(false);
+      expect(res2.code).toBe('PATH_INVALID');
+    });
+
+    it('replit_delete_file rejects .. traversal', async () => {
+      vi.stubEnv('MCP_REPLIT_SSH_ALLOW_DELETE', '1');
+      client = await createTestClient(tempHome);
+      const res = await callToolJson<StructuredError>(client, 'replit_delete_file', {
+        host: REPLIT_HOST,
+        user: REPLIT_USER,
+        path: '../escape.txt',
+      });
+      expect(res.ok).toBe(false);
+      expect(res.code).toBe('PATH_INVALID');
+      expect(res.error).toContain('Path traversal');
+    });
+
+    it('replit_stat rejects absolute paths', async () => {
+      client = await createTestClient(tempHome);
+      const res = await callToolJson<StructuredError>(client, 'replit_stat', {
+        host: REPLIT_HOST,
+        user: REPLIT_USER,
+        path: '/etc/passwd',
+      });
+      expect(res.ok).toBe(false);
+      expect(res.code).toBe('PATH_INVALID');
+    });
   });
 
   // ── Host allowlist ─────────────────────────────────────────────────────────
@@ -425,6 +537,52 @@ describe('Replit SSH MCP — mock tests', () => {
         user: REPLIT_USER,
         path: 'foo.txt',
         content: 'x',
+      });
+      expect(res.ok).toBe(false);
+      expect(res.code).toBe('HOST_NOT_ALLOWED');
+    });
+
+    it('replit_search_files also enforces host allowlist', async () => {
+      client = await createTestClient(tempHome);
+      const res = await callToolJson<StructuredError>(client, 'replit_search_files', {
+        host: 'evil.example.com',
+        user: REPLIT_USER,
+        name_contains: 'x',
+      });
+      expect(res.ok).toBe(false);
+      expect(res.code).toBe('HOST_NOT_ALLOWED');
+    });
+
+    it('replit_stat also enforces host allowlist', async () => {
+      client = await createTestClient(tempHome);
+      const res = await callToolJson<StructuredError>(client, 'replit_stat', {
+        host: 'evil.example.com',
+        user: REPLIT_USER,
+        path: 'foo.txt',
+      });
+      expect(res.ok).toBe(false);
+      expect(res.code).toBe('HOST_NOT_ALLOWED');
+    });
+
+    it('replit_move also enforces host allowlist', async () => {
+      client = await createTestClient(tempHome);
+      const res = await callToolJson<StructuredError>(client, 'replit_move', {
+        host: 'evil.example.com',
+        user: REPLIT_USER,
+        source_path: 'a.txt',
+        destination_path: 'b.txt',
+      });
+      expect(res.ok).toBe(false);
+      expect(res.code).toBe('HOST_NOT_ALLOWED');
+    });
+
+    it('replit_delete_file also enforces host allowlist (with delete enabled)', async () => {
+      vi.stubEnv('MCP_REPLIT_SSH_ALLOW_DELETE', '1');
+      client = await createTestClient(tempHome);
+      const res = await callToolJson<StructuredError>(client, 'replit_delete_file', {
+        host: 'evil.example.com',
+        user: REPLIT_USER,
+        path: 'foo.txt',
       });
       expect(res.ok).toBe(false);
       expect(res.code).toBe('HOST_NOT_ALLOWED');
