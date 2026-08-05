@@ -10,7 +10,7 @@ import {
   FORM_LITERAL_RULES,
   sanitizeHubSpotResponse,
 } from '../sanitize.js';
-import { assertMaxFanOut } from './input-limits.js';
+import { assertMaxFanOut, assertNonEmptyIdList } from './input-limits.js';
 
 /**
  * Parse HubSpot API error for AI-friendly messages
@@ -340,6 +340,7 @@ export async function handleBatchReadContacts(args: { ids: string[]; properties?
 }
 
 export async function handleAddListMembers(args: { listId: string; recordIds: string[] }) {
+  assertNonEmptyIdList(args.recordIds, 'recordIds');
   assertMaxFanOut(args.recordIds, 'recordIds');
 
   try {
@@ -358,6 +359,7 @@ export async function handleAddListMembers(args: { listId: string; recordIds: st
 }
 
 export async function handleRemoveListMembers(args: { listId: string; recordIds: string[] }) {
+  assertNonEmptyIdList(args.recordIds, 'recordIds');
   assertMaxFanOut(args.recordIds, 'recordIds');
 
   try {

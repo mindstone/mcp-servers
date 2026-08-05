@@ -140,6 +140,19 @@ describe('HubSpot MCP - list membership write tools', () => {
     expect(payload.errorCode).toBe('INPUT_TOO_LARGE');
   });
 
+  it('rejects an empty recordIds array before any API call', async () => {
+    mockApi.clearLog();
+    for (const tool of ['add_hubspot_list_members', 'remove_hubspot_list_members']) {
+      const raw = await client.callToolRaw(tool, { listId: '100', recordIds: [] });
+      expect(raw.isError).toBe(true);
+      const text = raw.content.find((c): c is { type: 'text'; text: string } => c.type === 'text');
+      expect(text!.text).toContain('recordIds');
+    }
+    // An empty membership write must be a no-op the model is TOLD about —
+    // no request may leave the connector.
+    expect(mockApi.requestLog.filter((r) => r.pathname.includes('memberships'))).toHaveLength(0);
+  });
+
   it('maps a scope-denied 403 to the honest multi-cause error', async () => {
     const raw = await client.callToolRaw('add_hubspot_list_members', {
       listId: '200',

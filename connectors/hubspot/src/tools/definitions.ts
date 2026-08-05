@@ -2517,6 +2517,7 @@ user's permissions, or the connected app's scopes are the likely cause.`,
         recordIds: {
           type: 'array',
           items: { type: 'string' },
+          minItems: 1,
           maxItems: MAX_FAN_OUT,
           description: 'Record IDs to add (max 100 per call)'
         }
@@ -2547,6 +2548,7 @@ user's permissions, or the connected app's scopes are the likely cause.`,
         recordIds: {
           type: 'array',
           items: { type: 'string' },
+          minItems: 1,
           maxItems: MAX_FAN_OUT,
           description: 'Record IDs to remove (max 100 per call)'
         }

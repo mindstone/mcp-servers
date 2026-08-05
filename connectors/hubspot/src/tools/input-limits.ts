@@ -55,6 +55,17 @@ export function assertMaxFanOut(
   }
 }
 
+/**
+ * Membership-write tools take a non-empty ID list — an empty array would be a
+ * no-op write the model believes succeeded. Rejected before any API call, in
+ * the same INVALID_ARGUMENTS shape as the path validators.
+ */
+export function assertNonEmptyIdList(ids: string[] | undefined, fieldPath: string): void {
+  if (!ids || ids.length === 0) {
+    throw new Error(`INVALID_ARGUMENTS: ${fieldPath} must contain at least one ID`);
+  }
+}
+
 export function assertAssociationFanOut(associations: {
   contactIds?: string[];
   companyIds?: string[];
