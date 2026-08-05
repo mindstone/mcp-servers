@@ -268,6 +268,72 @@ describe('microsoft-sharepoint mock-API integration', () => {
     expect(json.note).toContain('OneDrive');
   });
 
+  it('list_item_permissions returns grants with enveloped display names', async () => {
+    const result = await client.callTool('list_item_permissions', {
+      driveId: 'drive-1',
+      itemId: 'item-1',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      ok?: unknown;
+      count: number;
+      permissions: Array<{ id: string; roles: string[]; grantedTo: Array<{ displayName?: string; email?: string }> }>;
+    };
+    expect(json.ok).toBeUndefined();
+    expect(json.count).toBe(1);
+    expect(json.permissions[0]?.id).toBe('perm-1');
+    expect(json.permissions[0]?.grantedTo[0]?.displayName).toContain('<untrusted-content');
+    expect(json.permissions[0]?.grantedTo[0]?.displayName).toContain('Alice Example');
+  });
+
+  it('invite_item_collaborators POSTs to /invite with safe defaults', async () => {
+    const result = await client.callTool('invite_item_collaborators', {
+      driveId: 'drive-1',
+      itemId: 'item-1',
+      recipients: ['jane@example.com'],
+    });
+    expect(result.isError).not.toBe(true);
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.includes('/drives/drive-1/items/item-1/invite'),
+    );
+    expect(call).toBeDefined();
+    const body = call?.body as {
+      recipients: Array<{ email: string }>;
+      requireSignIn: boolean;
+      sendInvitation: boolean;
+      roles: string[];
+    };
+    expect(body.recipients).toEqual([{ email: 'jane@example.com' }]);
+    expect(body.requireSignIn).toBe(true);
+    expect(body.sendInvitation).toBe(false);
+    expect(body.roles).toEqual(['read']);
+  });
+
+  it('invite_item_collaborators rejects an empty recipient list', async () => {
+    const result = await client.callTool('invite_item_collaborators', {
+      driveId: 'drive-1',
+      itemId: 'item-1',
+      recipients: [],
+    });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('recipients');
+  });
+
+  it('revoke_item_permission deletes the permission', async () => {
+    const result = await client.callTool('revoke_item_permission', {
+      driveId: 'drive-1',
+      itemId: 'item-1',
+      permissionId: 'perm-1',
+    });
+    expect(result.isError).not.toBe(true);
+    const call = state.requests.find(
+      (r) => r.method === 'DELETE' && r.pathname.includes('/drives/drive-1/items/item-1/permissions/perm-1'),
+    );
+    expect(call).toBeDefined();
+  });
+
   it('returns explicit guidance when scope-gated tool arguments are missing', async () => {
     const result = await client.callTool('get_sharepoint_site', {});
     expect(result.isError).toBe(true);

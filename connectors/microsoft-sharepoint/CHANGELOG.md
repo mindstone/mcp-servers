@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- `list_item_permissions`, `invite_item_collaborators`, and `revoke_item_permission` tools for per-item permission management on library files/folders (Graph `permissions` and `invite` endpoints). Invitations default to `sendInvitation: false` (no surprise notification emails) and `requireSignIn: true`. Graph responses for these tools are parsed with Zod schemas rather than cast.
+
 ### Changed
 
 - `get_recent_files`: tool description and response now state explicitly that results come from the user's personal OneDrive (`/me/drive/recent`), not from SharePoint site document libraries, removing a scope-confusion trap in a SharePoint-branded connector.

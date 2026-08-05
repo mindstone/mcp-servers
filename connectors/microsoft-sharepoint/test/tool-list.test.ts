@@ -32,6 +32,9 @@ const EXPECTED_TOOLS = [
   'search_sharepoint',
   'rename_library_item',
   'create_sharing_link',
+  'list_item_permissions',
+  'invite_item_collaborators',
+  'revoke_item_permission',
   'list_subsites',
   'get_recent_files',
   'get_library_tree',
@@ -90,6 +93,9 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
     idempotentHint: true,
   },
   create_sharing_link: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+  list_item_permissions: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  invite_item_collaborators: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+  revoke_item_permission: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   list_subsites: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   get_recent_files: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   get_library_tree: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
@@ -127,7 +133,7 @@ describe('microsoft-sharepoint tools/list', () => {
     if (cfg) cfg.cleanup();
   });
 
-  it('registers exactly the 36 SharePoint tools in the locked surface', async () => {
+  it('registers exactly the locked SharePoint tool surface', async () => {
     const response = await client.client.listTools();
     const names = response.tools.map((tool) => tool.name).sort();
     expect(names).toEqual([...EXPECTED_TOOLS].sort());

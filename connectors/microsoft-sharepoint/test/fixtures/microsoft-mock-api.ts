@@ -88,6 +88,18 @@ const listItem = {
   fields: { Title: 'Task A', Status: 'Active' },
 };
 
+const permission = {
+  id: 'perm-1',
+  roles: ['read'],
+  shareId: 's!abc123',
+  link: {
+    type: 'view',
+    scope: 'users',
+    webUrl: 'https://contoso.sharepoint.com/share/perm-1',
+  },
+  grantedToV2: { user: { displayName: 'Alice Example', email: 'alice@example.com' } },
+};
+
 export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState } {
   const state: MockApiState = { requests: [], refreshCalls: 0 };
 
@@ -370,6 +382,26 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
           status: 202,
           headers: { Location: 'https://graph.microsoft.com/v1.0/monitor/copy-1' },
         });
+      }
+
+      if (method === 'GET' && /^\/v1\.0\/drives\/[^/]+\/items\/[^/]+\/permissions$/.test(pathname)) {
+        return HttpResponse.json({ value: [permission] });
+      }
+
+      if (method === 'POST' && /^\/v1\.0\/drives\/[^/]+\/items\/[^/]+\/invite$/.test(pathname)) {
+        return HttpResponse.json({
+          value: [
+            {
+              id: 'perm-2',
+              roles: ['read'],
+              grantedToV2: { user: { displayName: 'Jane Example', email: 'jane@example.com' } },
+            },
+          ],
+        });
+      }
+
+      if (method === 'DELETE' && /^\/v1\.0\/drives\/[^/]+\/items\/[^/]+\/permissions\/[^/]+$/.test(pathname)) {
+        return new HttpResponse(null, { status: 204 });
       }
 
       if (method === 'POST' && /^\/v1\.0\/drives\/[^/]+\/items\/[^/]+\/createLink$/.test(pathname)) {

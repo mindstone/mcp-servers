@@ -7,7 +7,72 @@ import {
   type SharePointDrive,
   type Client,
 } from '@mindstone/mcp-server-microsoft-shared';
+import { z } from 'zod';
 import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
+
+// -- Graph response schemas (Zod-validated at the boundary for new tools) --
+
+/** Parse a Graph collection response (`{ value: [...] }`) against an item schema. */
+function parseGraphCollection<S extends z.ZodTypeAny>(itemSchema: S, response: unknown): z.infer<S>[] {
+  return z.object({ value: z.array(itemSchema) }).parse(response).value;
+}
+
+const GraphIdentitySchema = z.object({
+  displayName: z.string().optional(),
+  email: z.string().optional(),
+});
+
+const GraphIdentitySetSchema = z.object({
+  user: GraphIdentitySchema.optional(),
+  siteUser: GraphIdentitySchema.optional(),
+  group: GraphIdentitySchema.optional(),
+  siteGroup: GraphIdentitySchema.optional(),
+  application: GraphIdentitySchema.optional(),
+});
+
+const GraphPermissionSchema = z.object({
+  id: z.string(),
+  roles: z.array(z.string()).optional().default([]),
+  shareId: z.string().optional(),
+  link: z
+    .object({
+      type: z.string().optional(),
+      scope: z.string().optional(),
+      webUrl: z.string().optional(),
+    })
+    .optional(),
+  grantedToV2: GraphIdentitySetSchema.optional(),
+  grantedToIdentitiesV2: z.array(GraphIdentitySetSchema).optional(),
+});
+
+type GraphPermission = z.infer<typeof GraphPermissionSchema>;
+type GraphIdentity = z.infer<typeof GraphIdentitySchema>;
+
+function extractPermissionIdentities(permission: GraphPermission): GraphIdentity[] {
+  const sets = [
+    ...(permission.grantedToV2 ? [permission.grantedToV2] : []),
+    ...(permission.grantedToIdentitiesV2 ?? []),
+  ];
+  const identities: GraphIdentity[] = [];
+  for (const set of sets) {
+    const identity = set.user ?? set.siteUser ?? set.group ?? set.siteGroup ?? set.application;
+    if (identity) identities.push(identity);
+  }
+  return identities;
+}
+
+function formatPermission(permission: GraphPermission, sourceTool: string) {
+  return {
+    id: permission.id,
+    roles: permission.roles,
+    shareId: permission.shareId,
+    link: permission.link,
+    grantedTo: extractPermissionIdentities(permission).map((identity) => ({
+      displayName: wrapUntrusted(identity.displayName, `microsoft-sharepoint:${sourceTool}:displayName`),
+      email: identity.email,
+    })),
+  };
+}
 
 // -- Helpers --
 
@@ -1129,6 +1194,108 @@ export async function createSharingLink(
     scope: response.link?.scope,
     id: response.id,
     roles: response.roles,
+  });
+}
+
+// -- Item permission tool implementations --
+
+interface ListItemPermissionsArgs {
+  driveId?: string;
+  itemId?: string;
+}
+
+export async function listItemPermissions(
+  client: Client,
+  args: ListItemPermissionsArgs,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (!args.driveId || !args.itemId) {
+    return errorResult(
+      'Missing required parameters: "driveId" and "itemId". ' +
+      'Example: { "driveId": "b!abc123...", "itemId": "01ABCDEF..." }',
+    );
+  }
+
+  const endpoint = `${buildDriveEndpoint(args.driveId, args.itemId)}/permissions`;
+  const response = await client.api(endpoint).options({ signal }).get();
+  const permissions = parseGraphCollection(GraphPermissionSchema, response);
+
+  return successResult({
+    driveId: args.driveId,
+    itemId: args.itemId,
+    count: permissions.length,
+    permissions: permissions.map((permission) => formatPermission(permission, 'list_item_permissions')),
+  });
+}
+
+interface InviteItemCollaboratorsArgs {
+  driveId?: string;
+  itemId?: string;
+  recipients?: string[];
+  role?: 'read' | 'write';
+  message?: string;
+  sendInvitation?: boolean;
+}
+
+export async function inviteItemCollaborators(
+  client: Client,
+  args: InviteItemCollaboratorsArgs,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (!args.driveId || !args.itemId || !args.recipients || args.recipients.length === 0) {
+    return errorResult(
+      'Missing required parameters: "driveId", "itemId", and "recipients" (non-empty array of email addresses). ' +
+      'Example: { "driveId": "b!abc123...", "itemId": "01ABCDEF...", "recipients": ["jane@example.com"], "role": "read" }',
+    );
+  }
+
+  const endpoint = `${buildDriveEndpoint(args.driveId, args.itemId)}/invite`;
+  const response = await client.api(endpoint).options({ signal }).post({
+    recipients: args.recipients.map((email) => ({ email })),
+    requireSignIn: true,
+    // Default to NOT sending a notification email — a surprise email to an
+    // external recipient is a side effect the caller must opt into.
+    sendInvitation: args.sendInvitation ?? false,
+    roles: [args.role ?? 'read'],
+    ...(args.message ? { message: args.message } : {}),
+  });
+
+  const granted = parseGraphCollection(GraphPermissionSchema, response);
+
+  return successResult({
+    success: true,
+    driveId: args.driveId,
+    itemId: args.itemId,
+    granted: granted.map((permission) => formatPermission(permission, 'invite_item_collaborators')),
+    message: `Granted ${args.role ?? 'read'} access to ${args.recipients.length} recipient(s)`,
+  });
+}
+
+interface RevokeItemPermissionArgs {
+  driveId?: string;
+  itemId?: string;
+  permissionId?: string;
+}
+
+export async function revokeItemPermission(
+  client: Client,
+  args: RevokeItemPermissionArgs,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (!args.driveId || !args.itemId || !args.permissionId) {
+    return errorResult(
+      'Missing required parameters: "driveId", "itemId", and "permissionId". ' +
+      'Example: { "driveId": "b!abc123...", "itemId": "01ABCDEF...", "permissionId": "perm-1" }. ' +
+      'Use list_item_permissions to find permission IDs.',
+    );
+  }
+
+  const endpoint = `${buildDriveEndpoint(args.driveId, args.itemId)}/permissions/${args.permissionId}`;
+  await client.api(endpoint).options({ signal }).delete();
+
+  return successResult({
+    success: true,
+    message: 'Permission revoked successfully',
   });
 }
 

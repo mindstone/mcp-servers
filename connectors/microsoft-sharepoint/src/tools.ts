@@ -24,6 +24,8 @@ import {
   getSiteItem,
   getSiteList,
   getSitesDelta,
+  inviteItemCollaborators,
+  listItemPermissions,
   listLibraryFiles,
   listListItems,
   listSharePointSites,
@@ -36,6 +38,7 @@ import {
   readLibraryTextFile,
   readSitePage,
   renameLibraryItem,
+  revokeItemPermission,
   searchLibraryFiles,
   searchSharePoint,
   updateFileMetadata,
@@ -462,6 +465,55 @@ const TOOL_SPECS: SharePointToolSpec[] = [
     }),
     annotations: WRITE_ANNOTATIONS,
     handler: createSharingLink as SharePointHandler,
+  },
+  {
+    name: 'list_item_permissions',
+    description:
+      'List sharing permissions on a file or folder in a SharePoint document library (links and direct grants).',
+    inputSchema: z.object({
+      driveId: z.string().optional().describe('Document library (drive) ID'),
+      itemId: z.string().optional().describe('File or folder item ID'),
+    }),
+    annotations: READ_ONLY_ANNOTATIONS,
+    handler: listItemPermissions as SharePointHandler,
+  },
+  {
+    name: 'invite_item_collaborators',
+    description:
+      'Grant specific people access to a file or folder in a SharePoint document library by email address. ' +
+      'Defaults to read-only access and does NOT send a notification email unless sendInvitation is true. ' +
+      'Requires a write permission (e.g. Sites.ReadWrite.All) — an admin may need to approve it.',
+    inputSchema: z.object({
+      driveId: z.string().optional().describe('Document library (drive) ID'),
+      itemId: z.string().optional().describe('File or folder item ID'),
+      recipients: z
+        .array(z.string().email())
+        .optional()
+        .describe('Email addresses to grant access to (e.g., ["jane@example.com"])'),
+      role: z.enum(['read', 'write']).optional().describe('Access level to grant (default: "read")'),
+      message: z
+        .string()
+        .optional()
+        .describe('Optional message included in the notification email (only sent when sendInvitation is true)'),
+      sendInvitation: z
+        .boolean()
+        .optional()
+        .describe('Send a sharing notification email to recipients (default: false)'),
+    }),
+    annotations: WRITE_ANNOTATIONS,
+    handler: inviteItemCollaborators as SharePointHandler,
+  },
+  {
+    name: 'revoke_item_permission',
+    description:
+      'Revoke a sharing permission from a file or folder in a SharePoint document library. Use list_item_permissions to find permission IDs.',
+    inputSchema: z.object({
+      driveId: z.string().optional().describe('Document library (drive) ID'),
+      itemId: z.string().optional().describe('File or folder item ID'),
+      permissionId: z.string().optional().describe('Permission ID from list_item_permissions'),
+    }),
+    annotations: WRITE_ANNOTATIONS,
+    handler: revokeItemPermission as SharePointHandler,
   },
   {
     name: 'list_subsites',
