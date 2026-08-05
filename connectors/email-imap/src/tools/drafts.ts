@@ -16,7 +16,7 @@ import {
   resolveDraftsMailbox,
   wrapEmailField,
 } from './shared.js';
-import { appendDraftMessage } from './send.js';
+import { appendDraftMessage, attachmentsSchema } from './send.js';
 
 const draftFieldsSchema = {
   to: z
@@ -30,6 +30,7 @@ const draftFieldsSchema = {
     .string()
     .optional()
     .describe('Message-ID of the original email when drafting a reply'),
+  attachments: attachmentsSchema,
 };
 
 function requireDraftContent(fields: {

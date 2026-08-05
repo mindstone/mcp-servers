@@ -16,11 +16,13 @@
  */
 
 import { z } from 'zod';
+import * as fs from 'node:fs';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import nodemailer from 'nodemailer';
 import { withErrorHandling } from '../utils.js';
 import { getConnection } from '../imap-client.js';
 import { getTransport } from '../smtp-client.js';
+import { resolveReadPath, sanitizeAttachmentFilename } from '../path-safety.js';
 import {
   ensureInitialized,
   generateMessageId,
@@ -31,6 +33,68 @@ import {
   getMaxRecipients,
   recordSend,
 } from './limits.js';
+
+/**
+ * Blast-radius caps for outbound attachments: at most 10 files and 25 MB
+ * total per message (25 MB matches common SMTP message-size limits).
+ */
+const MAX_OUTBOUND_ATTACHMENTS = 10;
+const MAX_OUTBOUND_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
+const outboundAttachmentSchema = z.object({
+  path: z
+    .string()
+    .min(1)
+    .describe(
+      'Path to a file inside the workspace sandbox (MCP_WORKSPACE_PATH, or the system ' +
+        'temp directory when unset). Paths outside the sandbox — including via symlinks — ' +
+        'are refused.',
+    ),
+  filename: z
+    .string()
+    .optional()
+    .describe('Optional display filename for the attachment (basename only)'),
+});
+
+export const attachmentsSchema = z
+  .array(outboundAttachmentSchema)
+  .max(MAX_OUTBOUND_ATTACHMENTS)
+  .optional()
+  .describe(`Files to attach (max ${MAX_OUTBOUND_ATTACHMENTS}, 25 MB total across all files)`);
+
+export type OutboundAttachment = z.infer<typeof outboundAttachmentSchema>;
+
+/**
+ * Resolve outbound attachment paths to canonical in-workspace files and
+ * enforce the aggregate size cap. Throws before any network I/O when a path
+ * escapes the sandbox or the cap is exceeded.
+ */
+function resolveOutboundAttachments(
+  attachments: OutboundAttachment[] | undefined,
+): Array<{ path: string; filename?: string }> | undefined {
+  if (!attachments || attachments.length === 0) {
+    return undefined;
+  }
+  const resolved: Array<{ path: string; filename?: string }> = [];
+  let totalBytes = 0;
+  for (const attachment of attachments) {
+    const canonical = resolveReadPath(attachment.path);
+    totalBytes += fs.statSync(canonical).size;
+    if (totalBytes > MAX_OUTBOUND_ATTACHMENT_BYTES) {
+      throw new Error(
+        `Attachments exceed the ${MAX_OUTBOUND_ATTACHMENT_BYTES}-byte aggregate cap; ` +
+          'remove files or send them in separate messages.',
+      );
+    }
+    resolved.push({
+      path: canonical,
+      ...(attachment.filename
+        ? { filename: sanitizeAttachmentFilename(attachment.filename) }
+        : {}),
+    });
+  }
+  return resolved;
+}
 
 /**
  * Flatten a recipient field (string | string[] | undefined) into the list of
@@ -70,6 +134,7 @@ export interface DraftFields {
   text?: string;
   html?: string;
   reply_to_message_id?: string;
+  attachments?: OutboundAttachment[];
 }
 
 /**
@@ -102,6 +167,9 @@ export async function appendDraftMessage(
           inReplyTo: reply_to_message_id,
           references: reply_to_message_id,
         }
+      : {}),
+    ...(fields.attachments
+      ? { attachments: resolveOutboundAttachments(fields.attachments) }
       : {}),
   });
   draftTransport.close();
@@ -147,7 +215,8 @@ export function registerSendTools(server: McpServer): void {
         '`EMAIL_IMAP_MAX_RECIPIENTS`) and outbound sends are rate-limited (default 50/hour, env ' +
         '`EMAIL_IMAP_RATE_LIMIT_PER_HOUR` / `EMAIL_IMAP_RATE_LIMIT_WINDOW_MS`). When a cap is hit, ' +
         'the tool returns a structured error with a stable `code` (`RECIPIENT_LIMIT_EXCEEDED` or ' +
-        '`RATE_LIMIT_EXCEEDED`).',
+        '`RATE_LIMIT_EXCEEDED`). Attachments (max 10, 25 MB total) are read only from inside ' +
+        'the workspace sandbox (MCP_WORKSPACE_PATH, or the system temp directory when unset).',
       inputSchema: z.object({
         to: z
           .union([z.string().min(1), z.array(z.string().min(1)).min(1)])
@@ -167,6 +236,7 @@ export function registerSendTools(server: McpServer): void {
           .string()
           .optional()
           .describe('Message-ID of the original email when replying'),
+        attachments: attachmentsSchema,
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
@@ -215,6 +285,10 @@ export function registerSendTools(server: McpServer): void {
         });
       }
 
+      // Resolve and validate attachment paths BEFORE recording the send
+      // attempt: a sandbox violation is a caller error, not a failed send.
+      const resolvedAttachments = resolveOutboundAttachments(args.attachments);
+
       // Record the attempt BEFORE calling the transport so that a looped
       // SMTP failure cannot bypass the cap by retrying.
       recordSend();
@@ -237,6 +311,7 @@ export function registerSendTools(server: McpServer): void {
               references: reply_to_message_id,
             }
           : {}),
+        ...(resolvedAttachments ? { attachments: resolvedAttachments } : {}),
       });
 
       return JSON.stringify({ ok: true, messageId });
@@ -248,7 +323,9 @@ export function registerSendTools(server: McpServer): void {
   server.registerTool(
     'email_save_draft',
     {
-      description: 'Save a draft email to the Drafts folder.',
+      description:
+        'Save a draft email to the Drafts folder. Attachment paths must resolve inside the ' +
+        'workspace sandbox (MCP_WORKSPACE_PATH, or the system temp directory when unset).',
       inputSchema: z.object({
         to: z
           .union([z.string().min(1), z.array(z.string().min(1)).min(1)])
@@ -261,13 +338,14 @@ export function registerSendTools(server: McpServer): void {
           .string()
           .optional()
           .describe('Message-ID of the original email when drafting a reply'),
+        attachments: attachmentsSchema,
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const config = ensureInitialized();
 
-      const { to, subject, text, html, reply_to_message_id } = args;
+      const { to, subject, text, html, reply_to_message_id, attachments } = args;
 
       const hasSubject = Boolean(subject && subject.trim().length > 0);
       const hasBody =
@@ -283,6 +361,7 @@ export function registerSendTools(server: McpServer): void {
         text,
         html,
         reply_to_message_id,
+        attachments,
       });
 
       return JSON.stringify({
