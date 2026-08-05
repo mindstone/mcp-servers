@@ -49,6 +49,10 @@ export async function workdayFetch<T>(
       ...options,
       signal: options.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers,
+      // Never auto-follow redirects: a vendor/proxy-controlled Location header
+      // would replay the bearer token to an arbitrary host. 3xx is rejected
+      // explicitly below.
+      redirect: 'manual',
     });
   } catch (error) {
     if (error instanceof Error && error.name === 'TimeoutError') {
@@ -72,19 +76,26 @@ export async function workdayFetch<T>(
       return workdayFetch<T>(resourcePath, options, retryCount + 1, serviceFamily);
     }
 
-    let errorText: string;
-    try {
-      const errorBody = await response.json() as { error?: string; errors?: Array<{ error?: string; message?: string }> };
-      const firstError = errorBody?.errors?.[0];
-      errorText = firstError?.message || firstError?.error || errorBody?.error || JSON.stringify(errorBody);
-    } catch {
-      errorText = await response.text().catch(() => 'Unknown error');
+    // Fetches run with redirect: 'manual', so a 3xx lands here instead of
+    // being auto-followed (which would replay the bearer token to the
+    // redirect target). Fail closed with a connector-authored message.
+    if (response.status >= 300 && response.status < 400) {
+      throw new WorkdayError(
+        `Workday API attempted a redirect (HTTP ${response.status}), which was refused.`,
+        'API_ERROR',
+        'The Workday API returned an unexpected redirect. Verify the configured host is correct.',
+      );
     }
+
+    // Do NOT read the vendor error body into model-visible output or logs:
+    // it is vendor/proxy-controlled text that may reflect credentials or
+    // carry injected instructions. Emit bounded, connector-authored messages.
+    console.error(`[Workday API] Request failed (HTTP ${response.status})`);
 
     if (response.status === 401) {
       clearTokenCache();
       throw new WorkdayError(
-        `Authentication failed (${response.status}): ${errorText}`,
+        'Authentication failed (401).',
         'AUTH_FAILED',
         'Re-configure with configure_workday_credentials. Check client ID, secret, and tenant.',
       );
@@ -92,7 +103,7 @@ export async function workdayFetch<T>(
 
     if (response.status === 403) {
       throw new WorkdayError(
-        `Insufficient permissions (${response.status}): ${errorText}`,
+        'Insufficient permissions (403).',
         'FORBIDDEN',
         'Check ISU security group and domain permissions in Workday.',
       );
@@ -100,7 +111,7 @@ export async function workdayFetch<T>(
 
     if (response.status === 404) {
       throw new WorkdayError(
-        `Resource not found (${response.status}): ${errorText}`,
+        'Resource not found (404).',
         'NOT_FOUND',
         'Verify the ID is correct.',
       );
@@ -116,14 +127,14 @@ export async function workdayFetch<T>(
 
     if (response.status >= 500) {
       throw new WorkdayError(
-        `Workday server error (${response.status}): ${errorText}`,
+        `Workday server error (${response.status}).`,
         'SERVER_ERROR',
         'Workday server error. Try again later.',
       );
     }
 
     throw new WorkdayError(
-      `Workday API error (${response.status}): ${errorText}`,
+      `Workday API error (${response.status}).`,
       `HTTP_${response.status}`,
       'Check the request parameters and try again.',
     );

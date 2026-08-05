@@ -199,6 +199,9 @@ export async function getAccessToken(): Promise<string> {
         'User-Agent': USER_AGENT,
       },
       body: body.toString(),
+      // Never auto-follow redirects: a vendor/proxy-controlled Location header
+      // would replay the Basic-auth credential to an arbitrary host.
+      redirect: 'manual',
     });
   } catch (error) {
     if (error instanceof Error && error.name === 'TimeoutError') {
@@ -212,15 +215,20 @@ export async function getAccessToken(): Promise<string> {
   }
 
   if (!response.ok) {
-    let errorText: string;
-    try {
-      const errorBody = await response.json() as { error?: string; error_description?: string };
-      errorText = errorBody?.error_description || errorBody?.error || JSON.stringify(errorBody);
-    } catch {
-      errorText = await response.text().catch(() => 'Unknown error');
+    // The OAuth error body (error / error_description / raw text) is
+    // vendor/proxy-controlled and may reflect request data, including the
+    // credentials just sent — never propagate it. Bounded, connector-authored
+    // messages only.
+    console.error(`[Workday] OAuth token exchange failed (HTTP ${response.status})`);
+    if (response.status >= 300 && response.status < 400) {
+      throw new WorkdayError(
+        `OAuth token endpoint attempted a redirect (HTTP ${response.status}), which was refused.`,
+        'AUTH_FAILED',
+        'The token endpoint returned an unexpected redirect. Verify the configured host is correct.',
+      );
     }
     throw new WorkdayError(
-      `OAuth token exchange failed (${response.status}): ${errorText}`,
+      `OAuth token exchange failed (${response.status}).`,
       'AUTH_FAILED',
       'Re-configure with configure_workday_credentials. Check client ID, secret, and tenant.',
     );
@@ -241,8 +249,11 @@ export async function getAccessToken(): Promise<string> {
     refreshToken = tokenData.refresh_token;
     bridgeRequest('/bundled/workday/update-refresh-token', {
       refreshToken: tokenData.refresh_token,
-    }).catch((err) => {
-      console.error('Failed to persist rotated refresh token:', err instanceof Error ? err.message : String(err));
+    }).catch(() => {
+      // The rotated token stays in memory and is used for this process'
+      // lifetime; only cross-restart persistence failed. Log a bounded,
+      // connector-authored message — never an arbitrary thrown error string.
+      console.error('[Workday] Failed to persist rotated refresh token via bridge.');
     });
   }
 

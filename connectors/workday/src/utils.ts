@@ -36,9 +36,21 @@ export function withErrorHandling<T>(
           isError: true,
         };
       }
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      // Unknown errors: never emit an arbitrary thrown message to the model —
+      // it may embed a fragment of a vendor/proxy-controlled response body
+      // (e.g. a JSON parse error quoting hostile text). Log the detail to
+      // stderr (not model-visible) and return a bounded, authored message.
+      console.error('[Workday] Unexpected tool error:', error);
       return {
-        content: [{ type: 'text', text: JSON.stringify({ ok: false, error: errorMessage }) }],
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              ok: false,
+              error: 'Unexpected error while executing the Workday tool. Check connector logs for details.',
+            }),
+          },
+        ],
         isError: true,
       };
     }
