@@ -87,6 +87,16 @@ export function createTalentLMSHandlers(expectedApiKey = MOCK_API_KEY) {
       return HttpResponse.json(fixtures.mockNewUser);
     }),
 
+    http.post(`${BASE}/edituser`, async ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      const params = new URLSearchParams(await request.text());
+      if (params.get('user_id') === '999') {
+        return HttpResponse.json({ error: { message: 'User not found', type: 'NotFound' } }, { status: 404 });
+      }
+      return HttpResponse.json({ ...fixtures.mockUserFull, ...Object.fromEntries(params) });
+    }),
+
     http.get(`${BASE}/usersetstatus/*`, ({ request }) => {
       const authError = checkAuth(request, expectedApiKey);
       if (authError) return authError;

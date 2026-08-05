@@ -102,6 +102,56 @@ export function registerUserTools(server: McpServer): void {
   );
 
   server.registerTool(
+    'update_talentlms_user',
+    {
+      description:
+        'Update an existing user in TalentLMS (name, email, login, password, bio, timezone, deactivation date). ' +
+        'Only the fields you provide are changed.\n\n' +
+        'Only non-privileged user types (Learner, Trainer) can be set through this tool. ' +
+        'Administrator or SuperAdmin roles must be assigned directly in the TalentLMS UI. ' +
+        'This guard prevents prompt-injected tool input from silently escalating privileges.\n\n' +
+        'RELATED TOOLS:\n' +
+        '- list_talentlms_users: Find user IDs\n' +
+        '- set_talentlms_user_status: Activate or deactivate instead',
+      inputSchema: z.object({
+        user_id: z.string().min(1).describe('User ID'),
+        first_name: z.string().min(1).optional().describe('First name'),
+        last_name: z.string().min(1).optional().describe('Last name'),
+        email: z.string().min(1).optional().describe('Email address'),
+        login: z.string().min(1).optional().describe('Login username'),
+        password: z.string().optional().describe('New password'),
+        bio: z.string().optional().describe('User biography'),
+        timezone: z.string().optional().describe('Timezone (e.g. "Europe/Athens")'),
+        user_type: z
+          .enum(['Learner', 'Trainer'])
+          .optional()
+          .describe('User type: Learner or Trainer. Administrator/SuperAdmin are intentionally not settable through this tool.'),
+        deactivation_date: z
+          .string()
+          .optional()
+          .describe('Date (DD/MM/YYYY) on which the user becomes automatically inactive; pass an empty string to clear. Can only be set on active users.'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      const { user_id, ...fields } = args;
+      if (Object.values(fields).every(v => v === undefined)) {
+        return JSON.stringify({
+          ok: false,
+          error: 'Provide at least one field to update (e.g. first_name, email, timezone).',
+          resolution: 'Use get_talentlms_user to see the current profile first.',
+        });
+      }
+      const body = formEncode({ user_id, ...fields });
+      const user = await talentlmsFetch<Record<string, unknown>>('/edituser', {
+        method: 'POST',
+        body,
+      });
+      return JSON.stringify({ ok: true, message: 'User updated.', user: wrapExternalTextFields(user, 'talentlms:user') });
+    }),
+  );
+
+  server.registerTool(
     'set_talentlms_user_status',
     {
       description:
