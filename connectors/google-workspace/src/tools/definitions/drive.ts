@@ -662,5 +662,53 @@ If you want to "restore" a revision, download it and re-upload as a new version.
       },
       required: ['file_id', 'revision_id']
     }
+  },
+  {
+    name: 'query_drive_activity',
+    category: 'Drive',
+    description: `See what changed on a Drive file, or inside a folder or shared drive — who edited, moved, renamed, created, deleted, or commented, and when (Drive Activity API).
+
+    Exactly one of item_id or ancestor_id is required:
+    - item_id: a single file or folder ID (from list_drive_files / search_drive_files)
+    - ancestor_id: a folder or shared-drive ID — reports activity on everything inside it
+
+    Optional:
+    - page_size: max activities to return (default API page, max 100)
+    - page_token: from a previous response's nextPageToken, for pagination
+    - filter: Drive Activity API filter string (e.g. time range: 'time >= "2026-07-01T00:00:00Z"', or action filtering like 'detail.action_detail_case:EDIT')
+
+    Example: { "ancestor_id": "0AAbbbbCCCC", "filter": "time >= \"2026-07-25T00:00:00-07:00\"" }`,
+    aliases: ['drive_activity', 'list_drive_activity', 'what_changed_in_drive'],
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email: {
+          type: 'string',
+          description: 'Email address of the Drive account'
+        },
+        item_id: {
+          type: 'string',
+          description: 'ID of a single file or folder to inspect (mutually exclusive with ancestor_id)'
+        },
+        ancestor_id: {
+          type: 'string',
+          description: 'ID of a folder or shared drive; reports activity on everything inside it (mutually exclusive with item_id)'
+        },
+        page_size: {
+          type: 'number',
+          description: 'Maximum activities to return (capped at 100)'
+        },
+        page_token: {
+          type: 'string',
+          description: 'Page token from a previous response (for pagination)'
+        },
+        filter: {
+          type: 'string',
+          description: 'Drive Activity API filter string, e.g. time >= "2026-07-01T00:00:00Z" or detail.action_detail_case:EDIT'
+        }
+      },
+      required: []
+    }
   }
 ];

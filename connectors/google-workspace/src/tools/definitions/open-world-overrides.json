@@ -80,6 +80,7 @@
   "mark_workspace_email_read": true,
   "mark_workspace_email_unread": true,
   "move_drive_file": true,
+  "query_drive_activity": true,
   "read_workspace_document": true,
   "read_workspace_presentation": true,
   "read_workspace_spreadsheet": true,

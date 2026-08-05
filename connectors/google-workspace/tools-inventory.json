@@ -497,6 +497,14 @@
       }
     },
     {
+      "name": "query_drive_activity",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": true
+      }
+    },
+    {
       "name": "get_workspace_contacts",
       "annotations": {
         "readOnlyHint": true,

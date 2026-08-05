@@ -83,6 +83,7 @@ export const SCOPE_SERVICE_NAMES: Record<string, string> = {
   [`${SCOPE_BASE}drive.readonly`]: 'Drive',
   [`${SCOPE_BASE}drive.file`]: 'Drive',
   [`${SCOPE_BASE}drive.appdata`]: 'Drive',
+  [`${SCOPE_BASE}drive.activity.readonly`]: 'Drive Activity',
   [`${SCOPE_BASE}documents`]: 'Google Docs',
   [`${SCOPE_BASE}documents.readonly`]: 'Google Docs',
   [`${SCOPE_BASE}spreadsheets`]: 'Google Sheets',

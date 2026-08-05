@@ -91,7 +91,9 @@ import {
   handleTrashDriveFile,
   handleUntrashDriveFile,
   handleListFileRevisions,
-  handleDownloadFileRevision
+  handleDownloadFileRevision,
+  handleQueryDriveActivity,
+  QueryDriveActivityArgs
 } from './drive-handlers.js';
 
 // Import contact handlers
@@ -676,6 +678,10 @@ export class GSuiteServer {
           case 'download_file_revision':
             assertDriveDownloadRevisionArgs(args);
             result = await handleDownloadFileRevision(args);
+            break;
+          case 'query_drive_activity':
+            assertBaseToolArguments(args);
+            result = await handleQueryDriveActivity(args as QueryDriveActivityArgs);
             break;
 
           // Contact Operations

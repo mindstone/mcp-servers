@@ -10,7 +10,7 @@ Google Workspace MCP server — Gmail, Calendar, Drive, Docs, Sheets, Slides, Co
 
 - **Version:** [0.2.0](./CHANGELOG.md) · npm: not yet published
 - **Auth:** OAuth (host-orchestrated) ([`GOOGLE_CLIENT_SECRET`](./server.json))
-- **Tools:** [99](./src/tools/definitions/) (Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Comments, Account; +10 gated Tasks/Forms behind `ENABLE_GOOGLE_TASKS_FORMS=true`)
+- **Tools:** [100](./src/tools/definitions/) (Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Comments, Account; +10 gated Tasks/Forms behind `ENABLE_GOOGLE_TASKS_FORMS=true`)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -153,7 +153,7 @@ Until the host has written `${ACCOUNTS_PATH}` and the matching per-account token
 }
 ```
 
-## Tools (99)
+## Tools (100)
 
 The full list lives under [`src/tools/definitions/`](./src/tools/definitions/) and is also surfaced in [`tools-inventory.json`](./tools-inventory.json). Grouped by domain:
 
@@ -161,7 +161,7 @@ The full list lives under [`src/tools/definitions/`](./src/tools/definitions/) a
 | --- | --- | --- |
 | Gmail | 23 | Email search/thread/send/compose, drafts, labels, label filters, attachments, archive/trash/read-state helpers, settings, vacation responder, and send-as aliases/signatures. |
 | Calendar | 9 | Current time, free-slot lookup, calendar/event listing, event creation, updates, responses, and deletion. |
-| Drive | 14 | List/search/upload/download/copy/move/trash/untrash files, folders, permissions, revisions, and shared-drive discovery. |
+| Drive | 15 | List/search/upload/download/copy/move/trash/untrash files, folders, permissions, revisions, shared-drive discovery, and activity queries (what changed, when, by whom). |
 | Docs | 8 | Read, create, append, replace, find/replace, tab listing, and batch updates. |
 | Sheets | 14 | Read/write ranges, create spreadsheets, sheet management, batch operations, find/replace, and formatting. |
 | Slides | 7 | Read, create, list/get slides, batch update, thumbnails, and ID extraction. |
@@ -172,7 +172,7 @@ The full list lives under [`src/tools/definitions/`](./src/tools/definitions/) a
 | Tasks (gated) | 6 | Registered only when `ENABLE_GOOGLE_TASKS_FORMS=true`. |
 | Forms (gated) | 4 | Registered only when `ENABLE_GOOGLE_TASKS_FORMS=true`. |
 
-The `## Status` block counts the 99 default-enabled tools; the additional 10 Tasks + Forms tools register when the feature flag is set.
+The `## Status` block counts the 100 default-enabled tools; the additional 10 Tasks + Forms tools register when the feature flag is set.
 
 ### Shared drives
 
