@@ -266,7 +266,12 @@ export function buildErrorResponse(err: unknown): CallToolResult {
           text: JSON.stringify({
             ...buildAuthRequiredResponse(),
             reason,
-            error: formatGraphError(err),
+            // The shared formatter embeds the upstream Graph error-body
+            // message raw for consent/tenant-classified 403s — that text is
+            // attacker-influenceable, so it is enveloped before it reaches
+            // the model (invariant #6).
+            error:
+              wrapUntrusted(formatGraphError(err), 'microsoft-mail:graph-error') ?? 'Unknown error',
             package_id: getMsPackageId(),
           }),
         },
