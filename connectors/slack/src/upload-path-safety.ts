@@ -112,3 +112,152 @@ export function resolveUploadSourcePath(filePath: string): ResolveResult {
 
   return { ok: true, path: canonical };
 }
+
+export type ReadSourceResult =
+  | { ok: true; path: string; buffer: Buffer; size: number }
+  | { ok: false; error: string };
+
+/**
+ * Validate AND read an upload source file as one race-resistant operation.
+ *
+ * A bare "validate the path, then `stat`, then `readFile`" sequence is a
+ * check/use race: a process that can write the workspace can swap the
+ * validated file for an out-of-workspace symlink (or a larger file) between
+ * the checks and the read, turning this connector into an exfiltration
+ * primitive and defeating the size cap. This helper closes that window:
+ *
+ *   1. `resolveUploadSourcePath` canonicalises and confines the path.
+ *   2. The canonical path is opened ONCE with `O_NOFOLLOW`, so a leaf swapped
+ *      to a symlink after validation fails with ELOOP instead of being read.
+ *   3. `fstat` on that descriptor enforces "regular file" (rejecting
+ *      directories, FIFOs, sockets and devices) and the size cap against the
+ *      exact inode that will be read.
+ *   4. A replaceable ancestor directory could still have redirected the
+ *      `open` itself, so the descriptor's dev+inode is compared against a
+ *      fresh confined resolution of the canonical path; a mismatch (or a
+ *      resolution that escapes the root) refuses the read.
+ *   5. Bytes are read THROUGH THE DESCRIPTOR, so post-open path swaps are
+ *      irrelevant — the content is the validated inode's.
+ *
+ * `openFile` is injectable for adversarial tests only; production callers use
+ * the default `fs.promises.open`.
+ */
+export async function readUploadSourceFile(
+  filePath: string,
+  maxSizeBytes: number,
+  openFile: typeof fs.promises.open = fs.promises.open,
+): Promise<ReadSourceResult> {
+  const resolved = resolveUploadSourcePath(filePath);
+  if (!resolved.ok) {
+    return { ok: false, error: resolved.error };
+  }
+
+  let handle: fs.promises.FileHandle;
+  try {
+    // O_NOFOLLOW: a leaf swapped to a symlink after validation fails with
+    // ELOOP. O_NONBLOCK: opening a FIFO O_RDONLY would otherwise block until
+    // a writer appears, letting a planted pipe wedge the connector; for
+    // regular files O_NONBLOCK is a no-op.
+    handle = await openFile(
+      resolved.path,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
+    );
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      return { ok: false, error: `File not found: ${filePath}` };
+    }
+    if (code === 'ELOOP' || code === 'EISDIR' || code === 'EPERM' || code === 'EACCES') {
+      // ELOOP: the validated leaf was swapped for a symlink before we could
+      // open it. EISDIR/EPERM/EACCES: swapped for a directory or an
+      // unreadable object. Either way, refuse rather than read.
+      return {
+        ok: false,
+        error:
+          'file_path could not be opened safely — the file changed between ' +
+          'validation and read. Retry the upload.',
+      };
+    }
+    throw err;
+  }
+
+  try {
+    const stat = await handle.stat();
+    if (!stat.isFile()) {
+      return {
+        ok: false,
+        error:
+          'file_path is not a regular file (directories, FIFOs, sockets and ' +
+          'devices cannot be uploaded).',
+      };
+    }
+    if (stat.size > maxSizeBytes) {
+      return {
+        ok: false,
+        error:
+          `File too large (${(stat.size / 1024 / 1024).toFixed(2)}MB exceeds the ` +
+          `${Math.floor(maxSizeBytes / 1024 / 1024)}MB upload cap)`,
+      };
+    }
+
+    // Ancestor-swap guard: an ancestor directory replaced with a symlink
+    // between validation and `open` would have redirected the descriptor
+    // outside the workspace. Re-resolve the canonical path now; it must stay
+    // confined AND still identify the same inode we opened.
+    const root = getUploadSourceRoot();
+    let recheck: fs.Stats;
+    try {
+      const canonicalNow = fs.realpathSync(resolved.path);
+      if (!(canonicalNow === root || canonicalNow.startsWith(root + path.sep))) {
+        return {
+          ok: false,
+          error:
+            'file_path changed while being read — the path now resolves outside ' +
+            'the workspace root. Refusing the upload.',
+        };
+      }
+      recheck = fs.statSync(resolved.path);
+    } catch {
+      return {
+        ok: false,
+        error:
+          'file_path changed while being read — the path no longer resolves. ' +
+          'Refusing the upload.',
+      };
+    }
+    if (recheck.dev !== stat.dev || recheck.ino !== stat.ino) {
+      return {
+        ok: false,
+        error:
+          'file_path was replaced while being read (inode mismatch). ' +
+          'Refusing the upload — retry if this was not expected.',
+      };
+    }
+
+    // Bounded read THROUGH THE DESCRIPTOR: post-open path swaps are
+    // irrelevant (the bytes come from the validated inode), and the cap is
+    // enforced on the bytes actually read so a same-inode grow after fstat
+    // cannot bypass it.
+    const scratch = Buffer.allocUnsafe(Math.min(1024 * 1024, maxSizeBytes + 1));
+    const chunks: Buffer[] = [];
+    let total = 0;
+    while (true) {
+      const { bytesRead } = await handle.read(scratch, 0, scratch.length, null);
+      if (bytesRead === 0) break;
+      total += bytesRead;
+      if (total > maxSizeBytes) {
+        return {
+          ok: false,
+          error:
+            `File too large (grew past the ${Math.floor(maxSizeBytes / 1024 / 1024)}MB ` +
+            'upload cap while being read)',
+        };
+      }
+      chunks.push(Buffer.from(scratch.subarray(0, bytesRead)));
+    }
+    const buffer = Buffer.concat(chunks);
+    return { ok: true, path: resolved.path, buffer, size: stat.size };
+  } finally {
+    await handle.close();
+  }
+}
