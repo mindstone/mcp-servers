@@ -105,8 +105,13 @@ describe('Message tools', () => {
       expect(json.ok).toBe(true);
       const message = json.message as Record<string, unknown>;
       expect(message.uid).toBe(101);
-      expect(message.subject).toBe('Welcome to the service');
+      expect(message.subject).toBe(
+        '<untrusted-content source="external-email">Welcome to the service</untrusted-content>',
+      );
       expect(message.from).toContain('support@example.com');
+      expect(message.from as string).toMatch(
+        /^<untrusted-content source="external-email">/,
+      );
     });
 
     it('includes attachment metadata', async () => {
@@ -122,7 +127,9 @@ describe('Message tools', () => {
       const message = json.message as Record<string, unknown>;
       const attachments = message.attachments as Array<Record<string, unknown>>;
       expect(attachments.length).toBe(1);
-      expect(attachments[0]!.filename).toBe('agenda.pdf');
+      expect(attachments[0]!.filename).toBe(
+        '<untrusted-content source="external-email">agenda.pdf</untrusted-content>',
+      );
       expect(attachments[0]!.contentType).toBe('application/pdf');
     });
 

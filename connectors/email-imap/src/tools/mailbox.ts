@@ -7,7 +7,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { withErrorHandling } from '../utils.js';
 import { getConnection } from '../imap-client.js';
 import { getMailboxLock } from '../imap-client.js';
-import { ensureInitialized, formatAddresses, formatDate } from './shared.js';
+import { ensureInitialized, formatAddresses, formatDate, wrapEmailField } from './shared.js';
 
 export function registerMailboxTools(server: McpServer): void {
   // ── email_list_mailboxes ────────────────────────────────────────
@@ -88,7 +88,7 @@ export function registerMailboxTools(server: McpServer): void {
       });
 
       let latestUnread:
-        | Array<{ uid: number; subject: string; from: string; date: string | null }>
+        | Array<{ uid: number; subject: string | null; from: string | null; date: string | null }>
         | undefined;
 
       if (includeLatest) {
@@ -110,8 +110,8 @@ export function registerMailboxTools(server: McpServer): void {
             )) {
               latestUnread.push({
                 uid: message.uid,
-                subject: message.envelope?.subject ?? '',
-                from: formatAddresses(message.envelope?.from),
+                subject: wrapEmailField(message.envelope?.subject ?? ''),
+                from: wrapEmailField(formatAddresses(message.envelope?.from)),
                 date: formatDate(message.envelope?.date),
               });
             }

@@ -9,6 +9,30 @@ import type { MessageAddressObject, MessageStructureObject } from 'imapflow';
 import type { ClientConfig } from '../types.js';
 import { getConnection } from '../imap-client.js';
 import { getPreset } from '../presets.js';
+import { wrapUntrusted } from '../untrusted-content.js';
+
+/**
+ * Envelope source tag for every attacker-controlled string an email message
+ * carries (bodies, subjects, display names, attachment filenames). LLM01
+ * mitigation: the host LLM must treat these as DATA, not instructions.
+ * Wrapping is content-agnostic — applied even to empty or injection-shaped
+ * content — and the canonical helper neutralises embedded close-tag variants
+ * so the envelope cannot be broken out of (VAL-EMAIL-115 / VAL-CROSS-011 /
+ * VAL-CROSS-012).
+ */
+export const UNTRUSTED_EMAIL_SOURCE = 'external-email';
+
+/**
+ * Wrap one attacker-controlled email text field in the untrusted-content
+ * envelope. `null`/`undefined` pass through as `null` so optional fields
+ * keep their shape in the JSON response.
+ */
+export function wrapEmailField(text: string | null | undefined): string | null {
+  if (text === null || text === undefined) {
+    return null;
+  }
+  return wrapUntrusted(text, UNTRUSTED_EMAIL_SOURCE) ?? null;
+}
 
 /**
  * In-memory client config. Set by initClients(), read by tool handlers.
