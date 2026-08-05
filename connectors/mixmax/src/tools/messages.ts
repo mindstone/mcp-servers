@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { mixmaxFetch } from '../client.js';
 import { withErrorHandling, parseApiResponse } from '../utils.js';
 import { isConfigured } from '../auth.js';
-import { messagesResponseSchema } from '../types.js';
+import { messagesResponseSchema, writeResultSchema } from '../types.js';
 import { sanitizeMessages, sanitizeVendorBlob } from '../sanitize.js';
 import { unwrapUntrusted, wrapUntrusted } from '../untrusted-content.js';
 
@@ -98,10 +98,14 @@ NOTE: This sends through Mixmax, not raw Gmail. The email will appear in the use
       if (args.cc && args.cc.length > 0) payload.cc = args.cc.map((email) => ({ email }));
       if (args.bcc && args.bcc.length > 0) payload.bcc = args.bcc.map((email) => ({ email }));
 
-      const data = await mixmaxFetch<Record<string, unknown>>('/send', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
+      const data = parseApiResponse(
+        writeResultSchema,
+        await mixmaxFetch<unknown>('/send', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }),
+        'email send',
+      );
 
       return JSON.stringify({
         ok: true,

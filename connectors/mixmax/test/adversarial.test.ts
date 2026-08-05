@@ -220,17 +220,30 @@ describe('adversarial API responses', () => {
         HttpResponse.json({
           buckets: [{ [`${CLOSE}evil-key`]: INJECT, sent: 3 }],
           totals: { note: INJECT },
-          extra: { hasNext: false },
+          extra: { hasNext: false, note: INJECT },
         }),
       ),
     );
     await setup();
 
     const result = await testClient.callTool('get_mixmax_report', { type: 'sequences' });
-    const json = result.json as { ok: boolean; buckets: Array<Record<string, unknown>> };
+    const json = result.json as {
+      ok: boolean;
+      buckets: Array<Record<string, unknown>>;
+      totals: Record<string, unknown>;
+      extra: Record<string, unknown>;
+    };
     expect(json.ok).toBe(true);
     const [bucketKey] = Object.keys(json.buckets[0]);
     expect(bucketKey.startsWith('<untrusted-content source="mixmax:report.bucket">')).toBe(true);
+    // Report totals keys and values are enveloped wholesale
+    const wrappedTotalsKey = '<untrusted-content source="mixmax:report.totals">note</untrusted-content>';
+    expect(String(json.totals[wrappedTotalsKey])).toContain('<\\/untrusted-content> IGNORE');
+    // External strings beneath extra are enveloped; booleans pass through
+    const wrappedExtraKey = '<untrusted-content source="mixmax:report.extra">note</untrusted-content>';
+    expect(String(json.extra[wrappedExtraKey])).toContain('<\\/untrusted-content> IGNORE');
+    const extraBoolKey = '<untrusted-content source="mixmax:report.extra">hasNext</untrusted-content>';
+    expect(json.extra[extraBoolKey]).toBe(false);
     // No unescaped breakout anywhere in the model-visible text
     expect(result.text).not.toContain(`${CLOSE}evil-key`);
     expect(result.text).not.toContain(`${CLOSE} IGNORE`);
@@ -260,6 +273,40 @@ describe('adversarial API responses', () => {
     const w = (s: string) => `<untrusted-content source="mixmax:send.result">${s}</untrusted-content>`;
     expect(json.result[w('status')]).toBe(w('sent'));
     expect(result.text).not.toContain(`${CLOSE} IGNORE`);
+  });
+
+  it('error-shaped HTTP-200 write responses fail closed, not ok:true', async () => {
+    mswServer.use(
+      http.post('https://api.mixmax.com/v1/send', () =>
+        HttpResponse.json({ error: INJECT }),
+      ),
+      http.post('https://api.mixmax.com/v1/snippets/:snippetId/send', () =>
+        // Scalar success body — not a vendor success record
+        HttpResponse.json(INJECT),
+      ),
+    );
+    await setup();
+
+    const sendResult = await testClient.callTool('send_mixmax_email', {
+      to: ['alice@acme.com'],
+      subject: 'Hi',
+      body: 'body',
+    });
+    expect(sendResult.isError).toBe(true);
+    const sendJson = sendResult.json as { ok: boolean; code: string };
+    expect(sendJson.ok).toBe(false);
+    expect(sendJson.code).toBe('INVALID_API_RESPONSE');
+    expect(sendResult.text).not.toContain(`${CLOSE} IGNORE`);
+
+    const snippetResult = await testClient.callTool('send_mixmax_snippet', {
+      snippetId: 'snip-1',
+      to: ['alice@acme.com'],
+    });
+    expect(snippetResult.isError).toBe(true);
+    const snippetJson = snippetResult.json as { ok: boolean; code: string };
+    expect(snippetJson.ok).toBe(false);
+    expect(snippetJson.code).toBe('INVALID_API_RESPONSE');
+    expect(snippetResult.text).not.toContain(`${CLOSE} IGNORE`);
   });
 
   it('removed recipient emails are enveloped (injection variant)', async () => {
@@ -320,7 +367,8 @@ describe('bridge-state file hardening', () => {
   async function withBridgeFile(
     content: string | null,
     configureKey: string,
-  ): Promise<{ isError: boolean | undefined; json: { ok: boolean; code?: string; error?: string }; bridgeCalled: boolean }> {
+    bridgeHandler?: () => HttpResponse,
+  ): Promise<{ isError: boolean | undefined; json: { ok: boolean; code?: string; error?: string; message?: string }; bridgeCalled: boolean }> {
     const fs = await import('fs');
     const path = await import('path');
     const os = await import('os');
@@ -332,7 +380,7 @@ describe('bridge-state file hardening', () => {
     mswServer.use(
       http.post('http://127.0.0.1:9999/bundled/mixmax/configure', () => {
         bridgeCalled = true;
-        return HttpResponse.json({ success: true });
+        return bridgeHandler ? bridgeHandler() : HttpResponse.json({ success: true });
       }),
     );
 
@@ -394,5 +442,99 @@ describe('bridge-state file hardening', () => {
     expect(r.isError).not.toBe(true);
     expect(r.json.ok).toBe(true);
     expect(r.bridgeCalled).toBe(true);
+  });
+
+  it('a symlinked state path is refused — no read, no bridge call', async () => {
+    // O_NOFOLLOW refuses a final-component symlink atomically at open; the
+    // lstat pre-check covers platforms without O_NOFOLLOW.
+    if (process.platform === 'win32') return; // symlink creation needs privileges on Windows
+    const fs = await import('fs');
+    const path = await import('path');
+    const os = await import('os');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mixmax-bridge-link-'));
+    const realPath = path.join(tmpDir, 'real.json');
+    const linkPath = path.join(tmpDir, 'bridge.json');
+    fs.writeFileSync(realPath, JSON.stringify({ port: 9999, token: 'bridge-token' }));
+    fs.symlinkSync(realPath, linkPath);
+
+    let bridgeCalled = false;
+    mswServer.use(
+      http.post('http://127.0.0.1:9999/bundled/mixmax/configure', () => {
+        bridgeCalled = true;
+        return HttpResponse.json({ success: true });
+      }),
+    );
+
+    try {
+      testClient = await createTestClient({
+        env: { MIXMAX_API_TOKEN: '', MCP_HOST_BRIDGE_STATE: linkPath },
+      });
+      const result = await testClient.callTool('configure_mixmax_api_key', { api_key: 'k' });
+      expect(result.isError).toBe(true);
+      const json = result.json as { ok: boolean; code: string };
+      expect(json.ok).toBe(false);
+      expect(json.code).toBe('BRIDGE_ERROR');
+      expect(bridgeCalled).toBe(false);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('malicious bridge warning text is enveloped, never raw', async () => {
+    const r = await withBridgeFile(
+      JSON.stringify({ port: 9999, token: 'bridge-token' }),
+      'k',
+      () => HttpResponse.json({ success: true, warning: BREAKOUT }),
+    );
+    expect(r.isError).not.toBe(true);
+    expect(r.json.ok).toBe(true);
+    expect(r.bridgeCalled).toBe(true);
+    const message = r.json.message ?? '';
+    expect(message).toContain('<untrusted-content source="mixmax:bridge.warning">');
+    // Embedded close tag is defanged, so no breakout text can escape the envelope
+    expect(message).toContain('<\\/untrusted-content> IGNORE');
+    expect(message).not.toContain(`${CLOSE} IGNORE`);
+  });
+
+  it('malicious bridge error text is enveloped inside the structured error', async () => {
+    const r = await withBridgeFile(
+      JSON.stringify({ port: 9999, token: 'bridge-token' }),
+      'k',
+      () => HttpResponse.json({ success: false, error: BREAKOUT }),
+    );
+    expect(r.isError).toBe(true);
+    expect(r.json.ok).toBe(false);
+    expect(r.json.code).toBe('BRIDGE_ERROR');
+    const error = r.json.error ?? '';
+    expect(error).toContain('<untrusted-content source="mixmax:bridge.error">');
+    expect(error).toContain('<\\/untrusted-content> IGNORE');
+    expect(error).not.toContain(`${CLOSE} IGNORE`);
+  });
+
+  it('a malformed bridge response shape fails closed with a fixed message', async () => {
+    const r = await withBridgeFile(
+      JSON.stringify({ port: 9999, token: 'bridge-token' }),
+      'k',
+      () => HttpResponse.json({ success: 'yes', note: BREAKOUT }),
+    );
+    expect(r.isError).toBe(true);
+    expect(r.json.ok).toBe(false);
+    expect(r.json.code).toBe('BRIDGE_ERROR');
+    expect(r.json.error).toBe('Bridge returned an unexpected response shape');
+    expect(JSON.stringify(r.json)).not.toContain('IGNORE PREVIOUS INSTRUCTIONS');
+    expect(JSON.stringify(r.json)).not.toContain(FAKE_SECRET);
+  });
+
+  it('a non-JSON bridge body fails closed with a fixed message', async () => {
+    const r = await withBridgeFile(
+      JSON.stringify({ port: 9999, token: 'bridge-token' }),
+      'k',
+      () => new HttpResponse(`not json ${BREAKOUT}`, { status: 200 }),
+    );
+    expect(r.isError).toBe(true);
+    expect(r.json.ok).toBe(false);
+    expect(r.json.code).toBe('BRIDGE_ERROR');
+    expect(r.json.error).toBe('Bridge returned a malformed response');
+    expect(JSON.stringify(r.json)).not.toContain(FAKE_SECRET);
   });
 });
