@@ -374,19 +374,94 @@ describe('download_quickbooks_invoice_pdf', () => {
     vi.unstubAllEnvs();
   });
 
-  it('downloads the invoice PDF to the temp directory', async () => {
+  it('downloads the invoice PDF into a fresh private staging directory', async () => {
     mswServer.use(...createQuickBooksHandlers());
     testClient = await createTestClient({ env: defaultEnv() });
 
     const result = await testClient.callTool('download_quickbooks_invoice_pdf', { invoiceId: 'inv-001' });
     const json = result.json as Record<string, unknown>;
     expect(json.ok).toBe(true);
-    expect(String(json.filePath)).toContain('quickbooks_invoice_inv-001.pdf');
+    const filePath = String(json.filePath);
+    expect(filePath).toContain('quickbooks_invoice_inv-001.pdf');
 
     const fs = await import('fs');
-    const content = fs.readFileSync(String(json.filePath));
+    const path = await import('path');
+    const os = await import('os');
+
+    const content = fs.readFileSync(filePath);
     expect(content.subarray(0, 4).toString()).toBe('%PDF');
-    fs.unlinkSync(String(json.filePath));
+
+    // The write must land inside a fresh mkdtemp staging directory directly
+    // under the canonical temp root — never at the predictable top-level path.
+    const stagingDir = path.dirname(filePath);
+    expect(path.basename(stagingDir)).toMatch(/^quickbooks-invoice-/);
+    expect(path.dirname(stagingDir)).toBe(fs.realpathSync(os.tmpdir()));
+    expect(filePath).not.toBe(
+      path.join(fs.realpathSync(os.tmpdir()), 'quickbooks_invoice_inv-001.pdf'),
+    );
+
+    // Directory and file are private to this process (no group/other access).
+    const dirMode = fs.statSync(stagingDir).mode & 0o777;
+    const fileMode = fs.statSync(filePath).mode & 0o777;
+    expect(dirMode & 0o077).toBe(0);
+    expect(fileMode & 0o077).toBe(0);
+
+    fs.rmSync(stagingDir, { recursive: true, force: true });
+  });
+
+  it('does not follow a pre-created symlink at the legacy predictable path', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const os = await import('os');
+
+    // Local-attacker setup: a symlink at the old predictable download path
+    // pointing at a victim file the connector process can write.
+    const victimPath = path.join(os.tmpdir(), `quickbooks-pdf-victim-${process.pid}`);
+    const symlinkPath = path.join(os.tmpdir(), 'quickbooks_invoice_inv-001.pdf');
+    fs.writeFileSync(victimPath, 'victim-sentinel');
+    fs.rmSync(symlinkPath, { force: true });
+    fs.symlinkSync(victimPath, symlinkPath);
+
+    mswServer.use(...createQuickBooksHandlers());
+    testClient = await createTestClient({ env: defaultEnv() });
+
+    try {
+      const result = await testClient.callTool('download_quickbooks_invoice_pdf', { invoiceId: 'inv-001' });
+      const json = result.json as Record<string, unknown>;
+      expect(json.ok).toBe(true);
+
+      // The victim file is untouched and the write went to the staging dir.
+      expect(fs.readFileSync(victimPath, 'utf8')).toBe('victim-sentinel');
+      const filePath = String(json.filePath);
+      expect(filePath).not.toBe(fs.realpathSync(symlinkPath));
+      expect(path.basename(path.dirname(filePath))).toMatch(/^quickbooks-invoice-/);
+      fs.rmSync(path.dirname(filePath), { recursive: true, force: true });
+    } finally {
+      fs.rmSync(symlinkPath, { force: true });
+      fs.rmSync(victimPath, { force: true });
+    }
+  });
+
+  it('concurrent same-ID downloads get distinct files and both succeed', async () => {
+    mswServer.use(...createQuickBooksHandlers());
+    testClient = await createTestClient({ env: defaultEnv() });
+
+    const [first, second] = await Promise.all([
+      testClient.callTool('download_quickbooks_invoice_pdf', { invoiceId: 'inv-001' }),
+      testClient.callTool('download_quickbooks_invoice_pdf', { invoiceId: 'inv-001' }),
+    ]);
+    const firstJson = first.json as Record<string, unknown>;
+    const secondJson = second.json as Record<string, unknown>;
+    expect(firstJson.ok).toBe(true);
+    expect(secondJson.ok).toBe(true);
+    expect(String(firstJson.filePath)).not.toBe(String(secondJson.filePath));
+
+    const fs = await import('fs');
+    const path = await import('path');
+    expect(fs.readFileSync(String(firstJson.filePath)).subarray(0, 4).toString()).toBe('%PDF');
+    expect(fs.readFileSync(String(secondJson.filePath)).subarray(0, 4).toString()).toBe('%PDF');
+    fs.rmSync(path.dirname(String(firstJson.filePath)), { recursive: true, force: true });
+    fs.rmSync(path.dirname(String(secondJson.filePath)), { recursive: true, force: true });
   });
 
   it('rejects an invalid invoice ID before any outbound request', async () => {
@@ -448,6 +523,42 @@ describe('list_quickbooks_estimates', () => {
     testClient = await createTestClient({ env: defaultEnv() });
     await testClient.callTool('list_quickbooks_estimates', { status: 'Pending' });
     expect(capturedQuery).toContain("TxnStatus = 'Pending'");
+  });
+
+  it('signals truncation instead of silently returning one page', async () => {
+    // The fixture always has 2 estimates; with limit 1 the connector's
+    // probe row proves more rows exist.
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.get(`${PRODUCTION_API_BASE}/query`, () =>
+        HttpResponse.json(createEstimatesQueryResponse()),
+      ),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('list_quickbooks_estimates', { limit: 1 });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(json.count).toBe(1);
+    expect(json.hasMore).toBe(true);
+    expect(String(json.note)).toContain('truncated');
+  });
+
+  it('reports hasMore false (and no note) when the page is complete', async () => {
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.get(`${PRODUCTION_API_BASE}/query`, () =>
+        HttpResponse.json(createEstimatesQueryResponse()),
+      ),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('list_quickbooks_estimates', {});
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(json.count).toBe(2);
+    expect(json.hasMore).toBe(false);
+    expect(json.note).toBeUndefined();
   });
 });
 
@@ -1041,5 +1152,175 @@ describe('Not configured returns actionable error', () => {
     expect(json.ok).toBe(false);
     expect(json.code).toBe('NOT_CONFIGURED');
     expect(json.resolution).toBeDefined();
+  });
+});
+
+
+describe('Input validation hardening (adversarial)', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  /** Registers handlers that count every outbound call to Intuit/QBO. */
+  function countOutbound() {
+    const counter = { count: 0 };
+    mswServer.use(
+      http.post(TOKEN_URL, () => {
+        counter.count++;
+        return HttpResponse.json(createTokenResponse());
+      }),
+      http.all(`${PRODUCTION_API_BASE}/*`, () => {
+        counter.count++;
+        return HttpResponse.json({ QueryResponse: {} });
+      }),
+    );
+    return counter;
+  }
+
+  it('rejects malformed dates on estimate, invoice, and report tools', async () => {
+    const outbound = countOutbound();
+    testClient = await createTestClient({ env: defaultEnv() });
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+
+    const badDates = ['2026-13-99', '2026-02-30', 'not-a-date', '2026-2-3', '2026/01/01'];
+    for (const bad of badDates) {
+      const estimate = await testClient.callTool('create_quickbooks_estimate', {
+        customerId: 'cust-001',
+        lines: [{ description: 'x', amount: 100 }],
+        expirationDate: bad,
+      });
+      expect(estimate.isError).toBe(true);
+
+      const invoice = await testClient.callTool('create_quickbooks_invoice', {
+        customerId: 'cust-001',
+        lines: [{ description: 'x', amount: 100 }],
+        dueDate: bad,
+      });
+      expect(invoice.isError).toBe(true);
+
+      const update = await testClient.callTool('update_quickbooks_invoice', {
+        invoiceId: 'inv-1',
+        dueDate: bad,
+      });
+      expect(update.isError).toBe(true);
+
+      const report = await testClient.callTool('get_quickbooks_report', {
+        report: 'ProfitAndLoss',
+        startDate: bad,
+      });
+      expect(report.isError).toBe(true);
+
+      const aging = await testClient.callTool('get_quickbooks_report', {
+        report: 'AgedReceivables',
+        asOfDate: bad,
+      });
+      expect(aging.isError).toBe(true);
+    }
+    expect(outbound.count).toBe(0);
+  });
+
+  it('rejects empty line arrays, non-positive amounts, and non-positive quantities', async () => {
+    const outbound = countOutbound();
+    testClient = await createTestClient({ env: defaultEnv() });
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+
+    const badLineSets: Array<Record<string, unknown>> = [
+      { lines: [] },
+      { lines: [{ description: 'x', amount: 0 }] },
+      { lines: [{ description: 'x', amount: -50 }] },
+      { lines: [{ description: 'x', amount: Number.POSITIVE_INFINITY }] },
+    ];
+    // qty is an invoice/estimate-only field (bill lines have no quantity).
+    const badQtyLineSets: Array<Record<string, unknown>> = [
+      { lines: [{ description: 'x', amount: 100, qty: 0 }] },
+      { lines: [{ description: 'x', amount: 100, qty: -2 }] },
+    ];
+    for (const bad of [...badLineSets, ...badQtyLineSets]) {
+      for (const tool of ['create_quickbooks_estimate', 'create_quickbooks_invoice']) {
+        const result = await testClient.callTool(tool, {
+          customerId: 'cust-001',
+          ...bad,
+        });
+        expect(result.isError).toBe(true);
+      }
+    }
+    for (const bad of badLineSets) {
+      const bill = await testClient.callTool('create_quickbooks_bill', {
+        vendorId: 'vend-001',
+        ...bad,
+      });
+      expect(bill.isError).toBe(true);
+    }
+    expect(outbound.count).toBe(0);
+  });
+
+  it('rejects malformed customer/item/vendor/account IDs before the POST', async () => {
+    const outbound = countOutbound();
+    testClient = await createTestClient({ env: defaultEnv() });
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+    const injected = "1' OR '1'='1";
+
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ['create_quickbooks_estimate', { customerId: injected, lines: [{ description: 'x', amount: 1 }] }],
+      ['create_quickbooks_estimate', { customerId: 'c1', lines: [{ description: 'x', amount: 1, itemId: injected }] }],
+      ['create_quickbooks_invoice', { customerId: injected, lines: [{ description: 'x', amount: 1 }] }],
+      ['create_quickbooks_invoice', { customerId: 'c1', lines: [{ description: 'x', amount: 1, itemId: injected }] }],
+      ['create_quickbooks_bill', { vendorId: injected, lines: [{ description: 'x', amount: 1 }] }],
+      ['create_quickbooks_bill', { vendorId: 'v1', lines: [{ description: 'x', amount: 1, accountId: injected }] }],
+    ];
+    for (const [tool, args] of cases) {
+      const result = await testClient.callTool(tool, args);
+      const json = result.json as Record<string, unknown>;
+      expect(json.ok).toBe(false);
+      expect(json.code).toBe('INVALID_INPUT');
+    }
+    expect(outbound.count).toBe(0);
+  });
+
+  it('rejects malformed email addresses on customer and vendor writes', async () => {
+    const outbound = countOutbound();
+    testClient = await createTestClient({ env: defaultEnv() });
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ['create_quickbooks_customer', { displayName: 'Acme', email: 'not-an-email' }],
+      ['update_quickbooks_customer', { customerId: 'c1', syncToken: '0', email: 'not-an-email' }],
+      ['create_quickbooks_vendor', { displayName: 'Acme', email: 'not-an-email' }],
+      ['update_quickbooks_vendor', { vendorId: 'v1', syncToken: '0', email: 'not-an-email' }],
+    ];
+    for (const [tool, args] of cases) {
+      const result = await testClient.callTool(tool, args);
+      expect(result.isError).toBe(true);
+    }
+    expect(outbound.count).toBe(0);
+  });
+
+  it('still accepts well-formed create inputs after hardening', async () => {
+    mswServer.use(...createQuickBooksHandlers());
+    testClient = await createTestClient({ env: defaultEnv() });
+    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+
+    const estimate = await testClient.callTool('create_quickbooks_estimate', {
+      customerId: 'cust-001',
+      lines: [{ description: 'Consulting', amount: 1500, qty: 2, itemId: 'item-9' }],
+      expirationDate: '2026-04-30',
+    });
+    expect((estimate.json as Record<string, unknown>).ok).toBe(true);
+
+    const invoice = await testClient.callTool('create_quickbooks_invoice', {
+      customerId: 'cust-001',
+      lines: [{ description: 'Consulting', amount: 1500 }],
+      dueDate: '2026-04-01',
+    });
+    expect((invoice.json as Record<string, unknown>).ok).toBe(true);
+
+    const customer = await testClient.callTool('create_quickbooks_customer', {
+      displayName: 'Acme Corp',
+      email: 'billing@example.com',
+    });
+    expect((customer.json as Record<string, unknown>).ok).toBe(true);
   });
 });

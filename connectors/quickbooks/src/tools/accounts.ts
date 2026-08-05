@@ -5,7 +5,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { withErrorHandling, escapeQboql } from '../utils.js';
-import { qboQuery } from '../client.js';
+import { qboQueryPage, truncationNote } from '../client.js';
 import { sanitizeQboEntity } from '../sanitize.js';
 
 export function registerAccountTools(server: McpServer): void {
@@ -36,11 +36,13 @@ Account types: Bank, Accounts Receivable, Other Current Asset, Fixed Asset, Othe
 
       const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
       const query = `SELECT * FROM Account${where} ORDERBY Name`;
-      const accounts = await qboQuery('Account', query, limit);
+      const page = await qboQueryPage('Account', query, limit);
       return JSON.stringify({
         ok: true,
-        accounts: sanitizeQboEntity(accounts, 'quickbooks:list_quickbooks_accounts'),
-        count: accounts.length,
+        accounts: sanitizeQboEntity(page.rows, 'quickbooks:list_quickbooks_accounts'),
+        count: page.rows.length,
+        hasMore: page.hasMore,
+        ...(page.hasMore ? { note: truncationNote(limit) } : {}),
       });
     }),
   );

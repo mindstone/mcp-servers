@@ -7,8 +7,8 @@ import * as os from 'os';
 import * as path from 'path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeQboql, validateAlphanumericId, requireProdWritesEnabled } from '../utils.js';
-import { qboFetch, qboFetchBinary, qboQuery, qboSparseUpdate } from '../client.js';
+import { withErrorHandling, escapeQboql, validateAlphanumericId, requireProdWritesEnabled, qboDate } from '../utils.js';
+import { qboFetch, qboFetchBinary, qboQueryPage, qboSparseUpdate, truncationNote } from '../client.js';
 import { QBO_MINOR_VERSION, QuickBooksError } from '../types.js';
 import { sanitizeQboEntity } from '../sanitize.js';
 
@@ -52,11 +52,13 @@ WORKFLOW:
 
       const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
       const query = `SELECT * FROM Invoice${where} ORDERBY TxnDate DESC`;
-      const invoices = await qboQuery('Invoice', query, limit);
+      const page = await qboQueryPage('Invoice', query, limit);
       return JSON.stringify({
         ok: true,
-        invoices: sanitizeQboEntity(invoices, 'quickbooks:list_quickbooks_invoices'),
-        count: invoices.length,
+        invoices: sanitizeQboEntity(page.rows, 'quickbooks:list_quickbooks_invoices'),
+        count: page.rows.length,
+        hasMore: page.hasMore,
+        ...(page.hasMore ? { note: truncationNote(limit) } : {}),
       });
     }),
   );
@@ -80,18 +82,22 @@ COMMON MISTAKES:
       inputSchema: z.object({
         customerId: z.string().describe('Customer ID (required)'),
         lines: z.array(z.object({
-          description: z.string().describe('Line description'),
-          amount: z.number().describe('Line amount'),
-          qty: z.number().optional().describe('Quantity (default: 1)'),
+          description: z.string().min(1).describe('Line description'),
+          amount: z.number().finite().positive().describe('Line amount (must be > 0)'),
+          qty: z.number().finite().positive().optional().describe('Quantity (default: 1, must be > 0)'),
           itemId: z.string().optional().describe('Item/service ID (optional)'),
-        })).describe('Invoice line items'),
-        dueDate: z.string().optional().describe('Due date (YYYY-MM-DD)'),
+        })).min(1).describe('Invoice line items (at least one required)'),
+        dueDate: qboDate.optional().describe('Due date (YYYY-MM-DD)'),
         memo: z.string().optional().describe('Customer memo / notes'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       requireProdWritesEnabled();
+      validateAlphanumericId(args.customerId, 'customerId');
+      for (const line of args.lines) {
+        if (line.itemId) validateAlphanumericId(line.itemId, 'itemId');
+      }
       const invoiceBody: Record<string, unknown> = {
         CustomerRef: { value: args.customerId },
         Line: args.lines.map((line) => ({
@@ -134,7 +140,7 @@ first to obtain the current one (QuickBooks rejects stale SyncTokens).`,
         invoiceId: z.string().describe('Invoice ID (required)'),
         syncToken: z.string().optional()
           .describe('Current SyncToken (omit to read it from QuickBooks first)'),
-        dueDate: z.string().optional().describe('New due date (YYYY-MM-DD)'),
+        dueDate: qboDate.optional().describe('New due date (YYYY-MM-DD)'),
         memo: z.string().optional().describe('New customer memo'),
         privateNote: z.string().optional().describe('New private note (not visible to the customer)'),
       }),
@@ -228,9 +234,40 @@ WORKFLOW:
         `/invoice/${encodeURIComponent(args.invoiceId)}/pdf?minorversion=${QBO_MINOR_VERSION}`,
         'application/pdf',
       );
-      // invoiceId is alphanumeric-validated above, so the filename is safe.
-      const outputPath = path.join(os.tmpdir(), `quickbooks_invoice_${args.invoiceId}.pdf`);
-      fs.writeFileSync(outputPath, pdfBuffer);
+      // invoiceId is alphanumeric-validated above, so the basename is safe —
+      // but a validated pathname is never re-trusted as a write target. The
+      // PDF lands inside a fresh, unpredictable staging directory created
+      // atomically with fs.mkdtempSync directly under the canonical temp
+      // root (mode 0700), so another local principal cannot pre-create,
+      // rename, or symlink-swap any path component, and concurrent same-ID
+      // downloads cannot collide. The file itself is opened with
+      // O_CREAT|O_EXCL|O_WRONLY (mode 0600), fstat-checked to be a regular
+      // file, and written through the single verified descriptor.
+      const tmpRoot = fs.realpathSync(os.tmpdir());
+      const stagingDir = fs.mkdtempSync(path.join(tmpRoot, 'quickbooks-invoice-'));
+      const outputPath = path.join(stagingDir, `quickbooks_invoice_${args.invoiceId}.pdf`);
+      try {
+        const fd = fs.openSync(outputPath, 'wx', 0o600);
+        try {
+          if (!fs.fstatSync(fd).isFile()) {
+            throw new QuickBooksError(
+              'Download target is not a regular file.',
+              'DOWNLOAD_WRITE_FAILED',
+              'Try the download again.',
+            );
+          }
+          fs.writeSync(fd, pdfBuffer);
+        } finally {
+          fs.closeSync(fd);
+        }
+      } catch (error) {
+        // Never leave a partial download behind; removal is best-effort so
+        // the original error stays observable.
+        try {
+          fs.rmSync(stagingDir, { recursive: true, force: true });
+        } catch { /* best effort */ }
+        throw error;
+      }
 
       return JSON.stringify({
         ok: true,

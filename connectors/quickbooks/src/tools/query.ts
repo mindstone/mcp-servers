@@ -5,7 +5,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { withErrorHandling } from '../utils.js';
-import { qboFetch, qboQuery } from '../client.js';
+import { qboFetch, qboQueryPage, truncationNote } from '../client.js';
 import { QBO_MINOR_VERSION } from '../types.js';
 import { wrapUntrustedJsonStrings } from '../untrusted-content.js';
 
@@ -42,13 +42,15 @@ COMMON MISTAKES:
       // Extract entity name from query for response parsing
       const entityMatch = query.match(/FROM\s+(\w+)/i);
       const entityName = entityMatch ? entityMatch[1] : 'Unknown';
-      const results = await qboQuery(entityName, query, limit);
+      const page = await qboQueryPage(entityName, query, limit);
       // Arbitrary entity shape: envelope every string value wholesale.
       return JSON.stringify({
         ok: true,
         entity: entityName,
-        data: wrapUntrustedJsonStrings(results, 'quickbooks:query_quickbooks'),
-        count: results.length,
+        data: wrapUntrustedJsonStrings(page.rows, 'quickbooks:query_quickbooks'),
+        count: page.rows.length,
+        hasMore: page.hasMore,
+        ...(page.hasMore ? { note: truncationNote(limit) } : {}),
       });
     }),
   );

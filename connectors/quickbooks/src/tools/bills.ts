@@ -4,8 +4,8 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeQboql, validateAlphanumericId, requireProdWritesEnabled } from '../utils.js';
-import { qboFetch, qboQuery } from '../client.js';
+import { withErrorHandling, escapeQboql, validateAlphanumericId, requireProdWritesEnabled, qboDate } from '../utils.js';
+import { qboFetch, qboQueryPage, truncationNote } from '../client.js';
 import { QBO_MINOR_VERSION } from '../types.js';
 import { sanitizeQboEntity } from '../sanitize.js';
 
@@ -30,11 +30,13 @@ Example: { "vendorId": "123" }`,
       if (args.vendorId) validateAlphanumericId(args.vendorId, 'vendorId');
       const where = args.vendorId ? ` WHERE VendorRef = '${escapeQboql(args.vendorId)}'` : '';
       const query = `SELECT * FROM Bill${where} ORDERBY TxnDate DESC`;
-      const bills = await qboQuery('Bill', query, limit);
+      const page = await qboQueryPage('Bill', query, limit);
       return JSON.stringify({
         ok: true,
-        bills: sanitizeQboEntity(bills, 'quickbooks:list_quickbooks_bills'),
-        count: bills.length,
+        bills: sanitizeQboEntity(page.rows, 'quickbooks:list_quickbooks_bills'),
+        count: page.rows.length,
+        hasMore: page.hasMore,
+        ...(page.hasMore ? { note: truncationNote(limit) } : {}),
       });
     }),
   );
@@ -53,17 +55,21 @@ WORKFLOW:
       inputSchema: z.object({
         vendorId: z.string().describe('Vendor ID (required)'),
         lines: z.array(z.object({
-          description: z.string().describe('Line description'),
-          amount: z.number().describe('Line amount'),
+          description: z.string().min(1).describe('Line description'),
+          amount: z.number().finite().positive().describe('Line amount (must be > 0)'),
           accountId: z.string().optional().describe('Expense account ID'),
-        })).describe('Bill line items'),
-        dueDate: z.string().optional().describe('Due date (YYYY-MM-DD)'),
+        })).min(1).describe('Bill line items (at least one required)'),
+        dueDate: qboDate.optional().describe('Due date (YYYY-MM-DD)'),
         memo: z.string().optional().describe('Memo / notes'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       requireProdWritesEnabled();
+      validateAlphanumericId(args.vendorId, 'vendorId');
+      for (const line of args.lines) {
+        if (line.accountId) validateAlphanumericId(line.accountId, 'accountId');
+      }
       const billBody: Record<string, unknown> = {
         VendorRef: { value: args.vendorId },
         Line: args.lines.map((line) => ({

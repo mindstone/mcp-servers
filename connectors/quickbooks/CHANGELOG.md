@@ -20,6 +20,9 @@ are maintained manually as part of the PR review checklist.
 
 ### Security
 - QuickBooks-authored free text (display names, memos, line descriptions, report cells) is now wrapped in `<untrusted-content>` envelopes before reaching the model (FOX-3490 remediation). Typed entity payloads envelope the known free-text fields; `query_quickbooks`, `get_quickbooks_entity`, and reports envelope every string value wholesale.
+- `download_quickbooks_invoice_pdf` no longer writes to a predictable temp path with an unconditional `writeFileSync` (which followed pre-existing symlinks and silently overwrote existing files). Downloads land in a fresh `mkdtempSync` staging directory (mode 0700) under the canonical temp root, opened `O_CREAT|O_EXCL` (mode 0600), fstat-verified, and written through the single descriptor.
+- Vendor error text (QuickBooks `Fault` Detail/Message) and Intuit OAuth error descriptions are enveloped in `<untrusted-content>` before they can reach model output, so a compromised API/OAuth response cannot inject instructions or break out of the surrounding envelope.
+- Typed entity payloads (`sanitizeQboEntity`) are now sanitized deny-by-default: every string is enveloped unless its key is a narrow structural predicate (IDs, SyncToken, `*Ref.value` markers, enums, dates/timestamps). This closes the allow-list gaps that left `PrimaryEmailAddr.Address`, `PrimaryPhone.FreeFormNumber`, postal-address fields, and any future vendor-defined free-text fields unwrapped.
 
 ### Changed
 - QuickBooks `minorversion` is centralized in one constant and bumped from 65 to 75 (was hardcoded at every call site).
@@ -27,6 +30,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 - `server.json` now declares the optional `MCP_HOST_BRIDGE_STATE` / `MINDSTONE_REBEL_BRIDGE_STATE` bridge variables that `src/bridge.ts` reads.
+- Write-tool input validation is hardened: dates (`dueDate`, `expirationDate`, report `startDate`/`endDate`/`asOfDate`) must be real YYYY-MM-DD calendar dates, line arrays must be non-empty with finite positive amounts (and positive quantities where applicable), customer/vendor email fields must be valid emails, and `customerId`/`itemId`/`vendorId`/`accountId` on the create tools are alphanumeric-validated before any outbound request.
+- List tools (`list_quickbooks_*` and `query_quickbooks`) no longer silently return a truncated first page: output now includes `hasMore` (computed exactly via a one-row probe, not a count-equals-limit guess) plus a `note` with recovery guidance when results were truncated.
 
 ## [0.3.1] - 2026-05-14
 ### Added

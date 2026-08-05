@@ -10,6 +10,7 @@
 
 import { QuickBooksError, USER_AGENT, REQUEST_TIMEOUT_MS, QBO_MINOR_VERSION } from './types.js';
 import { getAccessToken, getBaseUrl, isConfigured, clearTokenCache } from './auth.js';
+import { wrapUntrusted } from './untrusted-content.js';
 
 /**
  * Make an authenticated request to the QuickBooks Online API and return the
@@ -79,6 +80,11 @@ async function qboRequest(
     } catch {
       errorText = await response.text().catch(() => 'Unknown error');
     }
+    // Fault Detail/Message is vendor-controlled text on its way to the model
+    // (QuickBooksError.message -> withErrorHandling -> tool output). Envelope
+    // it so a compromised API response cannot inject instructions or break
+    // out of the surrounding untrusted-content envelope (AGENTS.md #6).
+    errorText = wrapUntrusted(errorText, 'quickbooks:api-error') ?? 'Unknown error';
 
     if (response.status === 401) {
       clearTokenCache();
@@ -202,4 +208,33 @@ export async function qboQuery<T>(
   const encoded = encodeURIComponent(fullQuery);
   const result = await qboFetch<{ QueryResponse: Record<string, T[]> }>(`/query?query=${encoded}`);
   return result.QueryResponse[entity] || [];
+}
+
+export interface QboQueryPage<T> {
+  rows: T[];
+  /** True when more rows exist beyond the requested limit. */
+  hasMore: boolean;
+}
+
+/**
+ * Run a QuickBooks query and report whether the result was truncated at
+ * `limit`. Requests one extra row as a probe so `hasMore` is exact rather
+ * than a "returned count equals limit" guess; the probe row is sliced off.
+ */
+export async function qboQueryPage<T>(
+  entity: string,
+  query: string,
+  limit: number,
+  offset = 1,
+): Promise<QboQueryPage<T>> {
+  const rows = await qboQuery<T>(entity, query, limit + 1, offset);
+  return { rows: rows.slice(0, limit), hasMore: rows.length > limit };
+}
+
+/**
+ * Standard truncation note for list-tool output, so the model knows the
+ * page is partial instead of silently treating it as complete.
+ */
+export function truncationNote(limit: number): string {
+  return `Results truncated at ${limit}. Narrow the filters or pass a higher limit (max 1000) to see more.`;
 }

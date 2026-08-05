@@ -8,7 +8,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling } from '../utils.js';
+import { withErrorHandling, qboDate } from '../utils.js';
 import { qboFetch } from '../client.js';
 import { QBO_MINOR_VERSION } from '../types.js';
 import { wrapUntrustedJsonStrings } from '../untrusted-content.js';
@@ -36,11 +36,11 @@ WORKFLOW:
 3. Dates use YYYY-MM-DD format; omitted dates use the QuickBooks default period`,
       inputSchema: z.object({
         report: z.enum(REPORT_NAMES).describe('Report to run'),
-        startDate: z.string().optional()
+        startDate: qboDate.optional()
           .describe('Report start date (YYYY-MM-DD) — range reports only'),
-        endDate: z.string().optional()
+        endDate: qboDate.optional()
           .describe('Report end date (YYYY-MM-DD) — range reports only'),
-        asOfDate: z.string().optional()
+        asOfDate: qboDate.optional()
           .describe('As-of date (YYYY-MM-DD) — aging reports only'),
         accountingMethod: z.enum(['Accrual', 'Cash']).optional()
           .describe('Accounting method for the report (default: company setting)'),

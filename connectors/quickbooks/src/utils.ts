@@ -1,5 +1,22 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 import { QuickBooksError } from './types.js';
+
+/**
+ * Shared date schema for QuickBooks tool inputs: strict YYYY-MM-DD shape plus
+ * a real-calendar-date round-trip check, so 2026-13-99, 2026-02-30, unpadded
+ * variants, and arbitrary strings are rejected before any outbound request.
+ */
+export const qboDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format.')
+  .refine(
+    (value) => {
+      const parsed = new Date(`${value}T00:00:00Z`);
+      return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+    },
+    { message: 'Date must be a real calendar date in YYYY-MM-DD format.' },
+  );
 
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
 
