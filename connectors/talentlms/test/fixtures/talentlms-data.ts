@@ -82,6 +82,14 @@ export const mockBranches = [
   { id: '2', name: 'APAC', description: 'Asia Pacific', created_on: '2025-01-01' },
 ];
 
+// ─── Categories ───────────────────────────────────────────
+
+export const mockCategories = [
+  { id: '1', name: 'Onboarding', price: '$0', parent_category_id: '' },
+  { id: '2', name: 'Compliance', price: '$0', parent_category_id: '' },
+  { id: '3', name: 'Leadership', price: '$49', parent_category_id: '' },
+];
+
 // ─── Reporting ──────────────────────────────────────────
 
 export const mockSiteInfo = {

@@ -211,6 +211,28 @@ export function createTalentLMSHandlers(expectedApiKey = MOCK_API_KEY) {
       return HttpResponse.json({ error: { message: 'Not found' } }, { status: 404 });
     }),
 
+    // ─── Categories ─────────────────────────────────────────
+    http.get(`${BASE}/categories`, ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      const url = new URL(request.url);
+      if (url.pathname === '/api/v1/categories') {
+        return HttpResponse.json(fixtures.mockCategories);
+      }
+      return undefined;
+    }),
+
+    http.get(`${BASE}/categories/*`, ({ request }) => {
+      const authError = checkAuth(request, expectedApiKey);
+      if (authError) return authError;
+      const url = new URL(request.url);
+      const segment = url.pathname.split('/api/v1/categories/')[1] || '';
+      if (isPaginationSegment(segment)) {
+        return HttpResponse.json(paginate(fixtures.mockCategories, segment));
+      }
+      return HttpResponse.json({ error: { message: 'Not found' } }, { status: 404 });
+    }),
+
     // ─── Reporting ──────────────────────────────────────────
     http.get(`${BASE}/siteinfo`, ({ request }) => {
       const authError = checkAuth(request, expectedApiKey);

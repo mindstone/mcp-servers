@@ -43,6 +43,44 @@ describe('Reporting tools', () => {
     expect(data.branches[1].name).toBe('<untrusted-content source="talentlms:branches">APAC</untrusted-content>');
   });
 
+  it('list_talentlms_categories returns categories', async () => {
+    const client = await getClient();
+    const result = await client.callTool('list_talentlms_categories', {});
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(data.ok).toBe(true);
+    expect(data.categories).toHaveLength(3);
+    expect(data.count).toBe(3);
+    expect(data.categories[0].name).toBe('<untrusted-content source="talentlms:categories">Onboarding</untrusted-content>');
+    expect(data.categories[2].id).toBe('3');
+  });
+
+  it('list_talentlms_categories forwards page_size and page_number', async () => {
+    const client = await getClient();
+    const result = await client.callTool('list_talentlms_categories', { page_size: 2, page_number: 2 });
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(data.ok).toBe(true);
+    expect(data.categories).toHaveLength(1);
+    expect(data.categories[0].id).toBe('3');
+  });
+
+  it('list_talentlms_categories surfaces API errors', async () => {
+    const { http, HttpResponse } = await import('msw');
+    mswServer.use(
+      http.get(`https://${MOCK_DOMAIN}.talentlms.com/api/v1/categories`, () =>
+        HttpResponse.json({ error: { message: 'Server error' } }, { status: 500 }),
+      ),
+    );
+    const client = await getClient();
+    const result = await client.callTool('list_talentlms_categories', {});
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(result.isError).toBe(true);
+    expect(data.ok).toBe(false);
+    expect(data.code).toBe('HTTP_500');
+  });
+
   it('get_talentlms_site_info returns site stats', async () => {
     const client = await getClient();
     const result = await client.callTool('get_talentlms_site_info', {});
