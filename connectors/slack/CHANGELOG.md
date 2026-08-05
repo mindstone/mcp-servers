@@ -21,6 +21,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 - `search_slack_messages` and `get_slack_saved_messages` now prefer Slack's Real-Time Search API (`assistant.search.context`) over the legacy `search.messages` endpoint Slack officially discourages. The Real-Time Search API requires the granular `search:read.public/private/im/mpim` scopes; when the connected token lacks them (or the workspace refuses RTS), the connector falls back to legacy `search.messages` **loudly** — every search response carries a `search_backend` field, and legacy responses add a `search_backend_note` naming the refusal and the scopes needed to enable the recommended path. The probe result is cached per process, and deep `page` walks on the cursor-paginated RTS path are capped (rate-limit safety) with a `page_walk_truncated` marker.
 
+### Security
+
+- `upload_slack_file` now reads the source file race-free: the validated canonical path is opened once (no-follow, non-blocking), `fstat` on that descriptor enforces regular-file-only and the 50MB cap, a dev+inode re-check detects post-validation replacement (including swapped ancestor directories), and bytes are read through the descriptor with the cap enforced on the bytes actually read. Previously the validate → `stat` → `readFile` sequence let a process that can write the workspace swap in an out-of-workspace symlink or an oversized file between the checks and the read.
+- `add_slack_bookmark` and `add_slack_reminder` now envelope the Slack-returned bookmark title and reminder text as untrusted content (with close-tag breakout escaping), matching the list paths. Previously those fields reached the model raw.
+- `list_slack_emoji` now enforces — rather than assumes — Slack's emoji constraints: entries whose name is not a valid Slack emoji name or whose value is neither an `alias:` pointer nor an HTTPS URL on Slack-owned infrastructure are dropped from the response, with the omission reported in the response and on stderr. Previously a compromised or unexpected upstream response could inject arbitrary model-visible strings through the emoji map.
+- `search_slack_messages` / `get_slack_saved_messages` no longer cache the legacy-search fallback on `access_denied`. Slack can return that code for query- or resource-specific denials (not just installation capability), so caching it let one denied query pin the whole process to the legacy backend; `access_denied` now surfaces as an ordinary error and Real-Time Search is retried on the next call. The remaining cached codes (`missing_scope`, `not_allowed_token_type`, `feature_not_enabled`, `deprecated_endpoint`, `method_deprecated`) are all installation- or workspace-scoped.
+- `download_slack_file` / `upload_slack_file` failure messages no longer include the raw HTTP reason phrase (`statusText`) from the upstream response; they report the numeric status only.
+
 ## [0.2.0] - 2026-07-30
 
 ### Changed

@@ -200,7 +200,7 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 - `list_slack_workspaces` — Check Slack connection status (connected, token health, near-expiry).
 
 ### Messages
-- `search_slack_messages` — Search across all channels (Slack search modifiers supported). Uses Slack's Real-Time Search API (`assistant.search.context`) when the connected app holds the granular `search:read.*` scopes; otherwise falls back to legacy `search.messages` and says so in the response (`search_backend` / `search_backend_note`).
+- `search_slack_messages` — Search across all channels (Slack search modifiers supported). Uses Slack's Real-Time Search API (`assistant.search.context`) when the connected app holds the granular `search:read.*` scopes; otherwise falls back to legacy `search.messages` and says so in the response (`search_backend` / `search_backend_note`). The fallback is cached per workspace only for installation-scoped refusals (`missing_scope`, `not_allowed_token_type`, `feature_not_enabled`, endpoint-deprecation codes) — a resource-specific `access_denied` surfaces as an ordinary error and RTS is retried on the next call.
 - `get_slack_saved_messages` — Get messages saved for later (uses `is:saved`). Same search-backend reporting as `search_slack_messages`.
 - `get_slack_message_by_link` — Retrieve a message from its permalink URL.
 - `compose_slack_message` — Open an inline editable compose form before sending; the form posts via `post_slack_message` when the user clicks Send.
@@ -227,7 +227,7 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 ### Reactions
 - `add_slack_reaction` — Add an emoji reaction to a message.
 - `remove_slack_reaction` — Remove your own reaction from a message.
-- `list_slack_emoji` — List the workspace's custom emoji (name → URL/alias).
+- `list_slack_emoji` — List the workspace's custom emoji (name → URL/alias). Entries that violate Slack's emoji name/value constraints are dropped and reported (`omitted_invalid_entries`), never forwarded.
 
 ### Pins
 - `list_slack_pins` — List messages pinned in a channel.
@@ -242,7 +242,7 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 
 ### Files
 - `download_slack_file` — Download a file attachment by ID or URL.
-- `upload_slack_file` — Upload a local file (workspace-constrained reads; max 50MB) and optionally share it to a channel or thread. Uses the 3-step external upload flow.
+- `upload_slack_file` — Upload a local file (workspace-constrained, race-free reads; max 50MB) and optionally share it to a channel or thread. Uses the 3-step external upload flow.
 
 ### Workspace
 - `add_slack_bookmark` — Add a bookmark to a channel.
@@ -258,7 +258,9 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 - **Untrusted-content envelopes** — every tool that returns external text wraps it in `<untrusted-content source="…">…</untrusted-content>` envelopes per AGENTS.md invariant #6, with close-tag breakout escaping. This applies to message text, channel topics/purposes, search results, thread replies, unread messages, and downloaded file content/names. Hosts must keep the envelopes intact when surfacing tool output to the model (added in 0.1.3 to close findings `slack-001..007`).
 - **Atomic, durable token persistence** — token files are written via temp-file + `fsync` + `rename`, then `chmod 0600`, so a crash mid-write cannot lose Slack's single-use refresh token.
 - **Refresh-failure differentiation** — transient network errors, HTTP 429 rate-limits, Slack auth rejections (`invalid_grant`), and malformed responses produce distinct error codes so hosts can react correctly without retrying unrecoverable failures.
-- **No host-internal vocabulary** — host-side bridge identifiers and bundled HTTP paths are explicitly absent from the published artefact (enforced by `scripts/check-no-bridge-strings.sh` during `prepublishOnly`).
+- **No host-internal vocabulary** — host-side bridge identifiers and bundled HTTP paths are explicitly absent from the published artefact (enforced by `scripts/check-no-bridge-strings.sh` during `prepublishOnly`, and by `scripts/check-internal-refs.mjs` — also run as `npm run security:internal-refs` — which additionally rejects internal issue-tracker references in `src/` and `dist/`).
+- **Race-free upload source reads** — `upload_slack_file` validates the source path inside the workspace, then opens it once (no-follow, non-blocking), enforces regular-file-only and the 50MB cap via `fstat` on the opened descriptor, re-verifies the descriptor's dev+inode against a fresh confined path resolution (defeats post-validation replacement, including swapped ancestor directories), and reads the bytes through the descriptor with the cap enforced on what is actually read.
+- **Envelope parity on add-paths** — `add_slack_bookmark` and `add_slack_reminder` envelope the Slack-returned title/text exactly like the list paths, with close-tag breakout escaping.
 
 Full implementation-level notes (request-timeout composition, MSW request manifest, token-file error states, server-version drift checks, etc.) live in [`docs/connectors/slack-cohort-hygiene.md`](../../docs/connectors/slack-cohort-hygiene.md).
 
