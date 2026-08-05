@@ -21,7 +21,8 @@ const fake = vi.hoisted(() => {
 
   type FakeNode =
     | { type: 'file'; content: Buffer; mode: number; mtime: number }
-    | { type: 'dir'; mode: number; mtime: number };
+    | { type: 'dir'; mode: number; mtime: number }
+    | { type: 'symlink'; target: string; mode: number; mtime: number };
 
   const fsMap = new Map<string, FakeNode>();
 
@@ -36,8 +37,8 @@ const fake = vi.hoisted(() => {
   const attrsFor = (node: FakeNode): FakeAttrs => ({
     isDirectory: () => node.type === 'dir',
     isFile: () => node.type === 'file',
-    isSymbolicLink: () => false,
-    size: node.type === 'file' ? node.content.length : 0,
+    isSymbolicLink: () => node.type === 'symlink',
+    size: node.type === 'file' ? node.content.length : node.type === 'symlink' ? node.target.length : 0,
     mode: node.mode,
     atime: node.mtime,
     mtime: node.mtime,
@@ -68,6 +69,17 @@ const fake = vi.hoisted(() => {
     },
 
     stat(path: string, cb: (err: Error | undefined, stats?: FakeAttrs) => void) {
+      // Follows one symlink hop, like a real SSH_FXP_STAT.
+      let node = fsMap.get(normalize(path));
+      if (node?.type === 'symlink') node = fsMap.get(normalize(node.target));
+      if (!node) {
+        cb(sftpErr(2, 'No such file'));
+        return;
+      }
+      cb(undefined, attrsFor(node));
+    },
+
+    lstat(path: string, cb: (err: Error | undefined, stats?: FakeAttrs) => void) {
       const node = fsMap.get(normalize(path));
       if (!node) {
         cb(sftpErr(2, 'No such file'));
@@ -134,7 +146,11 @@ const fake = vi.hoisted(() => {
     fsMap.set(path, { type: 'file', content: Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf-8'), mode, mtime });
   };
 
-  return { fsMap, sftp, reset, addFile };
+  const addSymlink = (path: string, target: string, mode = 0o777, mtime = 1_700_000_100) => {
+    fsMap.set(path, { type: 'symlink', target, mode, mtime });
+  };
+
+  return { fsMap, sftp, reset, addFile, addSymlink };
 });
 
 vi.mock('../src/ssh.js', async (importOriginal) => {
@@ -208,6 +224,18 @@ describe('Replit SSH MCP — file operations against a fake SFTP backend', () =>
       });
       expect(res.ok).toBe(true);
       expect(res.type).toBe('directory');
+    });
+
+    it('reports symlinks as type "symlink" without following them', async () => {
+      fake.addFile('real.txt', 'data');
+      fake.addSymlink('link.txt', 'real.txt');
+      const res = await call<{ ok: boolean; type: string }>('replit_stat', {
+        host: 'h.replit.dev',
+        user: 'u',
+        path: 'link.txt',
+      });
+      expect(res.ok).toBe(true);
+      expect(res.type).toBe('symlink');
     });
 
     it('returns IO_ERROR for a missing path', async () => {
@@ -400,6 +428,24 @@ describe('Replit SSH MCP — file operations against a fake SFTP backend', () =>
       const line = res.matches[0].lineMatches![0].line;
       expect(line).toContain('<\\/untrusted-content>');
       expect(line.match(/<\/untrusted-content>/g)).toHaveLength(1); // only the envelope's own close tag
+    });
+
+    it('caps per-file line matches and flags the overflow observably', async () => {
+      const hotLines = Array.from({ length: 20 }, (_, i) => `needle on line ${i + 1}`).join('\n');
+      fake.addFile('hot.txt', hotLines + '\n');
+      fake.addFile('calm.txt', 'needle once\nplain line\n');
+      const res = await call<{
+        ok: boolean;
+        matches: Array<{ path: string; lineMatches?: Array<{ lineNumber: number }>; lineMatchesTruncated?: boolean }>;
+      }>('replit_search_files', { host: 'h.replit.dev', user: 'u', content_contains: 'needle' });
+      expect(res.ok).toBe(true);
+      const hot = res.matches.find((m) => m.path.includes('hot.txt'))!;
+      expect(hot.lineMatches).toHaveLength(5);
+      expect(hot.lineMatches![0].lineNumber).toBe(1);
+      expect(hot.lineMatchesTruncated).toBe(true);
+      const calm = res.matches.find((m) => m.path.includes('calm.txt'))!;
+      expect(calm.lineMatches).toHaveLength(1);
+      expect(calm.lineMatchesTruncated).toBeUndefined();
     });
 
     it('skips binary files for content search', async () => {

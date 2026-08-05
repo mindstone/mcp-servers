@@ -48,6 +48,8 @@ export async function replitStatFile(
   try {
     const { sftp } = await getConnection(host, user, key);
 
+    // lstat (not stat): symlinks are reported as type "symlink" with the
+    // link's own metadata rather than silently describing the link target.
     const attrs = await sftpOpWithSignal<{
       isDirectory(): boolean;
       isFile(): boolean;
@@ -57,7 +59,7 @@ export async function replitStatFile(
       atime: number;
       mtime: number;
     }>(signal, SSH_CONNECT_TIMEOUT_MS, (cb) => {
-      sftp.stat(targetPath, (err: Error | undefined, stats) => {
+      sftp.lstat(targetPath, (err: Error | undefined, stats) => {
         if (err) {
           cb(err);
           return;

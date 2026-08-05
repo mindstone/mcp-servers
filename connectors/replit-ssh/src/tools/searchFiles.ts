@@ -25,6 +25,10 @@ const MAX_GREP_FILE_BYTES = 1024 * 1024;
 // Bounds total SFTP work so a huge project tree cannot run away.
 const MAX_VISITED_ENTRIES = 10_000;
 const MAX_LINE_LENGTH = 200;
+// Per-file cap on returned matching lines so one hot file (e.g. a needle on
+// every line of a 1 MB file) cannot flood the response; overflow is flagged
+// via lineMatchesTruncated rather than silently dropped.
+const MAX_LINE_MATCHES_PER_FILE = 5;
 
 // At-least-one-of name_contains/content_contains is enforced at runtime inside
 // the tool — a .refine() here would wrap the object in ZodEffects and break the
@@ -68,6 +72,7 @@ interface LineMatch {
 interface SearchMatch {
   path: string | undefined;
   lineMatches?: LineMatch[];
+  lineMatchesTruncated?: boolean;
 }
 
 interface WalkContext {
@@ -126,6 +131,7 @@ async function walkDirectory(ctx: WalkContext, absDir: string, relDir: string, d
 
     const nameHit = ctx.nameNeedle !== null && entry.filename.toLowerCase().includes(ctx.nameNeedle);
     let lineMatches: LineMatch[] | undefined;
+    let lineMatchesTruncated = false;
 
     if (ctx.contentNeedle && entry.attrs.size <= MAX_GREP_FILE_BYTES) {
       const content = await sftpOpWithSignal<Buffer>(ctx.signal, SSH_CONNECT_TIMEOUT_MS, (cb) => {
@@ -145,6 +151,10 @@ async function walkDirectory(ctx: WalkContext, absDir: string, relDir: string, d
         const hits: LineMatch[] = [];
         for (let i = 0; i < lines.length; i++) {
           if (lines[i].toLowerCase().includes(needle)) {
+            if (hits.length >= MAX_LINE_MATCHES_PER_FILE) {
+              lineMatchesTruncated = true;
+              break;
+            }
             hits.push({
               lineNumber: i + 1,
               line: wrapUntrusted(lines[i].slice(0, MAX_LINE_LENGTH), ctx.source),
@@ -156,7 +166,11 @@ async function walkDirectory(ctx: WalkContext, absDir: string, relDir: string, d
     }
 
     if (nameHit || lineMatches) {
-      ctx.matches.push({ path: wrapUntrusted(relPath, ctx.source), ...(lineMatches ? { lineMatches } : {}) });
+      ctx.matches.push({
+        path: wrapUntrusted(relPath, ctx.source),
+        ...(lineMatches ? { lineMatches } : {}),
+        ...(lineMatchesTruncated ? { lineMatchesTruncated } : {}),
+      });
     }
   }
 }
