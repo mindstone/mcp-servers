@@ -21,6 +21,8 @@ function childEnv(): Record<string, string> {
   }
   env.XERO_CLIENT_ID = "test-client-id";
   env.XERO_CLIENT_SECRET = "test-client-secret";
+  // The write gate must be exercised closed; never inherit an opt-in.
+  delete env.XERO_ALLOW_WRITES;
   return env;
 }
 
@@ -70,6 +72,57 @@ describe("Xero MCP server smoke", () => {
       const addInvoiceNote = tools.find((tool) => tool.name === "add-invoice-note");
       expect(addInvoiceNote?.annotations?.readOnlyHint).toBe(false);
       expect(addInvoiceNote?.annotations?.destructiveHint).toBe(true);
+
+      expect(names).toContain("list-bank-summary");
+      expect(names).toContain("list-budget-summary");
+      expect(names).toContain("list-executive-summary");
+      expect(names).toContain("list-purchase-orders");
+      expect(names).toContain("create-purchase-order");
+      expect(names).toContain("email-invoice");
+
+      const emailInvoice = tools.find((tool) => tool.name === "email-invoice");
+      expect(emailInvoice?.annotations?.readOnlyHint).toBe(false);
+      expect(emailInvoice?.annotations?.destructiveHint).toBe(true);
+    } finally {
+      await client.close();
+      await transport.close();
+    }
+  }, 30_000);
+
+  it("refuses write tools while XERO_ALLOW_WRITES is unset", async () => {
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [path.join(connectorRoot, "dist/index.js")],
+      cwd: connectorRoot,
+      env: childEnv(),
+      stderr: "pipe",
+    });
+    const client = new Client({ name: "xero-write-gate-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const result = await client.callTool({
+        name: "create-invoice",
+        arguments: {
+          contactId: "00000000-0000-0000-0000-000000000000",
+          lineItems: [
+            {
+              description: "Consulting",
+              quantity: 1,
+              unitAmount: 100,
+              accountCode: "200",
+              taxType: "NONE",
+            },
+          ],
+          type: "ACCREC",
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      const text = (result.content as Array<{ type: string; text?: string }>)
+        .map((block) => (block.type === "text" ? block.text : ""))
+        .join("\n");
+      expect(text).toContain("XERO_ALLOW_WRITES=1");
     } finally {
       await client.close();
       await transport.close();

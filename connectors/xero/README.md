@@ -149,6 +149,8 @@ This guard is secure-by-default: it prevents an agent from accidentally performi
 
 ### Available MCP Commands
 
+> **Tool naming:** this connector's tools use unprefixed dash-case names (e.g. `list-invoices`, `create-contact`), inherited from its fork lineage. Sibling connectors use prefixed snake_case names (e.g. `list_quickbooks_invoices`). In multi-server hosts, unprefixed generic names can collide with other servers' tools. Renaming would be a breaking change for existing configurations, so the names are kept as-is; if your host supports namespacing/aliasing, prefer enabling it for this server.
+
 - `list-accounts`: Retrieve a list of accounts
 - `list-contacts`: Retrieve a list of contacts from Xero
 - `list-credit-notes`: Retrieve a list of credit notes
