@@ -11,7 +11,7 @@ Microsoft 365 Outlook Calendar MCP server — list, get, create, update, delete,
 
 - **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-calendar)
 - **Auth:** OAuth (host-orchestrated, shared with [`mcp-server-microsoft-mail`](../microsoft-mail/)) ([`MS_CLIENT_ID`](./server.json))
-- **Tools:** [8](./src/tools.ts) (events, calendars, free-busy)
+- **Tools:** [9](./src/tools.ts) (events, calendars, free-busy, scheduling)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 - **Shared library:** [`@mindstone/mcp-server-microsoft-shared`](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-shared)
@@ -26,7 +26,7 @@ When we ported this in May 2026, Microsoft's own [Graph MCP](https://github.com/
 
 Tools the host calls:
 1. `list_events` — date range covering the rest of today.
-2. `get_free_busy` — checks Alice and the current user across tomorrow's working hours.
+2. `find_meeting_times` — suggests slots tomorrow when both Alice and the user are free.
 
 Response (trimmed):
 
@@ -35,8 +35,9 @@ Response (trimmed):
   "today": [
     { "id": "AA...=", "subject": "Q3 review", "start": "2026-05-19T15:00:00Z", "end": "2026-05-19T16:00:00Z" }
   ],
-  "tomorrow_freebusy": [
-    { "user": "alice@example.com", "free": ["10:00-11:00", "14:30-16:00"] }
+  "tomorrow_suggestions": [
+    { "start": "2026-05-20T10:00:00", "end": "2026-05-20T10:30:00" },
+    { "start": "2026-05-20T14:30:00", "end": "2026-05-20T15:00:00" }
   ]
 }
 ```
@@ -162,17 +163,18 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 }
 ```
 
-## Tools (8)
+## Tools (9)
 
 | Tool | Description |
 | ---- | ----------- |
-| `list_events` | List calendar events within a date range (JSON or agenda-style text). |
+| `list_events` | List calendar events within a date range (JSON with per-attendee RSVP status, or agenda-style text). |
 | `get_event` | Get detailed information about a specific calendar event. |
 | `create_event` | Create a new calendar event (with optional Teams meeting). |
 | `update_event` | Update an existing calendar event. |
 | `delete_event` | Delete a calendar event. |
 | `respond_to_event` | Accept, decline, or tentatively accept an event invitation. |
 | `get_free_busy` | Check availability/free-busy status for users. |
+| `find_meeting_times` | Suggest slots when all given attendees are free. |
 | `list_calendars` | List all calendars the user has access to. |
 
 ## Security notes

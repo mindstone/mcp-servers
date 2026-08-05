@@ -80,6 +80,18 @@ const MANIFEST: ManifestRow[] = [
     pathname: '/v1.0/me/calendars',
     args: {},
   },
+  {
+    tool: 'find_meeting_times',
+    method: 'POST',
+    pathname: '/v1.0/me/calendar/getSchedule',
+    args: {
+      attendees: ['alice@example.com'],
+      startDateTime: '2026-05-21T09:00:00',
+      endDateTime: '2026-05-21T12:00:00',
+      durationMinutes: 30,
+      deviceTimezone: 'America/New_York',
+    },
+  },
 ];
 
 function matchPath(actual: string, pattern: string): boolean {

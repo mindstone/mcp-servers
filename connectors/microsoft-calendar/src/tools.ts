@@ -5,6 +5,7 @@ import { errorResponse, successJson, withErrorHandling } from './utils.js';
 import {
   createEvent,
   deleteEvent,
+  findMeetingTimes,
   getEvent,
   getFreeBusy,
   listCalendars,
@@ -379,6 +380,74 @@ export function registerCalendarTools(server: McpServer): void {
             emails: args.emails!,
             startDateTime: args.startDateTime!,
             endDateTime: args.endDateTime!,
+            deviceTimezone: args.deviceTimezone,
+          },
+          signal,
+        ),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // find_meeting_times
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'find_meeting_times',
+    {
+      description:
+        'Suggest time slots within a window when ALL given attendees are free, based on their free/busy availability. Returns candidate start/end times in the resolved timezone that can be passed directly to create_event. Include your own email address in attendees to account for your own availability.',
+      inputSchema: z.object({
+        attendees: z
+          .array(z.string())
+          .optional()
+          .describe('Email addresses whose availability must all be free'),
+        startDateTime: z.string().optional().describe('Start of the search window (ISO format)'),
+        endDateTime: z.string().optional().describe('End of the search window (ISO format)'),
+        durationMinutes: z
+          .number()
+          .optional()
+          .describe('Required meeting length in minutes (e.g. 30)'),
+        intervalMinutes: z
+          .number()
+          .optional()
+          .describe('Slot granularity in minutes, 5-60 (default: 30)'),
+        maxSuggestions: z
+          .number()
+          .optional()
+          .describe('Maximum number of candidate slots to return, 1-20 (default: 5)'),
+        deviceTimezone: z
+          .string()
+          .optional()
+          .describe(
+            "User's device IANA timezone from system prompt (e.g. \"Europe/London\"). Used to interpret the window if calendar settings unavailable.",
+          ),
+      }).shape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.attendees?.length || !args.startDateTime || !args.endDateTime || !args.durationMinutes) {
+        return errorResponse({
+          error:
+            'Missing required parameters: "attendees" (array of emails), "startDateTime", "endDateTime", and "durationMinutes". Example: { "attendees": ["alice@example.com", "me@example.com"], "startDateTime": "2026-05-21T08:00:00", "endDateTime": "2026-05-21T18:00:00", "durationMinutes": 30 }',
+          action_required: 'Provide attendees, startDateTime, endDateTime, and durationMinutes.',
+          next_step: 'find_meeting_times',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        findMeetingTimes(
+          c,
+          {
+            attendees: args.attendees!,
+            startDateTime: args.startDateTime!,
+            endDateTime: args.endDateTime!,
+            durationMinutes: args.durationMinutes!,
+            intervalMinutes: args.intervalMinutes,
+            maxSuggestions: args.maxSuggestions,
             deviceTimezone: args.deviceTimezone,
           },
           signal,

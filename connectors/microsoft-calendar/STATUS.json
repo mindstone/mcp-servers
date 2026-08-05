@@ -10,11 +10,12 @@
     ]
   },
   "tools": {
-    "count": 8,
+    "count": 9,
     "domains": [
       "events",
       "calendars",
-      "free-busy"
+      "free-busy",
+      "scheduling"
     ]
   },
   "surface": "cloud-api",

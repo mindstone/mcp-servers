@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { http, HttpResponse } from 'msw';
 import { mswServer } from './fixtures/setup.js';
 import { createMockApi, type MockApiState } from './fixtures/microsoft-mock-api.js';
 import {
@@ -308,6 +309,92 @@ describe('microsoft-calendar mock-API integration', () => {
     const json = result.json as { ok: boolean; error: string };
     expect(json.ok).toBe(false);
     expect(json.error).toContain('Missing required parameters');
+  });
+
+  // -------------------------------------------------------------------------
+  // find_meeting_times
+  // -------------------------------------------------------------------------
+  it('find_meeting_times suggests free slots from the getSchedule availabilityView', async () => {
+    // Mock returns availabilityView '000000' (6 x 30-min free buckets).
+    const result = await client.callTool('find_meeting_times', {
+      attendees: ['alice@example.com'],
+      startDateTime: '2026-05-20T09:00:00',
+      endDateTime: '2026-05-20T12:00:00',
+      durationMinutes: 60,
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      suggestionCount: number;
+      timeZone: string;
+      suggestions: Array<{ start: string; end: string }>;
+    };
+    expect(json.suggestionCount).toBe(5); // default maxSuggestions cap
+    expect(json.timeZone).toBe('America/Los_Angeles');
+    expect(json.suggestions[0]).toEqual({
+      start: '2026-05-20T09:00:00',
+      end: '2026-05-20T10:00:00',
+    });
+    expect(json.suggestions[1]?.start).toBe('2026-05-20T09:30:00');
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.endsWith('/me/calendar/getSchedule'),
+    );
+    expect(call?.body).toMatchObject({
+      schedules: ['alice@example.com'],
+      startTime: { dateTime: '2026-05-20T09:00:00', timeZone: 'America/Los_Angeles' },
+      availabilityViewInterval: 30,
+    });
+  });
+
+  it('find_meeting_times skips buckets where any attendee is busy', async () => {
+    mswServer.use(
+      http.post('https://graph.microsoft.com/v1.0/me/calendar/getSchedule', () =>
+        HttpResponse.json({
+          value: [
+            { scheduleId: 'alice@example.com', availabilityView: '2200' },
+            { scheduleId: 'bob@example.com', availabilityView: '0200' },
+          ],
+        }),
+      ),
+    );
+    const result = await client.callTool('find_meeting_times', {
+      attendees: ['alice@example.com', 'bob@example.com'],
+      startDateTime: '2026-05-20T09:00:00',
+      endDateTime: '2026-05-20T11:00:00',
+      durationMinutes: 30,
+      intervalMinutes: 30,
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { suggestions: Array<{ start: string; end: string }> };
+    // Only buckets 2 and 3 (10:00-11:00) are free for both attendees.
+    expect(json.suggestions).toEqual([
+      { start: '2026-05-20T10:00:00', end: '2026-05-20T10:30:00' },
+      { start: '2026-05-20T10:30:00', end: '2026-05-20T11:00:00' },
+    ]);
+  });
+
+  it('find_meeting_times converts offset-bearing window times to the resolved zone', async () => {
+    // 16:00Z = 09:00 in America/Los_Angeles (May, PDT).
+    const result = await client.callTool('find_meeting_times', {
+      attendees: ['alice@example.com'],
+      startDateTime: '2026-05-20T16:00:00Z',
+      endDateTime: '2026-05-20T19:00:00Z',
+      durationMinutes: 60,
+      maxSuggestions: 1,
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { suggestions: Array<{ start: string }> };
+    expect(json.suggestions[0]?.start).toBe('2026-05-20T09:00:00');
+  });
+
+  it('find_meeting_times rejects missing parameters', async () => {
+    const result = await client.callTool('find_meeting_times', {
+      attendees: ['alice@example.com'],
+    });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('Missing required parameters');
+    expect(json.next_step).toBe('find_meeting_times');
   });
 
   // -------------------------------------------------------------------------

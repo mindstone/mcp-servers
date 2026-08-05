@@ -3,6 +3,7 @@ import type { Client } from '@mindstone/mcp-server-microsoft-shared';
 import {
   createEvent,
   deleteEvent,
+  findMeetingTimes,
   getEvent,
   getFreeBusy,
   listCalendars,
@@ -132,6 +133,26 @@ describe('Graph request signal propagation', () => {
         emails: ['alice@example.com'],
         startDateTime: '2026-05-20T08:00:00Z',
         endDateTime: '2026-05-20T18:00:00Z',
+        deviceTimezone: 'America/New_York',
+      },
+      signal,
+    );
+    expect(builder.options).toHaveBeenCalledWith({ signal });
+    expect(builder.options.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('findMeetingTimes passes signal to GraphRequest.options for both timezone lookup and POST', async () => {
+    const { client, builder } = createMockClient();
+    builder.get.mockResolvedValueOnce({ timeZone: 'UTC' });
+    builder.post.mockResolvedValueOnce({ value: [] });
+    const signal = new AbortController().signal;
+    await findMeetingTimes(
+      client,
+      {
+        attendees: ['alice@example.com'],
+        startDateTime: '2026-05-20T09:00:00',
+        endDateTime: '2026-05-20T12:00:00',
+        durationMinutes: 30,
         deviceTimezone: 'America/New_York',
       },
       signal,

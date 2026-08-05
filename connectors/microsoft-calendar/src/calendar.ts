@@ -271,6 +271,16 @@ export interface GetFreeBusyArgs {
   deviceTimezone?: string;
 }
 
+export interface FindMeetingTimesArgs {
+  attendees: string[];
+  startDateTime: string;
+  endDateTime: string;
+  durationMinutes: number;
+  intervalMinutes?: number;
+  maxSuggestions?: number;
+  deviceTimezone?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Discriminated return type for list_events to allow agenda-style text
 // ---------------------------------------------------------------------------
@@ -611,6 +621,162 @@ export async function getFreeBusy(
     startDateTime: args.startDateTime,
     endDateTime: args.endDateTime,
     schedules,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// find_meeting_times — getSchedule-based slot suggestion. Deliberately built
+// on getSchedule (already used by get_free_busy) rather than Graph's
+// findMeetingTimes action, which is v1.0 but known-flaky (result capping,
+// empty responses); availabilityView bucketing is deterministic.
+// ---------------------------------------------------------------------------
+
+const DEFAULT_SLOT_INTERVAL_MINUTES = 30;
+const MAX_SUGGESTIONS = 20;
+
+/**
+ * Normalise an ISO date-time to a wall-clock string ("YYYY-MM-DDTHH:mm:ss") in
+ * `timeZone`. Inputs with an explicit offset/Z are converted via Intl; naive
+ * inputs are already interpreted as wall time in the resolved zone — the same
+ * convention create_event uses — and pass through unchanged.
+ */
+function normalizeToWallTime(dateTime: string, timeZone: string, field: string): string {
+  const trimmed = dateTime.trim();
+  if (!/([zZ]|[+-]\d{2}:?\d{2})$/.test(trimmed)) return trimmed;
+  const instant = new Date(trimmed);
+  if (Number.isNaN(instant.getTime())) {
+    throw new CalendarBusinessError(
+      `Could not parse "${field}" as a date/time: "${dateTime}". Use ISO format (e.g. "2026-05-20T09:00:00").`,
+      'find_meeting_times',
+    );
+  }
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(instant);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '00';
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}`;
+}
+
+/** Re-format a naive wall-clock Date (see normalizeToWallTime) as ISO without offset. */
+function formatWallTime(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  );
+}
+
+export async function findMeetingTimes(
+  client: Client,
+  args: FindMeetingTimesArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const tzInfo = await resolveTimezone(client, signal, args.deviceTimezone);
+  if (tzInfo.source === 'utc_fallback') {
+    throw new CalendarBusinessError(
+      'Could not determine your timezone. Neither Microsoft account settings nor device timezone are available. Meeting-time suggestions require the correct timezone to interpret the time window. Please pass your deviceTimezone (e.g. "Europe/London") or check that your Microsoft 365 mailbox has a timezone configured.',
+      'find_meeting_times',
+    );
+  }
+
+  const interval = Math.min(
+    Math.max(Math.trunc(args.intervalMinutes ?? DEFAULT_SLOT_INTERVAL_MINUTES), 5),
+    60,
+  );
+  const duration = Math.max(Math.trunc(args.durationMinutes), 5);
+  const maxSuggestions = Math.min(Math.max(Math.trunc(args.maxSuggestions ?? 5), 1), MAX_SUGGESTIONS);
+
+  // Normalise the window to wall time in the resolved zone so availabilityView
+  // bucket indices map to civil times by plain interval arithmetic.
+  const startWall = normalizeToWallTime(args.startDateTime, tzInfo.resolved, 'startDateTime');
+  const endWall = normalizeToWallTime(args.endDateTime, tzInfo.resolved, 'endDateTime');
+  const startMs = new Date(startWall).getTime();
+  const endMs = new Date(endWall).getTime();
+  if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+    throw new CalendarBusinessError(
+      `Could not parse the time window. Use ISO format (e.g. "2026-05-20T09:00:00") for startDateTime and endDateTime.`,
+      'find_meeting_times',
+    );
+  }
+  if (endMs <= startMs) {
+    throw new CalendarBusinessError(
+      'endDateTime must be after startDateTime.',
+      'find_meeting_times',
+    );
+  }
+
+  const response = await client
+    .api('/me/calendar/getSchedule')
+    .options({ signal })
+    .post({
+      schedules: args.attendees,
+      startTime: { dateTime: startWall, timeZone: tzInfo.resolved },
+      endTime: { dateTime: endWall, timeZone: tzInfo.resolved },
+      availabilityViewInterval: interval,
+    });
+  const schedules = (response.value ?? []) as Array<{
+    scheduleId?: string;
+    availabilityView?: string;
+  }>;
+
+  const views = schedules.map((s) => s.availabilityView ?? '');
+  const unresolvableAttendees = schedules
+    .filter((s) => !s.availabilityView)
+    .map((s) => s.scheduleId)
+    .filter((id): id is string => !!id);
+
+  const intervalMs = interval * 60_000;
+  const durationMs = duration * 60_000;
+  const suggestions: Array<{ start: string; end: string }> = [];
+
+  if (views.length > 0) {
+    const bucketCount = Math.min(...views.map((v) => v.length));
+    // A bucket qualifies only when every attendee's availabilityView digit is
+    // '0' (free) — tentative/busy/oof/workingElsewhere all count as unavailable.
+    let runStart = -1;
+    for (let i = 0; i <= bucketCount && suggestions.length < maxSuggestions; i += 1) {
+      const free = i < bucketCount && views.every((v) => v[i] === '0');
+      if (free && runStart < 0) runStart = i;
+      if (!free && runStart >= 0) {
+        const runEndMs = startMs + i * intervalMs;
+        for (
+          let slotStartMs = startMs + runStart * intervalMs;
+          slotStartMs + durationMs <= runEndMs && suggestions.length < maxSuggestions;
+          slotStartMs += intervalMs
+        ) {
+          suggestions.push({
+            start: formatWallTime(new Date(slotStartMs)),
+            end: formatWallTime(new Date(slotStartMs + durationMs)),
+          });
+        }
+        runStart = -1;
+      }
+    }
+  }
+
+  return {
+    timezoneInfo: {
+      resolved: tzInfo.resolved,
+      source: tzInfo.source,
+      calendarTimezone: tzInfo.calendarTimezone,
+      deviceTimezone: tzInfo.deviceTimezone,
+      timezoneMismatch: tzInfo.timezoneMismatch,
+    },
+    attendees: args.attendees,
+    durationMinutes: duration,
+    intervalMinutes: interval,
+    timeZone: tzInfo.resolved,
+    suggestionCount: suggestions.length,
+    suggestions,
+    unresolvableAttendees,
+    note: `Times are wall-clock in ${tzInfo.resolved}. Pass a suggestion's start/end directly to create_event. Only fully free slots are suggested (tentative counts as busy).`,
   };
 }
 
