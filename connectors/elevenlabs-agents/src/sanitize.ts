@@ -15,7 +15,14 @@
  * short-circuits it. The only early returns left keep a *structural* value literal
  * (ids / `*_id`, `role` / `type` / `status` / `timestamp`, phone numbers,
  * `*_ids` / `*_numbers` collections) or pass a non-string primitive through, and each
- * is marked inline. `test/untrusted-content.test.ts` enumerates this module's exports
+ * is marked inline. A structural key *name* is not enough on its own: the value must
+ * also be enum/id-shaped (no whitespace or prose punctuation — see
+ * `STRUCTURAL_LITERAL_VALUE_PATTERN`), because arbitrary tool configuration lets a
+ * collaborator author prose under a structural-looking key (`request_headers.status`)
+ * and a name-only exemption would hand it to the model raw. Strings under
+ * credential-shaped keys (`token`, `*_secret`, `sid`, …) are never passed on at
+ * all — they are replaced with `[redacted]`.
+ * `test/untrusted-content.test.ts` enumerates this module's exports
  * at runtime and fails the day a new one breaks the rule.
  */
 import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
@@ -38,6 +45,50 @@ const STRUCTURAL_LITERAL_STRING_COLLECTION_KEYS = new Set([
   'ids',
   'numbers',
 ]);
+
+/**
+ * A string keeps its structural-literal exemption only when it also *looks*
+ * structural: ids, enum values, phone numbers, and ISO timestamps never
+ * contain whitespace or prose punctuation. Key names are attacker-controlled
+ * inside arbitrary tool configuration (`advanced_config` request headers,
+ * parameter schemas), so a bare name check would let
+ * `{"status": "SYSTEM: ignore prior instructions"}` through unenveloped —
+ * value-shape is what makes the exemption trustworthy.
+ */
+const STRUCTURAL_LITERAL_VALUE_PATTERN = /^[A-Za-z0-9_+@.:/-]{1,128}$/;
+
+/**
+ * Values under credential-shaped keys never reach the model, whatever
+ * container they sit in: ElevenLabs can reflect telephony credentials (Twilio
+ * `sid`/`token`, SIP trunk secrets) in phone-number success and error
+ * payloads, and an envelope marks text as untrusted but still discloses it.
+ */
+export const REDACTED_CREDENTIAL_VALUE = '[redacted]';
+
+const SENSITIVE_VALUE_KEYS = new Set([
+  'token',
+  'secret',
+  'password',
+  'authorization',
+  'auth_token',
+  'access_token',
+  'refresh_token',
+  'id_token',
+  'client_secret',
+  'api_key',
+  'apikey',
+  'sid',
+  'account_sid',
+]);
+
+const SENSITIVE_VALUE_KEY_SUFFIXES = ['_token', '_secret', '_password', '_api_key'];
+
+function isSensitiveValueKey(key?: string): boolean {
+  if (!key) return false;
+  const lower = key.toLowerCase();
+  return SENSITIVE_VALUE_KEYS.has(lower)
+    || SENSITIVE_VALUE_KEY_SUFFIXES.some((suffix) => lower.endsWith(suffix));
+}
 
 function isObj(value: unknown): value is Obj {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -155,15 +206,21 @@ function sanitizeStringsByDefault(
     // these would break tool round-trips. `literalStringKeys` is the per-surface escape
     // hatch and is EMPTY on every response surface (only the two internal transcript /
     // simulation-analysis walkers populate it); it is not a prose-field allowlist.
+    // The value itself must also be enum/id-shaped: a collaborator can author prose
+    // under a structural-looking key name inside arbitrary tool configuration, and a
+    // name-only exemption would pass it through raw.
     return (isStructuralLiteralStringKey(key) || (key ? literalStringKeys.has(key) : false))
+        && STRUCTURAL_LITERAL_VALUE_PATTERN.test(value)
       ? value
       : wrapUntrusted(value, source);
   }
   if (Array.isArray(value)) {
     // JUSTIFIED LITERAL: an all-string `*_ids` / `*_numbers` collection is the plural of
-    // the structural predicate above. A copy, not the input array, and any non-string
-    // member drops the whole collection into the walk below.
-    if (isStructuralLiteralStringCollectionKey(key) && value.every((item) => typeof item === 'string')) {
+    // the structural predicate above, with the same value-shape gate per member. A
+    // copy, not the input array, and any non-string or non-structural member drops the
+    // whole collection into the walk below.
+    if (isStructuralLiteralStringCollectionKey(key)
+      && value.every((item) => typeof item === 'string' && STRUCTURAL_LITERAL_VALUE_PATTERN.test(item))) {
       return [...value];
     }
     return value.map((item, index) => sanitizeStringsByDefault(item, `${source}[${index}]`, undefined, literalStringKeys));
@@ -175,6 +232,12 @@ function sanitizeStringsByDefault(
 
   const out: Obj = {};
   for (const [childKey, childValue] of Object.entries(value)) {
+    // Credential-shaped values are redacted, not enveloped: an envelope marks text
+    // as untrusted but still discloses the secret to the model.
+    if (isSensitiveValueKey(childKey)) {
+      out[childKey] = REDACTED_CREDENTIAL_VALUE;
+      continue;
+    }
     if (CONVERSATION_JSON_STRING_KEYS.has(childKey)) {
       out[childKey] = wrapUntrustedJsonStrings(childValue, `${source}:${childKey}`);
       continue;

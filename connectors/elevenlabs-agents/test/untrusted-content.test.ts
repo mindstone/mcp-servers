@@ -11,6 +11,7 @@ import {
   CONTAINER_BRANCH_KEYS,
   sanitizeAgent,
   sanitizeAgentSummary,
+  sanitizeAgentTool,
   sanitizeBatchCall,
   sanitizeConversation,
   sanitizeKbDoc,
@@ -830,6 +831,117 @@ describe('Stage 5 external-text envelope coverage', () => {
     expect(parsed).not.toHaveProperty('transcript');
     expect(String(parsed.message ?? '')).not.toContain('tool_calls');
     if (fs.existsSync(parsed.file_path as string)) fs.unlinkSync(parsed.file_path as string);
+  });
+});
+
+/**
+ * A structural key *name* is attacker-controllable inside arbitrary tool
+ * configuration: `advanced_config` lets a workspace collaborator place prose
+ * under `status`, `type`, `*_id`, or `*_ids` keys (request headers, parameter
+ * schemas), and a name-only literal exemption would pass it to the model raw.
+ * The walk therefore gates the exemption on the value's shape too, and these
+ * tests pin the exact adversarial cases.
+ */
+describe('structural exemptions are value-shape-aware, not just key-name-based', () => {
+  it('envelopes hostile prose under structural-looking keys in tool configs', () => {
+    const tool = sanitizeAgentTool(
+      {
+        id: 'tool_test_123',
+        tool_config: {
+          type: 'webhook',
+          name: 'check_order_status',
+          api_schema: {
+            url: 'https://example.com/hook',
+            method: 'POST',
+            request_headers: { status: ATTACK_PAYLOAD },
+          },
+          dependent_tool_ids: ['tool_ok_123', ATTACK_PAYLOAD],
+        },
+      },
+      'elevenlabs-agents:test_tool',
+    ) as Record<string, unknown>;
+
+    // Genuinely structural values stay literal.
+    expect(tool.id).toBe('tool_test_123');
+    const config = tool.tool_config as Record<string, unknown>;
+    expect(config.type).toBe('webhook');
+
+    const apiSchema = config.api_schema as Record<string, unknown>;
+    const headers = apiSchema.request_headers as Record<string, unknown>;
+    expectEnvelopedAndDefanged(
+      headers.status,
+      'elevenlabs-agents:test_tool:tool_config:api_schema:request_headers:status',
+      ATTACK_PAYLOAD,
+    );
+
+    // A non-structural member drops the whole collection into the walk, so the
+    // hostile member is enveloped rather than riding along with the real ids.
+    const ids = config.dependent_tool_ids as string[];
+    expect(ids).toHaveLength(2);
+    expectEnveloped(ids[0], 'elevenlabs-agents:test_tool:tool_config:dependent_tool_ids[0]');
+    expectEnvelopedAndDefanged(
+      ids[1],
+      'elevenlabs-agents:test_tool:tool_config:dependent_tool_ids[1]',
+      ATTACK_PAYLOAD,
+    );
+
+    assertSentinelOnlyInsideEnvelopes(tool);
+  });
+
+  it('envelopes hostile prose under id/role/status keys on other surfaces too', () => {
+    const phoneNumber = sanitizePhoneNumber(
+      {
+        phone_number_id: 'pn_test_123',
+        status: 'active',
+        label: ATTACK_PAYLOAD,
+        assigned_agent: {
+          agent_id: ATTACK_PAYLOAD,
+          role: ATTACK_PAYLOAD,
+        },
+      },
+      'elevenlabs-agents:test_phone',
+    ) as Record<string, unknown>;
+
+    expect(phoneNumber.phone_number_id).toBe('pn_test_123');
+    expect(phoneNumber.status).toBe('active');
+    const assignedAgent = phoneNumber.assigned_agent as Record<string, unknown>;
+    expectEnvelopedAndDefanged(
+      assignedAgent.agent_id,
+      'elevenlabs-agents:test_phone:assigned_agent:agent_id',
+      ATTACK_PAYLOAD,
+    );
+    expectEnvelopedAndDefanged(
+      assignedAgent.role,
+      'elevenlabs-agents:test_phone:assigned_agent:role',
+      ATTACK_PAYLOAD,
+    );
+    assertSentinelOnlyInsideEnvelopes(phoneNumber);
+  });
+
+  it('redacts credential-shaped keys wherever they appear in a response', () => {
+    const phoneNumber = sanitizePhoneNumber(
+      {
+        phone_number_id: 'pn_test_123',
+        label: 'Sales line',
+        provider_credentials: {
+          sid: 'AC reflected-sid',
+          token: 'reflected-token-value',
+          auth_token: 'another-secret',
+          note: ATTACK_PAYLOAD,
+        },
+      },
+      'elevenlabs-agents:test_phone_creds',
+    ) as Record<string, unknown>;
+
+    const credentials = phoneNumber.provider_credentials as Record<string, unknown>;
+    expect(credentials.sid).toBe('[redacted]');
+    expect(credentials.token).toBe('[redacted]');
+    expect(credentials.auth_token).toBe('[redacted]');
+    const serialized = JSON.stringify(phoneNumber);
+    expect(serialized).not.toContain('reflected-token-value');
+    expect(serialized).not.toContain('another-secret');
+    expect(serialized).not.toContain('AC reflected-sid');
+    assertSentinelOnlyInsideEnvelopes(phoneNumber);
   });
 });
 
