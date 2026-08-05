@@ -207,6 +207,12 @@ export function createElevenLabsAgentsHandlers() {
       });
     }),
 
+    http.post(`${BASE_V1}/convai/phone-numbers`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      return HttpResponse.json({ phone_number_id: 'pn_imported_123' });
+    }),
+
     http.get(`${BASE_V1}/convai/phone-numbers/:phoneNumberId`, ({ request, params }) => {
       const authErr = requireAuth(request.headers.get('xi-api-key'));
       if (authErr) return authErr;
@@ -227,6 +233,14 @@ export function createElevenLabsAgentsHandlers() {
         ...(typeof body.label === 'string' ? { label: body.label } : {}),
         ...(typeof body.agent_id === 'string' ? { assigned_agent_id: body.agent_id } : {}),
       });
+    }),
+
+    http.delete(`${BASE_V1}/convai/phone-numbers/:phoneNumberId`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      const triggered = triggerResponse(idTrigger(params.phoneNumberId));
+      if (triggered) return triggered;
+      return new HttpResponse(null, { status: 204 });
     }),
 
     http.post(`${BASE_V1}/convai/twilio/outbound-call`, ({ request }) => {
@@ -494,6 +508,19 @@ export function createUpdatePhoneNumberCapturingHandler() {
       ...(typeof captured.body.label === 'string' ? { label: captured.body.label } : {}),
       ...(typeof captured.body.agent_id === 'string' ? { assigned_agent_id: captured.body.agent_id } : {}),
     });
+  });
+
+  return { handler, captured };
+}
+
+export function createImportPhoneNumberCapturingHandler() {
+  const captured: { body?: JsonBody } = {};
+
+  const handler = http.post(`${BASE_V1}/convai/phone-numbers`, async ({ request }) => {
+    const authErr = requireAuth(request.headers.get('xi-api-key'));
+    if (authErr) return authErr;
+    captured.body = (await request.json()) as JsonBody;
+    return HttpResponse.json({ phone_number_id: 'pn_imported_123' });
   });
 
   return { handler, captured };

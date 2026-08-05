@@ -1,9 +1,11 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { requireApiKey, elevenLabsJson } from '../client.js';
+import { requireApiKey, elevenLabsFetch, elevenLabsJson } from '../client.js';
 import { ENDPOINTS } from '../endpoints.js';
 import { sanitizeList, sanitizePhoneNumber } from '../sanitize.js';
+import { validateE164 } from '../schema-helpers.js';
 import { ElevenLabsError } from '../types.js';
+import { unwrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
 function extractItems(result: unknown): unknown[] {
@@ -178,6 +180,156 @@ FREE.`,
         ok: true,
         phone_number: sanitizePhoneNumber(result, 'elevenlabs-agents:update_phone_number'),
         message: `Phone number ${args.phone_number_id} updated successfully.`,
+      });
+    }),
+  );
+
+  server.registerTool(
+    'import_phone_number',
+    {
+      description: `Import a phone number into your ElevenLabs Conversational AI workspace from a telephony provider.
+
+WHEN TO USE:
+- Onboard a Twilio number (needs the Twilio Account SID and Auth Token)
+- Onboard a SIP trunk number (needs at least one trunk config)
+- Before make_outbound_call or submit_batch_call when no suitable number exists yet
+
+EXAMPLE: {"provider": "twilio", "phone_number": "+14155559876", "label": "Sales line", "twilio_sid": "ACxxxxxxxx", "twilio_token": "xxxxxxxx"}
+EXAMPLE: {"provider": "sip_trunk", "phone_number": "+14155559876", "label": "SIP line", "outbound_trunk_config": {"address": "sip.example.com"}}
+
+RELATED TOOLS:
+- list_phone_numbers: confirm the import landed and get its phone_number_id
+- update_phone_number: assign an agent after import
+- make_outbound_call: place a call once the number is imported and assigned
+
+RETURNS: phone_number (the created phone_number_id).
+
+COST: FREE for the import itself; telephony usage is billed by the provider.
+
+COMMON MISTAKES:
+- provider "twilio" requires twilio_sid and twilio_token.
+- provider "sip_trunk" requires at least one of inbound_trunk_config / outbound_trunk_config.
+- phone_number must be E.164 (leading "+", country code, digits only).`,
+      inputSchema: z.object({
+        provider: z.enum(['twilio', 'sip_trunk'])
+          .describe('Telephony provider the number is imported from. Outbound calling supports these two providers.'),
+        phone_number: z.string().min(1)
+          .describe('Phone number in E.164 format (e.g. +14155559876).'),
+        label: z.string().min(1)
+          .describe('Human-readable label for the number.'),
+        agent_id: z.string().min(1).optional()
+          .describe('Optional agent ID to assign to the number immediately.'),
+        twilio_sid: z.string().min(1).optional()
+          .describe('Twilio Account SID. Required when provider is "twilio".'),
+        twilio_token: z.string().min(1).optional()
+          .describe('Twilio Auth Token. Required when provider is "twilio".'),
+        inbound_trunk_config: z.record(z.unknown()).optional()
+          .describe('SIP trunk inbound configuration object (allowed addresses/numbers, credentials). Provider "sip_trunk" only.'),
+        outbound_trunk_config: z.record(z.unknown()).optional()
+          .describe('SIP trunk outbound configuration object; must include an "address" host. Provider "sip_trunk" only.'),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args) => {
+      validateE164('phone_number', args.phone_number);
+
+      const body: Record<string, unknown> = {
+        provider: args.provider,
+        phone_number: args.phone_number,
+        // Labels come back enveloped from list/get; a copied label must not be
+        // stored upstream as an envelope (same round-trip contract as agents).
+        label: unwrapUntrusted(args.label),
+      };
+      if (args.agent_id !== undefined) body.agent_id = args.agent_id;
+
+      if (args.provider === 'twilio') {
+        if (!args.twilio_sid || !args.twilio_token) {
+          throw new ElevenLabsError(
+            'Provider "twilio" requires twilio_sid and twilio_token.',
+            'INVALID_ARGUMENTS',
+            'Send the Twilio Account SID and Auth Token for this number, then retry.',
+          );
+        }
+        body.sid = args.twilio_sid;
+        body.token = args.twilio_token;
+      } else {
+        if (args.inbound_trunk_config === undefined && args.outbound_trunk_config === undefined) {
+          throw new ElevenLabsError(
+            'Provider "sip_trunk" requires at least one of inbound_trunk_config or outbound_trunk_config.',
+            'INVALID_ARGUMENTS',
+            'Send the SIP trunk configuration for this number, then retry.',
+          );
+        }
+        if (args.inbound_trunk_config !== undefined) body.inbound_trunk_config = args.inbound_trunk_config;
+        if (args.outbound_trunk_config !== undefined) body.outbound_trunk_config = args.outbound_trunk_config;
+      }
+
+      const apiKey = requireApiKey();
+      const result = await elevenLabsJson<unknown>(
+        apiKey,
+        ENDPOINTS.PHONE_NUMBERS,
+        { method: 'POST', body: JSON.stringify(body) },
+      );
+      return JSON.stringify({
+        ok: true,
+        phone_number: sanitizePhoneNumber(result, 'elevenlabs-agents:import_phone_number'),
+        message: `Imported phone number ${args.phone_number} from provider ${args.provider}.`,
+      });
+    }),
+  );
+
+  server.registerTool(
+    'delete_phone_number',
+    {
+      description: `Permanently delete one imported phone number from your ElevenLabs workspace.
+
+WHEN TO USE:
+- Remove a number that was imported by mistake
+- Decommission a line before releasing it at the telephony provider
+
+EXAMPLE: {"phone_number_id": "pn_123"}
+
+RELATED TOOLS:
+- get_phone_number: confirm the exact number before deleting it
+- list_phone_numbers: verify the number is gone afterwards
+
+RETURNS: ok confirmation.
+
+COST: FREE — but this is irreversible; calls to the number stop working immediately.`,
+      inputSchema: z.object({
+        phone_number_id: z.string().min(1).describe('Phone number ID to delete permanently.'),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args) => {
+      const apiKey = requireApiKey();
+      try {
+        await elevenLabsFetch(apiKey, ENDPOINTS.phoneNumber(args.phone_number_id), { method: 'DELETE' });
+      } catch (error) {
+        if (error instanceof ElevenLabsError && error.code === 'HTTP_404') {
+          throw new ElevenLabsError(
+            `Phone number not found: ${args.phone_number_id}`,
+            'PHONE_NUMBER_NOT_FOUND',
+            'Re-list phone numbers and retry with the exact returned phone_number_id.',
+          );
+        }
+        throw error;
+      }
+
+      return JSON.stringify({
+        ok: true,
+        phone_number_id: args.phone_number_id,
+        message: `Deleted phone number ${args.phone_number_id}.`,
       });
     }),
   );

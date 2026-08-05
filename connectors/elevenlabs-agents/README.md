@@ -8,7 +8,7 @@ ElevenLabs Conversational AI MCP server for Model Context Protocol hosts. Inspec
 
 - **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs-agents)
 - **Auth:** API key ([`ELEVENLABS_API_KEY`](./server.json))
-- **Tools:** [24](./src/tools/) (configure, agents, conversations, phone numbers, outbound calls, batch calls, knowledge base)
+- **Tools:** [26](./src/tools/) (configure, agents, conversations, phone numbers, outbound calls, batch calls, knowledge base)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -91,7 +91,7 @@ node dist/index.js
 }
 ```
 
-## Tools (24)
+## Tools (26)
 
 ### Configuration
 - `configure_elevenlabs_agents_api_key` — Save your ElevenLabs API key
@@ -113,7 +113,9 @@ node dist/index.js
 ### Phone numbers
 - `list_phone_numbers` — List configured phone numbers
 - `get_phone_number` — Get one phone number and its label/assignment
+- `import_phone_number` — Import a Twilio or SIP trunk number into the workspace
 - `update_phone_number` — Update one phone number label and/or assigned agent
+- `delete_phone_number` — Permanently remove an imported phone number
 
 ### Outbound calls
 - `make_outbound_call` — Place one outbound call after resolving the phone-number provider automatically
