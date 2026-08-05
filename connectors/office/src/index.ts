@@ -8,7 +8,8 @@
  * the MCP SDK; the public surface is the registered tool names + their JSON
  * schemas, which are covered by the managed-install smoke test rather than by
  * TS types. Do NOT refactor to `McpServer` + Zod patterns — see planning doc
- * `260422_rebeloffice_oss_migration.md` Stage 1 gotcha #2.
+ * `260422_rebeloffice_oss_migration.md` Stage 1 gotcha #2 and the approved
+ * validation exception in this connector's scoped `AGENTS.md`.
  */
 import fs from 'node:fs';
 import https from 'node:https';
