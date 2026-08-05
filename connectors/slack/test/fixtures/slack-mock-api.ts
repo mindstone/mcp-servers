@@ -20,6 +20,8 @@ export const SLACK_PRODUCTION_API_URLS: string[] = [
   `${SLACK_API_BASE}/bookmarks.add`,
   `${SLACK_API_BASE}/chat.postMessage`,
   `${SLACK_API_BASE}/chat.scheduleMessage`,
+  `${SLACK_API_BASE}/chat.scheduledMessages.list`,
+  `${SLACK_API_BASE}/chat.deleteScheduledMessage`,
   `${SLACK_API_BASE}/conversations.create`,
   `${SLACK_API_BASE}/conversations.history`,
   `${SLACK_API_BASE}/conversations.info`,
@@ -71,6 +73,24 @@ export function createSlackHandlers() {
         scheduled_message_id: 'Q1234ABCD',
         post_at: Math.floor(Date.now() / 1000) + 3600,
       }),
+    ),
+    http.post(`${SLACK_API_BASE}/chat.scheduledMessages.list`, () =>
+      HttpResponse.json({
+        ok: true,
+        scheduled_messages: [
+          {
+            id: 'Q1234ABCD',
+            channel_id: 'C123TEST',
+            post_at: Math.floor(Date.now() / 1000) + 3600,
+            date_created: Math.floor(Date.now() / 1000),
+            text: 'Scheduled hello',
+          },
+        ],
+        response_metadata: { next_cursor: '' },
+      }),
+    ),
+    http.post(`${SLACK_API_BASE}/chat.deleteScheduledMessage`, () =>
+      HttpResponse.json({ ok: true }),
     ),
     http.post(`${SLACK_API_BASE}/conversations.open`, () =>
       HttpResponse.json({

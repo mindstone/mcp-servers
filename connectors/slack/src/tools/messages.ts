@@ -1057,4 +1057,129 @@ channel per 5 minutes. Max 120 days in advance.`,
       });
     }),
   );
+
+  // ---------------------------------------------------------------------
+  // list_scheduled_slack_messages
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'list_scheduled_slack_messages',
+    {
+      description: `List your pending scheduled messages (optionally filtered to one channel).
+
+Returns each message's scheduled_message_id — pass it to
+delete_scheduled_slack_message to cancel one before it posts.`,
+      inputSchema: z
+        .object({
+          channel: z
+            .string()
+            .optional()
+            .describe('Optional channel filter — channel ID or #channel-name'),
+          limit: z.number().int().min(1).max(100).optional(),
+          cursor: z
+            .string()
+            .optional()
+            .describe('Pagination cursor from a previous response (next_cursor).'),
+        })
+        .strict(),
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args) => {
+      const userClient = await getSlackUserClient();
+      if (!userClient) {
+        return errorJson({
+          error: 'Listing scheduled messages requires user authorization.',
+          action_required:
+            'Reconnect Slack via authenticate_slack_workspace to grant chat:write.',
+          next_step: 'authenticate_slack_workspace',
+        });
+      }
+      const channelId = args.channel ? await resolveChannelId(args.channel) : undefined;
+      const result = await userClient.chat.scheduledMessages.list({
+        ...(channelId ? { channel: channelId } : {}),
+        limit: args.limit || 50,
+        ...(args.cursor ? { cursor: args.cursor } : {}),
+      });
+      const scheduled = (result.scheduled_messages || []).map((m) => ({
+        scheduled_message_id: m.id,
+        channel: m.channel_id,
+        post_at: m.post_at,
+        post_at_iso: m.post_at ? new Date(m.post_at * 1000).toISOString() : undefined,
+        // The scheduled text is the calling user's own draft, but it round-
+        // trips through Slack and may embed quoted external content — wrap it
+        // like every other Slack-sourced string (invariant #6).
+        text: wrapUntrusted(m.text, 'slack:scheduled-message'),
+      }));
+      const nextCursor = result.response_metadata?.next_cursor || undefined;
+      return JSON.stringify({
+        ok: true,
+        scheduled_messages: scheduled,
+        count: scheduled.length,
+        ...(nextCursor
+          ? {
+              next_cursor: nextCursor,
+              hint: 'More scheduled messages available. Pass next_cursor as cursor to fetch the next page.',
+            }
+          : {}),
+        ...(scheduled.length === 0
+          ? { note: 'No pending scheduled messages. Create one with schedule_slack_message.' }
+          : {}),
+      });
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // delete_scheduled_slack_message
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'delete_scheduled_slack_message',
+    {
+      description: `Cancel a scheduled message before it posts.
+
+Get the scheduled_message_id from list_scheduled_slack_messages (or from the
+schedule_slack_message response). This cannot be undone — the message will
+never be sent.`,
+      inputSchema: z
+        .object({
+          channel: z.string().min(1).describe('Channel the message was scheduled to — channel ID or #channel-name'),
+          scheduled_message_id: z
+            .string()
+            .min(1)
+            .describe('Scheduled message ID (Q…) from list_scheduled_slack_messages'),
+        })
+        .strict(),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args) => {
+      const userClient = await getSlackUserClient();
+      if (!userClient) {
+        return errorJson({
+          error: 'Deleting scheduled messages requires user authorization.',
+          action_required:
+            'Reconnect Slack via authenticate_slack_workspace to grant chat:write.',
+          next_step: 'authenticate_slack_workspace',
+        });
+      }
+      const channelId = await resolveChannelId(args.channel);
+      await userClient.chat.deleteScheduledMessage({
+        channel: channelId,
+        scheduled_message_id: args.scheduled_message_id,
+      });
+      return JSON.stringify({
+        ok: true,
+        channel: channelId,
+        scheduled_message_id: args.scheduled_message_id,
+        note: 'Scheduled message cancelled — it will not be posted.',
+      });
+    }),
+  );
 }

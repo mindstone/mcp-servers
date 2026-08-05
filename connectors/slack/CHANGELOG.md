@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- `list_scheduled_slack_messages` and `delete_scheduled_slack_message` — inspect and cancel pending scheduled messages. Closes the asymmetry where `schedule_slack_message` could create a scheduled message but nothing in the connector could list or cancel one.
+
 ### Changed
 
 - `search_slack_messages` and `get_slack_saved_messages` now prefer Slack's Real-Time Search API (`assistant.search.context`) over the legacy `search.messages` endpoint Slack officially discourages. The Real-Time Search API requires the granular `search:read.public/private/im/mpim` scopes; when the connected token lacks them (or the workspace refuses RTS), the connector falls back to legacy `search.messages` **loudly** — every search response carries a `search_backend` field, and legacy responses add a `search_backend_note` naming the refusal and the scopes needed to enable the recommended path. The probe result is cached per process, and deep `page` walks on the cursor-paginated RTS path are capped (rate-limit safety) with a `page_walk_truncated` marker.

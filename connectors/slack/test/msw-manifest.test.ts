@@ -37,8 +37,10 @@ const SRC_DIR = path.join(__dirname, '..', 'src');
 //   verifyClient.conversations.info(
 //   botClient.users.info(
 //   userClient.search.messages(
+// Nested groups are captured too:
+//   userClient.chat.scheduledMessages.list(  →  chat.scheduledMessages.list
 const CLIENT_CALL_PATTERN =
-  /\b(?:client|userClient|botClient|reader|userClientNoNull|verifyClient|tokenProvider|tp)\.([a-zA-Z]+)\.([a-zA-Z]+)\s*\(/g;
+  /\b(?:client|userClient|botClient|reader|userClientNoNull|verifyClient|tokenProvider|tp)\.([a-zA-Z]+)\.([a-zA-Z]+)(?:\.([a-zA-Z]+))?\s*\(/g;
 
 // Slack URLs sometimes appear as raw literals (e.g. oauth.v2.access). Catch them too.
 const RAW_URL_PATTERN = /https:\/\/slack\.com\/api\/([a-zA-Z0-9._]+)/g;
@@ -97,11 +99,12 @@ function collectProductionUrls(): Set<string> {
 
     // 1. Capture client.<group>.<method>(...) call sites.
     for (const m of contents.matchAll(CLIENT_CALL_PATTERN)) {
-      const [, group, method] = m;
+      const [, group, method, nestedMethod] = m;
       if (!SLACK_GROUPS.has(group)) continue;
       // `users.lookupByEmail` is a single method, but our generated URL
       // builder is correct: `users.lookupByEmail` → /users.lookupByEmail.
-      found.add(urlFor(group, method));
+      // Nested groups (chat.scheduledMessages.list) append their third segment.
+      found.add(urlFor(group, nestedMethod ? `${method}.${nestedMethod}` : method));
     }
 
     // 2. Capture client.paginate('group.method', ...) usages.
