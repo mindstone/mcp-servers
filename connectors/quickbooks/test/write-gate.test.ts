@@ -478,6 +478,10 @@ describe('VAL-QB-302 — every destructiveHint:true tool is gated', () => {
       },
       create_quickbooks_customer: { displayName: 'X' },
       create_quickbooks_vendor: { displayName: 'Y' },
+      create_quickbooks_estimate: {
+        customerId: 'c1',
+        lines: [{ description: 'x', amount: 1 }],
+      },
       send_quickbooks_invoice_email: { invoiceId: 'inv-1' },
     };
 

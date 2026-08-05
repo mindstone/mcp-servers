@@ -16,6 +16,7 @@ import {
   createVendorsQueryResponse,
   createAccountsQueryResponse,
   createEmployeesQueryResponse,
+  createEstimatesQueryResponse,
   createReportResponse,
 } from '../fixtures/quickbooks-data.js';
 
@@ -82,6 +83,9 @@ export function createQuickBooksHandlers(options: MockServerOptions = {}): HttpH
       }
       if (query.includes('Employee')) {
         return HttpResponse.json(createEmployeesQueryResponse());
+      }
+      if (query.includes('Estimate')) {
+        return HttpResponse.json(createEstimatesQueryResponse());
       }
 
       // Default: empty response

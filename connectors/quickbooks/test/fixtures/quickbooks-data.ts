@@ -169,6 +169,37 @@ export function createEmployeesQueryResponse(count = 2) {
   };
 }
 
+export function createEstimate(overrides: Record<string, unknown> = {}) {
+  return {
+    Id: 'est-001',
+    DocNumber: '3001',
+    TxnDate: '2024-01-10',
+    ExpirationDate: '2024-02-10',
+    TotalAmt: 1500.00,
+    TxnStatus: 'Pending',
+    CustomerRef: { value: 'cust-001', name: 'Acme Corp' },
+    Line: [
+      {
+        Amount: 1500.00,
+        DetailType: 'SalesItemLineDetail',
+        Description: 'Consulting services',
+        SalesItemLineDetail: { Qty: 1, UnitPrice: 1500.00 },
+      },
+    ],
+    ...overrides,
+  };
+}
+
+export function createEstimatesQueryResponse(count = 2) {
+  return {
+    QueryResponse: {
+      Estimate: Array.from({ length: count }, (_, i) =>
+        createEstimate({ Id: `est-${String(i + 1).padStart(3, '0')}`, DocNumber: `${3001 + i}` }),
+      ),
+    },
+  };
+}
+
 export function createReportResponse(reportName = 'ProfitAndLoss') {
   return {
     Header: {

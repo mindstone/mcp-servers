@@ -7,3 +7,4 @@ export { registerVendorTools } from './vendors.js';
 export { registerAccountTools } from './accounts.js';
 export { registerEmployeeTools } from './employees.js';
 export { registerReportTools } from './reports.js';
+export { registerEstimateTools } from './estimates.js';
