@@ -31,6 +31,8 @@ are maintained manually as part of the PR review checklist.
 - Every vendor-controlled string in tool output — task IDs, video IDs, result URLs, durations, `task_status_msg`, and resource-pack name/type/status — is now wrapped in an `<untrusted-content>` envelope with close-tag breakout escaping (invariant #6). Tools unwrap their own enveloped IDs/URLs when passed back as input, so chaining `generate_*` → `check_kling_task` → `download_kling_video` keeps working.
 - Unknown (non-`KlingError`) exceptions no longer echo raw runtime messages to the model; they are logged credential-redacted to stderr and reported as a generic error.
 - `check_kling_task` now returns a `videos` array with every video the vendor returned (previously only index zero was surfaced as a singular `video`).
+- Local media reads no longer stat-then-reopen by pathname: the validated file is opened once with `O_NOFOLLOW`, `fstat`-verified as a regular file within the size limit, and read through that same descriptor, closing the swap race between validation and read.
+- `download_kling_video` opens its output with numeric flags including `O_NOFOLLOW` (plus `O_NONBLOCK` on overwrite) and `fstat`-verifies the opened object, so a symlink or special file planted at the target between the pre-checks and the open is refused instead of written through.
 
 ## [0.3.2] - 2026-05-14
 ### Added

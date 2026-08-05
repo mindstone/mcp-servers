@@ -57,13 +57,23 @@ export function registerDownloadTools(server: McpServer): void {
         throw err;
       }
 
-      // Open the output file synchronously with `wx` (or `w` if overwrite) so
-      // the EEXIST refusal is atomic with the open and happens BEFORE any
-      // network request.
-      const writeFlag = overwrite ? 'w' : 'wx';
+      // Open the output file synchronously so the EEXIST/symlink refusal is
+      // atomic with the open and happens BEFORE any network request:
+      //   - create:    O_CREAT|O_EXCL  (refuse any pre-existing path)
+      //   - overwrite: O_CREAT|O_TRUNC (clobber a validated regular file)
+      // O_NOFOLLOW closes the swap race in which a symlink is planted at the
+      // target between the lstat pre-check and this open — with plain 'w'
+      // the open would silently write through it. (O_NOFOLLOW is unavailable
+      // on some platforms, e.g. Windows; there the lstat pre-check remains
+      // the mitigation.) O_NONBLOCK keeps an overwrite open of a raced-in
+      // FIFO from blocking forever; the fstat below then rejects it.
+      const nofollow = fs.constants.O_NOFOLLOW ?? 0;
+      const openFlags = overwrite
+        ? fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | nofollow | (fs.constants.O_NONBLOCK ?? 0)
+        : fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | nofollow;
       let fd: number;
       try {
-        fd = fs.openSync(safe.resolved, writeFlag);
+        fd = fs.openSync(safe.resolved, openFlags);
       } catch (openErr) {
         const e = openErr as NodeJS.ErrnoException;
         if (e && e.code === 'EEXIST') {
@@ -73,11 +83,51 @@ export function registerDownloadTools(server: McpServer): void {
             code: 'EEXIST',
           });
         }
+        if (e && e.code === 'ELOOP') {
+          return JSON.stringify({
+            ok: false,
+            error: `Output path is a symbolic link, refusing to write through it: ${outputPath}`,
+            code: 'OUTPUT_PATH_IS_SYMLINK',
+          });
+        }
         return JSON.stringify({
           ok: false,
           error: `Could not open output_path for writing: ${e?.message || String(openErr)}`,
           code: e?.code || 'OPEN_FAILED',
         });
+      }
+
+      // Validate the OPENED object: a raced-in FIFO/socket/device must not
+      // be written even if it slipped past the lstat pre-check. If we created
+      // the file (no overwrite), remove it again so the failure is atomic.
+      try {
+        const opened = fs.fstatSync(fd);
+        if (!opened.isFile()) {
+          try {
+            fs.closeSync(fd);
+          } catch {
+            /* empty */
+          }
+          if (!overwrite) {
+            try {
+              fs.unlinkSync(safe.resolved);
+            } catch {
+              /* cleanup best-effort */
+            }
+          }
+          return JSON.stringify({
+            ok: false,
+            error: `Output path is not a regular file: ${outputPath}`,
+            code: 'OUTPUT_PATH_NOT_REGULAR_FILE',
+          });
+        }
+      } catch (statErr) {
+        try {
+          fs.closeSync(fd);
+        } catch {
+          /* empty */
+        }
+        throw statErr;
       }
 
       // SSRF-via-redirect defence: fetch with `redirect: 'manual'` and
