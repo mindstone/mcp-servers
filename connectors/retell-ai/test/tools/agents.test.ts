@@ -28,6 +28,15 @@ describe('Agent tools — Retell AI', () => {
     expect(parsed.agents).toBeInstanceOf(Array);
     expect(parsed.agents.length).toBeGreaterThan(0);
     expect(parsed.agents[0].agent_id).toBe('agent_test_123');
+    expect(parsed.has_more).toBe(false);
+    expect(parsed.pagination_key).toBe('page_2');
+    // agent_name is external text → wrapped per AGENTS.md invariant #6 (FOX-3490).
+    expect(parsed.agents[0].agent_name).toBe(
+      '<untrusted-content source="retell:list_agents:agent_name">Test Agent</untrusted-content>',
+    );
+    expect(parsed.agents[0].voice_name).toBe(
+      '<untrusted-content source="retell:list_agents:voice_name">Sarah</untrusted-content>',
+    );
   });
 
   it('get_agent returns agent details', async () => {

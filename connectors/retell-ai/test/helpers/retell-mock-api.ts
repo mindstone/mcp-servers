@@ -72,10 +72,23 @@ function requireAuth(authHeader: string | null): HttpResponse | null {
 export function createRetellHandlers() {
   return [
     // --- Agents ---
-    http.get(`${RETELL_API_BASE}/list-agents`, ({ request }) => {
+    http.post(`${RETELL_API_BASE}/v2/list-agents`, ({ request }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;
-      return HttpResponse.json([mockAgent]);
+      return HttpResponse.json({
+        items: [{
+          agent_id: mockAgent.agent_id,
+          agent_name: mockAgent.agent_name,
+          channel: 'voice',
+          response_engine_type: 'retell-llm',
+          voice_id: mockAgent.voice_id,
+          voice_name: 'Sarah',
+          user_modified_timestamp: mockAgent.last_modification_timestamp,
+          tags: {},
+        }],
+        has_more: false,
+        pagination_key: 'page_2',
+      });
     }),
 
     http.get(`${RETELL_API_BASE}/get-agent/:agentId`, ({ request, params }) => {

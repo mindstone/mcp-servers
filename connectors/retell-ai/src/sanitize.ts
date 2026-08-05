@@ -151,6 +151,9 @@ export function sanitizeAgent(agent: unknown, source: string): unknown {
     agent_name: wrapStr(agent.agent_name, `${source}:agent_name`),
     version_description: wrapStr(agent.version_description, `${source}:version_description`),
     assigned_tags: wrapArrayItems(agent.assigned_tags, `${source}:assigned_tags`),
+    // POST /v2/list-agents summary items carry these extra display fields.
+    voice_name: wrapStr(agent.voice_name, `${source}:voice_name`),
+    tags: wrapJsonStrings(agent.tags, `${source}:tags`),
     backchannel_words: wrapArrayItems(agent.backchannel_words, `${source}:backchannel_words`),
     boosted_keywords: wrapArrayItems(agent.boosted_keywords, `${source}:boosted_keywords`),
     pronunciation_dictionary: sanitizePronunciationDictionary(agent.pronunciation_dictionary, source),
