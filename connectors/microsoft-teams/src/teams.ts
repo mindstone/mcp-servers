@@ -428,6 +428,83 @@ export async function replyToChannelMessage(
 }
 
 // ---------------------------------------------------------------------------
+// Message search
+// ---------------------------------------------------------------------------
+
+const searchHitSchema = z
+  .object({
+    hitId: z.string().nullish(),
+    summary: z.string().nullish(),
+    resource: graphMessageSchema.extend({ chatId: z.string().nullish() }).nullish(),
+  })
+  .passthrough();
+
+const searchResponseSchema = z
+  .object({
+    value: z
+      .array(
+        z
+          .object({
+            hitsContainers: z
+              .array(
+                z
+                  .object({
+                    hits: z.array(searchHitSchema).nullish(),
+                    total: z.number().nullish(),
+                  })
+                  .passthrough(),
+              )
+              .nullish(),
+          })
+          .passthrough(),
+      )
+      .nullish(),
+  })
+  .passthrough();
+
+export async function searchMessages(
+  client: Client,
+  args: ArgBag,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const query = requireStringArg(args, 'query', 'search text', 'search_messages');
+  const top = clampTop(numberArg(args, 'top'), 10, 25);
+
+  const response = searchResponseSchema.parse(
+    await client
+      .api('/search/query')
+      .options({ signal })
+      .post({
+        requests: [
+          {
+            entityTypes: ['chatMessage'],
+            query: { queryString: query },
+            from: 0,
+            size: top,
+          },
+        ],
+      }),
+  );
+
+  const container = response.value?.[0]?.hitsContainers?.[0];
+  const hits = container?.hits ?? [];
+
+  return {
+    query,
+    count: hits.length,
+    total: container?.total ?? hits.length,
+    results: hits.map((hit) => ({
+      ...formatMessage(hit.resource ?? {}, 'search_messages'),
+      chatId: hit.resource?.chatId ?? undefined,
+      summary: wrapUntrusted(
+        hit.summary ? stripHtml(hit.summary) : undefined,
+        'microsoft-teams:search_messages:summary',
+      ),
+    })),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // User lookup and chat creation
 // ---------------------------------------------------------------------------
 

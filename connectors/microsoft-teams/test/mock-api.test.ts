@@ -272,6 +272,35 @@ describe('microsoft-teams mock-API integration', () => {
     expect(body.topic).toBe('Launch plan');
   });
 
+  it('search_messages posts a chatMessage search query and maps hits', async () => {
+    const result = await client.callTool('search_messages', { query: 'budget', top: 5 });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      query: string;
+      count: number;
+      total: number;
+      results: Array<{ id: string; chatId: string; from: string; summary: string; content: string }>;
+    };
+    expect(json.query).toBe('budget');
+    expect(json.count).toBe(1);
+    expect(json.total).toBe(1);
+    expect(json.results[0]?.id).toBe('msg-9');
+    expect(json.results[0]?.chatId).toBe('chat-1');
+    expect(json.results[0]?.from).toContain('Alice');
+    expect(json.results[0]?.summary).toContain('budget');
+    expect(json.results[0]?.summary).not.toContain('<c0>');
+    expect(json.results[0]?.content).toContain('The budget draft is ready');
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.endsWith('/search/query'),
+    );
+    const body = call?.body as {
+      requests: Array<{ entityTypes: string[]; query: { queryString: string }; size: number }>;
+    };
+    expect(body.requests[0]?.entityTypes).toEqual(['chatMessage']);
+    expect(body.requests[0]?.query.queryString).toBe('budget');
+    expect(body.requests[0]?.size).toBe(5);
+  });
+
   it('send_chat_message rejects unknown keys (strict schema)', async () => {
     // F8: the input schema is `.strict()`, so an unexpected argument is refused
     // at the protocol boundary rather than silently forwarded to Graph. The SDK

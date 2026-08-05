@@ -238,6 +238,37 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
       return HttpResponse.json({ id: 'chat-new', chatType: body.chatType ?? 'oneOnOne' });
     }),
 
+    http.post(`${GRAPH_BASE}/search/query`, async ({ request }) => {
+      await capture(request);
+      return HttpResponse.json({
+        value: [
+          {
+            hitsContainers: [
+              {
+                total: 1,
+                hits: [
+                  {
+                    hitId: 'hit-1',
+                    summary: '...the <c0>budget</c0> draft is ready...',
+                    resource: {
+                      id: 'msg-9',
+                      chatId: 'chat-1',
+                      from: { user: { id: 'user-1', displayName: 'Alice' } },
+                      body: {
+                        content: '<p>The budget draft is ready</p>',
+                        contentType: 'html',
+                      },
+                      createdDateTime: '2026-05-18T12:00:00Z',
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+    }),
+
     http.get(`${GRAPH_BASE}/me/presence`, async ({ request }) => {
       await capture(request);
       return HttpResponse.json({

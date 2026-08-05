@@ -17,6 +17,7 @@ import {
   listChatMessages,
   listTeams,
   replyToChannelMessage,
+  searchMessages,
   sendChannelMessage,
   sendChatMessage,
 } from './teams.js';
@@ -211,6 +212,24 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
     },
     withErrorHandling(async (args, extra) =>
       successJson(await callGraph(extra, (c, signal) => sendChatMessage(c, args, signal))),
+    ),
+  );
+
+  server.registerTool(
+    'search_messages',
+    {
+      description:
+        'Search Teams chat and channel messages by keyword across conversations you can access.',
+      inputSchema: z
+        .object({
+          query: z.string().describe('Search text (keyword or phrase)'),
+          top: z.number().optional().describe('Max results to return (default: 10, max: 25)'),
+        })
+        .strict(),
+      annotations: READ_ANNOTATIONS,
+    },
+    withErrorHandling(async (args, extra) =>
+      successJson(await callGraph(extra, (c, signal) => searchMessages(c, args, signal))),
     ),
   );
 

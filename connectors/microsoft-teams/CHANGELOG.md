@@ -6,6 +6,7 @@ All notable changes to this connector will be documented in this file.
 
 ### Added
 
+- `search_messages` — keyword search across chat and channel messages via the Graph `/search/query` `chatMessage` entity (works with the already-granted `Chat.Read` permission).
 - `find_user` (resolve colleagues by display name or email; requires `User.ReadBasic.All`) and `create_chat` (start a 1:1 or group chat by member email/user ID, returning the chat ID for use with `send_chat_message`) — together they enable "message a colleague" flows that previously required an existing chat ID.
 - Channel messaging tools: `list_channel_messages`, `send_channel_message`, and `reply_to_channel_message`. Channel reads require the `ChannelMessage.Read.All` Graph permission and sends `ChannelMessage.Send`; when the connected account's token lacks the scope, the tools return actionable reconnect guidance (naming the missing permission and the likely admin-consent step) instead of a raw Graph 403.
 

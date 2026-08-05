@@ -10,13 +10,14 @@
     ]
   },
   "tools": {
-    "count": 13,
+    "count": 14,
     "domains": [
       "chats",
       "messages",
       "teams",
       "channels",
       "users",
+      "search",
       "presence"
     ]
   },

@@ -83,6 +83,12 @@ const MANIFEST: ManifestRow[] = [
     args: { members: ['alice@example.com'] },
   },
   {
+    tool: 'search_messages',
+    method: 'POST',
+    pathname: '/v1.0/search/query',
+    args: { query: 'budget' },
+  },
+  {
     tool: 'get_presence',
     method: 'GET',
     pathname: '/v1.0/me/presence',
