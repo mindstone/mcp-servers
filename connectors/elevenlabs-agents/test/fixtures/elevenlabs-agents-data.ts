@@ -274,6 +274,15 @@ export const mockKbDocUrlMetadata = {
   },
 };
 
+/** RAG index entry returned by GET/POST /knowledge-base/{id}/rag-index. */
+export const mockRagIndex = {
+  id: 'rag_index_test_123',
+  model: 'e5_mistral_7b_instruct',
+  status: 'succeeded',
+  progress_percentage: 100,
+  document_model_index_usage: { used_bytes: 12345 },
+};
+
 export const mockSimulation = {
   simulated_conversation: [
     {

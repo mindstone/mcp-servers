@@ -9,6 +9,7 @@ import {
   createKnowledgeBaseFileCapturingHandler,
   createKnowledgeBaseTextCapturingHandler,
   createKnowledgeBaseUrlCapturingHandler,
+  createRagIndexCapturingHandler,
   MOCK_API_KEY,
 } from './helpers/elevenlabs-agents-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
@@ -191,5 +192,63 @@ describe('knowledge-base tools', () => {
       documentation_id: 'doc_test_123',
       force: true,
     });
+  });
+
+  it('reads RAG index status for a document', async () => {
+    mswServer.use(...createElevenLabsAgentsHandlers());
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('get_knowledge_base_rag_index_status', {
+      documentation_id: 'doc_test_123',
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(result.json.ok).toBe(true);
+    expect(result.json.documentation_id).toBe('doc_test_123');
+    expect(result.json.indexes).toHaveLength(1);
+    expect(result.json.indexes[0].status).toBe('succeeded');
+  });
+
+  it('rebuilds the RAG index with the default and an explicit model', async () => {
+    const { handler, captured } = createRagIndexCapturingHandler();
+    mswServer.use(handler, ...createElevenLabsAgentsHandlers());
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const defaulted = await testClient.callTool('rebuild_knowledge_base_rag_index', {
+      documentation_id: 'doc_test_123',
+    });
+    expect(defaulted.isError).toBeFalsy();
+    expect(captured.body).toEqual({ model: 'e5_mistral_7b_instruct' });
+    expect(defaulted.json.rag_index.status).toBe('succeeded');
+
+    const explicit = await testClient.callTool('rebuild_knowledge_base_rag_index', {
+      documentation_id: 'doc_test_123',
+      model: 'multilingual_e5_large_instruct',
+    });
+    expect(explicit.isError).toBeFalsy();
+    expect(captured.body).toEqual({ model: 'multilingual_e5_large_instruct' });
+  });
+
+  it('RAG index tools surface upstream errors', async () => {
+    mswServer.use(...createElevenLabsAgentsHandlers());
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const status = await testClient.callTool('get_knowledge_base_rag_index_status', {
+      documentation_id: 'trigger-404',
+    });
+    expect(status.isError).toBe(true);
+    expect(status.json).toMatchObject({ ok: false, code: 'HTTP_404' });
+
+    const rebuild = await testClient.callTool('rebuild_knowledge_base_rag_index', {
+      documentation_id: 'trigger-429',
+    });
+    expect(rebuild.isError).toBe(true);
+    expect(rebuild.json).toMatchObject({ ok: false, code: 'RATE_LIMITED' });
   });
 });

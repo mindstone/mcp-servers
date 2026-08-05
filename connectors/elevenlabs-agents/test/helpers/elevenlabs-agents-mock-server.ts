@@ -15,6 +15,7 @@ import {
   mockKbDocUrlMetadata,
   mockOutboundCall,
   mockPhoneNumber,
+  mockRagIndex,
   mockSimulation,
 } from '../fixtures/elevenlabs-agents-data.js';
 
@@ -386,6 +387,22 @@ export function createElevenLabsAgentsHandlers() {
       if (triggered) return triggered;
       return new HttpResponse(null, { status: 204 });
     }),
+
+    http.get(`${BASE_V1}/convai/knowledge-base/:documentationId/rag-index`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      const triggered = triggerResponse(idTrigger(params.documentationId));
+      if (triggered) return triggered;
+      return HttpResponse.json({ indexes: [mockRagIndex] });
+    }),
+
+    http.post(`${BASE_V1}/convai/knowledge-base/:documentationId/rag-index`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      const triggered = triggerResponse(idTrigger(params.documentationId));
+      if (triggered) return triggered;
+      return HttpResponse.json(mockRagIndex);
+    }),
   ];
 }
 
@@ -736,6 +753,19 @@ export function createDeleteKnowledgeBaseCapturingHandler() {
     if (authErr) return authErr;
     captured.force = new URL(request.url).searchParams.get('force');
     return new HttpResponse(null, { status: 204 });
+  });
+
+  return { handler, captured };
+}
+
+export function createRagIndexCapturingHandler() {
+  const captured: { body?: JsonBody } = {};
+
+  const handler = http.post(`${BASE_V1}/convai/knowledge-base/:documentationId/rag-index`, async ({ request }) => {
+    const authErr = requireAuth(request.headers.get('xi-api-key'));
+    if (authErr) return authErr;
+    captured.body = (await request.json()) as JsonBody;
+    return HttpResponse.json(mockRagIndex);
   });
 
   return { handler, captured };

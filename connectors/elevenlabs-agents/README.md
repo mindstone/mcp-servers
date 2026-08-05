@@ -8,7 +8,7 @@ ElevenLabs Conversational AI MCP server for Model Context Protocol hosts. Inspec
 
 - **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs-agents)
 - **Auth:** API key ([`ELEVENLABS_API_KEY`](./server.json))
-- **Tools:** [27](./src/tools/) (configure, agents, conversations, phone numbers, outbound calls, batch calls, knowledge base)
+- **Tools:** [29](./src/tools/) (configure, agents, conversations, phone numbers, outbound calls, batch calls, knowledge base)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -91,7 +91,7 @@ node dist/index.js
 }
 ```
 
-## Tools (27)
+## Tools (29)
 
 ### Configuration
 - `configure_elevenlabs_agents_api_key` — Save your ElevenLabs API key
@@ -133,6 +133,8 @@ node dist/index.js
 - `get_knowledge_base_doc` — Get one knowledge-base document (metadata + /content body, capped ~50KB)
 - `add_knowledge_base_document` — Add a KB document in text, file, or URL mode
 - `delete_knowledge_base_document` — Delete a KB document, optionally with force
+- `get_knowledge_base_rag_index_status` — Check whether a document is indexed and retrievable
+- `rebuild_knowledge_base_rag_index` — Trigger (re)indexing of a KB document
 
 ## Security notes
 
