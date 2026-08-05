@@ -280,7 +280,7 @@ export function createRunShortcutHandler(runner: ShortcutsRunner = runShortcuts)
             {
               type: "text" as const,
               text:
-                `Shortcut "${params.name}" did not finish within ${resolveTimeoutMs()}ms and was terminated. ` +
+                `Shortcut "${envelope(params.name, SOURCES.run)}" did not finish within ${resolveTimeoutMs()}ms and was terminated. ` +
                 `Set APPLE_SHORTCUTS_TIMEOUT_MS to allow longer runs.` +
                 (partial
                   ? `\nPartial output before termination:\n${envelope(partial, SOURCES.run)}`
@@ -296,7 +296,7 @@ export function createRunShortcutHandler(runner: ShortcutsRunner = runShortcuts)
           content: [
             {
               type: "text" as const,
-              text: `Failed to run shortcut "${params.name}" (exit ${result.exitCode}): ${envelope(result.stderr || result.stdout, SOURCES.run)}`,
+              text: `Failed to run shortcut "${envelope(params.name, SOURCES.run)}" (exit ${result.exitCode}): ${envelope(result.stderr || result.stdout, SOURCES.run)}`,
             },
           ],
         };
@@ -308,7 +308,7 @@ export function createRunShortcutHandler(runner: ShortcutsRunner = runShortcuts)
           content: [
             {
               type: "text" as const,
-              text: `Shortcut "${params.name}" ran successfully with no output.`,
+              text: `Shortcut "${envelope(params.name, SOURCES.run)}" ran successfully with no output.`,
             },
           ],
         };
@@ -354,7 +354,7 @@ export function createViewShortcutHandler(runner: ShortcutsRunner = runShortcuts
     const result = await runner(["view", params.name]);
 
     if (result.timedOut) {
-      return timedOutResult(`Opening shortcut "${params.name}"`);
+      return timedOutResult(`Opening shortcut "${envelope(params.name, SOURCES.view)}"`);
     }
 
     if (result.exitCode !== 0) {
@@ -363,7 +363,7 @@ export function createViewShortcutHandler(runner: ShortcutsRunner = runShortcuts
         content: [
           {
             type: "text" as const,
-            text: `Failed to open shortcut "${params.name}" (exit ${result.exitCode}): ${envelope(result.stderr || result.stdout, SOURCES.view)}`,
+            text: `Failed to open shortcut "${envelope(params.name, SOURCES.view)}" (exit ${result.exitCode}): ${envelope(result.stderr || result.stdout, SOURCES.view)}`,
           },
         ],
       };
@@ -375,7 +375,7 @@ export function createViewShortcutHandler(runner: ShortcutsRunner = runShortcuts
         {
           type: "text" as const,
           text:
-            `Opened shortcut "${params.name}" in the Shortcuts app editor.` +
+            `Opened shortcut "${envelope(params.name, SOURCES.view)}" in the Shortcuts app editor.` +
             (output ? `\n${envelope(output, SOURCES.view)}` : ""),
         },
       ],

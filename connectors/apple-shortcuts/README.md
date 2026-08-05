@@ -95,7 +95,7 @@ No credentials are required. One optional environment variable tunes runtime beh
 
 ## Output trust model
 
-Shortcut names (`apple_shortcuts_list`) and shortcut stdout (`apple_shortcuts_run`, `apple_shortcuts_view`) are user-authored text returned by the local `shortcuts` CLI. The connector wraps all such output in `<untrusted-content source="apple-shortcuts:...">` envelopes so the model treats it as data, not instructions.
+Shortcut names (`apple_shortcuts_list`) and shortcut stdout (`apple_shortcuts_run`, `apple_shortcuts_view`) are user-authored text returned by the local `shortcuts` CLI. The connector wraps all such output in `<untrusted-content source="apple-shortcuts:...">` envelopes so the model treats it as data, not instructions. Shortcut names echoed back in `apple_shortcuts_run` / `apple_shortcuts_view` confirmation, error, and timeout messages are enveloped the same way — a name is attacker-controllable text once it appears in the list output.
 
 ## Register in Rebel
 
