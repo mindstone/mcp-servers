@@ -146,7 +146,7 @@ No API keys or credentials are required. The server communicates with the browse
 - **browser_screenshot** — Take a screenshot of the current page
 - **browser_get_page_info** — Get the current page URL and title
 - **browser_get_text** — Get the text content of the page or a single element
-- **browser_pdf** — Save the current page as a PDF inside the workspace directory
+- **browser_pdf** — Save the current page as a PDF inside the workspace directory (refuses to overwrite existing files unless `overwrite: true`)
 
 ### Interaction
 - **browser_click** — Click an element using @ref or CSS selector
@@ -156,7 +156,7 @@ No API keys or credentials are required. The server communicates with the browse
 - **browser_scroll** — Scroll the page in a direction
 - **browser_select** — Select an option from a dropdown
 - **browser_hover** — Hover over an element
-- **browser_upload** — Upload workspace files to a file input
+- **browser_upload** — Upload workspace files to a file input (regular files only, staged privately before upload)
 - **browser_evaluate** — Execute JavaScript in the page context (gated; see [Security notes](#security-notes))
 
 ### Session Management
@@ -213,7 +213,15 @@ To override the session name (for example, to keep separate profiles per project
 
 ### Workspace sandbox for file tools
 
-`browser_pdf` writes PDF files and `browser_upload` reads files, and both are constrained to a workspace directory: `MCP_WORKSPACE_PATH` when set, otherwise the system temp directory. Paths are canonicalised before use, so `..` traversal, absolute paths outside the workspace, and in-workspace symlinks pointing outside it are all refused before the `agent-browser` CLI runs. Set `MCP_WORKSPACE_PATH` explicitly to control exactly where page captures land and which files the model can attach to a page.
+`browser_pdf` writes PDF files and `browser_upload` reads files, and both are constrained to a workspace directory: `MCP_WORKSPACE_PATH` when set, otherwise the system temp directory. Paths are canonicalised before use, so `..` traversal, absolute paths outside the workspace, and in-workspace symlinks pointing outside it are all refused before the `agent-browser` CLI runs. Set `MCP_WORKSPACE_PATH` explicitly to control exactly where page captures land and which files the model can attach to a page. A `MCP_WORKSPACE_PATH` that cannot be resolved fails closed: file tools refuse to run rather than fall back to weaker checks.
+
+Both tools are marked `destructiveHint: true`, so hosts can require user confirmation: `browser_upload` can trigger an immediate remote upload on pages that submit when the file input changes, and `browser_pdf` writes a local file.
+
+Additional hardening:
+
+- **Staged file hand-off.** Validated files are never re-opened by pathname. `browser_upload` sources are opened once, verified to be regular files (directories, devices, and FIFOs are refused), and copied into a fresh private staging directory that the CLI consumes; `browser_pdf` has the CLI write into a fresh private staging directory and then installs the PDF at the requested path with exclusive-create semantics. A file or symlink planted after validation cannot redirect the read or the write.
+- **No silent overwrite.** `browser_pdf` refuses an existing `file_path` with a `FILE_EXISTS` error unless the caller explicitly passes `overwrite: true`.
+- **Enveloped errors.** Error output from the `agent-browser` CLI can contain page-authored text; it is wrapped in `<untrusted-content>` envelopes (with close-tag breakout escaping) before reaching the model, and timeout errors do not echo the command's argument values.
 
 ## Licence
 

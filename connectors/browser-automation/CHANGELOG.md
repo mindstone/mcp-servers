@@ -18,9 +18,17 @@ are maintained manually as part of the PR review checklist.
 
 ### Changed
 - Bumped the `agent-browser` npx fallback pin from 0.26.0 to 0.33.2 (verified against the connector's full command surface).
+- `browser_pdf` gains an `overwrite` parameter (default `false`): an existing file at `file_path` is now refused with `FILE_EXISTS` instead of being silently replaced, unless `overwrite: true` is passed.
+- `browser_upload` and `browser_pdf` now declare `destructiveHint: true` so hosts can require user confirmation; empty `ref` / `file_path` values are rejected at the schema boundary.
+
+### Fixed
+- A `MCP_WORKSPACE_PATH` that cannot be canonicalised now fails closed (`WORKSPACE_ROOT_UNAVAILABLE`, with a stderr warning) instead of silently weakening the workspace containment checks.
 
 ### Security
 - All page-authored text returned to the model — accessibility snapshots, page text, titles, URLs, tab lists, and `browser_evaluate` output — is now wrapped in `<untrusted-content source="…">` envelopes with close-tag breakout escaping (security invariant #6; FOX-3490 remediation).
+- CLI-derived error text (`stderr`/`stdout`, which can carry page-authored content including forged envelope close tags) and the short-output text fallback of `browser_screenshot` are now enveloped as untrusted content instead of reaching the model raw. Timeout errors name only the subcommand rather than echoing the full argument vector, which could carry URLs with userinfo, typed values, or evaluation scripts.
+- `browser_upload` sources are opened exactly once, verified via `fstat` to be regular files (directories, FIFOs, sockets, and devices are refused), and streamed through that descriptor into a fresh private staging directory (mode 0700) under the canonical workspace root; the CLI consumes only the staged copy, closing the check-then-use window between validation and upload.
+- `browser_pdf` output is written by the CLI into a fresh private staging directory and installed at the validated destination with exclusive-create semantics, so a symlink or file planted after validation cannot redirect the write or clobber an existing file.
 
 ## [0.1.8] - 2026-07-01
 
