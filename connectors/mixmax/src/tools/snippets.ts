@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { mixmaxFetch } from '../client.js';
 import { withErrorHandling, parseApiResponse, epochMsField } from '../utils.js';
 import { isConfigured } from '../auth.js';
-import { snippetsResponseSchema } from '../types.js';
+import { snippetsResponseSchema, writeResultSchema } from '../types.js';
 import { sanitizeSnippets, sanitizeVendorBlob } from '../sanitize.js';
 import { unwrapUntrusted, wrapUntrusted } from '../untrusted-content.js';
 
@@ -102,12 +102,16 @@ NOTE: Variables are applied to ALL recipients equally. If you need different var
       if (args.variables) payload.variables = args.variables;
       if (args.scheduledAt !== undefined) payload.scheduledAt = args.scheduledAt;
 
-      const data = await mixmaxFetch<Record<string, unknown>>(
-        `/snippets/${encodeURIComponent(args.snippetId)}/send`,
-        {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        },
+      const data = parseApiResponse(
+        writeResultSchema,
+        await mixmaxFetch<unknown>(
+          `/snippets/${encodeURIComponent(args.snippetId)}/send`,
+          {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          },
+        ),
+        'snippet send',
       );
 
       return JSON.stringify({

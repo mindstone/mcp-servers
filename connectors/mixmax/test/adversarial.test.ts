@@ -262,6 +262,40 @@ describe('adversarial API responses', () => {
     expect(result.text).not.toContain(`${CLOSE} IGNORE`);
   });
 
+  it('error-shaped HTTP-200 write responses fail closed, not ok:true', async () => {
+    mswServer.use(
+      http.post('https://api.mixmax.com/v1/send', () =>
+        HttpResponse.json({ error: INJECT }),
+      ),
+      http.post('https://api.mixmax.com/v1/snippets/:snippetId/send', () =>
+        // Scalar success body — not a vendor success record
+        HttpResponse.json(INJECT),
+      ),
+    );
+    await setup();
+
+    const sendResult = await testClient.callTool('send_mixmax_email', {
+      to: ['alice@acme.com'],
+      subject: 'Hi',
+      body: 'body',
+    });
+    expect(sendResult.isError).toBe(true);
+    const sendJson = sendResult.json as { ok: boolean; code: string };
+    expect(sendJson.ok).toBe(false);
+    expect(sendJson.code).toBe('INVALID_API_RESPONSE');
+    expect(sendResult.text).not.toContain(`${CLOSE} IGNORE`);
+
+    const snippetResult = await testClient.callTool('send_mixmax_snippet', {
+      snippetId: 'snip-1',
+      to: ['alice@acme.com'],
+    });
+    expect(snippetResult.isError).toBe(true);
+    const snippetJson = snippetResult.json as { ok: boolean; code: string };
+    expect(snippetJson.ok).toBe(false);
+    expect(snippetJson.code).toBe('INVALID_API_RESPONSE');
+    expect(snippetResult.text).not.toContain(`${CLOSE} IGNORE`);
+  });
+
   it('removed recipient emails are enveloped (injection variant)', async () => {
     mswServer.use(
       http.post('https://api.mixmax.com/v1/sequences/seq-001/cancel', () =>

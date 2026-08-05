@@ -175,3 +175,22 @@ export const reportResponseSchema = z.object({
   extra: z.record(z.unknown()).optional(),
 });
 export type ReportResponse = z.infer<typeof reportResponseSchema>;
+
+/**
+ * Write-endpoint responses (POST /send, POST /sequences/:id/recipients,
+ * POST /snippets/:id/send) have no stable published schema — the success body
+ * is vendor-defined: an object (e.g. the created message) or, for
+ * POST /sequences/:id/recipients, an array of per-recipient results.
+ * Fail-closed validation therefore asserts the structural minimum and rejects
+ * scalars, null, and error-shaped HTTP-200 objects (the vendor's
+ * `{ error: ... }` envelope) as INVALID_API_RESPONSE instead of reporting
+ * them as ok:true. Every string key and value in the result is still
+ * enveloped by sanitizeVendorBlob before reaching the model.
+ */
+export const writeResultSchema = z.union([
+  z.array(z.unknown()),
+  z.record(z.unknown()).refine((v) => !('error' in v), {
+    message: 'error-shaped write response',
+  }),
+]);
+export type WriteResult = z.infer<typeof writeResultSchema>;

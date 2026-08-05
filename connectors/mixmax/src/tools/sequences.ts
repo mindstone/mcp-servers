@@ -7,6 +7,7 @@ import {
   sequencesResponseSchema,
   sequenceDetailSchema,
   cancelSequenceResponseSchema,
+  writeResultSchema,
 } from '../types.js';
 import { sanitizeSequences, sanitizeSequence, sanitizeRemovedRecipients, sanitizeVendorBlob } from '../sanitize.js';
 import { unwrapUntrusted, wrapUntrusted } from '../untrusted-content.js';
@@ -136,12 +137,16 @@ TEMPLATE VARIABLES: If the sequence stages use variables like {{first_name}}, pa
       const payload: Record<string, unknown> = { recipients: args.recipients };
       if (args.scheduledAt !== undefined) payload.scheduledAt = args.scheduledAt;
 
-      const data = await mixmaxFetch<Record<string, unknown>>(
-        `/sequences/${encodeURIComponent(args.sequenceId)}/recipients`,
-        {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        },
+      const data = parseApiResponse(
+        writeResultSchema,
+        await mixmaxFetch<unknown>(
+          `/sequences/${encodeURIComponent(args.sequenceId)}/recipients`,
+          {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          },
+        ),
+        'sequence enrollment',
       );
 
       return JSON.stringify({
