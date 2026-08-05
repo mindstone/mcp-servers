@@ -877,6 +877,8 @@ export interface UpdateVacationResponderToolParams {
   startTime?: number | string;
   end_time?: number | string;
   endTime?: number | string;
+  clear_end_time?: boolean;
+  clearEndTime?: boolean;
   contacts_only?: boolean;
   contactsOnly?: boolean;
   domain_only?: boolean;
@@ -898,6 +900,13 @@ export async function handleUpdateWorkspaceVacationResponder(params: UpdateVacat
 
   const startTime = parseEpochMsField(rawParams.start_time ?? rawParams.startTime, 'start_time');
   const endTime = parseEpochMsField(rawParams.end_time ?? rawParams.endTime, 'end_time');
+  const clearEndTime = readAliasedBoolean(rawParams, 'clear_end_time', 'clearEndTime') ?? false;
+  if (clearEndTime && endTime !== undefined) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'Pass either end_time or clear_end_time, not both'
+    );
+  }
   if (startTime !== undefined && endTime !== undefined && endTime <= startTime) {
     throw new McpError(ErrorCode.InvalidParams, 'end_time must be after start_time');
   }
@@ -911,6 +920,7 @@ export async function handleUpdateWorkspaceVacationResponder(params: UpdateVacat
         responseBody: readAliasedString(rawParams, 'response_body', 'responseBody'),
         startTime,
         endTime,
+        clearEndTime,
         contactsOnly: readAliasedBoolean(rawParams, 'contacts_only', 'contactsOnly'),
         domainOnly: readAliasedBoolean(rawParams, 'domain_only', 'domainOnly')
       });

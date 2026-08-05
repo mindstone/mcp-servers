@@ -184,8 +184,10 @@ export interface UpdateVacationResponderParams {
   responseBody?: string;
   /** Epoch milliseconds; omit to start immediately when enabling. */
   startTime?: number;
-  /** Epoch milliseconds; omit for no scheduled end. */
+  /** Epoch milliseconds; omit to keep the currently scheduled end (if any). */
   endTime?: number;
+  /** Explicitly remove the scheduled end (open-ended auto-reply). */
+  clearEndTime?: boolean;
   /** Only auto-reply to people in the user's contacts. */
   contactsOnly?: boolean;
   /** Only auto-reply to people in the user's Workspace domain. */

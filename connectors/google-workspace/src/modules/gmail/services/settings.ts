@@ -142,12 +142,16 @@ export class SettingsService {
       const { data: current } = await client.users.settings.getVacation({ userId: 'me' });
 
       const responseSubject = params.responseSubject ?? current.responseSubject ?? undefined;
-      const responseBody = params.responseBody
-        ?? current.responseBodyPlainText
-        ?? current.responseBodyHtml
-        ?? undefined;
 
-      if (params.enabled && !responseBody) {
+      // A caller-supplied body is sent as plain text. When omitted, preserve the
+      // existing body in its own representation: an HTML body must go back as
+      // responseBodyHtml, not be flattened into responseBodyPlainText (that
+      // would turn the markup into literal visible text in the auto-reply).
+      const hasBody = params.responseBody !== undefined
+        || Boolean(current.responseBodyPlainText)
+        || Boolean(current.responseBodyHtml);
+
+      if (params.enabled && !hasBody) {
         throw new GmailError(
           'Vacation responder needs a message',
           'INVALID_PARAMS',
@@ -155,22 +159,32 @@ export class SettingsService {
         );
       }
 
+      const bodyFields = params.responseBody !== undefined
+        ? { responseBodyPlainText: params.responseBody }
+        : {
+            ...(current.responseBodyPlainText && { responseBodyPlainText: current.responseBodyPlainText }),
+            ...(current.responseBodyHtml && { responseBodyHtml: current.responseBodyHtml })
+          };
+
       const { data: updated } = await client.users.settings.updateVacation({
         userId: 'me',
         requestBody: {
           enableAutoReply: params.enabled,
           ...(responseSubject && { responseSubject }),
-          ...(responseBody && { responseBodyPlainText: responseBody }),
+          ...bodyFields,
           ...(params.startTime !== undefined
             ? { startTime: String(params.startTime) }
             : params.enabled && !current.startTime
               ? { startTime: String(Date.now()) }
               : current.startTime ? { startTime: current.startTime } : {}),
-          // An omitted endTime means "no scheduled end"; only forward an explicit
-          // value or the existing one — never inherit a stale end into a new enable.
+          // An omitted endTime preserves a still-pending scheduled end — the API
+          // replaces the whole resource, so omitting it would silently erase it.
+          // An already-past end is not inherited (Gmail requires start < end, and
+          // an expired end carries no meaning); clearEndTime drops one explicitly.
           ...(params.endTime !== undefined
             ? { endTime: String(params.endTime) }
-            : !params.enabled && current.endTime ? { endTime: current.endTime } : {}),
+            : !params.clearEndTime && current.endTime && Number(current.endTime) > Date.now()
+              ? { endTime: current.endTime } : {}),
           restrictToContacts: params.contactsOnly ?? current.restrictToContacts ?? false,
           restrictToDomain: params.domainOnly ?? current.restrictToDomain ?? false
         }
