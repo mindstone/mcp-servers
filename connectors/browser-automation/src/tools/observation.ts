@@ -2,9 +2,9 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { execAgentBrowser } from '../browser-client.js';
 import { withErrorHandling, withErrorHandlingRaw } from '../utils.js';
-import { ConnectorError, SNAPSHOT_TIMEOUT_MS, SCREENSHOT_TIMEOUT_MS } from '../types.js';
+import { SNAPSHOT_TIMEOUT_MS, SCREENSHOT_TIMEOUT_MS } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
-import { resolveWorkspaceWritePath } from '../path-safety.js';
+import { createPdfStagingTarget, discardStagingDir, installStagedFile } from '../path-safety.js';
 
 export function registerObservationTools(server: McpServer): void {
   server.registerTool(
@@ -126,9 +126,10 @@ Use this for reading and summarising page content — it returns clean text, unl
     {
       description: `Save the current page as a PDF file.
 
-The file is written inside the workspace directory (MCP_WORKSPACE_PATH, or the system temp directory when unset) — file_path must resolve inside that workspace.`,
+The file is written inside the workspace directory (MCP_WORKSPACE_PATH, or the system temp directory when unset) — file_path must resolve inside that workspace. Existing files are refused unless overwrite is set to true.`,
       inputSchema: {
         file_path: z.string().describe('Target file path for the PDF. Relative paths resolve inside the workspace directory; absolute paths must be inside it (e.g., "reports/page.pdf").'),
+        overwrite: z.boolean().optional().default(false).describe('Replace an existing file at file_path. Default: false — existing files are refused.'),
       },
       annotations: {
         readOnlyHint: false,
@@ -138,16 +139,18 @@ The file is written inside the workspace directory (MCP_WORKSPACE_PATH, or the s
       },
     },
     withErrorHandling(async (args) => {
-      const resolved = resolveWorkspaceWritePath(args.file_path);
-      if (!resolved.ok) {
-        throw new ConnectorError(
-          resolved.error,
-          'PATH_OUTSIDE_WORKSPACE',
-          'Pass a file path inside the workspace directory (MCP_WORKSPACE_PATH, or the system temp directory when unset).',
-        );
+      // The CLI writes into a private staging dir, and the PDF is installed
+      // at the validated destination with exclusive-create semantics, so a
+      // post-validation swap cannot redirect the write or clobber an
+      // existing file.
+      const target = createPdfStagingTarget(args.file_path, args.overwrite);
+      try {
+        await execAgentBrowser(['pdf', target.stagingPath]);
+        installStagedFile(target.stagingPath, target.destPath, args.overwrite);
+        return JSON.stringify({ ok: true, file_path: target.destPath });
+      } finally {
+        discardStagingDir(target.stagingDir);
       }
-      await execAgentBrowser(['pdf', resolved.path]);
-      return JSON.stringify({ ok: true, file_path: resolved.path });
     }),
   );
 }

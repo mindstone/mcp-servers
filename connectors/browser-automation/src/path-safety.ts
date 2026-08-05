@@ -247,3 +247,97 @@ export function stageUploadSource(inputPath: string, stagingDir: string, index: 
   }
   return stagingPath;
 }
+
+export interface PdfStagingTarget {
+  /** Validated final destination for the PDF. */
+  destPath: string;
+  /** Private staging path the CLI should write to. */
+  stagingPath: string;
+  /** Remove with discardStagingDir once installed (or on failure). */
+  stagingDir: string;
+}
+
+/**
+ * Resolve the `browser_pdf` destination and prepare a private staging
+ * target. The CLI writes into the staging path — never the validated
+ * pathname — so an attacker cannot redirect the write by swapping an
+ * intermediate directory or leaf after validation.
+ *
+ * An existing destination is refused up front unless `overwrite` was
+ * explicitly requested; installStagedFile enforces the same invariant
+ * race-safely with exclusive-create at install time.
+ */
+export function createPdfStagingTarget(filePath: string, overwrite: boolean): PdfStagingTarget {
+  const resolved = resolveWorkspaceWritePath(filePath);
+  if (!resolved.ok) {
+    throw new ConnectorError(
+      resolved.error,
+      'PATH_OUTSIDE_WORKSPACE',
+      'Pass a file path inside the workspace directory (MCP_WORKSPACE_PATH, or the system temp directory when unset).',
+    );
+  }
+
+  if (!overwrite && fs.existsSync(resolved.path)) {
+    throw new ConnectorError(
+      `file_path already exists: ${filePath}`,
+      'FILE_EXISTS',
+      'Pass overwrite: true to replace the existing file, or choose a different file_path.',
+    );
+  }
+
+  const stagingDir = createStagingDir('browser-pdf-');
+  return {
+    destPath: resolved.path,
+    stagingPath: path.join(stagingDir, sanitiseBasename(resolved.path, 'page.pdf')),
+    stagingDir,
+  };
+}
+
+/**
+ * Install a staged PDF at its validated destination.
+ *
+ * The install never writes through a pre-existing filesystem entry:
+ * exclusive-create (COPYFILE_EXCL) fails with EEXIST on anything already at
+ * the destination — including a planted symlink. With `overwrite`, the old
+ * entry is removed first and the same exclusive-create follows, so a swap
+ * planted in between still surfaces as an EEXIST refusal instead of a write
+ * through an attacker-chosen path.
+ */
+export function installStagedFile(stagingPath: string, destPath: string, overwrite: boolean): void {
+  let staged: fs.Stats;
+  try {
+    staged = fs.lstatSync(stagingPath);
+  } catch {
+    throw new ConnectorError(
+      'The agent-browser CLI did not produce an output file.',
+      'CLI_ERROR',
+      'Retry the call, or check that a page is open in the browser session.',
+    );
+  }
+  if (!staged.isFile()) {
+    throw new ConnectorError(
+      'The agent-browser CLI did not produce a regular output file.',
+      'CLI_ERROR',
+      'Retry the call, or check that a page is open in the browser session.',
+    );
+  }
+
+  if (overwrite) {
+    fs.rmSync(destPath, { force: true });
+  }
+  // Parent directories were validated as inside the workspace by
+  // resolveWorkspaceWritePath; create any missing tail before installing.
+  fs.mkdirSync(path.dirname(destPath), { recursive: true });
+  try {
+    fs.copyFileSync(stagingPath, destPath, fs.constants.COPYFILE_EXCL);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+      throw new ConnectorError(
+        `Destination already exists: ${destPath}`,
+        'FILE_EXISTS',
+        'Pass overwrite: true to replace the existing file, or choose a different file_path.',
+      );
+    }
+    throw err;
+  }
+}

@@ -274,8 +274,13 @@ describe('browser_pdf', () => {
     const childProcess = await import('node:child_process');
     const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
 
+    // The real CLI writes the PDF to the path it is given; emulate that so
+    // the staged install has something to move into place.
     mockExecFile.mockImplementation((_cmd: string, args: string[], _opts: unknown, callback: Function) => {
       capturedArgs.push(args);
+      if (args[0] === 'pdf') {
+        fs.writeFileSync(args[1], 'pdf-bytes');
+      }
       callback(null, '', '');
     });
   });
@@ -301,9 +306,18 @@ describe('browser_pdf', () => {
     });
     const parsed = parseResult(result);
 
+    const dest = path.join(workspace, 'reports', 'page.pdf');
     expect(parsed.ok).toBe(true);
-    expect(parsed.file_path).toBe(path.join(workspace, 'reports', 'page.pdf'));
-    expect(capturedArgs[0]).toEqual(['pdf', path.join(workspace, 'reports', 'page.pdf')]);
+    expect(parsed.file_path).toBe(dest);
+    expect(fs.readFileSync(dest, 'utf8')).toBe('pdf-bytes');
+    // The CLI wrote into a private staging dir — never the destination —
+    // carrying over only the requested basename.
+    const staged = capturedArgs[0][1];
+    expect(staged).not.toBe(dest);
+    expect(path.basename(staged)).toBe('page.pdf');
+    expect(staged.startsWith(workspace + path.sep)).toBe(true);
+    // The staging dir is discarded once the call ends.
+    expect(fs.existsSync(path.dirname(staged))).toBe(false);
   });
 
   it('rejects path traversal outside the workspace before invoking the CLI', async () => {
@@ -360,5 +374,103 @@ describe('browser_pdf', () => {
     } finally {
       fs.rmSync(outsideDir, { recursive: true, force: true });
     }
+  });
+
+  it('refuses to overwrite an existing file unless overwrite is true', async () => {
+    const dest = path.join(workspace, 'page.pdf');
+    fs.writeFileSync(dest, 'previous-contents');
+
+    testClient = await createTestClient({
+      env: { AGENT_BROWSER_SHOW_WINDOW: 'false', MCP_WORKSPACE_PATH: workspace },
+    });
+
+    const result = await testClient.client.callTool({
+      name: 'browser_pdf',
+      arguments: { file_path: 'page.pdf' },
+    });
+    const parsed = parseResult(result);
+
+    expect(parsed.ok).toBe(false);
+    expect(result.isError).toBe(true);
+    expect(parsed.code).toBe('FILE_EXISTS');
+    // Refused before the CLI ran, and the existing file is untouched.
+    expect(capturedArgs).toHaveLength(0);
+    expect(fs.readFileSync(dest, 'utf8')).toBe('previous-contents');
+  });
+
+  it('overwrites an existing file when overwrite is true', async () => {
+    const dest = path.join(workspace, 'page.pdf');
+    fs.writeFileSync(dest, 'previous-contents');
+
+    testClient = await createTestClient({
+      env: { AGENT_BROWSER_SHOW_WINDOW: 'false', MCP_WORKSPACE_PATH: workspace },
+    });
+
+    const result = await testClient.client.callTool({
+      name: 'browser_pdf',
+      arguments: { file_path: 'page.pdf', overwrite: true },
+    });
+    const parsed = parseResult(result);
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.file_path).toBe(dest);
+    expect(fs.readFileSync(dest, 'utf8')).toBe('pdf-bytes');
+  });
+
+  it('refuses to install when the destination appears during the CLI call (race)', async () => {
+    const dest = path.join(workspace, 'page.pdf');
+
+    const childProcess = await import('node:child_process');
+    const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
+    mockExecFile.mockImplementation((_cmd: string, args: string[], _opts: unknown, callback: Function) => {
+      capturedArgs.push(args);
+      if (args[0] === 'pdf') {
+        fs.writeFileSync(args[1], 'pdf-bytes');
+        // Simulate an attacker (or another process) planting the destination
+        // in the window between validation and install.
+        fs.writeFileSync(dest, 'planted');
+      }
+      callback(null, '', '');
+    });
+
+    testClient = await createTestClient({
+      env: { AGENT_BROWSER_SHOW_WINDOW: 'false', MCP_WORKSPACE_PATH: workspace },
+    });
+
+    const result = await testClient.client.callTool({
+      name: 'browser_pdf',
+      arguments: { file_path: 'page.pdf' },
+    });
+    const parsed = parseResult(result);
+
+    // Exclusive-create must refuse rather than clobber the planted file.
+    expect(parsed.ok).toBe(false);
+    expect(parsed.code).toBe('FILE_EXISTS');
+    expect(fs.readFileSync(dest, 'utf8')).toBe('planted');
+  });
+
+  it('surfaces CLI errors and still discards the staging dir', async () => {
+    const childProcess = await import('node:child_process');
+    const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
+    mockExecFile.mockImplementation((_cmd: string, args: string[], _opts: unknown, callback: Function) => {
+      capturedArgs.push(args);
+      callback(Object.assign(new Error('boom'), { code: 1, stderr: 'no page open', stdout: '' }));
+    });
+
+    testClient = await createTestClient({
+      env: { AGENT_BROWSER_SHOW_WINDOW: 'false', MCP_WORKSPACE_PATH: workspace },
+    });
+
+    const result = await testClient.client.callTool({
+      name: 'browser_pdf',
+      arguments: { file_path: 'page.pdf' },
+    });
+    const parsed = parseResult(result);
+
+    expect(parsed.ok).toBe(false);
+    expect(result.isError).toBe(true);
+    expect(parsed.code).toBe('CLI_ERROR');
+    const staged = capturedArgs[0][1];
+    expect(fs.existsSync(path.dirname(staged))).toBe(false);
   });
 });
