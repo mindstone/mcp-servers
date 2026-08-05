@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Changed
+
+- `get_recent_files`: tool description and response now state explicitly that results come from the user's personal OneDrive (`/me/drive/recent`), not from SharePoint site document libraries, removing a scope-confusion trap in a SharePoint-branded connector.
+
 ## [0.1.2] - 2026-07-03
 
 ### Changed

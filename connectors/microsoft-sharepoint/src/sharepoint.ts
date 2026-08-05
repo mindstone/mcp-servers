@@ -1220,6 +1220,9 @@ export async function getRecentFiles(
   return successResult({
     count: items.length,
     items,
+    note:
+      'Results come from the current user\'s personal OneDrive (/me/drive/recent), ' +
+      'not from SharePoint site document libraries.',
   });
 }
 

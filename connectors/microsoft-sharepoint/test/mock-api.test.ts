@@ -260,6 +260,14 @@ describe('microsoft-sharepoint mock-API integration', () => {
     expect(deltaJson.deltaLink).toContain('/sites/delta(');
   });
 
+  it('get_recent_files labels its personal-OneDrive scope', async () => {
+    const result = await client.callTool('get_recent_files', { top: 5 });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; note?: string };
+    expect(json.ok).toBeUndefined();
+    expect(json.note).toContain('OneDrive');
+  });
+
   it('returns explicit guidance when scope-gated tool arguments are missing', async () => {
     const result = await client.callTool('get_sharepoint_site', {});
     expect(result.isError).toBe(true);

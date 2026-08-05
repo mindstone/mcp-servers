@@ -477,7 +477,9 @@ const TOOL_SPECS: SharePointToolSpec[] = [
   {
     name: 'get_recent_files',
     description:
-      "Get recently accessed files from the current user's OneDrive and SharePoint. Useful for finding files the user was recently working on.",
+      "Get recently accessed files from the current user's personal OneDrive (via /me/drive/recent). " +
+      'Note: this does NOT list recent files from SharePoint site document libraries — ' +
+      'use search_library_files or get_library_tree to explore SharePoint content.',
     inputSchema: z.object({
       top: z.number().optional().describe('Max files to return (default: 25)'),
     }),
