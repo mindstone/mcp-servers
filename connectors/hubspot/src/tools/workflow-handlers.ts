@@ -4,6 +4,7 @@ import {
   WorkflowActionInput
 } from '../api/hubspot-client.js';
 import { parseHubSpotError, summariseHubSpotApiError } from '../utils/error-parser.js';
+import { sanitizeHubSpotResponse } from '../sanitize.js';
 import logger from '../utils/logger.js';
 import { assertMaxFanOut } from './input-limits.js';
 
@@ -48,7 +49,8 @@ export async function handleListWorkflows(args: ListWorkflowsArgs): Promise<unkn
   try {
     const client = await getHubSpotClientAsync();
     const result = await client.listWorkflows(args.limit);
-    return { workflows: result.results, paging: result.paging };
+    const sanitized = sanitizeHubSpotResponse(result, 'hubspot:workflows');
+    return { workflows: sanitized.results, paging: sanitized.paging };
   } catch (error) {
     const parsed = parseHubSpotError(error, {
       objectType: 'workflows',
@@ -63,7 +65,8 @@ export async function handleListWorkflows(args: ListWorkflowsArgs): Promise<unkn
 export async function handleGetWorkflow(args: GetWorkflowArgs): Promise<unknown> {
   try {
     const client = await getHubSpotClientAsync();
-    return await client.getWorkflow(args.flowId);
+    const result = await client.getWorkflow(args.flowId);
+    return sanitizeHubSpotResponse(result, 'hubspot:workflows');
   } catch (error) {
     const parsed = parseHubSpotError(error, {
       objectType: 'workflows',
@@ -86,7 +89,7 @@ export async function handleCreateWorkflow(args: CreateWorkflowArgs): Promise<un
     });
 
     logger.info(`Created workflow ${result.id}`);
-    return result;
+    return sanitizeHubSpotResponse(result, 'hubspot:workflows');
   } catch (error) {
     const parsed = parseHubSpotError(error, {
       objectType: 'workflows',
@@ -108,7 +111,7 @@ export async function handleUpdateWorkflow(args: UpdateWorkflowArgs): Promise<un
     });
 
     logger.info(`Updated workflow ${args.flowId}`);
-    return result;
+    return sanitizeHubSpotResponse(result, 'hubspot:workflows');
   } catch (error) {
     const parsed = parseHubSpotError(error, {
       objectType: 'workflows',
@@ -155,7 +158,7 @@ export async function handleActivateWorkflow(args: ToggleWorkflowArgs): Promise<
     const result = await client.updateWorkflow(args.flowId, { isEnabled: true });
 
     logger.info(`Activated workflow ${args.flowId}`);
-    return result;
+    return sanitizeHubSpotResponse(result, 'hubspot:workflows');
   } catch (error) {
     const parsed = parseHubSpotError(error, {
       objectType: 'workflows',
@@ -173,7 +176,7 @@ export async function handleDeactivateWorkflow(args: ToggleWorkflowArgs): Promis
     const result = await client.updateWorkflow(args.flowId, { isEnabled: false });
 
     logger.info(`Deactivated workflow ${args.flowId}`);
-    return result;
+    return sanitizeHubSpotResponse(result, 'hubspot:workflows');
   } catch (error) {
     const parsed = parseHubSpotError(error, {
       objectType: 'workflows',
@@ -190,7 +193,8 @@ export async function handleEnrolInWorkflow(args: EnrolInWorkflowArgs): Promise<
 
   try {
     const client = await getHubSpotClientAsync();
-    return await client.enrollInWorkflow(args.flowId, args.objectIds, args.objectType || 'contacts');
+    const result = await client.enrollInWorkflow(args.flowId, args.objectIds, args.objectType || 'contacts');
+    return sanitizeHubSpotResponse(result, 'hubspot:workflows');
   } catch (error) {
     // 404 keeps its endpoint-specific hint (portal may need v3 not v4). A 403 is
     // a scope/plan/permission gap — route it through the shared honest, multi-cause

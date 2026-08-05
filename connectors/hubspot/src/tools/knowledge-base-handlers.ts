@@ -9,6 +9,7 @@ import {
   summariseHubSpotApiError,
 } from '../utils/error-parser.js';
 import logger from '../utils/logger.js';
+import { sanitizeHubSpotResponse } from '../sanitize.js';
 
 /**
  * Internal classification for a KB GraphQL error. GraphQL returns HTTP 200 even
@@ -251,7 +252,7 @@ export async function handleListKbArticles(args: ListKbArticlesArgs): Promise<{
 
     logger.info(`Listed ${articles.length} KB articles (total: ${total}, offset: ${offset}, limit: ${limit})`);
     return {
-      articles,
+      articles: sanitizeHubSpotResponse(articles, 'hubspot:knowledge-base'),
       total,
       paging: { offset, limit }
     };
@@ -311,7 +312,7 @@ export async function handleGetKbArticle(args: GetKbArticleArgs): Promise<Record
     }
 
     logger.info(`Retrieved KB article ${args.articleId}`);
-    return mapGraphQLArticle(article);
+    return sanitizeHubSpotResponse(mapGraphQLArticle(article), 'hubspot:knowledge-base');
   } catch (error) {
     const parsed = parseKnowledgeBaseError(error, 'get_kb_article', args);
     logger.error('Get KB article failed', parsed);
@@ -330,7 +331,7 @@ export async function handleSearchKbArticles(args: SearchKbArticlesArgs): Promis
     logger.info(`Found ${result.results.length} KB search results for query "${args.query}"`);
     return {
       query: args.query,
-      results: result.results,
+      results: sanitizeHubSpotResponse(result.results, 'hubspot:knowledge-base'),
       total: result.total
     };
   } catch (error) {

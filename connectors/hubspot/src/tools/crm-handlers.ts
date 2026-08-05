@@ -8,6 +8,10 @@ import {
 } from '../utils/error-parser.js';
 import logger from '../utils/logger.js';
 import {
+  PROPERTY_SCHEMA_LITERAL_KEYS,
+  sanitizeHubSpotResponse,
+} from '../sanitize.js';
+import {
   assertAssociationFanOut,
   assertRecordStringBodySizes,
 } from './input-limits.js';
@@ -226,7 +230,7 @@ async function searchObjects(objectType: string, args: SearchArgs) {
       validateRequestedProperties(objectType, args.properties),
     ]);
     logger.info(`Found ${result.results.length} ${objectType}`);
-    return attachPropertyValidation(result, validation);
+    return attachPropertyValidation(sanitizeHubSpotResponse(result, `hubspot:crm/${objectType}`), validation);
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType, operation: 'search', args });
     logger.error(`Search ${objectType} failed:`, parsed);
@@ -247,7 +251,7 @@ async function getObject(objectType: string, objectId: string, args: GetArgs) {
       client.getObject(objectType, objectId, args.properties, args.associations),
       validateRequestedProperties(objectType, args.properties),
     ]);
-    return attachPropertyValidation(result, validation);
+    return attachPropertyValidation(sanitizeHubSpotResponse(result, `hubspot:crm/${objectType}`), validation);
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType, operation: 'get', args: { objectId, ...args } });
     logger.error(`Get ${objectType} ${objectId} failed:`, parsed);
@@ -264,7 +268,7 @@ async function createObject(objectType: string, args: CreateArgs) {
     const enrichedProperties = await injectHostMetadata(args.properties, objectType);
     const result = await client.createObject(objectType, enrichedProperties);
     logger.info(`Created ${objectType} with ID: ${result.id}`);
-    return result;
+    return sanitizeHubSpotResponse(result, `hubspot:crm/${objectType}`);
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType, operation: 'create', args });
     logger.error(`Create ${objectType} failed:`, parsed);
@@ -280,7 +284,7 @@ async function updateObject(objectType: string, objectId: string, args: UpdateAr
     const client = await getHubSpotClientAsync();
     const result = await client.updateObject(objectType, objectId, args.properties);
     logger.info(`Updated ${objectType} ${objectId}`);
-    return result;
+    return sanitizeHubSpotResponse(result, `hubspot:crm/${objectType}`);
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType, operation: 'update', args: { objectId, ...args } });
     logger.error(`Update ${objectType} ${objectId} failed:`, parsed);
@@ -410,7 +414,7 @@ export async function handleCreateLead(args: { properties: Record<string, string
     }];
     const result = await client.createObjectWithAssociations('leads', enrichedProperties, associations);
     logger.info(`Created lead ${result.id} associated with contact ${args.contactId}`);
-    return result;
+    return sanitizeHubSpotResponse(result, 'hubspot:crm/leads');
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType: 'leads', operation: 'create', args });
     logger.error(`Create lead failed:`, parsed);
@@ -497,7 +501,7 @@ export async function handleCreateNote(args: NoteCreateArgs) {
       logger.info(`Created note ${note.id} with associations`);
     }
     
-    return note;
+    return sanitizeHubSpotResponse(note, 'hubspot:crm/notes');
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType: 'notes', operation: 'create', args });
     logger.error(`Create note failed:`, parsed);
@@ -538,7 +542,8 @@ export async function handleGetAssociations(args: {
 }) {
   try {
     const client = await getHubSpotClientAsync();
-    return await client.getAssociations(args.fromObjectType, args.fromObjectId, args.toObjectType);
+    const result = await client.getAssociations(args.fromObjectType, args.fromObjectId, args.toObjectType);
+    return sanitizeHubSpotResponse(result, 'hubspot:associations');
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType: 'associations', operation: 'get', args });
     logger.error(`Get associations failed:`, parsed);
@@ -575,7 +580,8 @@ export async function handleDeleteAssociation(args: {
 export async function handleListProperties(args: { objectType: string }) {
   try {
     const client = await getHubSpotClientAsync();
-    return await client.listProperties(args.objectType);
+    const result = await client.listProperties(args.objectType);
+    return sanitizeHubSpotResponse(result, 'hubspot:properties', PROPERTY_SCHEMA_LITERAL_KEYS);
   } catch (error) {
     const parsed = parseSharedHubSpotError(error, { objectType: args.objectType, operation: 'list_properties', args });
     logger.error(`List properties for ${args.objectType} failed:`, parsed);
@@ -587,7 +593,8 @@ export async function handleListProperties(args: { objectType: string }) {
 export async function handleListOwners(args: { limit?: number }) {
   try {
     const client = await getHubSpotClientAsync();
-    return await client.listOwners(args.limit || 100);
+    const result = await client.listOwners(args.limit || 100);
+    return sanitizeHubSpotResponse(result, 'hubspot:owners');
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType: 'owners', operation: 'list', args });
     logger.error(`List owners failed:`, parsed);
@@ -598,7 +605,8 @@ export async function handleListOwners(args: { limit?: number }) {
 export async function handleGetOwner(args: { ownerId: string }) {
   try {
     const client = await getHubSpotClientAsync();
-    return await client.getOwner(args.ownerId);
+    const result = await client.getOwner(args.ownerId);
+    return sanitizeHubSpotResponse(result, 'hubspot:owners');
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType: 'owners', operation: 'get', args });
     logger.error(`Get owner ${args.ownerId} failed:`, parsed);
@@ -610,7 +618,8 @@ export async function handleGetOwner(args: { ownerId: string }) {
 export async function handleListPipelines(args: { objectType: string }) {
   try {
     const client = await getHubSpotClientAsync();
-    return await client.listPipelines(args.objectType);
+    const result = await client.listPipelines(args.objectType);
+    return sanitizeHubSpotResponse(result, 'hubspot:pipelines');
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType: args.objectType, operation: 'list_pipelines', args });
     logger.error(`List pipelines for ${args.objectType} failed:`, parsed);
@@ -621,7 +630,8 @@ export async function handleListPipelines(args: { objectType: string }) {
 export async function handleGetPipeline(args: { objectType: string; pipelineId: string }) {
   try {
     const client = await getHubSpotClientAsync();
-    return await client.getPipeline(args.objectType, args.pipelineId);
+    const result = await client.getPipeline(args.objectType, args.pipelineId);
+    return sanitizeHubSpotResponse(result, 'hubspot:pipelines');
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType: args.objectType, operation: 'get_pipeline', args });
     logger.error(`Get pipeline ${args.pipelineId} failed:`, parsed);
@@ -679,7 +689,8 @@ async function searchEngagement(engagementType: string, args: EngagementSearchAr
     // Structural requirement: keep getHubSpotClientAsync() inside this try/catch
     // so refresh failures map through parseHubSpotError() to auth_required.
     const client = await getHubSpotClientAsync();
-    return await client.searchEngagements(engagementType, searchRequest);
+    const result = await client.searchEngagements(engagementType, searchRequest);
+    return sanitizeHubSpotResponse(result, `hubspot:engagements/${engagementType}`);
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType: engagementType, operation: 'search', args });
     logger.error(`Search ${engagementType} failed:`, parsed);
@@ -690,7 +701,8 @@ async function searchEngagement(engagementType: string, args: EngagementSearchAr
 async function getEngagement(engagementType: string, engagementId: string, properties?: string[]) {
   try {
     const client = await getHubSpotClientAsync();
-    return await client.getEngagement(engagementType, engagementId, properties);
+    const result = await client.getEngagement(engagementType, engagementId, properties);
+    return sanitizeHubSpotResponse(result, `hubspot:engagements/${engagementType}`);
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType: engagementType, operation: 'get', args: { engagementId } });
     logger.error(`Get ${engagementType} ${engagementId} failed:`, parsed);
@@ -746,7 +758,7 @@ async function createEngagement(engagementType: string, args: EngagementCreateAr
     
     const result = await client.createEngagement(engagementType, enrichedProperties, associations);
     logger.info(`Created ${engagementType} with ID: ${result.id}`);
-    return result;
+    return sanitizeHubSpotResponse(result, `hubspot:engagements/${engagementType}`);
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType: engagementType, operation: 'create', args });
     logger.error(`Create ${engagementType} failed:`, parsed);
@@ -882,7 +894,7 @@ export async function handleCreateLineItem(args: { properties: Record<string, st
     const result = await client.createObjectWithAssociations('line_items', enrichedProperties, associations);
     
     logger.info(`Created line item ${result.id}${args.dealId ? ` associated with deal ${args.dealId}` : ''}`);
-    return result;
+    return sanitizeHubSpotResponse(result, 'hubspot:crm/line_items');
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType: 'line_items', operation: 'create', args });
     logger.error(`Create line item failed:`, parsed);

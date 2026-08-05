@@ -31,6 +31,14 @@ import {
   knowledgeBaseTools,
 } from '../src/tools/definitions.js';
 
+/**
+ * Envelope applied to every external-text string the HubSpot API returns
+ * (FOX-3490 / AGENTS.md invariant #6). Identifiers, enums, URLs, timestamps,
+ * and pagination cursors stay literal; prose values arrive enveloped.
+ */
+const env = (source: string, value: string) =>
+  `<untrusted-content source="${source}">${value}</untrusted-content>`;
+
 /** Set up the HubSpot config directory with a fake account and OAuth token. */
 function createHubSpotConfigDir(): string {
   const configDir = mkdtempSync(join(tmpdir(), 'hubspot-test-'));
@@ -327,7 +335,7 @@ describe('HubSpot MCP - mock API tests', () => {
     expect(result.results).toHaveLength(2);
     expect(result.results[0].id).toBe('101');
     expect(result.results[0].properties.email).toBe('alice@acme.com');
-    expect(result.results[1].properties.firstname).toBe('Bob');
+    expect(result.results[1].properties.firstname).toBe(env('hubspot:crm/contacts', 'Bob'));
 
     // Verify search request was posted
     const searchReq = mockApi.requestLog.find(
@@ -351,7 +359,7 @@ describe('HubSpot MCP - mock API tests', () => {
 
     expect(result.id).toBe('101');
     expect(result.properties.email).toBe('alice@acme.com');
-    expect(result.properties.jobtitle).toBe('VP of Sales');
+    expect(result.properties.jobtitle).toBe(env('hubspot:crm/contacts', 'VP of Sales'));
   });
 
   it('search_hubspot_companies returns matching companies', async () => {
@@ -365,8 +373,8 @@ describe('HubSpot MCP - mock API tests', () => {
     });
 
     expect(result.results).toHaveLength(1);
-    expect(result.results[0].properties.name).toBe('Acme Corp');
-    expect(result.results[0].properties.domain).toBe('acme.com');
+    expect(result.results[0].properties.name).toBe(env('hubspot:crm/companies', 'Acme Corp'));
+    expect(result.results[0].properties.domain).toBe(env('hubspot:crm/companies', 'acme.com'));
   });
 
   it('search_hubspot_deals exposes and forwards the search pagination cursor', async () => {
@@ -418,7 +426,7 @@ describe('HubSpot MCP - mock API tests', () => {
     }>('list_hubspot_owners', {});
 
     expect(result.results).toHaveLength(1);
-    expect(result.results[0].firstName).toBe('Test');
+    expect(result.results[0].firstName).toBe(env('hubspot:owners', 'Test'));
     expect(result.results[0].email).toBe('test@example.com');
   });
 
@@ -495,7 +503,7 @@ describe('HubSpot MCP - mock API tests', () => {
       properties: ['notes'],
     });
 
-    expect(result.properties.notes).toBe('Legacy note text via Rebel');
+    expect(result.properties.notes).toBe(env('hubspot:crm/contacts', 'Legacy note text via Rebel'));
   });
 
   it('top-level hubspot_owner_id takes precedence over properties bag value', async () => {
@@ -734,7 +742,7 @@ describe('HubSpot MCP - lists/segments tools', () => {
 
     expect(result.lists).toHaveLength(2);
     expect(result.lists[0].listId).toBe('100');
-    expect(result.lists[0].name).toBe('High Intent Leads');
+    expect(result.lists[0].name).toBe(env('hubspot:lists', 'High Intent Leads'));
     expect(result.paging?.next?.after).toBe('101');
 
     const listReq = mockApi.requestLog.find(
@@ -755,7 +763,7 @@ describe('HubSpot MCP - lists/segments tools', () => {
     });
 
     expect(result.listId).toBe('100');
-    expect(result.name).toBe('High Intent Leads');
+    expect(result.name).toBe(env('hubspot:lists', 'High Intent Leads'));
     expect(result.processingType).toBe('DYNAMIC');
     expect(result.size).toBe(2);
     expect(result.filterBranch).toBeDefined();
@@ -792,7 +800,7 @@ describe('HubSpot MCP - lists/segments tools', () => {
     expect(result.contacts).toHaveLength(2);
     expect(result.contacts[0].id).toBe('101');
     expect(result.contacts[0].properties.email).toBe('alice@acme.com');
-    expect(result.contacts[1].properties.firstname).toBe('Bob');
+    expect(result.contacts[1].properties.firstname).toBe(env('hubspot:crm/contacts', 'Bob'));
 
     const batchReq = mockApi.requestLog.find(
       r => r.method === 'POST' && r.pathname === '/crm/v3/objects/contacts/batch/read'
@@ -986,7 +994,7 @@ describe('HubSpot MCP - property tools', () => {
     });
 
     expect(result.name).toBe('test_property');
-    expect(result.label).toBe('Test Property');
+    expect(result.label).toBe(env('hubspot:properties', 'Test Property'));
     expect(result.type).toBe('string');
     expect(result.fieldType).toBe('text');
   });
@@ -1011,7 +1019,7 @@ describe('HubSpot MCP - property tools', () => {
     });
 
     expect(result.name).toBe('test_property');
-    expect(result.label).toBe('Test Property');
+    expect(result.label).toBe(env('hubspot:properties', 'Test Property'));
     expect(result.groupName).toBe('contactinformation');
 
     const createReq = mockApi.requestLog.find(
@@ -1033,8 +1041,8 @@ describe('HubSpot MCP - property tools', () => {
     });
 
     expect(result.name).toBe('test_property');
-    expect(result.label).toBe('Updated Label');
-    expect(result.description).toBe('Updated description');
+    expect(result.label).toBe(env('hubspot:properties', 'Updated Label'));
+    expect(result.description).toBe(env('hubspot:properties', 'Updated description'));
   });
 
   it('delete_hubspot_property archives a property', async () => {
@@ -1056,7 +1064,7 @@ describe('HubSpot MCP - property tools', () => {
 
     expect(result.results).toHaveLength(1);
     expect(result.results[0].name).toBe('contactinformation');
-    expect(result.results[0].label).toBe('Contact Information');
+    expect(result.results[0].label).toBe(env('hubspot:properties', 'Contact Information'));
   });
 
   it('create_hubspot_property_group creates a property group', async () => {
@@ -1072,7 +1080,7 @@ describe('HubSpot MCP - property tools', () => {
     });
 
     expect(result.name).toBe('customgroup');
-    expect(result.label).toBe('Custom Group');
+    expect(result.label).toBe(env('hubspot:properties', 'Custom Group'));
     expect(result.displayOrder).toBe(10);
   });
 
@@ -1284,7 +1292,7 @@ describe('HubSpot MCP - workflow tools', () => {
     });
 
     expect(result.id).toBe('generated-flow-123');
-    expect(result.name).toBe('New Lead Notification');
+    expect(result.name).toBe(env('hubspot:workflows', 'New Lead Notification'));
     expect(result.type).toBe('CONTACT_FLOW');
 
     const createReq = mockApi.requestLog.find(
@@ -1311,7 +1319,7 @@ describe('HubSpot MCP - workflow tools', () => {
     });
 
     expect(result.id).toBe('valid-flow-1');
-    expect(result.name).toBe('Updated Lead Follow-up');
+    expect(result.name).toBe(env('hubspot:workflows', 'Updated Lead Follow-up'));
 
     const updateReq = mockApi.requestLog.find(
       r => r.method === 'PUT' && r.pathname === '/automation/v4/flows/valid-flow-1'
@@ -1786,8 +1794,8 @@ describe('HubSpot MCP - leads tools (FOX-2755)', () => {
 
     expect(result.results).toHaveLength(2);
     expect(result.results[0].id).toBe('901');
-    expect(result.results[0].properties.hs_lead_name).toBe('Jane Doe');
-    expect(result.results[1].properties.hs_lead_label).toBe('HOT');
+    expect(result.results[0].properties.hs_lead_name).toBe(env('hubspot:crm/leads', 'Jane Doe'));
+    expect(result.results[1].properties.hs_lead_label).toBe(env('hubspot:crm/leads', 'HOT'));
 
     // Verify search request uses CONTAINS_TOKEN on hs_lead_name
     const searchReq = mockApi.requestLog.find(
@@ -1812,7 +1820,7 @@ describe('HubSpot MCP - leads tools (FOX-2755)', () => {
     });
 
     expect(result.id).toBe('901');
-    expect(result.properties.hs_lead_name).toBe('Jane Doe');
+    expect(result.properties.hs_lead_name).toBe(env('hubspot:crm/leads', 'Jane Doe'));
     expect(result.properties.hubspot_owner_id).toBe('5001');
   });
 
@@ -2077,12 +2085,12 @@ describe('HubSpot MCP - knowledge base tools', () => {
     expect(result.total).toBe(2);
     // Verify GraphQL field mapping (hs_* → user-friendly names)
     expect(result.articles[0].id).toBe('kb-1');
-    expect(result.articles[0].title).toBe('Getting Started');
-    expect(result.articles[0].body).toBe('<p>Content</p>');
-    expect(result.articles[0].slug).toBe('getting-started');
+    expect(result.articles[0].title).toBe(env('hubspot:knowledge-base', 'Getting Started'));
+    expect(result.articles[0].body).toBe(env('hubspot:knowledge-base', '<p>Content</p>'));
+    expect(result.articles[0].slug).toBe(env('hubspot:knowledge-base', 'getting-started'));
     expect(result.articles[0].path).toBe('/getting-started');
     expect(result.articles[1].id).toBe('kb-2');
-    expect(result.articles[1].title).toBe('FAQ');
+    expect(result.articles[1].title).toBe(env('hubspot:knowledge-base', 'FAQ'));
 
     // Verify GraphQL endpoint was hit
     const graphqlReq = mockApi.requestLog.find(
@@ -2106,12 +2114,12 @@ describe('HubSpot MCP - knowledge base tools', () => {
 
     // Verify GraphQL field mapping
     expect(result.id).toBe('kb-1');
-    expect(result.title).toBe('Getting Started');
-    expect(result.body).toBe('<p>Content</p>');
-    expect(result.slug).toBe('getting-started');
+    expect(result.title).toBe(env('hubspot:knowledge-base', 'Getting Started'));
+    expect(result.body).toBe(env('hubspot:knowledge-base', '<p>Content</p>'));
+    expect(result.slug).toBe(env('hubspot:knowledge-base', 'getting-started'));
     expect(result.path).toBe('/getting-started');
     expect(result.language).toBe('en');
-    expect(result.metaDescription).toBe('How to get started');
+    expect(result.metaDescription).toBe(env('hubspot:knowledge-base', 'How to get started'));
 
     // Verify GraphQL endpoint was hit
     const graphqlReq = mockApi.requestLog.find(
@@ -2131,7 +2139,7 @@ describe('HubSpot MCP - knowledge base tools', () => {
 
     expect(result.query).toBe('getting started');
     expect(result.total).toBe(1);
-    expect(result.results[0].title).toBe('Getting Started');
+    expect(result.results[0].title).toBe(env('hubspot:knowledge-base', 'Getting Started'));
 
     // Verify site search endpoint was hit (not GraphQL)
     const searchReq = mockApi.requestLog.find(

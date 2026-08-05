@@ -8,6 +8,7 @@ import {
   type ParsedHubSpotError,
 } from '../utils/error-parser.js';
 import { injectHostMetadata } from '../utils/user-context.js';
+import { sanitizeHubSpotResponse } from '../sanitize.js';
 import logger from '../utils/logger.js';
 import {
   assertAssociationFanOut,
@@ -165,7 +166,7 @@ export async function handleUploadFile(args: UploadFileArgs) {
     });
 
     logger.info(`Uploaded file "${fileName}" → id=${result.id}`);
-    return result;
+    return sanitizeHubSpotResponse(result, 'hubspot:files');
   } catch (error) {
     if (isStructuredError(error)) throw error;
     const parsed = parseFileError(error, 'upload_file');
@@ -193,7 +194,7 @@ export async function handleImportFileFromUrl(args: ImportFileFromUrlArgs) {
     });
 
     logger.info(`Imported file from URL → id=${result.id}, name=${result.name}`);
-    return result;
+    return sanitizeHubSpotResponse(result, 'hubspot:files');
   } catch (error) {
     if (isStructuredError(error)) throw error;
     const parsed = parseFileError(error, 'import_file_from_url');
@@ -210,7 +211,7 @@ export interface GetFileArgs {
 export async function handleGetFile(args: GetFileArgs) {
   try {
     const client = await getHubSpotClientAsync();
-    const file = await client.getFile(args.fileId);
+    const file = sanitizeHubSpotResponse(await client.getFile(args.fileId), 'hubspot:files');
 
     if (args.getSignedUrl) {
       try {

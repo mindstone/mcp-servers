@@ -6,6 +6,10 @@ import {
   type ParsedHubSpotError,
 } from '../utils/error-parser.js';
 import logger from '../utils/logger.js';
+import {
+  FORM_LITERAL_KEYS,
+  sanitizeHubSpotResponse,
+} from '../sanitize.js';
 import { assertMaxFanOut } from './input-limits.js';
 
 /**
@@ -129,11 +133,12 @@ export async function handleListForms(args: { formTypes?: string[]; limit?: numb
   try {
     const client = await getHubSpotClientAsync();
     const result = await client.listForms(args.limit || 20, args.after, args.formTypes);
-    
+    const sanitized = sanitizeHubSpotResponse(result, 'hubspot:forms', FORM_LITERAL_KEYS);
+
     logger.info(`Listed ${result.results.length} forms`);
     return {
-      forms: result.results,
-      paging: result.paging
+      forms: sanitized.results,
+      paging: sanitized.paging
     };
   } catch (error) {
     const parsed = parseHubSpotError(error, { feature: 'forms', operation: 'list', args });
@@ -146,9 +151,9 @@ export async function handleGetForm(args: { formId: string }) {
   try {
     const client = await getHubSpotClientAsync();
     const result = await client.getForm(args.formId);
-    
+
     logger.info(`Retrieved form ${args.formId}: ${result.name}`);
-    return result;
+    return sanitizeHubSpotResponse(result, 'hubspot:forms', FORM_LITERAL_KEYS);
   } catch (error) {
     const parsed = parseHubSpotError(error, { feature: 'form', operation: 'get', args });
     logger.error(`Get form failed:`, parsed);
@@ -160,11 +165,12 @@ export async function handleGetFormSubmissions(args: { formId: string; limit?: n
   try {
     const client = await getHubSpotClientAsync();
     const result = await client.getFormSubmissions(args.formId, args.limit || 20, args.after);
-    
+    const sanitized = sanitizeHubSpotResponse(result, 'hubspot:forms/submissions', FORM_LITERAL_KEYS);
+
     logger.info(`Retrieved ${result.results.length} submissions for form ${args.formId}`);
     return {
-      submissions: result.results,
-      paging: result.paging
+      submissions: sanitized.results,
+      paging: sanitized.paging
     };
   } catch (error) {
     const parsed = parseHubSpotError(error, { feature: 'form_submissions', operation: 'get', args });
@@ -195,7 +201,7 @@ export async function handleGetAnalyticsReport(args: {
     );
     
     logger.info(`Retrieved analytics report: ${args.breakdownBy}/${args.timePeriod} from ${args.startDate} to ${args.endDate}`);
-    return result;
+    return sanitizeHubSpotResponse(result, 'hubspot:analytics');
   } catch (error) {
     const parsed = parseHubSpotError(error, { feature: 'analytics', operation: 'get_report', args });
     logger.error(`Get analytics report failed:`, parsed);
@@ -211,11 +217,12 @@ export async function handleListMarketingEmails(args: { limit?: number; after?: 
   try {
     const client = await getHubSpotClientAsync();
     const result = await client.listMarketingEmails(args.limit || 20, args.after);
-    
+    const sanitized = sanitizeHubSpotResponse(result, 'hubspot:marketing/emails');
+
     logger.info(`Listed ${result.results.length} marketing emails`);
     return {
-      emails: result.results,
-      paging: result.paging
+      emails: sanitized.results,
+      paging: sanitized.paging
     };
   } catch (error) {
     const parsed = parseHubSpotError(error, { feature: 'marketing_emails', operation: 'list', args });
@@ -228,9 +235,9 @@ export async function handleGetMarketingEmail(args: { emailId: string }) {
   try {
     const client = await getHubSpotClientAsync();
     const result = await client.getMarketingEmail(args.emailId);
-    
+
     logger.info(`Retrieved marketing email ${args.emailId}: ${result.name}`);
-    return result;
+    return sanitizeHubSpotResponse(result, 'hubspot:marketing/emails');
   } catch (error) {
     const parsed = parseHubSpotError(error, { feature: 'marketing_email', operation: 'get', args });
     logger.error(`Get marketing email failed:`, parsed);
@@ -252,7 +259,7 @@ export async function handleGetEmailStatistics(args: {
     );
     
     logger.info(`Retrieved email statistics${args.emailIds ? ` for ${args.emailIds.length} emails` : ''}`);
-    return result;
+    return sanitizeHubSpotResponse(result, 'hubspot:marketing/emails');
   } catch (error) {
     const parsed = parseHubSpotError(error, { feature: 'marketing_emails', operation: 'get_statistics', args });
     logger.error(`Get email statistics failed:`, parsed);
@@ -268,11 +275,12 @@ export async function handleListLists(args: { limit?: number; after?: string }) 
   try {
     const client = await getHubSpotClientAsync();
     const result = await client.listLists(args.limit || 20, args.after);
-    
+    const sanitized = sanitizeHubSpotResponse(result, 'hubspot:lists');
+
     logger.info(`Listed ${result.results.length} lists/segments`);
     return {
-      lists: result.results,
-      paging: result.paging
+      lists: sanitized.results,
+      paging: sanitized.paging
     };
   } catch (error) {
     const parsed = parseHubSpotError(error, { feature: 'lists', operation: 'list', args });
@@ -285,9 +293,9 @@ export async function handleGetList(args: { listId: string }) {
   try {
     const client = await getHubSpotClientAsync();
     const result = await client.getList(args.listId);
-    
+
     logger.info(`Retrieved list ${args.listId}: ${result.name}`);
-    return result;
+    return sanitizeHubSpotResponse(result, 'hubspot:lists');
   } catch (error) {
     const parsed = parseHubSpotError(error, { feature: 'lists', operation: 'get', args });
     logger.error(`Get list failed:`, parsed);
@@ -299,11 +307,12 @@ export async function handleListListMembers(args: { listId: string; limit?: numb
   try {
     const client = await getHubSpotClientAsync();
     const result = await client.getListMembers(args.listId, args.limit || 100, args.after);
-    
+    const sanitized = sanitizeHubSpotResponse(result, 'hubspot:lists');
+
     logger.info(`Retrieved ${result.results.length} members from list ${args.listId}`);
     return {
-      members: result.results,
-      paging: result.paging
+      members: sanitized.results,
+      paging: sanitized.paging
     };
   } catch (error) {
     const parsed = parseHubSpotError(error, { feature: 'lists', operation: 'get_members', args });
@@ -318,10 +327,10 @@ export async function handleBatchReadContacts(args: { ids: string[]; properties?
   try {
     const client = await getHubSpotClientAsync();
     const result = await client.batchReadContacts(args.ids, args.properties);
-    
+
     logger.info(`Batch read ${result.results.length} contacts`);
     return {
-      contacts: result.results
+      contacts: sanitizeHubSpotResponse(result.results, 'hubspot:crm/contacts')
     };
   } catch (error) {
     const parsed = parseHubSpotError(error, { feature: 'contacts', operation: 'batch_read', args });

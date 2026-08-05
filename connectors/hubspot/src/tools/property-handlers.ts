@@ -1,5 +1,6 @@
 import { getHubSpotClientAsync, PropertyOption } from '../api/hubspot-client.js';
 import { parseHubSpotError } from '../utils/error-parser.js';
+import { PROPERTY_SCHEMA_LITERAL_KEYS, sanitizeHubSpotResponse } from '../sanitize.js';
 import logger from '../utils/logger.js';
 
 interface GetPropertyArgs {
@@ -45,7 +46,8 @@ interface CreatePropertyGroupArgs {
 export async function handleGetProperty(args: GetPropertyArgs) {
   try {
     const client = await getHubSpotClientAsync();
-    return await client.getProperty(args.objectType, args.propertyName);
+    const result = await client.getProperty(args.objectType, args.propertyName);
+    return sanitizeHubSpotResponse(result, 'hubspot:properties', PROPERTY_SCHEMA_LITERAL_KEYS);
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType: args.objectType, operation: 'get_property', args });
     logger.error(`Get property ${args.propertyName} on ${args.objectType} failed:`, parsed);
@@ -67,7 +69,7 @@ export async function handleCreateProperty(args: CreatePropertyArgs) {
     });
 
     logger.info(`Created property ${result.name} on ${args.objectType}`);
-    return result;
+    return sanitizeHubSpotResponse(result, 'hubspot:properties', PROPERTY_SCHEMA_LITERAL_KEYS);
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType: args.objectType, operation: 'create_property', args });
     logger.error(`Create property on ${args.objectType} failed:`, parsed);
@@ -85,7 +87,7 @@ export async function handleUpdateProperty(args: UpdatePropertyArgs) {
     });
 
     logger.info(`Updated property ${args.propertyName} on ${args.objectType}`);
-    return result;
+    return sanitizeHubSpotResponse(result, 'hubspot:properties', PROPERTY_SCHEMA_LITERAL_KEYS);
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType: args.objectType, operation: 'update_property', args });
     logger.error(`Update property ${args.propertyName} on ${args.objectType} failed:`, parsed);
@@ -113,7 +115,8 @@ export async function handleDeleteProperty(args: DeletePropertyArgs) {
 export async function handleListPropertyGroups(args: ListPropertyGroupsArgs) {
   try {
     const client = await getHubSpotClientAsync();
-    return await client.listPropertyGroups(args.objectType);
+    const result = await client.listPropertyGroups(args.objectType);
+    return sanitizeHubSpotResponse(result, 'hubspot:properties', PROPERTY_SCHEMA_LITERAL_KEYS);
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType: args.objectType, operation: 'list_property_groups', args });
     logger.error(`List property groups for ${args.objectType} failed:`, parsed);
@@ -131,7 +134,7 @@ export async function handleCreatePropertyGroup(args: CreatePropertyGroupArgs) {
     });
 
     logger.info(`Created property group ${args.name} on ${args.objectType}`);
-    return result;
+    return sanitizeHubSpotResponse(result, 'hubspot:properties', PROPERTY_SCHEMA_LITERAL_KEYS);
   } catch (error) {
     const parsed = parseHubSpotError(error, { objectType: args.objectType, operation: 'create_property_group', args });
     logger.error(`Create property group on ${args.objectType} failed:`, parsed);
