@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { klingFetch } from '../client.js';
+import { encodeLocalImage } from '../media.js';
 import { withErrorHandling } from '../utils.js';
 import type { VideoGenerationResponse, TaskStatusResponse } from '../types.js';
 
@@ -96,19 +97,27 @@ export function registerVideoTools(server: McpServer): void {
       description:
         'Animate a still image into a video using AI.\n\n' +
         'WORKFLOW:\n' +
-        '1. You need a PUBLIC image URL (must start with https://)\n' +
-        '2. Call this tool with the image URL and a motion prompt → returns task_id\n' +
+        '1. Provide the image EITHER as a public HTTPS URL (image_url) OR as a local file (image_path)\n' +
+        '2. Call this tool with the image and a motion prompt → returns task_id\n' +
         '3. Wait 30 seconds, then call check_kling_task(task_id, task_type="image2video")\n' +
         '4. Repeat step 3 until status is "succeed" (typically 2-5 minutes)\n\n' +
         'IMAGE REQUIREMENTS:\n' +
-        '- Must be publicly accessible (https:// URL)\n' +
-        '- High resolution works best\n\n' +
-        'IMPORTANT: If you have a local image, you must first upload it to a hosting service to get a public URL.',
+        '- image_url: publicly accessible https:// URL, OR\n' +
+        '- image_path: local file inside MCP_WORKSPACE_PATH (or the system temp directory). ' +
+        'Formats: .jpg / .jpeg / .png, max 10MB. The file is Base64-encoded and sent directly — no hosting service needed.\n' +
+        '- High resolution works best',
       inputSchema: z.object({
         image_url: z
           .string()
           .url()
-          .describe('Public HTTPS URL of the image to animate.'),
+          .optional()
+          .describe('Public HTTPS URL of the image to animate. Provide either image_url or image_path, not both.'),
+        image_path: z
+          .string()
+          .optional()
+          .describe(
+            'Absolute path to a local image file inside MCP_WORKSPACE_PATH (or the system temp directory). Formats: .jpg / .jpeg / .png, max 10MB. Provide either image_url or image_path, not both.',
+          ),
         prompt: z
           .string()
           .min(1)
@@ -127,20 +136,44 @@ export function registerVideoTools(server: McpServer): void {
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      // Validate HTTPS URL
-      if (!args.image_url.startsWith('https://')) {
+      // Exactly one of image_url / image_path must be provided.
+      if (args.image_url && args.image_path) {
         return JSON.stringify({
           ok: false,
-          error: 'Image URL must use HTTPS',
-          code: 'INVALID_URL',
-          resolution:
-            'Kling requires publicly accessible HTTPS URLs. Upload your image to a hosting service first.',
+          error: 'Provide either image_url or image_path, not both.',
+          code: 'INVALID_INPUT',
         });
+      }
+      if (!args.image_url && !args.image_path) {
+        return JSON.stringify({
+          ok: false,
+          error: 'Provide an image: either image_url (public HTTPS URL) or image_path (local file).',
+          code: 'INVALID_INPUT',
+        });
+      }
+
+      let image: string;
+      if (args.image_url) {
+        // Validate HTTPS URL
+        if (!args.image_url.startsWith('https://')) {
+          return JSON.stringify({
+            ok: false,
+            error: 'Image URL must use HTTPS',
+            code: 'INVALID_URL',
+            resolution: 'Kling requires publicly accessible HTTPS URLs, or a local file via image_path.',
+          });
+        }
+        image = args.image_url;
+      } else {
+        // Local file: workspace-fenced read, Base64-encoded into the request.
+        // KlingError (sandbox/type/size refusals) propagates to the standard
+        // structured error handling.
+        image = encodeLocalImage(args.image_path!);
       }
 
       const model = args.model || 'kling-v2-6';
       const body: Record<string, unknown> = {
-        image: args.image_url,
+        image,
         prompt: args.prompt,
         model_name: model,
         duration: args.duration || '5',
