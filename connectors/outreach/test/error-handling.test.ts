@@ -155,4 +155,29 @@ describe('Error handling — Outreach MCP server', () => {
     expect(result.json).toHaveProperty('ok', false);
     expect(result.json).toHaveProperty('code', 'VALIDATION_ERROR');
   });
+
+  it('malformed API response (200 with non-JSON:API body) returns INVALID_RESPONSE', async () => {
+    mswServer.use(...createOutreachHandlers());
+    mswServer.use(
+      http.get('https://api.outreach.io/api/v2/prospects', () => {
+        return HttpResponse.json({ hello: 'world' });
+      }),
+    );
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('outreach_search_prospects', {});
+    expect(result.isError).toBe(true);
+    expect(result.json).toHaveProperty('ok', false);
+    expect(result.json).toHaveProperty('code', 'INVALID_RESPONSE');
+    expect(result.json).toHaveProperty('resolution');
+  });
 });
