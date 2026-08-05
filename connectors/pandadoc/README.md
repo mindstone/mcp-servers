@@ -9,7 +9,7 @@ PandaDoc document automation MCP server for Model Context Protocol hosts. Create
 
 - **Version:** [0.2.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-pandadoc)
 - **Auth:** API key ([`PANDADOC_API_KEY`](./server.json))
-- **Tools:** [12](./src/tools/) (documents, templates, folders, contacts)
+- **Tools:** [13](./src/tools/) (documents, templates, folders, contacts)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -114,7 +114,7 @@ node dist/index.js
 }
 ```
 
-## Tools (12)
+## Tools (13)
 
 ### Configuration
 - `configure_pandadoc_api_key` — Configure the PandaDoc API key
@@ -125,6 +125,7 @@ node dist/index.js
 - `get_document_details` — Get full details for a document
 - `create_document_from_template` — Create a new document from a template
 - `upload_document` — Upload a PDF, DOCX, or RTF file to create a document
+- `create_document_from_url` — Create a document from a publicly accessible HTTPS PDF URL
 - `send_document` — Send a document to recipients for viewing/signing
 - `create_document_session` — Create a shareable view/sign link for a document recipient
 - `download_document` — Download a document as PDF

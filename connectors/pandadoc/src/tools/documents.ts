@@ -459,6 +459,85 @@ RELATED TOOLS:
     }),
   );
 
+  // ── create_document_from_url ────────────────────────────────────────
+  server.registerTool(
+    'create_document_from_url',
+    {
+      description:
+        `Create a PandaDoc document from a publicly accessible PDF URL.
+
+PandaDoc fetches the PDF server-side, so no local file is needed — use this
+instead of upload_document when the source file is already hosted online.
+
+WORKFLOW:
+1. Create the document with this tool
+2. Poll get_document_status until status is 'document.draft'
+3. Then use send_document to send it for signing
+
+COMMON MISTAKES:
+- The URL must be HTTPS and publicly accessible (no auth headers, no expiring signed URLs that PandaDoc cannot reach)
+- Don't try to send while status is 'document.uploaded' — wait for 'document.draft'
+
+RELATED TOOLS:
+- upload_document: Upload a local file instead (must live under MCP_WORKSPACE_PATH)
+- get_document_status: Check when the document is ready (status = 'document.draft')
+- send_document: Send the processed document for e-signature`,
+      inputSchema: z.object({
+        url: z
+          .string()
+          .url()
+          .refine((u) => u.startsWith('https://'), { message: 'url must be HTTPS' })
+          .describe('Secure (HTTPS) and publicly accessible URL to the PDF document'),
+        name: z.string().min(1).describe('Document name in PandaDoc'),
+        recipients: z.array(z.object({
+          email: z.string().describe('Recipient email address'),
+          first_name: z.string().optional().describe('Recipient first name'),
+          last_name: z.string().optional().describe('Recipient last name'),
+          role: z.string().optional().describe('Recipient role (e.g., "Client", "Signer")'),
+        })).optional().describe('List of document recipients (at least one required for sending)'),
+        parse_form_fields: z.boolean().optional().describe('If true, recognizes PDF form fields as PandaDoc fields. Default: false'),
+        fields: z.record(z.unknown()).optional().describe('Map of field names to values: { "FieldName": { "value": "text" } }'),
+        tokens: z.array(z.object({
+          name: z.string().describe('Token/variable name'),
+          value: z.string().describe('Value to fill in'),
+        })).optional().describe('Tokens (variables) to pre-fill'),
+        metadata: z.record(z.unknown()).optional().describe('Custom key-value metadata to associate with the document'),
+        tags: z.array(z.string()).optional().describe('Tags to apply to the document'),
+        folder_uuid: z.string().optional().describe('ID of the PandaDoc folder to store the document in (see list_document_folders)'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      if (!isConfigured()) return noApiKeyError();
+
+      const body: Record<string, unknown> = {
+        url: args.url,
+        name: args.name,
+      };
+      if (args.recipients) body.recipients = args.recipients;
+      if (args.parse_form_fields !== undefined) body.parse_form_fields = args.parse_form_fields;
+      if (args.fields) body.fields = args.fields;
+      if (args.tokens) body.tokens = args.tokens;
+      if (args.metadata) body.metadata = args.metadata;
+      if (args.tags) body.tags = args.tags;
+      if (args.folder_uuid) body.folder_uuid = args.folder_uuid;
+
+      const result = await pandadocFetch<DocumentCreateResponse>('/documents', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+
+      return JSON.stringify({
+        ok: true,
+        document: formatDocumentCompact(
+          result as unknown as Record<string, unknown>,
+          'pandadoc:create_document_from_url',
+        ),
+        info: result.info_message || 'Document created. Poll get_document_status until status is "document.draft" before sending.',
+      });
+    }),
+  );
+
   // ── send_document ───────────────────────────────────────────────────
   server.registerTool(
     'send_document',

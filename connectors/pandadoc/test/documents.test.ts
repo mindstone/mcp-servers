@@ -147,6 +147,89 @@ describe('PandaDoc document tools', () => {
     expect(result.isError).toBe(true);
   });
 
+  // ── create_document_from_url ────────────────────────────────────────
+
+  it('create_document_from_url posts url and metadata to the API', async () => {
+    let capturedBody: Record<string, unknown> | null = null;
+    mswServer.use(
+      http.post('https://api.pandadoc.com/public/v1/documents', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({
+          id: 'doc-url-1',
+          name: 'Hosted Proposal',
+          status: 'document.uploaded',
+          date_created: '2026-03-10T12:00:00Z',
+          date_modified: '2026-03-10T12:00:00Z',
+          expiration_date: null,
+          version: null,
+          uuid: 'doc-url-1',
+          links: [],
+          info_message: 'Poll until document.draft',
+        });
+      }),
+    );
+    testClient = await createTestClient({
+      env: { PANDADOC_API_KEY: 'test-pandadoc-key', MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('create_document_from_url', {
+      url: 'https://files.example.com/proposal.pdf',
+      name: 'Hosted Proposal',
+      recipients: [{ email: 'jane@client.com', role: 'Client' }],
+      tags: ['sales'],
+      folder_uuid: 'folder-1',
+    });
+    const json = result.json as { ok: boolean; document: { id: string; status: string } };
+    expect(json.ok).toBe(true);
+    expect(json.document.id).toBe('doc-url-1');
+    expect(capturedBody).toEqual({
+      url: 'https://files.example.com/proposal.pdf',
+      name: 'Hosted Proposal',
+      recipients: [{ email: 'jane@client.com', role: 'Client' }],
+      tags: ['sales'],
+      folder_uuid: 'folder-1',
+    });
+  });
+
+  it('create_document_from_url rejects a non-HTTPS URL via Zod (no API call)', async () => {
+    let requestCount = 0;
+    mswServer.use(
+      http.post('https://api.pandadoc.com/public/v1/*', () => {
+        requestCount++;
+        return HttpResponse.json({});
+      }),
+    );
+    testClient = await createTestClient({
+      env: { PANDADOC_API_KEY: 'test-pandadoc-key', MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('create_document_from_url', {
+      url: 'http://files.example.com/proposal.pdf',
+      name: 'Hosted Proposal',
+    });
+    expect(result.isError).toBe(true);
+    expect(requestCount).toBe(0);
+  });
+
+  it('create_document_from_url surfaces API errors', async () => {
+    mswServer.use(
+      http.post('https://api.pandadoc.com/public/v1/documents', () =>
+        HttpResponse.json({ type: 'bad_request', detail: 'URL not reachable' }, { status: 400 }),
+      ),
+    );
+    testClient = await createTestClient({
+      env: { PANDADOC_API_KEY: 'test-pandadoc-key', MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('create_document_from_url', {
+      url: 'https://files.example.com/missing.pdf',
+      name: 'Hosted Proposal',
+    });
+    const json = result.json as { ok: boolean; code: string };
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('API_ERROR');
+  });
+
   // ── send_document ───────────────────────────────────────────────
 
   it('send_document sends a document', async () => {
