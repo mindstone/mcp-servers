@@ -11,6 +11,19 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+- `download_kling_video` — save generated videos/images to local disk before the 30-day URL expiry. Output is sandboxed to `KLING_DOWNLOAD_ROOT` (default `~/Downloads/kling-mcp`) with lexical + realpath containment, a sensitive-path deny-list, symlink refusal at the target, atomic no-clobber writes (opt-in `overwrite`), HTTPS-only SSRF validation, and manual redirect following with per-hop revalidation.
+- `generate_kling_image_to_video` now accepts a local image file via `image_path` (previously a public HTTPS URL was mandatory). Local reads are confined to `MCP_WORKSPACE_PATH` (or the system temp directory) with canonical-prefix containment that refuses symlink escape; jpg/jpeg/png up to 10MB are sent to Kling as base64.
+- `extend_kling_video` — continue a generated video (~4-5s per extension) via `/videos/video-extend`.
+- `generate_kling_lip_sync` — lip-sync a video from text (`text2video` mode, requires `text` + `voice_id`) or an audio file (`audio2video` mode, `audio_url` or workspace-fenced `audio_path`) via `/videos/lip-sync`.
+- `generate_kling_image` — text-to-image generation via `/images/generations`, with optional reference image (URL or workspace-fenced local file), negative prompt, aspect ratio, and 1-9 outputs.
+- `list_kling_tasks` — paginated task listing per task type; returns only IDs, status, timestamps, and result URLs (prompts echoed in `task_info` are deliberately not surfaced).
+- `get_kling_balance` — resource-package list with remaining quantities via `GET /account/costs`.
+- `callback_url` (HTTPS) is now supported on all generation tools (`generate_kling_video`, `generate_kling_image_to_video`, `extend_kling_video`, `generate_kling_lip_sync`, `generate_kling_image`) so hosts can receive webhook notifications instead of polling.
+
+### Changed
+- `check_kling_task` accepts all task types (`text2video`, `image2video`, `video-extend`, `lip-sync`, `image`), returns image URLs for image tasks, and surfaces the generated video `id` needed by `extend_kling_video` and `generate_kling_lip_sync`.
+
 ## [0.3.2] - 2026-05-14
 ### Added
 - **registry**: Cohort A backfill — 12 API-key OSS connectors get server.json + mcpName. fathom, humaans, kling, mixmax, nano-banana, napkin, pandadoc, freshdesk, elevenlabs, retell-ai, runway, talentlms each gain a registry-shaped server.json (validated against registry.modelcontextprotocol.io) and an mcpName field on package.json under the io.github.mindstone namespace.

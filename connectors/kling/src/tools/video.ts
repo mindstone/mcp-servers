@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { klingFetch } from '../client.js';
+import { encodeLocalImage } from '../media.js';
 import { withErrorHandling } from '../utils.js';
-import type { VideoGenerationResponse, TaskStatusResponse } from '../types.js';
+import { TASK_TYPE_PATHS, type VideoGenerationResponse, type TaskStatusResponse } from '../types.js';
 
 const MODEL_ENUM = [
   'kling-v2-6',
@@ -57,10 +58,25 @@ export function registerVideoTools(server: McpServer): void {
           .enum(['std', 'pro'])
           .optional()
           .describe('std=standard (faster), pro=professional (higher quality). Default: std'),
+        callback_url: z
+          .string()
+          .url()
+          .optional()
+          .describe(
+            'HTTPS URL that Kling POSTs the task result to when the task status changes. Optional — polling with check_kling_task works without it.',
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
+      if (args.callback_url && !args.callback_url.startsWith('https://')) {
+        return JSON.stringify({
+          ok: false,
+          error: 'callback_url must use HTTPS',
+          code: 'INVALID_URL',
+        });
+      }
+
       const model = args.model || 'kling-v2-6';
       const body: Record<string, unknown> = {
         prompt: args.prompt,
@@ -71,6 +87,9 @@ export function registerVideoTools(server: McpServer): void {
       };
       if (args.negative_prompt) {
         body.negative_prompt = args.negative_prompt;
+      }
+      if (args.callback_url) {
+        body.callback_url = args.callback_url;
       }
 
       const result = await klingFetch<VideoGenerationResponse>('/videos/text2video', {
@@ -96,19 +115,27 @@ export function registerVideoTools(server: McpServer): void {
       description:
         'Animate a still image into a video using AI.\n\n' +
         'WORKFLOW:\n' +
-        '1. You need a PUBLIC image URL (must start with https://)\n' +
-        '2. Call this tool with the image URL and a motion prompt → returns task_id\n' +
+        '1. Provide the image EITHER as a public HTTPS URL (image_url) OR as a local file (image_path)\n' +
+        '2. Call this tool with the image and a motion prompt → returns task_id\n' +
         '3. Wait 30 seconds, then call check_kling_task(task_id, task_type="image2video")\n' +
         '4. Repeat step 3 until status is "succeed" (typically 2-5 minutes)\n\n' +
         'IMAGE REQUIREMENTS:\n' +
-        '- Must be publicly accessible (https:// URL)\n' +
-        '- High resolution works best\n\n' +
-        'IMPORTANT: If you have a local image, you must first upload it to a hosting service to get a public URL.',
+        '- image_url: publicly accessible https:// URL, OR\n' +
+        '- image_path: local file inside MCP_WORKSPACE_PATH (or the system temp directory). ' +
+        'Formats: .jpg / .jpeg / .png, max 10MB. The file is Base64-encoded and sent directly — no hosting service needed.\n' +
+        '- High resolution works best',
       inputSchema: z.object({
         image_url: z
           .string()
           .url()
-          .describe('Public HTTPS URL of the image to animate.'),
+          .optional()
+          .describe('Public HTTPS URL of the image to animate. Provide either image_url or image_path, not both.'),
+        image_path: z
+          .string()
+          .optional()
+          .describe(
+            'Absolute path to a local image file inside MCP_WORKSPACE_PATH (or the system temp directory). Formats: .jpg / .jpeg / .png, max 10MB. Provide either image_url or image_path, not both.',
+          ),
         prompt: z
           .string()
           .min(1)
@@ -123,24 +150,62 @@ export function registerVideoTools(server: McpServer): void {
           .enum(['std', 'pro'])
           .optional()
           .describe('std=standard, pro=professional quality. Default: std'),
+        callback_url: z
+          .string()
+          .url()
+          .optional()
+          .describe(
+            'HTTPS URL that Kling POSTs the task result to when the task status changes. Optional — polling with check_kling_task works without it.',
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      // Validate HTTPS URL
-      if (!args.image_url.startsWith('https://')) {
+      // Exactly one of image_url / image_path must be provided.
+      if (args.image_url && args.image_path) {
         return JSON.stringify({
           ok: false,
-          error: 'Image URL must use HTTPS',
-          code: 'INVALID_URL',
-          resolution:
-            'Kling requires publicly accessible HTTPS URLs. Upload your image to a hosting service first.',
+          error: 'Provide either image_url or image_path, not both.',
+          code: 'INVALID_INPUT',
         });
+      }
+      if (!args.image_url && !args.image_path) {
+        return JSON.stringify({
+          ok: false,
+          error: 'Provide an image: either image_url (public HTTPS URL) or image_path (local file).',
+          code: 'INVALID_INPUT',
+        });
+      }
+      if (args.callback_url && !args.callback_url.startsWith('https://')) {
+        return JSON.stringify({
+          ok: false,
+          error: 'callback_url must use HTTPS',
+          code: 'INVALID_URL',
+        });
+      }
+
+      let image: string;
+      if (args.image_url) {
+        // Validate HTTPS URL
+        if (!args.image_url.startsWith('https://')) {
+          return JSON.stringify({
+            ok: false,
+            error: 'Image URL must use HTTPS',
+            code: 'INVALID_URL',
+            resolution: 'Kling requires publicly accessible HTTPS URLs, or a local file via image_path.',
+          });
+        }
+        image = args.image_url;
+      } else {
+        // Local file: workspace-fenced read, Base64-encoded into the request.
+        // KlingError (sandbox/type/size refusals) propagates to the standard
+        // structured error handling.
+        image = encodeLocalImage(args.image_path!);
       }
 
       const model = args.model || 'kling-v2-6';
       const body: Record<string, unknown> = {
-        image: args.image_url,
+        image,
         prompt: args.prompt,
         model_name: model,
         duration: args.duration || '5',
@@ -148,6 +213,9 @@ export function registerVideoTools(server: McpServer): void {
       };
       if (args.negative_prompt) {
         body.negative_prompt = args.negative_prompt;
+      }
+      if (args.callback_url) {
+        body.callback_url = args.callback_url;
       }
 
       const result = await klingFetch<VideoGenerationResponse>('/videos/image2video', {
@@ -171,47 +239,51 @@ export function registerVideoTools(server: McpServer): void {
     'check_kling_task',
     {
       description:
-        'Check if a Kling video generation task is complete.\n\n' +
+        'Check if a Kling generation task is complete.\n\n' +
         'WHEN TO CALL:\n' +
-        '- After generate_kling_video or generate_kling_image_to_video returns a task_id\n' +
+        '- After any generate_* / extend_* tool returns a task_id\n' +
         '- Wait ~30 seconds between checks\n' +
         '- Keep polling until status is "succeed" or "failed"\n\n' +
+        'TASK TYPES: "text2video" (generate_kling_video), "image2video" (generate_kling_image_to_video), ' +
+        '"video-extend" (extend_kling_video), "lip-sync" (generate_kling_lip_sync), "image" (generate_kling_image).\n\n' +
         'RESPONSE STATUS VALUES:\n' +
         '- "submitted" → Task received, generation starting\n' +
-        '- "processing" → Video being generated (wait and poll again)\n' +
-        '- "succeed" → DONE! Response includes video.url\n' +
+        '- "processing" → Being generated (wait and poll again)\n' +
+        '- "succeed" → DONE! Response includes the result URL(s) and, for videos, the video id (needed by extend_kling_video / generate_kling_lip_sync)\n' +
         '- "failed" → Error occurred, check the error message\n\n' +
-        'VIDEO URL: Valid for 30 days after generation.',
+        'RESULT URLs: Valid for 30 days after generation — use download_kling_video to save anything you want to keep.',
       inputSchema: z.object({
         task_id: z
           .string()
           .min(1)
-          .describe('The task_id returned by generate_kling_video or generate_kling_image_to_video'),
+          .describe('The task_id returned by a generate_* or extend_* tool'),
         task_type: z
-          .enum(['text2video', 'image2video'])
+          .enum(['text2video', 'image2video', 'video-extend', 'lip-sync', 'image'])
           .optional()
           .describe(
-            'Use "text2video" for generate_kling_video, "image2video" for generate_kling_image_to_video. Default: text2video',
+            '"text2video" for generate_kling_video, "image2video" for generate_kling_image_to_video, "video-extend" for extend_kling_video, "lip-sync" for generate_kling_lip_sync, "image" for generate_kling_image. Default: text2video',
           ),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const taskType = args.task_type || 'text2video';
-      const altType = taskType === 'text2video' ? 'image2video' : 'text2video';
 
       let result: TaskStatusResponse;
       try {
-        result = await klingFetch<TaskStatusResponse>(`/videos/${taskType}/${args.task_id}`);
+        result = await klingFetch<TaskStatusResponse>(`${TASK_TYPE_PATHS[taskType]}/${args.task_id}`);
       } catch (error) {
-        // If task not found with the given type, try the alternative type
+        // Legacy fallback: if a video task is not found with the given type,
+        // try the alternative video type (text2video <-> image2video).
+        const altType = taskType === 'text2video' ? 'image2video' : taskType === 'image2video' ? 'text2video' : null;
         if (
+          altType &&
           error instanceof Error &&
           'code' in error &&
           ((error as { code: string }).code === 'HTTP_404' ||
             (error as { code: string }).code === 'KLING_1201')
         ) {
-          result = await klingFetch<TaskStatusResponse>(`/videos/${altType}/${args.task_id}`);
+          result = await klingFetch<TaskStatusResponse>(`${TASK_TYPE_PATHS[altType]}/${args.task_id}`);
         } else {
           throw error;
         }
@@ -236,7 +308,15 @@ export function registerVideoTools(server: McpServer): void {
           url: video.url,
           duration: video.duration,
         };
-        response.hint = 'Video generation complete! URL is valid for 30 days.';
+        if (video.id) {
+          (response.video as Record<string, unknown>).id = video.id;
+        }
+        response.hint =
+          'Video generation complete! URL is valid for 30 days — use download_kling_video to save it locally.';
+      } else if (result.task_status === 'succeed' && result.task_result?.images?.length) {
+        response.images = result.task_result.images.map((img) => ({ url: img.url }));
+        response.hint =
+          'Image generation complete! URLs are valid for 30 days — use download_kling_video to save them locally.';
       } else if (result.task_status === 'failed') {
         response.ok = false;
         response.resolution = 'Generation failed. Try a different prompt or check your credits.';

@@ -74,15 +74,68 @@ export interface VideoGenerationResponse {
   task_id: string;
 }
 
+/**
+ * Logical task types the connector knows about, mapped to their API paths.
+ * Used by check_kling_task (single-task query) and list_kling_tasks (list).
+ */
+export const TASK_TYPE_PATHS = {
+  text2video: '/videos/text2video',
+  image2video: '/videos/image2video',
+  'video-extend': '/videos/video-extend',
+  'lip-sync': '/videos/lip-sync',
+  image: '/images/generations',
+} as const;
+
+export type KlingTaskType = keyof typeof TASK_TYPE_PATHS;
+
+export type KlingTaskStatus = 'submitted' | 'processing' | 'succeed' | 'failed';
+
 export interface TaskStatusResponse {
   task_id: string;
-  task_status: 'submitted' | 'processing' | 'succeed' | 'failed';
+  task_status: KlingTaskStatus;
   task_status_msg?: string;
   task_result?: {
     videos?: Array<{
+      id?: string;
       url: string;
       duration: string;
       aspect_ratio?: string;
     }>;
+    images?: Array<{
+      url: string;
+      index?: number;
+    }>;
   };
+}
+
+/**
+ * One entry of a Query Task (List) response. `task_info` (which echoes the
+ * caller's prompt) is deliberately not modelled — the connector only
+ * surfaces IDs, status, and result URLs.
+ */
+export interface TaskListItem {
+  task_id: string;
+  task_status: KlingTaskStatus;
+  task_status_msg?: string;
+  created_at?: number;
+  updated_at?: number;
+  task_result?: TaskStatusResponse['task_result'];
+}
+
+export interface ResourcePackInfo {
+  resource_pack_name?: string;
+  resource_pack_id?: string;
+  resource_pack_type?: string;
+  total_quantity?: number;
+  remaining_quantity?: number;
+  purchase_time?: number;
+  effective_time?: number;
+  invalid_time?: number;
+  status?: string;
+}
+
+export interface AccountCostsResponse {
+  code?: number;
+  msg?: string;
+  resource_pack_subscribe_infos?: ResourcePackInfo[];
 }

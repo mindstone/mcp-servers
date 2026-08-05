@@ -1,6 +1,15 @@
 import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { registerConfigureTools, registerVideoTools } from './tools/index.js';
+import {
+  registerConfigureTools,
+  registerVideoTools,
+  registerDownloadTools,
+  registerExtendTools,
+  registerLipSyncTools,
+  registerTaskListTools,
+  registerAccountTools,
+  registerImageTools,
+} from './tools/index.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json') as { version: string };
@@ -13,6 +22,12 @@ export function createServer(): McpServer {
 
   registerConfigureTools(server);
   registerVideoTools(server);
+  registerDownloadTools(server);
+  registerExtendTools(server);
+  registerLipSyncTools(server);
+  registerTaskListTools(server);
+  registerAccountTools(server);
+  registerImageTools(server);
 
   return server;
 }

@@ -3,13 +3,13 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-kling.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-kling)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Kling AI video generation MCP server for Model Context Protocol hosts. Generate AI videos from text descriptions or images, and manage video generation tasks through a standardised MCP interface.
+Kling AI video and image generation MCP server for Model Context Protocol hosts. Generate AI videos from text or images, extend them, add lip-sync, generate images, and manage generation tasks through a standardised MCP interface.
 
 ## Status
 
 - **Version:** [0.3.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-kling)
 - **Auth:** API key ([`KLING_ACCESS_KEY`](./server.json))
-- **Tools:** [4](./src/tools/) (video-generation, tasks)
+- **Tools:** [10](./src/tools/) (video-generation, image-generation, tasks, account, downloads)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -82,6 +82,8 @@ node dist/index.js
 - `KLING_SECRET_KEY` — Kling API secret key
 - `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
 - `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
+- `MCP_WORKSPACE_PATH` — optional directory that local media inputs (`image_path`, `audio_path`) must live inside. Defaults to the system temp directory when unset. Files elsewhere are refused before any read.
+- `KLING_DOWNLOAD_ROOT` — optional directory that `download_kling_video` output paths must live inside. Default: `~/Downloads/kling-mcp` (auto-created). Sensitive paths (`~/.ssh`, `~/.aws`, `/etc`, shell rc files) are refused even when the root would otherwise permit them.
 - `KLING_REQUEST_TIMEOUT_MS` — optional override (positive integer ms, max 30 min) for the outbound HTTP request timeout applied to both Kling API and host-bridge calls. Default: `60000` (60s). Raise this if you see `TIMEOUT` errors on slow submits; lower it if you want tighter bounds.
 
 ## Host configuration examples
@@ -120,17 +122,29 @@ node dist/index.js
 }
 ```
 
-## Tools (4)
+## Tools (10)
 
 ### Configuration
 - `configure_kling_api_keys` — Save Kling API credentials
 
 ### Video generation
 - `generate_kling_video` — Create an AI-generated video from a text description
-- `generate_kling_image_to_video` — Animate a still image into a video
+- `generate_kling_image_to_video` — Animate a still image into a video (public HTTPS URL or local file via `image_path`)
+- `extend_kling_video` — Continue a generated video, adding ~4-5 seconds per call
+- `generate_kling_lip_sync` — Make a person in a video speak, from text (text-to-speech) or an audio file
+
+### Image generation
+- `generate_kling_image` — Create an AI-generated image from a text description, with optional reference image
 
 ### Task management
-- `check_kling_task` — Check if a video generation task is complete
+- `check_kling_task` — Check if a generation task is complete (task types: `text2video`, `image2video`, `video-extend`, `lip-sync`, `image`)
+- `list_kling_tasks` — List your generation tasks with pagination
+- `download_kling_video` — Save a generated video or image to a local file (result URLs expire 30 days after generation)
+
+### Account
+- `get_kling_balance` — List resource packages on the account and their remaining quantities
+
+All generation tools accept an optional `callback_url` (HTTPS) that Kling POSTs to on task status changes, as an alternative to polling.
 
 ## Licence
 

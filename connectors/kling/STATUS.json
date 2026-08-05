@@ -11,10 +11,13 @@
     ]
   },
   "tools": {
-    "count": 4,
+    "count": 10,
     "domains": [
       "video-generation",
-      "tasks"
+      "image-generation",
+      "tasks",
+      "account",
+      "downloads"
     ]
   },
   "surface": "cloud-api",
