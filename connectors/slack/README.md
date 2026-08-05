@@ -242,7 +242,11 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 
 ### Workspace
 - `add_slack_bookmark` — Add a bookmark to a channel.
+- `list_slack_bookmarks` — List a channel's bookmarks.
 - `add_slack_reminder` — \[EXPERIMENTAL\] Create a reminder (Slack API partially deprecated; prefer `schedule_slack_message`).
+- `list_slack_reminders` — \[EXPERIMENTAL\] List your reminders.
+- `complete_slack_reminder` — \[EXPERIMENTAL\] Mark a reminder complete.
+- `delete_slack_reminder` — \[EXPERIMENTAL\] Permanently delete a reminder.
 
 ## Security notes
 

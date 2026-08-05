@@ -39,6 +39,10 @@ export const SLACK_PRODUCTION_API_URLS: string[] = [
   `${SLACK_API_BASE}/pins.remove`,
   `${SLACK_API_BASE}/reactions.add`,
   `${SLACK_API_BASE}/reminders.add`,
+  `${SLACK_API_BASE}/reminders.list`,
+  `${SLACK_API_BASE}/reminders.complete`,
+  `${SLACK_API_BASE}/reminders.delete`,
+  `${SLACK_API_BASE}/bookmarks.list`,
   `${SLACK_API_BASE}/search.messages`,
   `${SLACK_API_BASE}/users.info`,
   `${SLACK_API_BASE}/users.list`,
@@ -305,6 +309,38 @@ export function createSlackHandlers() {
           text: 'Test reminder',
           time: Math.floor(Date.now() / 1000) + 3600,
         },
+      }),
+    ),
+    http.post(`${SLACK_API_BASE}/reminders.list`, () =>
+      HttpResponse.json({
+        ok: true,
+        reminders: [
+          {
+            id: 'Rm123',
+            text: 'Test reminder',
+            user: 'U123',
+            time: Math.floor(Date.now() / 1000) + 3600,
+            complete_ts: 0,
+          },
+        ],
+      }),
+    ),
+    http.post(`${SLACK_API_BASE}/reminders.complete`, () => HttpResponse.json({ ok: true })),
+    http.post(`${SLACK_API_BASE}/reminders.delete`, () => HttpResponse.json({ ok: true })),
+    http.post(`${SLACK_API_BASE}/bookmarks.list`, () =>
+      HttpResponse.json({
+        ok: true,
+        bookmarks: [
+          {
+            id: 'Bk123',
+            channel_id: 'C123TEST',
+            title: 'Project dashboard',
+            link: 'https://example.com/dashboard',
+            type: 'link',
+            emoji: ':link:',
+            date_created: 1704067200,
+          },
+        ],
       }),
     ),
     http.post(`${SLACK_API_BASE}/files.info`, () =>

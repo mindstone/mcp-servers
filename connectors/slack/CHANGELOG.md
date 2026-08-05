@@ -11,6 +11,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - `list_scheduled_slack_messages` and `delete_scheduled_slack_message` — inspect and cancel pending scheduled messages. Closes the asymmetry where `schedule_slack_message` could create a scheduled message but nothing in the connector could list or cancel one.
 - `update_slack_message` and `delete_slack_message` — edit or permanently delete messages the connected user posted (`chat.update` / `chat.delete`). `delete_slack_message` carries `destructiveHint: true`.
 - `list_slack_pins`, `pin_slack_message`, and `unpin_slack_message` — read and manage a channel's pinned items (`pins.list` / `pins.add` / `pins.remove`). Pinned-message text is enveloped as untrusted content.
+- `list_slack_bookmarks` — read a channel's bookmarks bar (`bookmarks.list`), closing the add-only asymmetry. Bookmark titles are enveloped as untrusted content.
+- `list_slack_reminders`, `complete_slack_reminder`, and `delete_slack_reminder` — inspect and manage reminders (`reminders.list` / `reminders.complete` / `reminders.delete`), closing the add-only asymmetry. All three are marked EXPERIMENTAL like `add_slack_reminder`, since Slack has partially deprecated the reminders API.
 
 ### Changed
 

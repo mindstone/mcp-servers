@@ -36,10 +36,12 @@ const ALL_TOOLS = [
   'add_slack_reaction',
   'add_slack_reminder',
   'authenticate_slack_workspace',
+  'complete_slack_reminder',
   'compose_slack_message',
   'create_slack_channel',
   'delete_scheduled_slack_message',
   'delete_slack_message',
+  'delete_slack_reminder',
   'download_slack_file',
   'get_slack_channel_history',
   'get_slack_message_by_link',
@@ -49,8 +51,10 @@ const ALL_TOOLS = [
   'get_slack_user_profile',
   'invite_user_to_channel',
   'list_scheduled_slack_messages',
+  'list_slack_bookmarks',
   'list_slack_channels',
   'list_slack_pins',
+  'list_slack_reminders',
   'list_slack_users',
   'list_slack_workspaces',
   'lookup_user_by_email',
@@ -74,6 +78,8 @@ const READ_ONLY_TOOLS = [
   'list_scheduled_slack_messages',
   'list_slack_channels',
   'list_slack_pins',
+  'list_slack_bookmarks',
+  'list_slack_reminders',
   'get_slack_channel_history',
   'get_slack_thread_replies',
   'list_slack_users',
@@ -95,6 +101,8 @@ const DESTRUCTIVE_TOOLS = [
   'delete_slack_message',
   'pin_slack_message',
   'unpin_slack_message',
+  'complete_slack_reminder',
+  'delete_slack_reminder',
   'add_slack_bookmark',
   'add_slack_reminder',
   // Mutate Slack state — read position (mark) or open new DM channel (open).
@@ -158,7 +166,7 @@ describe('Slack MCP — smoke & registration', () => {
     if (cfg) cfg.cleanup();
   });
 
-  it('registers all 32 tools', async () => {
+  it('registers all 36 tools', async () => {
     const result = await client.client.listTools();
     const names = result.tools.map((t) => t.name).sort();
     expect(names).toEqual(ALL_TOOLS);
