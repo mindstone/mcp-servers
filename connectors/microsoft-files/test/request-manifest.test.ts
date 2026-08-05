@@ -124,6 +124,18 @@ const MANIFEST: ManifestRow[] = [
     pathname: '/v1.0/me/drive/items/:id/permissions/:permissionId',
     args: { path: '01ABC123xyz', permissionId: 'perm-1' },
   },
+  {
+    tool: 'list_file_versions',
+    method: 'GET',
+    pathname: '/v1.0/me/drive/items/:id/versions',
+    args: { path: '01ABC123xyz' },
+  },
+  {
+    tool: 'restore_file_version',
+    method: 'POST',
+    pathname: '/v1.0/me/drive/items/:id/versions/:versionId/restoreVersion',
+    args: { path: '01ABC123xyz', versionId: '1.0' },
+  },
 ];
 
 function matchPath(actual: string, pattern: string): boolean {

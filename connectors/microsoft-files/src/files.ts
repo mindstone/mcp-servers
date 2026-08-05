@@ -73,6 +73,22 @@ const GraphPermissionListSchema = z
   .object({ value: z.array(GraphPermissionSchema) })
   .passthrough();
 
+const GraphDriveItemVersionSchema = z
+  .object({
+    id: z.string(),
+    lastModifiedDateTime: z.string().optional(),
+    size: z.number().optional(),
+    lastModifiedBy: z
+      .object({ user: GraphIdentitySchema.optional() })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
+const GraphDriveItemVersionListSchema = z
+  .object({ value: z.array(GraphDriveItemVersionSchema) })
+  .passthrough();
+
 function formatPermission(
   permission: z.infer<typeof GraphPermissionSchema>,
   sourceTool: string,
@@ -179,6 +195,15 @@ export interface ListFilePermissionsArgs {
 export interface RevokeFilePermissionArgs {
   path: string;
   permissionId: string;
+}
+
+export interface ListFileVersionsArgs {
+  path: string;
+}
+
+export interface RestoreFileVersionArgs {
+  path: string;
+  versionId: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -606,5 +631,51 @@ export async function revokeFilePermission(
     success: true,
     permissionId: args.permissionId,
     message: 'Permission revoked successfully',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Version history (list / restore)
+// ---------------------------------------------------------------------------
+
+export async function listFileVersions(
+  client: Client,
+  args: ListFileVersionsArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const endpoint = buildDriveItemEndpoint(args.path, '/versions');
+  const response = await client.api(endpoint).options({ signal }).get();
+
+  const parsed = GraphDriveItemVersionListSchema.parse(response);
+
+  return {
+    count: parsed.value.length,
+    versions: parsed.value.map((version) => ({
+      id: version.id,
+      modifiedAt: version.lastModifiedDateTime,
+      size: formatSize(version.size),
+      lastModifiedBy: wrapUntrusted(
+        version.lastModifiedBy?.user?.displayName,
+        'microsoft-files:list_file_versions:lastModifiedBy',
+      ),
+    })),
+  };
+}
+
+export async function restoreFileVersion(
+  client: Client,
+  args: RestoreFileVersionArgs,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const endpoint = buildDriveItemEndpoint(
+    args.path,
+    `/versions/${encodeURIComponent(args.versionId)}/restoreVersion`,
+  );
+  await client.api(endpoint).options({ signal }).post({});
+
+  return {
+    success: true,
+    versionId: args.versionId,
+    message: 'Version restored successfully. The restored content becomes the current version.',
   };
 }

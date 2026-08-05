@@ -467,4 +467,64 @@ describe('microsoft-files mock-API integration', () => {
     expect(json.ok).toBe(false);
     expect(json.next_step).toBe('list_file_permissions');
   });
+
+  // -------------------------------------------------------------------------
+  // list_file_versions
+  // -------------------------------------------------------------------------
+  it('list_file_versions returns formatted version history', async () => {
+    const result = await client.callTool('list_file_versions', { path: 'item-1' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      ok?: unknown;
+      count: number;
+      versions: Array<{ id: string; size: string; lastModifiedBy?: string }>;
+    };
+    expect(json.ok).toBeUndefined();
+    expect(json.count).toBe(2);
+    expect(json.versions[0]?.id).toBe('2.0');
+    expect(json.versions[0]?.lastModifiedBy).toContain('untrusted-content');
+    expect(json.versions[0]?.lastModifiedBy).toContain('Jane Doe');
+    const call = state.requests.find(
+      (r) => r.method === 'GET' && r.pathname.includes('/me/drive/items/item-1/versions'),
+    );
+    expect(call).toBeDefined();
+  });
+
+  it('list_file_versions rejects missing path', async () => {
+    const result = await client.callTool('list_file_versions', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.next_step).toBe('list_file_versions');
+  });
+
+  // -------------------------------------------------------------------------
+  // restore_file_version
+  // -------------------------------------------------------------------------
+  it('restore_file_version POSTs to restoreVersion', async () => {
+    const result = await client.callTool('restore_file_version', {
+      path: 'item-1',
+      versionId: '1.0',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; success: boolean; versionId: string };
+    expect(json.ok).toBeUndefined();
+    expect(json.success).toBe(true);
+    expect(json.versionId).toBe('1.0');
+    const call = state.requests.find(
+      (r) =>
+        r.method === 'POST' &&
+        r.pathname.includes('/me/drive/items/item-1/versions/1.0/restoreVersion'),
+    );
+    expect(call).toBeDefined();
+  });
+
+  it('restore_file_version rejects missing versionId with WARNING guidance', async () => {
+    const result = await client.callTool('restore_file_version', { path: 'item-1' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; next_step: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('WARNING');
+    expect(json.next_step).toBe('list_file_versions');
+  });
 });

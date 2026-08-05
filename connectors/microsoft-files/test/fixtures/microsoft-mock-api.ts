@@ -295,6 +295,35 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
       },
     ),
 
+    // /me/drive/items/{id}/versions (GET) — list_file_versions
+    http.get(rx(`${GRAPH_BASE}/me/drive/items/<seg>/versions`), async ({ request }) => {
+      await capture(request);
+      return HttpResponse.json({
+        value: [
+          {
+            id: '2.0',
+            lastModifiedDateTime: '2026-05-19T10:00:00Z',
+            size: 1600,
+            lastModifiedBy: { user: { displayName: 'Jane Doe' } },
+          },
+          {
+            id: '1.0',
+            lastModifiedDateTime: '2026-01-01T10:00:00Z',
+            size: 1500,
+          },
+        ],
+      });
+    }),
+
+    // /me/drive/items/{id}/versions/{versionId}/restoreVersion (POST) — restore_file_version
+    http.post(
+      rx(`${GRAPH_BASE}/me/drive/items/<seg>/versions/<seg>/restoreVersion`),
+      async ({ request }) => {
+        await capture(request);
+        return new HttpResponse(null, { status: 204 });
+      },
+    ),
+
     // /me/drive/items/{id}/copy (POST) — copy_file id-based
     http.post(rx(`${GRAPH_BASE}/me/drive/items/<seg>/copy`), async ({ request }) => {
       await capture(request);

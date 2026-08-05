@@ -13,8 +13,10 @@ import {
   inviteToFile,
   listFilePermissions,
   listFiles,
+  listFileVersions,
   moveFile,
   readTextFile,
+  restoreFileVersion,
   revokeFilePermission,
   searchFiles,
   shareFile,
@@ -585,6 +587,75 @@ export function registerFilesTools(server: McpServer): void {
           { path: args.path!, permissionId: args.permissionId! },
           signal,
         ),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // list_file_versions
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'list_file_versions',
+    {
+      description: 'List the version history of a file.',
+      inputSchema: z.object({
+        path: z.string().optional().describe('File path or item ID'),
+      }).shape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.path) {
+        return errorResponse({
+          error:
+            'Missing required parameter: "path" (file to inspect). Example: { "path": "/Documents/report.docx" }',
+          action_required: 'Provide the file path or item ID.',
+          next_step: 'list_file_versions',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        listFileVersions(c, { path: args.path! }, signal),
+      );
+      return successJson(result);
+    }),
+  );
+
+  // ---------------------------------------------------------------------
+  // restore_file_version
+  // ---------------------------------------------------------------------
+  server.registerTool(
+    'restore_file_version',
+    {
+      description:
+        'Restore a previous version of a file, replacing the current content. Use list_file_versions to find the version ID.',
+      inputSchema: z.object({
+        path: z.string().optional().describe('File path or item ID'),
+        versionId: z
+          .string()
+          .optional()
+          .describe('Version ID from list_file_versions'),
+      }).shape,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args, extra) => {
+      if (!args.path || !args.versionId) {
+        return errorResponse({
+          error:
+            'Missing required parameters: "path" (file) and "versionId". Example: { "path": "/Documents/report.docx", "versionId": "3.0" }. Use list_file_versions to find version IDs. WARNING: This replaces the current file content.',
+          action_required: 'Provide both the file path or item ID and the version ID.',
+          next_step: 'list_file_versions',
+        });
+      }
+      const result = await callGraph(extra, (c, signal) =>
+        restoreFileVersion(c, { path: args.path!, versionId: args.versionId! }, signal),
       );
       return successJson(result);
     }),
