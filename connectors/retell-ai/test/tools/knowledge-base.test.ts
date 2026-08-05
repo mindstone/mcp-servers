@@ -2,6 +2,7 @@ import { describe, it, expect, afterAll, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { http, HttpResponse } from 'msw';
 import { mswServer } from '../helpers/setup.js';
 import { createRetellHandlers, MOCK_API_KEY } from '../helpers/retell-mock-api.js';
 import { createTestClient, type McpTestClient } from '../helpers/mcp-test-client.js';
@@ -12,6 +13,7 @@ describe('Knowledge base tools — Retell AI', () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
     for (const dir of createdDirs) {
       try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
     }
@@ -164,6 +166,81 @@ describe('Knowledge base tools — Retell AI', () => {
     } finally {
       try { fs.unlinkSync(outside); } catch { /* ignore */ }
     }
+  });
+
+  it('create_knowledge_base fails closed when the validated file is swapped before the read (TOCTOU)', async () => {
+    // Simulate a local race: the workspace fence validates the canonical path,
+    // then a concurrent writer swaps the file so the descriptor opened for the
+    // upload points at a different inode. The read MUST fail closed and no
+    // upstream request may be made.
+    let createKbRequests = 0;
+    mswServer.use(
+      ...createRetellHandlers(),
+      http.post('https://api.retellai.com/create-knowledge-base', () => {
+        createKbRequests += 1;
+        return HttpResponse.json({ error_message: 'should never be reached' }, { status: 500 });
+      }),
+    );
+    const workspace = makeWorkspace();
+    const sourcePath = path.join(workspace, 'faq.txt');
+    const impostorPath = path.join(workspace, 'impostor.txt');
+    fs.writeFileSync(sourcePath, 'Legitimate knowledge-base content.');
+    fs.writeFileSync(impostorPath, 'Swapped-in content the fence never validated.');
+    testClient = await createTestClient({
+      env: { RETELL_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '', MCP_WORKSPACE_PATH: workspace },
+    });
+
+    const realOpen = fs.promises.open.bind(fs.promises);
+    vi.spyOn(fs.promises, 'open').mockImplementation(((
+      _target: fs.PathLike,
+      flags?: fs.OpenMode,
+      mode?: fs.Mode,
+    ) => realOpen(impostorPath, flags, mode)) as typeof fs.promises.open);
+
+    const result = await testClient.client.callTool({
+      name: 'create_knowledge_base',
+      arguments: {
+        knowledge_base_name: 'Swap KB',
+        file_paths: [sourcePath],
+      },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const parsed = JSON.parse(text);
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.code).toBe('FILE_CHANGED_DURING_READ');
+    expect(parsed.error).toContain('changed while it was being verified');
+    expect(createKbRequests).toBe(0);
+  });
+
+  it('create_knowledge_base fails closed when the file disappears before the read', async () => {
+    mswServer.use(...createRetellHandlers());
+    const workspace = makeWorkspace();
+    const sourcePath = path.join(workspace, 'faq.txt');
+    fs.writeFileSync(sourcePath, 'Legitimate knowledge-base content.');
+    testClient = await createTestClient({
+      env: { RETELL_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '', MCP_WORKSPACE_PATH: workspace },
+    });
+
+    const realOpen = fs.promises.open.bind(fs.promises);
+    vi.spyOn(fs.promises, 'open').mockImplementation(((
+      _target: fs.PathLike,
+      flags?: fs.OpenMode,
+      mode?: fs.Mode,
+    ) => realOpen(path.join(workspace, 'deleted.txt'), flags, mode)) as typeof fs.promises.open);
+
+    const result = await testClient.client.callTool({
+      name: 'create_knowledge_base',
+      arguments: {
+        knowledge_base_name: 'Vanished KB',
+        file_paths: [sourcePath],
+      },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const parsed = JSON.parse(text);
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.code).toBe('FILE_CHANGED_DURING_READ');
   });
 
   it('add_knowledge_base_sources adds texts to an existing knowledge base', async () => {

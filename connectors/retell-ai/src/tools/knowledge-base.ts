@@ -30,8 +30,14 @@ const knowledgeBaseSourcesSchema = {
  * Resolve and read sandbox-approved upload files, returning FormData-ready
  * parts. Throws a structured ConnectorError on the first sandbox violation —
  * fail-closed: no file outside the workspace is ever read from disk.
+ *
+ * Open-then-validate (TOCTOU): the fence validated the canonical path, but
+ * reading by path afterwards would let a concurrent writer swap the file
+ * between check and read. Open a descriptor once, confirm via fstat that the
+ * opened inode (dev/ino) is the file the fence validated, re-check
+ * regular-file and size bounds on the descriptor, and read through it.
  */
-function readUploadFiles(filePaths: string[]): Array<{ name: string; data: Buffer }> {
+async function readUploadFiles(filePaths: string[]): Promise<Array<{ name: string; data: Buffer }>> {
   const files: Array<{ name: string; data: Buffer }> = [];
   for (const inputPath of filePaths) {
     const resolved = resolveUploadPath(inputPath);
@@ -42,36 +48,59 @@ function readUploadFiles(filePaths: string[]): Array<{ name: string; data: Buffe
         'Place the file inside MCP_WORKSPACE_PATH (or the system temp directory) and retry with a path inside that sandbox.',
       );
     }
-    const stat = fs.statSync(resolved.path);
-    if (!stat.isFile()) {
+
+    let handle: fs.promises.FileHandle | undefined;
+    try {
+      handle = await fs.promises.open(resolved.path, 'r');
+      const opened = await handle.stat();
+      if (opened.dev !== resolved.stat.dev || opened.ino !== resolved.stat.ino) {
+        throw new ConnectorError(
+          `file_path changed while it was being verified: ${inputPath}`,
+          'FILE_CHANGED_DURING_READ',
+          'The file was replaced between the workspace-sandbox check and the read. Retry the upload; if it keeps failing, check for another process modifying the file.',
+        );
+      }
+      if (!opened.isFile()) {
+        throw new ConnectorError(
+          `file_path is not a regular file: ${inputPath}`,
+          'INVALID_FILE',
+          'Pass a path to a regular file inside the workspace sandbox.',
+        );
+      }
+      if (opened.size > MAX_KB_FILE_BYTES) {
+        throw new ConnectorError(
+          `file_path exceeds Retell's 50MB knowledge-base file limit (${Math.round(opened.size / 1024 / 1024)}MB): ${inputPath}`,
+          'FILE_TOO_LARGE',
+          'Split the document or remove unneeded sections, then retry with a file under 50MB.',
+        );
+      }
+      files.push({ name: path.basename(resolved.path), data: await handle.readFile() });
+    } catch (err) {
+      if (err instanceof ConnectorError) throw err;
+      // Open/read failure (e.g. the file was deleted between the sandbox check
+      // and the open) — fail closed with a structured error, never a raw throw.
       throw new ConnectorError(
-        `file_path is not a regular file: ${inputPath}`,
-        'INVALID_FILE',
-        'Pass a path to a regular file inside the workspace sandbox.',
+        `file_path could not be read (${(err as NodeJS.ErrnoException).code ?? 'unknown error'}): ${inputPath}`,
+        'FILE_CHANGED_DURING_READ',
+        'The file changed or was removed while it was being read. Retry the upload.',
       );
+    } finally {
+      await handle?.close().catch(() => undefined);
     }
-    if (stat.size > MAX_KB_FILE_BYTES) {
-      throw new ConnectorError(
-        `file_path exceeds Retell's 50MB knowledge-base file limit (${Math.round(stat.size / 1024 / 1024)}MB): ${inputPath}`,
-        'FILE_TOO_LARGE',
-        'Split the document or remove unneeded sections, then retry with a file under 50MB.',
-      );
-    }
-    files.push({ name: path.basename(resolved.path), data: fs.readFileSync(resolved.path) });
   }
   return files;
 }
 
-function appendSourcesToForm(
+async function appendSourcesToForm(
   form: FormData,
   args: { knowledge_base_texts?: unknown; knowledge_base_urls?: unknown; file_paths?: string[] },
-): void {
+): Promise<void> {
   // Mirror the Retell SDK's multipart encoding: non-file arrays are appended
   // as a single JSON-string field; files are appended one part per file.
   if (args.knowledge_base_texts) form.append('knowledge_base_texts', JSON.stringify(args.knowledge_base_texts));
   if (args.knowledge_base_urls) form.append('knowledge_base_urls', JSON.stringify(args.knowledge_base_urls));
   if (args.file_paths && args.file_paths.length > 0) {
-    for (const file of readUploadFiles(args.file_paths)) {
+    for (const file of await readUploadFiles(args.file_paths)) {
       form.append('knowledge_base_files', new Blob([new Uint8Array(file.data)]), file.name);
     }
   }
@@ -215,7 +244,7 @@ RETURNS: knowledge_base_id, knowledge_base_name, status (starts "in_progress").`
       const form = new FormData();
       form.append('knowledge_base_name', args.knowledge_base_name);
       if (args.enable_auto_refresh !== undefined) form.append('enable_auto_refresh', String(args.enable_auto_refresh));
-      appendSourcesToForm(form, args);
+      await appendSourcesToForm(form, args);
 
       const result = await retellFetch<Record<string, unknown>>(
         '/create-knowledge-base',
@@ -272,7 +301,7 @@ RETURNS: knowledge_base_id, knowledge_base_name, status, updated sources.`,
       }
       requireApiKey();
       const form = new FormData();
-      appendSourcesToForm(form, args);
+      await appendSourcesToForm(form, args);
 
       const result = await retellFetch<Record<string, unknown>>(
         `/add-knowledge-base-sources/${encodeURIComponent(args.knowledge_base_id)}`,
