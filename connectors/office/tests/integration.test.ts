@@ -975,3 +975,151 @@ describe('integration: Excel pivot table tools', () => {
     expect(payload.code).toBe('ITEM_NOT_FOUND');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Integration tests: PowerPoint layout & shape tools
+// ---------------------------------------------------------------------------
+
+describe('integration: PowerPoint layout and shape tools', () => {
+  it('routes apply_layout with slideIndex and layout name', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'powerpoint', baseUrl);
+
+    const commandReceived = new Promise<{ action: string; params: Record<string, unknown> }>((resolve) => {
+      socket.on('message', (raw) => {
+        const msg = JSON.parse(raw.toString()) as {
+          type?: string; id?: string; action?: string; params?: Record<string, unknown>;
+        };
+        if (msg.type === 'command' && typeof msg.id === 'string') {
+          sendJson(socket, {
+            type: 'response', id: msg.id, success: true,
+            data: { success: true, slideIndex: 2, layout: 'Two Content' },
+          });
+          resolve({ action: msg.action ?? '', params: msg.params ?? {} });
+        }
+      });
+    });
+
+    const response = await fetchHttps(`${baseUrl}/powerpoint/apply_layout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slideIndex: 2, layout: 'Two Content' }),
+    });
+
+    const payload = (await response.json()) as { success: boolean };
+    const routed = await commandReceived;
+
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(routed.action).toBe('apply_layout');
+    expect(routed.params).toEqual({ slideIndex: 2, layout: 'Two Content' });
+  });
+
+  it('routes delete_shape with a shapeId target', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'powerpoint', baseUrl);
+
+    const commandReceived = new Promise<{ action: string; params: Record<string, unknown> }>((resolve) => {
+      socket.on('message', (raw) => {
+        const msg = JSON.parse(raw.toString()) as {
+          type?: string; id?: string; action?: string; params?: Record<string, unknown>;
+        };
+        if (msg.type === 'command' && typeof msg.id === 'string') {
+          sendJson(socket, {
+            type: 'response', id: msg.id, success: true,
+            data: { success: true, slideIndex: 1, deletedShapeId: 'shape-42' },
+          });
+          resolve({ action: msg.action ?? '', params: msg.params ?? {} });
+        }
+      });
+    });
+
+    const response = await fetchHttps(`${baseUrl}/powerpoint/delete_shape`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slideIndex: 1, target: { type: 'shapeId', shapeId: 'shape-42' } }),
+    });
+
+    const payload = (await response.json()) as { success: boolean };
+    const routed = await commandReceived;
+
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(routed.action).toBe('delete_shape');
+    expect(routed.params).toEqual({ slideIndex: 1, target: { type: 'shapeId', shapeId: 'shape-42' } });
+  });
+
+  it('routes format_shape with formatting payload', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'powerpoint', baseUrl);
+
+    const commandReceived = new Promise<{ action: string; params: Record<string, unknown> }>((resolve) => {
+      socket.on('message', (raw) => {
+        const msg = JSON.parse(raw.toString()) as {
+          type?: string; id?: string; action?: string; params?: Record<string, unknown>;
+        };
+        if (msg.type === 'command' && typeof msg.id === 'string') {
+          sendJson(socket, {
+            type: 'response', id: msg.id, success: true,
+            data: { success: true, slideIndex: 3, shapeId: 'shape-7' },
+          });
+          resolve({ action: msg.action ?? '', params: msg.params ?? {} });
+        }
+      });
+    });
+
+    const response = await fetchHttps(`${baseUrl}/powerpoint/format_shape`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        slideIndex: 3,
+        target: { type: 'placeholder', placeholder: 'title' },
+        formatting: { fillColor: '#4472C4', width: 400 },
+      }),
+    });
+
+    const payload = (await response.json()) as { success: boolean };
+    const routed = await commandReceived;
+
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(routed.action).toBe('format_shape');
+    expect(routed.params).toEqual({
+      slideIndex: 3,
+      target: { type: 'placeholder', placeholder: 'title' },
+      formatting: { fillColor: '#4472C4', width: 400 },
+    });
+  });
+
+  it('propagates apply_layout errors (layout not found) from the add-in', async () => {
+    const { sidecar, baseUrl } = await startTestServer();
+    const socket = await connectWebSocket(sidecar.port);
+    await authenticateAndRegister(socket, sidecar.token, 'powerpoint', baseUrl);
+
+    socket.on('message', (raw) => {
+      const msg = JSON.parse(raw.toString()) as { type?: string; id?: string };
+      if (msg.type === 'command' && typeof msg.id === 'string') {
+        sendJson(socket, {
+          type: 'response', id: msg.id, success: false,
+          error: 'Layout "Fancy" not found. Available layouts: Title Slide, Title and Content, Blank.',
+          code: 'UNKNOWN_ERROR',
+        });
+      }
+    });
+
+    const response = await fetchHttps(`${baseUrl}/powerpoint/apply_layout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sidecar.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slideIndex: 1, layout: 'Fancy' }),
+    });
+
+    const payload = (await response.json()) as { success: boolean; error: string };
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(false);
+    expect(payload.error).toContain('not found');
+    expect(payload.error).toContain('Available layouts');
+  });
+});

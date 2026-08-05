@@ -11,7 +11,7 @@ Read and edit Word documents, Excel workbooks, and PowerPoint presentations from
 
 - **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-office)
 - **Auth:** None ([`server.json`](./server.json))
-- **Tools:** [59](./src/) (word, excel, powerpoint, setup)
+- **Tools:** [62](./src/) (word, excel, powerpoint, setup)
 - **Surface:** desktop-addin
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -173,7 +173,7 @@ Claude Desktop is possible but the host must provide a writable
 }
 ```
 
-## Tools (59)
+## Tools (62)
 
 ### Setup
 - `rebel_office_setup` — Install or repair (or uninstall) the Office add-in.
@@ -228,15 +228,18 @@ Claude Desktop is possible but the host must provide a writable
 - `rebel_office_excel_create_pivot_table` — Create a pivot table from a source range (destructive).
 - `rebel_office_excel_refresh_pivot_table` — Refresh one pivot table, or all of them.
 
-### PowerPoint (12)
+### PowerPoint (15)
 - `rebel_office_powerpoint_get_slides` — List slides with layout, title, and shape counts.
 - `rebel_office_powerpoint_get_slide_content` — Get all shapes and text on a specific slide.
 - `rebel_office_powerpoint_add_slide` — Add a new slide with a layout and optional content (destructive).
+- `rebel_office_powerpoint_apply_layout` — Change the layout of an existing slide (destructive).
 - `rebel_office_powerpoint_delete_slide` — Delete a slide by index (destructive).
 - `rebel_office_powerpoint_reorder_slides` — Move a slide to a new position (destructive).
 - `rebel_office_powerpoint_add_text_box` — Add a positioned text box to a slide (destructive).
 - `rebel_office_powerpoint_add_image` — Add an image to a slide from path or base64 (destructive).
 - `rebel_office_powerpoint_add_shape` — Add a geometric shape with optional text and fill (destructive).
+- `rebel_office_powerpoint_delete_shape` — Delete a shape from a slide by ID or name (destructive).
+- `rebel_office_powerpoint_format_shape` — Format a shape's fill, line, position, size, or name (destructive).
 - `rebel_office_powerpoint_update_text` — Update text in a shape or layout placeholder (destructive).
 - `rebel_office_powerpoint_get_speaker_notes` — Read speaker notes for one or all slides.
 - `rebel_office_powerpoint_set_speaker_notes` — Set or replace speaker notes for a slide (destructive).

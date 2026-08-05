@@ -799,11 +799,14 @@ const TOOL_NAMES = {
   pptGetSlides: 'rebel_office_powerpoint_get_slides',
   pptGetSlideContent: 'rebel_office_powerpoint_get_slide_content',
   pptAddSlide: 'rebel_office_powerpoint_add_slide',
+  pptApplyLayout: 'rebel_office_powerpoint_apply_layout',
   pptDeleteSlide: 'rebel_office_powerpoint_delete_slide',
   pptReorderSlides: 'rebel_office_powerpoint_reorder_slides',
   pptAddTextBox: 'rebel_office_powerpoint_add_text_box',
   pptAddImage: 'rebel_office_powerpoint_add_image',
   pptAddShape: 'rebel_office_powerpoint_add_shape',
+  pptDeleteShape: 'rebel_office_powerpoint_delete_shape',
+  pptFormatShape: 'rebel_office_powerpoint_format_shape',
   pptUpdateText: 'rebel_office_powerpoint_update_text',
   pptGetSpeakerNotes: 'rebel_office_powerpoint_get_speaker_notes',
   pptSetSpeakerNotes: 'rebel_office_powerpoint_set_speaker_notes',
@@ -3668,8 +3671,11 @@ registerTool(TOOL_NAMES.pptAddSlide, {
   description:
     'Add a new slide to the presentation. Specify a layout and optional initial content (title, ' +
     'subtitle, body text). The slide is inserted at the specified position or at the end.\n\n' +
-    'Standard PowerPoint layouts: "Title Slide", "Title and Content", "Section Header", ' +
-    '"Two Content", "Comparison", "Title Only", "Blank".',
+    'The layout is resolved by name (case-insensitive) against the presentation\'s slide masters — ' +
+    'theme layouts work, not just the defaults. Standard PowerPoint layouts: "Title Slide", ' +
+    '"Title and Content", "Section Header", "Two Content", "Comparison", "Title Only", "Blank". ' +
+    'Use `rebel_office_powerpoint_get_presentation_properties` to list the available layouts, and ' +
+    '`rebel_office_powerpoint_apply_layout` to change the layout of an existing slide.',
   inputSchema: {
     "type": "object",
     "properties": {
@@ -4203,6 +4209,193 @@ registerTool(TOOL_NAMES.pptGetPresentationProperties, {
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 }, async () => {
   const result = await sidecarRequest('powerpoint', 'get_presentation_properties', {});
+  return toMcpResult(result);
+});
+
+// 58. rebel_office_powerpoint_apply_layout
+registerTool(TOOL_NAMES.pptApplyLayout, {
+  title: 'Apply layout to slide',
+  description:
+    'Change the layout of an existing slide — e.g. switch a slide from "Title and Content" to ' +
+    '"Two Content". The layout is resolved by name (case-insensitive) against the ' +
+    "presentation's slide masters; theme layouts work, not just the defaults.\n\n" +
+    'Use `rebel_office_powerpoint_get_presentation_properties` to list the available layouts. ' +
+    'Requires a PowerPoint version with layout support (PowerPointApi 1.8+).',
+  inputSchema: {
+    "type": "object",
+    "properties": {
+      "slideIndex": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Slide index (1-based)."
+      },
+      "layout": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Layout name, e.g. \"Title and Content\"."
+      }
+    },
+    "required": [
+      "slideIndex",
+      "layout"
+    ]
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async (input) => {
+  const result = await sidecarRequest('powerpoint', 'apply_layout', {
+    slideIndex: input.slideIndex, layout: input.layout,
+  });
+  return toMcpResult(result);
+});
+
+// 59. rebel_office_powerpoint_delete_shape
+registerTool(TOOL_NAMES.pptDeleteShape, {
+  title: 'Delete shape',
+  description:
+    'Delete a shape from a slide, identified by shape ID or by placeholder/name match.\n\n' +
+    'Use `rebel_office_powerpoint_get_slide_content` to list a slide\'s shapes and their IDs first. ' +
+    'This cannot be undone from the API — delete with care.',
+  inputSchema: {
+    "type": "object",
+    "properties": {
+      "slideIndex": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Slide index (1-based)."
+      },
+      "target": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "shapeId",
+              "placeholder"
+            ],
+            "description": "Identify the shape by its ID, or by placeholder/name (case-insensitive contains-match)."
+          },
+          "shapeId": {
+            "type": "string",
+            "description": "Shape ID (for shapeId)."
+          },
+          "placeholder": {
+            "type": "string",
+            "description": "Placeholder or shape name to match (for placeholder), e.g. \"title\", \"content\"."
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "description": "Which shape to delete."
+      }
+    },
+    "required": [
+      "slideIndex",
+      "target"
+    ]
+  },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+}, async (input) => {
+  const result = await sidecarRequest('powerpoint', 'delete_shape', {
+    slideIndex: input.slideIndex, target: input.target,
+  });
+  return toMcpResult(result);
+});
+
+// 60. rebel_office_powerpoint_format_shape
+registerTool(TOOL_NAMES.pptFormatShape, {
+  title: 'Format shape',
+  description:
+    'Format an existing shape: fill color, line color/width, position (left/top), size ' +
+    '(width/height, in points), or rename it. Shapes are identified by shape ID or by ' +
+    'placeholder/name match.\n\n' +
+    'Use `rebel_office_powerpoint_get_slide_content` to list a slide\'s shapes and their IDs first.',
+  inputSchema: {
+    "type": "object",
+    "properties": {
+      "slideIndex": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Slide index (1-based)."
+      },
+      "target": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "shapeId",
+              "placeholder"
+            ],
+            "description": "Identify the shape by its ID, or by placeholder/name (case-insensitive contains-match)."
+          },
+          "shapeId": {
+            "type": "string",
+            "description": "Shape ID (for shapeId)."
+          },
+          "placeholder": {
+            "type": "string",
+            "description": "Placeholder or shape name to match (for placeholder)."
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "description": "Which shape to format."
+      },
+      "formatting": {
+        "type": "object",
+        "properties": {
+          "fillColor": {
+            "type": "string",
+            "description": "Fill color as HTML color (e.g. \"#4472C4\")."
+          },
+          "lineColor": {
+            "type": "string",
+            "description": "Line (border) color as HTML color."
+          },
+          "lineWidth": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Line (border) width in points."
+          },
+          "left": {
+            "type": "number",
+            "description": "Distance from the left edge of the slide, in points."
+          },
+          "top": {
+            "type": "number",
+            "description": "Distance from the top edge of the slide, in points."
+          },
+          "width": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Shape width in points."
+          },
+          "height": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Shape height in points."
+          },
+          "name": {
+            "type": "string",
+            "description": "Rename the shape."
+          }
+        },
+        "description": "Formatting to apply. At least one property is required."
+      }
+    },
+    "required": [
+      "slideIndex",
+      "target",
+      "formatting"
+    ]
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async (input) => {
+  const result = await sidecarRequest('powerpoint', 'format_shape', {
+    slideIndex: input.slideIndex, target: input.target, formatting: input.formatting,
+  });
   return toMcpResult(result);
 });
 
