@@ -1,12 +1,16 @@
 import { z } from 'zod';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { pandadocFetch, pandadocFetchRaw } from '../client.js';
-import { withErrorHandling } from '../utils.js';
+import { sanitizeVendorErrorText, withErrorHandling } from '../utils.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import { isConfigured } from '../auth.js';
-import { MAX_FILE_SIZE } from '../types.js';
+import { MAX_FILE_SIZE, PandaDocError } from '../types.js';
 import { resolveUploadPath } from './path-safety.js';
+import { validatePublicHttpsUrl } from './url-safety.js';
 import {
   sanitizeDocumentCompact,
   sanitizeDocumentDetails,
@@ -79,8 +83,32 @@ function formatDocumentDetails(
 }
 
 function paginationHint(count: number, page: number, pageSize: number): string {
-  if (count < pageSize) return `Showing all ${count} results.`;
-  return `Showing ${count} results (page ${page}). Use page=${page + 1} to see more.`;
+  // The PandaDoc list API returns only `results` — no totals or next-page
+  // markers — so a page's length cannot prove completeness. Never claim
+  // "all results", and never promise another page exists.
+  if (count < pageSize) {
+    return `Showing ${count} results (page ${page}). This page is not full, so there are probably no further pages; the API does not report totals.`;
+  }
+  return `Showing ${count} results (page ${page}). This page is full, so more results may exist — try page=${page + 1}. The API does not report totals.`;
+}
+
+/**
+ * Open-ended vendor request structures (fields, pricing-table data, metadata)
+ * are still validated as JSON-shaped values — this rejects anything that
+ * cannot serialize (functions, undefined leaves, class instances) instead of
+ * passing `z.unknown()` straight through.
+ */
+const jsonValue: z.ZodType<unknown> = z.lazy(() =>
+  z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(jsonValue), z.record(jsonValue)]),
+);
+
+/**
+ * `info_message` in a create/upload response is vendor-authored text — wrap it
+ * in an untrusted-content envelope before it reaches the model (invariant #6).
+ */
+function vendorInfoMessage(value: string | undefined, source: string, fallback: string): string {
+  if (!value) return fallback;
+  return wrapUntrusted(value, source) ?? fallback;
 }
 
 export function registerDocumentTools(server: McpServer): void {
@@ -247,11 +275,11 @@ RELATED TOOLS:
           name: z.string().describe('Token/variable name from template'),
           value: z.string().describe('Value to fill in'),
         })).optional().describe('Template variables to pre-fill'),
-        fields: z.record(z.unknown()).optional().describe('Map of field names to values: { "FieldName": { "value": "text" } }'),
+        fields: z.record(jsonValue).optional().describe('Map of field names to values: { "FieldName": { "value": "text" } }'),
         pricing_tables: z.array(z.object({
           name: z.string().describe('Name of the pricing table in the template to populate'),
           data_merge: z.boolean().optional().describe('If true, all field names in data rows must be the external names defined in the template'),
-          options: z.record(z.unknown()).optional().describe('Table options, e.g. { "currency": "USD", "Discount": { "type": "percent", "name": "Global Discount", "value": 10 } }'),
+          options: z.record(jsonValue).optional().describe('Table options, e.g. { "currency": "USD", "Discount": { "type": "percent", "name": "Global Discount", "value": 10 } }'),
           sections: z.array(z.object({
             title: z.string().describe('Section title'),
             default: z.boolean().optional().describe('If true, this is the default section'),
@@ -262,12 +290,12 @@ RELATED TOOLS:
                 optional_selected: z.boolean().optional(),
                 optional: z.boolean().optional(),
               }).optional().describe('Row options (editable qty, optional row, pre-selected)'),
-              data: z.record(z.unknown()).optional().describe('Row values keyed by column name, e.g. { "Name": "Widget", "Price": 10, "QTY": 3, "SKU": "widget-1" }'),
-              custom_fields: z.record(z.unknown()).optional().describe('Additional custom column values'),
+              data: z.record(jsonValue).optional().describe('Row values keyed by column name, e.g. { "Name": "Widget", "Price": 10, "QTY": 3, "SKU": "widget-1" }'),
+              custom_fields: z.record(jsonValue).optional().describe('Additional custom column values'),
             })).optional().describe('Rows to populate in this section'),
           })).optional().describe('Pricing table sections with rows'),
         })).optional().describe('Pricing tables to populate. Requires "Automatically add products to this table" enabled on the template pricing table. All product info must be passed here — products stored in PandaDoc cannot be used.'),
-        metadata: z.record(z.unknown()).optional().describe('Custom key-value metadata to associate with the document'),
+        metadata: z.record(jsonValue).optional().describe('Custom key-value metadata to associate with the document'),
         tags: z.array(z.string()).optional().describe('Tags to apply'),
         folder_uuid: z.string().optional().describe('Folder ID to store the document in (see list_document_folders)'),
       }),
@@ -299,7 +327,11 @@ RELATED TOOLS:
           result as unknown as Record<string, unknown>,
           'pandadoc:create_document_from_template',
         ),
-        info: result.info_message || 'Document created. Poll get_document_status until status is "document.draft" before sending.',
+        info: vendorInfoMessage(
+          result.info_message,
+          'pandadoc:create_document_from_template:info_message',
+          'Document created. Poll get_document_status until status is "document.draft" before sending.',
+        ),
       });
     }),
   );
@@ -366,32 +398,9 @@ RELATED TOOLS:
             'the env var is unset) before uploading.',
         });
       }
-      // Defence-in-depth: re-canonicalise via fs.realpathSync at the very
-      // last moment to close the (vanishingly small) TOCTOU window between
-      // sandbox validation and the readFileSync call below.
-      const resolvedPath = fs.realpathSync(sandboxResult.path);
+      const resolvedPath = sandboxResult.path;
 
-      // Validate file exists and check size
-      let fileInfo: fs.Stats;
-      try {
-        fileInfo = fs.statSync(resolvedPath);
-      } catch {
-        return JSON.stringify({
-          ok: false,
-          error: `File not found: ${resolvedPath}`,
-          resolution: 'Check the file path exists and is accessible.',
-        });
-      }
-
-      if (fileInfo.size > MAX_FILE_SIZE) {
-        return JSON.stringify({
-          ok: false,
-          error: `File too large (${(fileInfo.size / 1024 / 1024).toFixed(1)}MB). Maximum is 50MB.`,
-          resolution: 'Use a smaller file or compress it before uploading.',
-        });
-      }
-
-      // Validate file extension
+      // Validate file extension (lexical — no disk access).
       const ext = path.extname(resolvedPath).toLowerCase();
       if (!['.pdf', '.docx', '.rtf'].includes(ext)) {
         return JSON.stringify({
@@ -401,7 +410,63 @@ RELATED TOOLS:
         });
       }
 
-      const fileBuffer = fs.readFileSync(resolvedPath);
+      // Open the validated path ONCE, then enforce the size/type policy on
+      // that descriptor and read through it. A check-then-use pair of
+      // separate path-based stat + read calls would let a local attacker
+      // swap the file (or an ancestor) between the check and the read —
+      // re-running realpathSync does not bind a later read to the checked
+      // inode, only a single open descriptor does.
+      let fd: number;
+      try {
+        fd = fs.openSync(resolvedPath, 'r');
+      } catch {
+        return JSON.stringify({
+          ok: false,
+          error: `File not found: ${resolvedPath}`,
+          resolution: 'Check the file path exists and is accessible.',
+        });
+      }
+
+      let fileBuffer: Buffer;
+      try {
+        const fileInfo = fs.fstatSync(fd);
+        if (!fileInfo.isFile()) {
+          return JSON.stringify({
+            ok: false,
+            error: `Not a regular file: ${resolvedPath}`,
+            resolution: 'Pass the path of a PDF, DOCX, or RTF file, not a directory or device.',
+          });
+        }
+        if (fileInfo.size > MAX_FILE_SIZE) {
+          return JSON.stringify({
+            ok: false,
+            error: `File too large (${(fileInfo.size / 1024 / 1024).toFixed(1)}MB). Maximum is 50MB.`,
+            resolution: 'Use a smaller file or compress it before uploading.',
+          });
+        }
+        // If the path stopped naming the opened inode (swap between sandbox
+        // validation and open, or mid-validation), fail closed.
+        let viaPath: fs.Stats;
+        try {
+          viaPath = fs.statSync(resolvedPath);
+        } catch {
+          return JSON.stringify({
+            ok: false,
+            error: 'The file changed while it was being validated.',
+            resolution: 'Try the upload again.',
+          });
+        }
+        if (viaPath.dev !== fileInfo.dev || viaPath.ino !== fileInfo.ino) {
+          return JSON.stringify({
+            ok: false,
+            error: 'The file changed while it was being validated.',
+            resolution: 'Try the upload again.',
+          });
+        }
+        fileBuffer = fs.readFileSync(fd);
+      } finally {
+        fs.closeSync(fd);
+      }
       const fileName = args.name || path.basename(resolvedPath);
 
       // Build metadata JSON for the 'data' field
@@ -418,7 +483,7 @@ RELATED TOOLS:
       };
 
       const formData = new FormData();
-      formData.append('file', new Blob([fileBuffer], { type: mimeTypes[ext] || 'application/octet-stream' }), path.basename(resolvedPath));
+      formData.append('file', new Blob([new Uint8Array(fileBuffer)], { type: mimeTypes[ext] || 'application/octet-stream' }), path.basename(resolvedPath));
       formData.append('data', JSON.stringify(data));
 
       // Upload — use pandadocFetch but with FormData body and no Content-Type (let browser set multipart boundary)
@@ -458,9 +523,13 @@ RELATED TOOLS:
             'Wait a moment and try again.',
           );
         }
-        const errorText = await response.text().catch(() => 'Unknown error');
+        const errorText = await response.text().catch(() => '');
         throw new PandaDocError(
-          `PandaDoc upload error (${response.status}): ${errorText}`,
+          `PandaDoc upload error (${response.status}): ${
+            errorText
+              ? sanitizeVendorErrorText(errorText, 'pandadoc:upload_document:error_body')
+              : 'no error details provided'
+          }`,
           'UPLOAD_ERROR',
           'Check the file and try again.',
         );
@@ -474,7 +543,11 @@ RELATED TOOLS:
           result as unknown as Record<string, unknown>,
           'pandadoc:upload_document',
         ),
-        info: result.info_message || 'Document uploaded. Poll get_document_status until status is "document.draft" before sending.',
+        info: vendorInfoMessage(
+          result.info_message,
+          'pandadoc:upload_document:info_message',
+          'Document uploaded. Poll get_document_status until status is "document.draft" before sending.',
+        ),
       });
     }),
   );
@@ -516,12 +589,12 @@ RELATED TOOLS:
           role: z.string().optional().describe('Recipient role (e.g., "Client", "Signer")'),
         })).optional().describe('List of document recipients (at least one required for sending)'),
         parse_form_fields: z.boolean().optional().describe('If true, recognizes PDF form fields as PandaDoc fields. Default: false'),
-        fields: z.record(z.unknown()).optional().describe('Map of field names to values: { "FieldName": { "value": "text" } }'),
+        fields: z.record(jsonValue).optional().describe('Map of field names to values: { "FieldName": { "value": "text" } }'),
         tokens: z.array(z.object({
           name: z.string().describe('Token/variable name'),
           value: z.string().describe('Value to fill in'),
         })).optional().describe('Tokens (variables) to pre-fill'),
-        metadata: z.record(z.unknown()).optional().describe('Custom key-value metadata to associate with the document'),
+        metadata: z.record(jsonValue).optional().describe('Custom key-value metadata to associate with the document'),
         tags: z.array(z.string()).optional().describe('Tags to apply to the document'),
         folder_uuid: z.string().optional().describe('ID of the PandaDoc folder to store the document in (see list_document_folders)'),
       }),
@@ -529,6 +602,19 @@ RELATED TOOLS:
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
+
+      // The URL is fetched server-side by PandaDoc, which makes this tool an
+      // indirect fetch primitive — refuse literal internal hosts (loopback,
+      // link-local, private ranges) and credential-bearing URLs. DNS and
+      // redirect handling are vendor-side; see src/tools/url-safety.ts.
+      const urlProblem = validatePublicHttpsUrl(args.url);
+      if (urlProblem) {
+        return JSON.stringify({
+          ok: false,
+          error: `Rejected source URL: ${urlProblem}.`,
+          resolution: 'Provide an HTTPS URL on a public host that PandaDoc can reach.',
+        });
+      }
 
       const body: Record<string, unknown> = {
         url: args.url,
@@ -553,7 +639,11 @@ RELATED TOOLS:
           result as unknown as Record<string, unknown>,
           'pandadoc:create_document_from_url',
         ),
-        info: result.info_message || 'Document created. Poll get_document_status until status is "document.draft" before sending.',
+        info: vendorInfoMessage(
+          result.info_message,
+          'pandadoc:create_document_from_url:info_message',
+          'Document created. Poll get_document_status until status is "document.draft" before sending.',
+        ),
       });
     }),
   );
@@ -703,12 +793,29 @@ RELATED TOOLS:
       inputSchema: z.object({
         document_id: z.string().min(1).describe('The document ID'),
         watermark_text: z.string().optional().describe('Optional watermark text to overlay on the PDF'),
-        watermark_color: z.string().optional().describe('Watermark color as HEX code (e.g., "#FF5733")'),
-        watermark_font_size: z.number().optional().describe('Watermark font size'),
-        watermark_opacity: z.number().optional().describe('Watermark opacity (0.0 to 1.0)'),
+        watermark_color: z
+          .string()
+          .regex(/^#[0-9A-Fa-f]{6}$/, 'watermark_color must be a 6-digit HEX code (e.g., "#FF5733")')
+          .optional()
+          .describe('Watermark color as HEX code (e.g., "#FF5733")'),
+        watermark_font_size: z
+          .number()
+          .int()
+          .min(1)
+          .max(500)
+          .optional()
+          .describe('Watermark font size (integer, 1-500)'),
+        watermark_opacity: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe('Watermark opacity (0.0 to 1.0)'),
         separate_files: z.boolean().optional().describe('If true, downloads as a zip archive with separate PDFs per section'),
       }),
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+      // Not read-only: the tool writes a new local temp file. It is still
+      // non-destructive — downloads use exclusive create and never overwrite.
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (!isConfigured()) return noApiKeyError();
@@ -725,12 +832,56 @@ RELATED TOOLS:
 
       const response = await pandadocFetchRaw(downloadPath);
 
-      // Save the PDF to a temp file
+      // Save the PDF under the canonical OS temp directory. The raw
+      // TMPDIR/TEMP env strings are NOT trusted verbatim: a process that can
+      // mutate the environment could point them at an arbitrary (possibly
+      // symlinked) location; os.tmpdir() + realpathSync gives the canonical
+      // containment anchor instead.
       const pdfBuffer = Buffer.from(await response.arrayBuffer());
-      const tmpDir = process.env.TMPDIR || process.env.TEMP || '/tmp';
-      const safeName = `pandadoc_${args.document_id.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
-      const outputPath = path.join(tmpDir, safeName);
-      fs.writeFileSync(outputPath, pdfBuffer);
+      const tmpRoot = fs.realpathSync(os.tmpdir());
+
+      // Unique name + exclusive create: downloads never overwrite an
+      // existing file, and a pre-positioned file or symlink can neither be
+      // clobbered nor redirect the write (O_EXCL fails on any existing
+      // entry, including symlinks).
+      const safeBase = `pandadoc_${args.document_id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+      let outputPath: string | undefined;
+      for (let attempt = 0; attempt < 3 && !outputPath; attempt += 1) {
+        const candidate = path.join(
+          tmpRoot,
+          `${safeBase}_${crypto.randomBytes(6).toString('hex')}.pdf`,
+        );
+        // Canonical-prefix containment, kept explicit so a future refactor
+        // cannot silently weaken the boundary.
+        const relative = path.relative(tmpRoot, candidate);
+        if (relative.startsWith('..') || path.isAbsolute(relative)) {
+          throw new PandaDocError(
+            'Resolved download path escaped the temp directory.',
+            'DOWNLOAD_ERROR',
+            'Try the download again.',
+          );
+        }
+        let outFd: number;
+        try {
+          outFd = fs.openSync(candidate, 'wx');
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code === 'EEXIST') continue;
+          throw err;
+        }
+        try {
+          fs.writeFileSync(outFd, pdfBuffer);
+        } finally {
+          fs.closeSync(outFd);
+        }
+        outputPath = candidate;
+      }
+      if (!outputPath) {
+        throw new PandaDocError(
+          'Could not allocate a temp file for the download.',
+          'DOWNLOAD_ERROR',
+          'Try the download again.',
+        );
+      }
 
       return JSON.stringify({
         ok: true,
