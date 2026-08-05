@@ -69,7 +69,7 @@ describe('Smoke test — Browser Automation MCP server', () => {
     ];
 
     const destructiveTools = [
-      'browser_close',
+      'browser_close', 'browser_upload', 'browser_pdf',
     ];
 
     for (const tool of toolsResult.tools) {

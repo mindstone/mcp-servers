@@ -14,12 +14,15 @@ WORKFLOW: browser_snapshot → find file input @ref → browser_upload.
 
 Files must live inside the workspace directory (MCP_WORKSPACE_PATH, or the system temp directory when unset) — paths outside it are refused, and only regular files (not directories or devices) are accepted. Validated files are copied into a private staging directory before upload, so the upload cannot be redirected after validation.`,
       inputSchema: {
-        ref: z.string().describe('Element ref (e.g., "@e3") or CSS selector for the file input'),
-        file_paths: z.array(z.string()).min(1).describe('Files to upload. Relative paths resolve inside the workspace directory; absolute paths must be inside it.'),
+        ref: z.string().min(1).describe('Element ref (e.g., "@e3") or CSS selector for the file input'),
+        file_paths: z.array(z.string().min(1)).min(1).describe('Files to upload. Relative paths resolve inside the workspace directory; absolute paths must be inside it.'),
       },
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        // Uploading a file to a page can trigger an immediate remote upload
+        // (pages that submit on the input's change event) — an external,
+        // production-impacting write.
+        destructiveHint: true,
         idempotentHint: false,
         openWorldHint: true,
       },

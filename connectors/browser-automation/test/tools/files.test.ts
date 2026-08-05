@@ -272,6 +272,26 @@ describe('browser_upload', () => {
     expect(capturedArgs).toHaveLength(0);
   });
 
+  it('rejects empty strings at the schema boundary', async () => {
+    testClient = await createTestClient({
+      env: { AGENT_BROWSER_SHOW_WINDOW: 'false', MCP_WORKSPACE_PATH: workspace },
+    });
+
+    const emptyRef = await testClient.client.callTool({
+      name: 'browser_upload',
+      arguments: { ref: '', file_paths: ['report.pdf'] },
+    });
+    expect(emptyRef.isError).toBe(true);
+
+    const emptyPath = await testClient.client.callTool({
+      name: 'browser_upload',
+      arguments: { ref: '@e3', file_paths: [''] },
+    });
+    expect(emptyPath.isError).toBe(true);
+
+    expect(capturedArgs).toHaveLength(0);
+  });
+
   it('fails closed (with a stderr warning) when the workspace root cannot be canonicalised', async () => {
     const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const missing = path.join(workspace, 'does-not-exist');

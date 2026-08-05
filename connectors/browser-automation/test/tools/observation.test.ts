@@ -449,6 +449,20 @@ describe('browser_pdf', () => {
     expect(fs.readFileSync(dest, 'utf8')).toBe('planted');
   });
 
+  it('rejects an empty file_path at the schema boundary', async () => {
+    testClient = await createTestClient({
+      env: { AGENT_BROWSER_SHOW_WINDOW: 'false', MCP_WORKSPACE_PATH: workspace },
+    });
+
+    const result = await testClient.client.callTool({
+      name: 'browser_pdf',
+      arguments: { file_path: '' },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(capturedArgs).toHaveLength(0);
+  });
+
   it('surfaces CLI errors and still discards the staging dir', async () => {
     const childProcess = await import('node:child_process');
     const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
