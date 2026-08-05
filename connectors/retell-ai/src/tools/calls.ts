@@ -147,19 +147,23 @@ COST: Uses phone minutes from your Retell AI plan.`,
       if (args.metadata) body.metadata = args.metadata;
       if (args.retell_llm_dynamic_variables) body.retell_llm_dynamic_variables = args.retell_llm_dynamic_variables;
 
-      const [result, dynamicVarWarnings] = await Promise.all([
-        retellFetch<Record<string, unknown>>(
-          '/v2/create-phone-call',
-          { method: 'POST', body: JSON.stringify(body) },
-        ),
-        args.retell_llm_dynamic_variables
-          ? checkDynamicVariableReferences({
-              fromNumber: args.from_number,
-              dynamicVariables: args.retell_llm_dynamic_variables as Record<string, unknown>,
-              overrideAgentId: args.override_agent_id,
-            })
-          : Promise.resolve(null),
-      ]);
+      // Run the prompt check BEFORE the create request: a warning computed
+      // concurrently with (or after) call creation is unactionable for that
+      // call. The check is fail-open but observable — a lookup failure
+      // surfaces as an explicit warning and never blocks the call.
+      const dynamicVarWarnings = args.retell_llm_dynamic_variables
+        ? await checkDynamicVariableReferences({
+            fromNumber: args.from_number,
+            dynamicVariables: args.retell_llm_dynamic_variables as Record<string, unknown>,
+            overrideAgentId: args.override_agent_id,
+            overrideAgentVersion: args.override_agent_version,
+          })
+        : null;
+
+      const result = await retellFetch<Record<string, unknown>>(
+        '/v2/create-phone-call',
+        { method: 'POST', body: JSON.stringify(body) },
+      );
 
       const response: Record<string, unknown> = {
         ok: true,
@@ -226,19 +230,23 @@ RETURNS: call_id, web_call_link, status, agent_id, access_token. Share web_call_
       if (args.metadata) body.metadata = args.metadata;
       if (args.retell_llm_dynamic_variables) body.retell_llm_dynamic_variables = args.retell_llm_dynamic_variables;
 
-      const [result, dynamicVarWarnings] = await Promise.all([
-        retellFetch<Record<string, unknown>>(
-          '/v2/create-web-call',
-          { method: 'POST', body: JSON.stringify(body) },
-        ),
-        args.retell_llm_dynamic_variables
-          ? checkDynamicVariableReferences({
-              fromNumber: '',
-              dynamicVariables: args.retell_llm_dynamic_variables as Record<string, unknown>,
-              overrideAgentId: args.agent_id,
-            })
-          : Promise.resolve(null),
-      ]);
+      // Run the prompt check BEFORE the create request: a warning computed
+      // concurrently with (or after) session creation is unactionable for that
+      // session. The check is fail-open but observable — a lookup failure
+      // surfaces as an explicit warning and never blocks the session.
+      const dynamicVarWarnings = args.retell_llm_dynamic_variables
+        ? await checkDynamicVariableReferences({
+            fromNumber: '',
+            dynamicVariables: args.retell_llm_dynamic_variables as Record<string, unknown>,
+            overrideAgentId: args.agent_id,
+            overrideAgentVersion: args.agent_version,
+          })
+        : null;
+
+      const result = await retellFetch<Record<string, unknown>>(
+        '/v2/create-web-call',
+        { method: 'POST', body: JSON.stringify(body) },
+      );
 
       const response: Record<string, unknown> = {
         ok: true,
