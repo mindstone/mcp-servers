@@ -23,6 +23,7 @@ import {
   type PollableJobResponse,
 } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
+import { UPLOAD_ALLOWED_HOST_SUFFIXES, validateOutboundUrlSync } from './url-safety.js';
 
 export const OPUS_API_BASE = 'https://api.opus.pro';
 
@@ -217,16 +218,26 @@ export async function opusFetch<T>(
  * upload URL is signed; adding Bearer would be wrong and could leak the key
  * if a future Opus change ever pointed `upload_url` at a non-GCS host).
  *
- * Hosts of returned upload URLs are NOT validated against an allow-list
- * because GCS uses signed URLs across multiple subdomains that vary by
- * region and bucket. The connector defends against host-injection in two
- * other ways: (a) the upload URL is consumed only within `opus_upload_video`
- * and never persisted, and (b) the Bearer header is intentionally omitted.
+ * The URL is validated against the GCS host allow-list (HTTPS, no userinfo,
+ * no non-public IP literals) before any request is issued: the initiation
+ * and session URLs are upstream-supplied, so a poisoned Opus response must
+ * not be able to point the connector's fetch at an arbitrary host (SSRF).
+ * Combined with (a) the URLs being consumed only within `opus_upload_video`
+ * and never persisted, and (b) the intentional omission of the Bearer
+ * header, a non-GCS destination is both refused and useless.
  */
 export async function opusFetchUnauthenticated<T>(
   url: string,
   options: OpusFetchOptions = {},
 ): Promise<T> {
+  const urlError = validateOutboundUrlSync(url, UPLOAD_ALLOWED_HOST_SUFFIXES);
+  if (urlError) {
+    throw new OpusError(
+      `Upload URL rejected: ${urlError}`,
+      'URL_REJECTED',
+      'The Opus API returned an unexpected upload URL. Re-run opus_upload_video to get a fresh upload link.',
+    );
+  }
   return opusFetchRaw<T>(url, options, false);
 }
 

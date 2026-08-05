@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { mswServer } from './helpers/setup.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
+import { setDnsLookupForTesting } from '../src/url-safety.js';
 import { MOCK_API_KEY } from './fixtures/opus-data.js';
 
 const CDN = 'https://ext.cdn.opus.pro';
@@ -16,9 +17,13 @@ let testClient: McpTestClient | undefined;
 
 beforeEach(() => {
   workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'opus-dl-'));
+  // The connector's DNS anti-rebinding layer resolves download hostnames;
+  // tests stub the resolver so no real DNS traffic is needed.
+  setDnsLookupForTesting(async () => [{ address: '93.184.216.34', family: 4 }]);
 });
 
 afterEach(async () => {
+  setDnsLookupForTesting(null);
   if (testClient) {
     await testClient.close();
     testClient = undefined;
