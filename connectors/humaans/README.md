@@ -145,7 +145,7 @@ node dist/index.js
 ## Data handling
 
 - Person list responses are field-allowlisted; person detail responses strip sensitive fields (tax ID, personal email/phone, home address, birthday, profile photo).
-- Free-text fields authored in Humaans (time-away `note`/`reviewNote`, job-role `note`) are returned inside `<untrusted-content>` envelopes so the model treats them as data, not instructions.
+- Free-text fields authored in Humaans (time-away `note`/`reviewNote`, job-role `note`, embedded time-away type and policy names, team names) are returned inside `<untrusted-content>` envelopes so the model treats them as data, not instructions.
 
 ## Licence
 
