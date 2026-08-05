@@ -1,4 +1,5 @@
 import { ConnectorError, RETELL_API_BASE, REQUEST_TIMEOUT_MS } from './types.js';
+import { envelopeApiErrorDetail } from './error-detail.js';
 
 /** Mutable API key — set via configure_retell_api_key tool or RETELL_API_KEY env var. */
 let apiKey = process.env.RETELL_API_KEY || '';
@@ -89,7 +90,7 @@ export async function retellFetch<T>(
       } catch { /* not JSON */ }
 
       throw new ConnectorError(
-        `Retell AI API error (HTTP ${response.status}): ${detail || response.statusText}`,
+        `Retell AI API error (HTTP ${response.status}): ${detail ? envelopeApiErrorDetail(detail) : response.statusText}`,
         `HTTP_${response.status}`,
         getErrorResolution(response.status, detail),
       );
