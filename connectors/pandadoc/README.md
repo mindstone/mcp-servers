@@ -123,7 +123,7 @@ node dist/index.js
 - `list_documents` — List and search PandaDoc documents with filtering
 - `get_document_status` — Check the current status of a document
 - `get_document_details` — Get full details for a document
-- `create_document_from_template` — Create a new document from a template
+- `create_document_from_template` — Create a new document from a template (recipients, tokens, fields, pricing tables, metadata, tags)
 - `upload_document` — Upload a PDF, DOCX, or RTF file to create a document
 - `create_document_from_url` — Create a document from a publicly accessible HTTPS PDF URL
 - `send_document` — Send a document to recipients for viewing/signing

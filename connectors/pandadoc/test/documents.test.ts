@@ -147,6 +147,76 @@ describe('PandaDoc document tools', () => {
     expect(result.isError).toBe(true);
   });
 
+  it('create_document_from_template passes pricing_tables through to the API', async () => {
+    let capturedBody: Record<string, unknown> | null = null;
+    mswServer.use(
+      http.post('https://api.pandadoc.com/public/v1/documents', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({
+          id: 'doc-tmpl-2',
+          name: 'Priced Proposal',
+          status: 'document.uploaded',
+          date_created: '2026-03-10T12:00:00Z',
+          date_modified: '2026-03-10T12:00:00Z',
+          expiration_date: null,
+          version: null,
+          uuid: 'doc-tmpl-2',
+          links: [],
+          info_message: 'Poll until document.draft',
+        });
+      }),
+    );
+    testClient = await createTestClient({
+      env: { PANDADOC_API_KEY: 'test-pandadoc-key', MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const pricingTables = [
+      {
+        name: 'Pricing Table 1',
+        data_merge: true,
+        options: { currency: 'USD' },
+        sections: [
+          {
+            title: 'Services',
+            default: true,
+            rows: [
+              {
+                data: { Name: 'Consulting', Price: 200, QTY: 10, SKU: 'consult-1' },
+                custom_fields: { Notes: 'On-site' },
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    const result = await testClient.callTool('create_document_from_template', {
+      template_uuid: 'tmpl-1',
+      recipients: [{ email: 'client@co.com', role: 'Client' }],
+      pricing_tables: pricingTables,
+    });
+    const json = result.json as { ok: boolean; document: { id: string } };
+    expect(json.ok).toBe(true);
+    expect(capturedBody).toMatchObject({
+      template_uuid: 'tmpl-1',
+      pricing_tables: pricingTables,
+    });
+  });
+
+  it('create_document_from_template rejects a pricing table without name via Zod', async () => {
+    mswServer.use(...createPandaDocHandlers());
+    testClient = await createTestClient({
+      env: { PANDADOC_API_KEY: 'test-pandadoc-key', MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('create_document_from_template', {
+      template_uuid: 'tmpl-1',
+      recipients: [{ email: 'client@co.com', role: 'Client' }],
+      pricing_tables: [{ sections: [] }],
+    });
+    expect(result.isError).toBe(true);
+  });
+
   // ── create_document_from_url ────────────────────────────────────────
 
   it('create_document_from_url posts url and metadata to the API', async () => {

@@ -21,6 +21,7 @@ are maintained manually as part of the PR review checklist.
 - `create_document_from_url` — create a document from a publicly accessible HTTPS PDF URL (`POST /documents` with `url`), sidestepping the local-file sandbox of `upload_document` for cloud-hosted files. Supports recipients, fields, tokens, metadata, tags, and `folder_uuid`; marked `destructiveHint: true`.
 - `list_content_library_items` — search/list content library items (`GET /content-library-items` with q/id/folder/tag/deleted filters) for proposal assembly from approved reusable blocks.
 - `get_content_library_item_details` — full content library item details (`GET /content-library-items/{id}/details`): roles, fields, tokens, pricing, metadata, and tags.
+- `create_document_from_template` now accepts `pricing_tables` to populate template pricing tables at creation time (sections, rows, options, custom fields), matching the PandaDoc `PricingTableRequest` schema.
 
 ## [0.2.2] - 2026-05-14
 ### Added

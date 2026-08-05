@@ -248,9 +248,28 @@ RELATED TOOLS:
           value: z.string().describe('Value to fill in'),
         })).optional().describe('Template variables to pre-fill'),
         fields: z.record(z.unknown()).optional().describe('Map of field names to values: { "FieldName": { "value": "text" } }'),
+        pricing_tables: z.array(z.object({
+          name: z.string().describe('Name of the pricing table in the template to populate'),
+          data_merge: z.boolean().optional().describe('If true, all field names in data rows must be the external names defined in the template'),
+          options: z.record(z.unknown()).optional().describe('Table options, e.g. { "currency": "USD", "Discount": { "type": "percent", "name": "Global Discount", "value": 10 } }'),
+          sections: z.array(z.object({
+            title: z.string().describe('Section title'),
+            default: z.boolean().optional().describe('If true, this is the default section'),
+            multichoice_enabled: z.boolean().optional().describe('If true, recipients can pick rows in this section'),
+            rows: z.array(z.object({
+              options: z.object({
+                qty_editable: z.boolean().optional(),
+                optional_selected: z.boolean().optional(),
+                optional: z.boolean().optional(),
+              }).optional().describe('Row options (editable qty, optional row, pre-selected)'),
+              data: z.record(z.unknown()).optional().describe('Row values keyed by column name, e.g. { "Name": "Widget", "Price": 10, "QTY": 3, "SKU": "widget-1" }'),
+              custom_fields: z.record(z.unknown()).optional().describe('Additional custom column values'),
+            })).optional().describe('Rows to populate in this section'),
+          })).optional().describe('Pricing table sections with rows'),
+        })).optional().describe('Pricing tables to populate. Requires "Automatically add products to this table" enabled on the template pricing table. All product info must be passed here — products stored in PandaDoc cannot be used.'),
         metadata: z.record(z.unknown()).optional().describe('Custom key-value metadata to associate with the document'),
         tags: z.array(z.string()).optional().describe('Tags to apply'),
-        folder_uuid: z.string().optional().describe('Folder ID to store the document in'),
+        folder_uuid: z.string().optional().describe('Folder ID to store the document in (see list_document_folders)'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
@@ -264,6 +283,7 @@ RELATED TOOLS:
       if (args.name) body.name = args.name;
       if (args.tokens) body.tokens = args.tokens;
       if (args.fields) body.fields = args.fields;
+      if (args.pricing_tables) body.pricing_tables = args.pricing_tables;
       if (args.metadata) body.metadata = args.metadata;
       if (args.tags) body.tags = args.tags;
       if (args.folder_uuid) body.folder_uuid = args.folder_uuid;
