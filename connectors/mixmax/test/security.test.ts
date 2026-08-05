@@ -28,6 +28,28 @@ describe('Mixmax security — destructiveHint annotations (M3.8)', () => {
     expect(tool!.annotations?.destructiveHint).toBe(true);
   });
 
+  it('VAL-MIXMAX-002 — production-impacting write tools have destructiveHint: true', async () => {
+    mswServer.use(...createMixmaxHandlers(API_TOKEN));
+    testClient = await createTestClient({
+      env: { MIXMAX_API_TOKEN: API_TOKEN, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const toolsResult = await testClient.client.listTools();
+    for (const name of [
+      'remove_mixmax_sequence_recipients',
+      'cancel_mixmax_message',
+      'send_mixmax_email',
+      'send_mixmax_snippet',
+    ]) {
+      const tool = toolsResult.tools.find((t) => t.name === name);
+      expect(tool, `${name} tool must be registered`).toBeDefined();
+      expect(
+        tool!.annotations?.destructiveHint,
+        `${name} must have destructiveHint:true`,
+      ).toBe(true);
+    }
+  });
+
   it('VAL-MIXMAX-101 — read-only mixmax tools keep destructiveHint: false', async () => {
     mswServer.use(...createMixmaxHandlers(API_TOKEN));
     testClient = await createTestClient({

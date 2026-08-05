@@ -3,7 +3,11 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { mixmaxFetch } from '../client.js';
 import { withErrorHandling, parseApiResponse } from '../utils.js';
 import { isConfigured } from '../auth.js';
-import { sequencesResponseSchema, sequenceDetailSchema } from '../types.js';
+import {
+  sequencesResponseSchema,
+  sequenceDetailSchema,
+  cancelSequenceResponseSchema,
+} from '../types.js';
 import { sanitizeSequences, sanitizeSequence } from '../sanitize.js';
 
 function noApiTokenError(): string {
@@ -141,4 +145,47 @@ TEMPLATE VARIABLES: If the sequence stages use variables like {{first_name}}, pa
     }),
   );
 
+  server.registerTool(
+    'remove_mixmax_sequence_recipients',
+    {
+      description:
+        `Remove recipients from a Mixmax sequence, exiting them from the drip campaign — they will receive no further stage emails.
+
+IMPORTANT: Confirm with the user before calling — this stops a live sequence for real people (e.g. for opt-out/compliance requests).
+
+WORKFLOW:
+1. list_mixmax_sequences to find the sequence _id
+2. Confirm the exact recipient email addresses with the user
+3. Call this tool
+
+NOTE: An explicit email list is required; this tool cannot cancel an entire sequence at once.`,
+      inputSchema: z.object({
+        sequenceId: z.string().min(1).describe('The _id of the sequence to remove recipients from'),
+        emails: z.array(z.string().email()).min(1).describe('Email addresses of the recipients to remove from the sequence'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      if (!isConfigured()) return noApiTokenError();
+
+      const data = parseApiResponse(
+        cancelSequenceResponseSchema,
+        await mixmaxFetch<unknown>(
+          `/sequences/${encodeURIComponent(args.sequenceId)}/cancel`,
+          {
+            method: 'POST',
+            body: JSON.stringify({ emails: args.emails }),
+          },
+        ),
+        'sequence cancel',
+      );
+
+      const removed = data.recipients ?? [];
+      return JSON.stringify({
+        ok: true,
+        message: `Removed ${removed.length} recipient(s) from sequence.`,
+        removed,
+      });
+    }),
+  );
 }

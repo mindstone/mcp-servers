@@ -93,6 +93,14 @@ export const sequenceDetailSchema = z
   .passthrough();
 export type SequenceDetail = z.infer<typeof sequenceDetailSchema>;
 
+/** Response of POST /sequences/:id/cancel — the exited recipient emails. */
+export const cancelSequenceResponseSchema = z
+  .object({
+    recipients: z.array(z.string()).optional(),
+  })
+  .passthrough();
+export type CancelSequenceResponse = z.infer<typeof cancelSequenceResponseSchema>;
+
 export const snippetItemSchema = z
   .object({
     _id: z.string(),

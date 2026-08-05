@@ -85,6 +85,56 @@ describe('Mixmax sequence tools', () => {
     expect(json.sequence.stages[0].subject).toBe('<untrusted-content source="mixmax:sequence.stages.subject">Welcome to Acme!</untrusted-content>');
   });
 
+  it('remove_mixmax_sequence_recipients cancels recipients via /sequences/:id/cancel', async () => {
+    let capturedPayload: Record<string, unknown> = {};
+    mswServer.use(
+      http.post('https://api.mixmax.com/v1/sequences/seq-001/cancel', async ({ request }) => {
+        const token = request.headers.get('X-API-Token');
+        if (token !== API_TOKEN) {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        capturedPayload = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ recipients: ['alice@acme.com'] });
+      }),
+    );
+
+    testClient = await createTestClient({
+      env: { MIXMAX_API_TOKEN: API_TOKEN, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('remove_mixmax_sequence_recipients', {
+      sequenceId: 'seq-001',
+      emails: ['alice@acme.com'],
+    });
+    const json = result.json as { ok: boolean; message: string; removed: string[] };
+
+    expect(json.ok).toBe(true);
+    expect(json.message).toContain('1 recipient(s)');
+    expect(json.removed).toEqual(['alice@acme.com']);
+    expect(capturedPayload.emails).toEqual(['alice@acme.com']);
+  });
+
+  it('remove_mixmax_sequence_recipients rejects empty emails via Zod', async () => {
+    let requestMade = false;
+    mswServer.use(
+      http.post('https://api.mixmax.com/v1/sequences/*/cancel', () => {
+        requestMade = true;
+        return HttpResponse.json({});
+      }),
+    );
+
+    testClient = await createTestClient({
+      env: { MIXMAX_API_TOKEN: API_TOKEN, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('remove_mixmax_sequence_recipients', {
+      sequenceId: 'seq-001',
+      emails: [],
+    });
+    expect(result.isError).toBe(true);
+    expect(requestMade).toBe(false);
+  });
+
   // --- VAL-COMMON-003: Invalid credentials fail cleanly without leaking secrets ---
   it('invalid credentials return isError without leaking secrets', async () => {
     mswServer.use(...createMixmaxUnauthorizedHandlers());

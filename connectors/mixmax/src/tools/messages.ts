@@ -108,4 +108,36 @@ NOTE: This sends through Mixmax, not raw Gmail. The email will appear in the use
     }),
   );
 
+  server.registerTool(
+    'cancel_mixmax_message',
+    {
+      description:
+        `Cancel a scheduled (not yet sent) Mixmax message, recalling it before it goes out.
+
+IMPORTANT: Confirm with the user before calling — this is irreversible.
+
+WORKFLOW:
+1. list_mixmax_messages and find the message with a "scheduled" timestamp and no "sent" timestamp
+2. Confirm the subject/recipients with the user
+3. Call this tool with the message _id
+
+NOTE: Only messages that have not been sent yet can be cancelled. An already-sent email CANNOT be recalled.`,
+      inputSchema: z.object({
+        messageId: z.string().min(1).describe('The _id of the scheduled message (from list_mixmax_messages)'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      if (!isConfigured()) return noApiTokenError();
+
+      await mixmaxFetch<unknown>(`/messages/${encodeURIComponent(args.messageId)}`, {
+        method: 'DELETE',
+      });
+
+      return JSON.stringify({
+        ok: true,
+        message: 'Message cancelled. If it was scheduled, it will not be sent.',
+      });
+    }),
+  );
 }
