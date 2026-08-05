@@ -13,6 +13,8 @@ Napkin AI visual generation MCP server for Model Context Protocol hosts. Generat
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
+> **Note:** The Napkin API is currently a **developer preview** (see [api.napkin.ai](https://api.napkin.ai/)). Endpoints and behavior may change; report upstream issues to api@napkin.ai. Older guides reference `context_before`/`context_after` parameters — Napkin deprecated these in favor of the single `context` parameter, which `napkin_generate_visual` supports.
+
 ## Requirements
 
 - Node.js 20+
