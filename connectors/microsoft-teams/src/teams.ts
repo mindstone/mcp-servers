@@ -414,6 +414,7 @@ const graphMessageSchema = z
 const graphMessageCollectionSchema = z
   .object({
     value: z.array(graphMessageSchema).nullish(),
+    '@odata.nextLink': z.string().nullish(),
   })
   .passthrough();
 
@@ -454,6 +455,7 @@ export async function listChannelMessages(
     teamId,
     channelId,
     count: messages.length,
+    hasMore: Boolean(response['@odata.nextLink']),
     messages: messages.map((msg) => ({
       ...formatMessage(msg, 'list_channel_messages'),
       replyToId: msg.replyToId ?? undefined,
@@ -624,6 +626,7 @@ const graphUserSchema = z
 const graphUserCollectionSchema = z
   .object({
     value: z.array(graphUserSchema).nullish(),
+    '@odata.nextLink': z.string().nullish(),
   })
   .passthrough();
 
@@ -654,11 +657,11 @@ export async function findUser(
           .select('id,displayName,mail,userPrincipalName')
           .get(),
       );
-      return { count: 1, users: [formatUser(user, 'find_user')] };
+      return { count: 1, hasMore: false, users: [formatUser(user, 'find_user')] };
     } catch (err) {
       // A 404 here means "no such user", which is a result, not a failure.
       if ((err as { statusCode?: number })?.statusCode === 404) {
-        return { count: 0, users: [] };
+        return { count: 0, hasMore: false, users: [] };
       }
       throw err;
     }
@@ -678,7 +681,13 @@ export async function findUser(
       .get(),
   );
   const users = response.value ?? [];
-  return { count: users.length, users: users.map((user) => formatUser(user, 'find_user')) };
+  // Name searches are capped at 10 results; surface Graph's continuation link
+  // so a truncated result is never mistaken for a complete one.
+  return {
+    count: users.length,
+    hasMore: Boolean(response['@odata.nextLink']),
+    users: users.map((user) => formatUser(user, 'find_user')),
+  };
 }
 
 function requireStringArrayArg(args: ArgBag, name: string, label: string, nextStep: string): string[] {
