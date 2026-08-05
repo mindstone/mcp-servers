@@ -56,7 +56,7 @@ export function registerNoteTools(server: McpServer): void {
         body: z.string().min(1).describe('Note body text (required)'),
         parent_id: z.string().optional().describe('Record ID to attach the note to'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       return withConnection(undefined, async (conn) => {

@@ -211,7 +211,7 @@ export function registerQueryTools(server: McpServer): void {
         object_name: z.string().min(1).describe('sObject API name (e.g., Invoice__c, Case)'),
         fields: z.record(z.unknown()).describe('Field-value pairs to set on the new record'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       validateObjectName(args.object_name);

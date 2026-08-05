@@ -52,7 +52,7 @@ export function registerContactTools(server: McpServer): void {
         related_account_id: z.string().optional().describe('Account ID to associate with'),
         fields: z.record(z.unknown()).optional().describe('Additional/custom fields as key-value pairs'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       return withConnection(undefined, async (conn) => {

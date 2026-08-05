@@ -57,7 +57,7 @@ export function registerEventTools(server: McpServer): void {
         owner_id: z.string().optional().describe('Owner User ID'),
         fields: z.record(z.unknown()).optional().describe('Additional/custom fields as key-value pairs'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       // Validate formats up front for actionable errors; the validated values

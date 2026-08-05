@@ -59,7 +59,7 @@ export function registerTaskTools(server: McpServer): void {
         owner_id: z.string().optional().describe('Owner User ID'),
         fields: z.record(z.unknown()).optional().describe('Additional/custom fields'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       if (args.activity_date) formatSOQLDate(args.activity_date, 'activity_date');

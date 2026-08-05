@@ -55,7 +55,7 @@ export function registerLeadTools(server: McpServer): void {
         status: z.string().optional().describe('Lead status'),
         fields: z.record(z.unknown()).optional().describe('Additional/custom fields'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       return withConnection(undefined, async (conn) => {
@@ -82,7 +82,7 @@ export function registerLeadTools(server: McpServer): void {
         create_opportunity: z.boolean().optional().describe('Create opportunity (default: true)'),
         opportunity_name: z.string().optional().describe('Name for new opportunity'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       return withConnection(undefined, async (conn) => {

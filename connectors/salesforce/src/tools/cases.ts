@@ -56,7 +56,7 @@ export function registerCaseTools(server: McpServer): void {
         related_contact_id: z.string().optional().describe('Contact ID to associate with'),
         fields: z.record(z.unknown()).optional().describe('Additional/custom fields as key-value pairs'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       return withConnection(undefined, async (conn) => {
