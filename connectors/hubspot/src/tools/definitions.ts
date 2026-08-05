@@ -2428,6 +2428,71 @@ Common properties: email, firstname, lastname, phone, company, jobtitle, lifecyc
       },
       required: ['ids']
     }
+  },
+  {
+    name: 'add_hubspot_list_members',
+    category: 'Lists',
+    description: `Add records to a HubSpot list/segment.
+
+USE THIS WHEN:
+- User asks "add these contacts to the Q3 webinar list" or "put this deal on the nurture list"
+
+WORKFLOW:
+1. list_hubspot_lists → find the listId
+2. search_hubspot_contacts (or another search tool) → find the record IDs
+3. add_hubspot_list_members with both
+
+IMPORTANT: only MANUAL and SNAPSHOT lists accept membership changes. DYNAMIC lists
+compute membership from their filter criteria — HubSpot rejects the write; edit the
+list's filters (in the HubSpot UI) instead.
+
+REQUIRES the crm.lists.write OAuth scope. On a 403 the account's plan, the signed-in
+user's permissions, or the connected app's scopes are the likely cause.`,
+    aliases: ['add_to_hubspot_list', 'add_list_members'],
+    annotations: { readOnlyHint: false, destructiveHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        listId: { type: 'string', description: 'The list ID (from list_hubspot_lists)' },
+        recordIds: {
+          type: 'array',
+          items: { type: 'string' },
+          maxItems: MAX_FAN_OUT,
+          description: 'Record IDs to add (max 100 per call)'
+        }
+      },
+      required: ['listId', 'recordIds']
+    }
+  },
+  {
+    name: 'remove_hubspot_list_members',
+    category: 'Lists',
+    description: `Remove records from a HubSpot list/segment.
+
+USE THIS WHEN:
+- User asks "take these contacts off the webinar list" or "clean up this segment"
+
+IMPORTANT: only MANUAL and SNAPSHOT lists accept membership changes. DYNAMIC lists
+compute membership from their filter criteria — HubSpot rejects the write; edit the
+list's filters (in the HubSpot UI) instead.
+
+REQUIRES the crm.lists.write OAuth scope. On a 403 the account's plan, the signed-in
+user's permissions, or the connected app's scopes are the likely cause.`,
+    aliases: ['remove_from_hubspot_list', 'remove_list_members'],
+    annotations: { readOnlyHint: false, destructiveHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        listId: { type: 'string', description: 'The list ID (from list_hubspot_lists)' },
+        recordIds: {
+          type: 'array',
+          items: { type: 'string' },
+          maxItems: MAX_FAN_OUT,
+          description: 'Record IDs to remove (max 100 per call)'
+        }
+      },
+      required: ['listId', 'recordIds']
+    }
   }
 ];
 

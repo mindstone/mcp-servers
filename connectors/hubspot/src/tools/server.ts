@@ -92,6 +92,8 @@ import {
   handleListLists,
   handleGetList,
   handleListListMembers,
+  handleAddListMembers,
+  handleRemoveListMembers,
   handleBatchReadContacts
 } from './marketing-handlers.js';
 import {
@@ -610,6 +612,12 @@ export class HubSpotServer {
             break;
           case 'list_hubspot_list_members':
             result = await handleListListMembers(args as unknown as Parameters<typeof handleListListMembers>[0]);
+            break;
+          case 'add_hubspot_list_members':
+            result = await handleAddListMembers(args as unknown as Parameters<typeof handleAddListMembers>[0]);
+            break;
+          case 'remove_hubspot_list_members':
+            result = await handleRemoveListMembers(args as unknown as Parameters<typeof handleRemoveListMembers>[0]);
             break;
           case 'batch_read_hubspot_contacts':
             result = await handleBatchReadContacts(args as unknown as Parameters<typeof handleBatchReadContacts>[0]);

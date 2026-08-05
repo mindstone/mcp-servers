@@ -804,6 +804,21 @@ export class HubSpotClient {
     return this.request('GET', `/crm/v3/lists/${listId}/memberships?${params.toString()}`);
   }
 
+  // List membership writes. Only MANUAL and SNAPSHOT lists accept membership
+  // changes; DYNAMIC lists reject them (membership is computed from filters).
+  // Body is a bare JSON array of record ID strings, per the v3 Lists API.
+  async addListMembers(listId: string, recordIds: string[]): Promise<void> {
+    assertHubSpotObjectId(listId, 'listId');
+    for (const recordId of recordIds) assertHubSpotObjectId(recordId, 'recordId');
+    await this.request('PUT', `/crm/v3/lists/${encodeURIComponent(listId)}/memberships/add`, recordIds);
+  }
+
+  async removeListMembers(listId: string, recordIds: string[]): Promise<void> {
+    assertHubSpotObjectId(listId, 'listId');
+    for (const recordId of recordIds) assertHubSpotObjectId(recordId, 'recordId');
+    await this.request('PUT', `/crm/v3/lists/${encodeURIComponent(listId)}/memberships/remove`, recordIds);
+  }
+
   // CMS Blog / Knowledge Base APIs
   async listBlogSettings(limit?: number, after?: string): Promise<ListResponse<BlogSettings>> {
     const params = new URLSearchParams();

@@ -338,3 +338,39 @@ export async function handleBatchReadContacts(args: { ids: string[]; properties?
     throw new Error(JSON.stringify(parsed));
   }
 }
+
+export async function handleAddListMembers(args: { listId: string; recordIds: string[] }) {
+  assertMaxFanOut(args.recordIds, 'recordIds');
+
+  try {
+    const client = await getHubSpotClientAsync();
+    await client.addListMembers(args.listId, args.recordIds);
+    logger.info(`Added ${args.recordIds.length} record(s) to list ${args.listId}`);
+    return {
+      success: true,
+      message: `Added ${args.recordIds.length} record(s) to list ${args.listId}.`
+    };
+  } catch (error) {
+    const parsed = parseHubSpotError(error, { feature: 'lists', operation: 'add_members', args });
+    logger.error(`Add list members failed:`, parsed);
+    throw new Error(JSON.stringify(parsed));
+  }
+}
+
+export async function handleRemoveListMembers(args: { listId: string; recordIds: string[] }) {
+  assertMaxFanOut(args.recordIds, 'recordIds');
+
+  try {
+    const client = await getHubSpotClientAsync();
+    await client.removeListMembers(args.listId, args.recordIds);
+    logger.info(`Removed ${args.recordIds.length} record(s) from list ${args.listId}`);
+    return {
+      success: true,
+      message: `Removed ${args.recordIds.length} record(s) from list ${args.listId}.`
+    };
+  } catch (error) {
+    const parsed = parseHubSpotError(error, { feature: 'lists', operation: 'remove_members', args });
+    logger.error(`Remove list members failed:`, parsed);
+    throw new Error(JSON.stringify(parsed));
+  }
+}
