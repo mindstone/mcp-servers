@@ -4,6 +4,7 @@ import {
   registerConfigureTools,
   registerMailboxTools,
   registerMessageTools,
+  registerAttachmentTools,
   registerSendTools,
 } from './tools/index.js';
 
@@ -19,6 +20,7 @@ export function createServer(): McpServer {
   registerConfigureTools(server);
   registerMailboxTools(server);
   registerMessageTools(server);
+  registerAttachmentTools(server);
   registerSendTools(server);
 
   return server;

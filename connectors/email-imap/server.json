@@ -92,6 +92,12 @@
           "isRequired": false,
           "default": "3600000",
           "format": "number"
+        },
+        {
+          "name": "MCP_WORKSPACE_PATH",
+          "description": "Workspace directory that email_get_attachment downloads into (email-imap-attachments/ subdirectory). Defaults to the system temp directory.",
+          "isRequired": false,
+          "format": "string"
         }
       ]
     }

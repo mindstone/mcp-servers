@@ -10,6 +10,7 @@ import { setClientConfig } from './shared.js';
 
 export { registerMailboxTools } from './mailbox.js';
 export { registerMessageTools } from './messages.js';
+export { registerAttachmentTools } from './attachments.js';
 export { registerSendTools } from './send.js';
 export { registerConfigureTools, getCredentials, setCredentials } from './configure.js';
 

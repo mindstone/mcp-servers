@@ -61,6 +61,8 @@ export interface AttachmentMetadata {
   filename: string | null;
   contentType: string;
   size: number;
+  /** MIME part identifier — pass to email_get_attachment to download. */
+  part: string;
 }
 
 /**
@@ -192,6 +194,7 @@ export function collectMessageParts(
     filename,
     contentType,
     size: typeof node.size === 'number' ? node.size : 0,
+    part: partIdentifier,
   });
 }
 
