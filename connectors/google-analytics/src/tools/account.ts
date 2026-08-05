@@ -6,7 +6,8 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { googleApi, paginate, propertyPath } from '../client.js';
-import { withErrorHandling } from '../utils.js';
+import { wrapUntrusted } from '../untrusted-content.js';
+import { UNTRUSTED_SOURCES, withErrorHandling } from '../utils.js';
 
 const READ_ONLY = {
   readOnlyHint: true,
@@ -48,10 +49,10 @@ export function registerAccountTools(server: McpServer): void {
         ok: true,
         accountSummaries: accountSummaries.map((summary) => ({
           account: summary.account,
-          displayName: summary.displayName,
+          displayName: wrapUntrusted(summary.displayName, UNTRUSTED_SOURCES.admin),
           propertySummaries: (summary.propertySummaries || []).map((property) => ({
             property: property.property,
-            displayName: property.displayName,
+            displayName: wrapUntrusted(property.displayName, UNTRUSTED_SOURCES.admin),
             propertyType: property.propertyType,
             parent: property.parent,
           })),
@@ -93,9 +94,9 @@ export function registerAccountTools(server: McpServer): void {
           if (accountFilter && accountId !== accountFilter) return [];
           return (accountSummary.propertySummaries || []).map((property) => ({
             account_id: accountId,
-            account_name: accountSummary.displayName,
+            account_name: wrapUntrusted(accountSummary.displayName, UNTRUSTED_SOURCES.admin),
             property_id: property.property?.replace(/^properties\//, '') || null,
-            property_name: property.displayName,
+            property_name: wrapUntrusted(property.displayName, UNTRUSTED_SOURCES.admin),
             property_type: property.propertyType || null,
             parent: property.parent || null,
           }));
@@ -136,7 +137,7 @@ export function registerAccountTools(server: McpServer): void {
       return JSON.stringify({
         ok: true,
         property_id: property.name?.replace(/^properties\//, '') || null,
-        displayName: property.displayName || null,
+        displayName: wrapUntrusted(property.displayName, UNTRUSTED_SOURCES.admin) || null,
         propertyType: property.propertyType || null,
         parent: property.parent || null,
         currencyCode: property.currencyCode || null,

@@ -8,7 +8,8 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { googleApi, paginate, propertyPath, accountPath, Bases } from '../client.js';
 import { GoogleAnalyticsError } from '../types.js';
-import { withErrorHandling } from '../utils.js';
+import { wrapUntrusted, wrapUntrustedJsonStrings } from '../untrusted-content.js';
+import { UNTRUSTED_SOURCES, withErrorHandling } from '../utils.js';
 
 const READ_ONLY = {
   readOnlyHint: true,
@@ -77,16 +78,16 @@ export function registerAdminTools(server: McpServer): void {
         customDimensions: customDimensions.map((item) => ({
           name: item.name || null,
           parameterName: item.parameterName || null,
-          displayName: item.displayName || null,
-          description: item.description || null,
+          displayName: wrapUntrusted(item.displayName, UNTRUSTED_SOURCES.admin) || null,
+          description: wrapUntrusted(item.description, UNTRUSTED_SOURCES.admin) || null,
           scope: item.scope || null,
           disallowAdsPersonalization: item.disallowAdsPersonalization || false,
         })),
         customMetrics: customMetrics.map((item) => ({
           name: item.name || null,
           parameterName: item.parameterName || null,
-          displayName: item.displayName || null,
-          description: item.description || null,
+          displayName: wrapUntrusted(item.displayName, UNTRUSTED_SOURCES.admin) || null,
+          description: wrapUntrusted(item.description, UNTRUSTED_SOURCES.admin) || null,
           measurementUnit: item.measurementUnit || null,
           restrictedMetricType: item.restrictedMetricType || [],
         })),
@@ -121,7 +122,8 @@ export function registerAdminTools(server: McpServer): void {
           customerId: link.customerId || null,
           canManageClients: link.canManageClients || false,
           adsPersonalizationEnabled: link.adsPersonalizationEnabled || false,
-          creatorEmailAddress: link.creatorEmailAddress || null,
+          creatorEmailAddress:
+            wrapUntrusted(link.creatorEmailAddress, UNTRUSTED_SOURCES.admin) || null,
         })),
       });
     }),
@@ -153,7 +155,7 @@ export function registerAdminTools(server: McpServer): void {
         property,
         keyEvents: keyEvents.map((item) => ({
           name: item.name || null,
-          eventName: item.eventName || null,
+          eventName: wrapUntrusted(item.eventName, UNTRUSTED_SOURCES.admin) || null,
           createTime: item.createTime || null,
           countingMethod: item.countingMethod || null,
           defaultValue: item.defaultValue || null,
@@ -182,7 +184,7 @@ export function registerAdminTools(server: McpServer): void {
         property,
         dataStreams: dataStreams.map((stream) => ({
           name: stream.name || null,
-          displayName: stream.displayName || null,
+          displayName: wrapUntrusted(stream.displayName, UNTRUSTED_SOURCES.admin) || null,
           type: stream.type || null,
           createTime: stream.createTime || null,
           updateTime: stream.updateTime || null,
@@ -226,7 +228,7 @@ export function registerAdminTools(server: McpServer): void {
         ok: true,
         property,
         dataStream: webStream.name,
-        displayName: webStream.displayName || null,
+        displayName: wrapUntrusted(webStream.displayName, UNTRUSTED_SOURCES.admin) || null,
         globalSiteTag: response?.snippet || null,
         globalSiteTagName: response?.name || null,
       });
@@ -374,11 +376,15 @@ export function registerAdminTools(server: McpServer): void {
           id: event.id || null,
           changeTime: event.changeTime || null,
           actorType: event.actorType || null,
-          userActorEmail: event.userActorEmail || null,
+          userActorEmail: wrapUntrusted(event.userActorEmail, UNTRUSTED_SOURCES.admin) || null,
           changesFiltered: (event.changes || []).map((change) => ({
             action: change.action || null,
             resource: change.resource || null,
-            resourceAfterChange: change.resourceAfterChange || null,
+            // Arbitrary resource snapshot authored in the external system —
+            // enveloped wholesale rather than field-enumerated.
+            resourceAfterChange: change.resourceAfterChange
+              ? wrapUntrustedJsonStrings(change.resourceAfterChange, UNTRUSTED_SOURCES.admin)
+              : null,
           })),
         })),
       });

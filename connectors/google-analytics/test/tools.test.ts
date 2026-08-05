@@ -82,7 +82,9 @@ describe('tool calls — happy path', () => {
     expect(parsed.ok).toBe(true);
     const rows = parsed.rows as Array<Record<string, string>>;
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toMatchObject({ country: 'United Kingdom' });
+    expect(rows[0]).toMatchObject({
+      country: '<untrusted-content source="ga4-report">United Kingdom</untrusted-content>',
+    });
   });
 
   it('ga_check_compatibility surfaces compatible dimensions and metrics', async () => {
