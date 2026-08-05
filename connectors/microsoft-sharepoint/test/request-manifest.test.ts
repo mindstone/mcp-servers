@@ -37,6 +37,8 @@ const MANIFEST: ManifestRow[] = [
   { tool: 'create_list_item', method: 'POST', pathname: '/v1.0/sites/:siteId/lists/:listId/items', args: { siteId: 'site-1', listId: 'list-1', fields: { Title: 'New item' } } },
   { tool: 'update_list_item', method: 'PATCH', pathname: '/v1.0/sites/:siteId/lists/:listId/items/:itemId/fields', args: { siteId: 'site-1', listId: 'list-1', itemId: '1', fields: { Status: 'Complete' } } },
   { tool: 'delete_list_item', method: 'DELETE', pathname: '/v1.0/sites/:siteId/lists/:listId/items/:itemId', args: { siteId: 'site-1', listId: 'list-1', itemId: '1' } },
+  { tool: 'list_list_columns', method: 'GET', pathname: '/v1.0/sites/:siteId/lists/:listId/columns', args: { siteId: 'site-1', listId: 'list-1' } },
+  { tool: 'create_site_list', method: 'POST', pathname: '/v1.0/sites/:siteId/lists', args: { siteId: 'site-1', displayName: 'Project Tracker' } },
   { tool: 'search_sharepoint', method: 'POST', pathname: '/v1.0/search/query', args: { query: 'budget', top: 1, entityTypes: ['site'] } },
   { tool: 'rename_library_item', method: 'PATCH', pathname: '/v1.0/drives/:driveId/items/:itemId', args: { driveId: 'drive-1', itemId: 'item-1', newName: 'renamed.txt' } },
   { tool: 'create_sharing_link', method: 'POST', pathname: '/v1.0/drives/:driveId/items/:itemId/createLink', args: { driveId: 'drive-1', itemId: 'item-1', type: 'view', scope: 'organization' } },

@@ -207,6 +207,34 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
         });
       }
 
+      if (method === 'GET' && /^\/v1\.0\/sites\/[^/]+\/lists\/[^/]+\/columns$/.test(pathname)) {
+        return HttpResponse.json({
+          value: [
+            { id: 'col-1', name: 'Title', displayName: 'Title', readOnly: true, text: {} },
+            {
+              id: 'col-2',
+              name: 'Status',
+              displayName: 'Status',
+              description: 'Current status',
+              required: true,
+              choice: { choices: ['Active', 'Complete'] },
+            },
+          ],
+        });
+      }
+
+      if (method === 'POST' && /^\/v1\.0\/sites\/[^/]+\/lists$/.test(pathname)) {
+        return HttpResponse.json(
+          {
+            id: 'list-new',
+            displayName: 'Project Tracker',
+            webUrl: 'https://contoso.sharepoint.com/sites/Marketing/Lists/ProjectTracker',
+            list: { template: 'genericList', hidden: false },
+          },
+          { status: 201 },
+        );
+      }
+
       if (method === 'GET' && /^\/v1\.0\/sites\/[^/]+\/lists$/.test(pathname)) {
         return HttpResponse.json({ value: [listEntity] });
       }

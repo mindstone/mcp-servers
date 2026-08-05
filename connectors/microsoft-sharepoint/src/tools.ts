@@ -10,6 +10,7 @@ import {
   createLibraryFolder,
   createListItem,
   createSharingLink,
+  createSiteList,
   deleteLibraryItem,
   deleteListItem,
   downloadLibraryFile,
@@ -28,6 +29,7 @@ import {
   listFileVersions,
   listItemPermissions,
   listLibraryFiles,
+  listListColumns,
   listListItems,
   listSharePointSites,
   listSiteDocumentLibraries,
@@ -88,6 +90,16 @@ type SharePointToolSpec = {
 const SearchEntityTypeEnum = z.enum(['driveItem', 'listItem', 'list', 'site']);
 const SharingTypeEnum = z.enum(['view', 'edit']);
 const SharingScopeEnum = z.enum(['anonymous', 'organization']);
+const ListTemplateEnum = z.enum([
+  'genericList',
+  'tasks',
+  'announcements',
+  'contacts',
+  'events',
+  'links',
+  'issueTracking',
+]);
+const ListColumnTypeEnum = z.enum(['text', 'number', 'dateTime', 'boolean', 'choice']);
 
 async function requireSharePointScope(): Promise<CallToolResult | null> {
   try {
@@ -427,6 +439,45 @@ const TOOL_SPECS: SharePointToolSpec[] = [
     }),
     annotations: WRITE_ANNOTATIONS,
     handler: deleteListItem as SharePointHandler,
+  },
+  {
+    name: 'list_list_columns',
+    description:
+      'List the column schema of a SharePoint list (column names, types, and required flags). Use this to discover which fields exist before creating or updating list items.',
+    inputSchema: z.object({
+      siteId: z.string().optional().describe('SharePoint site ID'),
+      listId: z.string().optional().describe('List ID from list_site_lists'),
+    }),
+    annotations: READ_ONLY_ANNOTATIONS,
+    handler: listListColumns as SharePointHandler,
+  },
+  {
+    name: 'create_site_list',
+    description:
+      'Create a new SharePoint list in a site, optionally with a column schema. ' +
+      'Requires a write permission (e.g. Sites.ReadWrite.All) — an admin may need to approve it.',
+    inputSchema: z.object({
+      siteId: z.string().optional().describe('SharePoint site ID'),
+      displayName: z.string().optional().describe('Display name for the new list (e.g., "Project Tracker")'),
+      description: z.string().optional().describe('Optional description for the list'),
+      template: ListTemplateEnum.optional().describe('List template (default: "genericList")'),
+      columns: z
+        .array(
+          z.object({
+            name: z.string().describe('Column name (e.g., "Status")'),
+            type: ListColumnTypeEnum.describe('Column type'),
+            required: z.boolean().optional().describe('Whether the column is required'),
+            choices: z
+              .array(z.string())
+              .optional()
+              .describe('Allowed values — required when type is "choice"'),
+          }),
+        )
+        .optional()
+        .describe('Optional column definitions for the new list'),
+    }),
+    annotations: WRITE_ANNOTATIONS,
+    handler: createSiteList as SharePointHandler,
   },
   {
     name: 'search_sharepoint',

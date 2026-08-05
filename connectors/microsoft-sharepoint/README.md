@@ -11,7 +11,7 @@ Microsoft 365 SharePoint MCP server — discover sites, browse document librarie
 
 - **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-sharepoint)
 - **Auth:** OAuth (host-orchestrated incremental consent via `authenticate_sharepoint`) ([`MS_CLIENT_ID`](./server.json))
-- **Tools:** [40](./src/tools.ts) (auth + sites, libraries, pages, lists, metadata, search, mutations)
+- **Tools:** [42](./src/tools.ts) (auth + sites, libraries, pages, lists, metadata, search, mutations)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 - **Shared library:** [`@mindstone/mcp-server-microsoft-shared`](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-shared)
@@ -166,7 +166,7 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 }
 ```
 
-## Tools (40)
+## Tools (42)
 
 | Tool | Description |
 | ---- | ----------- |
@@ -179,6 +179,7 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 | `list_item_permissions`, `invite_item_collaborators`, `revoke_item_permission` | Manage per-item sharing permissions (list grants, invite specific people, revoke access). |
 | `list_site_pages`, `read_site_page` | Browse and read SharePoint pages. |
 | `list_site_lists`, `list_list_items`, `get_list_item`, `create_list_item`, `update_list_item`, `delete_list_item` | Browse and mutate list items. |
+| `list_list_columns`, `create_site_list` | Read a list's column schema; create new lists with columns. |
 | `search_sharepoint` | Search across sites, libraries, lists, and content. |
 | `list_subsites`, `get_recent_files`, `get_library_tree` | Site discovery and hierarchy views. |
 | `get_file_metadata`, `update_file_metadata` | Read and update custom SharePoint metadata fields. |

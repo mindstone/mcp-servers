@@ -268,6 +268,69 @@ describe('microsoft-sharepoint mock-API integration', () => {
     expect(json.note).toContain('OneDrive');
   });
 
+  it('list_list_columns returns column schema with derived types', async () => {
+    const result = await client.callTool('list_list_columns', {
+      siteId: 'site-1',
+      listId: 'list-1',
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      ok?: unknown;
+      count: number;
+      columns: Array<{ name?: string; displayName?: string; type: string; required: boolean }>;
+    };
+    expect(json.ok).toBeUndefined();
+    expect(json.count).toBe(2);
+    expect(json.columns[0]?.type).toBe('text');
+    expect(json.columns[1]?.type).toBe('choice');
+    expect(json.columns[1]?.required).toBe(true);
+    expect(json.columns[1]?.displayName).toContain('<untrusted-content');
+  });
+
+  it('create_site_list POSTs a list with column schema', async () => {
+    const result = await client.callTool('create_site_list', {
+      siteId: 'site-1',
+      displayName: 'Project Tracker',
+      columns: [
+        { name: 'Status', type: 'choice', choices: ['Active', 'Complete'], required: true },
+        { name: 'Notes', type: 'text' },
+      ],
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; success: boolean; id: string };
+    expect(json.ok).toBeUndefined();
+    expect(json.success).toBe(true);
+    const call = state.requests.find(
+      (r) => r.method === 'POST' && /\/sites\/site-1\/lists$/.test(r.pathname),
+    );
+    expect(call).toBeDefined();
+    const body = call?.body as {
+      displayName: string;
+      list: { template: string };
+      columns: Array<Record<string, unknown>>;
+    };
+    expect(body.displayName).toBe('Project Tracker');
+    expect(body.list.template).toBe('genericList');
+    expect(body.columns[0]).toMatchObject({
+      name: 'Status',
+      required: true,
+      choice: { choices: ['Active', 'Complete'] },
+    });
+    expect(body.columns[1]).toMatchObject({ name: 'Notes', text: {} });
+  });
+
+  it('create_site_list rejects a choice column without choices', async () => {
+    const result = await client.callTool('create_site_list', {
+      siteId: 'site-1',
+      displayName: 'Bad List',
+      columns: [{ name: 'Status', type: 'choice' }],
+    });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('choices');
+  });
+
   it('list_file_versions returns version history with enveloped names', async () => {
     const result = await client.callTool('list_file_versions', {
       driveId: 'drive-1',

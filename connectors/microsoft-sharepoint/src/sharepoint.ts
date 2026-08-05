@@ -59,6 +59,48 @@ const GraphDriveItemVersionSchema = z.object({
     .optional(),
 });
 
+/** columnDefinition facet keys that determine a column's type. */
+const COLUMN_TYPE_FACETS = [
+  'boolean',
+  'calculated',
+  'choice',
+  'currency',
+  'dateTime',
+  'geolocation',
+  'hyperlinkOrPicture',
+  'lookup',
+  'number',
+  'personOrGroup',
+  'text',
+  'term',
+  'thumbnail',
+] as const;
+
+const GraphColumnDefinitionSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().optional(),
+    displayName: z.string().optional(),
+    description: z.string().optional(),
+    required: z.boolean().optional(),
+    hidden: z.boolean().optional(),
+    readOnly: z.boolean().optional(),
+  })
+  .catchall(z.unknown());
+
+const GraphListSchema = z.object({
+  id: z.string(),
+  displayName: z.string().optional(),
+  description: z.string().optional(),
+  webUrl: z.string().optional(),
+  list: z
+    .object({
+      template: z.string().optional(),
+      hidden: z.boolean().optional(),
+    })
+    .optional(),
+});
+
 function extractPermissionIdentities(permission: GraphPermission): GraphIdentity[] {
   const sets = [
     ...(permission.grantedToV2 ? [permission.grantedToV2] : []),
@@ -1055,6 +1097,133 @@ export async function deleteListItem(
   return successResult({
     success: true,
     message: 'List item deleted successfully',
+  });
+}
+
+// -- List schema tool implementations --
+
+interface ListListColumnsArgs {
+  siteId?: string;
+  listId?: string;
+}
+
+export async function listListColumns(
+  client: Client,
+  args: ListListColumnsArgs,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (!args.siteId || !args.listId) {
+    return errorResult(
+      'Missing required parameters: "siteId" and "listId". ' +
+      'Example: { "siteId": "contoso.sharepoint.com,abc123,def456", "listId": "abc-123-def" }. ' +
+      'Use list_site_lists to find lists first.',
+    );
+  }
+
+  const response = await client
+    .api(`/sites/${args.siteId}/lists/${args.listId}/columns`)
+    .options({ signal })
+    .get();
+  const columns = parseGraphCollection(GraphColumnDefinitionSchema, response);
+
+  return successResult({
+    siteId: args.siteId,
+    listId: args.listId,
+    count: columns.length,
+    columns: columns.map((column) => ({
+      id: column.id,
+      name: column.name,
+      displayName: wrapUntrusted(column.displayName, 'microsoft-sharepoint:list_list_columns:displayName'),
+      description: wrapUntrusted(column.description, 'microsoft-sharepoint:list_list_columns:description'),
+      type: COLUMN_TYPE_FACETS.find((facet) => column[facet] !== undefined) ?? 'unknown',
+      required: column.required ?? false,
+      hidden: column.hidden ?? false,
+      readOnly: column.readOnly ?? false,
+    })),
+  });
+}
+
+type NewListColumnType = 'text' | 'number' | 'dateTime' | 'boolean' | 'choice';
+
+interface NewListColumn {
+  name: string;
+  type: NewListColumnType;
+  required?: boolean;
+  choices?: string[];
+}
+
+function buildColumnDefinition(column: NewListColumn): Record<string, unknown> {
+  const definition: Record<string, unknown> = { name: column.name };
+  if (column.required) definition.required = true;
+  switch (column.type) {
+    case 'text':
+      definition.text = {};
+      break;
+    case 'number':
+      definition.number = {};
+      break;
+    case 'dateTime':
+      definition.dateTime = {};
+      break;
+    case 'boolean':
+      definition.boolean = {};
+      break;
+    case 'choice':
+      definition.choice = { choices: column.choices ?? [] };
+      break;
+  }
+  return definition;
+}
+
+interface CreateSiteListArgs {
+  siteId?: string;
+  displayName?: string;
+  description?: string;
+  template?: string;
+  columns?: NewListColumn[];
+}
+
+export async function createSiteList(
+  client: Client,
+  args: CreateSiteListArgs,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (!args.siteId || !args.displayName) {
+    return errorResult(
+      'Missing required parameters: "siteId" and "displayName". ' +
+      'Example: { "siteId": "contoso.sharepoint.com,abc123,def456", "displayName": "Project Tracker", ' +
+      '"columns": [{ "name": "Status", "type": "choice", "choices": ["Active", "Complete"] }] }',
+    );
+  }
+
+  for (const column of args.columns ?? []) {
+    if (column.type === 'choice' && (!column.choices || column.choices.length === 0)) {
+      return errorResult(
+        `Column "${column.name}" is of type "choice" but has no "choices" array. ` +
+        'Provide at least one choice value.',
+      );
+    }
+  }
+
+  const body: Record<string, unknown> = {
+    displayName: args.displayName,
+    list: { template: args.template ?? 'genericList' },
+    ...(args.description ? { description: args.description } : {}),
+    ...(args.columns && args.columns.length > 0
+      ? { columns: args.columns.map(buildColumnDefinition) }
+      : {}),
+  };
+
+  const response = await client.api(`/sites/${args.siteId}/lists`).options({ signal }).post(body);
+  const created = GraphListSchema.parse(response);
+
+  return successResult({
+    success: true,
+    id: created.id,
+    displayName: wrapUntrusted(created.displayName, 'microsoft-sharepoint:create_site_list:displayName'),
+    webUrl: created.webUrl,
+    template: created.list?.template,
+    message: 'List created successfully',
   });
 }
 

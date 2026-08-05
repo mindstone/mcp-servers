@@ -29,6 +29,8 @@ const EXPECTED_TOOLS = [
   'create_list_item',
   'update_list_item',
   'delete_list_item',
+  'list_list_columns',
+  'create_site_list',
   'search_sharepoint',
   'rename_library_item',
   'create_sharing_link',
@@ -86,6 +88,8 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
     idempotentHint: true,
   },
   delete_list_item: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+  list_list_columns: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  create_site_list: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   search_sharepoint: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   rename_library_item: {
     readOnlyHint: false,
