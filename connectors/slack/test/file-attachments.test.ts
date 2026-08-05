@@ -246,7 +246,7 @@ describe('Slack MCP — file-attachment metadata (files[])', () => {
     expect(name).toContain('<untrusted-content source="slack:file-name">');
     // … and the attacker's close tag is neutralised — no genuine close tag survives
     // except the single one the wrapper appends at the end.
-    expect(name).toContain('<&#47;untrusted-content>');
+    expect(name).toContain('<\\/untrusted-content>');
     const closeTags = name.match(/<\/untrusted-content>/g) ?? [];
     expect(closeTags).toHaveLength(1);
     expect(name.endsWith('</untrusted-content>')).toBe(true);
@@ -280,7 +280,7 @@ describe('Slack MCP — file-attachment metadata (files[])', () => {
     const name = j.file_info?.name ?? '';
     // Wrapped with the same source convention as download_slack_file's success path.
     expect(name).toContain('<untrusted-content source="slack:download-file:F0123456789:name">');
-    expect(name).toContain('<&#47;untrusted-content>');
+    expect(name).toContain('<\\/untrusted-content>');
     const closeTags = name.match(/<\/untrusted-content>/g) ?? [];
     expect(closeTags).toHaveLength(1);
   });
@@ -310,7 +310,7 @@ describe('Slack MCP — file-attachment metadata (files[])', () => {
     expect(j.error).toContain('download URL not available');
     const name = j.file_info?.name ?? '';
     expect(name).toContain('<untrusted-content source="slack:download-file:F0123456789:name">');
-    expect(name).toContain('<&#47;untrusted-content>');
+    expect(name).toContain('<\\/untrusted-content>');
     const closeTags = name.match(/<\/untrusted-content>/g) ?? [];
     expect(closeTags).toHaveLength(1);
   });
