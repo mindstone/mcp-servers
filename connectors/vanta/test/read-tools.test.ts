@@ -204,4 +204,106 @@ describe('Read tools — documented request contracts', () => {
       testsFailing: 25,
     });
   });
+
+  it('vanta_list_frameworks returns documented framework counters', async () => {
+    mswServer.use(
+      successTokenHandler,
+      http.get('https://api.vanta.com/v1/frameworks', ({ request }) => {
+        expect(Object.fromEntries(new URL(request.url).searchParams)).toEqual({
+          pageSize: '10',
+          pageCursor: 'framework-cursor',
+        });
+        return paginated([
+          {
+            id: 'soc2',
+            displayName: 'SOC 2',
+            shorthandName: 'SOC 2',
+            numControlsCompleted: 43,
+            numControlsTotal: 86,
+            numTestsPassing: 21,
+            numTestsTotal: 46,
+          },
+        ]);
+      }),
+    );
+
+    const { createServer } = await import('../src/server.js');
+    testClient = await createInMemoryTestClient({
+      createServer,
+      env: {
+        VANTA_CLIENT_ID: MOCK_CLIENT_ID,
+        VANTA_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+      },
+    });
+
+    const result = await testClient.callTool('vanta_list_frameworks', {
+      page_size: 10,
+      page_cursor: 'framework-cursor',
+    });
+    const payload = result.json as {
+      ok: boolean;
+      frameworks: Array<{ id: string; numTestsTotal: number }>;
+      count: number;
+    };
+
+    expect(payload.ok).toBe(true);
+    expect(payload.count).toBe(1);
+    expect(payload.frameworks[0]?.id).toBe('soc2');
+    expect(payload.frameworks[0]?.numTestsTotal).toBe(46);
+  });
+
+  it('vanta_get_framework fetches a single framework by ID', async () => {
+    mswServer.use(
+      successTokenHandler,
+      http.get('https://api.vanta.com/v1/frameworks/soc2', () =>
+        HttpResponse.json({
+          id: 'soc2',
+          displayName: 'SOC 2',
+          numControlsCompleted: 43,
+          numControlsTotal: 86,
+          requirementCategories: [],
+        }),
+      ),
+    );
+
+    const { createServer } = await import('../src/server.js');
+    testClient = await createInMemoryTestClient({
+      createServer,
+      env: {
+        VANTA_CLIENT_ID: MOCK_CLIENT_ID,
+        VANTA_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+      },
+    });
+
+    const result = await testClient.callTool('vanta_get_framework', { framework_id: 'soc2' });
+    const payload = result.json as { ok: boolean; framework: { id: string } };
+
+    expect(payload.ok).toBe(true);
+    expect(payload.framework.id).toBe('soc2');
+  });
+
+  it('vanta_get_framework surfaces a structured error for an unknown framework ID', async () => {
+    mswServer.use(
+      successTokenHandler,
+      http.get('https://api.vanta.com/v1/frameworks/nope', () =>
+        HttpResponse.json({ message: 'not found' }, { status: 404 }),
+      ),
+      http.get('https://api.vanta.com/v1/frameworks', () => paginated([])),
+    );
+
+    const { createServer } = await import('../src/server.js');
+    testClient = await createInMemoryTestClient({
+      createServer,
+      env: {
+        VANTA_CLIENT_ID: MOCK_CLIENT_ID,
+        VANTA_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+      },
+    });
+
+    const result = await testClient.callTool('vanta_get_framework', { framework_id: 'nope' });
+    const payload = result.json as { ok: boolean; code: string };
+
+    expect(payload.ok).toBe(false);
+    expect(payload.code).toBe('NOT_FOUND');
+  });
 });

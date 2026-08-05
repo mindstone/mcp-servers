@@ -10,11 +10,12 @@
     ]
   },
   "tools": {
-    "count": 17,
+    "count": 19,
     "domains": [
       "vulnerabilities",
       "tests",
       "controls",
+      "frameworks",
       "people",
       "vendors",
       "documents",

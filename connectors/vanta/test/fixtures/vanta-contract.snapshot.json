@@ -13,6 +13,7 @@
       "https://developer.vanta.com/api-reference/controls/list-controls.md",
       "https://developer.vanta.com/api-reference/controls/get-control-by-an-id.md",
       "https://developer.vanta.com/api-reference/frameworks/list-available-frameworks.md",
+      "https://developer.vanta.com/api-reference/frameworks/get-framework-by-id.md",
       "https://developer.vanta.com/api-reference/people/list-people.md",
       "https://developer.vanta.com/api-reference/vendors/list-vendors.md",
       "https://developer.vanta.com/api-reference/vendors/get-vendor-by-id.md",
@@ -126,6 +127,12 @@
         "pageSize",
         "pageCursor"
       ],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/frameworks/{frameworkId}",
+      "queryParams": [],
       "requiredBodyFields": []
     },
     {

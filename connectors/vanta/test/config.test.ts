@@ -102,7 +102,7 @@ describe('VANTA_REGION validation — fail-closed on unknown region (C6 fix)', (
       },
     });
     const list = await testClient.client.listTools();
-    expect(list.tools.length).toBe(17);
+    expect(list.tools.length).toBe(19);
   });
 
   it('accepts canonical regions us, eu, aus', async () => {
@@ -118,7 +118,7 @@ describe('VANTA_REGION validation — fail-closed on unknown region (C6 fix)', (
       });
       try {
         const list = await client.client.listTools();
-        expect(list.tools.length).toBe(17);
+        expect(list.tools.length).toBe(19);
       } finally {
         await client.close();
       }

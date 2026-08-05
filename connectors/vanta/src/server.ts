@@ -9,6 +9,12 @@ import {
   vantaGetControl,
   vantaListControls,
 } from './tools/controls.js';
+import {
+  getFrameworkSchema,
+  listFrameworksSchema,
+  vantaGetFramework,
+  vantaListFrameworks,
+} from './tools/frameworks.js';
 import { listPeopleSchema, vantaListPeople } from './tools/people.js';
 import { queryTestResultsSchema, vantaQueryTestResults } from './tools/query-results.js';
 import { complianceSummarySchema, vantaGetComplianceSummary } from './tools/summary.js';
@@ -149,6 +155,20 @@ RETURNS:
     annotations: readOnlyAnnotations,
     inputSchema: complianceSummarySchema,
   }, async (input) => textResult(await vantaGetComplianceSummary(client, input)));
+
+  server.registerTool('vanta_list_frameworks', {
+    title: 'List Vanta Frameworks',
+    description: 'List available compliance frameworks in Vanta with per-framework control, document, and test counters.',
+    annotations: readOnlyAnnotations,
+    inputSchema: listFrameworksSchema,
+  }, async (input) => textResult(await vantaListFrameworks(client, input)));
+
+  server.registerTool('vanta_get_framework', {
+    title: 'Get Vanta Framework',
+    description: 'Get details for one Vanta framework by ID, including requirement categories and mapped controls.',
+    annotations: readOnlyAnnotations,
+    inputSchema: getFrameworkSchema,
+  }, async (input) => textResult(await vantaGetFramework(client, input)));
 
   server.registerTool('vanta_list_vendors', {
     title: 'List Vanta Vendors',
