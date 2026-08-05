@@ -57,6 +57,16 @@ const WRITE_ANNOTATIONS = {
   openWorldHint: true,
 };
 
+// Tools that change external state (send messages, create chats, set presence)
+// must declare destructiveHint so hosts can gate or confirm them — AGENTS.md
+// security invariant #7. compose_chat_message keeps the plain write
+// annotations: it returns an editable draft and performs no Graph send itself.
+const DESTRUCTIVE_WRITE_ANNOTATIONS = {
+  readOnlyHint: false,
+  destructiveHint: true,
+  openWorldHint: true,
+};
+
 /**
  * Some Teams Graph surfaces (channel messages, user lookup, other users'
  * presence) need delegated permissions beyond the cohort's base scope set,
@@ -219,7 +229,7 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
         chatId: z.string().describe('Chat ID'),
         content: z.string().describe('Message content (HTML supported)'),
       }).strict(),
-      annotations: WRITE_ANNOTATIONS,
+      annotations: DESTRUCTIVE_WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (args, extra) =>
       successJson(await callGraph(extra, (c, signal) => sendChatMessage(c, args, signal))),
@@ -237,7 +247,7 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
           content: z.string().describe('Reply content (HTML supported)'),
         })
         .strict(),
-      annotations: WRITE_ANNOTATIONS,
+      annotations: DESTRUCTIVE_WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (args, extra) =>
       successJson(await callGraph(extra, (c, signal) => replyToChatMessage(c, args, signal))),
@@ -295,7 +305,7 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
           topic: z.string().optional().describe('Chat topic (group chats only)'),
         })
         .strict(),
-      annotations: WRITE_ANNOTATIONS,
+      annotations: DESTRUCTIVE_WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (args, extra) =>
       successJson(await callGraph(extra, (c, signal) => createChat(c, args, signal))),
@@ -362,7 +372,7 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
           content: z.string().describe('Message content (HTML supported)'),
         })
         .strict(),
-      annotations: WRITE_ANNOTATIONS,
+      annotations: DESTRUCTIVE_WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (args, extra) => {
       const gate = await requireScopesGranted(['ChannelMessage.Send'], 'Posting channel messages');
@@ -384,7 +394,7 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
           content: z.string().describe('Reply content (HTML supported)'),
         })
         .strict(),
-      annotations: WRITE_ANNOTATIONS,
+      annotations: DESTRUCTIVE_WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (args, extra) => {
       const gate = await requireScopesGranted(['ChannelMessage.Send'], 'Replying to channel messages');
@@ -440,7 +450,7 @@ PARAMETERS: target (the chat ID to send to), text (message content).`,
             .describe('How long the status applies, in minutes (5-480). Omit to keep it until changed.'),
         })
         .strict(),
-      annotations: WRITE_ANNOTATIONS,
+      annotations: DESTRUCTIVE_WRITE_ANNOTATIONS,
     },
     withErrorHandling(async (args, extra) => {
       const gate = await requireScopesGranted(['Presence.ReadWrite'], 'Setting presence');
