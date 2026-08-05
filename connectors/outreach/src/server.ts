@@ -5,9 +5,12 @@ import {
   registerAuthTools,
   registerProspectTools,
   registerSequenceTools,
+  registerSequenceContentTools,
   registerAccountTools,
   registerTaskTools,
   registerMailingTools,
+  registerCallTools,
+  registerMailboxTools,
   registerUserTools,
 } from './tools/index.js';
 
@@ -23,9 +26,12 @@ export function createServer(): McpServer {
   registerAuthTools(server);
   registerProspectTools(server);
   registerSequenceTools(server);
+  registerSequenceContentTools(server);
   registerAccountTools(server);
   registerTaskTools(server);
   registerMailingTools(server);
+  registerCallTools(server);
+  registerMailboxTools(server);
   registerUserTools(server);
 
   return server;

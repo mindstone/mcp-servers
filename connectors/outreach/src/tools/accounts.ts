@@ -21,7 +21,7 @@ Returns company accounts with domain, industry, and owner info.`,
         name: z.string().optional().describe('Filter by account name (partial match)'),
         domain: z.string().optional().describe('Filter by domain'),
         limit: z.number().min(1).max(50).default(25).optional().describe('Max results (default 25, max 50)'),
-        page_offset: z.number().min(0).optional().describe('Page offset for pagination'),
+        page_offset: z.number().min(0).optional().describe('Record offset into the result list for pagination (maps to the API\'s page[offset]; e.g. 25 for the second page with limit 25)'),
       }),
       annotations: {
         readOnlyHint: true,

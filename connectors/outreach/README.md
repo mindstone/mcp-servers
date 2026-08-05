@@ -42,7 +42,7 @@ After clicking the button, your host will prompt you to fill: `OUTREACH_CLIENT_I
 
 - **Version:** [0.1.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-outreach)
 - **Auth:** OAuth (local 127.0.0.1 callback) ([`OUTREACH_CLIENT_SECRET`](./server.json))
-- **Tools:** [15](./src/tools/) (prospects, sequences, accounts, tasks)
+- **Tools:** [22](./src/tools/) (prospects, sequences, accounts, tasks, calls, mailboxes)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -78,10 +78,12 @@ OUTREACH_ACCESS_TOKEN=your_access_token
 ```bash
 OUTREACH_CONFIG_DIR=~/.mcp/outreach    # Custom config directory (default: ~/.mcp/outreach)
 OUTREACH_OAUTH_PORT=0                   # OAuth callback port (default: OS-assigned)
-OUTREACH_OAUTH_SCOPES="prospects.all sequences.all accounts.all users.read tasks.all mailings.read"
+OUTREACH_OAUTH_SCOPES="prospects.all sequences.all sequenceStates.all sequenceSteps.read sequenceTemplates.read templates.read accounts.all users.read tasks.all mailings.read calls.read mailboxes.read"
 ```
 
-## Available Tools (15)
+The `OUTREACH_OAUTH_SCOPES` value above is the built-in default, which covers every tool the connector ships. If you connected an account before these scopes were added (or you override the variable), re-run `outreach_connect_account` so the new token picks them up.
+
+## Available Tools (22)
 
 ### Account Management
 - **outreach_connect_account** — Connect an Outreach account via OAuth
@@ -91,13 +93,16 @@ OUTREACH_OAUTH_SCOPES="prospects.all sequences.all accounts.all users.read tasks
 ### Prospects
 - **outreach_search_prospects** — Search prospects by name, email, company, tags
 - **outreach_get_prospect** — Get full prospect details by ID
-- **outreach_create_prospect** — Create a new prospect
-- **outreach_update_prospect** — Update an existing prospect
+- **outreach_create_prospect** — Create a new prospect (supports `custom_fields` mapped to `custom1`..`custom35`)
+- **outreach_update_prospect** — Update an existing prospect (supports `custom_fields`)
 
 ### Sequences
 - **outreach_list_sequences** — List sequences with filters
 - **outreach_get_sequence** — Get sequence details by ID
+- **outreach_list_sequence_steps** — List a sequence's steps (type, interval, order, template links)
+- **outreach_get_sequence_template** — Read a sequence template's email subject and body
 - **outreach_add_prospect_to_sequence** — Enroll a prospect in a sequence
+- **outreach_remove_prospect_from_sequence** — Pause or finish a prospect's enrollment
 
 ### Accounts (Companies)
 - **outreach_list_accounts** — List company accounts
@@ -105,9 +110,17 @@ OUTREACH_OAUTH_SCOPES="prospects.all sequences.all accounts.all users.read tasks
 
 ### Tasks
 - **outreach_list_tasks** — List tasks with status and prospect filters
+- **outreach_create_task** — Create a task (note, due date, prospect, owner)
+- **outreach_complete_task** — Mark a task as completed
 
 ### Mailings
 - **outreach_list_mailings** — List sent emails with delivery status
+
+### Calls
+- **outreach_list_calls** — List calls with outcome, notes, and disposition link
+
+### Mailboxes
+- **outreach_list_mailboxes** — List connected sender mailboxes (feeds `mailbox_id` on enrollment)
 
 ### Users
 - **outreach_list_users** — List Outreach team members
@@ -124,6 +137,10 @@ The connector supports four authentication modes, detected once at startup:
 | `unconfigured` | No auth env vars | Tools return setup guidance |
 
 **Precedence**: bridge > standalone_oauth > manual_token > unconfigured
+
+## Untrusted Content Handling
+
+All user-authored text returned by the Outreach API (names, emails, mailing subjects, template bodies, task notes, tags, custom fields) is wrapped in `<untrusted-content source="...">` envelopes so MCP hosts and models treat third-party CRM content as data, not instructions. Vendor-generated structure (IDs, timestamps, lifecycle states) is returned raw.
 
 ## License
 

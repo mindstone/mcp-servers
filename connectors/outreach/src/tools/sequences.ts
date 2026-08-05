@@ -8,7 +8,7 @@ import {
   clampLimit,
   paginationParams,
 } from '../client.js';
-import type { JsonApiResource } from '../types.js';
+import { ConnectorError, type JsonApiResource } from '../types.js';
 
 export function registerSequenceTools(server: McpServer): void {
   server.registerTool(
@@ -22,7 +22,7 @@ FILTERS: name (partial match), enabled status.`,
         name: z.string().optional().describe('Filter by sequence name (partial match)'),
         enabled: z.boolean().optional().describe('Filter by enabled/disabled status'),
         limit: z.number().min(1).max(50).default(25).optional().describe('Max results (default 25, max 50)'),
-        page_offset: z.number().min(0).optional().describe('Page offset for pagination'),
+        page_offset: z.number().min(0).optional().describe('Record offset into the result list for pagination (maps to the API\'s page[offset]; e.g. 25 for the second page with limit 25)'),
       }),
       annotations: {
         readOnlyHint: true,
@@ -110,6 +110,69 @@ COMMON MISTAKES: Prospect must not already be active in the same sequence.`,
         ok: true,
         status: 'enrolled',
         ...formatResource(response.data as JsonApiResource),
+      });
+    }),
+  );
+
+  server.registerTool(
+    'outreach_remove_prospect_from_sequence',
+    {
+      description: `Pause or finish a prospect's enrollment in a sequence. Example: { "prospect_id": "123", "sequence_id": "456", "action": "pause" }
+
+ACTIONS: "pause" (default) stops future sends but can be resumed later; "remove"
+finishes the enrollment via the sequence state's finish action — the prospect
+receives no further steps, and re-enrolling restarts the sequence from the top.
+WORKFLOW: Finds the prospect's sequence state for the given sequence, then applies the action.`,
+      inputSchema: z.object({
+        prospect_id: z.string().min(1).describe('Prospect ID'),
+        sequence_id: z.string().min(1).describe('Sequence ID'),
+        action: z
+          .enum(['pause', 'remove'])
+          .default('pause')
+          .optional()
+          .describe('"pause" (reversible, default) or "remove" (finish the enrollment)'),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        // Interrupts real outbound email to a real person mid-sequence;
+        // "remove" cannot be silently undone (re-enrollment restarts the
+        // sequence). Hosts MUST gate this behind user confirmation.
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args) => {
+      const listResponse = await outreachFetch('/sequenceStates', {
+        params: {
+          'filter[prospect][id]': args.prospect_id,
+          'filter[sequence][id]': args.sequence_id,
+        },
+      });
+      const states = Array.isArray(listResponse.data) ? listResponse.data : [listResponse.data];
+      if (states.length === 0) {
+        throw new ConnectorError(
+          'No enrollment found for this prospect in this sequence',
+          'NOT_FOUND',
+          'Verify the prospect and sequence IDs. The prospect may already be finished or never enrolled.',
+        );
+      }
+
+      const stateId = states[0].id;
+      const action = args.action === 'remove' ? 'finish' : 'pause';
+      const response = await outreachFetch(`/sequenceStates/${stateId}/actions/${action}`, {
+        method: 'POST',
+      });
+      // The actions endpoints may return the updated sequence state or 204
+      // (normalised to an empty data array by outreachFetch).
+      const record = Array.isArray(response.data)
+        ? {}
+        : formatResource(response.data as JsonApiResource);
+      return JSON.stringify({
+        ok: true,
+        status: args.action === 'remove' ? 'removed' : 'paused',
+        sequence_state_id: stateId,
+        ...record,
       });
     }),
   );

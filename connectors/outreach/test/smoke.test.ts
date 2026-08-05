@@ -6,18 +6,25 @@ import { createTempConfig, type TempConfigResult } from '@mindstone/mcp-test-har
 
 const EXPECTED_TOOLS = [
   'outreach_add_prospect_to_sequence',
+  'outreach_complete_task',
   'outreach_connect_account',
   'outreach_create_prospect',
+  'outreach_create_task',
   'outreach_disconnect_account',
   'outreach_get_account',
   'outreach_get_prospect',
   'outreach_get_sequence',
+  'outreach_get_sequence_template',
   'outreach_list_accounts',
+  'outreach_list_calls',
   'outreach_list_connected_accounts',
+  'outreach_list_mailboxes',
   'outreach_list_mailings',
+  'outreach_list_sequence_steps',
   'outreach_list_sequences',
   'outreach_list_tasks',
   'outreach_list_users',
+  'outreach_remove_prospect_from_sequence',
   'outreach_search_prospects',
   'outreach_update_prospect',
 ];
@@ -63,7 +70,7 @@ describe('Smoke test — Outreach MCP server', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(15);
+    expect(toolsResult.tools).toHaveLength(22);
     expect(toolNames).toEqual(EXPECTED_TOOLS);
   });
 
@@ -108,14 +115,18 @@ describe('Smoke test — Outreach MCP server', () => {
       'outreach_get_prospect',
       'outreach_list_sequences',
       'outreach_get_sequence',
+      'outreach_list_sequence_steps',
+      'outreach_get_sequence_template',
       'outreach_list_accounts',
       'outreach_get_account',
+      'outreach_list_calls',
       'outreach_list_tasks',
+      'outreach_list_mailboxes',
       'outreach_list_mailings',
       'outreach_list_users',
     ];
 
-    const destructiveTools = ['outreach_disconnect_account'];
+    const destructiveTools = ['outreach_disconnect_account', 'outreach_remove_prospect_from_sequence'];
 
     for (const tool of toolsResult.tools) {
       expect(tool.annotations, `Tool ${tool.name} should have annotations`).toBeDefined();

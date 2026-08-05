@@ -8,15 +8,17 @@ import {
   paginationParams,
 } from '../client.js';
 
-export function registerMailingTools(server: McpServer): void {
+export function registerMailboxTools(server: McpServer): void {
   server.registerTool(
-    'outreach_list_mailings',
+    'outreach_list_mailboxes',
     {
-      description: `List recent mailings (sent emails). Example: { "prospect_id": "123" } or { "limit": 10 }
+      description: `List Outreach mailboxes (connected sender email accounts). Example: {}
 
-Returns sent emails with subject, status (delivered/bounced/opened), and timestamps.`,
+Returns mailboxes with email address, send/sync status, and owning user.
+WORKFLOW: Use the returned IDs as mailbox_id when enrolling a prospect with
+outreach_add_prospect_to_sequence.`,
       inputSchema: z.object({
-        prospect_id: z.string().optional().describe('Filter mailings for a specific prospect'),
+        user_id: z.string().optional().describe('Filter mailboxes owned by a specific Outreach user'),
         limit: z.number().min(1).max(50).default(25).optional().describe('Max results (default 25, max 50)'),
         page_offset: z.number().min(0).optional().describe('Record offset into the result list for pagination (maps to the API\'s page[offset]; e.g. 25 for the second page with limit 25)'),
       }),
@@ -30,9 +32,9 @@ Returns sent emails with subject, status (delivered/bounced/opened), and timesta
     withErrorHandling(async (args) => {
       const limit = clampLimit(args.limit);
       const params: Record<string, string> = { ...paginationParams(limit, args.page_offset) };
-      if (args.prospect_id) params['filter[prospect][id]'] = args.prospect_id;
+      if (args.user_id) params['filter[user][id]'] = args.user_id;
 
-      const response = await outreachFetch('/mailings', { params });
+      const response = await outreachFetch('/mailboxes', { params });
       return JSON.stringify({
         ok: true,
         records: formatResources(response.data),

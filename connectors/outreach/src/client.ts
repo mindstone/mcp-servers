@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import {
   ConnectorError,
   OUTREACH_API_BASE,
@@ -6,6 +7,52 @@ import {
   type JsonApiResource,
 } from './types.js';
 import { getActiveToken, refreshTokenIfNeeded, getAuthMode } from './auth.js';
+import { wrapUntrustedJsonStrings } from './untrusted-content.js';
+
+// JSON:API envelope validation for every external response (repo convention:
+// validate external responses with Zod instead of casting). Attribute values
+// stay `unknown` — they are resource-specific and handled by formatResource —
+// but the envelope structure the tools rely on is checked before use.
+const jsonApiResourceSchema = z
+  .object({
+    id: z.string(),
+    type: z.string(),
+    attributes: z.record(z.unknown()).optional(),
+    relationships: z
+      .record(
+        z
+          .object({
+            data: z
+              .union([
+                z.object({ id: z.string(), type: z.string() }).passthrough(),
+                z.array(z.object({ id: z.string(), type: z.string() }).passthrough()),
+                z.null(),
+              ])
+              .optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
+    links: z.record(z.unknown()).optional(),
+  })
+  .passthrough();
+
+const jsonApiResponseSchema = z
+  .object({
+    data: z.union([jsonApiResourceSchema, z.array(jsonApiResourceSchema)]),
+    meta: z
+      .object({
+        count: z.number().optional(),
+        page: z
+          .object({ current: z.number().optional(), total: z.number().optional() })
+          .passthrough()
+          .optional(),
+      })
+      .passthrough()
+      .optional(),
+    links: z.record(z.unknown()).optional(),
+  })
+  .passthrough();
 
 function getErrorResolution(status: number, detail?: string): string {
   const msg = (detail || '').toLowerCase();
@@ -107,7 +154,15 @@ export async function outreachFetch(
       return { data: [] } as unknown as JsonApiResponse;
     }
 
-    return (await response.json()) as JsonApiResponse;
+    const parsed = jsonApiResponseSchema.safeParse(await response.json());
+    if (!parsed.success) {
+      throw new ConnectorError(
+        'Outreach API returned an unexpected response shape',
+        'INVALID_RESPONSE',
+        'The API response did not match the expected JSON:API structure. Try again; if it persists, reconnect with outreach_connect_account.',
+      );
+    }
+    return parsed.data as JsonApiResponse;
   } catch (error) {
     if (error instanceof ConnectorError) throw error;
     if (error instanceof Error && error.name === 'AbortError') {
@@ -127,10 +182,51 @@ export async function outreachFetch(
 // JSON:API Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * String-valued attribute keys whose values are vendor-generated structure
+ * (timestamps, lifecycle enums) rather than user-authored prose. Everything
+ * else is treated as external text and enveloped per AGENTS.md security
+ * invariant #6 — fail-closed, so prospect custom fields (`custom1..custom35`)
+ * and any attribute Outreach adds later are enveloped by default.
+ */
+const STRUCTURAL_ATTRIBUTES = new Set([
+  'addedAt',
+  'answeredAt',
+  'bouncedAt',
+  'clickedAt',
+  'completedAt',
+  'createdAt',
+  'deliveredAt',
+  'dueAt',
+  'engagedAt',
+  'finishedAt',
+  'lastContactedAt',
+  'lastEngagedAt',
+  'openedAt',
+  'pausedAt',
+  'repliedAt',
+  'scheduledAt',
+  'stateChangedAt',
+  'touchedAt',
+  'updatedAt',
+  'action',
+  'direction',
+  'outcome',
+  'sequenceType',
+  'state',
+  'status',
+  'stepType',
+  'taskType',
+]);
+
 export function formatResource(resource: JsonApiResource): Record<string, unknown> {
   const result: Record<string, unknown> = { id: resource.id, type: resource.type };
   if (resource.attributes) {
-    Object.assign(result, resource.attributes);
+    for (const [key, value] of Object.entries(resource.attributes)) {
+      result[key] = STRUCTURAL_ATTRIBUTES.has(key)
+        ? value
+        : wrapUntrustedJsonStrings(value, `outreach:${resource.type}:${key}`);
+    }
   }
   if (resource.relationships) {
     for (const [key, rel] of Object.entries(resource.relationships)) {
