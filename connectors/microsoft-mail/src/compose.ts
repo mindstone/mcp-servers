@@ -68,11 +68,13 @@ function sanitizeViewSummaryPart(value: string): string {
 }
 
 export async function handleComposeEmail(params: ComposeEmailParams): Promise<ComposeEmailResult> {
-  const to = Array.isArray(params.to)
-    ? params.to.filter((addr) => typeof addr === 'string' && addr.trim().length > 0)
-    : [];
-  const cc = Array.isArray(params.cc) ? params.cc : [];
-  const bcc = Array.isArray(params.bcc) ? params.bcc : [];
+  const nonEmpty = (addrs: unknown): string[] =>
+    Array.isArray(addrs)
+      ? addrs.filter((addr) => typeof addr === 'string' && addr.trim().length > 0)
+      : [];
+  const to = nonEmpty(params.to);
+  const cc = nonEmpty(params.cc);
+  const bcc = nonEmpty(params.bcc);
   const subject = typeof params.subject === 'string' ? params.subject : '';
   const body = typeof params.body === 'string' ? params.body : '';
 

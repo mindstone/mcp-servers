@@ -25,6 +25,7 @@ import {
   listFolders,
   markEmailRead,
   moveEmail,
+  normalizeScheduledWindow,
   replyToEmail,
   searchEmails,
   sendDraft,
@@ -34,7 +35,13 @@ import {
   updateDraft,
 } from './mail.js';
 
-const RecipientField = z.union([z.array(z.string()), z.string()]);
+// Bounded, validated recipient addresses: trimmed, RFC-shaped, and capped in
+// length and count so arbitrary strings cannot flow into a Graph send payload.
+const MAX_RECIPIENT_ADDRESS_LENGTH = 254;
+const MAX_RECIPIENT_COUNT = 500;
+const EmailAddress = z.string().trim().max(MAX_RECIPIENT_ADDRESS_LENGTH).email();
+const RecipientList = z.array(EmailAddress).max(MAX_RECIPIENT_COUNT);
+const RecipientField = z.union([RecipientList, EmailAddress]);
 
 const ImportanceEnum = z.enum(['low', 'normal', 'high']);
 
@@ -370,9 +377,9 @@ sign-in, Microsoft 365 tools become available.`,
       description:
         'Open an inline editable email compose form before sending. Use this when the user wants to write or send an email, so they can review and edit the draft first. Do NOT use when the user asks to save a draft (use create_draft). This tool does not send the email directly.',
       inputSchema: z.object({
-        to: z.array(z.string()).describe('Recipient email address(es), e.g. ["alice@example.com"]'),
-        cc: z.array(z.string()).optional().describe('CC recipient(s)'),
-        bcc: z.array(z.string()).optional().describe('BCC recipient(s)'),
+        to: RecipientList.min(1).describe('Recipient email address(es), e.g. ["alice@example.com"]'),
+        cc: RecipientList.optional().describe('CC recipient(s)'),
+        bcc: RecipientList.optional().describe('BCC recipient(s)'),
         subject: z.string().describe('Email subject'),
         body: z.string().describe('Email body'),
       }).shape,
@@ -918,13 +925,13 @@ sign-in, Microsoft 365 tools become available.`,
           .string()
           .optional()
           .describe(
-            'Start of the scheduled window as an ISO 8601 date-time (e.g. "2026-08-10T09:00:00Z"); interpreted as UTC',
+            'Start of the scheduled window as an ISO 8601 date-time (e.g. "2026-08-10T09:00:00Z"); explicit offsets are converted to UTC, zone-less values are treated as UTC',
           ),
         scheduledEnd: z
           .string()
           .optional()
           .describe(
-            'End of the scheduled window as an ISO 8601 date-time (e.g. "2026-08-14T18:00:00Z"); interpreted as UTC',
+            'End of the scheduled window as an ISO 8601 date-time (e.g. "2026-08-14T18:00:00Z"); explicit offsets are converted to UTC, zone-less values are treated as UTC',
           ),
       }).shape,
       annotations: {
@@ -950,6 +957,18 @@ sign-in, Microsoft 365 tools become available.`,
           action_required: 'Provide scheduledStart and scheduledEnd.',
           next_step: 'set_automatic_replies',
         });
+      }
+      if (args.status === 'scheduled') {
+        try {
+          normalizeScheduledWindow(args.scheduledStart, args.scheduledEnd);
+        } catch (err) {
+          return errorResponse({
+            error: err instanceof Error ? err.message : String(err),
+            action_required:
+              'Provide ISO 8601 date-times with an explicit offset or "Z" (or a UTC wall-clock time), with scheduledStart earlier than scheduledEnd.',
+            next_step: 'set_automatic_replies',
+          });
+        }
       }
       const scopeError = await requireMailboxSettingsScope(true);
       if (scopeError) return scopeError;

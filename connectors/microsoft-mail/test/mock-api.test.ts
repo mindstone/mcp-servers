@@ -195,6 +195,53 @@ describe('microsoft-mail mock-API integration', () => {
     expect(recipientsJson.error).toContain('"to" instead of "recipient"/"recipients"');
   });
 
+  it('send_email rejects malformed recipient addresses before calling Graph', async () => {
+    for (const bad of ['not-an-address', '', 'missing-at-sign.example.com']) {
+      const result = await client.callTool('send_email', {
+        to: [bad],
+        subject: 'Hi',
+        body: 'Hello there',
+      });
+      expect(result.isError, `"${bad}" should be rejected`).toBe(true);
+    }
+    expect(state.requests.some((r) => r.pathname.endsWith('/me/sendMail'))).toBe(false);
+  });
+
+  it('send_email rejects malformed cc/bcc entries before calling Graph', async () => {
+    const result = await client.callTool('send_email', {
+      to: 'alice@example.com',
+      bcc: ['carol@example.com', 'definitely not an email'],
+      subject: 'Hi',
+      body: 'Hello there',
+    });
+    expect(result.isError).toBe(true);
+    expect(state.requests.some((r) => r.pathname.endsWith('/me/sendMail'))).toBe(false);
+  });
+
+  it('send_email trims recipient whitespace before sending', async () => {
+    const result = await client.callTool('send_email', {
+      to: ['  alice@example.com  '],
+      subject: 'Hi',
+      body: 'Hello there',
+    });
+    expect(result.isError).not.toBe(true);
+    const call = state.requests.find((r) => r.pathname.endsWith('/me/sendMail'));
+    expect(call?.body).toMatchObject({
+      message: {
+        toRecipients: [{ emailAddress: { address: 'alice@example.com' } }],
+      },
+    });
+  });
+
+  it('forward_email rejects malformed recipients before calling Graph', async () => {
+    const result = await client.callTool('forward_email', {
+      id: 'msg-1',
+      to: 'not-an-address',
+    });
+    expect(result.isError).toBe(true);
+    expect(state.requests.some((r) => r.pathname.includes('/forward'))).toBe(false);
+  });
+
   it('send_email rejects "message"/"content"/"text" aliases with explicit guidance', async () => {
     for (const alias of ['message', 'content', 'text']) {
       const result = await client.callTool('send_email', {

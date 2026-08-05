@@ -875,6 +875,51 @@ export interface SetAutomaticRepliesArgs {
   scheduledEnd?: string;
 }
 
+// ISO 8601 date-time, with or without an explicit offset/"Z" suffix. A
+// zone-less value is documented (and treated) as UTC below.
+const ISO_DATETIME_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})?$/;
+
+function normalizeScheduledDateTime(value: string, field: string): string {
+  const trimmed = value.trim();
+  const guidance =
+    `Invalid ${field}: expected an ISO 8601 date-time such as "2026-08-10T09:00:00Z" ` +
+    'or "2026-08-10T09:00:00+02:00".';
+  if (!ISO_DATETIME_PATTERN.test(trimmed)) {
+    throw new Error(guidance);
+  }
+  // Make the zone-less-is-UTC convention explicit before parsing so the
+  // result does not depend on the host's local timezone.
+  const hasExplicitZone = /(Z|[+-]\d{2}:\d{2})$/.test(trimmed);
+  const parsed = new Date(hasExplicitZone ? trimmed : `${trimmed}Z`);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(guidance);
+  }
+  // Graph's dateTimeTimeZone pairs a zone-less wall-clock string with the
+  // timeZone field we send ("UTC"), so convert to UTC and strip the
+  // milliseconds and trailing "Z" — passing an offset or "Z" through
+  // verbatim would mislabel the instant.
+  return parsed.toISOString().slice(0, 'YYYY-MM-DDTHH:mm:ss'.length);
+}
+
+/**
+ * Validate and normalize a scheduled out-of-office window: both bounds must
+ * be ISO 8601 date-times (offsets converted to UTC) and start must precede
+ * end. Throws with actionable guidance otherwise. Idempotent — its own
+ * output re-normalizes to itself.
+ */
+export function normalizeScheduledWindow(
+  scheduledStart: string | undefined,
+  scheduledEnd: string | undefined,
+): { start: string; end: string } {
+  const start = normalizeScheduledDateTime(scheduledStart ?? '', 'scheduledStart');
+  const end = normalizeScheduledDateTime(scheduledEnd ?? '', 'scheduledEnd');
+  if (start >= end) {
+    throw new Error('Invalid schedule: scheduledStart must be earlier than scheduledEnd.');
+  }
+  return { start, end };
+}
+
 export async function setAutomaticReplies(
   client: Client,
   args: SetAutomaticRepliesArgs,
@@ -891,8 +936,9 @@ export async function setAutomaticReplies(
     setting.externalAudience = args.externalAudience;
   }
   if (args.status === 'scheduled') {
-    setting.scheduledStartDateTime = { dateTime: args.scheduledStart, timeZone: 'UTC' };
-    setting.scheduledEndDateTime = { dateTime: args.scheduledEnd, timeZone: 'UTC' };
+    const { start, end } = normalizeScheduledWindow(args.scheduledStart, args.scheduledEnd);
+    setting.scheduledStartDateTime = { dateTime: start, timeZone: 'UTC' };
+    setting.scheduledEndDateTime = { dateTime: end, timeZone: 'UTC' };
   }
 
   const response = await client
