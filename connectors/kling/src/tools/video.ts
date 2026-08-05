@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { klingFetch } from '../client.js';
 import { encodeLocalImage } from '../media.js';
 import { withErrorHandling } from '../utils.js';
-import type { VideoGenerationResponse, TaskStatusResponse } from '../types.js';
+import { TASK_TYPE_PATHS, type VideoGenerationResponse, type TaskStatusResponse } from '../types.js';
 
 const MODEL_ENUM = [
   'kling-v2-6',
@@ -204,47 +204,51 @@ export function registerVideoTools(server: McpServer): void {
     'check_kling_task',
     {
       description:
-        'Check if a Kling video generation task is complete.\n\n' +
+        'Check if a Kling generation task is complete.\n\n' +
         'WHEN TO CALL:\n' +
-        '- After generate_kling_video or generate_kling_image_to_video returns a task_id\n' +
+        '- After any generate_* / extend_* tool returns a task_id\n' +
         '- Wait ~30 seconds between checks\n' +
         '- Keep polling until status is "succeed" or "failed"\n\n' +
+        'TASK TYPES: "text2video" (generate_kling_video), "image2video" (generate_kling_image_to_video), ' +
+        '"video-extend" (extend_kling_video), "lip-sync" (generate_kling_lip_sync), "image" (generate_kling_image).\n\n' +
         'RESPONSE STATUS VALUES:\n' +
         '- "submitted" → Task received, generation starting\n' +
-        '- "processing" → Video being generated (wait and poll again)\n' +
-        '- "succeed" → DONE! Response includes video.url\n' +
+        '- "processing" → Being generated (wait and poll again)\n' +
+        '- "succeed" → DONE! Response includes the result URL(s) and, for videos, the video id (needed by extend_kling_video / generate_kling_lip_sync)\n' +
         '- "failed" → Error occurred, check the error message\n\n' +
-        'VIDEO URL: Valid for 30 days after generation.',
+        'RESULT URLs: Valid for 30 days after generation — use download_kling_video to save anything you want to keep.',
       inputSchema: z.object({
         task_id: z
           .string()
           .min(1)
-          .describe('The task_id returned by generate_kling_video or generate_kling_image_to_video'),
+          .describe('The task_id returned by a generate_* or extend_* tool'),
         task_type: z
-          .enum(['text2video', 'image2video'])
+          .enum(['text2video', 'image2video', 'video-extend', 'lip-sync', 'image'])
           .optional()
           .describe(
-            'Use "text2video" for generate_kling_video, "image2video" for generate_kling_image_to_video. Default: text2video',
+            '"text2video" for generate_kling_video, "image2video" for generate_kling_image_to_video, "video-extend" for extend_kling_video, "lip-sync" for generate_kling_lip_sync, "image" for generate_kling_image. Default: text2video',
           ),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       const taskType = args.task_type || 'text2video';
-      const altType = taskType === 'text2video' ? 'image2video' : 'text2video';
 
       let result: TaskStatusResponse;
       try {
-        result = await klingFetch<TaskStatusResponse>(`/videos/${taskType}/${args.task_id}`);
+        result = await klingFetch<TaskStatusResponse>(`${TASK_TYPE_PATHS[taskType]}/${args.task_id}`);
       } catch (error) {
-        // If task not found with the given type, try the alternative type
+        // Legacy fallback: if a video task is not found with the given type,
+        // try the alternative video type (text2video <-> image2video).
+        const altType = taskType === 'text2video' ? 'image2video' : taskType === 'image2video' ? 'text2video' : null;
         if (
+          altType &&
           error instanceof Error &&
           'code' in error &&
           ((error as { code: string }).code === 'HTTP_404' ||
             (error as { code: string }).code === 'KLING_1201')
         ) {
-          result = await klingFetch<TaskStatusResponse>(`/videos/${altType}/${args.task_id}`);
+          result = await klingFetch<TaskStatusResponse>(`${TASK_TYPE_PATHS[altType]}/${args.task_id}`);
         } else {
           throw error;
         }
@@ -269,7 +273,15 @@ export function registerVideoTools(server: McpServer): void {
           url: video.url,
           duration: video.duration,
         };
-        response.hint = 'Video generation complete! URL is valid for 30 days.';
+        if (video.id) {
+          (response.video as Record<string, unknown>).id = video.id;
+        }
+        response.hint =
+          'Video generation complete! URL is valid for 30 days — use download_kling_video to save it locally.';
+      } else if (result.task_status === 'succeed' && result.task_result?.images?.length) {
+        response.images = result.task_result.images.map((img) => ({ url: img.url }));
+        response.hint =
+          'Image generation complete! URLs are valid for 30 days — use download_kling_video to save them locally.';
       } else if (result.task_status === 'failed') {
         response.ok = false;
         response.resolution = 'Generation failed. Try a different prompt or check your credits.';
