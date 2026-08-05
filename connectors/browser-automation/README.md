@@ -99,7 +99,7 @@ This server requires the `agent-browser` CLI binary to control the browser.
 ### Binary Resolution
 
 1. **PATH lookup** (preferred): If `agent-browser` is on your PATH, it is used directly.
-2. **npx fallback**: If the binary is not found, the server automatically falls back to `npx -y agent-browser@0.26.0`.
+2. **npx fallback**: If the binary is not found, the server automatically falls back to `npx -y agent-browser@0.33.2`.
 
 ### Installing agent-browser
 
