@@ -124,6 +124,7 @@ This server is designed to run alongside a host application that performs the Sl
 - `SLACK_CLIENT_SECRET` — OAuth Connected App client secret. Same conditions as `SLACK_CLIENT_ID`.
 - `SLACK_DISABLE_REFRESH` — Set to `1` to disable token refresh on this surface. The server will fail-closed with a structured `auth_required` response on token expiry instead of attempting an `oauth.v2.access` refresh. Use this on the cloud surface so desktop remains the sole refresh authority and avoids racing for single-use refresh tokens.
 - `SLACK_REQUEST_TIMEOUT_MS` — Override the default 60s upstream timeout. Must be a positive integer ≤ 300000 (5 minutes).
+- `MCP_WORKSPACE_PATH` — Directory that `upload_slack_file` reads are constrained to. Paths outside it (including symlinks pointing outside) are refused. Defaults to the system temp dir when unset.
 
 ### Authentication flow
 
@@ -241,6 +242,7 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 
 ### Files
 - `download_slack_file` — Download a file attachment by ID or URL.
+- `upload_slack_file` — Upload a local file (workspace-constrained reads; max 50MB) and optionally share it to a channel or thread. Uses the 3-step external upload flow.
 
 ### Workspace
 - `add_slack_bookmark` — Add a bookmark to a channel.

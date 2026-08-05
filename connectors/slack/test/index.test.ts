@@ -70,6 +70,7 @@ const ALL_TOOLS = [
   'send_myself_a_note',
   'unpin_slack_message',
   'update_slack_message',
+  'upload_slack_file',
 ];
 
 const READ_ONLY_TOOLS = [
@@ -109,6 +110,7 @@ const DESTRUCTIVE_TOOLS = [
   'delete_slack_reminder',
   'add_slack_bookmark',
   'add_slack_reminder',
+  'upload_slack_file',
   // Mutate Slack state — read position (mark) or open new DM channel (open).
   'mark_slack_channel_as_read',
   'open_slack_dm',
@@ -170,7 +172,7 @@ describe('Slack MCP — smoke & registration', () => {
     if (cfg) cfg.cleanup();
   });
 
-  it('registers all 38 tools', async () => {
+  it('registers all 39 tools', async () => {
     const result = await client.client.listTools();
     const names = result.tools.map((t) => t.name).sort();
     expect(names).toEqual(ALL_TOOLS);

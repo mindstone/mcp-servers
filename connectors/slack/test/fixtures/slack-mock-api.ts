@@ -33,6 +33,8 @@ export const SLACK_PRODUCTION_API_URLS: string[] = [
   `${SLACK_API_BASE}/conversations.open`,
   `${SLACK_API_BASE}/conversations.replies`,
   `${SLACK_API_BASE}/files.info`,
+  `${SLACK_API_BASE}/files.getUploadURLExternal`,
+  `${SLACK_API_BASE}/files.completeUploadExternal`,
   `${SLACK_API_BASE}/oauth.v2.access`,
   `${SLACK_API_BASE}/pins.list`,
   `${SLACK_API_BASE}/pins.add`,
@@ -371,6 +373,31 @@ export function createSlackHandlers() {
     http.get(
       'https://files.slack.com/files-pri/:teamFile/download/:filename',
       () => HttpResponse.text('hello world!', { status: 200 }),
+    ),
+    http.post(`${SLACK_API_BASE}/files.getUploadURLExternal`, () =>
+      HttpResponse.json({
+        ok: true,
+        upload_url: 'https://files.slack.com/upload/v1/ABC123',
+        file_id: 'F0UPLOAD123',
+      }),
+    ),
+    http.post('https://files.slack.com/upload/v1/:uploadId', () =>
+      HttpResponse.text('OK', { status: 200 }),
+    ),
+    http.post(`${SLACK_API_BASE}/files.completeUploadExternal`, () =>
+      HttpResponse.json({
+        ok: true,
+        files: [
+          {
+            id: 'F0UPLOAD123',
+            name: 'upload.txt',
+            title: 'upload.txt',
+            mimetype: 'text/plain',
+            size: 12,
+            permalink: 'https://test.slack.com/files/U123/F0UPLOAD123/upload.txt',
+          },
+        ],
+      }),
     ),
     http.post(`${SLACK_API_BASE}/oauth.v2.access`, async ({ request }) => {
       const body = await request.text();

@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - `list_slack_reminders`, `complete_slack_reminder`, and `delete_slack_reminder` — inspect and manage reminders (`reminders.list` / `reminders.complete` / `reminders.delete`), closing the add-only asymmetry. All three are marked EXPERIMENTAL like `add_slack_reminder`, since Slack has partially deprecated the reminders API.
 - `remove_slack_reaction` — undo your own reaction (`reactions.remove`).
 - `list_slack_emoji` — list the workspace's custom emoji (`emoji.list`) so agents can react with them by name.
+- `upload_slack_file` — upload a local file via Slack's 3-step external upload flow (`files.getUploadURLExternal` → byte POST → `files.completeUploadExternal`), with optional channel/thread sharing. Reads are constrained to `MCP_WORKSPACE_PATH` (or the system temp dir) with canonical-prefix, symlink-safe containment per the repo's file-read invariant; the Slack-supplied upload URL is validated as Slack-owned HTTPS before the local file bytes are sent, and redirects are followed manually with per-hop re-validation. 50MB cap. `destructiveHint: true`.
 
 ### Changed
 
