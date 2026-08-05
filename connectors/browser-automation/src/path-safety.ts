@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { ConnectorError } from './types.js';
 
 export type ResolveResult =
   | { ok: true; path: string }
@@ -17,17 +18,29 @@ export type ResolveResult =
  *     checks are stable on platforms where the tmpdir itself is reached
  *     through a symlink (macOS: `/tmp` → `/private/tmp`).
  *   - If `realpathSync` fails (e.g. the env var points at a non-existent
- *     directory), fall back to the lexically-resolved path so the
- *     containment checks still produce a clean refusal.
+ *     directory), FAIL CLOSED: a root we cannot canonicalise makes every
+ *     downstream containment check unreliable, so file operations are
+ *     refused. The failed pre-check is made observable via a stderr warning.
  */
 export function getWorkspaceRoot(): string {
   const envRoot = process.env.MCP_WORKSPACE_PATH;
-  const raw = envRoot && envRoot.trim() ? envRoot.trim() : os.tmpdir();
+  const explicit = Boolean(envRoot && envRoot.trim());
+  const raw = explicit ? envRoot!.trim() : os.tmpdir();
   const lexical = path.resolve(raw);
   try {
     return fs.realpathSync(lexical);
-  } catch {
-    return lexical;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[browser-automation] Workspace root ${JSON.stringify(lexical)} cannot be canonicalised (${reason}); refusing file operations.`,
+    );
+    throw new ConnectorError(
+      explicit
+        ? `MCP_WORKSPACE_PATH (${lexical}) cannot be resolved: ${reason}`
+        : `System temp directory (${lexical}) cannot be resolved: ${reason}`,
+      'WORKSPACE_ROOT_UNAVAILABLE',
+      'Set MCP_WORKSPACE_PATH to an existing directory the process can read, or unset it to use the system temp directory.',
+    );
   }
 }
 

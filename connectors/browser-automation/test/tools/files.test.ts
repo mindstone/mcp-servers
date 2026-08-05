@@ -182,4 +182,26 @@ describe('browser_upload', () => {
     expect(result.isError).toBe(true);
     expect(capturedArgs).toHaveLength(0);
   });
+
+  it('fails closed (with a stderr warning) when the workspace root cannot be canonicalised', async () => {
+    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const missing = path.join(workspace, 'does-not-exist');
+
+    testClient = await createTestClient({
+      env: { AGENT_BROWSER_SHOW_WINDOW: 'false', MCP_WORKSPACE_PATH: missing },
+    });
+
+    const result = await testClient.client.callTool({
+      name: 'browser_upload',
+      arguments: { ref: '@e3', file_paths: ['report.pdf'] },
+    });
+    const parsed = parseResult(result);
+
+    expect(parsed.ok).toBe(false);
+    expect(result.isError).toBe(true);
+    expect(parsed.code).toBe('WORKSPACE_ROOT_UNAVAILABLE');
+    expect(capturedArgs).toHaveLength(0);
+    // The failed pre-check must be observable, not silent.
+    expect(stderrSpy).toHaveBeenCalled();
+  });
 });
