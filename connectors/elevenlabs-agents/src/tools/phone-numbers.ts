@@ -195,7 +195,7 @@ WHEN TO USE:
 - Onboard a SIP trunk number (needs at least one trunk config)
 - Before make_outbound_call or submit_batch_call when no suitable number exists yet
 
-EXAMPLE: {"provider": "twilio", "phone_number": "+14155559876", "label": "Sales line", "twilio_sid": "ACxxxxxxxx", "twilio_token": "xxxxxxxx"}
+EXAMPLE: {"provider": "twilio", "phone_number": "+14155559876", "label": "Sales line", "twilio_sid": "AC<32 lowercase hex chars>", "twilio_token": "<32 lowercase hex chars>"}
 EXAMPLE: {"provider": "sip_trunk", "phone_number": "+14155559876", "label": "SIP line", "outbound_trunk_config": {"address": "sip.example.com"}}
 
 RELATED TOOLS:
@@ -208,7 +208,7 @@ RETURNS: phone_number (the created phone_number_id).
 COST: FREE for the import itself; telephony usage is billed by the provider.
 
 COMMON MISTAKES:
-- provider "twilio" requires twilio_sid and twilio_token.
+- provider "twilio" requires twilio_sid ("AC" + 32 lowercase hex chars) and twilio_token (32 lowercase hex chars).
 - provider "sip_trunk" requires at least one of inbound_trunk_config / outbound_trunk_config.
 - phone_number must be E.164 (leading "+", country code, digits only).`,
       inputSchema: z.object({
@@ -220,10 +220,14 @@ COMMON MISTAKES:
           .describe('Human-readable label for the number.'),
         agent_id: z.string().min(1).optional()
           .describe('Optional agent ID to assign to the number immediately.'),
-        twilio_sid: z.string().min(1).optional()
-          .describe('Twilio Account SID. Required when provider is "twilio".'),
-        twilio_token: z.string().min(1).optional()
-          .describe('Twilio Auth Token. Required when provider is "twilio".'),
+        twilio_sid: z.string()
+          .regex(/^AC[0-9a-f]{32}$/, 'must be a Twilio Account SID: "AC" followed by 32 lowercase hex characters')
+          .optional()
+          .describe('Twilio Account SID ("AC" + 32 lowercase hex chars). Required when provider is "twilio".'),
+        twilio_token: z.string()
+          .regex(/^[0-9a-f]{32}$/, 'must be a Twilio Auth Token: 32 lowercase hex characters')
+          .optional()
+          .describe('Twilio Auth Token (32 lowercase hex chars). Required when provider is "twilio".'),
         inbound_trunk_config: z.record(z.unknown()).optional()
           .describe('SIP trunk inbound configuration object (allowed addresses/numbers, credentials). Provider "sip_trunk" only.'),
         outbound_trunk_config: z.record(z.unknown()).optional()

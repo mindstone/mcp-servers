@@ -8,6 +8,12 @@ import {
   MOCK_API_KEY,
 } from './helpers/elevenlabs-agents-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
+import { redactCredentialValues } from '../src/redact.js';
+
+/** Format-valid Twilio credentials ("AC" + 32 hex / 32 hex) for the import tests.
+ * Built programmatically so no literal trips secret scanners. */
+const TWILIO_SID = `AC${'0123456789abcdef'.repeat(2)}`;
+const TWILIO_TOKEN = 'fedcba9876543210'.repeat(2);
 
 describe('phone number tools', () => {
   let testClient: McpTestClient;
@@ -82,8 +88,8 @@ describe('phone number tools', () => {
       provider: 'twilio',
       phone_number: '+14155559876',
       label: 'Sales line',
-      twilio_sid: 'AC123',
-      twilio_token: 'token123',
+      twilio_sid: TWILIO_SID,
+      twilio_token: TWILIO_TOKEN,
       agent_id: 'agent_test_123',
     });
 
@@ -93,8 +99,8 @@ describe('phone number tools', () => {
       phone_number: '+14155559876',
       label: 'Sales line',
       agent_id: 'agent_test_123',
-      sid: 'AC123',
-      token: 'token123',
+      sid: TWILIO_SID,
+      token: TWILIO_TOKEN,
     });
     expect(result.json.phone_number.phone_number_id).toBe('pn_imported_123');
   });
@@ -131,8 +137,8 @@ describe('phone number tools', () => {
       provider: 'twilio',
       phone_number: '415-555-9876',
       label: 'Sales line',
-      twilio_sid: 'AC123',
-      twilio_token: 'token123',
+      twilio_sid: TWILIO_SID,
+      twilio_token: TWILIO_TOKEN,
     });
 
     expect(result.isError).toBe(true);
@@ -153,6 +159,26 @@ describe('phone number tools', () => {
     expect(result.isError).toBe(true);
     expect(result.json).toMatchObject({ ok: false, code: 'INVALID_ARGUMENTS' });
     expect(result.json.error).toContain('twilio_sid');
+  });
+
+  it('import_phone_number rejects malformed Twilio credentials before any upstream call', async () => {
+    // Format validation is fail-closed at the input schema: a short or
+    // JSON-syntax credential must never reach the redaction path, where it
+    // would double as a substring-replacement weapon against the output.
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('import_phone_number', {
+      provider: 'twilio',
+      phone_number: '+14155559876',
+      label: 'Sales line',
+      twilio_sid: '"',
+      twilio_token: 'x',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toMatch(/twilio_sid|Account SID/);
   });
 
   it('import_phone_number rejects sip_trunk imports without any trunk config', async () => {
@@ -193,9 +219,9 @@ describe('phone number tools', () => {
       () => HttpResponse.json({
         phone_number_id: 'pn_imported_123',
         provider: 'twilio',
-        sid: 'AC123',
-        token: 'token123',
-        echoed_note: 'credential token123 accepted',
+        sid: TWILIO_SID,
+        token: TWILIO_TOKEN,
+        echoed_note: `credential ${TWILIO_TOKEN} accepted`,
       }),
     );
     mswServer.use(reflecting, ...createElevenLabsAgentsHandlers());
@@ -207,15 +233,16 @@ describe('phone number tools', () => {
       provider: 'twilio',
       phone_number: '+14155559876',
       label: 'Sales line',
-      twilio_sid: 'AC123',
-      twilio_token: 'token123',
+      twilio_sid: TWILIO_SID,
+      twilio_token: TWILIO_TOKEN,
     });
 
     expect(result.isError).toBeFalsy();
     // Credential-shaped keys are redacted by the sanitizer; the exact values are
-    // stripped even when reflected under an innocent key name.
-    expect(result.text).not.toContain('token123');
-    expect(result.text).not.toContain('AC123');
+    // stripped even when reflected under an innocent key name, and the JSON
+    // structure around the redaction survives intact.
+    expect(result.text).not.toContain(TWILIO_TOKEN);
+    expect(result.text).not.toContain(TWILIO_SID);
     expect(result.text).toContain('[redacted]');
     expect(result.json.phone_number.phone_number_id).toBe('pn_imported_123');
   });
@@ -224,7 +251,7 @@ describe('phone number tools', () => {
     const failing = http.post(
       'https://api.elevenlabs.io/v1/convai/phone-numbers',
       () => HttpResponse.json(
-        { detail: { message: 'Twilio rejected auth token token123 for account AC123' } },
+        { detail: { message: `Twilio rejected auth token ${TWILIO_TOKEN} for account ${TWILIO_SID}` } },
         { status: 422 },
       ),
     );
@@ -237,14 +264,35 @@ describe('phone number tools', () => {
       provider: 'twilio',
       phone_number: '+14155559876',
       label: 'Sales line',
-      twilio_sid: 'AC123',
-      twilio_token: 'token123',
+      twilio_sid: TWILIO_SID,
+      twilio_token: TWILIO_TOKEN,
     });
 
     expect(result.isError).toBe(true);
     expect(result.json).toMatchObject({ ok: false, code: 'HTTP_422' });
-    expect(result.text).not.toContain('token123');
-    expect(result.text).not.toContain('AC123');
+    expect(result.text).not.toContain(TWILIO_TOKEN);
+    expect(result.text).not.toContain(TWILIO_SID);
     expect(result.text).toContain('[redacted]');
+  });
+});
+
+describe('redactCredentialValues', () => {
+  it('redacts a valid-format credential without corrupting surrounding fields', () => {
+    const out = redactCredentialValues(
+      `{"phone_number_id":"pn_1","note":"imported ${TWILIO_SID} with ${TWILIO_TOKEN}"}`,
+      [TWILIO_SID, TWILIO_TOKEN],
+    );
+    expect(out).toBe('{"phone_number_id":"pn_1","note":"imported [redacted] with [redacted]"}');
+    expect(JSON.parse(out)).toEqual({
+      phone_number_id: 'pn_1',
+      note: 'imported [redacted] with [redacted]',
+    });
+  });
+
+  it('skips secrets below the minimum length instead of corrupting the payload', () => {
+    // A one-character or JSON-delimiter "secret" would otherwise replace every
+    // matching byte in the serialized output; short values are skipped instead.
+    const text = '{"ok":true,"note":"everything fine"}';
+    expect(redactCredentialValues(text, ['"', 'x', '"ok"'])).toBe(text);
   });
 });
