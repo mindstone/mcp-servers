@@ -10,10 +10,11 @@
     ]
   },
   "tools": {
-    "count": 4,
+    "count": 5,
     "domains": [
       "visuals",
-      "downloads"
+      "downloads",
+      "styles"
     ]
   },
   "surface": "cloud-api",

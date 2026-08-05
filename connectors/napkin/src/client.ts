@@ -203,7 +203,7 @@ async function napkinFetch<T>(
     throw new NapkinError(
       'Access forbidden',
       'AUTH_FAILED',
-      'Your API key does not have permission for this operation.',
+      'Your API key is invalid or does not have permission for this operation. Check it at https://app.napkin.ai → Account Settings → Developers.',
     );
   }
 
@@ -213,6 +213,16 @@ async function napkinFetch<T>(
       'Resource not found',
       'NOT_FOUND',
       'The requested resource does not exist. Check the ID and try again.',
+    );
+  }
+
+  // Handle expired resources — Napkin status/file URLs expire 30 minutes
+  // after generation (documented 410 on the status endpoint).
+  if (response.status === 410) {
+    throw new NapkinError(
+      'Resource expired',
+      'EXPIRED',
+      'Napkin request status expires 30 minutes after generation. Start over with napkin_generate_visual, then poll napkin_check_status and download promptly.',
     );
   }
 
@@ -326,6 +336,14 @@ export async function downloadFile(
       );
     }
     throw error;
+  }
+
+  if (response.status === 410) {
+    throw new NapkinError(
+      'Download URL expired',
+      'EXPIRED',
+      'Napkin file URLs expire 30 minutes after generation. Call napkin_generate_visual again and download promptly once napkin_check_status returns "completed".',
+    );
   }
 
   if (!response.ok) {

@@ -11,6 +11,13 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+- **napkin**: Add `napkin_list_styles` tool exposing the 15 built-in Napkin style catalog (IDs, descriptions, categories) so models can pick a `style_id` without copying one from the app UI. Static catalog data — no API key or network call required.
+
+### Fixed
+- **napkin**: Map HTTP 410 responses (status/file URLs expire 30 minutes after generation) to a structured `EXPIRED` error with an actionable regenerate-and-download-promptly resolution, instead of generic `API_ERROR`/`DOWNLOAD_ERROR`.
+- **napkin**: Broaden the 403 `AUTH_FAILED` resolution — the vendor returns 403 ("user not found") for invalid keys too, not only for missing permissions, so the message now points at checking the key.
+
 ## [0.3.2] - 2026-05-14
 ### Added
 - **registry**: Cohort A backfill — 12 API-key OSS connectors get server.json + mcpName. fathom, humaans, kling, mixmax, nano-banana, napkin, pandadoc, freshdesk, elevenlabs, retell-ai, runway, talentlms each gain a registry-shaped server.json (validated against registry.modelcontextprotocol.io) and an mcpName field on package.json under the io.github.mindstone namespace.

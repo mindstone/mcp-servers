@@ -6,6 +6,7 @@ import { mswServer } from './helpers/setup.js';
 import {
   createNapkinHandlers,
   createNapkinUnauthorizedHandlers,
+  createNapkinExpiredHandlers,
   createNapkinTimeoutHandlers,
   createNapkinBridgeHandlers,
   createNapkinBridge401Handlers,
@@ -38,6 +39,41 @@ describe('Error handling', () => {
       expect(result.text).toContain('AUTH_FAILED');
       // Must not leak the API key
       expect(result.text).not.toContain('super-secret-key-12345');
+    });
+  });
+
+  describe('Expired resources (HTTP 410)', () => {
+    it('status endpoint 410 returns an actionable EXPIRED error', async () => {
+      mswServer.use(...createNapkinExpiredHandlers());
+      testClient = await createTestClient({
+        env: { NAPKIN_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('napkin_check_status', {
+        request_id: 'some-id',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain('EXPIRED');
+      expect(result.text).toContain('napkin_generate_visual');
+      // Must not leak the API key
+      expect(result.text).not.toContain(MOCK_API_KEY);
+    });
+
+    it('download endpoint 410 returns an actionable EXPIRED error', async () => {
+      mswServer.use(...createNapkinExpiredHandlers());
+      testClient = await createTestClient({
+        env: { NAPKIN_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('napkin_download_visual', {
+        file_url: 'https://api.napkin.ai/v1/visual/some-id/file/output.svg',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain('EXPIRED');
+      expect(result.text).toContain('napkin_generate_visual');
+      expect(result.text).not.toContain(MOCK_API_KEY);
     });
   });
 
