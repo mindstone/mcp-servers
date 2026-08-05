@@ -1,11 +1,15 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { ZodError } from 'zod';
 import {
   MicrosoftRefreshDisabledError,
+  createLogger,
   detectAuthRequiredReason,
   formatGraphError,
 } from '@mindstone/mcp-server-microsoft-shared';
 import type { AuthRequiredReason } from '@mindstone/mcp-server-microsoft-shared';
 import { AUTH_TOOL_NAME, REQUEST_TIMEOUT_MS, getMsPackageId } from './types.js';
+
+const log = createLogger('microsoft-mail-mcp');
 
 /**
  * Compose a per-call abort signal with the cohort timeout.
@@ -219,6 +223,26 @@ export function buildErrorResponse(err: unknown): CallToolResult {
       next_step: 'list_emails',
     });
   }
+  // A ZodError here means a Graph response failed boundary validation. Its
+  // formatted issues can echo attacker-controlled values (e.g. an unexpected
+  // enum value from the mailbox), so never pass the raw message through —
+  // report the failure class only, with the offending field paths logged
+  // locally for debugging.
+  if (err instanceof ZodError) {
+    log.warn('Microsoft Graph response failed schema validation', {
+      paths: err.issues.map((issue) => issue.path.join('.')),
+    });
+    return errorResponse({
+      error:
+        'Microsoft Graph returned a response that failed schema validation, so it was not processed.',
+      action_required:
+        'Retry the call. If it keeps failing, the upstream response shape has changed and the connector needs an update.',
+      next_step: 'Retry the same tool call',
+    });
+  }
+  // Generic non-auth failure: re-authentication cannot fix filesystem,
+  // validation, or unexpected Graph failures, so do not send the user (or
+  // the model) down that path — say what actually helps.
   return {
     content: [
       {
