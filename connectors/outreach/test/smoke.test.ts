@@ -20,6 +20,7 @@ const EXPECTED_TOOLS = [
   'outreach_list_sequences',
   'outreach_list_tasks',
   'outreach_list_users',
+  'outreach_remove_prospect_from_sequence',
   'outreach_search_prospects',
   'outreach_update_prospect',
 ];
@@ -65,7 +66,7 @@ describe('Smoke test — Outreach MCP server', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(17);
+    expect(toolsResult.tools).toHaveLength(18);
     expect(toolNames).toEqual(EXPECTED_TOOLS);
   });
 
@@ -119,7 +120,7 @@ describe('Smoke test — Outreach MCP server', () => {
       'outreach_list_users',
     ];
 
-    const destructiveTools = ['outreach_disconnect_account'];
+    const destructiveTools = ['outreach_disconnect_account', 'outreach_remove_prospect_from_sequence'];
 
     for (const tool of toolsResult.tools) {
       expect(tool.annotations, `Tool ${tool.name} should have annotations`).toBeDefined();

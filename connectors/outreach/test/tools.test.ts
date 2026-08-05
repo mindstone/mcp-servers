@@ -238,6 +238,75 @@ describe('Tool tests — Outreach MCP server', () => {
     expect(result.json).toHaveProperty('code', 'HTTP_404');
   });
 
+  it('outreach_remove_prospect_from_sequence pauses by default', async () => {
+    mswServer.use(...createOutreachHandlers());
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('outreach_remove_prospect_from_sequence', {
+      prospect_id: '101',
+      sequence_id: '301',
+    });
+    expect(result.isError).toBeFalsy();
+    expect(result.json).toHaveProperty('ok', true);
+    expect(result.json).toHaveProperty('status', 'paused');
+    expect(result.json).toHaveProperty('state', 'paused');
+  });
+
+  it('outreach_remove_prospect_from_sequence with action "remove" finishes the enrollment', async () => {
+    mswServer.use(...createOutreachHandlers());
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('outreach_remove_prospect_from_sequence', {
+      prospect_id: '101',
+      sequence_id: '301',
+      action: 'remove',
+    });
+    expect(result.isError).toBeFalsy();
+    expect(result.json).toHaveProperty('ok', true);
+    expect(result.json).toHaveProperty('status', 'removed');
+    expect(result.json).toHaveProperty('state', 'finished');
+  });
+
+  it('outreach_remove_prospect_from_sequence returns NOT_FOUND when not enrolled', async () => {
+    mswServer.use(...createOutreachHandlers());
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('outreach_remove_prospect_from_sequence', {
+      prospect_id: '999',
+      sequence_id: '301',
+    });
+    expect(result.isError).toBe(true);
+    expect(result.json).toHaveProperty('ok', false);
+    expect(result.json).toHaveProperty('code', 'NOT_FOUND');
+  });
+
   // --- Accounts ---
 
   it('outreach_list_accounts returns accounts', async () => {

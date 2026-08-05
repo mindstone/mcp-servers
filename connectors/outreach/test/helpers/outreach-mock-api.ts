@@ -220,6 +220,29 @@ export function createOutreachHandlers() {
       return HttpResponse.json({ data: mockSequenceState });
     }),
 
+    http.get(`${OUTREACH_API_BASE}/sequenceStates`, ({ request }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      const url = new URL(request.url);
+      if (url.searchParams.get('filter[prospect][id]') === '999') {
+        return HttpResponse.json(jsonApiList([], 0));
+      }
+      return HttpResponse.json(jsonApiList([mockSequenceState]));
+    }),
+
+    http.post(`${OUTREACH_API_BASE}/sequenceStates/:id/actions/:action`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      const newState = params.action === 'finish' ? 'finished' : 'paused';
+      return HttpResponse.json({
+        data: {
+          ...mockSequenceState,
+          id: params.id,
+          attributes: { ...mockSequenceState.attributes, state: newState },
+        },
+      });
+    }),
+
     // --- Sequence content ---
     http.get(`${OUTREACH_API_BASE}/sequenceSteps`, ({ request }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
