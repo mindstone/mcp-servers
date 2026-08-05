@@ -30,6 +30,7 @@
     "start": "node dist/index.js",
     "compose:template": "node scripts/gen-compose-html.mjs",
     "compose:template:check": "node scripts/gen-compose-html.mjs --check",
+    "security:internal-refs": "node scripts/check-internal-refs.mjs",
     "pretest": "npm run compose:template:check",
     "test": "vitest run",
     "test:watch": "vitest",
