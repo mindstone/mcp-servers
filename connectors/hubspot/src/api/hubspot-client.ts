@@ -438,6 +438,16 @@ export class HubSpotClient {
     this.accessToken = accessToken;
   }
 
+  /**
+   * The access token legitimately appears in a few request paths (HubSpot's
+   * token-info endpoint is addressed BY token). It must never reach logs or
+   * structured error summaries, so every endpoint string that gets recorded
+   * goes through this redaction first.
+   */
+  private redactEndpointForLogs(endpoint: string): string {
+    return this.accessToken ? endpoint.split(this.accessToken).join('[REDACTED]') : endpoint;
+  }
+
   private async request<T>(
     method: string,
     endpoint: string,
@@ -446,8 +456,9 @@ export class HubSpotClient {
   ): Promise<T> {
     const url = `${HUBSPOT_API_BASE}${endpoint}`;
     const signal = composeHubSpotRequestSignal(options?.signal);
-    
-    logger.debug(`HubSpot API ${method} ${endpoint}`);
+    const logSafeEndpoint = this.redactEndpointForLogs(endpoint);
+
+    logger.debug(`HubSpot API ${method} ${logSafeEndpoint}`);
 
     const response = await fetch(url, {
       method,
@@ -478,7 +489,7 @@ export class HubSpotClient {
           : undefined;
       const errorSummary = summariseHubSpotApiError(
         { statusCode: response.status, details: errorDetails, requestId, retryAfterSeconds },
-        { operation: `${method} ${endpoint}` },
+        { operation: `${method} ${logSafeEndpoint}` },
       );
       
       logger.error(
@@ -501,6 +512,9 @@ export class HubSpotClient {
     return response.json() as Promise<T>;
   }
 
+  // HubSpot's token-info endpoint is addressed by the token itself, so the
+  // secret sits in the request path. The wire format is HubSpot's choice, but
+  // redactEndpointForLogs keeps it out of every log line and error summary.
   async getTokenInfo(): Promise<{ user: string; hub_id: number; user_id: number; scopes?: string[] }> {
     return this.request('GET', `${HUBSPOT_API_PREFIXES.oauthV1}/access-tokens/${this.accessToken}`);
   }
