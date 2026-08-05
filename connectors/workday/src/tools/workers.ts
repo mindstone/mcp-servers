@@ -11,6 +11,7 @@ import {
   pickFields,
   paginationHint,
 } from '../types.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
 import { workdayFetch } from '../client.js';
@@ -76,7 +77,9 @@ async function searchWorkers(search: string, limit: number, offset: number): Pro
     count: workers.length,
     total: matched.length,
     search: {
-      query: search,
+      // The echoed query is caller-supplied text; envelope it like any other
+      // untrusted string so a crafted query cannot break out into tool output.
+      query: wrapUntrusted(search, 'workday'),
       mode: 'client-side',
       scannedWorkers: scanned,
       ...(exhausted

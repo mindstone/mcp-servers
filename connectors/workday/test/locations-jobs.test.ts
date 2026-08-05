@@ -55,7 +55,9 @@ describe('list_workday_locations', () => {
     const location = json.locations[0];
     expect(location.id).toBeDefined();
     expect(location.descriptor).toBeDefined();
-    expect((location.locationType as Record<string, unknown>).descriptor).toBe('Office');
+    expect((location.locationType as Record<string, unknown>).descriptor).toBe(
+      '<untrusted-content source="workday">Office</untrusted-content>',
+    );
     // Free-text / sensitive fields are stripped by the allowlist
     expect(location.addressLine1).toBeUndefined();
     expect(location.addressNote).toBeUndefined();
@@ -118,7 +120,9 @@ describe('list_workday_jobs', () => {
     const job = json.jobs[0];
     expect(job.id).toBeDefined();
     expect(job.businessTitle).toBeDefined();
-    expect((job.worker as Record<string, unknown>).descriptor).toBe('Jane Smith');
+    expect((job.worker as Record<string, unknown>).descriptor).toBe(
+      '<untrusted-content source="workday">Jane Smith</untrusted-content>',
+    );
     // Nested references are deep-picked: no PII or financials leak through
     expect((job.worker as Record<string, unknown>).ssn).toBeUndefined();
     expect((job.location as Record<string, unknown>).postalCode).toBeUndefined();
