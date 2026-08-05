@@ -26,6 +26,20 @@ import { wrapUntrusted } from './untrusted-content.js';
 
 export const OPUS_API_BASE = 'https://api.opus.pro';
 
+/**
+ * Strip query string and fragment from a URL before logging. Signed /
+ * resumable-upload URLs carry bearer-like credentials in their query
+ * parameters; the origin + pathname is sufficient for request tracing.
+ */
+function redactUrlForLog(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return '[unparseable URL]';
+  }
+}
+
 export interface OpusFetchOptions extends Omit<RequestInit, 'signal'> {
   /** Optional caller AbortSignal — composed via AbortSignal.any() with our timeout. */
   signal?: AbortSignal;
@@ -45,7 +59,10 @@ async function opusFetchRaw<T>(
   options: OpusFetchOptions = {},
   injectAuth: boolean = true,
 ): Promise<T> {
-  console.error(`[Opus API] ${options.method || 'GET'} ${url}`);
+  // Never log the full URL: GCS resumable/signed URLs carry bearer-like
+  // query credentials (upload_id, X-Goog-Signature, …). Method +
+  // origin + pathname is enough to trace a request.
+  console.error(`[Opus API] ${options.method || 'GET'} ${redactUrlForLog(url)}`);
 
   const timeoutMs = options.uploadTimeout ? getUploadTimeoutMs() : getApiTimeoutMs();
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
@@ -145,8 +162,10 @@ async function opusFetchRaw<T>(
   }
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    console.error(`Opus API error (${response.status}):`, errorText);
+    // Consume the body so the connection is released, but never log it:
+    // vendor error bodies are not proven secret-free.
+    await response.text().catch(() => '');
+    console.error(`Opus API error (HTTP ${response.status})`);
     const message =
       response.status >= 500
         ? 'Opus server error - try again later'
