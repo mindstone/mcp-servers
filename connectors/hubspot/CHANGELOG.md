@@ -29,6 +29,7 @@ are maintained manually as part of the PR review checklist.
 - Validated `objectId` (and the engagement IDs) before path interpolation on the generic CRM object tools, and paired every generic CRUD path segment with `encodeURIComponent` — a crafted ID carrying `../` or `?`/`#` could previously reroute an authenticated request to another HubSpot API path.
 - Redacted the OAuth access token from request debug logs and structured error summaries. HubSpot's token-info endpoint is addressed by the token itself, and the sales-email scope check made that path reachable from a tool call.
 - Enveloped engagement bodies returned by `get_contact_engagements`, which fetched them through the raw client without sanitization.
+- The envelope walker's per-surface literal rules now match exact documented object paths (root and `results`-nested shapes are enumerated explicitly) instead of suffix-matching — an attacker-controlled parent could previously recreate a trusted suffix (e.g. `audit.options[].value`) and inherit the exception, exposing free text raw.
 
 ### Fixed
 

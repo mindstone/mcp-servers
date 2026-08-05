@@ -141,9 +141,11 @@ function defangKey(key: string): string {
  *
  * `path` is the object-key path of the objects on which `keys` stay literal,
  * with array hops transparent (an item of `options[]` sits at path
- * ['options']). An empty path matches the root object only; a non-empty path
- * is a suffix match, so the same rule covers both a bare object at the root
- * and objects nested under `results`.
+ * ['options']). An empty path matches the root object only. The match is
+ * EXACT — a rule covers only the documented response shapes, so a surface
+ * that nests the same shape under `results` enumerates both paths explicitly.
+ * A suffix match would let an attacker-controlled parent recreate a trusted
+ * tail (`audit.options[].value`) and inherit the exception.
  */
 export interface SanitizeLiteralRule {
   path: readonly string[];
@@ -157,13 +159,8 @@ function matchesLiteralRule(
 ): boolean {
   for (const rule of rules) {
     if (!rule.keys.has(key)) continue;
-    if (rule.path.length === 0) {
-      if (objectPath.length === 0) return true;
-      continue;
-    }
-    if (objectPath.length < rule.path.length) continue;
-    const offset = objectPath.length - rule.path.length;
-    if (rule.path.every((segment, index) => objectPath[offset + index] === segment)) {
+    if (rule.path.length !== objectPath.length) continue;
+    if (rule.path.every((segment, index) => objectPath[index] === segment)) {
       return true;
     }
   }
@@ -274,27 +271,32 @@ export function sanitizeHubSpotResponse<T>(
  * property and property-group tools). On this surface `name` and `groupName`
  * are API identifiers the model must echo back verbatim when creating/updating
  * records, and option `value`s are the identifiers written into records. The
- * rules are pinned to the documented response shapes — a definition arrives
- * bare (get/create/update) or under `results` (list), and option identifiers
- * live under the definition's `options` array — so a nested `name` or `value`
- * anywhere else stays enveloped. (On CRM *records* the same keys are
- * user-authored text and stay enveloped via the `properties` rule.)
+ * rules are pinned to the exact documented response shapes — a definition
+ * arrives bare (get/create/update) or under `results` (list), and option
+ * identifiers live under the definition's `options` array — so a nested
+ * `name` or `value` anywhere else (e.g. an attacker-named `audit.options`
+ * subtree) stays enveloped. (On CRM *records* the same keys are user-authored
+ * text and stay enveloped via the `properties` rule.)
  */
 export const PROPERTY_SCHEMA_LITERAL_RULES: readonly SanitizeLiteralRule[] = [
   { path: [], keys: new Set(['name', 'groupName']) },
   { path: ['results'], keys: new Set(['name', 'groupName']) },
   { path: ['options'], keys: new Set(['value']) },
+  { path: ['results', 'options'], keys: new Set(['value']) },
 ];
 
 /**
  * Literal rules for the forms surface. A form field's `name` is the CRM
  * property the field writes to — an identifier the model needs verbatim to map
- * submissions onto contact properties. Scoped to the two documented binding
- * shapes (field definitions and submission values); submission `value`s, field
- * `label`s, and the form's own display name stay enveloped (form fillers and
- * form authors are untrusted, and forms are referenced by ID, not name).
+ * submissions onto contact properties. Scoped to the exact documented binding
+ * shapes (field definitions, bare or under a list `results`, and submission
+ * values); submission `value`s, field `label`s, and the form's own display
+ * name stay enveloped (form fillers and form authors are untrusted, and forms
+ * are referenced by ID, not name).
  */
 export const FORM_LITERAL_RULES: readonly SanitizeLiteralRule[] = [
   { path: ['fieldGroups', 'fields'], keys: new Set(['name']) },
+  { path: ['results', 'fieldGroups', 'fields'], keys: new Set(['name']) },
   { path: ['values'], keys: new Set(['name']) },
+  { path: ['results', 'values'], keys: new Set(['name']) },
 ];
