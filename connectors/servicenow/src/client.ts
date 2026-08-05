@@ -1,14 +1,28 @@
 /**
  * ServiceNow API HTTP client.
  *
- * Centralises Basic auth header injection, error handling, rate-limit
+ * Centralises auth header injection, error handling, rate-limit
  * messaging, and instance URL construction for all ServiceNow API calls.
  *
- * Auth: Authorization: Basic base64(username:password)
+ * Auth: Basic (username:password) by default; OAuth 2.0 client-credentials
+ * Bearer tokens when SERVICENOW_CLIENT_ID / SERVICENOW_CLIENT_SECRET are set
+ * and basic credentials are absent.
  * Base URL: https://{instance}.service-now.com/api/now/table
  */
 
-import { getInstance, getUsername, getPassword, isConfigured } from './auth.js';
+import { z } from 'zod';
+import {
+  getInstance,
+  getUsername,
+  getPassword,
+  isConfigured,
+  isBasicConfigured,
+  getOAuthClientId,
+  getOAuthClientSecret,
+  getCachedOAuthToken,
+  setCachedOAuthToken,
+  clearOAuthToken,
+} from './auth.js';
 import { ServiceNowError, REQUEST_TIMEOUT_MS } from './types.js';
 
 /**
@@ -16,6 +30,93 @@ import { ServiceNowError, REQUEST_TIMEOUT_MS } from './types.js';
  */
 function getBaseUrl(): string {
   return `https://${getInstance()}.service-now.com/api/now/table`;
+}
+
+const OAuthTokenResponseSchema = z.object({
+  access_token: z.string().min(1),
+  expires_in: z.number().nonnegative().optional(),
+});
+
+/**
+ * Fetch an OAuth access token from the instance's token endpoint using the
+ * client credentials grant. The token endpoint requires the instance-side
+ * OAuth application registry entry and the inbound client-credentials grant
+ * to be enabled.
+ */
+async function fetchOAuthToken(): Promise<string> {
+  const url = `https://${getInstance()}.service-now.com/oauth_token.do`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: getOAuthClientId(),
+        client_secret: getOAuthClientSecret(),
+      }).toString(),
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      throw new ServiceNowError(
+        'Request to the ServiceNow OAuth token endpoint timed out',
+        'TIMEOUT',
+        'The token request took too long. Try again or check if the ServiceNow instance is available.',
+      );
+    }
+    throw error;
+  }
+
+  if (!response.ok) {
+    // Never echo the client secret or the response body — it can contain
+    // instance-specific detail; the resolution carries the guidance.
+    throw new ServiceNowError(
+      `OAuth token request failed (${response.status}). Check your client ID and secret.`,
+      'AUTH_FAILED',
+      'Verify SERVICENOW_CLIENT_ID and SERVICENOW_CLIENT_SECRET, and that the instance has an OAuth application registry entry with the client credentials grant enabled.',
+    );
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = await response.json();
+  } catch {
+    throw new ServiceNowError(
+      'The ServiceNow OAuth token endpoint returned a non-JSON response.',
+      'UNEXPECTED_CONTENT_TYPE',
+      'Check that the instance name is correct and the OAuth plugin is active on the instance.',
+    );
+  }
+
+  const token = OAuthTokenResponseSchema.safeParse(parsed);
+  if (!token.success) {
+    throw new ServiceNowError(
+      'The ServiceNow OAuth token endpoint returned an unexpected response shape.',
+      'API_ERROR',
+      'The token response did not contain an access_token. Check the OAuth application registry entry on the instance.',
+    );
+  }
+
+  setCachedOAuthToken(token.data.access_token, token.data.expires_in ?? 1800);
+  return token.data.access_token;
+}
+
+/**
+ * Builds the Authorization header for the configured auth method. Basic auth
+ * takes precedence when both methods are configured.
+ */
+async function getAuthorizationHeader(): Promise<string> {
+  if (isBasicConfigured()) {
+    return 'Basic ' + Buffer.from(`${getUsername()}:${getPassword()}`).toString('base64');
+  }
+  const cached = getCachedOAuthToken();
+  const token = cached ?? (await fetchOAuthToken());
+  return `Bearer ${token}`;
 }
 
 /**
@@ -43,13 +144,12 @@ export async function servicenowFetch<T>(
     throw new ServiceNowError(
       'ServiceNow not configured',
       'AUTH_REQUIRED',
-      'Use configure_servicenow to set your instance name, username, and password first.',
+      'Use configure_servicenow to set your instance name, username, and password first, or set SERVICENOW_INSTANCE, SERVICENOW_CLIENT_ID, and SERVICENOW_CLIENT_SECRET for OAuth.',
     );
   }
 
   const url = `${getBaseUrl()}${tablePath}`;
-  const authHeader =
-    'Basic ' + Buffer.from(`${getUsername()}:${getPassword()}`).toString('base64');
+  const authHeader = await getAuthorizationHeader();
 
   let response: Response;
 
@@ -76,10 +176,20 @@ export async function servicenowFetch<T>(
   }
 
   if (response.status === 401 || response.status === 403) {
+    if (isBasicConfigured()) {
+      throw new ServiceNowError(
+        'Authentication failed. Check your instance name, username, and password.',
+        'AUTH_FAILED',
+        'Re-configure with configure_servicenow. Ensure the account has itil and knowledge roles.',
+      );
+    }
+    // OAuth: the cached token may have been revoked instance-side — drop it
+    // so a retry fetches a fresh one.
+    clearOAuthToken();
     throw new ServiceNowError(
-      'Authentication failed. Check your instance name, username, and password.',
+      'Authentication failed. Check your OAuth client ID and secret.',
       'AUTH_FAILED',
-      'Re-configure with configure_servicenow. Ensure the account has itil and knowledge roles.',
+      'Verify SERVICENOW_CLIENT_ID and SERVICENOW_CLIENT_SECRET, and that the OAuth application on the instance has the required API scopes. A fresh token will be requested on retry.',
     );
   }
 

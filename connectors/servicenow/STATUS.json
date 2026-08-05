@@ -4,9 +4,10 @@
   "name": "servicenow",
   "package": "@mindstone/mcp-server-servicenow",
   "auth": {
-    "type": "basic-auth",
+    "type": "hybrid",
     "envVars": [
-      "SERVICENOW_PASSWORD"
+      "SERVICENOW_PASSWORD",
+      "SERVICENOW_CLIENT_SECRET"
     ]
   },
   "tools": {

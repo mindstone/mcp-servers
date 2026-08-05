@@ -40,6 +40,20 @@
           "isRequired": true,
           "isSecret": true,
           "format": "string"
+        },
+        {
+          "name": "SERVICENOW_CLIENT_ID",
+          "description": "OAuth 2.0 client ID (optional; alternative to username/password when the instance enforces MFA/SSO — requires an OAuth application registry entry with the client credentials grant enabled)",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "SERVICENOW_CLIENT_SECRET",
+          "description": "OAuth 2.0 client secret (optional; used with SERVICENOW_CLIENT_ID instead of username/password)",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
         }
       ]
     }

@@ -8,7 +8,7 @@ ServiceNow ITSM MCP server for Model Context Protocol hosts. Manage incidents, c
 ## Status
 
 - **Version:** [0.2.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-servicenow)
-- **Auth:** Basic auth (username + password) ([`SERVICENOW_PASSWORD`](./server.json))
+- **Auth:** Basic auth (username + password) or OAuth 2.0 client credentials ([`SERVICENOW_PASSWORD`](./server.json))
 - **Tools:** [13](./src/tools/) (incidents, change-requests, users, knowledge, service-catalog)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
@@ -81,8 +81,20 @@ node dist/index.js
 - `SERVICENOW_INSTANCE` — ServiceNow instance name (e.g. `acme` for acme.service-now.com)
 - `SERVICENOW_USERNAME` — ServiceNow username
 - `SERVICENOW_PASSWORD` — ServiceNow password
+- `SERVICENOW_CLIENT_ID` — optional OAuth 2.0 client ID (alternative to username/password; see below)
+- `SERVICENOW_CLIENT_SECRET` — optional OAuth 2.0 client secret
 - `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
 - `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
+
+### OAuth 2.0 (client credentials)
+
+Instances that enforce MFA/SSO often disable basic auth. As an alternative, the connector supports the OAuth 2.0 client credentials grant:
+
+1. On the instance, enable the inbound client credentials grant (system property `glide.oauth.inbound.client.credential.grant_type.enabled = true`).
+2. Create an entry under **System OAuth → Application Registry → New → Create an OAuth API endpoint for external clients** and note the client ID and secret.
+3. Set `SERVICENOW_INSTANCE`, `SERVICENOW_CLIENT_ID`, and `SERVICENOW_CLIENT_SECRET` (leave username/password unset).
+
+Tokens are fetched from the instance's `oauth_token.do` endpoint and cached until shortly before expiry. When both auth methods are configured, basic auth takes precedence.
 
 ## Host configuration examples
 

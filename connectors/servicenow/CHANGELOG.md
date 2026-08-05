@@ -15,6 +15,7 @@ are maintained manually as part of the PR review checklist.
 - `update_servicenow_incident` now accepts `work_notes` and `comments`, so notes can be appended to an incident's journal — previously there was no way to add a note or comment to an incident.
 - New tool: `create_servicenow_change_request` — create a change request (short_description, description, type, assignment_group, category, risk), symmetric with `create_servicenow_incident`. Marked `destructiveHint: true`.
 - New tools: `list_servicenow_catalog_items` and `get_servicenow_catalog_item` — read-only access to the service catalog (sc_cat_item) so self-service items are discoverable.
+- OAuth 2.0 client credentials authentication (`SERVICENOW_CLIENT_ID` / `SERVICENOW_CLIENT_SECRET`) as an alternative to basic auth, for instances that enforce MFA/SSO. Tokens are fetched from the instance's `oauth_token.do` endpoint and cached until shortly before expiry; basic auth still takes precedence when both are configured.
 
 ### Security
 - All external text returned by ServiceNow (incident/change-request/knowledge/user records, including fields added by instance customisation) is now wrapped in `<untrusted-content>` envelopes with close-tag breakout escaping, per the repo's untrusted-content invariant. Identifiers, timestamps, and choice-list display values stay literal so they can be copied into follow-up tool calls.
