@@ -11,6 +11,7 @@ export const MOCK_ACCESS_TOKEN = 'test-access-token-abc123';
 
 export const TOKEN_URL = `https://${MOCK_HOST}/ccx/oauth2/${MOCK_TENANT}/token`;
 export const API_BASE = `https://${MOCK_HOST}/ccx/api/v1/${MOCK_TENANT}`;
+export const ABSENCE_API_BASE = `https://${MOCK_HOST}/ccx/api/absenceManagement/v1/${MOCK_TENANT}`;
 
 export function createTokenResponse(overrides: Partial<{
   access_token: string;
@@ -93,6 +94,36 @@ export function createDirectReportsResponse(count = 2, total = 2) {
     id: `report-${String(i + 1).padStart(3, '0')}`,
     descriptor: `Report ${i + 1}`,
     primaryWorkEmail: `report${i + 1}@acme.com`,
+  }));
+  return { data, total };
+}
+
+export function createTimeOffEntry(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'timeoff-001',
+    descriptor: 'Vacation',
+    startDate: '2026-08-10',
+    endDate: '2026-08-14',
+    quantity: 5,
+    unitOfTime: 'Days',
+    status: 'Approved',
+    href: '/workers/worker-001/timeOffDetails/timeoff-001',
+    timeOffType: {
+      id: 'type-001',
+      descriptor: 'Vacation',
+      // Sensitive/extra fields that should be stripped by nested allowlisting
+      accrualRate: 1.66,
+    },
+    // Free-text fields that must never reach the model output
+    comment: 'Visiting family in Springfield',
+    reason: 'Personal matters',
+    ...overrides,
+  };
+}
+
+export function createTimeOffListResponse(count = 2, total = 2) {
+  const data = Array.from({ length: count }, (_, i) => createTimeOffEntry({
+    id: `timeoff-${String(i + 1).padStart(3, '0')}`,
   }));
   return { data, total };
 }

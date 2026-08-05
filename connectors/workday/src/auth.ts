@@ -98,6 +98,13 @@ export function getApiBaseUrl(): string {
   return `https://${workdayHost}/ccx/api/v1/${workdayTenant}`;
 }
 
+// Workday's wider REST surface is split into per-domain service families
+// (e.g. absenceManagement/v1, payroll/v2) that hang off /ccx/api/ rather
+// than the /ccx/api/v1/{tenant} alias used for the core worker/org endpoints.
+export function getServiceApiBaseUrl(serviceFamily: string): string {
+  return `https://${workdayHost}/ccx/api/${serviceFamily}/${workdayTenant}`;
+}
+
 // ── SSRF / Host validation ──
 
 function normalizeHost(raw: string): string {

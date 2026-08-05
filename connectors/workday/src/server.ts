@@ -5,6 +5,7 @@ import {
   registerWorkerTools,
   registerOrganizationTools,
   registerDirectReportTools,
+  registerTimeOffTools,
 } from './tools/index.js';
 
 const require = createRequire(import.meta.url);
@@ -20,6 +21,7 @@ export function createServer(): McpServer {
   registerWorkerTools(server);
   registerOrganizationTools(server);
   registerDirectReportTools(server);
+  registerTimeOffTools(server);
 
   return server;
 }

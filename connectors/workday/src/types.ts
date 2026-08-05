@@ -33,6 +33,12 @@ export const NESTED_OBJECT_FIELDS = ['id', 'descriptor'] as const;
 
 export const ORG_LIST_FIELDS = ['id', 'descriptor', 'type', 'isActive', 'href'] as const;
 
+// Time-off entries: scalar scheduling fields only — comment/reason fields are
+// free text authored in Workday and deliberately excluded from the allowlist.
+export const TIME_OFF_FIELDS = ['id', 'descriptor', 'startDate', 'endDate', 'quantity', 'unitOfTime', 'status', 'href'] as const;
+
+export const ABSENCE_MANAGEMENT_FAMILY = 'absenceManagement/v1';
+
 // ── Field allowlisting ──
 
 export function pickFields<T extends readonly string[]>(

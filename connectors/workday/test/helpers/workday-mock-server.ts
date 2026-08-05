@@ -9,10 +9,12 @@ import {
   MOCK_ACCESS_TOKEN,
   TOKEN_URL,
   API_BASE,
+  ABSENCE_API_BASE,
   createTokenResponse,
   createWorkersListResponse,
   createOrgsListResponse,
   createDirectReportsResponse,
+  createTimeOffListResponse,
   createWorker,
 } from '../fixtures/workday-data.js';
 
@@ -95,6 +97,20 @@ export function createWorkdayHandlers(options: MockServerOptions = {}): HttpHand
       }
 
       return HttpResponse.json(createDirectReportsResponse());
+    }),
+
+    // Time-off details (absenceManagement family)
+    http.get(`${ABSENCE_API_BASE}/workers/:workerId/timeOffDetails`, async ({ request }) => {
+      const authHeader = request.headers.get('Authorization');
+      if (!authHeader?.startsWith('Bearer ')) {
+        return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
+      if (options.apiErrorStatus) {
+        return HttpResponse.json({ error: 'Mock API error' }, { status: options.apiErrorStatus });
+      }
+
+      return HttpResponse.json(createTimeOffListResponse());
     }),
   ];
 }
