@@ -125,6 +125,28 @@ In this case, use the following configuration:
 
 NOTE: The `XERO_CLIENT_BEARER_TOKEN` will take precedence over the `XERO_CLIENT_ID` if defined.
 
+### Write access gate (`XERO_ALLOW_WRITES`)
+
+Write tools (create/update/delete, adding history notes, emailing invoices) are **disabled by default**. They refuse to run unless the host environment sets `XERO_ALLOW_WRITES=1` (the value must be exactly `1`). Read-only tools (`list-*`, `get-*`) are unaffected.
+
+This guard is secure-by-default: it prevents an agent from accidentally performing a destructive write against a real Xero organisation. Only opt in when you intend writes to occur:
+
+```json
+{
+  "mcpServers": {
+    "xero": {
+      "command": "npx",
+      "args": ["-y", "@mindstone/mcp-server-xero@latest"],
+      "env": {
+        "XERO_CLIENT_ID": "your_client_id_here",
+        "XERO_CLIENT_SECRET": "your_client_secret_here",
+        "XERO_ALLOW_WRITES": "1"
+      }
+    }
+  }
+}
+```
+
 ### Available MCP Commands
 
 - `list-accounts`: Retrieve a list of accounts
