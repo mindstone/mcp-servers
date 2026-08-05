@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { withErrorHandling, escapeQboql, validateAlphanumericId, requireProdWritesEnabled } from '../utils.js';
 import { qboFetch, qboQuery } from '../client.js';
 import { QBO_MINOR_VERSION } from '../types.js';
+import { sanitizeQboEntity } from '../sanitize.js';
 
 export function registerInvoiceTools(server: McpServer): void {
   server.registerTool(
@@ -49,7 +50,11 @@ WORKFLOW:
       const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
       const query = `SELECT * FROM Invoice${where} ORDERBY TxnDate DESC`;
       const invoices = await qboQuery('Invoice', query, limit);
-      return JSON.stringify({ ok: true, invoices, count: invoices.length });
+      return JSON.stringify({
+        ok: true,
+        invoices: sanitizeQboEntity(invoices, 'quickbooks:list_quickbooks_invoices'),
+        count: invoices.length,
+      });
     }),
   );
 
@@ -104,7 +109,11 @@ COMMON MISTAKES:
         `/invoice?minorversion=${QBO_MINOR_VERSION}`,
         { method: 'POST', body: JSON.stringify(invoiceBody) },
       );
-      return JSON.stringify({ ok: true, message: 'Invoice created.', invoice: result.Invoice });
+      return JSON.stringify({
+        ok: true,
+        message: 'Invoice created.',
+        invoice: sanitizeQboEntity(result.Invoice, 'quickbooks:create_quickbooks_invoice'),
+      });
     }),
   );
 }

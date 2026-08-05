@@ -6,6 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { withErrorHandling } from '../utils.js';
 import { qboQuery } from '../client.js';
+import { sanitizeQboEntity } from '../sanitize.js';
 
 export function registerEmployeeTools(server: McpServer): void {
   server.registerTool(
@@ -30,7 +31,11 @@ Example: {}`,
 
       const query = `SELECT * FROM Employee${where} ORDERBY DisplayName`;
       const employees = await qboQuery('Employee', query, limit);
-      return JSON.stringify({ ok: true, employees, count: employees.length });
+      return JSON.stringify({
+        ok: true,
+        employees: sanitizeQboEntity(employees, 'quickbooks:list_quickbooks_employees'),
+        count: employees.length,
+      });
     }),
   );
 }

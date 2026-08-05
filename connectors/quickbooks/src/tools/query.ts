@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { withErrorHandling } from '../utils.js';
 import { qboFetch, qboQuery } from '../client.js';
 import { QBO_MINOR_VERSION } from '../types.js';
+import { wrapUntrustedJsonStrings } from '../untrusted-content.js';
 
 export function registerQueryTools(server: McpServer): void {
   server.registerTool(
@@ -42,7 +43,13 @@ COMMON MISTAKES:
       const entityMatch = query.match(/FROM\s+(\w+)/i);
       const entityName = entityMatch ? entityMatch[1] : 'Unknown';
       const results = await qboQuery(entityName, query, limit);
-      return JSON.stringify({ ok: true, entity: entityName, data: results, count: results.length });
+      // Arbitrary entity shape: envelope every string value wholesale.
+      return JSON.stringify({
+        ok: true,
+        entity: entityName,
+        data: wrapUntrustedJsonStrings(results, 'quickbooks:query_quickbooks'),
+        count: results.length,
+      });
     }),
   );
 
@@ -68,7 +75,14 @@ Supported entity types: Account, Bill, BillPayment, Customer, Employee, Estimate
       const result = await qboFetch<Record<string, unknown>>(
         `/${entityType.toLowerCase()}/${encodeURIComponent(entityId)}?minorversion=${QBO_MINOR_VERSION}`,
       );
-      return JSON.stringify({ ok: true, [entityType]: result[entityType] || result });
+      // Arbitrary entity shape: envelope every string value wholesale.
+      return JSON.stringify({
+        ok: true,
+        [entityType]: wrapUntrustedJsonStrings(
+          result[entityType] || result,
+          `quickbooks:get_quickbooks_entity:${entityType}`,
+        ),
+      });
     }),
   );
 }

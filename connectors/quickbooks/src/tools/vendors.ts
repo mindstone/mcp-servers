@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { withErrorHandling, escapeQboql, requireProdWritesEnabled } from '../utils.js';
 import { qboFetch, qboQuery } from '../client.js';
 import { QBO_MINOR_VERSION } from '../types.js';
+import { sanitizeQboEntity } from '../sanitize.js';
 
 export function registerVendorTools(server: McpServer): void {
   server.registerTool(
@@ -37,7 +38,11 @@ Example: { "searchTerm": "Office" }`,
       const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
       const query = `SELECT * FROM Vendor${where} ORDERBY DisplayName`;
       const vendors = await qboQuery('Vendor', query, limit);
-      return JSON.stringify({ ok: true, vendors, count: vendors.length });
+      return JSON.stringify({
+        ok: true,
+        vendors: sanitizeQboEntity(vendors, 'quickbooks:list_quickbooks_vendors'),
+        count: vendors.length,
+      });
     }),
   );
 
@@ -67,7 +72,11 @@ Example: { "displayName": "AWS", "email": "billing@aws.amazon.com", "companyName
         `/vendor?minorversion=${QBO_MINOR_VERSION}`,
         { method: 'POST', body: JSON.stringify(vendorBody) },
       );
-      return JSON.stringify({ ok: true, message: 'Vendor created.', vendor: result.Vendor });
+      return JSON.stringify({
+        ok: true,
+        message: 'Vendor created.',
+        vendor: sanitizeQboEntity(result.Vendor, 'quickbooks:create_quickbooks_vendor'),
+      });
     }),
   );
 }

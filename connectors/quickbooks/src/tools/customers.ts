@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { withErrorHandling, escapeQboql, requireProdWritesEnabled } from '../utils.js';
 import { qboFetch, qboQuery } from '../client.js';
 import { QBO_MINOR_VERSION } from '../types.js';
+import { sanitizeQboEntity } from '../sanitize.js';
 
 export function registerCustomerTools(server: McpServer): void {
   server.registerTool(
@@ -38,7 +39,11 @@ Example: { "searchTerm": "Smith" }`,
       const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
       const query = `SELECT * FROM Customer${where} ORDERBY DisplayName`;
       const customers = await qboQuery('Customer', query, limit);
-      return JSON.stringify({ ok: true, customers, count: customers.length });
+      return JSON.stringify({
+        ok: true,
+        customers: sanitizeQboEntity(customers, 'quickbooks:list_quickbooks_customers'),
+        count: customers.length,
+      });
     }),
   );
 
@@ -68,7 +73,11 @@ Example: { "displayName": "Jane Smith", "email": "jane@smith.com", "phone": "555
         `/customer?minorversion=${QBO_MINOR_VERSION}`,
         { method: 'POST', body: JSON.stringify(customerBody) },
       );
-      return JSON.stringify({ ok: true, message: 'Customer created.', customer: result.Customer });
+      return JSON.stringify({
+        ok: true,
+        message: 'Customer created.',
+        customer: sanitizeQboEntity(result.Customer, 'quickbooks:create_quickbooks_customer'),
+      });
     }),
   );
 }

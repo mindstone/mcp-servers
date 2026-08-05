@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { withErrorHandling, escapeQboql, validateAlphanumericId, requireProdWritesEnabled } from '../utils.js';
 import { qboFetch, qboQuery } from '../client.js';
 import { QBO_MINOR_VERSION } from '../types.js';
+import { sanitizeQboEntity } from '../sanitize.js';
 
 export function registerBillTools(server: McpServer): void {
   server.registerTool(
@@ -30,7 +31,11 @@ Example: { "vendorId": "123" }`,
       const where = args.vendorId ? ` WHERE VendorRef = '${escapeQboql(args.vendorId)}'` : '';
       const query = `SELECT * FROM Bill${where} ORDERBY TxnDate DESC`;
       const bills = await qboQuery('Bill', query, limit);
-      return JSON.stringify({ ok: true, bills, count: bills.length });
+      return JSON.stringify({
+        ok: true,
+        bills: sanitizeQboEntity(bills, 'quickbooks:list_quickbooks_bills'),
+        count: bills.length,
+      });
     }),
   );
 
@@ -77,7 +82,11 @@ WORKFLOW:
         `/bill?minorversion=${QBO_MINOR_VERSION}`,
         { method: 'POST', body: JSON.stringify(billBody) },
       );
-      return JSON.stringify({ ok: true, message: 'Bill created.', bill: result.Bill });
+      return JSON.stringify({
+        ok: true,
+        message: 'Bill created.',
+        bill: sanitizeQboEntity(result.Bill, 'quickbooks:create_quickbooks_bill'),
+      });
     }),
   );
 }
