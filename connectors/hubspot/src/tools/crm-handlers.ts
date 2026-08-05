@@ -836,35 +836,66 @@ export async function handleGetContactEngagements(args: { contactId: string; lim
   try {
     const client = await getHubSpotClientAsync();
     const limit = args.limit || 5;
-    
-    // Get associations for the contact to find related engagements
+
+    // Get associations for the contact to find related engagements. A single
+    // failing association type degrades to an empty list — the timeline is
+    // best-effort — but the degradation is logged, never silent.
+    const associationsOrEmpty = async (engagementType: 'calls' | 'emails' | 'meetings') => {
+      try {
+        return await client.getAssociations('contacts', args.contactId, engagementType);
+      } catch (error) {
+        logger.warn(`Contact engagement associations for ${engagementType} failed:`, error);
+        return { results: [] as Array<{ id: string; type: string }> };
+      }
+    };
     const [callAssocs, emailAssocs, meetingAssocs] = await Promise.all([
-      client.getAssociations('contacts', args.contactId, 'calls').catch(() => ({ results: [] })),
-      client.getAssociations('contacts', args.contactId, 'emails').catch(() => ({ results: [] })),
-      client.getAssociations('contacts', args.contactId, 'meetings').catch(() => ({ results: [] }))
+      associationsOrEmpty('calls'),
+      associationsOrEmpty('emails'),
+      associationsOrEmpty('meetings'),
     ]);
-    
+
     // Fetch details for each engagement type (limited)
     const callIds = callAssocs.results.slice(0, limit).map(a => a.id);
     const emailIds = emailAssocs.results.slice(0, limit).map(a => a.id);
     const meetingIds = meetingAssocs.results.slice(0, limit).map(a => a.id);
-    
+
     const defaultProps = ['hs_timestamp', 'hubspot_owner_id'];
     const callProps = [...defaultProps, 'hs_call_title', 'hs_call_body', 'hs_call_direction', 'hs_call_status', 'hs_call_duration'];
     const emailProps = [...defaultProps, 'hs_email_subject', 'hs_email_text', 'hs_email_direction', 'hs_email_status'];
     const meetingProps = [...defaultProps, 'hs_meeting_title', 'hs_meeting_body', 'hs_meeting_start_time', 'hs_meeting_end_time', 'hs_meeting_outcome'];
-    
+
+    // Per-engagement failures degrade to an omitted entry (logged, not
+    // silent); surviving engagements are envelope-wrapped like every other
+    // engagement read — bodies and subjects are external text.
+    const fetchEngagements = async (
+      engagementType: 'calls' | 'emails' | 'meetings',
+      ids: string[],
+      properties: string[],
+    ) => {
+      const fetched = await Promise.all(
+        ids.map(id =>
+          client.getEngagement(engagementType, id, properties).catch((error) => {
+            logger.warn(`Contact engagement fetch for ${engagementType} ${id} failed:`, error);
+            return null;
+          })
+        )
+      );
+      return sanitizeHubSpotResponse(
+        fetched.filter((entry) => entry !== null),
+        `hubspot:engagements/${engagementType}`,
+      );
+    };
     const [calls, emails, meetings] = await Promise.all([
-      Promise.all(callIds.map(id => client.getEngagement('calls', id, callProps).catch(() => null))),
-      Promise.all(emailIds.map(id => client.getEngagement('emails', id, emailProps).catch(() => null))),
-      Promise.all(meetingIds.map(id => client.getEngagement('meetings', id, meetingProps).catch(() => null)))
+      fetchEngagements('calls', callIds, callProps),
+      fetchEngagements('emails', emailIds, emailProps),
+      fetchEngagements('meetings', meetingIds, meetingProps),
     ]);
-    
+
     return attachSalesEmailScopeNote({
       contactId: args.contactId,
-      calls: calls.filter(Boolean),
-      emails: emails.filter(Boolean),
-      meetings: meetings.filter(Boolean),
+      calls,
+      emails,
+      meetings,
       summary: {
         totalCalls: callAssocs.results.length,
         totalEmails: emailAssocs.results.length,
