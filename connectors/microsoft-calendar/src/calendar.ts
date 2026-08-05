@@ -119,9 +119,137 @@ function parseGraphResponse<S extends z.ZodType>(
 type GraphCalendarEvent = z.infer<typeof GraphEventSchema>;
 
 // ---------------------------------------------------------------------------
-// Recurrence input schema — a Graph-shaped `recurrence` object
-// (`pattern` + `range`) validated here and passed through to Graph verbatim.
-// Shared by create_event and update_event.
+// Structural-string validators. Graph-sourced strings that merely LOOK
+// structural (IDs, URLs, enum-like fields, timestamps, timezone names) are
+// attacker-influenced like any other response field, so they pass through raw
+// ONLY when they match the documented closed format; anything anomalous is
+// enveloped instead (AGENTS.md invariant #6).
+// ---------------------------------------------------------------------------
+
+const GRAPH_ID_PATTERN = /^[A-Za-z0-9_\-+.=/]+$/;
+const MIME_TYPE_PATTERN = /^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+$/;
+const AVAILABILITY_VIEW_PATTERN = /^[0-4]*$/;
+const EMAIL_LIKE_PATTERN = /^[^\s<>"']+@[^\s<>"']+$/;
+const TIMEZONE_NAME_PATTERN = /^[A-Za-z0-9_+\-/() ]+$/;
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** ISO 8601 date-time, naive (`YYYY-MM-DDTHH:mm[:ss]`) or offset/`Z`-bearing. */
+export const ISO_DATE_TIME_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/;
+
+const GRAPH_ATTENDEE_TYPES: ReadonlySet<string> = new Set(['required', 'optional', 'resource']);
+const GRAPH_ATTENDEE_RESPONSES: ReadonlySet<string> = new Set([
+  'none',
+  'organizer',
+  'tentativelyaccepted',
+  'accepted',
+  'declined',
+  'notresponded',
+]);
+const GRAPH_BODY_CONTENT_TYPES: ReadonlySet<string> = new Set(['text', 'html']);
+const GRAPH_FREEBUSY_STATUSES: ReadonlySet<string> = new Set([
+  'free',
+  'tentative',
+  'busy',
+  'oof',
+  'workingelsewhere',
+  'unknown',
+]);
+const GRAPH_CALENDAR_COLORS: ReadonlySet<string> = new Set([
+  'auto',
+  'lightblue',
+  'lightgreen',
+  'lightorange',
+  'lightgray',
+  'lightyellow',
+  'lightteal',
+  'lightpink',
+  'lightbrown',
+  'lightred',
+  'maxcolor',
+]);
+
+function isSafeGraphUrl(value: string): boolean {
+  if (/[\s<>"']/.test(value)) return false;
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function isIsoDateTime(value: string): boolean {
+  const trimmed = value.trim();
+  return ISO_DATE_TIME_PATTERN.test(trimmed) && !Number.isNaN(new Date(trimmed).getTime());
+}
+
+/**
+ * Pass a structural Graph string through raw when it matches its closed
+ * format; envelop it otherwise, so an anomalous value cannot reach
+ * model-visible output unwrapped.
+ */
+function strictOrEnvelop(
+  value: string | undefined,
+  isValid: (v: string) => boolean,
+  source: string,
+): string | undefined {
+  if (value === undefined) return undefined;
+  return isValid(value) ? value : wrapUntrusted(value, source);
+}
+
+function enumOrEnvelop(
+  value: string | undefined,
+  allowed: ReadonlySet<string>,
+  source: string,
+): string | undefined {
+  return strictOrEnvelop(value, (v) => allowed.has(v.toLowerCase()), source);
+}
+
+/**
+ * Fail-closed input assertions that run BEFORE any network access (including
+ * the mailboxSettings timezone lookup): malformed windows must be rejected
+ * without touching Graph.
+ */
+function assertIsoDateTime(value: string, field: string, nextStep: string): void {
+  if (!isIsoDateTime(value)) {
+    throw new CalendarBusinessError(
+      `Could not parse "${field}" as a date/time: "${value}". Use ISO format (e.g. "2026-05-20T09:00:00").`,
+      nextStep,
+    );
+  }
+}
+
+function hasExplicitOffset(value: string): boolean {
+  return /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value.trim());
+}
+
+function assertWindowOrder(
+  start: string,
+  end: string,
+  startField: string,
+  endField: string,
+  nextStep: string,
+): void {
+  if (hasExplicitOffset(start) !== hasExplicitOffset(end)) {
+    throw new CalendarBusinessError(
+      `"${startField}" and "${endField}" must use the same style — either both with a UTC offset/Z or both without. Mixing them makes the window ambiguous.`,
+      nextStep,
+    );
+  }
+  // Both offset-bearing: instants compare directly. Both naive: parsing both
+  // in the same (server-local) zone preserves their ordering.
+  if (new Date(end.trim()).getTime() <= new Date(start.trim()).getTime()) {
+    throw new CalendarBusinessError(`"${endField}" must be after "${startField}".`, nextStep);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Recurrence input schema — a Graph-shaped `recurrence` object (`pattern` +
+// `range`) validated here and passed through to Graph verbatim. Shared by
+// create_event and update_event. Both objects are `.strict()` (unknown keys
+// are rejected, not silently forwarded) and the range carries the cross-field
+// requirements Graph documents (`endDate` ↔ endDate, `numbered` ↔
+// numberOfOccurrences).
 // ---------------------------------------------------------------------------
 
 const RecurrenceWeekdaySchema = z.enum([
@@ -133,6 +261,8 @@ const RecurrenceWeekdaySchema = z.enum([
   'friday',
   'saturday',
 ]);
+
+const RecurrenceDateSchema = z.string().regex(DATE_ONLY_PATTERN, 'Use YYYY-MM-DD format');
 
 export const RecurrenceSchema = z.object({
   pattern: z
@@ -152,16 +282,32 @@ export const RecurrenceSchema = z.object({
       firstDayOfWeek: RecurrenceWeekdaySchema.optional(),
       index: z.enum(['first', 'second', 'third', 'fourth', 'last']).optional(),
     })
-    .passthrough(),
+    .strict(),
   range: z
     .object({
       type: z.enum(['endDate', 'noEnd', 'numbered']),
-      startDate: z.string(),
-      endDate: z.string().optional(),
+      startDate: RecurrenceDateSchema,
+      endDate: RecurrenceDateSchema.optional(),
       numberOfOccurrences: z.number().int().positive().optional(),
       recurrenceTimeZone: z.string().optional(),
     })
-    .passthrough(),
+    .strict()
+    .superRefine((range, ctx) => {
+      if (range.type === 'endDate' && !range.endDate) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['endDate'],
+          message: 'range.endDate is required when range.type is "endDate"',
+        });
+      }
+      if (range.type === 'numbered' && !range.numberOfOccurrences) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['numberOfOccurrences'],
+          message: 'range.numberOfOccurrences is required when range.type is "numbered"',
+        });
+      }
+    }),
 });
 
 export type RecurrenceInput = z.infer<typeof RecurrenceSchema>;
@@ -214,9 +360,11 @@ async function tryGetCalendarTimezone(
         '[microsoft-calendar] mailboxSettings returned 403 (missing MailboxSettings.Read scope?) — falling back to device timezone',
       );
     } else {
+      // Log only the status/code — the error message can embed the vendor
+      // response body, which must not reach logs unsanitised.
+      const code = (err as { code?: string })?.code;
       console.warn(
-        '[microsoft-calendar] Failed to fetch user timezone from mailboxSettings',
-        err instanceof Error ? err.message : String(err),
+        `[microsoft-calendar] Failed to fetch user timezone from mailboxSettings (status ${statusCode ?? 'unknown'}${code ? `, code ${code}` : ''})`,
       );
     }
     return null;
@@ -480,23 +628,38 @@ export async function listEvents(
     'list_events',
   );
 
+  // Graph paginates calendarView; the nextLink URL itself is vendor-supplied
+  // and is deliberately NOT surfaced — only the truncation fact is.
+  const hasMore = typeof response?.['@odata.nextLink'] === 'string';
+
   if (args.returnText) {
+    const truncationNote = hasMore
+      ? '\n\nNOTE: more events exist beyond this page — narrow the date range or increase top (max 100) to see them.'
+      : '';
     return {
       kind: 'text',
-      text: wrapUntrusted(formatEventsAsText(events, tzInfo), 'microsoft-calendar:list_events') ?? '',
+      text: wrapUntrusted(formatEventsAsText(events, tzInfo) + truncationNote, 'microsoft-calendar:list_events') ?? '',
     };
   }
 
   const formatted = events.map((event) => ({
-    id: event.id,
+    id: strictOrEnvelop(event.id, (v) => GRAPH_ID_PATTERN.test(v), 'microsoft-calendar:list_events:id'),
     subject: wrapUntrusted(event.subject, 'microsoft-calendar:list_events:subject'),
     start: {
-      dateTime: event.start.dateTime,
-      timeZone: windowsToIanaTimezone(event.start.timeZone),
+      dateTime: strictOrEnvelop(event.start.dateTime, isIsoDateTime, 'microsoft-calendar:list_events:start'),
+      timeZone: strictOrEnvelop(
+        windowsToIanaTimezone(event.start.timeZone),
+        (v) => TIMEZONE_NAME_PATTERN.test(v),
+        'microsoft-calendar:list_events:start.timeZone',
+      ),
     },
     end: {
-      dateTime: event.end.dateTime,
-      timeZone: windowsToIanaTimezone(event.end.timeZone),
+      dateTime: strictOrEnvelop(event.end.dateTime, isIsoDateTime, 'microsoft-calendar:list_events:end'),
+      timeZone: strictOrEnvelop(
+        windowsToIanaTimezone(event.end.timeZone),
+        (v) => TIMEZONE_NAME_PATTERN.test(v),
+        'microsoft-calendar:list_events:end.timeZone',
+      ),
     },
     location: wrapUntrusted(event.location?.displayName, 'microsoft-calendar:list_events:location'),
     organizer: wrapUntrustedJsonStrings(
@@ -507,11 +670,11 @@ export async function listEvents(
     attendees: event.attendees?.map((a) => ({
       email: wrapUntrusted(a.emailAddress?.address, 'microsoft-calendar:list_events:attendees.email'),
       name: wrapUntrusted(a.emailAddress?.name, 'microsoft-calendar:list_events:attendees.name'),
-      type: a.type,
-      status: a.status?.response,
+      type: enumOrEnvelop(a.type, GRAPH_ATTENDEE_TYPES, 'microsoft-calendar:list_events:attendees.type'),
+      status: enumOrEnvelop(a.status?.response, GRAPH_ATTENDEE_RESPONSES, 'microsoft-calendar:list_events:attendees.status'),
     })),
     isAllDay: event.isAllDay,
-    webLink: event.webLink,
+    webLink: strictOrEnvelop(event.webLink, isSafeGraphUrl, 'microsoft-calendar:list_events:webLink'),
   }));
 
   return {
@@ -529,6 +692,13 @@ export async function listEvents(
       startDateTime: start,
       endDateTime: end,
       events: formatted,
+      truncated: hasMore,
+      ...(hasMore
+        ? {
+            truncationNote:
+              'More events exist beyond this page. Narrow the date range or increase top (max 100) to see them.',
+          }
+        : {}),
     },
   };
 }
@@ -546,6 +716,7 @@ export async function getEvent(
   const event = parseGraphResponse(GraphEventSchema, rawEvent, 'get_event');
 
   let attachments: unknown;
+  let attachmentsTruncated = false;
   if (args.includeAttachments) {
     const attachmentsResponse = await client
       .api(`/me/events/${args.id}/attachments`)
@@ -557,22 +728,43 @@ export async function getEvent(
       attachmentsResponse.value ?? [],
       'get_event attachments',
     );
+    // The vendor-supplied @odata.nextLink is not surfaced or followed — only
+    // the truncation fact is reported.
+    attachmentsTruncated = typeof attachmentsResponse?.['@odata.nextLink'] === 'string';
     attachments = parsedAttachments.map((a) => ({
-      id: a.id,
+      id: strictOrEnvelop(a.id, (v) => GRAPH_ID_PATTERN.test(v), 'microsoft-calendar:get_event:attachments.id'),
       name: wrapUntrusted(a.name, 'microsoft-calendar:get_event:attachments.name'),
-      contentType: a.contentType,
+      contentType: strictOrEnvelop(
+        a.contentType,
+        (v) => MIME_TYPE_PATTERN.test(v),
+        'microsoft-calendar:get_event:attachments.contentType',
+      ),
       size: a.size,
     }));
   }
 
   return {
-    id: event.id,
+    id: strictOrEnvelop(event.id, (v) => GRAPH_ID_PATTERN.test(v), 'microsoft-calendar:get_event:id'),
     subject: wrapUntrusted(event.subject, 'microsoft-calendar:get_event:subject'),
-    start: event.start,
-    end: event.end,
+    start: {
+      dateTime: strictOrEnvelop(event.start.dateTime, isIsoDateTime, 'microsoft-calendar:get_event:start'),
+      timeZone: strictOrEnvelop(
+        event.start.timeZone,
+        (v) => TIMEZONE_NAME_PATTERN.test(v),
+        'microsoft-calendar:get_event:start.timeZone',
+      ),
+    },
+    end: {
+      dateTime: strictOrEnvelop(event.end.dateTime, isIsoDateTime, 'microsoft-calendar:get_event:end'),
+      timeZone: strictOrEnvelop(
+        event.end.timeZone,
+        (v) => TIMEZONE_NAME_PATTERN.test(v),
+        'microsoft-calendar:get_event:end.timeZone',
+      ),
+    },
     location: wrapUntrusted(event.location?.displayName, 'microsoft-calendar:get_event:location'),
     body: wrapUntrusted(event.body?.content, 'microsoft-calendar:get_event:body'),
-    bodyType: event.body?.contentType,
+    bodyType: enumOrEnvelop(event.body?.contentType, GRAPH_BODY_CONTENT_TYPES, 'microsoft-calendar:get_event:bodyType'),
     organizer: wrapUntrustedJsonStrings(
       event.organizer?.emailAddress,
       'microsoft-calendar:get_event:organizer',
@@ -580,13 +772,17 @@ export async function getEvent(
     attendees: event.attendees?.map((a) => ({
       email: wrapUntrusted(a.emailAddress?.address, 'microsoft-calendar:get_event:attendees.email'),
       name: wrapUntrusted(a.emailAddress?.name, 'microsoft-calendar:get_event:attendees.name'),
-      type: a.type,
-      status: a.status?.response,
+      type: enumOrEnvelop(a.type, GRAPH_ATTENDEE_TYPES, 'microsoft-calendar:get_event:attendees.type'),
+      status: enumOrEnvelop(a.status?.response, GRAPH_ATTENDEE_RESPONSES, 'microsoft-calendar:get_event:attendees.status'),
     })),
     isAllDay: event.isAllDay,
-    webLink: event.webLink,
-    onlineMeetingUrl: event.onlineMeeting?.joinUrl,
-    ...(attachments ? { attachments } : {}),
+    webLink: strictOrEnvelop(event.webLink, isSafeGraphUrl, 'microsoft-calendar:get_event:webLink'),
+    onlineMeetingUrl: strictOrEnvelop(
+      event.onlineMeeting?.joinUrl,
+      isSafeGraphUrl,
+      'microsoft-calendar:get_event:onlineMeetingUrl',
+    ),
+    ...(attachments ? { attachments, attachmentsTruncated } : {}),
   };
 }
 
@@ -595,6 +791,11 @@ export async function createEvent(
   args: CreateEventArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
+  // Validate the window BEFORE any network access (timezone lookup included).
+  assertIsoDateTime(args.start, 'start', 'create_event');
+  assertIsoDateTime(args.end, 'end', 'create_event');
+  assertWindowOrder(args.start, args.end, 'start', 'end', 'create_event');
+
   const tzInfo = await resolveTimezone(client, signal, args.deviceTimezone);
   if (tzInfo.source === 'utc_fallback') {
     throw new CalendarBusinessError(
@@ -649,9 +850,13 @@ export async function createEvent(
 
   return {
     success: true,
-    eventId: created.id,
-    webLink: created.webLink,
-    onlineMeetingUrl: created.onlineMeeting?.joinUrl,
+    eventId: strictOrEnvelop(created.id, (v) => GRAPH_ID_PATTERN.test(v), 'microsoft-calendar:create_event:eventId'),
+    webLink: strictOrEnvelop(created.webLink, isSafeGraphUrl, 'microsoft-calendar:create_event:webLink'),
+    onlineMeetingUrl: strictOrEnvelop(
+      created.onlineMeeting?.joinUrl,
+      isSafeGraphUrl,
+      'microsoft-calendar:create_event:onlineMeetingUrl',
+    ),
     message: 'Event created successfully',
   };
 }
@@ -661,6 +866,14 @@ export async function updateEvent(
   args: UpdateEventArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
+  // Validate any supplied times BEFORE any network access (timezone lookup
+  // and the attendee pre-read included).
+  if (args.start) assertIsoDateTime(args.start, 'start', 'update_event');
+  if (args.end) assertIsoDateTime(args.end, 'end', 'update_event');
+  if (args.start && args.end) {
+    assertWindowOrder(args.start, args.end, 'start', 'end', 'update_event');
+  }
+
   const needsTimezone = !!(args.start || args.end);
   let resolvedTz: string | undefined;
   if (needsTimezone) {
@@ -702,6 +915,7 @@ export async function updateEvent(
   // read-merge-write against the event's current attendee list. Attendees are
   // re-sent in the documented write shape (emailAddress + type only) — echoing
   // back read-side fields like `status` would be rejected.
+  let droppedAttendeesWithoutAddress = 0;
   if (args.addAttendees?.length || args.removeAttendees?.length) {
     const current = await client
       .api(`/me/events/${args.id}`)
@@ -714,10 +928,18 @@ export async function updateEvent(
       'update_event current attendees',
     );
     const removeSet = new Set((args.removeAttendees ?? []).map((e) => e.toLowerCase()));
-    const kept = (currentEvent.attendees ?? [])
-      .filter((a) => !removeSet.has((a.emailAddress?.address ?? '').toLowerCase()))
+    // Rows without an email address cannot be re-sent in the write shape
+    // (Graph would receive `{ address: undefined }`); they are left out and
+    // reported in the response instead of being silently re-PUT.
+    const withAddress = (currentEvent.attendees ?? []).filter(
+      (a): a is typeof a & { emailAddress: { address: string; name?: string } } =>
+        typeof a.emailAddress?.address === 'string' && a.emailAddress.address.length > 0,
+    );
+    droppedAttendeesWithoutAddress = (currentEvent.attendees?.length ?? 0) - withAddress.length;
+    const kept = withAddress
+      .filter((a) => !removeSet.has(a.emailAddress.address.toLowerCase()))
       .map((a) => ({
-        emailAddress: { address: a.emailAddress?.address, name: a.emailAddress?.name },
+        emailAddress: { address: a.emailAddress.address, name: a.emailAddress.name },
         type: a.type ?? 'required',
       }));
     const keptAddresses = new Set(kept.map((a) => (a.emailAddress.address ?? '').toLowerCase()));
@@ -739,6 +961,11 @@ export async function updateEvent(
   return {
     success: true,
     message: 'Event updated successfully',
+    ...(droppedAttendeesWithoutAddress > 0
+      ? {
+          note: `${droppedAttendeesWithoutAddress} existing attendee(s) had no email address in the Graph response and were left out of the updated attendee list.`,
+        }
+      : {}),
   };
 }
 
@@ -797,6 +1024,11 @@ export async function getFreeBusy(
   args: GetFreeBusyArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
+  // Validate the window BEFORE any network access (timezone lookup included).
+  assertIsoDateTime(args.startDateTime, 'startDateTime', 'get_free_busy');
+  assertIsoDateTime(args.endDateTime, 'endDateTime', 'get_free_busy');
+  assertWindowOrder(args.startDateTime, args.endDateTime, 'startDateTime', 'endDateTime', 'get_free_busy');
+
   const tzInfo = await resolveTimezone(client, signal, args.deviceTimezone);
   if (tzInfo.source === 'utc_fallback') {
     throw new CalendarBusinessError(
@@ -829,12 +1061,20 @@ export async function getFreeBusy(
         subject?: string;
       }>;
     }) => ({
-      email: schedule.scheduleId,
-      availability: schedule.availabilityView,
+      email: strictOrEnvelop(
+        schedule.scheduleId,
+        (v) => EMAIL_LIKE_PATTERN.test(v),
+        'microsoft-calendar:get_free_busy:scheduleId',
+      ),
+      availability: strictOrEnvelop(
+        schedule.availabilityView,
+        (v) => AVAILABILITY_VIEW_PATTERN.test(v),
+        'microsoft-calendar:get_free_busy:availabilityView',
+      ),
       scheduleItems: schedule.scheduleItems?.map((item) => ({
-        status: item.status,
-        start: item.start?.dateTime,
-        end: item.end?.dateTime,
+        status: enumOrEnvelop(item.status, GRAPH_FREEBUSY_STATUSES, 'microsoft-calendar:get_free_busy:scheduleItems.status'),
+        start: strictOrEnvelop(item.start?.dateTime, isIsoDateTime, 'microsoft-calendar:get_free_busy:scheduleItems.start'),
+        end: strictOrEnvelop(item.end?.dateTime, isIsoDateTime, 'microsoft-calendar:get_free_busy:scheduleItems.end'),
         subject: wrapUntrusted(item.subject, 'microsoft-calendar:get_free_busy:scheduleItems.subject'),
       })),
     }),
@@ -901,13 +1141,11 @@ export async function findMeetingTimes(
   args: FindMeetingTimesArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
-  const tzInfo = await resolveTimezone(client, signal, args.deviceTimezone);
-  if (tzInfo.source === 'utc_fallback') {
-    throw new CalendarBusinessError(
-      'Could not determine your timezone. Neither Microsoft account settings nor device timezone are available. Meeting-time suggestions require the correct timezone to interpret the time window. Please pass your deviceTimezone (e.g. "Europe/London") or check that your Microsoft 365 mailbox has a timezone configured.',
-      'find_meeting_times',
-    );
-  }
+  // Validate the window BEFORE any network access (timezone lookup included):
+  // malformed input must fail closed without touching Graph.
+  assertIsoDateTime(args.startDateTime, 'startDateTime', 'find_meeting_times');
+  assertIsoDateTime(args.endDateTime, 'endDateTime', 'find_meeting_times');
+  assertWindowOrder(args.startDateTime, args.endDateTime, 'startDateTime', 'endDateTime', 'find_meeting_times');
 
   const interval = Math.min(
     Math.max(Math.trunc(args.intervalMinutes ?? DEFAULT_SLOT_INTERVAL_MINUTES), 5),
@@ -915,6 +1153,14 @@ export async function findMeetingTimes(
   );
   const duration = Math.max(Math.trunc(args.durationMinutes), 5);
   const maxSuggestions = Math.min(Math.max(Math.trunc(args.maxSuggestions ?? 5), 1), MAX_SUGGESTIONS);
+
+  const tzInfo = await resolveTimezone(client, signal, args.deviceTimezone);
+  if (tzInfo.source === 'utc_fallback') {
+    throw new CalendarBusinessError(
+      'Could not determine your timezone. Neither Microsoft account settings nor device timezone are available. Meeting-time suggestions require the correct timezone to interpret the time window. Please pass your deviceTimezone (e.g. "Europe/London") or check that your Microsoft 365 mailbox has a timezone configured.',
+      'find_meeting_times',
+    );
+  }
 
   // Normalise the window to wall time in the resolved zone so availabilityView
   // bucket indices map to civil times by plain interval arithmetic.
@@ -950,17 +1196,43 @@ export async function findMeetingTimes(
     'find_meeting_times schedules',
   );
 
-  const views = schedules.map((s) => s.availabilityView ?? '');
-  const unresolvableAttendees = schedules
-    .filter((s) => !s.availabilityView)
-    .map((s) => s.scheduleId)
-    .filter((id): id is string => !!id);
+  // Match one schedule row per requested attendee (case-insensitive, first
+  // row wins). A row Graph omits — or returns without an availabilityView —
+  // makes that attendee unresolvable; fail closed rather than compute
+  // "all free" slots from partial coverage.
+  const rowByScheduleId = new Map<string, z.infer<typeof GraphScheduleSchema>>();
+  for (const s of schedules) {
+    const key = s.scheduleId?.trim().toLowerCase();
+    if (key && !rowByScheduleId.has(key)) rowByScheduleId.set(key, s);
+  }
+  const seen = new Set<string>();
+  const views: string[] = [];
+  const unresolvableAttendees: string[] = [];
+  for (const attendee of args.attendees) {
+    const key = attendee.trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const row = rowByScheduleId.get(key);
+    if (row && row.availabilityView) {
+      views.push(row.availabilityView);
+    } else {
+      unresolvableAttendees.push(attendee);
+    }
+  }
 
   const intervalMs = interval * 60_000;
   const durationMs = duration * 60_000;
   const suggestions: Array<{ start: string; end: string }> = [];
+  let note: string;
 
-  if (views.length > 0) {
+  if (unresolvableAttendees.length > 0) {
+    note =
+      `No slots suggested: availability could not be resolved for ${unresolvableAttendees.length} ` +
+      `attendee(s) (see unresolvableAttendees). Verify the addresses or retry without them — ` +
+      `a slot is only suggested when EVERY requested attendee's availability is known.`;
+  } else if (views.length === 0) {
+    note = 'No attendees to check availability for.';
+  } else {
     const bucketCount = Math.min(...views.map((v) => v.length));
     // A bucket qualifies only when every attendee's availabilityView digit is
     // '0' (free) — tentative/busy/oof/workingElsewhere all count as unavailable.
@@ -983,6 +1255,7 @@ export async function findMeetingTimes(
         runStart = -1;
       }
     }
+    note = `Times are wall-clock in ${tzInfo.resolved}. Pass a suggestion's start/end directly to create_event. Only fully free slots are suggested (tentative counts as busy).`;
   }
 
   return {
@@ -1000,7 +1273,7 @@ export async function findMeetingTimes(
     suggestionCount: suggestions.length,
     suggestions,
     unresolvableAttendees,
-    note: `Times are wall-clock in ${tzInfo.resolved}. Pass a suggestion's start/end directly to create_event. Only fully free slots are suggested (tentative counts as busy).`,
+    note,
   };
 }
 
@@ -1014,9 +1287,9 @@ export async function listCalendars(client: Client, signal: AbortSignal): Promis
   const calendars: Calendar[] = response.value ?? [];
 
   const formatted = calendars.map((cal) => ({
-    id: cal.id,
+    id: strictOrEnvelop(cal.id, (v) => GRAPH_ID_PATTERN.test(v), 'microsoft-calendar:list_calendars:id'),
     name: wrapUntrusted(cal.name, 'microsoft-calendar:list_calendars:name'),
-    color: cal.color,
+    color: enumOrEnvelop(cal.color, GRAPH_CALENDAR_COLORS, 'microsoft-calendar:list_calendars:color'),
     isDefault: cal.isDefaultCalendar,
     canEdit: cal.canEdit,
     owner: wrapUntrustedJsonStrings(cal.owner, 'microsoft-calendar:list_calendars:owner'),

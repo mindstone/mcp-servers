@@ -167,15 +167,15 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 
 | Tool | Description |
 | ---- | ----------- |
-| `list_events` | List calendar events within a date range (JSON with per-attendee RSVP status, or agenda-style text). |
-| `get_event` | Get detailed information about a specific calendar event (optionally including attachment metadata). |
+| `list_events` | List calendar events within a date range (JSON with per-attendee RSVP status, or agenda-style text). Reports `truncated: true` when Graph has more pages — narrow the range or raise `top` (max 100). |
+| `get_event` | Get detailed information about a specific calendar event (optionally including attachment metadata; `attachmentsTruncated` flags further pages). |
 | `create_event` | Create a new calendar event (with optional Teams meeting and recurrence). |
 | `update_event` | Update an existing calendar event (including adding/removing attendees and recurrence). |
 | `delete_event` | Delete a calendar event. |
 | `cancel_event` | Cancel a meeting as organizer with an optional message to attendees. |
 | `respond_to_event` | Accept, decline, or tentatively accept an event invitation. |
 | `get_free_busy` | Check availability/free-busy status for users. |
-| `find_meeting_times` | Suggest slots when all given attendees are free. |
+| `find_meeting_times` | Suggest slots when all given attendees are free. Slots are only suggested when availability for every requested attendee was resolved; otherwise the unresolved attendees are listed in `unresolvableAttendees`. |
 | `list_calendars` | List all calendars the user has access to. |
 
 ## Security notes
@@ -184,6 +184,9 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 - Token files are written by the host with mode `0600`; this server reads them via the cohort-shared library, which fails closed on malformed files.
 - `MICROSOFT_DISABLE_REFRESH=1` is the default on cloud surfaces so the desktop session remains the sole refresh-token authority.
 - Per-tool Graph calls run under a composed caller + cohort timeout signal.
+- All Graph-sourced text is returned inside `<untrusted-content>` envelopes; structural-looking fields (IDs, URLs, enum-like values, timestamps) pass through raw only when they match their documented closed format and are enveloped otherwise. Vendor error messages are enveloped before they reach the model.
+- Tool inputs are validated fail-closed (email addresses, ISO date-times, bounded numerics, strict recurrence objects) before any Graph request is made.
+- Graph pagination is never silently dropped: list endpoints report `truncated` / `attachmentsTruncated` instead of following vendor-supplied continuation URLs.
 
 ## Licence
 

@@ -13,6 +13,7 @@ import {
   listEvents,
   respondToEvent,
   updateEvent,
+  ISO_DATE_TIME_PATTERN,
   RecurrenceSchema,
   type RecurrenceInput,
 } from './calendar.js';
@@ -20,17 +21,29 @@ import {
 const ShowAsEnum = z.enum(['free', 'tentative', 'busy', 'oof', 'workingElsewhere', 'unknown']);
 const ResponseEnum = z.enum(['accept', 'decline', 'tentative']);
 
+// Fail-closed input contracts: attendee/emails must be real email addresses,
+// date-times must be ISO 8601 (naive or offset-bearing), and numeric knobs
+// must be finite positives — invalid input is rejected by schema validation
+// before any Graph request is made.
+const EmailAddress = z.string().trim().max(254).email();
+const IsoDateTime = z
+  .string()
+  .regex(
+    ISO_DATE_TIME_PATTERN,
+    'Use ISO format (e.g. "2026-05-20T09:00:00"), with or without a UTC offset/Z',
+  );
+
 // create_event accepts unknown keys so the handler can surface bundled-parity
 // alias guidance (`title`/`name`/`summary`, `startTime`/`startDateTime`,
 // `endTime`/`endDateTime`) rather than letting Zod silently strip them.
 const CreateEventSchema = z
   .object({
     subject: z.string().optional().describe('Event title'),
-    start: z.string().optional().describe('Start date/time in ISO format'),
-    end: z.string().optional().describe('End date/time in ISO format'),
+    start: IsoDateTime.optional().describe('Start date/time in ISO format'),
+    end: IsoDateTime.optional().describe('End date/time in ISO format'),
     location: z.string().optional().describe('Event location'),
     body: z.string().optional().describe('Event description (HTML supported)'),
-    attendees: z.array(z.string()).optional().describe('Attendee email addresses'),
+    attendees: z.array(EmailAddress).optional().describe('Attendee email addresses'),
     isOnlineMeeting: z
       .boolean()
       .optional()
@@ -59,21 +72,17 @@ export function registerCalendarTools(server: McpServer): void {
     'list_events',
     {
       description:
-        'List calendar events within a date range. Returns JSON by default (with timezoneInfo showing calendar, device, and resolved timezone). Set returnText=true for a human-readable agenda format. Pass deviceTimezone from the system prompt for fallback if calendar settings are unavailable.',
+        'List calendar events within a date range. Returns JSON by default (with timezoneInfo showing calendar, device, and resolved timezone). Set returnText=true for a human-readable agenda format. Pass deviceTimezone from the system prompt for fallback if calendar settings are unavailable. If the result is truncated (truncated: true), narrow the date range or raise top (max 100) to see more events.',
       inputSchema: z.object({
-        startDateTime: z
-          .string()
-          .optional()
-          .describe('Start date/time in ISO format (default: now)'),
-        endDateTime: z
-          .string()
-          .optional()
-          .describe('End date/time in ISO format (default: 7 days from now)'),
+        startDateTime: IsoDateTime.optional().describe('Start date/time in ISO format (default: now)'),
+        endDateTime: IsoDateTime.optional().describe(
+          'End date/time in ISO format (default: 7 days from now)',
+        ),
         calendarId: z
           .string()
           .optional()
           .describe('Calendar ID (default: primary calendar)'),
-        top: z.number().optional().describe('Max events to return (default: 50)'),
+        top: z.number().int().min(1).max(100).optional().describe('Max events to return (default: 50)'),
         returnText: z
           .boolean()
           .optional()
@@ -112,7 +121,7 @@ export function registerCalendarTools(server: McpServer): void {
         includeAttachments: z
           .boolean()
           .optional()
-          .describe('Also list attachment metadata (id, name, contentType, size) (default: false)'),
+          .describe('Also list attachment metadata (id, name, contentType, size) (default: false). If attachmentsTruncated is true, more attachments exist beyond the first page.'),
       }).shape,
       annotations: {
         readOnlyHint: true,
@@ -223,16 +232,16 @@ export function registerCalendarTools(server: McpServer): void {
       inputSchema: z.object({
         id: z.string().optional().describe('Event ID'),
         subject: z.string().optional().describe('New title'),
-        start: z.string().optional().describe('New start date/time'),
-        end: z.string().optional().describe('New end date/time'),
+        start: IsoDateTime.optional().describe('New start date/time'),
+        end: IsoDateTime.optional().describe('New end date/time'),
         location: z.string().optional().describe('New location'),
         body: z.string().optional().describe('New description'),
         addAttendees: z
-          .array(z.string())
+          .array(EmailAddress)
           .optional()
           .describe('Email addresses to add as required attendees (merged with the current list)'),
         removeAttendees: z
-          .array(z.string())
+          .array(EmailAddress)
           .optional()
           .describe('Email addresses to remove from the attendee list'),
         recurrence: RecurrenceSchema.optional().describe(
@@ -412,9 +421,9 @@ export function registerCalendarTools(server: McpServer): void {
     {
       description: 'Check availability/free-busy status for users.',
       inputSchema: z.object({
-        emails: z.array(z.string()).optional().describe('Email addresses to check'),
-        startDateTime: z.string().optional().describe('Start of time range (ISO format)'),
-        endDateTime: z.string().optional().describe('End of time range (ISO format)'),
+        emails: z.array(EmailAddress).optional().describe('Email addresses to check'),
+        startDateTime: IsoDateTime.optional().describe('Start of time range (ISO format)'),
+        endDateTime: IsoDateTime.optional().describe('End of time range (ISO format)'),
         deviceTimezone: z
           .string()
           .optional()
@@ -460,24 +469,32 @@ export function registerCalendarTools(server: McpServer): void {
     'find_meeting_times',
     {
       description:
-        'Suggest time slots within a window when ALL given attendees are free, based on their free/busy availability. Returns candidate start/end times in the resolved timezone that can be passed directly to create_event. Include your own email address in attendees to account for your own availability.',
+        'Suggest time slots within a window when ALL given attendees are free, based on their free/busy availability. Returns candidate start/end times in the resolved timezone that can be passed directly to create_event. Include your own email address in attendees to account for your own availability. A slot is only suggested when availability for EVERY requested attendee was resolved; otherwise no slots are returned and the unresolved attendees are listed in unresolvableAttendees.',
       inputSchema: z.object({
         attendees: z
-          .array(z.string())
+          .array(EmailAddress)
           .optional()
           .describe('Email addresses whose availability must all be free'),
-        startDateTime: z.string().optional().describe('Start of the search window (ISO format)'),
-        endDateTime: z.string().optional().describe('End of the search window (ISO format)'),
+        startDateTime: IsoDateTime.optional().describe('Start of the search window (ISO format)'),
+        endDateTime: IsoDateTime.optional().describe('End of the search window (ISO format)'),
         durationMinutes: z
           .number()
+          .int()
+          .positive()
           .optional()
           .describe('Required meeting length in minutes (e.g. 30)'),
         intervalMinutes: z
           .number()
+          .int()
+          .min(5)
+          .max(60)
           .optional()
           .describe('Slot granularity in minutes, 5-60 (default: 30)'),
         maxSuggestions: z
           .number()
+          .int()
+          .min(1)
+          .max(20)
           .optional()
           .describe('Maximum number of candidate slots to return, 1-20 (default: 5)'),
         deviceTimezone: z
