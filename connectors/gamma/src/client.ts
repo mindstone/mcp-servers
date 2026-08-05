@@ -8,6 +8,7 @@
  * Base URL: https://public-api.gamma.app/v1.0
  */
 
+import { z } from 'zod';
 import {
   GammaError,
   getRequestTimeoutMs,
@@ -21,6 +22,48 @@ import {
 } from './types.js';
 
 const GAMMA_API_BASE = 'https://public-api.gamma.app/v1.0';
+
+// ---------------------------------------------------------------------------
+// Response schemas — every Gamma API response is validated fail-closed with
+// Zod before it reaches tool code. Unknown vendor-added fields are stripped
+// (Zod default), so a poisoned or evolving payload cannot smuggle
+// structural-looking fields through the object spreads in the listing tools.
+// ---------------------------------------------------------------------------
+
+const generationResponseSchema = z.object({
+  generationId: z.string(),
+});
+
+const generationStatusSchema = z.object({
+  generationId: z.string(),
+  status: z.enum(['pending', 'completed', 'failed']),
+  gammaUrl: z.string().optional(),
+  pdfUrl: z.string().optional(),
+  pptxUrl: z.string().optional(),
+  credits: z.object({ deducted: z.number(), remaining: z.number() }).optional(),
+  error: z.string().optional(),
+});
+
+const themeSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.enum(['standard', 'custom']),
+  colorKeywords: z.array(z.string()).optional(),
+  toneKeywords: z.array(z.string()).optional(),
+});
+
+const folderSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+
+function paginatedSchema<T extends z.ZodTypeAny>(itemSchema: T) {
+  return z.object({
+    data: z.array(itemSchema),
+    hasMore: z.boolean(),
+    nextCursor: z.string().nullable().default(null),
+  });
+}
 
 /**
  * Hosts allowed to serve export downloads. Export URLs come from Gamma's own
@@ -138,12 +181,18 @@ export function validateDownloadUrl(input: string): URL {
 
 /**
  * Make an authenticated request to the Gamma API.
+ *
+ * The response body is parsed defensively and validated against `schema`
+ * (fail-closed): a malformed JSON body or a shape mismatch surfaces as a
+ * generic `INVALID_RESPONSE` error — raw parser messages can embed a fragment
+ * of the vendor response and must never reach model-visible output.
  */
-async function gammaFetch<T>(
+async function gammaFetch<T extends z.ZodTypeAny>(
   apiKey: string,
   endpoint: string,
+  schema: T,
   options: RequestInit = {},
-): Promise<T> {
+): Promise<z.infer<T>> {
   const url = `${GAMMA_API_BASE}${endpoint}`;
 
   console.error(`[Gamma API] ${options.method || 'GET'} ${url}`);
@@ -220,8 +269,10 @@ async function gammaFetch<T>(
 
   // Handle other errors
   if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    console.error(`Gamma API error (${response.status}):`, errorText);
+    // Deliberately do NOT read or log the vendor error body: it can contain
+    // reflected request data, sensitive diagnostics, or attacker-controlled
+    // content, and must stay out of both logs and model-visible errors.
+    console.error(`Gamma API error: HTTP ${response.status}`);
 
     const statusMessage =
       response.status === 422
@@ -237,7 +288,30 @@ async function gammaFetch<T>(
     );
   }
 
-  return response.json() as Promise<T>;
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new GammaError(
+      `Gamma API returned a malformed response (HTTP ${response.status})`,
+      'INVALID_RESPONSE',
+      'The Gamma API response could not be parsed. Try again; if it persists, check the connector logs.',
+    );
+  }
+
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    console.error(
+      `[Gamma API] Response failed schema validation for ${options.method || 'GET'} ${endpoint} (${parsed.error.issues.length} issue(s))`,
+    );
+    throw new GammaError(
+      'Gamma API returned an unexpected response shape',
+      'INVALID_RESPONSE',
+      'The Gamma API response did not match the expected schema. If this persists, the API may have changed — check for a connector update.',
+    );
+  }
+
+  return parsed.data;
 }
 
 /**
@@ -264,7 +338,7 @@ export async function createGeneration(
   if (request.cardOptions) body.cardOptions = request.cardOptions;
   if (request.sharingOptions) body.sharingOptions = request.sharingOptions;
 
-  return gammaFetch<GenerationResponse>(apiKey, '/generations', {
+  return gammaFetch(apiKey, '/generations', generationResponseSchema, {
     method: 'POST',
     body: JSON.stringify(body),
   });
@@ -288,7 +362,7 @@ export async function createFromTemplate(
   if (request.imageOptions) body.imageOptions = request.imageOptions;
   if (request.sharingOptions) body.sharingOptions = request.sharingOptions;
 
-  return gammaFetch<GenerationResponse>(apiKey, '/generations/from-template', {
+  return gammaFetch(apiKey, '/generations/from-template', generationResponseSchema, {
     method: 'POST',
     body: JSON.stringify(body),
   });
@@ -301,7 +375,7 @@ export async function getGenerationStatus(
   apiKey: string,
   generationId: string,
 ): Promise<GenerationStatus> {
-  return gammaFetch<GenerationStatus>(apiKey, `/generations/${generationId}`);
+  return gammaFetch(apiKey, `/generations/${generationId}`, generationStatusSchema);
 }
 
 /**
@@ -316,9 +390,10 @@ export async function listThemes(
   if (options?.limit) params.set('limit', String(options.limit));
   if (options?.after) params.set('after', options.after);
   const queryString = params.toString();
-  return gammaFetch<PaginatedResponse<Theme>>(
+  return gammaFetch(
     apiKey,
     `/themes${queryString ? `?${queryString}` : ''}`,
+    paginatedSchema(themeSchema),
   );
 }
 
@@ -334,11 +409,15 @@ export async function listFolders(
   if (options?.limit) params.set('limit', String(options.limit));
   if (options?.after) params.set('after', options.after);
   const queryString = params.toString();
-  return gammaFetch<PaginatedResponse<Folder>>(
+  return gammaFetch(
     apiKey,
     `/folders${queryString ? `?${queryString}` : ''}`,
+    paginatedSchema(folderSchema),
   );
 }
+
+/** Maximum redirect hops an export download will follow. */
+const MAX_DOWNLOAD_REDIRECTS = 5;
 
 /**
  * Download an export file (PDF/PPTX) to the system tmpdir.
@@ -346,28 +425,126 @@ export async function listFolders(
  *
  * The URL is validated against the Gamma export allow-list BEFORE any outbound
  * request is made — a rejected URL produces a structured `URL_REJECTED` error
- * with zero network calls.
+ * with zero network calls. Redirects are followed manually with every hop
+ * re-validated against the same allow-list, so an allowed export URL cannot
+ * bounce the connector's fetch to an arbitrary or private host (SSRF).
+ *
+ * The temp file is created atomically: opened with O_CREAT|O_EXCL|O_NOFOLLOW
+ * (an unpredictable random suffix makes pre-creation impractical, and a raced
+ * or pre-planted symlink fails the open instead of being written through),
+ * fstat-verified as a regular file, and written through the open descriptor.
  */
 export async function downloadExportFile(
   url: string,
   generationId: string,
   format: 'pdf' | 'pptx',
 ): Promise<string> {
-  const validated = validateDownloadUrl(url);
+  // Follow redirects manually, re-validating every hop. Invariant #7: do not
+  // auto-follow redirects on downloads.
+  let current = validateDownloadUrl(url);
+  let response: Response | undefined;
+  let redirectCount = 0;
+  for (;;) {
+    response = await fetch(current.toString(), { redirect: 'manual' });
+    if (response.status >= 300 && response.status < 400) {
+      // Drain the redirect body so the connection isn't held open.
+      try {
+        await response.body?.cancel();
+      } catch {
+        /* best-effort */
+      }
+      redirectCount++;
+      if (redirectCount > MAX_DOWNLOAD_REDIRECTS) {
+        throw new GammaError(
+          `Refused to follow redirect: too many redirects (>${MAX_DOWNLOAD_REDIRECTS})`,
+          'URL_REJECTED',
+          'The export URL redirected too many times. Export manually from the Gamma app instead.',
+        );
+      }
+      const location = response.headers.get('location');
+      if (!location) {
+        throw new GammaError(
+          `Export download redirected (HTTP ${response.status}) without a Location header`,
+          'DOWNLOAD_FAILED',
+          'The export endpoint responded with an incomplete redirect. Export manually from the Gamma app instead.',
+        );
+      }
+      let next: URL;
+      try {
+        next = new URL(location, current);
+      } catch {
+        throw new GammaError(
+          'Refused to follow redirect: invalid Location header',
+          'URL_REJECTED',
+          'The export endpoint returned a malformed redirect target. Export manually from the Gamma app instead.',
+        );
+      }
+      // Re-validate every hop: a redirect must not downgrade to http://,
+      // leave the Gamma allow-list, or point at a private/reserved host.
+      // Throws URL_REJECTED on any violation.
+      current = validateDownloadUrl(next.toString());
+      continue;
+    }
+    break;
+  }
 
-  const { writeFileSync } = await import('fs');
-  const { join } = await import('path');
-  const { tmpdir } = await import('os');
-
-  const safeId = generationId.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const fileName = `gamma_export_${safeId}_${Date.now()}.${format}`;
-  const filePath = join(tmpdir(), fileName);
-
-  const response = await fetch(validated.toString());
   if (!response.ok) {
     throw new Error(`Download failed: HTTP ${response.status}`);
   }
+
+  const fs = await import('fs');
+  const { join } = await import('path');
+  const { tmpdir } = await import('os');
+  const { randomBytes } = await import('crypto');
+
+  const safeId = generationId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const fileName = `gamma_export_${safeId}_${Date.now()}_${randomBytes(4).toString('hex')}.${format}`;
+  const filePath = join(tmpdir(), fileName);
+
   const buffer = Buffer.from(await response.arrayBuffer());
-  writeFileSync(filePath, buffer);
+
+  // O_NOFOLLOW is unavailable on some platforms (e.g. Windows); O_EXCL alone
+  // still refuses any pre-existing path, including symlinks.
+  const flags =
+    fs.constants.O_WRONLY |
+    fs.constants.O_CREAT |
+    fs.constants.O_EXCL |
+    (fs.constants.O_NOFOLLOW ?? 0);
+
+  let fd: number;
+  try {
+    fd = fs.openSync(filePath, flags, 0o600);
+  } catch (openErr) {
+    const e = openErr as NodeJS.ErrnoException;
+    throw new GammaError(
+      `Could not create the export temp file (${e?.code || 'unknown error'})`,
+      'DOWNLOAD_FAILED',
+      'The temporary export path already exists or is not writable. Try again.',
+    );
+  }
+  try {
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile()) {
+      throw new GammaError(
+        'Export temp file is not a regular file',
+        'DOWNLOAD_FAILED',
+        'The temporary export path resolved to an unexpected file type. Try again.',
+      );
+    }
+    fs.writeFileSync(fd, buffer);
+  } catch (writeErr) {
+    try {
+      fs.closeSync(fd);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.unlinkSync(filePath);
+    } catch {
+      /* cleanup best-effort */
+    }
+    throw writeErr;
+  }
+  fs.closeSync(fd);
   return filePath;
 }

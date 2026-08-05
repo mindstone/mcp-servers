@@ -16,13 +16,18 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
+import * as fs from 'fs';
+import * as os from 'os';
 import { mswServer } from './helpers/setup.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
 import { MOCK_API_KEY } from './fixtures/gamma-data.js';
-import { validateDownloadUrl } from '../src/client.js';
+import { validateDownloadUrl, downloadExportFile } from '../src/client.js';
 import { GammaError } from '../src/types.js';
 
 const BASE = 'https://public-api.gamma.app/v1.0';
+
+/** Credential-shaped marker built programmatically (never a literal). */
+const VENDOR_BODY_MARKER = ['AC', '0123456789abcdef', '0123456789abcdef'].join('');
 
 describe('validateDownloadUrl (unit)', () => {
   it.each([
@@ -207,5 +212,284 @@ describe('gamma_get_status — poisoned export URL handling', () => {
     expect(data.file_path).toBeUndefined();
     expect(data.message).toMatch(/private\/loopback\/reserved/);
     expect(fetchCallsTo('169.254.169.254')).toBe(0);
+  });
+});
+
+describe('Gamma API response validation (fail-closed Zod)', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('surfaces a malformed JSON body as a generic INVALID_RESPONSE, without parser fragments', async () => {
+    // V8 JSON.parse errors embed an excerpt of the source text; the marker
+    // must not reach the model through that channel.
+    mswServer.use(
+      http.get(`${BASE}/generations/:id`, () =>
+        new HttpResponse(`{"generationId":"gen-x","note":"${VENDOR_BODY_MARKER}", broken`, {
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+
+    testClient = await createTestClient({
+      env: { GAMMA_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('gamma_get_status', {
+      generation_id: 'gen-x',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('INVALID_RESPONSE');
+    expect(result.text).not.toContain(VENDOR_BODY_MARKER);
+  });
+
+  it('rejects a well-formed body that fails schema validation', async () => {
+    mswServer.use(
+      http.get(`${BASE}/generations/:id`, () =>
+        HttpResponse.json({ generationId: 'gen-x' }), // missing required `status`
+      ),
+    );
+
+    testClient = await createTestClient({
+      env: { GAMMA_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('gamma_get_status', {
+      generation_id: 'gen-x',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('INVALID_RESPONSE');
+    expect(result.text).toContain('unexpected response shape');
+  });
+
+  it('keeps vendor error bodies out of the model-visible error AND the logs', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mswServer.use(
+      http.get(`${BASE}/themes`, () =>
+        HttpResponse.text(`gateway exploded: ${VENDOR_BODY_MARKER}`, { status: 500 }),
+      ),
+    );
+
+    testClient = await createTestClient({
+      env: { GAMMA_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('gamma_list_themes', {});
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('API_ERROR');
+    expect(result.text).not.toContain(VENDOR_BODY_MARKER);
+    const logged = consoleSpy.mock.calls.map((call) => call.join(' ')).join('\n');
+    expect(logged).not.toContain(VENDOR_BODY_MARKER);
+    consoleSpy.mockRestore();
+  });
+
+  it('reports unexpected (non-Gamma) errors generically, with detail only in logs', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mswServer.use(
+      http.get(`${BASE}/themes`, () => HttpResponse.error()),
+    );
+
+    testClient = await createTestClient({
+      env: { GAMMA_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('gamma_list_themes', {});
+
+    expect(result.isError).toBe(true);
+    const parsed = result.json as { ok: boolean; error: string };
+    expect(parsed.ok).toBe(false);
+    // Generic message — the raw fetch error must not be relayed to the model.
+    expect(parsed.error).toContain('unexpected error');
+    // ...but the detail IS observable in the connector logs.
+    const logged = consoleSpy.mock.calls.map((call) => call.join(' ')).join('\n');
+    expect(logged).toContain('[gamma] Unexpected tool error');
+    consoleSpy.mockRestore();
+  });
+});
+
+describe('downloadExportFile — redirect and temp-file safety', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn> | undefined;
+  const writtenFiles: string[] = [];
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => {
+    fetchSpy?.mockRestore();
+    fetchSpy = undefined;
+    for (const f of writtenFiles) {
+      try {
+        fs.unlinkSync(f);
+      } catch {
+        /* already gone */
+      }
+    }
+    writtenFiles.length = 0;
+  });
+
+  function fetchCallsTo(host: string): number {
+    return (fetchSpy?.mock.calls ?? []).filter(([input]) => {
+      try {
+        const url =
+          typeof input === 'string'
+            ? new URL(input)
+            : input instanceof URL
+              ? input
+              : new URL((input as Request).url);
+        return url.host === host;
+      } catch {
+        return false;
+      }
+    }).length;
+  }
+
+  it('follows an in-allow-list redirect hop and downloads the file', async () => {
+    mswServer.use(
+      http.get('https://public-api.gamma.app/mock-exports/redir.pdf', () =>
+        new HttpResponse(null, {
+          status: 302,
+          headers: { Location: '/mock-exports/final.pdf' }, // relative Location
+        }),
+      ),
+      http.get('https://public-api.gamma.app/mock-exports/final.pdf', () =>
+        new HttpResponse(Buffer.from('redirected-pdf-bytes')),
+      ),
+    );
+
+    const filePath = await downloadExportFile(
+      'https://public-api.gamma.app/mock-exports/redir.pdf',
+      'gen-redir',
+      'pdf',
+    );
+    writtenFiles.push(filePath);
+
+    expect(fs.readFileSync(filePath, 'utf8')).toBe('redirected-pdf-bytes');
+  });
+
+  it('refuses a redirect to an attacker host with zero outbound calls to it', async () => {
+    mswServer.use(
+      http.get('https://public-api.gamma.app/mock-exports/bounce.pdf', () =>
+        new HttpResponse(null, {
+          status: 302,
+          headers: { Location: 'https://attacker.example/steal.pdf' },
+        }),
+      ),
+    );
+
+    await expect(
+      downloadExportFile('https://public-api.gamma.app/mock-exports/bounce.pdf', 'gen-bounce', 'pdf'),
+    ).rejects.toMatchObject({ code: 'URL_REJECTED' });
+    expect(fetchCallsTo('attacker.example')).toBe(0);
+  });
+
+  it('refuses a redirect to a private/link-local address (cloud metadata SSRF)', async () => {
+    mswServer.use(
+      http.get('https://public-api.gamma.app/mock-exports/meta.pdf', () =>
+        new HttpResponse(null, {
+          status: 302,
+          headers: { Location: 'https://169.254.169.254/latest/meta-data/' },
+        }),
+      ),
+    );
+
+    await expect(
+      downloadExportFile('https://public-api.gamma.app/mock-exports/meta.pdf', 'gen-meta', 'pdf'),
+    ).rejects.toMatchObject({ code: 'URL_REJECTED' });
+    expect(fetchCallsTo('169.254.169.254')).toBe(0);
+  });
+
+  it('refuses a redirect that downgrades to plaintext http', async () => {
+    mswServer.use(
+      http.get('https://public-api.gamma.app/mock-exports/downgrade.pdf', () =>
+        new HttpResponse(null, {
+          status: 302,
+          headers: { Location: 'http://public-api.gamma.app/mock-exports/final.pdf' },
+        }),
+      ),
+    );
+
+    await expect(
+      downloadExportFile(
+        'https://public-api.gamma.app/mock-exports/downgrade.pdf',
+        'gen-downgrade',
+        'pdf',
+      ),
+    ).rejects.toMatchObject({ code: 'URL_REJECTED' });
+  });
+
+  it('refuses a redirect chain that never terminates', async () => {
+    mswServer.use(
+      http.get('https://public-api.gamma.app/mock-exports/loop.pdf', () =>
+        new HttpResponse(null, {
+          status: 302,
+          headers: { Location: 'https://public-api.gamma.app/mock-exports/loop.pdf' },
+        }),
+      ),
+    );
+
+    await expect(
+      downloadExportFile('https://public-api.gamma.app/mock-exports/loop.pdf', 'gen-loop', 'pdf'),
+    ).rejects.toMatchObject({ code: 'URL_REJECTED', message: expect.stringMatching(/too many redirects/) });
+  });
+
+  it('writes the export as a fresh regular 0600 file inside the temp dir', async () => {
+    mswServer.use(
+      http.get('https://public-api.gamma.app/mock-exports/unit.pdf', () =>
+        new HttpResponse(Buffer.from('pdf-bytes')),
+      ),
+    );
+
+    const filePath = await downloadExportFile(
+      'https://public-api.gamma.app/mock-exports/unit.pdf',
+      'gen-unit',
+      'pdf',
+    );
+    writtenFiles.push(filePath);
+
+    expect(filePath.startsWith(os.tmpdir())).toBe(true);
+    const stat = fs.lstatSync(filePath);
+    expect(stat.isFile()).toBe(true);
+    expect(stat.isSymbolicLink()).toBe(false);
+    expect(stat.mode & 0o777).toBe(0o600);
+    expect(fs.readFileSync(filePath, 'utf8')).toBe('pdf-bytes');
+  });
+
+  it('gives every download a distinct, unpredictable temp path', async () => {
+    mswServer.use(
+      http.get('https://public-api.gamma.app/mock-exports/uniq.pdf', () =>
+        new HttpResponse(Buffer.from('x')),
+      ),
+    );
+
+    const [a, b] = await Promise.all([
+      downloadExportFile('https://public-api.gamma.app/mock-exports/uniq.pdf', 'gen-uniq', 'pdf'),
+      downloadExportFile('https://public-api.gamma.app/mock-exports/uniq.pdf', 'gen-uniq', 'pdf'),
+    ]);
+    writtenFiles.push(a, b);
+    expect(a).not.toBe(b);
+  });
+
+  it('leaves no partial file behind when the download response fails', async () => {
+    mswServer.use(
+      http.get('https://public-api.gamma.app/mock-exports/gone.pdf', () =>
+        HttpResponse.text('gone', { status: 410 }),
+      ),
+    );
+
+    await expect(
+      downloadExportFile('https://public-api.gamma.app/mock-exports/gone.pdf', 'gen-gone', 'pdf'),
+    ).rejects.toThrow(/HTTP 410/);
+
+    const leftovers = fs
+      .readdirSync(os.tmpdir())
+      .filter((name) => name.startsWith('gamma_export_gen-gone_'));
+    expect(leftovers).toHaveLength(0);
   });
 });
