@@ -16,6 +16,12 @@ import {
   vantaListFrameworks,
 } from './tools/frameworks.js';
 import { listPeopleSchema, vantaListPeople } from './tools/people.js';
+import {
+  getPolicySchema,
+  listPoliciesSchema,
+  vantaGetPolicy,
+  vantaListPolicies,
+} from './tools/policies.js';
 import { queryTestResultsSchema, vantaQueryTestResults } from './tools/query-results.js';
 import { complianceSummarySchema, vantaGetComplianceSummary } from './tools/summary.js';
 import {
@@ -169,6 +175,20 @@ RETURNS:
     annotations: readOnlyAnnotations,
     inputSchema: getFrameworkSchema,
   }, async (input) => textResult(await vantaGetFramework(client, input)));
+
+  server.registerTool('vanta_list_policies', {
+    title: 'List Vanta Policies',
+    description: 'List policies in Vanta with their approval/review status — e.g. which policies are out of review.',
+    annotations: readOnlyAnnotations,
+    inputSchema: listPoliciesSchema,
+  }, async (input) => textResult(await vantaListPolicies(client, input)));
+
+  server.registerTool('vanta_get_policy', {
+    title: 'Get Vanta Policy',
+    description: 'Get details for one Vanta policy by ID, including its latest version status and approved document links.',
+    annotations: readOnlyAnnotations,
+    inputSchema: getPolicySchema,
+  }, async (input) => textResult(await vantaGetPolicy(client, input)));
 
   server.registerTool('vanta_list_vendors', {
     title: 'List Vanta Vendors',

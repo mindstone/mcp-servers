@@ -14,6 +14,8 @@
       "https://developer.vanta.com/api-reference/controls/get-control-by-an-id.md",
       "https://developer.vanta.com/api-reference/frameworks/list-available-frameworks.md",
       "https://developer.vanta.com/api-reference/frameworks/get-framework-by-id.md",
+      "https://developer.vanta.com/api-reference/policies/list-policies.md",
+      "https://developer.vanta.com/api-reference/policies/get-policy-by-id.md",
       "https://developer.vanta.com/api-reference/people/list-people.md",
       "https://developer.vanta.com/api-reference/vendors/list-vendors.md",
       "https://developer.vanta.com/api-reference/vendors/get-vendor-by-id.md",
@@ -132,6 +134,21 @@
     {
       "method": "GET",
       "path": "/frameworks/{frameworkId}",
+      "queryParams": [],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/policies",
+      "queryParams": [
+        "pageSize",
+        "pageCursor"
+      ],
+      "requiredBodyFields": []
+    },
+    {
+      "method": "GET",
+      "path": "/policies/{policyId}",
       "queryParams": [],
       "requiredBodyFields": []
     },

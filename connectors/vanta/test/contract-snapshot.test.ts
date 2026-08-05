@@ -7,6 +7,7 @@ import { vantaListControls, vantaGetControl } from '../src/tools/controls.js';
 import { vantaUploadDocument } from '../src/tools/documents.js';
 import { vantaListFrameworks, vantaGetFramework } from '../src/tools/frameworks.js';
 import { vantaListPeople } from '../src/tools/people.js';
+import { vantaListPolicies, vantaGetPolicy } from '../src/tools/policies.js';
 import { vantaQueryTestResults } from '../src/tools/query-results.js';
 import { vantaListTests, vantaGetTest } from '../src/tools/tests.js';
 import { vantaListVendors, vantaGetVendor, vantaCreateVendor, vantaUpdateVendor, vantaAttachVendorDocument } from '../src/tools/vendors.js';
@@ -115,6 +116,7 @@ const normalizeContractPath = (endpoint: string): string => {
   normalized = normalized.replace(/\/tests\/[^/]+$/, '/tests/{testId}');
   normalized = normalized.replace(/\/controls\/[^/]+$/, '/controls/{controlId}');
   normalized = normalized.replace(/\/frameworks\/[^/]+$/, '/frameworks/{frameworkId}');
+  normalized = normalized.replace(/\/policies\/[^/]+$/, '/policies/{policyId}');
   normalized = normalized.replace(/\/vendors\/[^/]+$/, '/vendors/{vendorId}');
   if (!normalized.endsWith('/deactivate') && !normalized.endsWith('/reactivate')) {
     normalized = normalized.replace(/\/vulnerabilities\/[^/]+$/, '/vulnerabilities/{vulnerabilityId}');
@@ -215,6 +217,8 @@ describe('Vanta contract snapshot', () => {
     // coverage (both calls must send identical query params).
     await vantaListFrameworks(client, { page_size: 10, page_cursor: 'cursor-frameworks' });
     await vantaGetFramework(client, { framework_id: 'soc2' });
+    await vantaListPolicies(client, { page_size: 10, page_cursor: 'cursor-policies' });
+    await vantaGetPolicy(client, { policy_id: 'code-of-conduct-bsi' });
     await vantaListVendors(client, {
       name: 'Acme',
       status: 'MANAGED',

@@ -306,4 +306,105 @@ describe('Read tools — documented request contracts', () => {
     expect(payload.ok).toBe(false);
     expect(payload.code).toBe('NOT_FOUND');
   });
+
+  it('vanta_list_policies returns policy review status', async () => {
+    mswServer.use(
+      successTokenHandler,
+      http.get('https://api.vanta.com/v1/policies', ({ request }) => {
+        expect(Object.fromEntries(new URL(request.url).searchParams)).toEqual({
+          pageSize: '10',
+          pageCursor: 'policy-cursor',
+        });
+        return paginated([
+          {
+            id: 'code-of-conduct-bsi',
+            name: 'Code of Conduct',
+            status: 'NEEDS_REMEDIATION',
+            approvedAtDate: '2024-01-15T10:30:00.000Z',
+            latestVersion: { status: 'EXPIRED' },
+          },
+        ]);
+      }),
+    );
+
+    const { createServer } = await import('../src/server.js');
+    testClient = await createInMemoryTestClient({
+      createServer,
+      env: {
+        VANTA_CLIENT_ID: MOCK_CLIENT_ID,
+        VANTA_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+      },
+    });
+
+    const result = await testClient.callTool('vanta_list_policies', {
+      page_size: 10,
+      page_cursor: 'policy-cursor',
+    });
+    const payload = result.json as {
+      ok: boolean;
+      policies: Array<{ id: string; status: string; latestVersion: { status: string } }>;
+      count: number;
+    };
+
+    expect(payload.ok).toBe(true);
+    expect(payload.count).toBe(1);
+    expect(payload.policies[0]?.id).toBe('code-of-conduct-bsi');
+    expect(payload.policies[0]?.status).toBe('NEEDS_REMEDIATION');
+    expect(payload.policies[0]?.latestVersion.status).toBe('EXPIRED');
+  });
+
+  it('vanta_get_policy fetches a single policy by ID', async () => {
+    mswServer.use(
+      successTokenHandler,
+      http.get('https://api.vanta.com/v1/policies/code-of-conduct-bsi', () =>
+        HttpResponse.json({
+          id: 'code-of-conduct-bsi',
+          name: 'Code of Conduct',
+          status: 'OK',
+          latestVersion: { status: 'APPROVED' },
+        }),
+      ),
+    );
+
+    const { createServer } = await import('../src/server.js');
+    testClient = await createInMemoryTestClient({
+      createServer,
+      env: {
+        VANTA_CLIENT_ID: MOCK_CLIENT_ID,
+        VANTA_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+      },
+    });
+
+    const result = await testClient.callTool('vanta_get_policy', { policy_id: 'code-of-conduct-bsi' });
+    const payload = result.json as { ok: boolean; policy: { id: string; status: string } };
+
+    expect(payload.ok).toBe(true);
+    expect(payload.policy.id).toBe('code-of-conduct-bsi');
+    expect(payload.policy.status).toBe('OK');
+  });
+
+  it('vanta_get_policy surfaces a structured error for an unknown policy ID', async () => {
+    mswServer.use(
+      successTokenHandler,
+      http.get('https://api.vanta.com/v1/policies/nope', () =>
+        HttpResponse.json({ message: 'not found' }, { status: 404 }),
+      ),
+      http.get('https://api.vanta.com/v1/policies', () => paginated([])),
+    );
+
+    const { createServer } = await import('../src/server.js');
+    testClient = await createInMemoryTestClient({
+      createServer,
+      env: {
+        VANTA_CLIENT_ID: MOCK_CLIENT_ID,
+        VANTA_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+      },
+    });
+
+    const result = await testClient.callTool('vanta_get_policy', { policy_id: 'nope' });
+    const payload = result.json as { ok: boolean; code: string };
+
+    expect(payload.ok).toBe(false);
+    expect(payload.code).toBe('NOT_FOUND');
+  });
 });
