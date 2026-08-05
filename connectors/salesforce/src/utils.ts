@@ -117,6 +117,32 @@ export function formatSOQLDate(dateStr: string, paramName: string): string {
 }
 
 /**
+ * Format a date or datetime string as a SOQL datetime literal (UTC).
+ * Accepts a plain date ("2026-01-09", treated as midnight UTC) or an ISO 8601
+ * datetime ("2026-01-09T14:30:00Z", offsets supported).
+ */
+export function formatSOQLDateTime(value: string, paramName: string): string {
+  const dateOnly = value.match(/^(\d{4}-\d{2}-\d{2})$/);
+  if (dateOnly) return `${dateOnly[1]}T00:00:00Z`;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d{1,3})?(Z|[+-]\d{2}:?\d{2})?$/.test(value)) {
+    throw new ConnectorError(
+      `Invalid ${paramName}: "${value}"`,
+      'INVALID_DATE_FORMAT',
+      'Use ISO 8601 (e.g., "2026-01-09T14:30:00Z") or a plain date ("2026-01-09", treated as midnight UTC)',
+    );
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new ConnectorError(
+      `Invalid ${paramName}: "${value}"`,
+      'INVALID_DATE_FORMAT',
+      'Use ISO 8601 (e.g., "2026-01-09T14:30:00Z") or a plain date ("2026-01-09", treated as midnight UTC)',
+    );
+  }
+  return parsed.toISOString();
+}
+
+/**
  * Validate field names and return validated or default fields.
  */
 export function validateFields(

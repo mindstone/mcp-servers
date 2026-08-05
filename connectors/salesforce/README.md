@@ -11,7 +11,7 @@ Salesforce CRM MCP server — accounts, contacts, opportunities, leads, tasks, u
 
 - **Version:** [0.1.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-salesforce)
 - **Auth:** OAuth (local 127.0.0.1 callback) or static access token ([`SALESFORCE_CLIENT_SECRET`](./server.json), [`SALESFORCE_ACCESS_TOKEN`](./server.json))
-- **Tools:** [26](./src/tools/) (accounts, contacts, opportunities, leads, tasks, query)
+- **Tools:** [31](./src/tools/) (accounts, contacts, opportunities, leads, tasks, cases, events, query)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -135,7 +135,7 @@ Then call `salesforce_connect_account` to start the OAuth flow.
 - `SALESFORCE_OAUTH_PORT` — OAuth callback port (`0` = OS-assigned; default: `0`)
 - `SALESFORCE_OAUTH_SCOPES` — Space-separated OAuth scopes. Leave unset to use the connector default.
 
-## Available Tools (26)
+## Available Tools (31)
 
 ### Account Management
 - `salesforce_connect_account` — Connect a Salesforce account via OAuth
@@ -167,6 +167,15 @@ Then call `salesforce_connect_account` to start the OAuth flow.
 - `salesforce_get_tasks` — Get tasks with filters
 - `salesforce_create_task` — Create a task
 - `salesforce_update_task` — Update a task
+
+### Cases
+- `salesforce_get_cases` — Get support cases with filters
+- `salesforce_create_case` — Create a support case
+- `salesforce_update_case` — Update a support case
+
+### Events
+- `salesforce_get_events` — Get calendar events with filters
+- `salesforce_create_event` — Create a calendar event
 
 ### Users
 - `salesforce_get_users` — Get Salesforce users

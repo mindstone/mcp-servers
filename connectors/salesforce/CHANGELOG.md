@@ -11,6 +11,11 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+
+- New Case tools: `salesforce_get_cases`, `salesforce_create_case`, `salesforce_update_case` for support/customer-success workflows.
+- New Event tools: `salesforce_get_events`, `salesforce_create_event` for calendar/meeting-prep workflows. Date filters accept plain dates or ISO 8601 datetimes.
+
 ### Security
 
 - Envelope every record field returned by `salesforce_query`, `salesforce_get_records`, and all `salesforce_get_*` tools in `<untrusted-content>` tags so org-authored text (names, emails, descriptions, subjects) is treated as data, not instructions (FOX-3490). Record IDs stay raw so they can be reused in follow-up calls. Org-authored labels in `salesforce_describe_object` and `salesforce_list_objects` are enveloped too.

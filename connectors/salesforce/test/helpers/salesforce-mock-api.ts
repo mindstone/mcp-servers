@@ -100,6 +100,20 @@ export function createSalesforceHandlers() {
           records: [{ Id: '00T000000000001', Subject: 'Follow up', Status: 'Not Started', Priority: 'Normal', attributes: { type: 'Task' } }],
         });
       }
+      if (soql.includes('FROM Case')) {
+        return HttpResponse.json({
+          totalSize: 1,
+          done: true,
+          records: [{ Id: '500000000000001', CaseNumber: '00001001', Subject: 'Login issue', Status: 'New', Priority: 'Medium', attributes: { type: 'Case' } }],
+        });
+      }
+      if (soql.includes('FROM Event')) {
+        return HttpResponse.json({
+          totalSize: 1,
+          done: true,
+          records: [{ Id: '00U000000000001', Subject: 'Quarterly review', StartDateTime: '2026-08-10T14:00:00.000Z', EndDateTime: '2026-08-10T15:00:00.000Z', attributes: { type: 'Event' } }],
+        });
+      }
       if (soql.includes('FROM User')) {
         return HttpResponse.json({
           totalSize: 1,
