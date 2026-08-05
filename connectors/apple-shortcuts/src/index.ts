@@ -54,8 +54,10 @@ export function resolveTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
   if (raw === undefined) return DEFAULT_TIMEOUT_MS;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) {
+    // Do not echo the raw value: a misconfigured environment can place
+    // secret material here, and stderr logs must not capture it.
     logger.warn(
-      `Invalid APPLE_SHORTCUTS_TIMEOUT_MS "${raw}"; falling back to ${DEFAULT_TIMEOUT_MS}ms`
+      `Invalid APPLE_SHORTCUTS_TIMEOUT_MS (expected a positive number of milliseconds); falling back to ${DEFAULT_TIMEOUT_MS}ms`
     );
     return DEFAULT_TIMEOUT_MS;
   }
@@ -91,8 +93,11 @@ export const runShortcuts: ShortcutsRunner = (argv) => {
 
     timeoutTimer = setTimeout(() => {
       timedOut = true;
+      // Log only the connector-authored subcommand — the full argv contains
+      // the user-authored shortcut name and any temporary input path, which
+      // may carry private data and must not reach log files.
       logger.warn(
-        `"shortcuts ${argv.join(" ")}" exceeded the ${timeoutMs}ms timeout; terminating`
+        `"shortcuts ${argv[0]}" exceeded the ${timeoutMs}ms timeout; terminating`
       );
       proc.kill("SIGTERM");
       killTimer = setTimeout(() => {

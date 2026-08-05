@@ -58,6 +58,22 @@ describe("resolveTimeoutMs", () => {
     expect(resolveTimeoutMs({ APPLE_SHORTCUTS_TIMEOUT_MS: "0" })).toBe(DEFAULT_TIMEOUT_MS);
     expect(resolveTimeoutMs({ APPLE_SHORTCUTS_TIMEOUT_MS: "-5" })).toBe(DEFAULT_TIMEOUT_MS);
   });
+
+  it("does not echo the raw invalid value into logs (may carry secret material)", () => {
+    // Credential-shaped fixture built programmatically — never a literal.
+    const secretShaped = "sk-" + "a1b2c3".repeat(6);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(resolveTimeoutMs({ APPLE_SHORTCUTS_TIMEOUT_MS: secretShaped })).toBe(
+        DEFAULT_TIMEOUT_MS
+      );
+      const logged = errSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+      expect(logged).toContain("Invalid APPLE_SHORTCUTS_TIMEOUT_MS");
+      expect(logged).not.toContain(secretShaped);
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
 });
 
 describe("runShortcuts timeout", () => {
@@ -118,5 +134,29 @@ describe("runShortcuts timeout", () => {
     expect(result).toEqual({ stdout: "", stderr: "", exitCode: 0 });
     expect(result.timedOut).toBeUndefined();
     expect(proc.killed).toEqual([]);
+  });
+
+  it("timeout warning logs only the subcommand, never the shortcut name or input path", async () => {
+    const proc = createFakeProc();
+    spawnMock.mockReturnValue(proc as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const pending = runShortcuts([
+        "run",
+        "Private Family Matters",
+        "--input-path",
+        "/tmp/apple-sc-secret/input.txt",
+      ]);
+      await vi.advanceTimersByTimeAsync(1000);
+      proc.emit("close", null);
+      await pending;
+
+      const logged = errSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+      expect(logged).toContain('"shortcuts run"');
+      expect(logged).not.toContain("Private Family Matters");
+      expect(logged).not.toContain("apple-sc-secret");
+    } finally {
+      errSpy.mockRestore();
+    }
   });
 });
