@@ -9,5 +9,6 @@ export { registerEventTools } from './events.js';
 export { registerSearchTools } from './search.js';
 export { registerNoteTools } from './notes.js';
 export { registerCampaignTools } from './campaigns.js';
+export { registerReportTools } from './reports.js';
 export { registerUserTools } from './users.js';
 export { registerQueryTools } from './query.js';

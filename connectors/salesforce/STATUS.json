@@ -11,7 +11,7 @@
     ]
   },
   "tools": {
-    "count": 36,
+    "count": 37,
     "domains": [
       "accounts",
       "contacts",
@@ -23,6 +23,7 @@
       "search",
       "notes",
       "campaigns",
+      "reports",
       "query"
     ]
   },

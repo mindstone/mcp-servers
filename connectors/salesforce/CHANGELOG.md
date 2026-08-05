@@ -18,6 +18,7 @@ are maintained manually as part of the PR review checklist.
 - New `salesforce_search` tool: cross-object full-text search (SOSL) across Account, Contact, Lead, Opportunity, Case, Task, and Event. Search terms are escaped against SOSL reserved characters.
 - New Note tools: `salesforce_get_notes` and `salesforce_create_note` (ContentNote, linked to a record via ContentDocumentLink) for meeting-notes-into-CRM workflows. Note bodies are base64-decoded and enveloped on read.
 - New Campaign read tools: `salesforce_get_campaigns` and `salesforce_get_campaign_members` for marketing attribution questions.
+- New `salesforce_run_report` tool: run an existing Salesforce report via the Analytics REST API and return groupings, aggregates, and (optionally) detail rows.
 
 ### Security
 

@@ -239,6 +239,15 @@ export function sanitizeRecords(records: unknown[], source: string): unknown[] {
   return records.map((record) => wrapRecordValue(record, source));
 }
 
+/**
+ * Envelope every string inside an arbitrary external-data blob (report
+ * results, metadata payloads), leaving structural keys (Id, *Id, attributes)
+ * raw. Use for non-record response shapes where every value is org-authored.
+ */
+export function sanitizeExternalData<T>(value: T, source: string): T {
+  return wrapRecordValue(value, source) as T;
+}
+
 export function checkSaveResult(
   result: { success: boolean; errors?: unknown[] } | Array<{ success: boolean; errors?: unknown[] }>,
   errorMessage: string,

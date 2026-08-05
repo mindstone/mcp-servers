@@ -153,6 +153,33 @@ export function createSalesforceHandlers() {
       return HttpResponse.json({ totalSize: 0, done: true, records: [] });
     }),
 
+    // Analytics REST: run report
+    http.get('*/services/data/*/analytics/reports/:reportId', ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      const includeDetails = new URL(request.url).searchParams.get('includeDetails') === 'true';
+      return HttpResponse.json({
+        attributes: { type: 'Report', reportId: params.reportId },
+        reportMetadata: { name: 'Pipeline by Stage', reportFormat: 'SUMMARY', developerName: 'Pipeline_by_Stage' },
+        reportExtendedMetadata: {
+          aggregateColumnInfo: { 's!AMOUNT': { label: 'Sum of Amount' } },
+          groupingColumnInfo: { STAGE_NAME: { label: 'Stage' } },
+        },
+        factMap: {
+          'T!T': {
+            aggregates: [{ label: '50000', value: 50000 }],
+            rows: includeDetails
+              ? [{ dataCells: [{ label: 'Big Deal', value: '006000000000001' }] }]
+              : [],
+          },
+        },
+        groupingsDown: { groupings: [{ label: 'Prospecting', value: 'Prospecting' }] },
+        groupingsAcross: { groupings: [] },
+        hasDetailRows: includeDetails,
+        allData: true,
+      });
+    }),
+
     // SOSL search
     http.get('*/services/data/*/search*', ({ request }) => {
       const authErr = requireAuth(request.headers.get('authorization'));

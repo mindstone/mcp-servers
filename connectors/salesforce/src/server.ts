@@ -13,6 +13,7 @@ import {
   registerSearchTools,
   registerNoteTools,
   registerCampaignTools,
+  registerReportTools,
   registerUserTools,
   registerQueryTools,
 } from './tools/index.js';
@@ -36,6 +37,7 @@ export function createServer(): McpServer {
   registerSearchTools(server);
   registerNoteTools(server);
   registerCampaignTools(server);
+  registerReportTools(server);
   registerUserTools(server);
   registerQueryTools(server);
 
