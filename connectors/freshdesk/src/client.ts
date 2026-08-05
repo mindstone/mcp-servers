@@ -82,7 +82,10 @@ export async function freshdeskFetch<T>(
   const method = (fetchOptions.method ?? 'GET').toUpperCase();
 
   for (let attempt = 0; attempt <= MAX_RATE_LIMIT_RETRIES; attempt++) {
-    console.error(`[Freshdesk API] ${method} ${url}`);
+    // Log method + path only. The full URL can carry query params holding
+    // PII (contact email filters) or arbitrary search terms; those never
+    // belong in logs.
+    console.error(`[Freshdesk API] ${method} ${endpoint}`);
 
     let response: Response;
 
@@ -112,8 +115,14 @@ export async function freshdeskFetch<T>(
     // Retry-After; everything else surfaces RATE_LIMITED immediately.
     if (response.status === 429) {
       if (method !== 'GET' || attempt >= MAX_RATE_LIMIT_RETRIES) {
-        const retryAfter = response.headers.get('Retry-After');
-        const waitTime = retryAfter ? `${retryAfter} seconds` : 'a moment';
+        // The Retry-After header is vendor-controlled text: only a parsed
+        // non-negative integer ever reaches the model-visible message, never
+        // the raw header value.
+        const retryAfterSeconds = parseInt(response.headers.get('Retry-After') ?? '', 10);
+        const waitTime =
+          !isNaN(retryAfterSeconds) && retryAfterSeconds >= 0
+            ? `${retryAfterSeconds} seconds`
+            : 'a moment';
         throw new FreshdeskError(
           `Rate limited. Please wait ${waitTime} before retrying.`,
           'RATE_LIMITED',
@@ -158,8 +167,11 @@ export async function freshdeskFetch<T>(
 
     // Handle other errors
     if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      console.error(`Freshdesk API error (${response.status}):`, errorText);
+      // Drain the body for connection hygiene, but never log or surface it:
+      // vendor error payloads can embed rejected request values, PII, or
+      // custom-field content.
+      await response.text().catch(() => '');
+      console.error(`Freshdesk API error (${response.status}) for ${method} ${endpoint}`);
 
       const statusMessage =
         response.status === 422
@@ -180,7 +192,19 @@ export async function freshdeskFetch<T>(
       return {} as T;
     }
 
-    return response.json() as Promise<T>;
+    // A successful status with a non-JSON body is still a vendor-controlled
+    // response: the native JSON parse error can quote fragments of that body,
+    // so convert it to a fixed, connector-authored error instead.
+    try {
+      return (await response.json()) as T;
+    } catch {
+      console.error(`[Freshdesk API] Unparseable success response for ${method} ${endpoint}`);
+      throw new FreshdeskError(
+        `Freshdesk API error (${response.status}): response body could not be parsed`,
+        'API_ERROR',
+        'Try the request again. If the problem persists, reconnect your Freshdesk account in your MCP host\'s settings.',
+      );
+    }
   }
 
   // Unreachable: the loop either returns a response or throws. Kept so the
