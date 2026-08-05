@@ -11,12 +11,14 @@
     ]
   },
   "tools": {
-    "count": 15,
+    "count": 22,
     "domains": [
       "prospects",
       "sequences",
       "accounts",
-      "tasks"
+      "tasks",
+      "calls",
+      "mailboxes"
     ]
   },
   "surface": "cloud-api",
