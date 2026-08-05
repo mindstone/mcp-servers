@@ -299,6 +299,8 @@ export interface UpdateEventArgs {
   end?: string;
   location?: string;
   body?: string;
+  addAttendees?: string[];
+  removeAttendees?: string[];
   recurrence?: RecurrenceInput;
   deviceTimezone?: string;
 }
@@ -578,9 +580,37 @@ export async function updateEvent(
     update.recurrence = args.recurrence;
   }
 
+  // Graph PATCH replaces the entire attendees collection, so add/remove is a
+  // read-merge-write against the event's current attendee list. Attendees are
+  // re-sent in the documented write shape (emailAddress + type only) — echoing
+  // back read-side fields like `status` would be rejected.
+  if (args.addAttendees?.length || args.removeAttendees?.length) {
+    const current = await client
+      .api(`/me/events/${args.id}`)
+      .options({ signal })
+      .select('attendees')
+      .get();
+    const currentAttendees = (current.attendees ?? []) as Array<{
+      type?: string;
+      emailAddress?: { address?: string; name?: string };
+    }>;
+    const removeSet = new Set((args.removeAttendees ?? []).map((e) => e.toLowerCase()));
+    const kept = currentAttendees
+      .filter((a) => !removeSet.has((a.emailAddress?.address ?? '').toLowerCase()))
+      .map((a) => ({
+        emailAddress: { address: a.emailAddress?.address, name: a.emailAddress?.name },
+        type: a.type ?? 'required',
+      }));
+    const keptAddresses = new Set(kept.map((a) => (a.emailAddress.address ?? '').toLowerCase()));
+    const additions = (args.addAttendees ?? [])
+      .filter((email) => !keptAddresses.has(email.toLowerCase()))
+      .map((email) => ({ emailAddress: { address: email }, type: 'required' }));
+    update.attendees = [...kept, ...additions];
+  }
+
   if (Object.keys(update).length === 0) {
     throw new CalendarBusinessError(
-      'At least one field to update is required: subject, start, end, location, body, or recurrence. Example: { "id": "AAMkAGI2...", "subject": "New Title", "location": "Room 101" }',
+      'At least one field to update is required: subject, start, end, location, body, recurrence, addAttendees, or removeAttendees. Example: { "id": "AAMkAGI2...", "subject": "New Title", "addAttendees": ["carol@example.com"] }',
       'update_event',
     );
   }

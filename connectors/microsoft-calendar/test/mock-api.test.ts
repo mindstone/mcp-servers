@@ -267,6 +267,36 @@ describe('microsoft-calendar mock-API integration', () => {
     expect(patch?.body).toMatchObject({ recurrence });
   });
 
+  it('update_event addAttendees merges against the current attendee list', async () => {
+    const result = await client.callTool('update_event', {
+      id: 'event-1',
+      addAttendees: ['carol@example.com'],
+    });
+    expect(result.isError).not.toBe(true);
+    const patch = state.requests.find(
+      (r) => r.method === 'PATCH' && r.pathname.endsWith('/me/events/event-1'),
+    );
+    // Current list from the GET (bob) is preserved; carol is appended.
+    expect(patch?.body).toMatchObject({
+      attendees: [
+        { emailAddress: { address: 'bob@example.com', name: 'Bob' }, type: 'required' },
+        { emailAddress: { address: 'carol@example.com' }, type: 'required' },
+      ],
+    });
+  });
+
+  it('update_event removeAttendees drops the address from the merged list', async () => {
+    const result = await client.callTool('update_event', {
+      id: 'event-1',
+      removeAttendees: ['BOB@example.com'],
+    });
+    expect(result.isError).not.toBe(true);
+    const patch = state.requests.find(
+      (r) => r.method === 'PATCH' && r.pathname.endsWith('/me/events/event-1'),
+    );
+    expect(patch?.body).toMatchObject({ attendees: [] });
+  });
+
   // -------------------------------------------------------------------------
   // delete_event
   // -------------------------------------------------------------------------

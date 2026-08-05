@@ -220,6 +220,14 @@ export function registerCalendarTools(server: McpServer): void {
         end: z.string().optional().describe('New end date/time'),
         location: z.string().optional().describe('New location'),
         body: z.string().optional().describe('New description'),
+        addAttendees: z
+          .array(z.string())
+          .optional()
+          .describe('Email addresses to add as required attendees (merged with the current list)'),
+        removeAttendees: z
+          .array(z.string())
+          .optional()
+          .describe('Email addresses to remove from the attendee list'),
         recurrence: RecurrenceSchema.optional().describe(
           'New recurrence for the event (Graph pattern/range object). When changing recurrence, also pass start and end so the series stays consistent.',
         ),
@@ -256,6 +264,8 @@ export function registerCalendarTools(server: McpServer): void {
             end: args.end,
             location: args.location,
             body: args.body,
+            addAttendees: args.addAttendees,
+            removeAttendees: args.removeAttendees,
             recurrence: args.recurrence,
             deviceTimezone: args.deviceTimezone,
           },
