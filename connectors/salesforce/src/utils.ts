@@ -65,6 +65,19 @@ export function escapeSOQL(value: string): string {
 }
 
 /**
+ * Escape a user-supplied search term for interpolation inside a SOSL
+ * `FIND {term}` clause. SOSL gives special meaning to a different character
+ * set than SOQL — every reserved character is backslash-escaped so the term
+ * is always a single literal token and can never break out of the braces or
+ * inject operators (AND/OR groupings, wildcards, field scoping).
+ */
+export function escapeSOSL(term: string): string {
+  if (!term) return '';
+  // Backslash MUST be escaped first to avoid double-escaping.
+  return term.replace(/\\/g, '\\\\').replace(/([?&|!{}[\]()^~*:"+-])/g, '\\$1');
+}
+
+/**
  * Escape a user-supplied substring for interpolation inside a SOQL
  * `LIKE '%...%'` clause. Identical to `escapeSOQL` semantically (both
  * escape `\\`, `'`, `%`, `_`) but exists as a separate helper so every

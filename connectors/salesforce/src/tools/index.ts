@@ -6,5 +6,6 @@ export { registerLeadTools } from './leads.js';
 export { registerTaskTools } from './tasks.js';
 export { registerCaseTools } from './cases.js';
 export { registerEventTools } from './events.js';
+export { registerSearchTools } from './search.js';
 export { registerUserTools } from './users.js';
 export { registerQueryTools } from './query.js';

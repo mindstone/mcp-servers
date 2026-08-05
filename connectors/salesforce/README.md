@@ -11,7 +11,7 @@ Salesforce CRM MCP server — accounts, contacts, opportunities, leads, tasks, u
 
 - **Version:** [0.1.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-salesforce)
 - **Auth:** OAuth (local 127.0.0.1 callback) or static access token ([`SALESFORCE_CLIENT_SECRET`](./server.json), [`SALESFORCE_ACCESS_TOKEN`](./server.json))
-- **Tools:** [31](./src/tools/) (accounts, contacts, opportunities, leads, tasks, cases, events, query)
+- **Tools:** [32](./src/tools/) (accounts, contacts, opportunities, leads, tasks, cases, events, search, query)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -135,7 +135,7 @@ Then call `salesforce_connect_account` to start the OAuth flow.
 - `SALESFORCE_OAUTH_PORT` — OAuth callback port (`0` = OS-assigned; default: `0`)
 - `SALESFORCE_OAUTH_SCOPES` — Space-separated OAuth scopes. Leave unset to use the connector default.
 
-## Available Tools (31)
+## Available Tools (32)
 
 ### Account Management
 - `salesforce_connect_account` — Connect a Salesforce account via OAuth
@@ -176,6 +176,9 @@ Then call `salesforce_connect_account` to start the OAuth flow.
 ### Events
 - `salesforce_get_events` — Get calendar events with filters
 - `salesforce_create_event` — Create a calendar event
+
+### Search
+- `salesforce_search` — Cross-object full-text search (SOSL)
 
 ### Users
 - `salesforce_get_users` — Get Salesforce users

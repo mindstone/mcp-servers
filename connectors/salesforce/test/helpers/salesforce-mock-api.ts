@@ -124,6 +124,18 @@ export function createSalesforceHandlers() {
       return HttpResponse.json({ totalSize: 0, done: true, records: [] });
     }),
 
+    // SOSL search
+    http.get('*/services/data/*/search*', ({ request }) => {
+      const authErr = requireAuth(request.headers.get('authorization'));
+      if (authErr) return authErr;
+      return HttpResponse.json({
+        searchRecords: [
+          { Id: '001000000000001', Name: 'Acme Corp', Industry: 'Technology', attributes: { type: 'Account' } },
+          { Id: '003000000000001', FirstName: 'Jane', LastName: 'Doe', Email: 'jane@acme.com', attributes: { type: 'Contact' } },
+        ],
+      });
+    }),
+
     // Create records (POST to sobject)
     http.post('*/services/data/*/sobjects/:objectName', async ({ request, params }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
