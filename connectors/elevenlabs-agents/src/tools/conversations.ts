@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
   requireApiKey,
   elevenLabsBinaryDownload,
+  elevenLabsFetch,
   elevenLabsJson,
 } from '../client.js';
 import { ENDPOINTS } from '../endpoints.js';
@@ -175,6 +176,54 @@ FREE.`,
         file_path: downloaded.filePath,
         size_bytes: downloaded.sizeBytes,
         message: `Conversation audio downloaded to ${downloaded.filePath}.`,
+      });
+    }),
+  );
+
+  server.registerTool(
+    'submit_conversation_feedback',
+    {
+      description: `Submit like/dislike feedback for one conversation, closing the quality-review loop.
+
+WHEN TO USE:
+- Mark a conversation as good or bad after reviewing its transcript
+- Flag a failed call so it is visible in ElevenLabs analytics
+
+EXAMPLE: {"conversation_id": "conv_123", "feedback": "dislike"}
+
+RELATED TOOLS:
+- get_conversation: review the transcript and analysis before judging
+- list_conversations: discover conversation IDs to review
+
+RETURNS: ok confirmation.
+
+FREE.`,
+      inputSchema: z.object({
+        conversation_id: z.string().min(1).describe('Conversation ID to leave feedback on.'),
+        feedback: z.enum(['like', 'dislike'])
+          .describe('Thumbs up ("like") or thumbs down ("dislike") for this conversation.'),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    withErrorHandling(async (args) => {
+      const apiKey = requireApiKey();
+      // Success body is an empty object with no schema upstream, so this call
+      // deliberately ignores the body rather than parsing it as JSON.
+      await elevenLabsFetch(
+        apiKey,
+        ENDPOINTS.conversationFeedback(args.conversation_id),
+        { method: 'POST', body: JSON.stringify({ feedback: args.feedback }) },
+      );
+      return JSON.stringify({
+        ok: true,
+        conversation_id: args.conversation_id,
+        feedback: args.feedback,
+        message: `Submitted "${args.feedback}" feedback for conversation ${args.conversation_id}.`,
       });
     }),
   );

@@ -195,6 +195,14 @@ export function createElevenLabsAgentsHandlers() {
       });
     }),
 
+    http.post(`${BASE_V1}/convai/conversations/:conversationId/feedback`, ({ request, params }) => {
+      const authErr = requireAuth(request.headers.get('xi-api-key'));
+      if (authErr) return authErr;
+      const triggered = triggerResponse(idTrigger(params.conversationId));
+      if (triggered) return triggered;
+      return HttpResponse.json({});
+    }),
+
     http.get(`${BASE_V1}/convai/phone-numbers`, ({ request }) => {
       const authErr = requireAuth(request.headers.get('xi-api-key'));
       if (authErr) return authErr;
@@ -521,6 +529,19 @@ export function createImportPhoneNumberCapturingHandler() {
     if (authErr) return authErr;
     captured.body = (await request.json()) as JsonBody;
     return HttpResponse.json({ phone_number_id: 'pn_imported_123' });
+  });
+
+  return { handler, captured };
+}
+
+export function createConversationFeedbackCapturingHandler() {
+  const captured: { body?: JsonBody } = {};
+
+  const handler = http.post(`${BASE_V1}/convai/conversations/:conversationId/feedback`, async ({ request }) => {
+    const authErr = requireAuth(request.headers.get('xi-api-key'));
+    if (authErr) return authErr;
+    captured.body = (await request.json()) as JsonBody;
+    return HttpResponse.json({});
   });
 
   return { handler, captured };

@@ -28,6 +28,7 @@ const EXPECTED_TOOL_NAMES = [
   'retry_batch_call',
   'simulate_conversation',
   'submit_batch_call',
+  'submit_conversation_feedback',
   'update_agent',
   'update_phone_number',
 ].sort();
@@ -60,6 +61,7 @@ const EXPECTED_ANNOTATIONS: Record<
   retry_batch_call: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
   simulate_conversation: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
   submit_batch_call: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+  submit_conversation_feedback: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   update_agent: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
   update_phone_number: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
 };
@@ -75,7 +77,7 @@ describe('Smoke test — ElevenLabs Agents tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 26 tools with correct names', async () => {
+  it('registers exactly 27 tools with correct names', async () => {
     mswServer.use(...createElevenLabsAgentsHandlers());
 
     testClient = await createTestClient({
@@ -88,7 +90,7 @@ describe('Smoke test — ElevenLabs Agents tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((tool) => tool.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(26);
+    expect(toolsResult.tools).toHaveLength(27);
     expect(toolNames).toEqual(EXPECTED_TOOL_NAMES);
   });
 
@@ -141,7 +143,7 @@ describe('Smoke test — ElevenLabs Agents tool registration', () => {
 });
 
 describe('Spawned stdio smoke test', () => {
-  it('lists 26 tools from built dist/index.js', async () => {
+  it('lists 27 tools from built dist/index.js', async () => {
     const { createStdioTestClient } = await import('@mindstone/mcp-test-harness');
     const { join } = await import('path');
 
@@ -157,7 +159,7 @@ describe('Spawned stdio smoke test', () => {
 
     try {
       const toolsResult = await client.client.listTools();
-      expect(toolsResult.tools).toHaveLength(26);
+      expect(toolsResult.tools).toHaveLength(27);
     } finally {
       await client.close();
     }

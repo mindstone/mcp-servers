@@ -10,6 +10,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ### Added
 
 - `import_phone_number` and `delete_phone_number` tools, completing the telephony lifecycle: a Twilio number (Account SID + Auth Token) or SIP trunk number (inbound/outbound trunk config) can now be onboarded and later removed without leaving the agent loop. Numbers are E.164-validated before any upstream call; both tools carry `destructiveHint: true`.
+- `submit_conversation_feedback` tool: submits like/dislike feedback for a reviewed conversation, closing the quality-review loop against `POST /convai/conversations/{id}/feedback`.
 
 ### Fixed
 

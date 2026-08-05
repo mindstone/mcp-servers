@@ -8,7 +8,7 @@ ElevenLabs Conversational AI MCP server for Model Context Protocol hosts. Inspec
 
 - **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-elevenlabs-agents)
 - **Auth:** API key ([`ELEVENLABS_API_KEY`](./server.json))
-- **Tools:** [26](./src/tools/) (configure, agents, conversations, phone numbers, outbound calls, batch calls, knowledge base)
+- **Tools:** [27](./src/tools/) (configure, agents, conversations, phone numbers, outbound calls, batch calls, knowledge base)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -91,7 +91,7 @@ node dist/index.js
 }
 ```
 
-## Tools (26)
+## Tools (27)
 
 ### Configuration
 - `configure_elevenlabs_agents_api_key` — Save your ElevenLabs API key
@@ -109,6 +109,7 @@ node dist/index.js
 - `list_conversations` — List conversations, optionally filtered by agent/date/success
 - `get_conversation` — Get a full conversation transcript and analysis
 - `get_conversation_audio` — Download the conversation recording to a tmp file
+- `submit_conversation_feedback` — Submit like/dislike feedback on a reviewed conversation
 
 ### Phone numbers
 - `list_phone_numbers` — List configured phone numbers
