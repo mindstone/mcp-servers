@@ -22,6 +22,15 @@ are maintained manually as part of the PR review checklist.
 - API responses are validated with Zod at the boundary; unexpected shapes surface a structured `INVALID_API_RESPONSE` error instead of passing garbage through.
 - Tool descriptions aligned with the actual Mixmax API response shapes (message recipient/timestamp fields, meeting type `durationMin`/`link`, snippet list fields, and where open/click aggregates actually come from).
 
+### Security
+- Vendored envelope helper upgraded to the canonical strong family: every case/whitespace close-tag variant (e.g. `</UNTRUSTED-CONTENT\n>`) is defanged, and `wrapUntrustedJsonStrings` now envelopes object keys as well as values.
+- Vendor HTTP error bodies and malformed-body parse diagnostics are never surfaced to the model; they map to fixed safe error messages (`API_ERROR` / `INVALID_API_RESPONSE`). Unknown exceptions return a generic `INTERNAL_ERROR` (details logged to stderr only).
+- Response schemas are now strict: `.passthrough()` removed so unrecognised vendor fields are stripped instead of flowing to the model unwrapped. Pagination cursors, meeting-type links, removed-recipient emails, report `totals`/`extra`, and write results (`result`) are now enveloped; wrapped cursors are unwrapped again before being sent back to the API.
+- Bridge-state file read hardened: open-once + fstat (regular files only) + read-through-fd, and the content is schema-validated — a non-integer or out-of-range `port` can no longer be interpolated into the loopback bridge URL.
+
+### Fixed
+- List/report response collections (`results`, `buckets`, `recipients`) are now required at the validation boundary: a missing collection (e.g. an error-shaped HTTP-200 body) fails closed with `INVALID_API_RESPONSE` instead of silently reporting an empty successful result.
+
 ## [0.2.2] - 2026-05-14
 ### Added
 - **registry**: Cohort A backfill — 12 API-key OSS connectors get server.json + mcpName. fathom, humaans, kling, mixmax, nano-banana, napkin, pandadoc, freshdesk, elevenlabs, retell-ai, runway, talentlms each gain a registry-shaped server.json (validated against registry.modelcontextprotocol.io) and an mcpName field on package.json under the io.github.mindstone namespace.
