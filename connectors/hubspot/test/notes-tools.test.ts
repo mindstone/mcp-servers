@@ -180,7 +180,10 @@ describe('HubSpot MCP - notes read/update/delete tools', () => {
 
     expect(result.id).toBe('note-1');
     expect(result.properties.hs_note_body).toContain('Q3 rollout');
-    expect(result.properties.hubspot_owner_id).toBe('5001');
+    // Every value in the properties bag is enveloped, id-shaped keys included.
+    expect(result.properties.hubspot_owner_id).toBe(
+      '<untrusted-content source="hubspot:crm/notes">5001</untrusted-content>'
+    );
   });
 
   it('update_hubspot_note patches only the provided properties', async () => {

@@ -7,7 +7,7 @@ import {
 } from '../utils/error-parser.js';
 import logger from '../utils/logger.js';
 import {
-  FORM_LITERAL_KEYS,
+  FORM_LITERAL_RULES,
   sanitizeHubSpotResponse,
 } from '../sanitize.js';
 import { assertMaxFanOut } from './input-limits.js';
@@ -133,7 +133,7 @@ export async function handleListForms(args: { formTypes?: string[]; limit?: numb
   try {
     const client = await getHubSpotClientAsync();
     const result = await client.listForms(args.limit || 20, args.after, args.formTypes);
-    const sanitized = sanitizeHubSpotResponse(result, 'hubspot:forms', FORM_LITERAL_KEYS);
+    const sanitized = sanitizeHubSpotResponse(result, 'hubspot:forms', FORM_LITERAL_RULES);
 
     logger.info(`Listed ${result.results.length} forms`);
     return {
@@ -153,7 +153,7 @@ export async function handleGetForm(args: { formId: string }) {
     const result = await client.getForm(args.formId);
 
     logger.info(`Retrieved form ${args.formId}: ${result.name}`);
-    return sanitizeHubSpotResponse(result, 'hubspot:forms', FORM_LITERAL_KEYS);
+    return sanitizeHubSpotResponse(result, 'hubspot:forms', FORM_LITERAL_RULES);
   } catch (error) {
     const parsed = parseHubSpotError(error, { feature: 'form', operation: 'get', args });
     logger.error(`Get form failed:`, parsed);
@@ -165,7 +165,7 @@ export async function handleGetFormSubmissions(args: { formId: string; limit?: n
   try {
     const client = await getHubSpotClientAsync();
     const result = await client.getFormSubmissions(args.formId, args.limit || 20, args.after);
-    const sanitized = sanitizeHubSpotResponse(result, 'hubspot:forms/submissions', FORM_LITERAL_KEYS);
+    const sanitized = sanitizeHubSpotResponse(result, 'hubspot:forms/submissions', FORM_LITERAL_RULES);
 
     logger.info(`Retrieved ${result.results.length} submissions for form ${args.formId}`);
     return {

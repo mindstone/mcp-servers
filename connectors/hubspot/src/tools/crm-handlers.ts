@@ -8,7 +8,7 @@ import {
 } from '../utils/error-parser.js';
 import logger from '../utils/logger.js';
 import {
-  PROPERTY_SCHEMA_LITERAL_KEYS,
+  PROPERTY_SCHEMA_LITERAL_RULES,
   sanitizeHubSpotResponse,
 } from '../sanitize.js';
 import {
@@ -598,7 +598,7 @@ export async function handleListProperties(args: { objectType: string }) {
   try {
     const client = await getHubSpotClientAsync();
     const result = await client.listProperties(args.objectType);
-    return sanitizeHubSpotResponse(result, 'hubspot:properties', PROPERTY_SCHEMA_LITERAL_KEYS);
+    return sanitizeHubSpotResponse(result, 'hubspot:properties', PROPERTY_SCHEMA_LITERAL_RULES);
   } catch (error) {
     const parsed = parseSharedHubSpotError(error, { objectType: args.objectType, operation: 'list_properties', args });
     logger.error(`List properties for ${args.objectType} failed:`, parsed);
