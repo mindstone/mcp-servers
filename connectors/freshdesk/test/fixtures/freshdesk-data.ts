@@ -1,4 +1,13 @@
-import type { FreshdeskTicket, FreshdeskConversation, FreshdeskTicketField } from '../../src/types.js';
+import type {
+  FreshdeskTicket,
+  FreshdeskConversation,
+  FreshdeskTicketField,
+  FreshdeskAgent,
+  FreshdeskGroup,
+  FreshdeskContact,
+  FreshdeskCompany,
+  FreshdeskSolutionArticle,
+} from '../../src/types.js';
 
 export function makeTicket(id: number, overrides: Partial<FreshdeskTicket> = {}): FreshdeskTicket {
   return {
@@ -77,4 +86,113 @@ export const mockTicketFields: FreshdeskTicketField[] = [
   makeTicketField(2, 'priority', 'Priority', 'default_priority'),
   makeTicketField(3, 'subject', 'Subject', 'default_subject'),
   makeTicketField(4, 'cf_custom_dropdown', 'Custom Dropdown', 'custom_dropdown'),
+];
+
+export function makeAgent(id: number, overrides: Partial<FreshdeskAgent> = {}): FreshdeskAgent {
+  return {
+    id,
+    available: true,
+    occasional: false,
+    ticket_scope: 1,
+    group_ids: [1],
+    contact: {
+      name: `Agent ${id}`,
+      email: `agent${id}@testacme.freshdesk.com`,
+    },
+    created_at: '2025-06-01T09:00:00Z',
+    updated_at: '2026-01-10T09:00:00Z',
+    ...overrides,
+  };
+}
+
+export function makeGroup(id: number, overrides: Partial<FreshdeskGroup> = {}): FreshdeskGroup {
+  return {
+    id,
+    name: `Group ${id}`,
+    description: `Group ${id} description`,
+    group_type: 'support',
+    created_at: '2025-06-01T09:00:00Z',
+    updated_at: '2026-01-10T09:00:00Z',
+    ...overrides,
+  };
+}
+
+export const mockAgents: FreshdeskAgent[] = [
+  makeAgent(200),
+  makeAgent(201, { contact: { name: 'Jane Agent', email: 'jane@testacme.freshdesk.com' } }),
+];
+
+export const mockGroups: FreshdeskGroup[] = [
+  makeGroup(1, { name: 'Support' }),
+  makeGroup(2, { name: 'Escalations' }),
+];
+
+export function makeContact(id: number, overrides: Partial<FreshdeskContact> = {}): FreshdeskContact {
+  return {
+    id,
+    name: `Contact ${id}`,
+    email: `contact${id}@example.com`,
+    phone: '+14155550100',
+    job_title: 'Support Manager',
+    company_id: 900,
+    description: `Contact ${id} notes`,
+    tags: ['vip'],
+    active: true,
+    created_at: '2025-08-01T09:00:00Z',
+    updated_at: '2026-01-10T09:00:00Z',
+    ...overrides,
+  };
+}
+
+export function makeCompany(id: number, overrides: Partial<FreshdeskCompany> = {}): FreshdeskCompany {
+  return {
+    id,
+    name: `Company ${id}`,
+    description: `Company ${id} description`,
+    note: `Company ${id} internal note`,
+    domains: [`company${id}.example.com`],
+    industry: 'Software',
+    tier: 'Enterprise',
+    health_score: 'Good',
+    created_at: '2025-08-01T09:00:00Z',
+    updated_at: '2026-01-10T09:00:00Z',
+    ...overrides,
+  };
+}
+
+export const mockContacts: FreshdeskContact[] = [
+  makeContact(100),
+  makeContact(101, { name: 'Jane Customer', email: 'jane@example.com' }),
+];
+
+export const mockCompanies: FreshdeskCompany[] = [
+  makeCompany(900, { name: 'Acme Corp', domains: ['acme.example.com'] }),
+  makeCompany(901, { name: 'TechCorp' }),
+];
+
+export function makeArticle(
+  id: number,
+  overrides: Partial<FreshdeskSolutionArticle> = {},
+): FreshdeskSolutionArticle {
+  return {
+    id,
+    title: `Article ${id}: Resetting your password`,
+    description: '<p>Go to Settings and click Reset password.</p>',
+    description_text: 'Go to Settings and click Reset password.',
+    status: 2,
+    folder_id: 50,
+    category_id: 10,
+    thumbs_up: 12,
+    thumbs_down: 1,
+    hits: 340,
+    tags: ['password', 'account'],
+    created_at: '2025-09-01T09:00:00Z',
+    updated_at: '2026-01-10T09:00:00Z',
+    ...overrides,
+  };
+}
+
+export const mockArticles: FreshdeskSolutionArticle[] = [
+  makeArticle(500),
+  makeArticle(501, { title: 'Article 501: Billing FAQ', status: 1 }),
 ];

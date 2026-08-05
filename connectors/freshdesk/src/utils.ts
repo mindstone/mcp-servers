@@ -38,6 +38,17 @@ export function validateSubdomain(domain: string): void {
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
 
 /**
+ * Standard payload returned by tools when no Freshdesk account is connected.
+ */
+export function noAccountError(): string {
+  return JSON.stringify({
+    ok: false,
+    error: 'No Freshdesk account connected',
+    resolution: 'Use configure_freshdesk to connect your account.',
+  });
+}
+
+/**
  * Wraps a tool handler with standard error handling.
  *
  * - On success: returns the string result as a text content block.

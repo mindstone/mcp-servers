@@ -19,7 +19,7 @@ describe('Smoke test — tool registration', () => {
     if (cleanupConfig) cleanupConfig();
   });
 
-  it('registers exactly 11 tools with correct names', async () => {
+  it('registers exactly 20 tools with correct names', async () => {
     // Create temp config — use the harness API with defaultAccountKey for Freshdesk
     const tempConfig = createTempConfig({
       accounts: [
@@ -47,25 +47,76 @@ describe('Smoke test — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(11);
+    expect(toolsResult.tools).toHaveLength(20);
     expect(toolNames).toEqual([
       'add_freshdesk_note',
       'configure_freshdesk',
       'create_freshdesk_ticket',
+      'get_freshdesk_company',
+      'get_freshdesk_contact',
+      'get_freshdesk_solution_article',
       'get_freshdesk_ticket',
       'list_freshdesk_accounts',
+      'list_freshdesk_agents',
+      'list_freshdesk_companies',
+      'list_freshdesk_contacts',
+      'list_freshdesk_groups',
       'list_freshdesk_ticket_fields',
       'list_freshdesk_tickets',
       'remove_freshdesk_account',
       'reply_to_freshdesk_ticket',
+      'search_freshdesk_contacts',
+      'search_freshdesk_solutions',
       'search_freshdesk_tickets',
       'update_freshdesk_ticket',
     ]);
   });
+
+  it('marks production-impacting writes with destructiveHint: true', async () => {
+    const tempConfig = createTempConfig({
+      accounts: [
+        {
+          domain: 'testacme',
+          apiKey: 'mock-test-key',
+          agentEmail: 'agent@testacme.freshdesk.com',
+          authenticatedAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+      defaultAccount: 'testacme',
+      defaultAccountKey: 'defaultDomain',
+    });
+    cleanupConfig = tempConfig.cleanup;
+
+    testClient = await createTestClient({
+      env: {
+        FRESHDESK_CONFIG_PATH: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const toolsResult = await testClient.client.listTools();
+    const writeTools = [
+      'configure_freshdesk',
+      'create_freshdesk_ticket',
+      'update_freshdesk_ticket',
+      'reply_to_freshdesk_ticket',
+      'add_freshdesk_note',
+      'remove_freshdesk_account',
+    ];
+
+    for (const name of writeTools) {
+      const tool = toolsResult.tools.find((t) => t.name === name);
+      expect(tool, `${name} should be registered`).toBeDefined();
+      expect(
+        tool!.annotations?.destructiveHint,
+        `${name} should declare destructiveHint: true`,
+      ).toBe(true);
+    }
+  });
 });
 
 describe('Spawned stdio smoke test', () => {
-  it('lists 11 tools from built dist/index.js', async () => {
+  it('lists 20 tools from built dist/index.js', async () => {
     const { createStdioTestClient } = await import('@mindstone/mcp-test-harness');
     const { join } = await import('path');
 
@@ -94,7 +145,7 @@ describe('Spawned stdio smoke test', () => {
 
       try {
         const toolsResult = await client.client.listTools();
-        expect(toolsResult.tools).toHaveLength(11);
+        expect(toolsResult.tools).toHaveLength(20);
       } finally {
         await client.close();
       }

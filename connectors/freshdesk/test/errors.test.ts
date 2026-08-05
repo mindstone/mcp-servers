@@ -80,7 +80,7 @@ describe('Freshdesk error handling', () => {
     expect(parsed.resolution).toBeTruthy();
   });
 
-  it('returns RATE_LIMITED for 429 with Retry-After', async () => {
+  it('returns RATE_LIMITED for 429 after exhausting retries', async () => {
     const tc = makeDefaultConfig();
     cleanupConfig = tc.cleanup;
     mswServer.use(...createFreshdeskHandlers());
@@ -100,7 +100,6 @@ describe('Freshdesk error handling', () => {
     expect(parsed.ok).toBe(false);
     expect(parsed.code).toBe('RATE_LIMITED');
     expect(parsed.error).toContain('Rate limited');
-    expect(parsed.error).toContain('60 seconds');
   });
 
   it('returns error when no account connected', async () => {

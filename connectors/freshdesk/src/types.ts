@@ -88,6 +88,86 @@ export interface FreshdeskTicketField {
   choices?: Record<string, unknown> | Array<string | [string, string]>;
 }
 
+export interface FreshdeskAgent {
+  id: number;
+  available?: boolean;
+  occasional?: boolean;
+  signature?: string;
+  ticket_scope?: number;
+  group_ids?: number[];
+  role_ids?: number[];
+  contact?: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    mobile?: string;
+  };
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface FreshdeskGroup {
+  id: number;
+  name: string;
+  description?: string;
+  escalate_to?: number;
+  unassigned_for?: string;
+  business_hour_id?: number;
+  group_type?: string;
+  agent_ids?: number[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface FreshdeskContact {
+  id: number;
+  name?: string;
+  email?: string;
+  phone?: string;
+  mobile?: string;
+  twitter_id?: string;
+  job_title?: string;
+  company_id?: number;
+  description?: string;
+  address?: string;
+  tags?: string[];
+  active?: boolean;
+  deleted?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface FreshdeskCompany {
+  id: number;
+  name: string;
+  description?: string;
+  note?: string;
+  domains?: string[];
+  industry?: string;
+  tier?: string;
+  health_score?: string;
+  account_tier?: string;
+  renewal_date?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface FreshdeskSolutionArticle {
+  id: number;
+  title: string;
+  description?: string;
+  description_text?: string;
+  status?: number; // 1 = draft, 2 = published
+  folder_id?: number;
+  category_id?: number;
+  thumbs_up?: number;
+  thumbs_down?: number;
+  hits?: number;
+  tags?: string[];
+  created_at?: string;
+  updated_at?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Status / Priority / Source maps
 // ---------------------------------------------------------------------------

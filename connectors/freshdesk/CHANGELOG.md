@@ -11,6 +11,16 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+- `list_freshdesk_agents` and `list_freshdesk_groups` tools — discover valid agent and group IDs for the existing `responder_id`/`group_id` assignment parameters on ticket create/update. Names and descriptions are returned inside untrusted-content envelopes.
+- Contact and company read tools: `list_freshdesk_contacts` (email/company filters), `search_freshdesk_contacts` (Freshdesk query syntax), `get_freshdesk_contact`, `list_freshdesk_companies`, `get_freshdesk_company`. Names, job titles, addresses, descriptions, and notes are returned inside untrusted-content envelopes.
+- Knowledge base read tools: `search_freshdesk_solutions` (keyword search via `/search/solutions`) and `get_freshdesk_solution_article` (full article body). Titles and bodies are returned inside untrusted-content envelopes.
+
+### Changed
+- GET requests now retry in place on HTTP 429 (max 2 retries, honouring `Retry-After` capped at 30 seconds, with jitter) instead of failing immediately — plan-capped per-minute rate limits previously hard-failed under load. Writes are never retried automatically, so a retried POST cannot create duplicate tickets or replies.
+- Ticket subjects are now wrapped in untrusted-content envelopes in every output path (previously only search results wrapped them), and the envelope implementation now delegates to the canonical shared `wrapUntrusted` helper instead of a hand-rolled copy.
+- `reply_to_freshdesk_ticket` and `add_freshdesk_note` now declare `destructiveHint: true` — both write to production tickets (public replies are customer-facing).
+
 ## [0.2.2] - 2026-05-14
 ### Added
 - **registry**: Cohort A backfill — 12 API-key OSS connectors get server.json + mcpName. fathom, humaans, kling, mixmax, nano-banana, napkin, pandadoc, freshdesk, elevenlabs, retell-ai, runway, talentlms each gain a registry-shaped server.json (validated against registry.modelcontextprotocol.io) and an mcpName field on package.json under the io.github.mindstone namespace.
