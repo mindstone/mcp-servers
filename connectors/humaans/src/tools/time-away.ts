@@ -183,4 +183,55 @@ RELATED TOOLS:
       });
     }),
   );
+
+  server.registerTool(
+    'list_humaans_time_away_allocations',
+    {
+      description:
+        `List time away allocations in Humaans — which time off policy applies to each person, and from which date.
+
+Allocations link a person to a time away policy (the policy defines their allowance and balances).
+Use this to answer "which PTO policy is Jane on?" or "who is on the US policy?".
+
+Example: { "personId": "VMB1yzL5uL8VvNNCJc9rykJz" }
+
+RELATED TOOLS:
+- list_humaans_people: Find personId to filter by
+- list_humaans_time_away: See actual time off taken
+- list_humaans_time_away_types: See available time away types`,
+      inputSchema: z.object({
+        personId: z.string().optional()
+          .describe('Filter by person ID'),
+        limit: z.number().min(1).max(250).optional()
+          .describe('Max results (default 100, max 250)'),
+        skip: z.number().min(0).optional()
+          .describe('Number of results to skip'),
+      }),
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    withErrorHandling(async (args) => {
+      if (!isConfigured()) return noApiKeyError();
+
+      const limit = Math.min(Math.max(args.limit ?? 100, 1), 250);
+      const skip = Math.max(args.skip ?? 0, 0);
+      const params = new URLSearchParams();
+      params.set('$limit', String(limit));
+      params.set('$skip', String(skip));
+
+      if (args.personId) params.set('personId', args.personId);
+
+      const result = await humaansFetch<HumaansListResponse<Record<string, unknown>>>(
+        `/time-away-allocations?${params.toString()}`,
+      );
+
+      const hint = paginationHint(result.total, result.skip, result.data.length);
+      return JSON.stringify({
+        ok: true,
+        allocations: result.data,
+        count: result.data.length,
+        total: result.total,
+        pagination: hint,
+      });
+    }),
+  );
 }

@@ -178,4 +178,46 @@ describe('Humaans time away tools', () => {
     expect(json.timeAwayTypes[0]).toHaveProperty('name');
     expect(json.timeAwayTypes.map((t) => t.name)).toContain('Paid time off');
   });
+
+  it('list_humaans_time_away_allocations returns allocations', async () => {
+    await setup();
+    const result = await testClient.callTool('list_humaans_time_away_allocations', {});
+    const json = result.json as {
+      ok: boolean;
+      allocations: Array<{ id: string; personId: string; timeAwayPolicyId: string }>;
+      count: number;
+      total: number;
+    };
+
+    expect(json.ok).toBe(true);
+    expect(json.allocations).toHaveLength(2);
+    expect(json.count).toBe(2);
+    expect(json.allocations[0]).toHaveProperty('personId');
+    expect(json.allocations[0]).toHaveProperty('timeAwayPolicyId');
+  });
+
+  it('list_humaans_time_away_allocations forwards the personId filter', async () => {
+    let capturedPersonId: string | null = null;
+    mswServer.use(
+      http.get('https://app.humaans.io/api/time-away-allocations', ({ request }) => {
+        const auth = request.headers.get('Authorization');
+        if (auth !== `Bearer ${API_KEY}`) {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        capturedPersonId = new URL(request.url).searchParams.get('personId');
+        return HttpResponse.json({ total: 0, limit: 100, skip: 0, data: [] });
+      }),
+    );
+
+    testClient = await createTestClient({
+      env: { HUMAANS_API_KEY: API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('list_humaans_time_away_allocations', {
+      personId: 'person-001',
+    });
+    const json = result.json as { ok: boolean };
+    expect(json.ok).toBe(true);
+    expect(capturedPersonId).toBe('person-001');
+  });
 });

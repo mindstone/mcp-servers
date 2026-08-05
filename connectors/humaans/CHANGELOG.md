@@ -11,6 +11,9 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+- `list_humaans_time_away_allocations` — list time away allocations (the policy assignment behind each person's PTO balance), with `personId` filter and pagination.
+
 ### Security
 - Envelope the free-text fields authored in Humaans — `note`/`reviewNote` on time-away entries and `note` on job roles — in `<untrusted-content>` wrappers (with close-tag breakout escaping) before they reach the model. These list/get responses previously returned the raw API objects unenveloped.
 

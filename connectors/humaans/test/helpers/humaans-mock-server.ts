@@ -8,6 +8,7 @@ import {
   mockTimeAway,
   mockTimeAwayTypes,
   mockCreatedTimeAway,
+  mockTimeAwayAllocations,
 } from '../fixtures/humaans-data.js';
 
 const BASE = 'https://app.humaans.io/api';
@@ -137,6 +138,18 @@ export function createHumaansHandlers(expectedKey = 'test-humaans-key') {
         limit: 100,
         skip: 0,
         data: mockTimeAwayTypes,
+      });
+    }),
+
+    // GET /time-away-allocations
+    http.get(`${BASE}/time-away-allocations`, ({ request }) => {
+      const authError = checkAuth(request);
+      if (authError) return authError;
+      return HttpResponse.json({
+        total: mockTimeAwayAllocations.length,
+        limit: 100,
+        skip: 0,
+        data: mockTimeAwayAllocations,
       });
     }),
   ];
