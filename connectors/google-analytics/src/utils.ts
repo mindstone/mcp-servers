@@ -1,5 +1,5 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
 import { GoogleAnalyticsError, type DataApiResponse } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
@@ -143,6 +143,30 @@ export function toNameList(value: unknown): string[] {
     .split(',')
     .map((v) => v.trim())
     .filter(Boolean);
+}
+
+/**
+ * Google returns int64 fields as either JSON numbers or strings depending on
+ * the surface — accept both and pass the value through unchanged.
+ */
+export const int64Field = z.union([z.string(), z.number()]);
+
+/**
+ * Validate an external API response body against a Zod schema. Google API
+ * responses are otherwise only TypeScript-cast; a shape mismatch must fail
+ * closed with a structured error rather than propagate garbage downstream.
+ * Schemas use .passthrough() so new vendor fields stay forward-compatible.
+ */
+export function parseApiResponse<T>(schema: z.ZodType<T>, data: unknown, context: string): T {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    throw new GoogleAnalyticsError(
+      `Google API returned an unexpected response shape for ${context}.`,
+      'INVALID_API_RESPONSE',
+      'Try again. If the problem persists, the API response format may have changed — check for a connector update.',
+    );
+  }
+  return result.data;
 }
 
 /** Strip undefined values so the request body stays compact. */

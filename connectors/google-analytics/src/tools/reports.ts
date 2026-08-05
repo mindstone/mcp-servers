@@ -10,6 +10,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { googleApi, propertyPath, Bases } from '../client.js';
+import { filterExpressionSchema } from '../filters.js';
 import { DEFAULT_ROW_WARNING_THRESHOLD, type DataApiResponse } from '../types.js';
 import {
   compactObject,
@@ -56,8 +57,12 @@ const RunReportInputShape = {
     .union([z.string(), z.array(z.string())])
     .optional()
     .describe('Order field, prefix with - for descending.'),
-  dimension_filter: z.any().optional().describe('Raw GA4 dimensionFilter object.'),
-  metric_filter: z.any().optional().describe('Raw GA4 metricFilter object.'),
+  dimension_filter: filterExpressionSchema
+    .optional()
+    .describe('GA4 dimensionFilter (FilterExpression object).'),
+  metric_filter: filterExpressionSchema
+    .optional()
+    .describe('GA4 metricFilter (FilterExpression object).'),
   keep_empty_rows: z.boolean().optional(),
   return_property_quota: z.boolean().optional(),
   include_totals: z.boolean().optional(),
@@ -90,8 +95,8 @@ const RealtimeInputShape = {
       }),
     )
     .optional(),
-  dimension_filter: z.any().optional(),
-  metric_filter: z.any().optional(),
+  dimension_filter: filterExpressionSchema.optional(),
+  metric_filter: filterExpressionSchema.optional(),
   return_property_quota: z.boolean().optional(),
 };
 
@@ -111,8 +116,8 @@ const PivotInputShape = {
       }),
     )
     .min(1),
-  dimension_filter: z.any().optional(),
-  metric_filter: z.any().optional(),
+  dimension_filter: filterExpressionSchema.optional(),
+  metric_filter: filterExpressionSchema.optional(),
   keep_empty_rows: z.boolean().optional(),
   return_property_quota: z.boolean().optional(),
 };

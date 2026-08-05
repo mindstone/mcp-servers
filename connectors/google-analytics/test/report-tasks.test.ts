@@ -136,6 +136,104 @@ describe('report task tools', () => {
     expect(inner.toLowerCase()).not.toContain('</untrusted-content');
   });
 
+  it('rejects malformed dimension_filter / metric_filter values instead of passing them through', async () => {
+    await setup();
+    for (const bad of [
+      { dimension_filter: 'country' },
+      { dimension_filter: ['country'] },
+      { dimension_filter: { filter: { fieldName: '' } } },
+      { metric_filter: { filter: { fieldName: 'totalUsers', unknownFilter: {} } } },
+      { metric_filter: 42 },
+    ]) {
+      const result = await testClient.client.callTool({
+        name: 'ga_create_report_task',
+        arguments: { property_id: '200', metrics: ['totalUsers'], ...bad },
+      });
+      expect(result.isError, JSON.stringify(bad)).toBe(true);
+      const text = (result.content as TextContent[])[0].text;
+      // Rejected either by the SDK input-schema gate ("MCP error … Invalid
+      // arguments") or by the handler's own parse (INVALID_ARGUMENTS).
+      expect(/invalid/i.test(text), text).toBe(true);
+    }
+  });
+
+  it('accepts a valid nested FilterExpression and forwards it to the API', async () => {
+    let captured: unknown;
+    mswServer.use(...createGoogleHandlers());
+    mswServer.use(
+      http.post(
+        new RegExp(
+          `^${'https://analyticsdata.googleapis.com/v1alpha'.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/properties/[^/]+/reportTasks$`,
+        ),
+        async ({ request }) => {
+          captured = await request.json();
+          return HttpResponse.json({
+            name: 'properties/200/reportTasks/800',
+            reportMetadata: { state: 'CREATING' },
+          });
+        },
+      ),
+    );
+    testClient = await createTestClient({
+      env: {
+        GOOGLE_APPLICATION_CREDENTIALS: FIXTURE_ADC,
+        GA4_PROPERTY_ID: '200',
+      },
+    });
+    const filter = {
+      andGroup: {
+        expressions: [
+          {
+            filter: {
+              fieldName: 'country',
+              stringFilter: { matchType: 'EXACT', value: 'United Kingdom' },
+            },
+          },
+          { notExpression: { filter: { fieldName: 'city', emptyFilter: {} } } },
+        ],
+      },
+    };
+    const result = await testClient.client.callTool({
+      name: 'ga_create_report_task',
+      arguments: {
+        property_id: '200',
+        metrics: ['totalUsers'],
+        dimension_filter: filter,
+      },
+    });
+    const parsed = parseToolResult(result);
+    expect(parsed.ok).toBe(true);
+    expect(
+      (captured as { reportDefinition?: { dimensionFilter?: unknown } }).reportDefinition
+        ?.dimensionFilter,
+    ).toEqual(filter);
+  });
+
+  it('fails closed with INVALID_API_RESPONSE when the vendor returns a malformed report task', async () => {
+    mswServer.use(...createGoogleHandlers());
+    mswServer.use(
+      http.get(
+        new RegExp(
+          `^${'https://analyticsdata.googleapis.com/v1alpha'.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/properties/[^/]+/reportTasks/[^/]+$`,
+        ),
+        () => HttpResponse.json({ reportMetadata: { state: 123 } }),
+      ),
+    );
+    testClient = await createTestClient({
+      env: {
+        GOOGLE_APPLICATION_CREDENTIALS: FIXTURE_ADC,
+        GA4_PROPERTY_ID: '200',
+      },
+    });
+    const result = await testClient.client.callTool({
+      name: 'ga_get_report_task',
+      arguments: { task_id: '800' },
+    });
+    const parsed = parseToolResult(result);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.code).toBe('INVALID_API_RESPONSE');
+  });
+
   it('returns a structured error when task_id is empty', async () => {
     await setup();
     const result = await testClient.client.callTool({

@@ -12,11 +12,14 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { googleApi, propertyPath, Bases } from '../client.js';
+import { filterExpressionSchema } from '../filters.js';
 import { GoogleAnalyticsError, type DataApiResponse } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import {
   compactObject,
   formatRows,
+  int64Field,
+  parseApiResponse,
   parseOrderBy,
   toNameList,
   UNTRUSTED_SOURCES,
@@ -40,17 +43,29 @@ const CREATE_TASK = {
   openWorldHint: true,
 } as const;
 
-interface ReportTask {
-  name?: string;
-  reportMetadata?: {
-    state?: string;
-    taskRowCount?: number;
-    totalRowCount?: number;
-    beginCreatingTime?: string;
-    creationQuotaTokensCharged?: number;
-    errorMessage?: string;
-  };
-}
+/**
+ * Runtime shape of a report task resource. Validated at the boundary
+ * (fail-closed) instead of only TypeScript-cast; .passthrough() keeps the
+ * alpha surface forward-compatible with new vendor fields.
+ */
+const reportTaskSchema = z
+  .object({
+    name: z.string().optional(),
+    reportMetadata: z
+      .object({
+        state: z.string().optional(),
+        taskRowCount: int64Field.optional(),
+        totalRowCount: int64Field.optional(),
+        beginCreatingTime: z.string().optional(),
+        creationQuotaTokensCharged: int64Field.optional(),
+        errorMessage: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
+type ReportTask = z.infer<typeof reportTaskSchema>;
 
 /** Resolve `properties/<id>/reportTasks/<taskId>` from flexible input. */
 function reportTaskPath(propertyId: string | undefined, taskId: string): string {
@@ -127,8 +142,12 @@ const CreateReportTaskInputShape = {
     .union([z.string(), z.array(z.string())])
     .optional()
     .describe('Order field, prefix with - for descending.'),
-  dimension_filter: z.any().optional().describe('Raw GA4 dimensionFilter object.'),
-  metric_filter: z.any().optional().describe('Raw GA4 metricFilter object.'),
+  dimension_filter: filterExpressionSchema
+    .optional()
+    .describe('GA4 dimensionFilter (FilterExpression object).'),
+  metric_filter: filterExpressionSchema
+    .optional()
+    .describe('GA4 metricFilter (FilterExpression object).'),
   keep_empty_rows: z.boolean().optional(),
   currency_code: z.string().optional(),
 };
@@ -162,24 +181,28 @@ export function registerReportTaskTools(server: McpServer): void {
       const orderBys = parseOrderBy(args.order_by, dimensions, metricList);
       const property = propertyPath(args.property_id);
 
-      const response = await googleApi<ReportTask>(`/${property}/reportTasks`, {
-        method: 'POST',
-        body: {
-          reportDefinition: compactObject({
-            dateRanges: [{ startDate: args.start_date, endDate: args.end_date }],
-            dimensions: dimensions.map((name) => ({ name })),
-            metrics: metricList.map((name) => ({ name })),
-            limit: String(args.limit),
-            offset: args.offset !== undefined ? String(args.offset) : undefined,
-            orderBys: orderBys.length ? orderBys : undefined,
-            dimensionFilter: args.dimension_filter,
-            metricFilter: args.metric_filter,
-            keepEmptyRows: args.keep_empty_rows,
-            currencyCode: args.currency_code,
-          }),
-        },
-        baseUrl: Bases.dataAlpha,
-      });
+      const response = parseApiResponse(
+        reportTaskSchema,
+        await googleApi(`/${property}/reportTasks`, {
+          method: 'POST',
+          body: {
+            reportDefinition: compactObject({
+              dateRanges: [{ startDate: args.start_date, endDate: args.end_date }],
+              dimensions: dimensions.map((name) => ({ name })),
+              metrics: metricList.map((name) => ({ name })),
+              limit: String(args.limit),
+              offset: args.offset !== undefined ? String(args.offset) : undefined,
+              orderBys: orderBys.length ? orderBys : undefined,
+              dimensionFilter: args.dimension_filter,
+              metricFilter: args.metric_filter,
+              keepEmptyRows: args.keep_empty_rows,
+              currencyCode: args.currency_code,
+            }),
+          },
+          baseUrl: Bases.dataAlpha,
+        }),
+        'reportTasks.create',
+      );
       return JSON.stringify({ ok: true, property, reportTask: mapReportTask(response) });
     }),
   );
@@ -194,7 +217,11 @@ export function registerReportTaskTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const name = reportTaskPath(args.property_id, args.task_id);
-      const response = await googleApi<ReportTask>(`/${name}`, { baseUrl: Bases.dataAlpha });
+      const response = parseApiResponse(
+        reportTaskSchema,
+        await googleApi(`/${name}`, { baseUrl: Bases.dataAlpha }),
+        'reportTasks.get',
+      );
       return JSON.stringify({
         ok: true,
         property: name.split('/reportTasks/')[0],

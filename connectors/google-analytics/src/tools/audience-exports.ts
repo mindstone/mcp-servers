@@ -16,7 +16,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { googleApi, paginate, propertyPath, Bases } from '../client.js';
 import { GoogleAnalyticsError } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
-import { compactObject, UNTRUSTED_SOURCES, withErrorHandling } from '../utils.js';
+import { compactObject, int64Field, parseApiResponse, UNTRUSTED_SOURCES, withErrorHandling } from '../utils.js';
 
 const READ_ONLY = {
   readOnlyHint: true,
@@ -35,16 +35,46 @@ const CREATE_EXPORT = {
   openWorldHint: true,
 } as const;
 
-interface AudienceExport {
-  name?: string;
-  audience?: string;
-  audienceDisplayName?: string;
-  dimensions?: Array<{ dimensionName?: string }>;
-  state?: string;
-  beginCreatingTime?: string;
-  creationQuotaTokensCharged?: number;
-  rowCount?: number;
-}
+/**
+ * Runtime shape of an audience export resource. Validated at the boundary
+ * (fail-closed) instead of only TypeScript-cast; .passthrough() keeps the
+ * surface forward-compatible with new vendor fields.
+ */
+const audienceExportSchema = z
+  .object({
+    name: z.string().optional(),
+    audience: z.string().optional(),
+    audienceDisplayName: z.string().optional(),
+    dimensions: z
+      .array(z.object({ dimensionName: z.string().optional() }).passthrough())
+      .optional(),
+    state: z.string().optional(),
+    beginCreatingTime: z.string().optional(),
+    creationQuotaTokensCharged: int64Field.optional(),
+    rowCount: int64Field.optional(),
+  })
+  .passthrough();
+
+type AudienceExport = z.infer<typeof audienceExportSchema>;
+
+/** Runtime shape of the audienceExports:query response. */
+const audienceExportQuerySchema = z
+  .object({
+    audienceRows: z
+      .array(
+        z
+          .object({
+            dimensionValues: z
+              .array(z.object({ value: z.string().optional() }).passthrough())
+              .optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
+    audienceExport: audienceExportSchema.optional(),
+    rowCount: int64Field.optional(),
+  })
+  .passthrough();
 
 /** Resolve `properties/<id>/audienceExports/<exportId>` from flexible input. */
 function audienceExportPath(propertyId: string | undefined, exportId: string): string {
@@ -151,16 +181,20 @@ export function registerAudienceExportTools(server: McpServer): void {
     withErrorHandling(async (rawArgs) => {
       const args = z.object(CreateAudienceExportInputShape).parse(rawArgs ?? {});
       const property = propertyPath(args.property_id);
-      const response = await googleApi<AudienceExport>(`/${property}/audienceExports`, {
-        method: 'POST',
-        body: {
-          audienceExport: compactObject({
-            audience: audiencePath(args.property_id, args.audience),
-            dimensions: args.dimensions?.map((dimensionName) => ({ dimensionName })),
-          }),
-        },
-        baseUrl: Bases.data,
-      });
+      const response = parseApiResponse(
+        audienceExportSchema,
+        await googleApi(`/${property}/audienceExports`, {
+          method: 'POST',
+          body: {
+            audienceExport: compactObject({
+              audience: audiencePath(args.property_id, args.audience),
+              dimensions: args.dimensions?.map((dimensionName) => ({ dimensionName })),
+            }),
+          },
+          baseUrl: Bases.data,
+        }),
+        'audienceExports.create',
+      );
       return JSON.stringify({ ok: true, property, audienceExport: mapAudienceExport(response) });
     }),
   );
@@ -175,7 +209,11 @@ export function registerAudienceExportTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const name = audienceExportPath(args.property_id, args.export_id);
-      const response = await googleApi<AudienceExport>(`/${name}`, { baseUrl: Bases.data });
+      const response = parseApiResponse(
+        audienceExportSchema,
+        await googleApi(`/${name}`, { baseUrl: Bases.data }),
+        'audienceExports.get',
+      );
       return JSON.stringify({
         ok: true,
         property: name.split('/audienceExports/')[0],
@@ -207,7 +245,11 @@ export function registerAudienceExportTools(server: McpServer): void {
       return JSON.stringify({
         ok: true,
         property,
-        audienceExports: exports.map(mapAudienceExport),
+        audienceExports: exports.map((item) =>
+          mapAudienceExport(
+            parseApiResponse(audienceExportSchema, item, 'audienceExports.list'),
+          ),
+        ),
       });
     }),
   );
@@ -223,15 +265,15 @@ export function registerAudienceExportTools(server: McpServer): void {
     withErrorHandling(async (rawArgs) => {
       const args = z.object(QueryAudienceExportInputShape).parse(rawArgs ?? {});
       const name = audienceExportPath(args.property_id, args.export_id);
-      const response = await googleApi<{
-        audienceRows?: Array<{ dimensionValues?: Array<{ value?: string }> }>;
-        audienceExport?: AudienceExport;
-        rowCount?: number;
-      }>(`/${name}:query`, {
-        method: 'POST',
-        body: { offset: String(args.offset), limit: String(args.limit) },
-        baseUrl: Bases.data,
-      });
+      const response = parseApiResponse(
+        audienceExportQuerySchema,
+        await googleApi(`/${name}:query`, {
+          method: 'POST',
+          body: { offset: String(args.offset), limit: String(args.limit) },
+          baseUrl: Bases.data,
+        }),
+        'audienceExports.query',
+      );
 
       // Vendor-echoed dimension names become structural keys in the row
       // objects — envelope them like the recursive helper does (invariant #6).
