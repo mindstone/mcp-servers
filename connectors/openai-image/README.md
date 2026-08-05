@@ -206,6 +206,7 @@ The structured shape lets agentic hosts route to recovery flows rather than surf
 ## Security notes
 
 - Tool inputs that name local files (`edit_image.image_paths`, `edit_image.mask_path`) pass through a two-gate fence before any read: a lexical workspace pre-gate (the path must resolve lexically inside `MCP_WORKSPACE_PATH`), then a canonical containment gate (the path's `realpath` must land inside the canonical workspace **or** one of the declared roots in `MCP_ALLOWED_SYMLINK_ROOTS`, judged by `path.relative` segment semantics — never `startsWith`). Paths outside both are rejected with `WORKSPACE_FENCE_VIOLATION` to prevent symlink-escape and traversal. The same containment is applied to the generated-image output directory before any write, matching the host's built-in `Write` tool.
+- Reads are open-then-validate: after the fence approves the canonical path, the connector opens a descriptor, verifies via `fstat` that the opened inode is the same file the fence validated, and reads through the descriptor — closing the check-then-use race between fence check and read. A mid-flight swap fails closed with `WORKSPACE_FENCE_VIOLATION`.
 - Fence errors name the model-supplied input path and the workspace root only — never the canonical `realpath` of a symlink target — so the agent can self-correct without leaking the linked-Space destination.
 - Generated files are written with mode `0o600`.
 - `OPENAI_API_KEY` values are scrubbed from logs, structured error payloads, and stack traces — see `src/index.ts` `sanitizeUserFacingText`.

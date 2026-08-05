@@ -881,8 +881,34 @@ const loadLocalEditImage = async (
     );
   }
 
+  // Open-then-validate (closes the MED-1 check-then-use window): the fence
+  // validated the canonical path above, but reading by path afterwards would
+  // let a local race swap the file between check and read. Open a descriptor,
+  // confirm it is the same inode the fence validated, and read through the
+  // descriptor so a path swap cannot redirect the read outside the fence.
+  let handle: fs.promises.FileHandle | undefined;
   try {
-    const data = await fs.promises.readFile(realPath);
+    handle = await fs.promises.open(resolvedPath, 'r');
+    const openedStats = await handle.stat();
+    if (openedStats.dev !== stats.dev || openedStats.ino !== stats.ino) {
+      throw workspaceFenceError(
+        `${imageLabel} changed while it was being verified: ${inputPath}`,
+      );
+    }
+    if (openedStats.size === 0) {
+      throw workspaceFenceError(`${imageLabel} is empty (0 bytes): ${inputPath}`);
+    }
+    if (openedStats.size > MAX_LOCAL_IMAGE_BYTES) {
+      throw workspaceFenceError(`${imageLabel} exceeds 25MB limit: ${inputPath}`);
+    }
+
+    const data = await handle.readFile();
+    if (data.length === 0 || data.length > MAX_LOCAL_IMAGE_BYTES) {
+      throw workspaceFenceError(
+        `${imageLabel} size changed while it was being read: ${inputPath}`,
+      );
+    }
+
     return {
       path: realPath,
       filename: path.basename(resolvedPath),
@@ -890,7 +916,12 @@ const loadLocalEditImage = async (
       data,
     };
   } catch (error) {
+    if (error instanceof OpenAIImageToolError) {
+      throw error;
+    }
     throw workspaceFenceError(getLocalImageReadError(imageLabel, inputPath, error));
+  } finally {
+    await handle?.close().catch(() => undefined);
   }
 };
 
