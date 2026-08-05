@@ -127,7 +127,7 @@ const MAX_SANITIZE_NODES = 100_000;
 // keys are not enveloped — they must round-trip as identifiers — but a key
 // smuggling a close-tag variant would otherwise forge an envelope boundary in
 // model-visible output.
-const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content[ \t]*>/gi;
+const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content\s*>/gi;
 const ESCAPED_UNTRUSTED_CLOSE_TAG = '<\\/untrusted-content>';
 
 function defangKey(key: string): string {
