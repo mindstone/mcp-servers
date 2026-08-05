@@ -12,7 +12,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - `import_phone_number` and `delete_phone_number` tools, completing the telephony lifecycle: a Twilio number (Account SID + Auth Token) or SIP trunk number (inbound/outbound trunk config) can now be onboarded and later removed without leaving the agent loop. Numbers are E.164-validated before any upstream call; both tools carry `destructiveHint: true`.
 - `submit_conversation_feedback` tool: submits like/dislike feedback for a reviewed conversation, closing the quality-review loop against `POST /convai/conversations/{id}/feedback`.
 - `get_knowledge_base_rag_index_status` and `rebuild_knowledge_base_rag_index` tools: after uploading a knowledge-base document, agents can now check whether retrieval indexing has finished and trigger (re)indexing when it has not, instead of guessing when a document becomes retrievable.
-- `list_agent_tools` and `add_agent_tool` tools: workspace tools (webhook and client) can now be inventoried and created, so webhook wiring — the feature that makes ConvAI agents act on external systems — no longer requires the ElevenLabs dashboard. `add_agent_tool` fails closed when a webhook tool is missing its URL, accepts an `advanced_config` passthrough for the full platform schema, and carries `destructiveHint: true`.
+- `list_agent_tools` and `add_agent_tool` tools: workspace tools (webhook and client) can now be inventoried and created, so webhook wiring — the feature that makes ConvAI agents act on external systems — no longer requires the ElevenLabs dashboard. `add_agent_tool` fails closed when a webhook tool is missing its URL, requires webhook URLs to be public https destinations, accepts an `advanced_config` passthrough for platform fields beyond the first-class surface (first-class fields stay protected and the merged config is revalidated), and carries `destructiveHint: true`.
 
 ### Removed
 
@@ -21,6 +21,14 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ### Fixed
 
 - README Status section no longer claims a bootstrap placeholder version `0.0.0`; it now points at the released version and changelog, matching the sibling connectors.
+- `submit_conversation_feedback` and `rebuild_knowledge_base_rag_index` now carry `destructiveHint: true`. Both are production-impacting writes (analytics state, production indexing), so the previous `destructiveHint: false` under-reported them to hosts that gate writes on the annotation.
+
+### Security
+
+- `add_agent_tool` webhook URLs must now be public `https://` addresses. Previously any `z.string().url()`-shaped string passed, including `javascript:` and `file:` schemes and loopback, private, link-local, or cloud-metadata destinations such as `http://169.254.169.254/latest/meta-data` — all of which ElevenLabs would then dereference during conversations. The same public-https policy now applies to URL-mode `add_knowledge_base_document`, which ElevenLabs fetches server-side.
+- `add_agent_tool`'s `advanced_config` can no longer override the validated first-class fields. The deep-merge ran last, so a fragment such as `{"type": "webhook", "api_schema": {"url": "...", "method": "TRACE"}}` bypassed the type enum, the URL policy, and the method enum. First-class keys (`type`, `name`, `description`, `expects_response`, `api_schema.url`, `api_schema.method`) are now rejected inside `advanced_config`, and the merged tool config is revalidated against a discriminated schema before it is sent upstream.
+- Sanitizer literal exemptions are now value-shape-aware, not just key-name-based. Strings under structural keys (`id`, `*_id`, `role`, `type`, `status`, `timestamp`, `*_ids`, `*_numbers`) only stay literal when the value itself is id/enum-shaped; previously a collaborator could author prose under one of those key names inside arbitrary tool configuration (for example webhook `request_headers`) and have it reach the model unenveloped.
+- Telephony credentials are now redacted from model-visible output. Values under credential-shaped keys (`token`, `sid`, `*_secret`, `*_password`, `*_api_key`, …) are replaced with `[redacted]` on every response surface, and `import_phone_number` strips the exact submitted Twilio SID/Auth Token from success payloads and upstream error details that reflect them. Enveloping alone marked such text as untrusted but still disclosed the secret.
 
 ## [0.1.2] - 2026-08-03
 

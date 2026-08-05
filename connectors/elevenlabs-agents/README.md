@@ -150,6 +150,10 @@ Nor does an unexpected *shape* route text around the walk. A response whose root
 
 Because reads come back enveloped, the agent authoring tools strip one envelope from the values they are given. Copying a language, model id, prompt, or `advanced_config` fragment out of `get_agent` and back into `update_agent` therefore stores the original text upstream rather than the envelope around it.
 
+The structural literal exemptions in the walk are value-shape-aware, not just key-name-based: a string only stays literal under `id`/`status`/`role`/`type`/timestamp keys when it also looks like an id or enum (no whitespace or prose punctuation). This matters because arbitrary tool configuration (`add_agent_tool` request headers, parameter schemas) lets a collaborator choose key names, so a name-only exemption would pass authored prose through unenveloped. Values under credential-shaped keys (`token`, `sid`, `*_secret`, `*_password`, `*_api_key`) are replaced with `[redacted]` instead of being passed on at all, and `import_phone_number` additionally strips the exact submitted Twilio SID/token from any success payload or upstream error detail that reflects them.
+
+URLs the connector asks ElevenLabs to dereference server-side — webhook tools via `add_agent_tool` and URL-mode knowledge-base documents — must be public `https://` addresses. Non-HTTP schemes, plain HTTP, embedded credentials, loopback/private/link-local/CGNAT/multicast IP literals (including the cloud-metadata address 169.254.169.254), `localhost`-style hostnames, and single-label hostnames are rejected before any upstream call. `add_agent_tool`'s `advanced_config` deep-merges last but cannot set first-class fields (`type`, `name`, `description`, `expects_response`, `api_schema.url`, `api_schema.method`), and the merged tool config is revalidated before it is sent.
+
 Outbound numbers are validated in E.164 format before any billing-surface call is sent upstream. Scheduled batches run on ElevenLabs' servers even if the client app is closed, so they should be monitored with `list_batch_calls` / `get_batch_call` and stopped with `cancel_batch_call` when needed.
 
 ## Licence
