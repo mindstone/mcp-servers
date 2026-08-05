@@ -138,9 +138,17 @@ const SOURCES = {
   view: "apple-shortcuts:view",
 } as const;
 
-/** `wrapUntrusted` narrowed to defined input; CLI output here is never undefined. */
+/**
+ * `wrapUntrusted` narrowed to defined input; CLI output here is never undefined.
+ * Fails closed: if the helper contract ever changes and returns undefined for
+ * defined input, throw rather than fall back to returning raw untrusted text.
+ */
 function envelope(text: string, source: string): string {
-  return wrapUntrusted(text, source) ?? text;
+  const wrapped = wrapUntrusted(text, source);
+  if (wrapped === undefined) {
+    throw new Error("untrusted-content envelope helper returned no result for defined input");
+  }
+  return wrapped;
 }
 
 function timedOutResult(what: string) {
