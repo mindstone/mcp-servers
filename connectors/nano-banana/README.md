@@ -126,7 +126,7 @@ node dist/index.js
 
 ### Image generation
 - `nano_banana_generate` — Generate images from text descriptions
-- `nano_banana_edit` — Edit an existing image using AI
+- `nano_banana_edit` — Edit existing images using AI; accepts up to 14 reference images (`source_image_paths`) for multi-image composition/fusion
 
 ### Output resolution
 

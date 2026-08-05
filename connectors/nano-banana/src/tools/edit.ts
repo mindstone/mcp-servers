@@ -38,15 +38,79 @@ function getMimeTypeFromPath(filePath: string): string | null {
 }
 
 /**
- * Detect whether the user-supplied source_image_path is a remote URL the
- * sandbox should leave alone (https:// / http://). The connector currently
- * only consumes inline-base64 images from `inlineData`, so a URL falls
- * through to the existing not-found error path; the important thing is
- * that the sandbox check doesn't fire and prepend a misleading
- * "workspace sandbox" error message.
+ * Detect whether a user-supplied source image is a remote URL
+ * (https:// / http://). Remote URLs bypass the local-file sandbox —
+ * they never touch the filesystem.
  */
 function isRemoteUrl(value: string): boolean {
   return /^https?:\/\//i.test(value);
+}
+
+/**
+ * Gemini 3 image models accept up to 14 reference images per request
+ * (multi-image composition/fusion). Enforced across the combined
+ * source_image_path + source_image_paths inputs.
+ */
+export const MAX_REFERENCE_IMAGES = 14;
+
+interface LoadedSourceImage {
+  mimeType: string;
+  base64: string;
+}
+
+type LoadSourceResult =
+  | { ok: true; image: LoadedSourceImage }
+  | { ok: false; errorText: string };
+
+/**
+ * Read and base64-encode one local source image.
+ *
+ * ----------------------------------------------------------------
+ * SECURITY (M3.6): local source-image reads are sandboxed to under
+ * `MCP_WORKSPACE_PATH` (or `os.tmpdir()` when unset). LLM-controlled
+ * inputs cannot be allowed to point at arbitrary host files such as
+ * `~/.ssh/id_rsa` or `/etc/passwd`, where the bytes would otherwise
+ * be base64-encoded and shipped to the upstream Gemini API.
+ *
+ * Local paths run through `resolveSourcePath`, which:
+ *   1. Lexically resolves `~` and `..` and rejects paths outside
+ *      the workspace root before any disk read.
+ *   2. Canonicalises the file via `fs.realpathSync` so a symlink
+ *      inside the workspace pointing OUTSIDE the workspace is
+ *      refused.
+ *
+ * We additionally call `fs.realpathSync` again as defence-in-depth
+ * immediately before reading the bytes — if the file was swapped
+ * out behind a symlink between the validation and the read, the
+ * post-realpath read catches the escape.
+ * ----------------------------------------------------------------
+ */
+function loadLocalSourceImage(rawSource: string): LoadSourceResult {
+  const sourceResolution = resolveSourcePath(rawSource);
+  if (!sourceResolution.ok) {
+    return { ok: false, errorText: JSON.stringify({ ok: false, error: sourceResolution.error }) };
+  }
+  const sourcePath = sourceResolution.path;
+
+  // Check file format before reading
+  const sourceMimeType = getMimeTypeFromPath(sourcePath);
+  if (!sourceMimeType) {
+    const ext = path.extname(sourcePath).toLowerCase() || '(no extension)';
+    return { ok: false, errorText: `Unsupported image format: ${ext}. Supported formats: PNG, JPEG, WebP.` };
+  }
+
+  try {
+    if (!fs.existsSync(sourcePath)) {
+      return { ok: false, errorText: `File not found: ${sourcePath}` };
+    }
+    const verifiedPath = fs.realpathSync(sourcePath);
+    const imageBuffer = fs.readFileSync(verifiedPath);
+    console.error(`[NanoBanana] Read source image: ${imageBuffer.length} bytes, type: ${sourceMimeType}`);
+    return { ok: true, image: { mimeType: sourceMimeType, base64: imageBuffer.toString('base64') } };
+  } catch (readError) {
+    const errMsg = readError instanceof Error ? readError.message : String(readError);
+    return { ok: false, errorText: `Failed to read image file: ${errMsg}` };
+  }
 }
 
 export function registerEditTools(server: McpServer): void {
@@ -55,18 +119,19 @@ export function registerEditTools(server: McpServer): void {
     {
       title: 'Edit Image (Nano Banana)',
       description:
-        `Edit an existing image using Google Gemini's image editing capabilities.\n\n` +
-        `Use this when the user wants to modify, edit, or transform an existing image using AI.\n\n` +
-        `Provide a source image file path and edit instructions. The edited image will appear inline in the conversation.\n\n` +
+        `Edit one or more existing images using Google Gemini's image editing capabilities.\n\n` +
+        `Use this when the user wants to modify, edit, or transform an existing image using AI, or combine elements from several images into one.\n\n` +
+        `Provide up to ${MAX_REFERENCE_IMAGES} source image file paths and edit instructions. The edited image will appear inline in the conversation.\n\n` +
         `Examples of edit prompts:\n` +
         `- "Remove the background and make it transparent"\n` +
         `- "Change the color of the car to red"\n` +
         `- "Add a sunset sky in the background"\n` +
         `- "Make this photo look like a watercolor painting"\n` +
-        `- "Remove the person on the right side"`,
+        `- "Combine these images: put the product from the first image on the table from the second"`,
       inputSchema: z.object({
-        source_image_path: z.string().min(1).describe('Path to the image file to edit (supports ~ for home directory)'),
-        prompt: z.string().min(1).describe('Instructions for how to edit the image'),
+        source_image_path: z.string().min(1).optional().describe('Path to the image file to edit (supports ~ for home directory). Single-image shorthand for source_image_paths — provide one or the other (or both).'),
+        source_image_paths: z.array(z.string().min(1)).min(1).max(MAX_REFERENCE_IMAGES).optional().describe(`Up to ${MAX_REFERENCE_IMAGES} reference image files to edit or combine (multi-image composition/fusion). Each entry follows the same rules as source_image_path.`),
+        prompt: z.string().min(1).describe('Instructions for how to edit the image(s)'),
         model: z.enum(SUPPORTED_MODELS).optional().describe(MODEL_DESCRIPTION),
         aspect_ratio: z.enum(SUPPORTED_ASPECT_RATIOS).optional().describe('Aspect ratio for the edited image'),
         image_size: z.enum(SUPPORTED_IMAGE_SIZES).optional().describe(IMAGE_SIZE_DESCRIPTION),
@@ -95,7 +160,6 @@ export function registerEditTools(server: McpServer): void {
       }
 
       const model = input.model ?? DEFAULT_MODEL;
-      const rawSource = input.source_image_path;
 
       if (input.image_size && !supportsImageSize(model)) {
         return {
@@ -104,80 +168,38 @@ export function registerEditTools(server: McpServer): void {
         };
       }
 
-      // ----------------------------------------------------------------
-      // SECURITY (M3.6): sandbox local source-image reads to under
-      // `MCP_WORKSPACE_PATH` (or `os.tmpdir()` when unset). LLM-controlled
-      // inputs cannot be allowed to point at arbitrary host files such as
-      // `~/.ssh/id_rsa` or `/etc/passwd`, where the bytes would otherwise
-      // be base64-encoded and shipped to the upstream Gemini API.
-      //
-      // - HTTPS / HTTP URLs bypass the sandbox: the connector currently
-      //   only handles inline-base64 inputs, so a URL falls through to the
-      //   existing not-found error rather than emitting a misleading
-      //   sandbox-violation message.
-      // - Local paths run through `resolveSourcePath`, which:
-      //     1. Lexically resolves `~` and `..` and rejects paths outside
-      //        the workspace root before any disk read.
-      //     2. Canonicalises the file via `fs.realpathSync` so a symlink
-      //        inside the workspace pointing OUTSIDE the workspace is
-      //        refused.
-      //
-      // We additionally call `fs.realpathSync` here as defence-in-depth
-      // immediately before reading the bytes — if the file was swapped
-      // out behind a symlink between the validation and the read, the
-      // post-realpath check below catches the escape.
-      // ----------------------------------------------------------------
-      let sourcePath: string;
-      if (isRemoteUrl(rawSource)) {
-        // Preserve pre-existing behaviour for URL inputs: the
-        // local-file code below will report a clean "File not found"
-        // (a non-sandbox error) since fs.existsSync(URL) === false.
-        sourcePath = rawSource;
-      } else {
-        const sourceResolution = resolveSourcePath(rawSource);
-        if (!sourceResolution.ok) {
-          return {
-            content: [{ type: 'text', text: JSON.stringify({ ok: false, error: sourceResolution.error }) }],
-            isError: true,
-          };
-        }
-        sourcePath = sourceResolution.path;
-      }
-
-      // Check file format before reading
-      const sourceMimeType = getMimeTypeFromPath(sourcePath);
-      if (!sourceMimeType) {
-        const ext = path.extname(sourcePath).toLowerCase() || '(no extension)';
+      const rawSources = [
+        ...(input.source_image_path ? [input.source_image_path] : []),
+        ...(input.source_image_paths ?? []),
+      ];
+      if (rawSources.length === 0) {
         return {
-          content: [{ type: 'text', text: `Unsupported image format: ${ext}. Supported formats: PNG, JPEG, WebP.` }],
+          content: [{ type: 'text', text: JSON.stringify({ ok: false, error: 'No source image provided. Pass source_image_path or source_image_paths.' }) }],
+          isError: true,
+        };
+      }
+      if (rawSources.length > MAX_REFERENCE_IMAGES) {
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ ok: false, error: `Too many source images: ${rawSources.length} provided; the Gemini image models accept at most ${MAX_REFERENCE_IMAGES} reference images per request.` }) }],
           isError: true,
         };
       }
 
-      // Read and encode source image
-      let imageBuffer: Buffer;
-      try {
-        if (!fs.existsSync(sourcePath)) {
+      const loadedSources: LoadedSourceImage[] = [];
+      for (const rawSource of rawSources) {
+        const loadResult = isRemoteUrl(rawSource)
+          // Remote URL fetching is not wired up here yet — fail with a clean,
+          // actionable message rather than a misleading sandbox violation.
+          ? { ok: false as const, errorText: `Remote source image URLs are not supported: ${rawSource}. Download the image into the workspace and pass the local path instead.` }
+          : loadLocalSourceImage(rawSource);
+        if (!loadResult.ok) {
           return {
-            content: [{ type: 'text', text: `File not found: ${sourcePath}` }],
+            content: [{ type: 'text', text: loadResult.errorText }],
             isError: true,
           };
         }
-        // Defence-in-depth: re-canonicalise via realpathSync at the very
-        // last moment to close the (vanishingly small) TOCTOU window
-        // between sandbox validation and the readFileSync call.
-        const verifiedPath = isRemoteUrl(rawSource) ? sourcePath : fs.realpathSync(sourcePath);
-        imageBuffer = fs.readFileSync(verifiedPath);
-        console.error(`[NanoBanana] Read source image: ${imageBuffer.length} bytes, type: ${sourceMimeType}`);
-      } catch (readError) {
-        const errMsg = readError instanceof Error ? readError.message : String(readError);
-        return {
-          content: [{ type: 'text', text: `Failed to read image file: ${errMsg}` }],
-          isError: true,
-        };
+        loadedSources.push(loadResult.image);
       }
-
-      const sourceBase64 = imageBuffer.toString('base64');
 
       const generationConfig: GenerationConfig = { responseModalities: ['TEXT', 'IMAGE'] };
       const imageConfig: ImageConfig = {};
@@ -190,8 +212,8 @@ export function registerEditTools(server: McpServer): void {
       const requestBody = {
         contents: [{
           parts: [
-            { text: `Edit this image: ${input.prompt}` },
-            { inlineData: { mimeType: sourceMimeType, data: sourceBase64 } },
+            { text: loadedSources.length > 1 ? `Edit these images: ${input.prompt}` : `Edit this image: ${input.prompt}` },
+            ...loadedSources.map((source) => ({ inlineData: { mimeType: source.mimeType, data: source.base64 } })),
           ],
         }],
         generationConfig,
