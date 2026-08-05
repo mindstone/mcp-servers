@@ -50,6 +50,7 @@ import {
   updateListItem,
   updateSitePage,
   uploadLibraryFile,
+  uploadLibraryFileBinary,
 } from './sharepoint.js';
 
 const READ_ONLY_ANNOTATIONS = {
@@ -291,6 +292,26 @@ const TOOL_SPECS: SharePointToolSpec[] = [
     }),
     annotations: WRITE_ANNOTATIONS,
     handler: uploadLibraryFile as SharePointHandler,
+  },
+  {
+    name: 'upload_library_file_binary',
+    description:
+      'Upload a binary or large file (base64-encoded content, up to 100MB decoded) to a SharePoint document library using a resumable upload session. ' +
+      'Use upload_library_file instead for small text files.',
+    inputSchema: z.object({
+      driveId: z.string().optional().describe('Document library (drive) ID'),
+      path: z
+        .string()
+        .optional()
+        .describe('Destination path including filename (e.g., "General/report.pdf")'),
+      contentBase64: z.string().optional().describe('File content, base64-encoded'),
+      conflictBehavior: z
+        .enum(['fail', 'rename', 'replace'])
+        .optional()
+        .describe('What to do when a file with the same name exists (default: "rename")'),
+    }),
+    annotations: WRITE_ANNOTATIONS,
+    handler: uploadLibraryFileBinary as SharePointHandler,
   },
   {
     name: 'create_library_folder',

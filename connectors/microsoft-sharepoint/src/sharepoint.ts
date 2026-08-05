@@ -102,6 +102,17 @@ const GraphListSchema = z.object({
     .optional(),
 });
 
+const GraphUploadSessionSchema = z.object({
+  uploadUrl: z.string(),
+});
+
+const GraphUploadedItemSchema = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  size: z.number().optional(),
+  webUrl: z.string().optional(),
+});
+
 const GraphSitePageSchema = z.object({
   id: z.string(),
   name: z.string().optional(),
@@ -563,6 +574,102 @@ export async function uploadLibraryFile(
     name: wrapUntrusted(response.name, 'microsoft-sharepoint:upload_library_file:name'),
     size: formatSize(response.size),
     webUrl: response.webUrl,
+    message: 'File uploaded successfully',
+  });
+}
+
+// -- Large/binary upload tool implementation --
+
+/** Graph requires every chunk except the last to be a multiple of 320 KiB. */
+const UPLOAD_CHUNK_SIZE = 10 * 320 * 1024;
+const MAX_UPLOAD_SESSION_BYTES = 100 * 1024 * 1024;
+
+interface UploadLibraryFileBinaryArgs {
+  driveId?: string;
+  path?: string;
+  contentBase64?: string;
+  conflictBehavior?: 'fail' | 'rename' | 'replace';
+}
+
+export async function uploadLibraryFileBinary(
+  client: Client,
+  args: UploadLibraryFileBinaryArgs,
+  signal: AbortSignal,
+): Promise<ToolResult> {
+  if (!args.driveId || !args.path || !args.contentBase64) {
+    return errorResult(
+      'Missing required parameters: "driveId", "path" (destination path), and "contentBase64" (base64-encoded file content). ' +
+      'Example: { "driveId": "b!abc123...", "path": "General/report.pdf", "contentBase64": "JVBERi0x..." }',
+    );
+  }
+
+  const base64 = args.contentBase64.replace(/\s+/g, '');
+  if (base64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) {
+    return errorResult('The "contentBase64" parameter is not valid base64.');
+  }
+  const buffer = Buffer.from(base64, 'base64');
+  if (buffer.length === 0) {
+    return errorResult('The decoded content is empty.');
+  }
+  if (buffer.length > MAX_UPLOAD_SESSION_BYTES) {
+    return errorResult(
+      `File too large (${formatSize(buffer.length)}). Max size: ${formatSize(MAX_UPLOAD_SESSION_BYTES)}.`,
+    );
+  }
+
+  const encodedPath = encodeDrivePath(args.path);
+  const sessionResponse = await client
+    .api(`/drives/${args.driveId}/root:/${encodedPath}:/createUploadSession`)
+    .options({ signal })
+    .post({
+      item: {
+        // Default to "rename" so an upload never silently clobbers an existing file.
+        '@microsoft.graph.conflictBehavior': args.conflictBehavior ?? 'rename',
+      },
+    });
+  const { uploadUrl } = GraphUploadSessionSchema.parse(sessionResponse);
+
+  // The uploadUrl is pre-authenticated by Graph; chunks go to it directly
+  // without an Authorization header.
+  let start = 0;
+  let uploaded: z.infer<typeof GraphUploadedItemSchema> | null = null;
+  while (start < buffer.length) {
+    const end = Math.min(start + UPLOAD_CHUNK_SIZE, buffer.length);
+    const response = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Length': String(end - start),
+        'Content-Range': `bytes ${start}-${end - 1}/${buffer.length}`,
+      },
+      body: new Uint8Array(buffer.subarray(start, end)),
+      signal,
+    });
+
+    if (response.status === 202) {
+      start = end;
+      continue;
+    }
+    if (response.status === 200 || response.status === 201) {
+      uploaded = GraphUploadedItemSchema.parse(await response.json());
+      break;
+    }
+    const errorBody = await response.text().catch(() => '');
+    throw new Error(
+      `Upload session failed with HTTP ${response.status}` +
+      (errorBody ? `: ${errorBody.slice(0, 500)}` : ''),
+    );
+  }
+
+  if (!uploaded) {
+    throw new Error('Upload session ended without a completed item');
+  }
+
+  return successResult({
+    success: true,
+    id: uploaded.id,
+    name: wrapUntrusted(uploaded.name, 'microsoft-sharepoint:upload_library_file_binary:name'),
+    size: formatSize(uploaded.size ?? buffer.length),
+    webUrl: uploaded.webUrl,
     message: 'File uploaded successfully',
   });
 }

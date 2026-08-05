@@ -373,6 +373,38 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
         return HttpResponse.json({ value: [fileItem] });
       }
 
+      if (method === 'POST' && /^\/v1\.0\/drives\/[^/]+\/root:\/.*:\/createUploadSession$/.test(pathname)) {
+        return HttpResponse.json({
+          uploadUrl: 'https://graph.microsoft.com/v1.0/drives/drive-1/uploadSessions/session-1',
+          expirationDateTime: '2026-05-20T10:00:00Z',
+        });
+      }
+
+      if (method === 'PUT' && /^\/v1\.0\/drives\/[^/]+\/uploadSessions\/[^/]+$/.test(pathname)) {
+        const range = request.headers.get('content-range') ?? '';
+        const match = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(range);
+        if (!match) {
+          return HttpResponse.json({ error: { message: 'Missing or invalid Content-Range' } }, { status: 400 });
+        }
+        const end = Number(match[2]);
+        const total = Number(match[3]);
+        if (end + 1 < total) {
+          return HttpResponse.json(
+            { nextExpectedRanges: [`${end + 1}-`] },
+            { status: 202 },
+          );
+        }
+        return HttpResponse.json(
+          {
+            id: 'uploaded-bin-1',
+            name: 'report.bin',
+            size: total,
+            webUrl: 'https://contoso.sharepoint.com/uploaded-bin-1',
+          },
+          { status: 201 },
+        );
+      }
+
       if (method === 'PUT' && /^\/v1\.0\/drives\/[^/]+\/root:\/.*:\/content$/.test(pathname)) {
         return HttpResponse.json({
           id: 'uploaded-1',

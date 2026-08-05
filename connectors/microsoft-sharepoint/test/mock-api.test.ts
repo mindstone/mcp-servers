@@ -115,6 +115,57 @@ describe('microsoft-sharepoint mock-API integration', () => {
     expect(call).toBeDefined();
   });
 
+  it('upload_library_file_binary uploads via an upload session in one chunk', async () => {
+    const contentBase64 = Buffer.from('binary-payload').toString('base64');
+    const result = await client.callTool('upload_library_file_binary', {
+      driveId: 'drive-1',
+      path: 'General/report.bin',
+      contentBase64,
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { ok?: unknown; success: boolean; id: string };
+    expect(json.ok).toBeUndefined();
+    expect(json.success).toBe(true);
+    expect(json.id).toBe('uploaded-bin-1');
+    const sessionCall = state.requests.find(
+      (r) => r.method === 'POST' && r.pathname.includes('/createUploadSession'),
+    );
+    expect(sessionCall).toBeDefined();
+    expect((sessionCall?.body as { item: Record<string, unknown> }).item['@microsoft.graph.conflictBehavior']).toBe('rename');
+    const chunkCalls = state.requests.filter(
+      (r) => r.method === 'PUT' && r.pathname.includes('/uploadSessions/'),
+    );
+    expect(chunkCalls).toHaveLength(1);
+  });
+
+  it('upload_library_file_binary chunks large payloads (202 then 201)', async () => {
+    // 5 MB > one 3.2 MB chunk, so the upload must span two PUTs.
+    const contentBase64 = Buffer.alloc(5 * 1024 * 1024, 7).toString('base64');
+    const result = await client.callTool('upload_library_file_binary', {
+      driveId: 'drive-1',
+      path: 'General/big.bin',
+      contentBase64,
+      conflictBehavior: 'replace',
+    });
+    expect(result.isError).not.toBe(true);
+    const chunkCalls = state.requests.filter(
+      (r) => r.method === 'PUT' && r.pathname.includes('/uploadSessions/'),
+    );
+    expect(chunkCalls).toHaveLength(2);
+  });
+
+  it('upload_library_file_binary rejects invalid base64', async () => {
+    const result = await client.callTool('upload_library_file_binary', {
+      driveId: 'drive-1',
+      path: 'General/report.bin',
+      contentBase64: '!!!not-base64!!!',
+    });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('base64');
+  });
+
   it('create_library_folder creates nested folder', async () => {
     const result = await client.callTool('create_library_folder', {
       driveId: 'drive-1',

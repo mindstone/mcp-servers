@@ -25,6 +25,7 @@ const MANIFEST: ManifestRow[] = [
   { tool: 'search_library_files', method: 'GET', pathname: '/v1.0/drives/:driveId/root/search(q=*', args: { driveId: 'drive-1', query: 'report', top: 1 } },
   { tool: 'read_library_text_file', method: 'GET', pathname: '/v1.0/drives/:driveId/items/:itemId/content', args: { driveId: 'drive-1', itemId: 'item-1', maxSize: 200 } },
   { tool: 'upload_library_file', method: 'PUT', pathname: '/v1.0/drives/:driveId/root:/*:/content', args: { driveId: 'drive-1', path: 'General/uploaded.txt', content: 'hello' } },
+  { tool: 'upload_library_file_binary', method: 'POST', pathname: '/v1.0/drives/:driveId/root:/*:/createUploadSession', args: { driveId: 'drive-1', path: 'General/report.bin', contentBase64: 'aGVsbG8=' } },
   { tool: 'create_library_folder', method: 'POST', pathname: '/v1.0/drives/:driveId/root:/*:/children', args: { driveId: 'drive-1', path: 'General/NewFolder' } },
   { tool: 'delete_library_item', method: 'DELETE', pathname: '/v1.0/drives/:driveId/items/:itemId', args: { driveId: 'drive-1', itemId: 'item-1' } },
   { tool: 'move_library_item', method: 'PATCH', pathname: '/v1.0/drives/:driveId/items/:itemId', args: { driveId: 'drive-1', itemId: 'item-1', destinationFolderId: 'folder-1', newName: 'moved.txt' } },

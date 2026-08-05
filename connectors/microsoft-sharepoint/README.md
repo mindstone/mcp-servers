@@ -11,7 +11,7 @@ Microsoft 365 SharePoint MCP server — discover sites, browse document librarie
 
 - **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-sharepoint)
 - **Auth:** OAuth (host-orchestrated incremental consent via `authenticate_sharepoint`) ([`MS_CLIENT_ID`](./server.json))
-- **Tools:** [45](./src/tools.ts) (auth + sites, libraries, pages, lists, metadata, search, mutations)
+- **Tools:** [46](./src/tools.ts) (auth + sites, libraries, pages, lists, metadata, search, mutations)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 - **Shared library:** [`@mindstone/mcp-server-microsoft-shared`](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-shared)
@@ -166,7 +166,7 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 }
 ```
 
-## Tools (45)
+## Tools (46)
 
 | Tool | Description |
 | ---- | ----------- |
@@ -175,7 +175,7 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 | `list_site_document_libraries`, `list_library_files`, `get_library_file` | Browse libraries and items. |
 | `download_library_file`, `read_library_text_file`, `search_library_files` | Read and search library content. |
 | `list_file_versions` | List the version history of a library file. |
-| `upload_library_file`, `create_library_folder`, `delete_library_item`, `move_library_item`, `copy_library_item`, `rename_library_item`, `create_sharing_link` | Mutate and share library items. |
+| `upload_library_file`, `upload_library_file_binary`, `create_library_folder`, `delete_library_item`, `move_library_item`, `copy_library_item`, `rename_library_item`, `create_sharing_link` | Mutate and share library items (text upload, binary/large upload via resumable session). |
 | `list_item_permissions`, `invite_item_collaborators`, `revoke_item_permission` | Manage per-item sharing permissions (list grants, invite specific people, revoke access). |
 | `list_site_pages`, `read_site_page` | Browse and read SharePoint pages. |
 | `create_site_page`, `update_site_page`, `publish_site_page` | Author pages: create drafts (with simple HTML content), update metadata, publish. |

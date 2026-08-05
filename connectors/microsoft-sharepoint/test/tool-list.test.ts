@@ -17,6 +17,7 @@ const EXPECTED_TOOLS = [
   'search_library_files',
   'read_library_text_file',
   'upload_library_file',
+  'upload_library_file_binary',
   'create_library_folder',
   'delete_library_item',
   'move_library_item',
@@ -69,6 +70,7 @@ const EXPECTED_ANNOTATIONS: Record<string, Record<string, boolean>> = {
   search_library_files: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   read_library_text_file: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   upload_library_file: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+  upload_library_file_binary: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   create_library_folder: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   delete_library_item: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   move_library_item: {

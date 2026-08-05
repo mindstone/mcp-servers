@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Added
 
+- `upload_library_file_binary` tool for binary and large files: base64-encoded content (up to 100MB decoded) uploaded through a Graph resumable upload session with 320 KiB-aligned chunking. Defaults to `conflictBehavior: "rename"` so an upload never silently overwrites an existing file.
 - `create_site_page`, `update_site_page`, and `publish_site_page` tools for page authoring via the Graph sitePages API: create a draft page (optionally with simple HTML body content as a single text web part), update title/description/promotion kind, and publish. Pages are created as drafts; publishing is an explicit second step, and the publish response notes that an active page-approval flow defers visibility.
 - `list_list_columns` and `create_site_list` tools for list schema management: read a list's column definitions (name, derived type, required/hidden flags), and create new lists with an optional column schema (text/number/dateTime/boolean/choice columns).
 - `list_file_versions` tool listing the version history of a library file (version ID, size, modified date, modifier) via the Graph `versions` endpoint.
