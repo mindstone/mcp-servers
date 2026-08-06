@@ -60,6 +60,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   a `!`-pattern never selects that block's `IdentityFile`. Previously the `!`
   was treated as a literal character (and space-separated pattern lists were
   dropped entirely), so a block could apply to hosts the config excluded.
+- `replit_write_file` — `encoding: "base64"` content is now validated
+  strictly and rejected when malformed, instead of letting Node's decoder
+  silently discard invalid characters (which wrote corrupted bytes while the
+  read-back verification still reported `verified: true`). Line-wrapping
+  whitespace is tolerated.
 - `replit_list_files` — symlinks are now reported as `type: "symlink"`
   instead of being mislabeled `file`, consistent with `replit_stat`'s
   lstat-based typing (SFTP `readdir` returns lstat-style attributes).
