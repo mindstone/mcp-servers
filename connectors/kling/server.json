@@ -40,6 +40,18 @@
           "isRequired": false,
           "default": "60000",
           "format": "number"
+        },
+        {
+          "name": "MCP_WORKSPACE_PATH",
+          "description": "Workspace directory that local media inputs and downloads are constrained to. Defaults to the system temp directory when unset.",
+          "isRequired": false,
+          "format": "filepath"
+        },
+        {
+          "name": "KLING_DOWNLOAD_ROOT",
+          "description": "Sandbox root for download_kling_video outputs. Must resolve inside MCP_WORKSPACE_PATH. Defaults to <workspace>/kling-downloads.",
+          "isRequired": false,
+          "format": "filepath"
         }
       ]
     }
