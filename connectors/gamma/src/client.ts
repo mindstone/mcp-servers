@@ -427,6 +427,8 @@ export async function getGenerationStatus(
   apiKey: string,
   generationId: string,
 ): Promise<GenerationStatus> {
+  // Fail closed on caller-supplied ids before they reach a request path.
+  generationIdSchema.parse(generationId);
   return gammaFetch(apiKey, `/generations/${generationId}`, generationStatusSchema);
 }
 

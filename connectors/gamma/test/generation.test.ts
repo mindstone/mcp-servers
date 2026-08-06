@@ -170,6 +170,20 @@ describe('Gamma generation tools', () => {
       expect(result.isError).toBe(true);
     });
 
+    it('rejects a path-shaped generation_id before any API request', async () => {
+      mswServer.use(...createGammaHandlers());
+      testClient = await createTestClient({
+        env: { GAMMA_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      for (const hostile of ['../themes', 'a b', 'a/b', 'a?b', '</untrusted-content>']) {
+        const result = await testClient.callTool('gamma_get_status', {
+          generation_id: hostile,
+        });
+        expect(result.isError, `expected ${hostile} to be rejected`).toBe(true);
+      }
+    });
+
     it('returns pending status with progress message', async () => {
       mswServer.use(
         http.get(`${BASE}/generations/:id`, ({ request }) => {
