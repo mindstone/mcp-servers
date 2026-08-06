@@ -1,7 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z, ZodError } from 'zod';
 import { GoogleAnalyticsError, type DataApiResponse } from './types.js';
-import { wrapUntrusted } from './untrusted-content.js';
+import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
 
 /** Envelope source labels used across the connector. */
 export const UNTRUSTED_SOURCES = {
@@ -212,11 +212,23 @@ export function formatRows(response: DataApiResponse) {
   // authored by property editors) and become structural keys in the output —
   // envelope them the same way the recursive helper envelopes object keys
   // (invariant #6).
-  const dimensionHeaders = (response.dimensionHeaders || []).map(
-    (h) => wrapUntrusted(h.name, UNTRUSTED_SOURCES.report) ?? 'unknown',
+  //
+  // Header names are not unique by contract: two headers can both lack a
+  // name (both fall back to 'unknown'), or a dimension and a metric can
+  // share a name. Disambiguate duplicates so a later column never silently
+  // overwrites an earlier one in the row objects; the header arrays carry
+  // the same deduplicated names so keys stay traceable.
+  const usedHeaderNames = new Map<string, number>();
+  const uniqueHeader = (name: string): string => {
+    const seen = usedHeaderNames.get(name) ?? 0;
+    usedHeaderNames.set(name, seen + 1);
+    return seen === 0 ? name : `${name} (${seen + 1})`;
+  };
+  const dimensionHeaders = (response.dimensionHeaders || []).map((h) =>
+    uniqueHeader(wrapUntrusted(h.name, UNTRUSTED_SOURCES.report) ?? 'unknown'),
   );
-  const metricHeaders = (response.metricHeaders || []).map(
-    (h) => wrapUntrusted(h.name, UNTRUSTED_SOURCES.report) ?? 'unknown',
+  const metricHeaders = (response.metricHeaders || []).map((h) =>
+    uniqueHeader(wrapUntrusted(h.name, UNTRUSTED_SOURCES.report) ?? 'unknown'),
   );
 
   const rows = (response.rows || []).map((row) => {
@@ -340,19 +352,31 @@ export const metadataFieldSchema = z
     customDefinition: z.boolean().optional(),
     deprecatedApiNames: z.array(z.string()).optional(),
     allowedInSegments: z.boolean().optional(),
-    dimensionCompatibleMetrics: z.unknown().optional(),
-    metricCompatibleDimensions: z.unknown().optional(),
+    dimensionCompatibleMetrics: z.array(z.string()).optional(),
+    metricCompatibleDimensions: z.array(z.string()).optional(),
   })
   .passthrough();
 
 type MetadataField = z.infer<typeof metadataFieldSchema>;
 
+/**
+ * apiName prefixes that always identify property-editor-authored definitions
+ * (custom dimensions/metrics and calculated metrics), independent of the
+ * vendor-supplied customDefinition flag.
+ */
+const CUSTOM_API_NAME_PREFIX = /^(customUser|customItem|customEvent|calculatedMetric):/;
+
 /** Map a raw Data-API metadata field into a cleaner shape. */
 export function mapMetadataField(field: MetadataField, kind: 'dimension' | 'metric') {
   // Standard dimension/metric uiName/description are Google-authored
   // documentation. Custom definitions are authored by property editors, so
-  // only those are enveloped (invariant #6).
-  const userAuthored = field.customDefinition === true;
+  // only those are enveloped (invariant #6). Google labels custom fields with
+  // customDefinition: true, but that label is itself vendor-controlled — a
+  // recognised custom apiName prefix is treated as user-authored even when
+  // the flag is absent, so the gate cannot fail open on an unlabeled custom
+  // field.
+  const userAuthored =
+    field.customDefinition === true || CUSTOM_API_NAME_PREFIX.test(field.apiName ?? '');
   return {
     apiName: field.apiName || null,
     uiName: userAuthored
@@ -363,11 +387,21 @@ export function mapMetadataField(field: MetadataField, kind: 'dimension' | 'metr
       : field.description || null,
     category: categoriseField(field, kind),
     type: field.type || null,
-    expression: field.expression || null,
+    // The expression of a custom calculated metric is property-editor-authored
+    // — envelope it under the same gate as uiName/description (invariant #6).
+    expression: userAuthored
+      ? wrapUntrusted(field.expression, UNTRUSTED_SOURCES.metadata) ?? null
+      : field.expression || null,
     customDefinition: field.customDefinition || false,
     deprecatedApiNames: field.deprecatedApiNames || [],
     allowedInSegments: field.allowedInSegments || false,
-    dimensionCompatibleMetrics: field.dimensionCompatibleMetrics || undefined,
-    metricCompatibleDimensions: field.metricCompatibleDimensions || undefined,
+    // Vendor-echoed field-name lists — envelope before model output
+    // (invariant #6).
+    dimensionCompatibleMetrics: field.dimensionCompatibleMetrics
+      ? wrapUntrustedJsonStrings(field.dimensionCompatibleMetrics, UNTRUSTED_SOURCES.metadata)
+      : undefined,
+    metricCompatibleDimensions: field.metricCompatibleDimensions
+      ? wrapUntrustedJsonStrings(field.metricCompatibleDimensions, UNTRUSTED_SOURCES.metadata)
+      : undefined,
   };
 }

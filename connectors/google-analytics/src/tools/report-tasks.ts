@@ -11,7 +11,7 @@
 
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { googleApi, propertyPath, Bases } from '../client.js';
+import { googleApi, propertyPath, assertResourceIdSegment, Bases } from '../client.js';
 import { filterExpressionSchema } from '../filters.js';
 import { dataApiResponseSchema, GoogleAnalyticsError, type DataApiResponse } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
@@ -80,7 +80,7 @@ function reportTaskPath(propertyId: string | undefined, taskId: string): string 
       'Pass `task_id` as the bare task ID or the full resource name returned by ga_create_report_task.',
     );
   }
-  return `${property}/reportTasks/${clean}`;
+  return `${property}/reportTasks/${assertResourceIdSegment(clean, 'report task ID')}`;
 }
 
 function mapReportTask(task: ReportTask) {

@@ -248,4 +248,54 @@ describe('per-tool happy-path coverage', () => {
     expect(events).toHaveLength(101);
     expect(events[100].id).toBe('101');
   });
+
+  it('ga_run_report disambiguates duplicate header names instead of overwriting columns', async () => {
+    mswServer.use(...createGoogleHandlers());
+    mswServer.use(
+      http.post(
+        new RegExp(
+          `^${'https://analyticsdata.googleapis.com/v1beta'.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/properties/[^/]+:runReport$`,
+        ),
+        () =>
+          HttpResponse.json({
+            rowCount: 1,
+            // A dimension and a metric share a name; two headers lack names.
+            dimensionHeaders: [{ name: 'sessions' }, {}],
+            metricHeaders: [{ name: 'sessions' }, {}],
+            rows: [
+              {
+                dimensionValues: [{ value: 'uk' }, { value: 'dv2' }],
+                metricValues: [{ value: '10' }, { value: '20' }],
+              },
+            ],
+          }),
+      ),
+    );
+    testClient = await createTestClient({
+      env: {
+        GOOGLE_APPLICATION_CREDENTIALS: FIXTURE_ADC,
+        GA4_PROPERTY_ID: '200',
+      },
+    });
+    const parsed = await callOk('ga_run_report', {
+      property_id: '200',
+      dimensions: ['sessions'],
+      metrics: ['sessions'],
+    });
+    const sessionsKey = '<untrusted-content source="ga4-report">sessions</untrusted-content>';
+    const rows = parsed.rows as Array<Record<string, string>>;
+    expect(rows).toHaveLength(1);
+    // All four columns survive; no silent overwrite.
+    expect(rows[0][sessionsKey]).toBe(
+      '<untrusted-content source="ga4-report">uk</untrusted-content>',
+    );
+    expect(rows[0]['unknown']).toBe(
+      '<untrusted-content source="ga4-report">dv2</untrusted-content>',
+    );
+    expect(rows[0][`${sessionsKey} (2)`]).toBe('10');
+    expect(rows[0]['unknown (2)']).toBe('20');
+    // Header arrays carry the same deduplicated names.
+    expect(parsed.dimensionHeaders).toEqual([sessionsKey, 'unknown']);
+    expect(parsed.metricHeaders).toEqual([`${sessionsKey} (2)`, 'unknown (2)']);
+  });
 });

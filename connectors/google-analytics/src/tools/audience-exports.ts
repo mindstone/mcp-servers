@@ -13,7 +13,7 @@
 
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { googleApi, paginate, propertyPath, Bases } from '../client.js';
+import { googleApi, paginate, propertyPath, assertResourceIdSegment, Bases } from '../client.js';
 import { GoogleAnalyticsError } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { compactObject, int64Field, parseApiResponse, UNTRUSTED_SOURCES, withErrorHandling } from '../utils.js';
@@ -89,7 +89,7 @@ function audienceExportPath(propertyId: string | undefined, exportId: string): s
       'Pass `export_id` as the bare export ID or the full resource name returned by ga_create_audience_export.',
     );
   }
-  return `${property}/audienceExports/${clean}`;
+  return `${property}/audienceExports/${assertResourceIdSegment(clean, 'audience export ID')}`;
 }
 
 /** Resolve `properties/<id>/audiences/<audienceId>` from flexible input. */
@@ -105,7 +105,7 @@ function audiencePath(propertyId: string | undefined, audienceId: string): strin
       'Pass `audience` as the bare audience ID or the full resource name. Use ga_list_audiences to discover audience IDs.',
     );
   }
-  return `${property}/audiences/${clean}`;
+  return `${property}/audiences/${assertResourceIdSegment(clean, 'audience ID')}`;
 }
 
 function mapAudienceExport(audienceExport: AudienceExport) {

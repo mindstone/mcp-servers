@@ -38,6 +38,8 @@ interface GoogleApiOptions {
   body?: unknown;
   baseUrl?: string;
   signal?: AbortSignal;
+  /** Internal/test override for the request timeout; defaults to 30s. */
+  timeoutMs?: number;
 }
 
 /** Bases the client may target. Re-exported for tests and tools. */
@@ -76,7 +78,7 @@ export async function googleApi<T = unknown>(
   apiPath: string,
   options: GoogleApiOptions = {},
 ): Promise<T> {
-  const { method = 'GET', query, body, baseUrl = ADMIN_BASE_URL, signal } = options;
+  const { method = 'GET', query, body, baseUrl = ADMIN_BASE_URL, signal, timeoutMs } = options;
 
   const token = await getAccessToken();
   const url = new URL(`${baseUrl}${apiPath}`);
@@ -88,10 +90,19 @@ export async function googleApi<T = unknown>(
     }
   }
 
-  const controller = signal ? undefined : new AbortController();
-  const timer = controller
-    ? setTimeout(() => controller.abort(), DEFAULT_REQUEST_TIMEOUT_MS)
-    : undefined;
+  // The request timeout is unconditional: an externally supplied signal must
+  // not disable it, so the external signal is forwarded into our own
+  // controller rather than replacing it.
+  const controller = new AbortController();
+  const forwardAbort = () => controller.abort();
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener('abort', forwardAbort, { once: true });
+  }
+  const timer = setTimeout(
+    () => controller.abort(),
+    timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
+  );
 
   try {
     const response = await fetch(url, {
@@ -103,7 +114,7 @@ export async function googleApi<T = unknown>(
         ...(body ? { 'Content-Type': 'application/json' } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
-      signal: signal ?? controller?.signal,
+      signal: controller.signal,
     });
 
     const text = await response.text();
@@ -139,16 +150,25 @@ export async function googleApi<T = unknown>(
         ? (wrapUntrusted(apiError.message, UNTRUSTED_SOURCES.apiError) ??
           `Google API request failed (HTTP ${response.status}).`)
         : `Google API request failed (HTTP ${response.status}).`;
+      // The vendor-supplied `error.status` is untrusted text too: it only
+      // becomes the structured error code when it matches Google's enum shape
+      // (e.g. PERMISSION_DENIED). Anything else falls back to the numeric
+      // HTTP status, so arbitrary vendor text never reaches `code` raw.
+      const code =
+        apiError?.status && /^[A-Z][A-Z0-9_]*$/.test(apiError.status)
+          ? apiError.status
+          : `HTTP_${response.status}`;
       throw new GoogleAnalyticsError(
         message,
-        apiError?.status || `HTTP_${response.status}`,
+        code,
         'Check that the credential has access to this resource and that the relevant Google APIs are enabled in the Cloud project attached to the credential.',
       );
     }
 
     return data as T;
   } finally {
-    if (timer) clearTimeout(timer);
+    clearTimeout(timer);
+    if (signal) signal.removeEventListener('abort', forwardAbort);
   }
 }
 
@@ -198,6 +218,27 @@ export async function paginate<T>(
   return items;
 }
 
+/**
+ * Resource IDs are interpolated into URL paths. Constrain them to the
+ * character set Google actually uses so traversal or query/fragment
+ * characters (`.`, `/`, `?`, `#`) can never reshape the request path —
+ * inputs arrive from tool arguments (model-influenced) or from vendor
+ * responses (e.g. a property's parent account).
+ */
+const RESOURCE_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+/** Assert that a stripped resource ID is a single safe path segment. */
+export function assertResourceIdSegment(id: string, label: string): string {
+  if (!RESOURCE_ID_PATTERN.test(id)) {
+    throw new GoogleAnalyticsError(
+      `The ${label} contains characters that are not valid in a GA4 resource ID.`,
+      'INVALID_RESOURCE_ID',
+      `Pass a bare ${label} (letters, digits, "_" or "-") or the full resource name exactly as returned by a list/get tool.`,
+    );
+  }
+  return id;
+}
+
 /** Resolve `properties/<id>`, accepting either bare IDs or prefixed forms. */
 export function propertyPath(propertyId?: string): string {
   const resolved = propertyId || process.env.GA4_PROPERTY_ID;
@@ -209,11 +250,11 @@ export function propertyPath(propertyId?: string): string {
     );
   }
   const clean = String(resolved).replace(/^properties\//, '');
-  return `properties/${clean}`;
+  return `properties/${assertResourceIdSegment(clean, 'property ID')}`;
 }
 
 /** Resolve `accounts/<id>`, accepting either bare IDs or prefixed forms. */
 export function accountPath(accountId: string): string {
   const clean = String(accountId).replace(/^accounts\//, '');
-  return `accounts/${clean}`;
+  return `accounts/${assertResourceIdSegment(clean, 'account ID')}`;
 }
