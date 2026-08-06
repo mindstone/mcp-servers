@@ -93,14 +93,41 @@ function paginationHint(count: number, page: number, pageSize: number): string {
 }
 
 /**
- * Open-ended vendor request structures (fields, pricing-table data, metadata)
- * are still validated as JSON-shaped values — this rejects anything that
- * cannot serialize (functions, undefined leaves, class instances) instead of
- * passing `z.unknown()` straight through.
+ * Semantic request schemas for the open-ended vendor structures. A generic
+ * "any JSON value" check only proves serializability; these schemas validate
+ * the actual PandaDoc shapes (fail-closed) so a malformed structure is
+ * rejected before it reaches the API.
+ *
+ * - fields: `{ "FieldName": { "value": ... } }` — each entry must be an
+ *   object with a scalar `value` (text/date/checkbox pre-fill).
+ * - metadata: string-keyed map of scalar values; nested structures rejected.
+ * - pricing-table options: `currency` (ISO-4217-style 3-letter code) plus
+ *   Tax/Fee/Discount adjustment objects `{ type, value, name? }`.
+ * - pricing-table row data: column-name keys with scalar values, or
+ *   adjustment objects for Tax/Discount/Fee columns.
+ * Shapes per https://developers.pandadoc.com/docs/working-with-pricing-tables
  */
-const jsonValue: z.ZodType<unknown> = z.lazy(() =>
-  z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(jsonValue), z.record(jsonValue)]),
-);
+const scalarValue = z.union([z.string(), z.number(), z.boolean()]);
+
+const pricingAdjustment = z
+  .object({
+    type: z.enum(['percent', 'absolute']),
+    name: z.string().optional(),
+    value: z.number(),
+  })
+  .strict();
+
+const documentFieldsSchema = z.record(z.object({ value: scalarValue }).strict());
+
+const documentMetadataSchema = z.record(scalarValue);
+
+const pricingTableOptionsSchema = z
+  .object({
+    currency: z.string().regex(/^[A-Z]{3}$/, 'currency must be a 3-letter code (e.g., "USD")').optional(),
+  })
+  .catchall(pricingAdjustment);
+
+const pricingRowDataSchema = z.record(z.union([scalarValue, pricingAdjustment]));
 
 /**
  * `info_message` in a create/upload response is vendor-authored text — wrap it
@@ -265,7 +292,7 @@ RELATED TOOLS:
         template_uuid: z.string().min(1).describe('Template ID (from list_templates or PandaDoc app URL)'),
         name: z.string().optional().describe('Document name'),
         recipients: z.array(z.object({
-          email: z.string().describe('Recipient email'),
+          email: z.string().email().describe('Recipient email'),
           first_name: z.string().optional().describe('Recipient first name'),
           last_name: z.string().optional().describe('Recipient last name'),
           role: z.string().optional().describe('Must match a role in the template'),
@@ -275,11 +302,11 @@ RELATED TOOLS:
           name: z.string().describe('Token/variable name from template'),
           value: z.string().describe('Value to fill in'),
         })).optional().describe('Template variables to pre-fill'),
-        fields: z.record(jsonValue).optional().describe('Map of field names to values: { "FieldName": { "value": "text" } }'),
+        fields: documentFieldsSchema.optional().describe('Map of field names to values: { "FieldName": { "value": "text" } }'),
         pricing_tables: z.array(z.object({
           name: z.string().describe('Name of the pricing table in the template to populate'),
           data_merge: z.boolean().optional().describe('If true, all field names in data rows must be the external names defined in the template'),
-          options: z.record(jsonValue).optional().describe('Table options, e.g. { "currency": "USD", "Discount": { "type": "percent", "name": "Global Discount", "value": 10 } }'),
+          options: pricingTableOptionsSchema.optional().describe('Table options, e.g. { "currency": "USD", "Discount": { "type": "percent", "name": "Global Discount", "value": 10 } }'),
           sections: z.array(z.object({
             title: z.string().describe('Section title'),
             default: z.boolean().optional().describe('If true, this is the default section'),
@@ -289,13 +316,14 @@ RELATED TOOLS:
                 qty_editable: z.boolean().optional(),
                 optional_selected: z.boolean().optional(),
                 optional: z.boolean().optional(),
+                multichoice_selected: z.boolean().optional(),
               }).optional().describe('Row options (editable qty, optional row, pre-selected)'),
-              data: z.record(jsonValue).optional().describe('Row values keyed by column name, e.g. { "Name": "Widget", "Price": 10, "QTY": 3, "SKU": "widget-1" }'),
-              custom_fields: z.record(jsonValue).optional().describe('Additional custom column values'),
+              data: pricingRowDataSchema.optional().describe('Row values keyed by column name, e.g. { "Name": "Widget", "Price": 10, "QTY": 3, "SKU": "widget-1" }'),
+              custom_fields: z.record(scalarValue).optional().describe('Additional custom column values'),
             })).optional().describe('Rows to populate in this section'),
           })).optional().describe('Pricing table sections with rows'),
         })).optional().describe('Pricing tables to populate. Requires "Automatically add products to this table" enabled on the template pricing table. All product info must be passed here — products stored in PandaDoc cannot be used.'),
-        metadata: z.record(jsonValue).optional().describe('Custom key-value metadata to associate with the document'),
+        metadata: documentMetadataSchema.optional().describe('Custom key-value metadata to associate with the document'),
         tags: z.array(z.string()).optional().describe('Tags to apply'),
         folder_uuid: z.string().optional().describe('Folder ID to store the document in (see list_document_folders)'),
       }),
@@ -363,7 +391,7 @@ RELATED TOOLS:
         file_path: z.string().min(1).describe('Absolute path to the PDF, DOCX, or RTF file to upload'),
         name: z.string().optional().describe('Document name in PandaDoc (defaults to filename)'),
         recipients: z.array(z.object({
-          email: z.string().describe('Recipient email address'),
+          email: z.string().email().describe('Recipient email address'),
           first_name: z.string().optional().describe('Recipient first name'),
           last_name: z.string().optional().describe('Recipient last name'),
           role: z.string().optional().describe('Recipient role (e.g., "Client", "Signer")'),
@@ -583,18 +611,18 @@ RELATED TOOLS:
           .describe('Secure (HTTPS) and publicly accessible URL to the PDF document'),
         name: z.string().min(1).describe('Document name in PandaDoc'),
         recipients: z.array(z.object({
-          email: z.string().describe('Recipient email address'),
+          email: z.string().email().describe('Recipient email address'),
           first_name: z.string().optional().describe('Recipient first name'),
           last_name: z.string().optional().describe('Recipient last name'),
           role: z.string().optional().describe('Recipient role (e.g., "Client", "Signer")'),
         })).optional().describe('List of document recipients (at least one required for sending)'),
         parse_form_fields: z.boolean().optional().describe('If true, recognizes PDF form fields as PandaDoc fields. Default: false'),
-        fields: z.record(jsonValue).optional().describe('Map of field names to values: { "FieldName": { "value": "text" } }'),
+        fields: documentFieldsSchema.optional().describe('Map of field names to values: { "FieldName": { "value": "text" } }'),
         tokens: z.array(z.object({
           name: z.string().describe('Token/variable name'),
           value: z.string().describe('Value to fill in'),
         })).optional().describe('Tokens (variables) to pre-fill'),
-        metadata: z.record(jsonValue).optional().describe('Custom key-value metadata to associate with the document'),
+        metadata: documentMetadataSchema.optional().describe('Custom key-value metadata to associate with the document'),
         tags: z.array(z.string()).optional().describe('Tags to apply to the document'),
         folder_uuid: z.string().optional().describe('ID of the PandaDoc folder to store the document in (see list_document_folders)'),
       }),
