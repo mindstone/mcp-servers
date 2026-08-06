@@ -7,6 +7,7 @@
 
 import { getApiKey } from './auth.js';
 import { FathomError, FATHOM_API_BASE, REQUEST_TIMEOUT_MS } from './types.js';
+import { envelopeErrorText } from './utils.js';
 
 const MAX_RATE_LIMIT_RETRIES = 3;
 // Bound the wait so a busy rate-limit window cannot stall a tool call for
@@ -100,7 +101,7 @@ export async function fathomFetch<T>(
   if (!response.ok) {
     const errorText = await response.text().catch(() => 'Unknown error');
     throw new FathomError(
-      `Fathom API error (${response.status}): ${errorText}`,
+      `Fathom API error (${response.status}): ${envelopeErrorText(errorText, 'fathom:api.error_body')}`,
       'API_ERROR',
       'Check the request parameters and try again.',
     );
