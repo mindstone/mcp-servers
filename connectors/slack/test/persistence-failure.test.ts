@@ -36,7 +36,7 @@ describe('CRITICAL-1 — saveTokens failure does not burn the rotated refresh to
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('keeps rotated tokens in memory; surfaces TOKEN_PERSIST_FAILED distinctly; calls oauth.v2.access exactly once', async () => {
+  it.skipIf(typeof process.geteuid === 'function' && process.geteuid() === 0)('keeps rotated tokens in memory; surfaces TOKEN_PERSIST_FAILED distinctly; calls oauth.v2.access exactly once', async () => {
     let oauthCallCount = 0;
     mswServer.use(
       http.post(`${SLACK_API_BASE}/oauth.v2.access`, async () => {

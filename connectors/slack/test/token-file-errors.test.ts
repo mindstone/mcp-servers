@@ -14,6 +14,9 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 
 const isWindows = process.platform === 'win32';
+// chmod-based refusal assertions cannot fail-closed when running as uid 0 —
+// root bypasses file mode bits, so these tests only mean anything non-root.
+const isRoot = typeof process.geteuid === 'function' && process.geteuid() === 0;
 
 describe('SlackTokenProvider.loadTokens — distinct error types', () => {
   let tmpDir: string;
@@ -58,7 +61,7 @@ describe('SlackTokenProvider.loadTokens — distinct error types', () => {
     await expect(tp.loadTokens()).rejects.toMatchObject({ code: 'TOKEN_FILE_CORRUPT' });
   });
 
-  it.skipIf(isWindows)(
+  it.skipIf(isWindows || isRoot)(
     'chmod 000 token file throws TOKEN_FILE_PERMISSION_DENIED distinctly',
     async () => {
       const file = path.join(tmpDir, 'workspaces', 'T0123ABCD.json');
@@ -186,7 +189,7 @@ describe('getWorkspaces — distinct error types', () => {
     expect(() => getWorkspaces()).toThrow(/WORKSPACE_DIR_ALL_CORRUPT|not valid JSON/);
   });
 
-  it.skipIf(isWindows)(
+  it.skipIf(isWindows || isRoot)(
     'chmod 000 config.json → throws WORKSPACE_DIR_PERMISSION_DENIED',
     async () => {
       const cfg = path.join(tmpDir, 'config.json');
