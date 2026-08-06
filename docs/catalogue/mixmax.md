@@ -13,7 +13,7 @@ Mixmax email productivity MCP server for Model Context Protocol hosts. Manage se
 
 | Field | Value |
 |-------|-------|
-| Version | 0.2.2 |
+| Version | 0.3.0 |
 | Auth | API key (`MIXMAX_API_TOKEN`) |
 | Tools | 13 (sequences, messages, snippets, meetings, reports) |
 | Surface | cloud API |
