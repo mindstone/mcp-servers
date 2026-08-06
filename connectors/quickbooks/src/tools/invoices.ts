@@ -256,7 +256,12 @@ WORKFLOW:
               'Try the download again.',
             );
           }
-          fs.writeSync(fd, pdfBuffer);
+          // writeSync may short-write; loop until the whole buffer is on
+          // disk so a large PDF is never silently truncated.
+          let written = 0;
+          while (written < pdfBuffer.length) {
+            written += fs.writeSync(fd, pdfBuffer, written);
+          }
         } finally {
           fs.closeSync(fd);
         }

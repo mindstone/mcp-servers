@@ -36,6 +36,7 @@ are maintained manually as part of the PR review checklist.
 - List tools (`list_quickbooks_*` and `query_quickbooks`) no longer silently return a truncated first page: output now includes `hasMore` (computed exactly via a one-row probe, not a count-equals-limit guess) plus a `note` with recovery guidance when results were truncated.
 - `hasMore` no longer silently degrades to always-false at `limit: 1000`: Intuit caps MAXRESULTS at 1000, so the one-row probe is suppressed at the cap and a full-page heuristic is used there instead.
 - `limit` on the list/query tools must now be a positive integer (`limit: 0` and `limit: 1.5` are rejected before any outbound request instead of producing an empty page or a server-side error).
+- `download_quickbooks_invoice_pdf` loops `writeSync` until the whole buffer is on disk, so a short write can no longer silently truncate a large PDF.
 
 ## [0.3.1] - 2026-05-14
 ### Added

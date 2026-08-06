@@ -464,6 +464,34 @@ describe('download_quickbooks_invoice_pdf', () => {
     fs.rmSync(path.dirname(String(secondJson.filePath)), { recursive: true, force: true });
   });
 
+  it('writes a large PDF byte-for-byte (no short-write truncation)', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+
+    // ~1.5 MB deterministic pseudo-PDF: exercises the write loop end to end.
+    const largePdf = new Uint8Array(1_500_000);
+    largePdf.set(new TextEncoder().encode('%PDF-1.7 '), 0);
+    for (let i = 8; i < largePdf.length; i++) largePdf[i] = (i * 31) % 256;
+
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.get(`${PRODUCTION_API_BASE}/invoice/:invoiceId/pdf`, () =>
+        new HttpResponse(largePdf, { headers: { 'Content-Type': 'application/pdf' } }),
+      ),
+    );
+
+    testClient = await createTestClient({ env: defaultEnv() });
+    const result = await testClient.callTool('download_quickbooks_invoice_pdf', { invoiceId: 'inv-large' });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+
+    const filePath = String(json.filePath);
+    const written = fs.readFileSync(filePath);
+    expect(written.length).toBe(largePdf.length);
+    expect(written.equals(Buffer.from(largePdf))).toBe(true);
+    fs.rmSync(path.dirname(filePath), { recursive: true, force: true });
+  });
+
   it('rejects an invalid invoice ID before any outbound request', async () => {
     mswServer.use(...createQuickBooksHandlers());
     testClient = await createTestClient({ env: defaultEnv() });
