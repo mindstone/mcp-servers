@@ -124,6 +124,9 @@ function isNonPublicIpv6(host: string): boolean {
   if ((h0 & 0xff00) === 0xff00) return true; // ff00::/8 multicast
   if (h0 === 0 && h1 === 0 && h5 === 0xffff) return true; // IPv4-mapped ::ffff:0:0/96
   if (h0 === 0x64 && h1 === 0xff9b) return true; // NAT64 64:ff9b::/96
+  if (h0 === 0x2001 && h1 === 0) return true; // Teredo 2001::/32 (tunnels to embedded IPv4)
+  if (h0 === 0x2001 && h1 === 0x0db8) return true; // documentation 2001:db8::/32
+  if (h0 === 0x2002) return true; // 6to4 2002::/16 (relays to embedded IPv4, e.g. 2002:7f00:1:: -> 127.0.0.1)
   return false;
 }
 
@@ -177,5 +180,34 @@ export function validatePublicHttpsUrl(field: string, value: string): void {
   }
   if (!hostname.includes('.')) {
     fail('single-label hostnames resolve only on internal networks');
+  }
+}
+
+/**
+ * Recursive form of `validatePublicHttpsUrl` for caller-shaped passthrough bodies
+ * (the agent authoring tools' `advanced_config`). ElevenLabs dereferences URL
+ * fields inside the agent config server-side —
+ * `conversation_config.agent.prompt.custom_llm.url` is fetched on every
+ * conversation turn and `platform_settings` carries conversation-initiation
+ * webhook URLs — and the exact set drifts with the upstream schema, so rather
+ * than enumerate fields every `url`-keyed string anywhere in the merged body
+ * gets the same fail-closed policy before the body leaves the connector.
+ * Over-inclusion fails closed (a URL ElevenLabs never fetches must still be a
+ * public https destination — cosmetic strictness); under-inclusion re-opens the
+ * SSRF door this module exists to close.
+ */
+export function validateNestedPublicHttpsUrls(value: unknown, path: string): void {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => validateNestedPublicHttpsUrls(item, `${path}[${index}]`));
+    return;
+  }
+  if (typeof value !== 'object' || value === null) return;
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    const childPath = `${path}.${key}`;
+    if (key.toLowerCase() === 'url' && typeof entry === 'string') {
+      validatePublicHttpsUrl(childPath, entry);
+    } else {
+      validateNestedPublicHttpsUrls(entry, childPath);
+    }
   }
 }

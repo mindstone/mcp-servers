@@ -43,7 +43,7 @@ const EXPECTED_ANNOTATIONS: Record<
 > = {
   add_agent_tool: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
   add_knowledge_base_document: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
-  cancel_batch_call: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  cancel_batch_call: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
   configure_elevenlabs_agents_api_key: { readOnlyHint: false, destructiveHint: true },
   create_agent: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
   delete_agent: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
