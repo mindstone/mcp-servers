@@ -99,6 +99,29 @@ describe('non-canonical / disguised host rejection', () => {
     expect(tokenRequestCount).toBe(0);
   });
 
+  it('rejects host with the scheme-default port (https :443 is normalized away by URL parsing)', async () => {
+    tokenRequestCount = 0;
+    mswServer.use(
+      http.post(TOKEN_URL, async () => {
+        tokenRequestCount++;
+        return HttpResponse.json(createTokenResponse());
+      }),
+    );
+
+    testClient = await createTestClient({ env: CONFIGURED_ENV });
+    const result = await testClient.callTool('configure_workday_credentials', {
+      host: `${MOCK_HOST}:443`,
+      tenant: MOCK_TENANT,
+      client_id: MOCK_CLIENT_ID,
+      client_secret: MOCK_CLIENT_SECRET,
+    });
+
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.error as string).toContain('bare hostname');
+    expect(tokenRequestCount).toBe(0);
+  });
+
   it('rejects host with embedded user-info', async () => {
     testClient = await createTestClient({ env: CONFIGURED_ENV });
     const result = await testClient.callTool('configure_workday_credentials', {

@@ -221,6 +221,14 @@ export function validateHost(rawHost: string): { valid: boolean; host?: string; 
     return { valid: false, error: 'Host is required.' };
   }
 
+  // Refuse an explicit port even when it equals the https default — WHATWG
+  // URL parsing normalizes `host:443` away, so the `url.port` check below
+  // cannot see it. (Bare IPv6 without brackets also matches; it is invalid
+  // URL host syntax and would be refused below regardless.)
+  if (/:\d*$/.test(host)) {
+    return { valid: false, error: 'Host must be a bare hostname (no port, path, or credentials).' };
+  }
+
   // WHATWG URL parsing normalizes non-canonical IPv4 spellings (127.1,
   // 0x7f000001, 2130706433, 0177.0.0.1) to dotted-quad, so loopback/private
   // literals in disguise cannot slip past the checks below.
