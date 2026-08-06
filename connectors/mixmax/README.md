@@ -7,7 +7,7 @@ Mixmax email productivity MCP server for Model Context Protocol hosts. Manage se
 
 ## Status
 
-- **Version:** [0.2.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-mixmax)
+- **Version:** [0.3.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-mixmax)
 - **Auth:** API key ([`MIXMAX_API_TOKEN`](./server.json))
 - **Tools:** [13](./src/tools/) (sequences, messages, snippets, meetings, reports)
 - **Surface:** cloud-api

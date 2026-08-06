@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-06
+
+### Changed
+
+- Add sequence recipient removal, cancel scheduled message, analytics report, scheduledAt; full envelope coverage; strict response validation; bridge boundary
+
 ### Added
 - `remove_mixmax_sequence_recipients` — exit specific recipients from a sequence (POST /sequences/:id/cancel); destructiveHint, explicit email list required.
 - `cancel_mixmax_message` — recall a scheduled, not-yet-sent message (DELETE /messages/:id); destructiveHint.
