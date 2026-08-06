@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-06
+
+### Changed
+
+- Add attachments, draft lifecycle, triage, threads, BCC, OOF; Graph filter/orderby fix; staging-dir downloads; Zod boundaries; four hardening rounds
+
 ### Added
 
 - `list_attachments` tool: lists attachment metadata (ID, name, type, size) for a message, so agents can act on `hasAttachments` instead of dead-ending.
