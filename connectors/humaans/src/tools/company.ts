@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { humaansFetch } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
+import { sanitizeCompany, sanitizeList, sanitizeLocation } from '../sanitize.js';
 import type { HumaansListResponse } from '../types.js';
 
 function paginationHint(total: number, skip: number, count: number): string {
@@ -54,7 +55,7 @@ Example: {}`,
       const hint = paginationHint(result.total, result.skip, result.data.length);
       return JSON.stringify({
         ok: true,
-        locations: result.data,
+        locations: sanitizeList(result.data, sanitizeLocation, 'humaans:list_humaans_locations'),
         count: result.data.length,
         total: result.total,
         pagination: hint,
@@ -81,7 +82,10 @@ Example: {}`,
       if (result.data.length === 0) {
         return JSON.stringify({ ok: false, error: 'No company found.' });
       }
-      return JSON.stringify({ ok: true, company: result.data[0] });
+      return JSON.stringify({
+        ok: true,
+        company: sanitizeCompany(result.data[0], 'humaans:get_humaans_company'),
+      });
     }),
   );
 }
