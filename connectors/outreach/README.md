@@ -140,7 +140,7 @@ The connector supports four authentication modes, detected once at startup:
 
 ## Untrusted Content Handling
 
-All user-authored text returned by the Outreach API (names, emails, mailing subjects, template bodies, task notes, tags, custom fields) is wrapped in `<untrusted-content source="...">` envelopes so MCP hosts and models treat third-party CRM content as data, not instructions. Vendor-generated structure (IDs, timestamps, lifecycle states) is returned raw.
+All user-authored text returned by the Outreach API (names, emails, mailing subjects, template bodies, task notes, tags, custom fields) is wrapped in `<untrusted-content source="...">` envelopes so MCP hosts and models treat third-party CRM content as data, not instructions. Vendor-generated structure (IDs, timestamps, lifecycle states) is returned raw. Vendor error text (API error details, non-JSON error bodies, and OAuth token-exchange failures) is truncated to 500 characters and enveloped the same way (`source="outreach:api-error"`) before it appears in error messages.
 
 ## License
 
