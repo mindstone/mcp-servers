@@ -4,6 +4,8 @@ const require = createRequire(import.meta.url);
 const pkg = require('../package.json') as { version: string };
 
 export const REQUEST_TIMEOUT_MS = 30_000;
+/** Upper bound on vendor-authored error text included in error messages. */
+export const MAX_VENDOR_ERROR_CHARS = 500;
 export const OUTREACH_API_BASE = 'https://api.outreach.io/api/v2';
 export const OUTREACH_OAUTH_URL = 'https://api.outreach.io/oauth/token';
 export const OUTREACH_AUTHORIZE_URL = 'https://api.outreach.io/oauth/authorize';

@@ -1,13 +1,14 @@
 import { z } from 'zod';
 import {
   ConnectorError,
+  MAX_VENDOR_ERROR_CHARS,
   OUTREACH_API_BASE,
   REQUEST_TIMEOUT_MS,
   type JsonApiResponse,
   type JsonApiResource,
 } from './types.js';
 import { getActiveToken, refreshTokenIfNeeded, getAuthMode } from './auth.js';
-import { wrapUntrustedJsonStrings } from './untrusted-content.js';
+import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
 
 // JSON:API envelope validation for every external response (repo convention:
 // validate external responses with Zod instead of casting). Attribute values
@@ -143,8 +144,16 @@ export async function outreachFetch(
         }
       }
 
+      // Vendor-authored error text (JSON error details or a raw non-JSON body)
+      // is external content: bound it and wrap it in an untrusted-content
+      // envelope (AGENTS.md invariant #6) before it reaches model context via
+      // the error message. getErrorResolution keeps the raw detail — its
+      // keyword matching stays internal and its output is fixed strings.
+      const boundedDetail = (detail || response.statusText).slice(0, MAX_VENDOR_ERROR_CHARS);
+      const envelopedDetail =
+        wrapUntrusted(boundedDetail, 'outreach:api-error') ?? 'Unknown error';
       throw new ConnectorError(
-        `Outreach API error (HTTP ${response.status}): ${detail || response.statusText}`,
+        `Outreach API error (HTTP ${response.status}): ${envelopedDetail}`,
         `HTTP_${response.status}`,
         getErrorResolution(response.status, detail),
       );
