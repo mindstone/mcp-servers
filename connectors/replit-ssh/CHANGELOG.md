@@ -55,6 +55,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   (checked via stat before reading, with a post-read length check as backstop)
   instead of being buffered unbounded into memory; the cap matches the one
   `replit_search_files` already applies to content search.
+- `~/.ssh/config` evaluation — negated `Host` patterns (`Host *.replit.dev
+  !secret.replit.dev`) are now honoured per OpenSSH semantics: a host matching
+  a `!`-pattern never selects that block's `IdentityFile`. Previously the `!`
+  was treated as a literal character (and space-separated pattern lists were
+  dropped entirely), so a block could apply to hosts the config excluded.
 - `replit_list_files` — symlinks are now reported as `type: "symlink"`
   instead of being mislabeled `file`, consistent with `replit_stat`'s
   lstat-based typing (SFTP `readdir` returns lstat-style attributes).

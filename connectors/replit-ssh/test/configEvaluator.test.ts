@@ -150,4 +150,41 @@ describe('config evaluator', () => {
     );
     expect(findIdentityFilesForHost(parsedConfig, 'foo12.replit.dev')).toEqual([]);
   });
+
+  it('honours negated host patterns: an excluded host never selects the block', () => {
+    const parsedConfig = SSHConfig.parse(
+      'Host *.replit.dev !secret.replit.dev\n  IdentityFile ~/.ssh/pattern_key\n',
+    );
+
+    expect(findFirstIdentityFileForHost(parsedConfig, 'foo.replit.dev')).toBe(
+      '~/.ssh/pattern_key',
+    );
+    expect(findIdentityFilesForHost(parsedConfig, 'secret.replit.dev')).toEqual([]);
+  });
+
+  it('a Host block with only negated patterns matches nothing', () => {
+    const parsedConfig = SSHConfig.parse(
+      'Host !foo.replit.dev\n  IdentityFile ~/.ssh/pattern_key\n',
+    );
+
+    expect(findIdentityFilesForHost(parsedConfig, 'foo.replit.dev')).toEqual([]);
+    expect(findIdentityFilesForHost(parsedConfig, 'bar.replit.dev')).toEqual([]);
+  });
+
+  it('falls through to the default key for a negated host end-to-end', async () => {
+    writeKey('replit_key');
+    writeConfig('Host *.replit.dev !secret.replit.dev\n  IdentityFile ~/.ssh/replit_key\n');
+
+    const excluded = await resolveKeyPathForHost('secret.replit.dev');
+    expect(excluded).toEqual({
+      source: 'default',
+      keyPath: join(tempHome, '.ssh', 'rebel-replit'),
+    });
+
+    const included = await resolveKeyPathForHost('foo.replit.dev');
+    expect(included).toEqual({
+      source: 'config',
+      keyPath: join(tempHome, '.ssh', 'replit_key'),
+    });
+  });
 });
