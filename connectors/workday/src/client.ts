@@ -9,7 +9,15 @@
  */
 
 import { WorkdayError, USER_AGENT, REQUEST_TIMEOUT_MS } from './types.js';
-import { getAccessToken, getApiBaseUrl, getServiceApiBaseUrl, isConfigured, clearTokenCache } from './auth.js';
+import {
+  getAccessToken,
+  getApiBaseUrl,
+  getServiceApiBaseUrl,
+  getHost,
+  isConfigured,
+  clearTokenCache,
+  assertHostResolvesPublic,
+} from './auth.js';
 
 /**
  * Make an authenticated JSON request to the Workday REST API.
@@ -32,6 +40,14 @@ export async function workdayFetch<T>(
   }
 
   const accessToken = await getAccessToken();
+
+  // The token cache short-circuits getAccessToken's own DNS re-check, so the
+  // guard must run here too: the bearer token is credential-bearing, and the
+  // host could have been rebound to a non-public address since the token
+  // exchange. This is still best-effort (fetch re-resolves the name itself),
+  // but a flipped A/AAAA record is refused before the token leaves.
+  await assertHostResolvesPublic(getHost());
+
   const baseUrl = serviceFamily ? getServiceApiBaseUrl(serviceFamily) : getApiBaseUrl();
   const url = `${baseUrl}${resourcePath}`;
   const headers: Record<string, string> = {

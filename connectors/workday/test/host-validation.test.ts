@@ -199,4 +199,36 @@ describe('DNS re-resolution guard', () => {
     expect(json.ok).toBe(false);
     expect(json.error as string).toContain('non-public address');
   });
+
+  it('re-checks DNS on bearer-token API requests even with a cached token', async () => {
+    let apiRequestCount = 0;
+    mswServer.use(
+      http.post(TOKEN_URL, async () => HttpResponse.json(createTokenResponse({ expires_in: 3600 }))),
+      http.get(`${API_BASE}/workers`, async () => {
+        apiRequestCount++;
+        return HttpResponse.json({ data: [], total: 0 });
+      }),
+    );
+
+    testClient = await createTestClient({ env: CONFIGURED_ENV });
+    const { setDnsLookupForTesting } = await import('../../src/auth.js');
+
+    // First call: token exchange + API request with a public resolution.
+    setDnsLookupForTesting(async () => [{ address: '93.184.216.34', family: 4 }]);
+    const first = await testClient.callTool('list_workday_workers', {});
+    expect((first.json as Record<string, unknown>).ok).toBe(true);
+    expect(apiRequestCount).toBe(1);
+
+    // The host is then rebound to a link-local address (DNS rebinding). The
+    // token is still cached, so getAccessToken's own guard is short-circuited
+    // — the refusal must come from workdayFetch, before the bearer token is
+    // sent to the rebound address.
+    setDnsLookupForTesting(async () => [{ address: '169.254.169.254', family: 4 }]);
+    const second = await testClient.callTool('list_workday_workers', {});
+    const json = second.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('HOST_NOT_PUBLIC');
+    expect(apiRequestCount).toBe(1);
+    expect(second.text).not.toContain('169.254.169.254');
+  });
 });

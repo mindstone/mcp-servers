@@ -251,6 +251,14 @@ export function validateHost(rawHost: string): { valid: boolean; host?: string; 
 // (split-horizon DNS, DNS rebinding). Before any credential-bearing request,
 // resolve the host and re-check every A/AAAA record against the same
 // non-public deny list. Fail-closed: an unresolvable host is refused.
+//
+// Call sites: getAccessToken (Basic credential, below) and workdayFetch in
+// client.ts (bearer token — the token cache short-circuits the check here, so
+// data requests must re-run the guard themselves). Best-effort by nature:
+// fetch resolves the name again independently, so a record flipped between
+// the guard and the connect is not caught; closing that fully would require
+// pinning the resolved IP via a custom dispatcher, which undici does not
+// expose through the global fetch used here.
 
 export type DnsLookupFn = (
   hostname: string,
