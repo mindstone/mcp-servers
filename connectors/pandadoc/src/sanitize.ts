@@ -22,9 +22,10 @@
  *     dash/dot/underscore/tilde-separated segments (≤8 chars each) — the
  *     shapes real PandaDoc ids take. A natural-language phrase such as
  *     `SYSTEM-ignore-all-previous-instructions` does NOT match and is
- *     enveloped. (No charset can perfectly separate ids from prose — a
- *     separator-free instruction phrase would still pass; this rejects the
- *     realistic word-separated spellings.)
+ *     enveloped. (No charset can perfectly separate ids from prose: a
+ *     separator-free instruction phrase, or an imperative built from words
+ *     of ≤8 chars, would still pass — this is a fail-toward-envelope
+ *     heuristic, not a boundary.)
  *   - URLs: only `https:` URLs on PandaDoc-owned hosts stay raw (session and
  *     shared links the user is expected to open). Any other URL — however
  *     well-formed — is enveloped, because instruction-like path/query text
@@ -118,11 +119,14 @@ function wrapJsonStrings(v: unknown, source: string): unknown {
 
 function wrapStructuralValue(key: string, item: unknown, source: string): unknown {
   if (IDENTIFIER_KEYS.has(key)) {
-    if (typeof item !== 'string') return item;
+    // Non-string values under a structural key still recurse: a hostile
+    // response could nest prose inside an object/array here, and returning it
+    // untouched would leak it raw (type-confusion bypass).
+    if (typeof item !== 'string') return wrapJsonStrings(item, source);
     return isSafeIdentifier(item) ? item : wrapUntrusted(item, `${source}:${key}`);
   }
   if (URL_KEYS.has(key)) {
-    if (typeof item !== 'string') return item;
+    if (typeof item !== 'string') return wrapJsonStrings(item, source);
     return isSafeUrl(item) ? item : wrapUntrusted(item, `${source}:${key}`);
   }
   return wrapJsonStrings(item, source);
