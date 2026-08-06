@@ -7,7 +7,7 @@ import {
   extractPptxText,
 } from './office-text.js';
 import { wrapUntrusted } from './untrusted-content.js';
-import { validateUploadSessionUrl } from './upload-url.js';
+import { validateContentRedirectUrl, validateUploadSessionUrl } from './upload-url.js';
 import { FilesBusinessError } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -1067,17 +1067,60 @@ const PPTX_MIME =
  * inconsistent), so the body itself is independently bounded: a declared
  * content-length over the cap fails fast, and the stream is cancelled the
  * moment it overruns.
+ *
+ * Graph answers /content with a 302 to a short-lived pre-authenticated
+ * download URL, so redirects are followed MANUALLY: every hop is revalidated
+ * against the vendor-host policy (a hostile upstream response must not be
+ * able to retarget the download at an arbitrary address), the hop count is
+ * capped, and the bearer token is only ever sent to the Graph host — never
+ * forwarded across origins.
  */
+const MAX_CONTENT_REDIRECT_HOPS = 3;
+
 async function fetchDriveItemBytes(
   endpoint: string,
   signal: AbortSignal,
   maxBytes: number,
 ): Promise<Buffer> {
-  const token = await getAccessToken();
-  const response = await fetch(`${GRAPH_BASE_URL}${endpoint}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    signal,
-  });
+  let url = `${GRAPH_BASE_URL}${endpoint}`;
+  let token: string | undefined = await getAccessToken();
+  let response: Response;
+  for (let hops = 0; ; hops += 1) {
+    const page = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      redirect: 'manual',
+      signal,
+    });
+    if (page.status >= 300 && page.status < 400) {
+      // Best-effort cleanup of the (typically empty) redirect body; the
+      // policy decisions below are the observable part.
+      await page.body?.cancel().catch(() => undefined);
+      const location = page.headers.get('location');
+      if (!location) {
+        throw new FilesBusinessError(
+          `Document download returned HTTP ${page.status} without a Location header.`,
+          'read_document',
+        );
+      }
+      if (hops >= MAX_CONTENT_REDIRECT_HOPS) {
+        throw new FilesBusinessError(
+          'Document download exceeded the redirect limit.',
+          'read_document',
+        );
+      }
+      // Resolve relative Locations, then revalidate against the vendor-host
+      // policy — a refusal here is an observable error, never a silent follow.
+      const target = validateContentRedirectUrl(new URL(location, url).toString());
+      // Drop the bearer token before any hop off the Graph origin.
+      if (target.hostname !== new URL(url).hostname) {
+        token = undefined;
+      }
+      url = target.toString();
+      continue;
+    }
+    response = page;
+    break;
+  }
   if (!response.ok) {
     // statusCode lets withGraphRetry invalidate the cached token and retry on 401.
     const err = new Error(`Graph content request failed: HTTP ${response.status}`) as Error & {

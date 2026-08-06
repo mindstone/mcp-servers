@@ -200,6 +200,7 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 - Content authored in Microsoft 365 (file names, grantee identities, activity actors and action keys, permission roles, extracted document text, and Graph error messages) is returned inside `<untrusted-content>` envelopes; Graph responses on the permission/version/activity/upload/document paths are Zod-validated at the boundary. Functional identifiers (permission/version/item IDs) and `webUrl`s stay structural so they can round-trip into follow-up tool calls.
 - Permission/version/activity lists follow `@odata.nextLink` pagination (bounded, with an explicit `truncated` flag); continuation links are only followed back to the Graph host so the access token cannot leak to another origin.
 - `read_document` downloads are byte-capped mid-stream (not just by advertised metadata size) and Office ZIP inflation is bounded per-entry and cumulatively, so ZIP bombs cannot expand in memory.
+- `read_document` follows Graph's redirect to the pre-authenticated download URL manually: each hop is revalidated against the same OneDrive/SharePoint host policy as upload sessions, hops are capped, and the access token is only sent to the Graph host — never forwarded across origins.
 - Numeric limits (`top`, `maxSize`, `maxChars`) must be positive integers and are rejected before any network request.
 - Per-tool Graph calls run under a composed caller + cohort timeout signal.
 

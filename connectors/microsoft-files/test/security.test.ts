@@ -9,6 +9,7 @@
  *    including close-tag breakout attempts in the vendor error body.
  */
 
+import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { mswServer } from './fixtures/setup.js';
@@ -19,7 +20,7 @@ import {
   type McpTestClient,
   type MicrosoftTestConfig,
 } from './fixtures/mcp-test-client.js';
-import { isAllowedUploadHost, validateUploadSessionUrl } from '../src/upload-url.js';
+import { isAllowedUploadHost, validateContentRedirectUrl, validateUploadSessionUrl } from '../src/upload-url.js';
 import { FilesBusinessError } from '../src/types.js';
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
@@ -588,5 +589,155 @@ describe('list pagination', () => {
     const json = result.json as { count: number; truncated: boolean };
     expect(json.count).toBe(2);
     expect(json.truncated).toBe(false);
+  });
+});
+
+
+describe('content redirect URL policy (unit)', () => {
+  it.each([
+    'https://contoso-my.sharepoint.com/download/preauth-1',
+    'https://public.by.files.1drv.com/y/abc',
+    'https://graph.microsoft.com/v1.0/me/drive/items/x/content',
+  ])('accepts vendor HTTPS redirect (%s)', (url) => {
+    expect(validateContentRedirectUrl(url).toString()).toBe(url);
+  });
+
+  it.each([
+    'http://contoso-my.sharepoint.com/download/preauth-1',
+    'https://download.evil.example.com/steal',
+    'https://sharepoint.com.evil.example.com/steal',
+    'https://169.254.169.254/latest/meta-data',
+    'https://user:pass@contoso-my.sharepoint.com/download',
+    'https://contoso-my.sharepoint.com:8443/download',
+  ])('rejects non-vendor / malformed redirect (%s)', (url) => {
+    expect(() => validateContentRedirectUrl(url)).toThrowError(FilesBusinessError);
+  });
+});
+
+describe('read_document redirect policy', () => {
+  let client: McpTestClient;
+  let cfg: MicrosoftTestConfig;
+
+  const escapedBase = GRAPH_BASE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const docxContentRx = new RegExp(`${escapedBase}/me/drive/items/item-docx/content(\\?.*)?$`);
+  const docxBytes = readFileSync(new URL('./fixtures/files/sample.docx', import.meta.url));
+
+  function docxStream(): ReadableStream<Uint8Array> {
+    return new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(docxBytes));
+        controller.close();
+      },
+    });
+  }
+
+  interface RedirectHop {
+    url: string;
+    authorization?: string;
+  }
+  let hops: RedirectHop[];
+
+  function serveDocxAt(url: string): void {
+    mswServer.use(
+      http.get(url, ({ request }) => {
+        hops.push({ url: request.url, authorization: request.headers.get('authorization') ?? undefined });
+        return new HttpResponse(docxStream(), {
+          headers: { 'Content-Type': 'application/octet-stream' },
+        });
+      }),
+    );
+  }
+
+  function redirectContentTo(location: string): void {
+    mswServer.use(
+      http.get(docxContentRx, () =>
+        new HttpResponse(null, { status: 302, headers: { Location: location } }),
+      ),
+    );
+  }
+
+  beforeAll(async () => {
+    cfg = createMicrosoftConfigDir();
+    client = await createTestClient({
+      env: {
+        MS_CLIENT_ID: 'mock-client-id',
+        MS_CONFIG_DIR: cfg.configPath,
+      },
+    });
+  });
+
+  beforeEach(() => {
+    const mock = createMockApi();
+    mswServer.use(...mock.handlers);
+    hops = [];
+  });
+
+  afterAll(async () => {
+    if (client) await client.close();
+    if (cfg) cfg.cleanup();
+  });
+
+  it('follows a redirect to a vendor host WITHOUT forwarding the bearer token', async () => {
+    const target = 'https://contoso-my.sharepoint.com/download/preauth-1';
+    redirectContentTo(target);
+    serveDocxAt(target);
+    const result = await client.callTool('read_document', { path: 'item-docx' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as { content: string };
+    expect(json.content).toContain('Quarterly Results');
+    // The redirect target was fetched exactly once, with no Authorization header.
+    expect(hops).toHaveLength(1);
+    expect(hops[0]?.authorization).toBeUndefined();
+  });
+
+  it('keeps the bearer token on a same-host (Graph) redirect hop', async () => {
+    const target = `${GRAPH_BASE}/me/drive/items/item-docx/content?via=graph`;
+    let hits = 0;
+    let hopAuth: string | undefined;
+    mswServer.use(
+      http.get(docxContentRx, ({ request }) => {
+        hits += 1;
+        if (hits === 1) {
+          return new HttpResponse(null, { status: 302, headers: { Location: target } });
+        }
+        hopAuth = request.headers.get('authorization') ?? undefined;
+        return new HttpResponse(docxStream(), {
+          headers: { 'Content-Type': 'application/octet-stream' },
+        });
+      }),
+    );
+    const result = await client.callTool('read_document', { path: 'item-docx' });
+    expect(result.isError).not.toBe(true);
+    expect(hits).toBe(2);
+    expect(hopAuth).toMatch(/^Bearer /);
+  });
+
+  it('refuses a redirect to a non-vendor host and never fetches it', async () => {
+    const target = 'https://download.evil.example.com/steal';
+    redirectContentTo(target);
+    serveDocxAt(target);
+    const result = await client.callTool('read_document', { path: 'item-docx' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('OneDrive/SharePoint host');
+    expect(hops).toHaveLength(0);
+  });
+
+  it('fails closed on a redirect loop instead of hopping forever', async () => {
+    const self = `${GRAPH_BASE}/me/drive/items/item-docx/content`;
+    let redirects = 0;
+    mswServer.use(
+      http.get(docxContentRx, () => {
+        redirects += 1;
+        return new HttpResponse(null, { status: 302, headers: { Location: self } });
+      }),
+    );
+    const result = await client.callTool('read_document', { path: 'item-docx' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('redirect limit');
+    expect(redirects).toBeLessThanOrEqual(5);
   });
 });

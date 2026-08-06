@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Resumable `upload_file` chunk PUTs are now restricted to HTTPS URLs on Microsoft OneDrive/SharePoint hosts (default port, no userinfo), and redirects are rejected instead of followed. A malicious or compromised upload-session response can no longer retarget file bytes to an arbitrary destination.
 - Microsoft Graph error text (including the vendor error body) is now returned inside an `<untrusted-content>` envelope with close-tag breakout escaping, instead of verbatim.
 - `@odata.nextLink` continuation URLs are only ever followed back to the Graph host over HTTPS, so a hostile continuation link cannot leak the bearer token to another origin.
+- `read_document` content downloads now follow Graph's 302 redirect to the pre-authenticated download URL manually: every hop is revalidated against the same Microsoft OneDrive/SharePoint host policy as upload sessions, hops are capped, and the bearer token is only ever sent to the Graph host. A hostile upstream response can no longer retarget the download at an arbitrary address.
 
 ### Changed
 - `list_file_permissions`, `list_file_versions`, and `list_file_activities` now follow `@odata.nextLink` pagination (up to 10 pages) instead of silently dropping results beyond the first page, and return an explicit `truncated` flag when more pages remain.
