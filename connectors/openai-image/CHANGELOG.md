@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `server.json` now declares the optional `MCP_HTTP_PORT` environment variable (loopback-only HTTP transport), closing the manifest drift between the code and the registry declaration. `OPENAI_IMAGE_IMPORT_ONLY` remains undeclared by design: it is a test-harness escape hatch, not a runtime configuration knob.
 
+### Fixed
+
+- `OPENAI_IMAGE_REQUEST_TIMEOUT_MS` validation now matches the documented contract (`server.json`, README): the value must be a base-10 integer string between 1 and 1800000 ms (30 minutes). Non-integer input (`1e9`, `180000abc`, `30000.5`) was previously truncated by `parseInt`, and values above the documented maximum were accepted; both now fall back to the 180000 ms default with a structured warning.
+
 ## [0.2.0] - 2026-07-25
 
 ### Changed

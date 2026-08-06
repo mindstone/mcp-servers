@@ -18,6 +18,8 @@ const packageJson = require('../package.json') as { version: string };
 
 export const SERVER_VERSION = packageJson.version;
 export const DEFAULT_OPENAI_IMAGE_REQUEST_TIMEOUT_MS = 180_000;
+// Matches the documented ceiling in server.json / README (max 30 minutes).
+export const MAX_OPENAI_IMAGE_REQUEST_TIMEOUT_MS = 1_800_000;
 export const NOT_CONFIGURED_RESOLUTION =
   "Set OPENAI_API_KEY in your MCP host's settings.";
 const MAX_LOCAL_IMAGE_BYTES = 25 * 1024 * 1024;
@@ -213,8 +215,17 @@ export const resolveRequestTimeoutMs = (): number => {
     return DEFAULT_OPENAI_IMAGE_REQUEST_TIMEOUT_MS;
   }
 
-  const parsed = parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
+  // Strict whole-string integer parsing: parseInt would silently truncate
+  // values like '1e9' or '180000abc'.
+  const trimmed = raw.trim();
+  const parsed = /^\d+$/u.test(trimmed)
+    ? Number(trimmed)
+    : Number.NaN;
+  if (
+    !Number.isSafeInteger(parsed) ||
+    parsed <= 0 ||
+    parsed > MAX_OPENAI_IMAGE_REQUEST_TIMEOUT_MS
+  ) {
     logger.warn(
       '[openai-image] Invalid OPENAI_IMAGE_REQUEST_TIMEOUT_MS; using default.',
       { rawValue: raw, fallbackMs: DEFAULT_OPENAI_IMAGE_REQUEST_TIMEOUT_MS },
