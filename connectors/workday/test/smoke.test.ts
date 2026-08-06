@@ -51,6 +51,41 @@ describe('Smoke test — tool registration', () => {
     expect(toolsResult.tools).toHaveLength(9);
     expect(toolNames).toEqual(EXPECTED_TOOLS);
   });
+
+  it('declares read-only annotations on query tools and destructive on configure', async () => {
+    mswServer.use(...createWorkdayHandlers());
+
+    const client = await createTestClient({
+      env: {
+        WORKDAY_HOST: MOCK_HOST,
+        WORKDAY_TENANT: MOCK_TENANT,
+        WORKDAY_CLIENT_ID: MOCK_CLIENT_ID,
+        WORKDAY_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    try {
+      const toolsResult = await client.client.listTools();
+      for (const tool of toolsResult.tools) {
+        if (tool.name === 'configure_workday_credentials') {
+          expect(tool.annotations).toMatchObject({
+            readOnlyHint: false,
+            destructiveHint: true,
+            openWorldHint: false,
+          });
+        } else {
+          expect(tool.annotations).toMatchObject({
+            readOnlyHint: true,
+            destructiveHint: false,
+            openWorldHint: true,
+          });
+        }
+      }
+    } finally {
+      await client.close();
+    }
+  });
 });
 
 describe('Spawned stdio smoke test', () => {
