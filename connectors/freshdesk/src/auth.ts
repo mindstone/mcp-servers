@@ -35,16 +35,22 @@ export function getConfigPath(): string {
  *
  * The file is opened once and read through the file descriptor (open →
  * fstat → read) so it cannot be swapped between a path-level existence
- * check and the read (check-then-use race). A missing, unreadable, or
- * corrupt file fails closed to "no accounts", which surfaces as the
- * observable "No Freshdesk account connected" error from every tool.
+ * check and the read (check-then-use race). The open is non-blocking so a
+ * FIFO at the config path cannot stall every tool invocation waiting for
+ * a writer. A missing, unreadable, corrupt, or non-regular file fails
+ * closed to "no accounts" — including resetting previously loaded
+ * credentials — which surfaces as the observable "No Freshdesk account
+ * connected" error from every tool.
  */
 export function loadAccounts(): void {
   const accountsPath = path.join(CONFIG_PATH, 'accounts.json');
   let fd: number | undefined;
   try {
-    fd = fs.openSync(accountsPath, 'r');
-    if (!fs.fstatSync(fd).isFile()) return;
+    fd = fs.openSync(accountsPath, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
+    if (!fs.fstatSync(fd).isFile()) {
+      accountsConfig = { accounts: [] };
+      return;
+    }
     const raw = fs.readFileSync(fd, 'utf8');
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     if (parsed && Array.isArray(parsed.accounts)) {

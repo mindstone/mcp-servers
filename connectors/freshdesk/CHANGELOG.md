@@ -30,6 +30,7 @@ are maintained manually as part of the PR review checklist.
 ### Fixed
 - `search_freshdesk_solutions` gains a `page` parameter and reports `hasMore` (plus a "more results may be available" hint in concise output) on full pages, instead of presenting a truncated first page as the complete result set.
 - `accounts.json` is now read open-once through a file descriptor (open + fstat + read), closing the check-then-use window between the old existence check and the read; a missing, deleted, or non-regular file fails closed to "no accounts".
+- Hot-reload now drops previously loaded accounts when `accounts.json` becomes a non-regular file (e.g. replaced by a directory) instead of serving stale in-memory credentials, and the config-file open is non-blocking so a FIFO at the config path cannot stall tool invocations waiting for a writer.
 
 ## [0.2.2] - 2026-05-14
 ### Added
