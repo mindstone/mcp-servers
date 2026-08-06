@@ -14,6 +14,8 @@
 
 import { isIP } from 'node:net';
 
+import { z } from 'zod';
+
 import { WorkdayError, USER_AGENT, REQUEST_TIMEOUT_MS, RECRUITING_API_VERSION_DEFAULT } from './types.js';
 import { bridgeRequest } from './bridge.js';
 
@@ -342,6 +344,33 @@ if (_envHost) {
 
 // ── Token exchange ──
 
+// The token body is vendor/proxy-controlled. Validate it before caching: a
+// hostile endpoint could return an absurd expires_in (pinning the cached
+// token open for the process lifetime) or a malformed/missing access_token.
+// Bounds: 60s-24h. Below 60s the 60-second cache skew would force a
+// re-exchange on every call anyway; above 24h a stolen token stays usable
+// far beyond any legitimate Workday lifetime (real tokens last ~1h).
+const tokenResponseSchema = z.object({
+  access_token: z.string().min(1),
+  token_type: z.string(),
+  expires_in: z.number().int().min(60).max(86_400),
+  refresh_token: z.string().min(1).optional(),
+});
+
+export type TokenResponse = z.infer<typeof tokenResponseSchema>;
+
+export function parseTokenResponse(data: unknown): TokenResponse {
+  const parsed = tokenResponseSchema.safeParse(data);
+  if (!parsed.success) {
+    throw new WorkdayError(
+      'OAuth token endpoint returned a malformed or out-of-bounds response.',
+      'AUTH_FAILED',
+      'Re-configure with configure_workday_credentials. If the problem persists, check the API Client registration in Workday.',
+    );
+  }
+  return parsed.data;
+}
+
 export async function getAccessToken(): Promise<string> {
   if (!clientId || !clientSecret) {
     throw new WorkdayError(
@@ -414,12 +443,7 @@ export async function getAccessToken(): Promise<string> {
     );
   }
 
-  const tokenData = await response.json() as {
-    access_token: string;
-    token_type: string;
-    expires_in: number;
-    refresh_token?: string;
-  };
+  const tokenData = parseTokenResponse(await response.json());
 
   cachedAccessToken = tokenData.access_token;
   tokenExpiresAt = Date.now() + (tokenData.expires_in - 60) * 1000;

@@ -12,6 +12,7 @@ import { withErrorHandling } from '../utils.js';
 import {
   validateHost,
   assertHostResolvesPublic,
+  parseTokenResponse,
   setHost,
   setTenant,
   setClientId,
@@ -143,12 +144,17 @@ COMMON MISTAKES:
         });
       }
 
-      const tokenData = await tokenResponse.json() as {
-        access_token: string;
-        token_type: string;
-        expires_in: number;
-        refresh_token?: string;
-      };
+      // The token body is vendor/proxy-controlled — validate shape and bounds
+      // (bounded expires_in) before using it for the API probe.
+      let tokenData;
+      try {
+        tokenData = parseTokenResponse(await tokenResponse.json());
+      } catch (error) {
+        if (error instanceof WorkdayError) {
+          return JSON.stringify({ ok: false, error: error.message, resolution: error.resolution });
+        }
+        throw error;
+      }
 
       // API probe
       const testUrl = `https://${host}/ccx/api/v1/${tenant}/workers?limit=1`;

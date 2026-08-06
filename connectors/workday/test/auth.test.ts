@@ -210,6 +210,89 @@ describe('OAuth2 dual grant type', () => {
   });
 });
 
+describe('Token response validation', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  const ENV = {
+    WORKDAY_HOST: MOCK_HOST,
+    WORKDAY_TENANT: MOCK_TENANT,
+    WORKDAY_CLIENT_ID: MOCK_CLIENT_ID,
+    WORKDAY_CLIENT_SECRET: MOCK_CLIENT_SECRET,
+    MCP_HOST_BRIDGE_STATE: '',
+  };
+
+  it('refuses an out-of-bounds expires_in instead of pinning the token cache open', async () => {
+    let apiRequestCount = 0;
+    mswServer.use(
+      http.post(TOKEN_URL, async () =>
+        HttpResponse.json(createTokenResponse({ expires_in: 1e12 })),
+      ),
+      http.get(`${API_BASE}/workers`, async () => {
+        apiRequestCount++;
+        return HttpResponse.json({ data: [], total: 0 });
+      }),
+    );
+
+    testClient = await createTestClient({ env: ENV });
+    const result = await testClient.callTool('list_workday_workers', {});
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('AUTH_FAILED');
+    expect(apiRequestCount).toBe(0);
+  });
+
+  it('refuses a token response with a missing access_token', async () => {
+    mswServer.use(
+      http.post(TOKEN_URL, async () =>
+        HttpResponse.json({ token_type: 'Bearer', expires_in: 3600 }),
+      ),
+    );
+
+    testClient = await createTestClient({ env: ENV });
+    const result = await testClient.callTool('list_workday_workers', {});
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('AUTH_FAILED');
+  });
+
+  it('refuses a non-integer expires_in', async () => {
+    mswServer.use(
+      http.post(TOKEN_URL, async () =>
+        HttpResponse.json({ access_token: MOCK_ACCESS_TOKEN, token_type: 'Bearer', expires_in: '3600' }),
+      ),
+    );
+
+    testClient = await createTestClient({ env: ENV });
+    const result = await testClient.callTool('list_workday_workers', {});
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('AUTH_FAILED');
+  });
+
+  it('configure reports a malformed token response without leaking credentials', async () => {
+    mswServer.use(
+      http.post(TOKEN_URL, async () => HttpResponse.json({ unexpected: true })),
+    );
+
+    testClient = await createTestClient({ env: ENV });
+    const result = await testClient.callTool('configure_workday_credentials', {
+      host: MOCK_HOST,
+      tenant: MOCK_TENANT,
+      client_id: MOCK_CLIENT_ID,
+      client_secret: MOCK_CLIENT_SECRET,
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(result.text).not.toContain(MOCK_CLIENT_SECRET);
+    expect(result.text).not.toContain(MOCK_CLIENT_ID);
+  });
+});
+
 describe('Network error handling', () => {
   let testClient: McpTestClient;
 
