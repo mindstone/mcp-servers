@@ -213,10 +213,10 @@ export function formatRows(response: DataApiResponse) {
   // envelope them the same way the recursive helper envelopes object keys
   // (invariant #6).
   const dimensionHeaders = (response.dimensionHeaders || []).map(
-    (h) => wrapUntrusted(h.name, UNTRUSTED_SOURCES.report) ?? h.name,
+    (h) => wrapUntrusted(h.name, UNTRUSTED_SOURCES.report) ?? 'unknown',
   );
   const metricHeaders = (response.metricHeaders || []).map(
-    (h) => wrapUntrusted(h.name, UNTRUSTED_SOURCES.report) ?? h.name,
+    (h) => wrapUntrusted(h.name, UNTRUSTED_SOURCES.report) ?? 'unknown',
   );
 
   const rows = (response.rows || []).map((row) => {
@@ -235,7 +235,7 @@ export function formatRows(response: DataApiResponse) {
     return item;
   });
 
-  const mapAggregate = (entries: Array<{ metricValues?: Array<{ value: string }> }>) =>
+  const mapAggregate = (entries: Array<{ metricValues?: Array<{ value?: string }> }>) =>
     entries.map((entry) => {
       const item: Record<string, string | null> = {};
       metricHeaders.forEach((header, index) => {
@@ -324,19 +324,28 @@ export function categoriseField(
   return kind === 'metric' ? 'Other Metrics' : 'Other Dimensions';
 }
 
-interface MetadataField {
-  apiName?: string;
-  uiName?: string;
-  description?: string;
-  category?: string;
-  type?: string;
-  expression?: string;
-  customDefinition?: boolean;
-  deprecatedApiNames?: string[];
-  allowedInSegments?: boolean;
-  dimensionCompatibleMetrics?: unknown;
-  metricCompatibleDimensions?: unknown;
-}
+/**
+ * Runtime shape of a Data-API metadata field. Validated at the boundary
+ * (fail-closed) instead of only TypeScript-cast; .passthrough() keeps the
+ * surface forward-compatible with new vendor fields.
+ */
+export const metadataFieldSchema = z
+  .object({
+    apiName: z.string().optional(),
+    uiName: z.string().optional(),
+    description: z.string().optional(),
+    category: z.string().optional(),
+    type: z.string().optional(),
+    expression: z.string().optional(),
+    customDefinition: z.boolean().optional(),
+    deprecatedApiNames: z.array(z.string()).optional(),
+    allowedInSegments: z.boolean().optional(),
+    dimensionCompatibleMetrics: z.unknown().optional(),
+    metricCompatibleDimensions: z.unknown().optional(),
+  })
+  .passthrough();
+
+type MetadataField = z.infer<typeof metadataFieldSchema>;
 
 /** Map a raw Data-API metadata field into a cleaner shape. */
 export function mapMetadataField(field: MetadataField, kind: 'dimension' | 'metric') {

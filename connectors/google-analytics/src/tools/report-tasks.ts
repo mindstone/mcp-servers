@@ -13,7 +13,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { googleApi, propertyPath, Bases } from '../client.js';
 import { filterExpressionSchema } from '../filters.js';
-import { GoogleAnalyticsError, type DataApiResponse } from '../types.js';
+import { dataApiResponseSchema, GoogleAnalyticsError, type DataApiResponse } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import {
   compactObject,
@@ -241,11 +241,15 @@ export function registerReportTaskTools(server: McpServer): void {
     withErrorHandling(async (rawArgs) => {
       const args = z.object(QueryReportTaskInputShape).parse(rawArgs ?? {});
       const name = reportTaskPath(args.property_id, args.task_id);
-      const response = await googleApi<DataApiResponse>(`/${name}:query`, {
-        method: 'POST',
-        body: { offset: String(args.offset), limit: String(args.limit) },
-        baseUrl: Bases.dataAlpha,
-      });
+      const response: DataApiResponse = parseApiResponse(
+        dataApiResponseSchema,
+        await googleApi(`/${name}:query`, {
+          method: 'POST',
+          body: { offset: String(args.offset), limit: String(args.limit) },
+          baseUrl: Bases.dataAlpha,
+        }),
+        'reportTasks.query',
+      );
       return JSON.stringify({
         ok: true,
         reportTask: name,

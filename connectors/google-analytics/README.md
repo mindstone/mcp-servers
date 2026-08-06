@@ -179,6 +179,7 @@ For service accounts, set `GOOGLE_APPLICATION_CREDENTIALS` to the absolute path 
 - **Read-only posture.** All tools are read-only except `ga_create_report_task` and `ga_create_audience_export`, which materialise server-side snapshots and charge quota (annotated `readOnlyHint: false`, `destructiveHint: true`, `idempotentHint: false`) without modifying property configuration. Hosts can gate the two creation tools behind explicit user approval.
 - **Alpha endpoints.** Audiences, channel groups, BigQuery links, the global site tag, change history (Admin API), and report tasks (Data API) are only exposed on Google's `v1alpha` surfaces today; the corresponding tools note this in their descriptions.
 - **Untrusted content.** Text authored inside the GA4 property — report dimension values (page titles, campaign names, custom-dimension values), audience/display names, descriptions, definition blobs, vendor-echoed header/dimension names, and vendor error messages — is returned inside `<untrusted-content source="…">` envelopes so hosts treat it as data, not instructions. Metric values and resource identifiers stay raw so agents can compose follow-up calls.
+- **Response validation.** Every Google API response is validated against a Zod schema at the boundary; a shape mismatch fails closed with an `INVALID_API_RESPONSE` error rather than propagating malformed data. Paginated lists follow `nextPageToken` in full and fail with `PAGINATION_LIMIT_EXCEEDED` if the API does not stop paging after a generous safety cap — never a silent truncation.
 
 ## Licence
 

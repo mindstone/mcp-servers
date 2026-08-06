@@ -13,6 +13,7 @@ const FIXTURE_ADC = path.resolve(
 );
 
 const ADMIN_BETA = 'https://analyticsadmin.googleapis.com/v1beta';
+const ADMIN_ALPHA = 'https://analyticsadmin.googleapis.com/v1alpha';
 const DATA_BETA = 'https://analyticsdata.googleapis.com/v1beta';
 const DATA_ALPHA = 'https://analyticsdata.googleapis.com/v1alpha';
 
@@ -245,5 +246,107 @@ describe('error paths', () => {
     expect(parsed.ok).toBe(true);
     expect(parsed.estimatedRows).toBe(5000);
     expect(parsed.rows).toBeUndefined();
+  });
+
+  it('fails closed with INVALID_API_RESPONSE when report rows have a malformed shape', async () => {
+    await setup([
+      http.post(new RegExp(`^${escapeRegex(DATA_BETA)}/properties/[^/]+:runReport$`), () =>
+        HttpResponse.json({
+          rowCount: 1,
+          rows: [{ dimensionValues: 'United Kingdom' }],
+        }),
+      ),
+    ]);
+    const parsed = await callError('ga_run_report', {
+      property_id: '200',
+      metrics: ['totalUsers'],
+      proceed_with_large_dataset: true,
+    });
+    expect(parsed.code).toBe('INVALID_API_RESPONSE');
+  });
+
+  it('fails closed with INVALID_API_RESPONSE when a paginated list item has a malformed shape', async () => {
+    await setup([
+      http.get(new RegExp(`^${escapeRegex(ADMIN_BETA)}/properties/[^/]+/customDimensions`), () =>
+        HttpResponse.json({
+          customDimensions: [{ name: 'properties/200/customDimensions/1', displayName: 123 }],
+        }),
+      ),
+    ]);
+    const parsed = await callError('ga_get_custom_dimensions_and_metrics', {
+      property_id: '200',
+    });
+    expect(parsed.code).toBe('INVALID_API_RESPONSE');
+  });
+
+  it('fails closed with INVALID_API_RESPONSE when a list endpoint returns a non-array collection', async () => {
+    await setup([
+      http.get(new RegExp(`^${escapeRegex(DATA_BETA)}/properties/[^/]+/audienceExports$`), () =>
+        HttpResponse.json({ audienceExports: { name: 'not-an-array' } }),
+      ),
+    ]);
+    const parsed = await callError('ga_list_audience_exports', { property_id: '200' });
+    expect(parsed.code).toBe('INVALID_API_RESPONSE');
+  });
+
+  it('fails closed with INVALID_API_RESPONSE when account summaries have a malformed shape', async () => {
+    await setup([
+      http.get(`${ADMIN_BETA}/accountSummaries`, () =>
+        HttpResponse.json({ accountSummaries: [{ account: 42 }] }),
+      ),
+    ]);
+    const parsed = await callError('ga_list_account_summaries');
+    expect(parsed.code).toBe('INVALID_API_RESPONSE');
+  });
+
+  it('fails closed with INVALID_API_RESPONSE when metadata fields have a malformed shape', async () => {
+    await setup([
+      http.get(new RegExp(`^${escapeRegex(DATA_BETA)}/properties/[^/]+/metadata$`), () =>
+        HttpResponse.json({ dimensions: [{ apiName: 7 }] }),
+      ),
+    ]);
+    const parsed = await callError('ga_get_metadata', { property_id: '200' });
+    expect(parsed.code).toBe('INVALID_API_RESPONSE');
+  });
+
+  it('fails closed with INVALID_API_RESPONSE when change-history events have a malformed shape', async () => {
+    await setup([
+      http.post(
+        new RegExp(`^${escapeRegex(ADMIN_ALPHA)}/accounts/[^/]+:searchChangeHistoryEvents$`),
+        () => HttpResponse.json({ changeHistoryEvents: [{ id: 7 }] }),
+      ),
+    ]);
+    const parsed = await callError('ga_search_change_history_events', { property_id: '200' });
+    expect(parsed.code).toBe('INVALID_API_RESPONSE');
+  });
+
+  it('fails observably with PAGINATION_LIMIT_EXCEEDED when a list endpoint never stops paging', async () => {
+    await setup([
+      http.get(new RegExp(`^${escapeRegex(DATA_BETA)}/properties/[^/]+/audienceExports$`), () =>
+        HttpResponse.json({
+          audienceExports: [{ name: 'properties/200/audienceExports/700', state: 'ACTIVE' }],
+          nextPageToken: 'never-ending',
+        }),
+      ),
+    ]);
+    const parsed = await callError('ga_list_audience_exports', { property_id: '200' });
+    expect(parsed.code).toBe('PAGINATION_LIMIT_EXCEEDED');
+    expect(String(parsed.error)).toContain('did not terminate');
+  });
+
+  it('fails observably with PAGINATION_LIMIT_EXCEEDED when change history never stops paging', async () => {
+    await setup([
+      http.post(
+        new RegExp(`^${escapeRegex(ADMIN_ALPHA)}/accounts/[^/]+:searchChangeHistoryEvents$`),
+        () =>
+          HttpResponse.json({
+            changeHistoryEvents: [{ id: 'evt-1', changeTime: '2026-01-01T00:00:00Z' }],
+            nextPageToken: 'never-ending',
+          }),
+      ),
+    ]);
+    const parsed = await callError('ga_search_change_history_events', { property_id: '200' });
+    expect(parsed.code).toBe('PAGINATION_LIMIT_EXCEEDED');
+    expect(String(parsed.error)).toContain('did not terminate');
   });
 });

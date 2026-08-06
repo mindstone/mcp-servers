@@ -17,7 +17,7 @@ import {
   DEFAULT_REQUEST_TIMEOUT_MS,
 } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
-import { UNTRUSTED_SOURCES } from './utils.js';
+import { parseApiResponse, UNTRUSTED_SOURCES } from './utils.js';
 
 /** Shape of the standard Google API error payload, validated at the boundary. */
 const apiErrorPayloadSchema = z
@@ -47,6 +47,26 @@ export const Bases = {
   data: DATA_BASE_URL,
   dataAlpha: DATA_ALPHA_BASE_URL,
 } as const;
+
+/**
+ * Hard cap on followed list pages. A misbehaving or compromised upstream
+ * that returns a perpetual nextPageToken must fail observably instead of
+ * looping forever and growing memory without bound. 250 pages at the
+ * connector's page sizes (100-200 items) is far beyond any legitimate GA4
+ * collection.
+ */
+export const MAX_LIST_PAGES = 250;
+
+/**
+ * Throw the shared observable failure for pagination that does not terminate.
+ */
+export function paginationLimitExceeded(context: string): never {
+  throw new GoogleAnalyticsError(
+    `Google API pagination for ${context} did not terminate after ${MAX_LIST_PAGES} pages.`,
+    'PAGINATION_LIMIT_EXCEEDED',
+    'The API kept returning a nextPageToken beyond the safety cap. Try again; if the problem persists, narrow the query or check for a connector update.',
+  );
+}
 
 /**
  * Call a Google API endpoint with the configured ADC bearer token.
@@ -136,23 +156,43 @@ export async function googleApi<T = unknown>(
  * Iterate paginated list endpoints, accumulating all items. Used for the
  * smaller admin collections (account summaries, properties, links) where
  * full enumeration is the expected mode.
+ *
+ * Every page's items are fail-closed validated against `itemSchema` at the
+ * boundary (INVALID_API_RESPONSE on shape mismatch) instead of being
+ * TypeScript-cast only. A non-string nextPageToken ends pagination rather
+ * than being coerced into a query parameter.
  */
 export async function paginate<T>(
   apiPath: string,
-  options: { itemKey: string; query?: GoogleApiOptions['query']; baseUrl?: string },
+  options: {
+    itemKey: string;
+    itemSchema: z.ZodType<T>;
+    query?: GoogleApiOptions['query'];
+    baseUrl?: string;
+  },
 ): Promise<T[]> {
   const items: T[] = [];
   let pageToken: string | undefined;
+  let pages = 0;
 
   do {
+    pages += 1;
+    if (pages > MAX_LIST_PAGES) {
+      paginationLimitExceeded(options.itemKey);
+    }
     const response = await googleApi<Record<string, unknown>>(apiPath, {
       method: 'GET',
       query: { ...options.query, pageToken },
       baseUrl: options.baseUrl,
     });
-    const page = (response?.[options.itemKey] as T[] | undefined) || [];
+    const page = parseApiResponse(
+      z.array(options.itemSchema),
+      response?.[options.itemKey] ?? [],
+      `${options.itemKey}.list`,
+    );
     items.push(...page);
-    pageToken = response?.nextPageToken as string | undefined;
+    const rawToken = response?.nextPageToken;
+    pageToken = typeof rawToken === 'string' && rawToken !== '' ? rawToken : undefined;
   } while (pageToken);
 
   return items;

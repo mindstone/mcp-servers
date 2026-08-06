@@ -20,6 +20,7 @@ are maintained manually as part of the PR review checklist.
 ### Fixed
 - `ga_list_bigquery_links` and `ga_get_global_site_tag` now call the Admin API v1alpha base: neither resource exists on the v1beta surface, so both tools would fail against the real API.
 - `ga_search_change_history_events` no longer silently truncates at the first 100 events — it follows `nextPageToken` until the result set is exhausted.
+- Paginated list tools and change-history search now fail observably with `PAGINATION_LIMIT_EXCEEDED` if the API keeps returning a `nextPageToken` beyond a 250-page safety cap, instead of looping forever on a misbehaving upstream.
 - `dimension_filter` / `metric_filter` inputs are fail-closed validated against the GA4 `FilterExpression` structure instead of being passed through unvalidated.
 
 ### Security
@@ -29,6 +30,7 @@ are maintained manually as part of the PR review checklist.
 - `reportMetadata.errorMessage` on report tasks is enveloped before returning.
 - `ga_create_audience_export` and `ga_create_report_task` are now annotated `destructiveHint: true` so hosts can gate these quota-charging server-side materialisations behind explicit user approval.
 - Audience-export and report-task API responses are validated against Zod schemas at the boundary instead of being TypeScript-cast only.
+- All remaining external API responses are now validated the same way (fail-closed `INVALID_API_RESPONSE` on shape mismatch): report rows (`runReport`, pivot, realtime, batch, `reportTasks:query`), every paginated admin list, account summaries, property details, metadata, compatibility, retention settings, global site tag, and change-history pages. A non-string `nextPageToken` now ends pagination instead of being coerced into a query parameter.
 
 ## [0.1.1] - 2026-05-14
 ### Added

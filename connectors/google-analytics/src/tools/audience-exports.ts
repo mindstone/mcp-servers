@@ -237,19 +237,16 @@ export function registerAudienceExportTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const property = propertyPath(args.property_id);
-      const exports = await paginate<AudienceExport>(`/${property}/audienceExports`, {
+      const exports = await paginate(`/${property}/audienceExports`, {
         itemKey: 'audienceExports',
+        itemSchema: audienceExportSchema,
         query: { pageSize: 200 },
         baseUrl: Bases.data,
       });
       return JSON.stringify({
         ok: true,
         property,
-        audienceExports: exports.map((item) =>
-          mapAudienceExport(
-            parseApiResponse(audienceExportSchema, item, 'audienceExports.list'),
-          ),
-        ),
+        audienceExports: exports.map(mapAudienceExport),
       });
     }),
   );

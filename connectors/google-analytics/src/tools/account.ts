@@ -7,7 +7,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { googleApi, paginate, propertyPath } from '../client.js';
 import { wrapUntrusted } from '../untrusted-content.js';
-import { UNTRUSTED_SOURCES, withErrorHandling } from '../utils.js';
+import { parseApiResponse, UNTRUSTED_SOURCES, withErrorHandling } from '../utils.js';
 
 const READ_ONLY = {
   readOnlyHint: true,
@@ -16,20 +16,49 @@ const READ_ONLY = {
   openWorldHint: true,
 } as const;
 
-interface AccountSummary {
-  account?: string;
-  displayName?: string;
-  propertySummaries?: Array<{
-    property?: string;
-    displayName?: string;
-    propertyType?: string;
-    parent?: string;
-  }>;
-}
+/** Runtime shapes validated at the boundary (fail-closed); .passthrough()
+ * keeps the surfaces forward-compatible with new vendor fields. */
+const accountSummarySchema = z
+  .object({
+    account: z.string().optional(),
+    displayName: z.string().optional(),
+    propertySummaries: z
+      .array(
+        z
+          .object({
+            property: z.string().optional(),
+            displayName: z.string().optional(),
+            propertyType: z.string().optional(),
+            parent: z.string().optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
+  })
+  .passthrough();
+
+type AccountSummary = z.infer<typeof accountSummarySchema>;
+
+const propertyDetailsSchema = z
+  .object({
+    name: z.string().optional(),
+    displayName: z.string().optional(),
+    propertyType: z.string().optional(),
+    parent: z.string().optional(),
+    currencyCode: z.string().optional(),
+    timeZone: z.string().optional(),
+    industryCategory: z.string().optional(),
+    serviceLevel: z.string().optional(),
+    createTime: z.string().optional(),
+    updateTime: z.string().optional(),
+    deleted: z.boolean().optional(),
+  })
+  .passthrough();
 
 async function listAccountSummariesRaw(): Promise<AccountSummary[]> {
-  return paginate<AccountSummary>('/accountSummaries', {
+  return paginate('/accountSummaries', {
     itemKey: 'accountSummaries',
+    itemSchema: accountSummarySchema,
     query: { pageSize: 200 },
   });
 }
@@ -120,19 +149,11 @@ export function registerAccountTools(server: McpServer): void {
       annotations: READ_ONLY,
     },
     withErrorHandling(async (args) => {
-      const property = await googleApi<{
-        name?: string;
-        displayName?: string;
-        propertyType?: string;
-        parent?: string;
-        currencyCode?: string;
-        timeZone?: string;
-        industryCategory?: string;
-        serviceLevel?: string;
-        createTime?: string;
-        updateTime?: string;
-        deleted?: boolean;
-      }>(`/${propertyPath(args.property_id)}`);
+      const property = parseApiResponse(
+        propertyDetailsSchema,
+        await googleApi(`/${propertyPath(args.property_id)}`),
+        'properties.get',
+      );
 
       return JSON.stringify({
         ok: true,

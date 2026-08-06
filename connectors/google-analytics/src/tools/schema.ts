@@ -6,7 +6,13 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { googleApi, propertyPath, Bases } from '../client.js';
-import { mapMetadataField, toNameList, withErrorHandling } from '../utils.js';
+import {
+  mapMetadataField,
+  metadataFieldSchema,
+  parseApiResponse,
+  toNameList,
+  withErrorHandling,
+} from '../utils.js';
 
 const READ_ONLY = {
   readOnlyHint: true,
@@ -15,16 +21,44 @@ const READ_ONLY = {
   openWorldHint: true,
 } as const;
 
-interface MetadataResponse {
-  dimensions?: Parameters<typeof mapMetadataField>[0][];
-  metrics?: Parameters<typeof mapMetadataField>[0][];
-}
+/** Runtime response shapes validated at the boundary (fail-closed). */
+const metadataResponseSchema = z
+  .object({
+    dimensions: z.array(metadataFieldSchema).optional(),
+    metrics: z.array(metadataFieldSchema).optional(),
+  })
+  .passthrough();
+
+const compatibilityEntrySchema = z
+  .object({
+    dimensionMetadata: z
+      .object({ apiName: z.string().optional() })
+      .passthrough()
+      .optional(),
+    metricMetadata: z
+      .object({ apiName: z.string().optional() })
+      .passthrough()
+      .optional(),
+    compatibility: z.string().optional(),
+  })
+  .passthrough();
+
+const compatibilityResponseSchema = z
+  .object({
+    dimensionCompatibilities: z.array(compatibilityEntrySchema).optional(),
+    metricCompatibilities: z.array(compatibilityEntrySchema).optional(),
+  })
+  .passthrough();
 
 async function fetchMetadata(propertyId: string | undefined) {
   const property = propertyPath(propertyId);
-  const response = await googleApi<MetadataResponse>(`/${property}/metadata`, {
-    baseUrl: Bases.data,
-  });
+  const response = parseApiResponse(
+    metadataResponseSchema,
+    await googleApi(`/${property}/metadata`, {
+      baseUrl: Bases.data,
+    }),
+    'metadata.get',
+  );
   return {
     property,
     dimensions: (response.dimensions || []).map((field) => mapMetadataField(field, 'dimension')),
@@ -249,24 +283,19 @@ export function registerSchemaTools(server: McpServer): void {
       const dimensions = toNameList(args.dimensions);
       const metrics = toNameList(args.metrics);
 
-      const response = await googleApi<{
-        dimensionCompatibilities?: Array<{
-          dimensionMetadata?: { apiName?: string };
-          compatibility?: string;
-        }>;
-        metricCompatibilities?: Array<{
-          metricMetadata?: { apiName?: string };
-          compatibility?: string;
-        }>;
-      }>(`/${property}:checkCompatibility`, {
-        method: 'POST',
-        body: {
-          dimensions: dimensions.map((name) => ({ name })),
-          metrics: metrics.map((name) => ({ name })),
-          compatibilityFilter: 'COMPATIBLE',
-        },
-        baseUrl: Bases.data,
-      });
+      const response = parseApiResponse(
+        compatibilityResponseSchema,
+        await googleApi(`/${property}:checkCompatibility`, {
+          method: 'POST',
+          body: {
+            dimensions: dimensions.map((name) => ({ name })),
+            metrics: metrics.map((name) => ({ name })),
+            compatibilityFilter: 'COMPATIBLE',
+          },
+          baseUrl: Bases.data,
+        }),
+        'checkCompatibility',
+      );
 
       return JSON.stringify({
         ok: true,
