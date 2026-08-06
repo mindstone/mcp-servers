@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Changed
 
 - Graph responses for the new tools (and `create_draft`) are validated with Zod at the boundary instead of cast, per the planned tightening noted in 0.1.1; pre-existing read tools still cast and remain tracked as planned debt.
+- Each successful `download_attachment` save leaves its private staging directory (`microsoft-mail-attachment-*`) under the workspace root in place — by design, so the saved file survives — but repeated downloads accumulate directories there; prune them as part of normal workspace housekeeping.
 
 ### Fixed
 
