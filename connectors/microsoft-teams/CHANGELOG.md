@@ -9,7 +9,7 @@ All notable changes to this connector will be documented in this file.
 - Envelope Microsoft Graph error text in `<untrusted-content>` before returning it to the model, so vendor-controlled error bodies cannot inject instructions into the conversation.
 - Scope pre-checks now fail closed: when the stored token cannot be loaded or parsed, permission-gated tools return explicit reconnect guidance instead of silently skipping the check and proceeding to Graph.
 - Tools that change external state (`send_chat_message`, `reply_to_message`, `create_chat`, `send_channel_message`, `reply_to_channel_message`, `set_presence`) now declare `destructiveHint: true` so hosts can gate or confirm them.
-- Structural Graph fields (message/chat/user IDs, content types, timestamps, presence states, chat types) are validated against safe formats; values carrying envelope-breakout or markup characters fail closed instead of reaching model-visible output.
+- Structural Graph fields (message/chat/team/channel/user IDs, content types, timestamps, presence states, chat types, channel membership types, member roles) are validated against safe formats; values carrying envelope-breakout or markup characters fail closed instead of reaching model-visible output. This now also covers the pre-existing `list_chats`, `get_chat`, `list_teams`, `list_channels`, and `send_chat_message` response paths, not only the newly added tools.
 - Re-synced the vendored untrusted-content helper with the canonical reference implementation (all-whitespace close-tag variants, plus the unwrap helpers).
 
 ### Fixed

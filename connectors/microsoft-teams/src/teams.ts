@@ -149,13 +149,13 @@ export async function listChats(
   return {
     count: chats.length,
     chats: chats.map((chat) => ({
-      id: chat.id,
+      id: graphStructuralTokenSchema.parse(chat.id),
       topic: chat.topic
         ? wrapUntrusted(chat.topic, 'microsoft-teams:list_chats:topic')
         : '(No topic)',
-      type: chat.chatType,
-      createdAt: chat.createdDateTime,
-      lastUpdated: chat.lastUpdatedDateTime,
+      type: graphStructuralTokenSchema.nullish().parse(chat.chatType),
+      createdAt: graphIsoDateTimeSchema.nullish().parse(chat.createdDateTime),
+      lastUpdated: graphIsoDateTimeSchema.nullish().parse(chat.lastUpdatedDateTime),
     })),
   };
 }
@@ -173,17 +173,17 @@ export async function getChat(
     .get()) as ChatWithMembers;
 
   return {
-    id: chat.id,
+    id: graphStructuralTokenSchema.parse(chat.id),
     topic: chat.topic
       ? wrapUntrusted(chat.topic, 'microsoft-teams:get_chat:topic')
       : '(No topic)',
-    type: chat.chatType,
-    createdAt: chat.createdDateTime,
-    lastUpdated: chat.lastUpdatedDateTime,
+    type: graphStructuralTokenSchema.nullish().parse(chat.chatType),
+    createdAt: graphIsoDateTimeSchema.nullish().parse(chat.createdDateTime),
+    lastUpdated: graphIsoDateTimeSchema.nullish().parse(chat.lastUpdatedDateTime),
     members: chat.members?.map((member) => ({
       displayName: wrapUntrusted(member.displayName, 'microsoft-teams:get_chat:members.displayName'),
       email: wrapUntrusted(member.email, 'microsoft-teams:get_chat:members.email'),
-      roles: member.roles,
+      roles: z.array(graphStructuralTokenSchema).nullish().parse(member.roles),
     })),
   };
 }
@@ -217,12 +217,14 @@ export async function sendChatMessage(
 ): Promise<unknown> {
   const chatId = requireStringArg(args, 'chatId', 'chat ID', 'send_chat_message');
   const content = requireStringArg(args, 'content', 'message body', 'send_chat_message');
-  const response = (await client.api(`/me/chats/${chatId}/messages`).options({ signal }).post({
-    body: {
-      contentType: content.includes('<') ? 'html' : 'text',
-      content,
-    },
-  })) as { id?: string };
+  const response = sendMessageResponseSchema.parse(
+    await client.api(`/me/chats/${chatId}/messages`).options({ signal }).post({
+      body: {
+        contentType: content.includes('<') ? 'html' : 'text',
+        content,
+      },
+    }),
+  );
 
   return {
     success: true,
@@ -246,10 +248,10 @@ interface Channel {
 
 function formatChannel(channel: Channel): Record<string, unknown> {
   return {
-    id: channel.id,
+    id: graphStructuralTokenSchema.parse(channel.id),
     name: wrapUntrusted(channel.displayName, 'microsoft-teams:list_channels:name'),
     description: wrapUntrusted(channel.description, 'microsoft-teams:list_channels:description'),
-    membershipType: channel.membershipType,
+    membershipType: graphStructuralTokenSchema.nullish().parse(channel.membershipType),
   };
 }
 
@@ -268,7 +270,7 @@ export async function listTeams(
   return {
     count: teams.length,
     teams: teams.map((team) => ({
-      id: team.id,
+      id: graphStructuralTokenSchema.parse(team.id),
       name: wrapUntrusted(team.displayName, 'microsoft-teams:list_teams:name'),
       description: wrapUntrusted(team.description, 'microsoft-teams:list_teams:description'),
     })),
@@ -404,9 +406,11 @@ export async function setPresence(
 // ---------------------------------------------------------------------------
 // Channel messages
 // ---------------------------------------------------------------------------
-// Newer functions validate Graph responses with Zod (the repo convention);
-// the older functions above predate it and still cast — intentional, not an
-// oversight, pending the planned cohort-wide tightening.
+// Every function validates the Graph strings it returns — free text via the
+// untrusted-content envelope, structural values (IDs, enum-like tokens,
+// datetimes) via the shape schemas above — so vendor-controlled markup never
+// reaches model-visible output raw. The older functions still cast at fetch
+// time for typing, but their output mappers apply the same schemas.
 
 const graphMessageSchema = z
   .object({
