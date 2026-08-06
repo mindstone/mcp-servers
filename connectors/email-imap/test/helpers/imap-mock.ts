@@ -53,6 +53,10 @@ export interface ImapMockOptions {
   searchUids?: number[];
   /** If set, messageMove() throws with this message */
   moveError?: string;
+  /** If set, messageCopy() throws with this message */
+  copyError?: string;
+  /** If true, messageCopy() returns a uidMap missing the first requested UID */
+  copyPartialUidMap?: boolean;
 }
 
 /**
@@ -70,9 +74,16 @@ export function createImapMock(options: ImapMockOptions = {}) {
     connectError,
     searchUids,
     moveError,
+    copyError,
+    copyPartialUidMap,
   } = options;
 
   const constructorCalls: unknown[][] = [];
+  /**
+   * Live move/copy behavior — tests may flip these between tool calls to
+   * exercise fallback paths within a single test file.
+   */
+  const behavior = { moveError, copyError, copyPartialUidMap };
   /** Invocation counters shared across all mock instances of this factory. */
   const calls = {
     messageMove: 0,
@@ -241,15 +252,19 @@ export function createImapMock(options: ImapMockOptions = {}) {
 
     async messageMove(uids: number[], _destination: string, _opts?: unknown) {
       calls.messageMove += 1;
-      if (moveError) {
-        throw new Error(moveError);
+      if (behavior.moveError) {
+        throw new Error(behavior.moveError);
       }
       return { uidMap: new Map(uids.map((uid) => [uid, uid + 1000])) };
     }
 
-    async messageCopy(_uids: number[], _destination: string, _opts?: unknown) {
+    async messageCopy(uids: number[], _destination: string, _opts?: unknown) {
       calls.messageCopy += 1;
-      return { uidMap: new Map() };
+      if (behavior.copyError) {
+        throw new Error(behavior.copyError);
+      }
+      const mappedUids = behavior.copyPartialUidMap ? uids.slice(1) : uids;
+      return { uidMap: new Map(mappedUids.map((uid) => [uid, uid + 1000])) };
     }
 
     async messageFlagsAdd(_uids: number[], flags: string[], _opts?: unknown) {
@@ -292,5 +307,5 @@ export function createImapMock(options: ImapMockOptions = {}) {
     }
   }
 
-  return { MockImapFlow, constructorCalls, calls, flagsCalls, mailboxLocks };
+  return { MockImapFlow, constructorCalls, calls, flagsCalls, mailboxLocks, behavior };
 }

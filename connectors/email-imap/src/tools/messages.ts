@@ -326,7 +326,14 @@ export function registerMessageTools(server: McpServer): void {
   server.registerTool(
     'email_move_messages',
     {
-      description: 'Move emails between folders by UID.',
+      description:
+        'Move emails between folders by UID. Uses the server MOVE command when available; ' +
+        'otherwise falls back to COPY + permanent expunge of the originals from the source ' +
+        'mailbox — the expunge runs ONLY after the copy is verified complete for every ' +
+        'requested UID, and aborts with a MOVE_COPY_UNVERIFIED error (messages left in ' +
+        'place) when it cannot be verified. The destination mailbox is created when ' +
+        'missing. This mutates the remote account: hosts MUST require explicit user ' +
+        'confirmation before each invocation.',
       inputSchema: z.object({
         uids: z
           .array(z.number().int().positive())
@@ -335,7 +342,7 @@ export function registerMessageTools(server: McpServer): void {
         mailbox: z.string().min(1).describe('Source mailbox/folder name'),
         destination: z.string().min(1).describe('Destination mailbox/folder name'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       ensureInitialized();
@@ -350,35 +357,51 @@ export function registerMessageTools(server: McpServer): void {
       try {
         const client = await getConnection();
 
-        try {
-          const moveResult = await client.messageMove(uids, destination, {
-            uid: true,
-          });
+        const moveResult = await client
+          .messageMove(uids, destination, { uid: true })
+          .catch(() => null);
 
-          if (!moveResult) {
-            throw new Error('MOVE command failed');
-          }
-
+        if (moveResult) {
           return JSON.stringify({
             ok: true,
             moved: moveResult.uidMap ? moveResult.uidMap.size : uids.length,
           });
-        } catch {
-          const copyResult = await client.messageCopy(uids, destination, {
-            uid: true,
-          });
-          if (!copyResult) {
-            throw new Error('Unable to copy messages to destination mailbox');
-          }
+        }
 
-          await client.messageFlagsAdd(uids, ['\\Deleted'], { uid: true });
-          await client.messageDelete(uids, { uid: true });
+        // MOVE unsupported or failed — fall back to COPY + expunge-source.
+        // The permanent expunge of the source messages is gated on a
+        // VERIFIED complete copy: a truthy-but-incomplete messageCopy result
+        // (missing or partial COPYUID map) must never escalate into
+        // expunging messages that have not landed at the destination — the
+        // same fail-closed rationale as email_delete's TRASH_MOVE_FAILED.
+        const copyResult = await client
+          .messageCopy(uids, destination, { uid: true })
+          .catch(() => null);
+        const copyUidMap = copyResult ? copyResult.uidMap : undefined;
+        const copyVerifiedComplete =
+          copyUidMap instanceof Map && uids.every((uid) => copyUidMap.has(uid));
 
+        if (!copyVerifiedComplete) {
           return JSON.stringify({
-            ok: true,
-            moved: uids.length,
+            ok: false,
+            code: 'MOVE_COPY_UNVERIFIED',
+            error:
+              'The server has no usable MOVE command and the fallback COPY could not be ' +
+              'verified complete for every message (the server reported no complete COPYUID ' +
+              'map), so nothing was expunged. The messages remain in the source mailbox.',
+            resolution:
+              'Retry the move, or use an IMAP client that can verify the copy before ' +
+              'deleting the originals.',
           });
         }
+
+        await client.messageFlagsAdd(uids, ['\\Deleted'], { uid: true });
+        await client.messageDelete(uids, { uid: true });
+
+        return JSON.stringify({
+          ok: true,
+          moved: uids.length,
+        });
       } finally {
         lock.release();
       }
