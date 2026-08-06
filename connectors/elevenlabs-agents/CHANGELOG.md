@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-06
+
+### Changed
+
+- Add phone-number import/delete, conversation feedback, KB RAG index tools, agent-tools management; four sanitizer/SSRF hardening rounds
+
 ### Added
 
 - `import_phone_number` and `delete_phone_number` tools, completing the telephony lifecycle: a Twilio number (Account SID + Auth Token) or SIP trunk number (inbound/outbound trunk config) can now be onboarded and later removed without leaving the agent loop. Numbers are E.164-validated before any upstream call; both tools carry `destructiveHint: true`.
