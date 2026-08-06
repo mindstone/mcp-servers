@@ -212,11 +212,23 @@ export function formatRows(response: DataApiResponse) {
   // authored by property editors) and become structural keys in the output —
   // envelope them the same way the recursive helper envelopes object keys
   // (invariant #6).
-  const dimensionHeaders = (response.dimensionHeaders || []).map(
-    (h) => wrapUntrusted(h.name, UNTRUSTED_SOURCES.report) ?? 'unknown',
+  //
+  // Header names are not unique by contract: two headers can both lack a
+  // name (both fall back to 'unknown'), or a dimension and a metric can
+  // share a name. Disambiguate duplicates so a later column never silently
+  // overwrites an earlier one in the row objects; the header arrays carry
+  // the same deduplicated names so keys stay traceable.
+  const usedHeaderNames = new Map<string, number>();
+  const uniqueHeader = (name: string): string => {
+    const seen = usedHeaderNames.get(name) ?? 0;
+    usedHeaderNames.set(name, seen + 1);
+    return seen === 0 ? name : `${name} (${seen + 1})`;
+  };
+  const dimensionHeaders = (response.dimensionHeaders || []).map((h) =>
+    uniqueHeader(wrapUntrusted(h.name, UNTRUSTED_SOURCES.report) ?? 'unknown'),
   );
-  const metricHeaders = (response.metricHeaders || []).map(
-    (h) => wrapUntrusted(h.name, UNTRUSTED_SOURCES.report) ?? 'unknown',
+  const metricHeaders = (response.metricHeaders || []).map((h) =>
+    uniqueHeader(wrapUntrusted(h.name, UNTRUSTED_SOURCES.report) ?? 'unknown'),
   );
 
   const rows = (response.rows || []).map((row) => {
