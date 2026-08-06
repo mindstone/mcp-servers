@@ -199,8 +199,10 @@ behaviour.
 Every attacker-controlled text field the connector returns — message bodies,
 subjects, from/to display names, Message-IDs, attachment filenames, MIME
 content types and part identifiers, mailbox names and special-use values,
-message flag keywords (writable via `email_set_flags`, so envelope-shaped
-keywords are rejected on input), draft summaries, and error text originating
+message flag keywords (writable via `email_set_flags`, where keywords must
+match a conservative charset allowlist — letters, digits, `_`, `$`, `.`, `-`
+with an optional leading `\` — so atom-specials like spaces, parens, quotes
+or CR/LF can never reach the IMAP command), draft summaries, and error text originating
 from the IMAP/SMTP server or vendor SDKs — is wrapped in an
 `<untrusted-content …>…</untrusted-content>` envelope (with close-tag
 breakout escaping) so the host LLM treats it as data, not instructions.
@@ -240,7 +242,7 @@ confirmation as `email_send`.
 - `email_get_attachment` — Download an attachment into the workspace sandbox (see `MCP_WORKSPACE_PATH`); writes are exclusive-create, so existing files are never overwritten
 - `email_move_messages` — Move emails between folders (fallback expunge of the source is gated on a verified-complete copy; destructive)
 - `email_delete` — Delete emails (moves to Trash when one exists, otherwise expunges permanently; aborts with an error if the Trash move fails; destructive)
-- `email_set_flags` — Set or remove flags (read, starred) on messages (flag keywords are returned enveloped and envelope-shaped values are rejected; destructive)
+- `email_set_flags` — Set or remove flags (read, starred) on messages (flag keywords are returned enveloped and must match a charset allowlist on input; destructive)
 
 ### Drafts
 - `email_save_draft` — Save a draft email (supports attachments; mutates the remote account — destructive)

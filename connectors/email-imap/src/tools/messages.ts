@@ -43,23 +43,29 @@ function parseDateFilter(value: string | undefined, field: string): Date | undef
 }
 
 /**
+ * Accepted flag-keyword charset: an optional leading backslash (system flags
+ * like \Seen) followed by RFC 3501 atom characters restricted to a
+ * conservative subset. Anything outside it — spaces, parens, braces, quotes,
+ * list wildcards, controls (CR/LF), or envelope-marker characters (`<`, `>`,
+ * `/`) — is rejected before the value reaches the IMAP command compiler, so
+ * a flag keyword can never alter the command's structure regardless of how
+ * the underlying client serialises ATOM values. The allowlist also subsumes
+ * the old empty / envelope-marker-shape rejections.
+ */
+const FLAG_KEYWORD_PATTERN = /^\\?[A-Za-z0-9_$.-]+$/;
+
+/**
  * Normalise a caller-supplied flag keyword: strip one envelope layer (flags
  * are returned enveloped by email_search_messages, and the connector's
  * round-trip contract lets enveloped values be passed back as-is), then
- * reject empty and envelope-marker-shaped values. RFC 3501 flag-keyword is
- * an atom whose exclusion set permits `<`, `>` and `/`, so without this
- * check a model could persist an `<untrusted-content …>`-shaped keyword
- * server-side — a stored injection resurfacing in subsequent responses.
+ * enforce the keyword charset allowlist above.
  */
 function normalizeFlagInput(flag: string): string {
   const value = unwrapUntrusted(flag).trim();
-  if (value.length === 0) {
-    throw new Error('Flag values must be non-empty');
-  }
-  if (/<\/?untrusted-content/i.test(value)) {
+  if (!FLAG_KEYWORD_PATTERN.test(value)) {
     throw new Error(
-      'Refusing envelope-shaped flag value: <untrusted-content> markers are ' +
-        'not accepted as flag keywords.',
+      `Invalid flag keyword: "${value}". Use letters, digits, and "_", "$", ".", "-" ` +
+        'with an optional leading "\\" for system flags (e.g. "\\Seen", "$NotJunk", "NonJunk").',
     );
   }
   return value;
@@ -499,11 +505,11 @@ export function registerMessageTools(server: McpServer): void {
       description:
         'Set or remove flags on messages. Common flags: \\Seen (read), \\Flagged (starred). ' +
         'Flags are stored on the server and returned (enveloped) by email_search_messages; ' +
-        'envelope-shaped flag values are rejected, and enveloped mailbox/flag values from ' +
-        'previous tool output may be passed back as-is — one envelope layer is stripped on ' +
-        'input. NOTE: \\Deleted marks messages for permanent expunge when the mailbox is ' +
-        'closed. This mutates the remote account: hosts MUST require explicit user ' +
-        'confirmation before each invocation.',
+        'keywords must match [A-Za-z0-9_$.-] with an optional leading "\\", and enveloped ' +
+        'mailbox/flag values from previous tool output may be passed back as-is — one ' +
+        'envelope layer is stripped on input. NOTE: \\Deleted marks messages for ' +
+        'permanent expunge when the mailbox is closed. This mutates the remote account: ' +
+        'hosts MUST require explicit user confirmation before each invocation.',
       inputSchema: z.object({
         uids: z
           .array(z.number().int().positive())
