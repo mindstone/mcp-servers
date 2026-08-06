@@ -126,7 +126,7 @@ node dist/index.js
 
 ### Generation
 - `napkin_generate_visual` — Generate a professional visual from text
-- `napkin_check_status` — Check the status of a visual generation request (vendor-authored warning/error messages are wrapped in `<untrusted-content>` envelopes so hosts treat them as data)
+- `napkin_check_status` — Check the status of a visual generation request (vendor-authored free text — warning/error messages and `visual_query` — is wrapped in `<untrusted-content>` envelopes so hosts treat it as data; codes, IDs, and URLs stay raw, with their machine-identifier charset enforced by response validation)
 - `napkin_download_visual` — Download a generated visual file to disk (existing files are never overwritten — pass a different `filename` or omit it to auto-generate one). Redirects are re-validated against the Napkin host allow-list before being followed; off-list redirect targets are refused.
 
 ### Styles
