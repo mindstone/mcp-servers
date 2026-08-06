@@ -47,6 +47,7 @@ describe('Graph request signal propagation', () => {
 
   it('getChat passes signal to GraphRequest.options', async () => {
     const { client, builder } = createMockClient();
+    builder.get.mockResolvedValueOnce({ id: 'chat-1', chatType: 'group' });
     const signal = new AbortController().signal;
     await getChat(client, { chatId: 'chat-1' }, signal);
     expect(builder.options).toHaveBeenCalledWith({ signal });
