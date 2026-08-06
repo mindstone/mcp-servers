@@ -13,7 +13,7 @@ ElevenLabs Conversational AI MCP server for Model Context Protocol hosts. Inspec
 
 | Field | Value |
 |-------|-------|
-| Version | 0.1.2 |
+| Version | 0.2.0 |
 | Auth | API key (`ELEVENLABS_API_KEY`) |
 | Tools | 31 (agents, agent-tools, conversations, phone-numbers, outbound-calls, batch-calls, knowledge-base) |
 | Surface | cloud API |
