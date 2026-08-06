@@ -55,6 +55,15 @@ const jsonApiResponseSchema = z
   })
   .passthrough();
 
+/**
+ * Outreach API v2 resource IDs are numeric. Constraining IDs to digits also
+ * blocks path-traversal segments (`../`) where an ID is interpolated into a
+ * request path or forwarded as a filter/relationship value.
+ */
+export const outreachIdSchema = z
+  .string()
+  .regex(/^\d+$/, 'Outreach resource IDs are numeric');
+
 function getErrorResolution(status: number, detail?: string): string {
   const msg = (detail || '').toLowerCase();
   if (status === 401 || msg.includes('unauthorized') || msg.includes('invalid')) {

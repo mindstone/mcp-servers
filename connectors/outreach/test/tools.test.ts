@@ -328,10 +328,85 @@ describe('Tool tests — Outreach MCP server', () => {
       },
     });
 
-    const result = await testClient.callTool('outreach_get_sequence_template', { id: 'nonexistent' });
+    const result = await testClient.callTool('outreach_get_sequence_template', { id: '404999' });
     expect(result.isError).toBe(true);
     expect(result.json).toHaveProperty('ok', false);
     expect(result.json).toHaveProperty('code', 'HTTP_404');
+  });
+
+  it('rejects non-numeric (path-traversal) IDs before any API request', async () => {
+    mswServer.use(...createOutreachHandlers());
+    let apiRequests = 0;
+    mswServer.use(
+      http.all(`${OUTREACH_API_BASE}/*`, () => {
+        apiRequests += 1;
+        return HttpResponse.json({ data: [] });
+      }),
+    );
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    for (const [tool, args] of [
+      ['outreach_get_prospect', { id: '../prospects' }],
+      ['outreach_complete_task', { id: '../../tasks' }],
+      ['outreach_get_account', { id: '1/../2' }],
+      ['outreach_get_sequence_template', { id: 'abc' }],
+    ] as const) {
+      const result = await testClient.callTool(tool, args);
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain('numeric');
+    }
+    // Zod rejected every input up front — nothing reached the vendor API.
+    expect(apiRequests).toBe(0);
+  });
+
+  it('outreach_get_sequence_template fails closed on a non-numeric template reference from the vendor', async () => {
+    mswServer.use(...createOutreachHandlers());
+    let templateFetches = 0;
+    mswServer.use(
+      http.get(`${OUTREACH_API_BASE}/sequenceTemplates/:id`, () =>
+        HttpResponse.json({
+          data: {
+            id: '901',
+            type: 'sequenceTemplate',
+            attributes: { enabled: true },
+            relationships: {
+              // Attacker-shaped relationship ID steering the follow-up GET.
+              template: { data: { id: '../sequenceStates', type: 'template' } },
+            },
+          },
+        }),
+      ),
+      http.get(`${OUTREACH_API_BASE}/templates/:id`, () => {
+        templateFetches += 1;
+        return HttpResponse.json({ data: { id: '1001', type: 'template', attributes: {} } });
+      }),
+    );
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('outreach_get_sequence_template', { id: '901' });
+    expect(result.isError).toBe(true);
+    expect(result.json).toHaveProperty('ok', false);
+    expect(result.json).toHaveProperty('code', 'INVALID_RESPONSE');
+    // The steered follow-up request never happened.
+    expect(templateFetches).toBe(0);
   });
 
   it('outreach_remove_prospect_from_sequence pauses by default', async () => {

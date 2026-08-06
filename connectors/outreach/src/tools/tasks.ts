@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { withErrorHandling } from '../utils.js';
 import {
   outreachFetch,
+  outreachIdSchema,
   formatResource,
   formatResources,
   clampLimit,
@@ -22,7 +23,7 @@ Returns tasks with status, due date, type, and assigned user.`,
           .enum(['incomplete', 'complete'])
           .optional()
           .describe('Filter by completion status'),
-        prospect_id: z.string().optional().describe('Filter tasks for a specific prospect'),
+        prospect_id: outreachIdSchema.optional().describe('Filter tasks for a specific prospect'),
         limit: z.number().min(1).max(50).default(25).optional().describe('Max results (default 25, max 50)'),
         page_offset: z.number().min(0).optional().describe('Record offset into the result list for pagination (maps to the API\'s page[offset]; e.g. 25 for the second page with limit 25)'),
       }),
@@ -72,8 +73,8 @@ WORKFLOW: Use outreach_search_prospects to find the prospect ID first.`,
           .string()
           .optional()
           .describe('Due date as an ISO 8601 datetime string (e.g. "2026-05-01T17:00:00Z")'),
-        prospect_id: z.string().optional().describe('Prospect ID the task relates to'),
-        owner_id: z.string().optional().describe('Outreach user ID who owns the task (uses default when omitted)'),
+        prospect_id: outreachIdSchema.optional().describe('Prospect ID the task relates to'),
+        owner_id: outreachIdSchema.optional().describe('Outreach user ID who owns the task (uses default when omitted)'),
       }),
       annotations: {
         readOnlyHint: false,
@@ -126,7 +127,7 @@ WORKFLOW: Use outreach_search_prospects to find the prospect ID first.`,
 
 WORKFLOW: Use outreach_list_tasks with status "incomplete" to find open task IDs.`,
       inputSchema: z.object({
-        id: z.string().min(1).describe('Task ID (required)'),
+        id: outreachIdSchema.describe('Task ID (required)'),
       }),
       annotations: {
         readOnlyHint: false,

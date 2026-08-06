@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { withErrorHandling } from '../utils.js';
 import {
   outreachFetch,
+  outreachIdSchema,
   formatResource,
   formatResources,
   clampLimit,
@@ -90,7 +91,7 @@ PAGINATION: Default 25, max 50. Use page_offset for next page.`,
 Returns all prospect fields including custom fields, tags, engagement data.
 RELATED TOOLS: outreach_search_prospects to find IDs first.`,
       inputSchema: z.object({
-        id: z.string().min(1).describe('Prospect ID'),
+        id: outreachIdSchema.describe('Prospect ID'),
       }),
       annotations: {
         readOnlyHint: true,
@@ -119,7 +120,7 @@ COMMON MISTAKES: Don't forget to associate with an account via account_id if kno
         last_name: z.string().optional().describe('Last name'),
         title: z.string().optional().describe('Job title'),
         company: z.string().optional().describe('Company name'),
-        account_id: z.string().optional().describe('Associated Outreach account ID'),
+        account_id: outreachIdSchema.optional().describe('Associated Outreach account ID'),
         tags: z.array(z.string()).optional().describe('Tags to apply'),
         custom_fields: customFieldsSchema,
       }),
@@ -178,7 +179,7 @@ COMMON MISTAKES: Don't forget to associate with an account via account_id if kno
 
 Only provided fields are updated. Use outreach_search_prospects to find the ID.`,
       inputSchema: z.object({
-        id: z.string().min(1).describe('Prospect ID (required)'),
+        id: outreachIdSchema.describe('Prospect ID (required)'),
         email: z.string().optional().describe('Email address'),
         first_name: z.string().optional().describe('First name'),
         last_name: z.string().optional().describe('Last name'),

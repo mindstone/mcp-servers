@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { withErrorHandling } from '../utils.js';
 import {
   outreachFetch,
+  outreachIdSchema,
   formatResource,
   formatResources,
   clampLimit,
@@ -56,7 +57,7 @@ Returns company accounts with domain, industry, and owner info.`,
 
 Returns account fields, custom fields, and associated prospects count.`,
       inputSchema: z.object({
-        id: z.string().min(1).describe('Account ID'),
+        id: outreachIdSchema.describe('Account ID'),
       }),
       annotations: {
         readOnlyHint: true,

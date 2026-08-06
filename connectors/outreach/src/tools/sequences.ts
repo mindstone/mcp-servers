@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { withErrorHandling } from '../utils.js';
 import {
   outreachFetch,
+  outreachIdSchema,
   formatResource,
   formatResources,
   clampLimit,
@@ -57,7 +58,7 @@ FILTERS: name (partial match), enabled status.`,
 
 Returns sequence config, steps, and performance metrics.`,
       inputSchema: z.object({
-        id: z.string().min(1).describe('Sequence ID'),
+        id: outreachIdSchema.describe('Sequence ID'),
       }),
       annotations: {
         readOnlyHint: true,
@@ -83,9 +84,9 @@ Returns sequence config, steps, and performance metrics.`,
 WORKFLOW: Find the prospect (outreach_search_prospects) and sequence (outreach_list_sequences) first.
 COMMON MISTAKES: Prospect must not already be active in the same sequence.`,
       inputSchema: z.object({
-        prospect_id: z.string().min(1).describe('Prospect ID to enroll'),
-        sequence_id: z.string().min(1).describe('Sequence ID to enroll into'),
-        mailbox_id: z.string().optional().describe('Mailbox ID to send from (optional, uses default)'),
+        prospect_id: outreachIdSchema.describe('Prospect ID to enroll'),
+        sequence_id: outreachIdSchema.describe('Sequence ID to enroll into'),
+        mailbox_id: outreachIdSchema.optional().describe('Mailbox ID to send from (optional, uses default)'),
       }),
       annotations: {
         readOnlyHint: false,
@@ -127,8 +128,8 @@ finishes the enrollment via the sequence state's finish action — the prospect
 receives no further steps, and re-enrolling restarts the sequence from the top.
 WORKFLOW: Finds the prospect's sequence state for the given sequence, then applies the action.`,
       inputSchema: z.object({
-        prospect_id: z.string().min(1).describe('Prospect ID'),
-        sequence_id: z.string().min(1).describe('Sequence ID'),
+        prospect_id: outreachIdSchema.describe('Prospect ID'),
+        sequence_id: outreachIdSchema.describe('Sequence ID'),
         action: z
           .enum(['pause', 'remove'])
           .default('pause')

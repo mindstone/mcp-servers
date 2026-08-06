@@ -89,7 +89,7 @@ describe('Error handling — Outreach MCP server', () => {
       },
     });
 
-    const result = await testClient.callTool('outreach_get_prospect', { id: 'nonexistent' });
+    const result = await testClient.callTool('outreach_get_prospect', { id: '404999' });
     expect(result.isError).toBe(true);
     expect(result.json).toHaveProperty('ok', false);
     expect(result.json).toHaveProperty('code', 'HTTP_404');
@@ -109,7 +109,7 @@ describe('Error handling — Outreach MCP server', () => {
     });
 
     // Trigger 500
-    const errorResult = await testClient.callTool('outreach_get_prospect', { id: 'trigger-500' });
+    const errorResult = await testClient.callTool('outreach_get_prospect', { id: '500999' });
     expect(errorResult.isError).toBe(true);
     expect(errorResult.json).toHaveProperty('ok', false);
 
