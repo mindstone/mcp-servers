@@ -24,7 +24,7 @@ are maintained manually as part of the PR review checklist.
 ### Security
 - Envelope all external, user-authored text returned by the Outreach API (names, emails, subjects, bodies, notes, tags, custom fields) in `<untrusted-content>` envelopes with close-tag breakout escaping, via the single `formatResource` chokepoint (FOX-3490). Vendor-generated structure (ids, timestamps, lifecycle enums) is left raw; every other attribute is enveloped fail-closed.
 - Vendor error text — API error details (including raw non-JSON response bodies) and OAuth token-exchange failure bodies — is now truncated to 500 characters and wrapped in `<untrusted-content source="outreach:api-error">` envelopes before it can reach model context.
-- Outreach resource IDs accepted by tools must now be numeric (`/^\d+$/`); non-numeric values are rejected before any API request, closing path-traversal steering of request URLs. A non-numeric template reference in a vendor response likewise fails closed with `INVALID_RESPONSE` instead of steering the follow-up request.
+- Outreach resource IDs accepted by tools must now be numeric (`/^\d+$/`); non-numeric values are rejected before any API request, closing path-traversal steering of request URLs. A non-numeric template reference in a vendor response likewise fails closed with `INVALID_RESPONSE` instead of steering the follow-up request. The same contract now applies to the sequence-state ID returned by the vendor in `outreach_remove_prospect_from_sequence`, which steers a state-changing POST.
 - The host bridge state file is now Zod-validated (integer port 1–65535, non-empty token); malformed state is ignored instead of being interpolated into the bridge URL.
 
 ### Fixed
