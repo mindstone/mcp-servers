@@ -362,4 +362,48 @@ describe('external response validation (fail-closed)', () => {
     expect(JSON.parse(result.text).code).toBe('INVALID_RESPONSE');
     expect(result.text).not.toContain('secret-upstream-marker-do-not-echo');
   });
+
+  it('check_subscription rejects an extreme reset unix that would break toISOString', async () => {
+    mswServer.use(
+      http.get(`${BASE_V1}/user/subscription`, () =>
+        HttpResponse.json({
+          tier: 'starter',
+          character_count: 100,
+          character_limit: 30_000,
+          next_character_count_reset_unix: 1e300,
+        }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('check_subscription', {});
+  });
+
+  it('check_subscription rejects a non-numeric character_count', async () => {
+    mswServer.use(
+      http.get(`${BASE_V1}/user/subscription`, () =>
+        HttpResponse.json({ tier: 'starter', character_count: '12500', character_limit: 30_000 }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('check_subscription', {});
+  });
+
+  it('a 200 with a non-JSON body surfaces INVALID_RESPONSE without echoing the body excerpt', async () => {
+    const bodySnippet = 'upstream-non-json-marker-do-not-echo';
+    mswServer.use(
+      http.get(
+        `${BASE_V1}/user/subscription`,
+        () =>
+          new HttpResponse(`<html>${bodySnippet}</html>`, {
+            status: 200,
+            headers: { 'Content-Type': 'text/html' },
+          }),
+      ),
+    );
+    await openClient();
+    const result = await testClient.callTool('check_subscription', {});
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.text).code).toBe('INVALID_RESPONSE');
+    expect(result.text).not.toContain(bodySnippet);
+  });
 });

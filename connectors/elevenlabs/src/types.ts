@@ -113,16 +113,6 @@ export interface AudioResult {
   sizeBytes: number;
 }
 
-export interface SubscriptionResponse {
-  tier?: string;
-  status?: string;
-  character_count?: number;
-  character_limit?: number;
-  next_character_count_reset_unix?: number;
-  voice_slots_used?: number;
-  voice_limit?: number;
-}
-
 export interface ModelLanguage {
   language_id: string;
   name: string;

@@ -339,7 +339,9 @@ describe('Stage 4 dialogue, voice design, and dubbing tools', () => {
 
       expect(result.isError).toBeFalsy();
       const parsed = JSON.parse(result.text);
-      expect(parsed.status).toBe('failed');
+      expect(parsed.status).toBe(
+        '<untrusted-content source="elevenlabs:get_dubbing:status">failed</untrusted-content>',
+      );
       expect(parsed.is_terminal).toBe(true);
       expect(parsed.name).toContain('<untrusted-content source="elevenlabs:get_dubbing:name">');
       expect(parsed.error_detail).toContain('<untrusted-content source="elevenlabs:get_dubbing:error_detail">');
@@ -352,12 +354,16 @@ describe('Stage 4 dialogue, voice design, and dubbing tools', () => {
 
       const first = await testClient.callTool('get_dubbing', { dubbing_id: 'dub-transition-001' });
       const firstParsed = JSON.parse(first.text);
-      expect(firstParsed.status).toBe('dubbing');
+      expect(firstParsed.status).toBe(
+        '<untrusted-content source="elevenlabs:get_dubbing:status">dubbing</untrusted-content>',
+      );
       expect(firstParsed.is_terminal).toBe(false);
 
       const second = await testClient.callTool('get_dubbing', { dubbing_id: 'dub-transition-001' });
       const secondParsed = JSON.parse(second.text);
-      expect(secondParsed.status).toBe('dubbed');
+      expect(secondParsed.status).toBe(
+        '<untrusted-content source="elevenlabs:get_dubbing:status">dubbed</untrusted-content>',
+      );
       expect(secondParsed.is_terminal).toBe(true);
     });
 
@@ -379,10 +385,15 @@ describe('Stage 4 dialogue, voice design, and dubbing tools', () => {
 
       expect(result.isError).toBeFalsy();
       const parsed = JSON.parse(result.text);
-      expect(parsed.status).toBe('cancelled');
+      expect(parsed.status).toBe(
+        '<untrusted-content source="elevenlabs:get_dubbing:status">cancelled</untrusted-content>',
+      );
       expect(parsed.is_terminal).toBe(true);
-      expect(parsed.message).toContain('terminal status');
-      expect(parsed.message).toContain('cancelled');
+      // The raw status string must not be interpolated into message; the
+      // classification lives in next_step.
+      expect(parsed.message).toBe(
+        'Dubbing dub-cancelled-001 reached a terminal status (see status field).',
+      );
       expect(parsed.next_step).toContain('cancelled');
       expect(parsed.next_step).not.toMatch(/poll again/i);
     });

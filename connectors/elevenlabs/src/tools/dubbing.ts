@@ -150,7 +150,7 @@ RELATED TOOLS:
 - download_dubbed_audio: fetch audio when status is dubbed
 - delete_dubbing: remove test jobs
 
-RETURNS: status (verbatim, incl. failed), enveloped name and error detail when present.
+RETURNS: enveloped status, name, target_languages, and error detail (all API-authored); is_terminal and next_step classify the lifecycle.
 
 COST: FREE — status read only.`,
       inputSchema: z.object({
@@ -189,17 +189,23 @@ COST: FREE — status read only.`,
       const errorDetail = data.error_message ?? data.error;
       const isTerminal = TERMINAL_DUBBING_STATUSES.has(status);
 
+      // status and target_languages are API-authored strings too: expected to
+      // be enum-like but not validated against a closed grammar, so they are
+      // enveloped like name/error detail (same stance as list_history
+      // model_id/source). Neither is ever interpolated into `message`.
       return JSON.stringify({
         ok: true,
         dubbing_id: data.dubbing_id ?? args.dubbing_id,
-        status,
+        status: envelopDubbingStatusField(status, 'status'),
         name: envelopDubbingStatusField(data.name, 'name'),
-        target_languages: data.target_languages,
+        target_languages: data.target_languages?.map((lang) =>
+          wrapUntrusted(lang, 'elevenlabs:get_dubbing:target_languages'),
+        ),
         error_detail: envelopDubbingStatusField(errorDetail, 'error_detail'),
         is_terminal: isTerminal,
         message: isTerminal
-          ? `Dubbing ${args.dubbing_id} reached terminal status: ${status}.`
-          : `Dubbing ${args.dubbing_id} status: ${status}. Keep polling get_dubbing until ${TERMINAL_STATUS_PHRASE}.`,
+          ? `Dubbing ${args.dubbing_id} reached a terminal status (see status field).`
+          : `Dubbing ${args.dubbing_id} is still processing (see status field). Keep polling get_dubbing until ${TERMINAL_STATUS_PHRASE}.`,
         next_step: dubbingNextStep(status),
       });
     }),
