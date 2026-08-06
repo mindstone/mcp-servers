@@ -150,9 +150,17 @@ export async function googleApi<T = unknown>(
         ? (wrapUntrusted(apiError.message, UNTRUSTED_SOURCES.apiError) ??
           `Google API request failed (HTTP ${response.status}).`)
         : `Google API request failed (HTTP ${response.status}).`;
+      // The vendor-supplied `error.status` is untrusted text too: it only
+      // becomes the structured error code when it matches Google's enum shape
+      // (e.g. PERMISSION_DENIED). Anything else falls back to the numeric
+      // HTTP status, so arbitrary vendor text never reaches `code` raw.
+      const code =
+        apiError?.status && /^[A-Z][A-Z0-9_]*$/.test(apiError.status)
+          ? apiError.status
+          : `HTTP_${response.status}`;
       throw new GoogleAnalyticsError(
         message,
-        apiError?.status || `HTTP_${response.status}`,
+        code,
         'Check that the credential has access to this resource and that the relevant Google APIs are enabled in the Cloud project attached to the credential.',
       );
     }
