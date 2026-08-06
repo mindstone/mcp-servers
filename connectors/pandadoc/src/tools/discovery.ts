@@ -65,10 +65,20 @@ RELATED TOOLS:
         `/documents/folders?${params.toString()}`,
       );
 
-      const folders = sanitizeList(
-        result.results || [],
-        sanitizeFolder,
-        'pandadoc:list_document_folders',
+      // Project the known fields before sanitizing (fail-closed, matching
+      // the document tools): fields outside the known shape — including any
+      // PandaDoc adds later — never reach the model.
+      const folders = (result.results || []).map((folder) =>
+        sanitizeFolder(
+          {
+            uuid: folder.uuid,
+            name: folder.name,
+            date_created: folder.date_created,
+            has_folders: folder.has_folders,
+            has_items: folder.has_items,
+          },
+          'pandadoc:list_document_folders',
+        ),
       ) as Array<Record<string, unknown>>;
       const hint = paginationHint(folders.length, args.page, args.count);
 
