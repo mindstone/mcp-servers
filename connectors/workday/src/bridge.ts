@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { z } from 'zod';
 import { type BridgeState, REQUEST_TIMEOUT_MS } from './types.js';
 
 /**
@@ -86,6 +87,14 @@ const loadBridgeState = (): BridgeState | null => {
   }
 };
 
+// The bridge response is host-authored but still crosses a process boundary;
+// validate the shape before any of its strings reach model-visible output.
+const bridgeResponseSchema = z.object({
+  success: z.boolean(),
+  warning: z.string().optional(),
+  error: z.string().optional(),
+});
+
 /**
  * Send a request to the host app bridge.
  *
@@ -114,5 +123,17 @@ export const bridgeRequest = async (
     return { success: false, error: `Bridge returned ${response.status}: unauthorized. Check host app authentication.` };
   }
 
-  return response.json() as Promise<{ success: boolean; warning?: string; error?: string }>;
+  let data: unknown;
+  try {
+    data = await response.json();
+  } catch {
+    warn('Bridge returned a non-JSON response body.');
+    return { success: false, error: 'Bridge returned an unreadable response.' };
+  }
+  const parsed = bridgeResponseSchema.safeParse(data);
+  if (!parsed.success) {
+    warn('Bridge returned a response with an unexpected shape.');
+    return { success: false, error: 'Bridge returned an unreadable response.' };
+  }
+  return parsed.data;
 };
