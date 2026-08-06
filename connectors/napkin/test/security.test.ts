@@ -596,3 +596,207 @@ describe('VAL-NAPKIN — napkin_download_visual download-target hardening', () =
     expect(warned).toBe(true);
   });
 });
+
+describe('VAL-NAPKIN — napkin_download_visual redirect hardening (invariant #7)', () => {
+  let testClient: McpTestClient;
+  let fetchSpy: ReturnType<typeof vi.spyOn> | undefined;
+  const downloadedFiles: string[] = [];
+  const createdDirs: string[] = [];
+  const BASE = 'https://api.napkin.ai/v1';
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    fetchSpy?.mockRestore();
+    fetchSpy = undefined;
+    vi.unstubAllEnvs();
+    for (const f of downloadedFiles) {
+      try {
+        if (fs.existsSync(f)) fs.unlinkSync(f);
+      } catch { /* ignore */ }
+    }
+    downloadedFiles.length = 0;
+    for (const d of createdDirs.reverse()) {
+      try {
+        if (fs.existsSync(d)) fs.rmdirSync(d, { recursive: true } as fs.RmDirOptions);
+      } catch { /* ignore */ }
+    }
+    createdDirs.length = 0;
+  });
+
+  function makeWorkspace(): string {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'napkin-ws-'));
+    createdDirs.push(ws);
+    return ws;
+  }
+
+  function clientEnv(workspace: string) {
+    return {
+      NAPKIN_API_KEY: MOCK_API_KEY,
+      MCP_HOST_BRIDGE_STATE: '',
+      MCP_WORKSPACE_PATH: workspace,
+    };
+  }
+
+  /** Count fetch calls the spy saw whose URL host matches the predicate. */
+  function fetchCallsTo(predicate: (host: string) => boolean): number {
+    if (!fetchSpy) return 0;
+    let count = 0;
+    for (const call of fetchSpy.mock.calls) {
+      const [input] = call as [unknown];
+      try {
+        const u =
+          typeof input === 'string'
+            ? new URL(input)
+            : input instanceof URL
+              ? input
+              : new URL((input as Request).url);
+        if (predicate(u.host)) count++;
+      } catch { /* ignore */ }
+    }
+    return count;
+  }
+
+  it('VAL-NAPKIN-018 — a redirect to an allow-listed URL is followed and downloaded', async () => {
+    const ws = makeWorkspace();
+    mswServer.use(
+      http.get(`${BASE}/visual/:id/file/redirect.svg`, ({ request }) => {
+        const auth = request.headers.get('Authorization');
+        if (auth !== `Bearer ${MOCK_API_KEY}`) {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        return new HttpResponse(null, {
+          status: 302,
+          headers: { Location: `${BASE}/visual/${mockRequestId}/file/output.svg` },
+        });
+      }),
+      http.get(`${BASE}/visual/:id/file/output.svg`, ({ request }) => {
+        const auth = request.headers.get('Authorization');
+        if (auth !== `Bearer ${MOCK_API_KEY}`) {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        return new HttpResponse('<svg>redirected</svg>', {
+          headers: { 'Content-Type': 'image/svg+xml' },
+        });
+      }),
+    );
+
+    testClient = await createTestClient({ env: clientEnv(ws) });
+
+    const result = await testClient.callTool('napkin_download_visual', {
+      file_url: `https://api.napkin.ai/v1/visual/${mockRequestId}/file/redirect.svg`,
+      filename: 'redirected',
+    });
+
+    expect(result.isError).toBeFalsy();
+    const data = result.json as DownloadResult;
+    expect(data.success).toBe(true);
+    if (data.file_path) {
+      downloadedFiles.push(data.file_path);
+      expect(fs.readFileSync(data.file_path, 'utf8')).toBe('<svg>redirected</svg>');
+    }
+  });
+
+  it('VAL-NAPKIN-019 — a redirect to a non-allow-listed host is refused and never fetched', async () => {
+    const ws = makeWorkspace();
+    mswServer.use(
+      http.get(`${BASE}/visual/:id/file/redirect.svg`, () => {
+        return new HttpResponse(null, {
+          status: 302,
+          headers: { Location: 'https://attacker.example/exfiltrate' },
+        });
+      }),
+    );
+
+    testClient = await createTestClient({ env: clientEnv(ws) });
+    fetchSpy?.mockClear();
+
+    const result = await testClient.callTool('napkin_download_visual', {
+      file_url: `https://api.napkin.ai/v1/visual/${mockRequestId}/file/redirect.svg`,
+      filename: 'evil-redirect',
+    });
+
+    expect(result.isError).toBe(true);
+    const data = result.json as DownloadResult;
+    expect(data.code).toBe('REDIRECT_REJECTED');
+    // The redirect target must never be fetched — no request, with or
+    // without the Bearer header, ever leaves for attacker.example.
+    expect(fetchCallsTo((h) => h === 'attacker.example')).toBe(0);
+    // The error message may name the rejected host (debuggable, not secret)
+    // but must never echo the redirect target's path or query — signed
+    // query strings must not be copied into model-visible output.
+    expect(result.text ?? '').not.toContain('/exfiltrate');
+  });
+
+  it('VAL-NAPKIN-020 — a redirect to a link-local/private address is refused (SSRF)', async () => {
+    const ws = makeWorkspace();
+    mswServer.use(
+      http.get(`${BASE}/visual/:id/file/redirect.svg`, () => {
+        return new HttpResponse(null, {
+          status: 302,
+          headers: { Location: 'https://169.254.169.254/latest/meta-data/' },
+        });
+      }),
+    );
+
+    testClient = await createTestClient({ env: clientEnv(ws) });
+    fetchSpy?.mockClear();
+
+    const result = await testClient.callTool('napkin_download_visual', {
+      file_url: `https://api.napkin.ai/v1/visual/${mockRequestId}/file/redirect.svg`,
+      filename: 'metadata-redirect',
+    });
+
+    expect(result.isError).toBe(true);
+    expect((result.json as DownloadResult).code).toBe('REDIRECT_REJECTED');
+    expect(fetchCallsTo((h) => h === '169.254.169.254')).toBe(0);
+  });
+
+  it('VAL-NAPKIN-021 — a redirect chain deeper than 5 hops is refused', async () => {
+    const ws = makeWorkspace();
+    mswServer.use(
+      http.get(`${BASE}/visual/:id/file/loop.svg`, () => {
+        return new HttpResponse(null, {
+          status: 302,
+          headers: { Location: `${BASE}/visual/${mockRequestId}/file/loop.svg` },
+        });
+      }),
+    );
+
+    testClient = await createTestClient({ env: clientEnv(ws) });
+
+    const result = await testClient.callTool('napkin_download_visual', {
+      file_url: `https://api.napkin.ai/v1/visual/${mockRequestId}/file/loop.svg`,
+      filename: 'loop',
+    });
+
+    expect(result.isError).toBe(true);
+    const data = result.json as DownloadResult;
+    expect(data.code).toBe('REDIRECT_REJECTED');
+    expect((data.error ?? '').toLowerCase()).toContain('too many redirects');
+  });
+
+  it('VAL-NAPKIN-022 — a redirect without a Location header is refused', async () => {
+    const ws = makeWorkspace();
+    mswServer.use(
+      http.get(`${BASE}/visual/:id/file/redirect.svg`, () => {
+        return new HttpResponse(null, { status: 302 });
+      }),
+    );
+
+    testClient = await createTestClient({ env: clientEnv(ws) });
+
+    const result = await testClient.callTool('napkin_download_visual', {
+      file_url: `https://api.napkin.ai/v1/visual/${mockRequestId}/file/redirect.svg`,
+      filename: 'no-location',
+    });
+
+    expect(result.isError).toBe(true);
+    const data = result.json as DownloadResult;
+    expect(data.code).toBe('REDIRECT_REJECTED');
+    expect((data.error ?? '').toLowerCase()).toContain('location');
+  });
+});

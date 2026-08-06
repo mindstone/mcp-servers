@@ -22,6 +22,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Security
 - **napkin**: Harden `napkin_download_visual`'s download target. The output directory is now canonicalised with canonical-prefix containment beneath `MCP_WORKSPACE_PATH` (or the home-directory fallback), so a symlinked `Chief-of-Staff`/`generated-visuals` component fails closed with an observable `OUTPUT_PATH_REJECTED` error instead of redirecting the write. Downloads are written to a fresh private staging directory (mode 0700) and hard-linked into place with exclusive-create semantics: existing files are never overwritten (`FILE_EXISTS` error) and a pre-planted symlink at the destination is never followed.
+- **napkin**: `napkin_download_visual` no longer auto-follows redirects. Downloads now fetch with `redirect: 'manual'`, re-validate every `Location` target against the same download allow-list (HTTPS-only, no userinfo, no private/loopback/reserved hosts), and cap the chain at 5 hops — a 30x from the API host can no longer smuggle the request (and the bytes written to disk) to an internal or attacker-controlled host. Refusals surface as a structured `REDIRECT_REJECTED` error that never echoes the redirect target's path or query.
 
 ## [0.3.2] - 2026-05-14
 ### Added

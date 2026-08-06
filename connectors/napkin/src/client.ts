@@ -300,6 +300,13 @@ export async function getVisualStatus(
  * `Authorization: Bearer` header is constructed. This is a defence-in-depth
  * measure against prompt-injection-driven API-key exfiltration: if validation
  * fails we throw before composing the header, and the request is never sent.
+ *
+ * Redirects are NOT auto-followed (AGENTS.md invariant #7): each hop is
+ * fetched with `redirect: 'manual'` and every `Location` target is
+ * re-validated against the same allow-list before it is followed, so a 30x
+ * from the API host cannot smuggle the request — and the bytes written to
+ * disk — to an internal or attacker-controlled host. The Bearer header is
+ * only ever attached to a URL that has passed `validateDownloadUrl`.
  */
 export async function downloadFile(
   apiKey: string,
@@ -310,32 +317,96 @@ export async function downloadFile(
   // here cannot leak the API key over the wire.
   const validated = validateDownloadUrl(fileUrl);
 
-  let response: Response;
-
   const timeoutMs = getRequestTimeoutMs();
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
 
-  // Only NOW (after validation) build the request init that carries the
-  // Bearer token, and issue the request.
-  const requestUrl = validated.toString();
-  const requestInit: RequestInit = {
-    signal: timeoutSignal,
-    headers: { Authorization: `Bearer ${apiKey}` },
-  };
+  // SSRF-via-redirect defence: `redirect: 'manual'`, re-validate every
+  // Location target against the same allow-list, cap the chain depth.
+  const MAX_REDIRECTS = 5;
+  let currentUrl = validated.toString();
+  let redirectCount = 0;
+  let response: Response;
 
-  try {
-    response = await fetch(requestUrl, requestInit);
-  } catch (error) {
-    // Download path has no caller signal, so timeoutSignal.aborted is unambiguous.
-    if (timeoutSignal.aborted) {
-      const timeoutSec = Math.round(timeoutMs / 1000);
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    try {
+      response = await fetch(currentUrl, {
+        redirect: 'manual',
+        signal: timeoutSignal,
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+    } catch (error) {
+      // Download path has no caller signal, so timeoutSignal.aborted is unambiguous.
+      if (timeoutSignal.aborted) {
+        const timeoutSec = Math.round(timeoutMs / 1000);
+        throw new NapkinError(
+          `Download timed out after ${timeoutSec}s`,
+          'TIMEOUT',
+          `The download took longer than ${timeoutSec}s. Set NAPKIN_REQUEST_TIMEOUT_MS to increase the timeout, or try again.`,
+        );
+      }
+      throw error;
+    }
+
+    if (response.status < 300 || response.status >= 400) {
+      break;
+    }
+
+    // Drain the redirect body so the connection isn't held open.
+    try {
+      await response.body?.cancel();
+    } catch {
+      /* best-effort */
+    }
+
+    redirectCount++;
+    if (redirectCount > MAX_REDIRECTS) {
       throw new NapkinError(
-        `Download timed out after ${timeoutSec}s`,
-        'TIMEOUT',
-        `The download took longer than ${timeoutSec}s. Set NAPKIN_REQUEST_TIMEOUT_MS to increase the timeout, or try again.`,
+        `Refused to follow redirect: too many redirects (>${MAX_REDIRECTS})`,
+        'REDIRECT_REJECTED',
+        'The download URL redirected too many times. Generate a new visual and download promptly.',
       );
     }
-    throw error;
+
+    const location = response.headers.get('location');
+    if (!location) {
+      throw new NapkinError(
+        'Refused to follow redirect: the redirect response has no Location header',
+        'REDIRECT_REJECTED',
+        'The download URL returned an incomplete redirect. Generate a new visual and download promptly.',
+      );
+    }
+
+    let nextUrl: string;
+    try {
+      nextUrl = new URL(location, currentUrl).toString();
+    } catch {
+      // Do not echo the Location header: signed query strings must not be
+      // copied into model-visible output.
+      throw new NapkinError(
+        'Refused to follow redirect: the redirect target is not a valid URL',
+        'REDIRECT_REJECTED',
+        'The download URL returned a malformed redirect. Generate a new visual and download promptly.',
+      );
+    }
+
+    // Re-apply the same SSRF validation to every redirect target. The thrown
+    // URL_REJECTED message names only the scheme/hostname — never the full
+    // Location — so it is safe to relay.
+    try {
+      validateDownloadUrl(nextUrl);
+    } catch (error) {
+      if (error instanceof NapkinError) {
+        throw new NapkinError(
+          `Refused to follow redirect: the redirect target failed safety validation (${error.message})`,
+          'REDIRECT_REJECTED',
+          'The download URL redirected to a location outside the Napkin safety rules. Only pass URLs returned by napkin_check_status.',
+        );
+      }
+      throw error;
+    }
+
+    currentUrl = nextUrl;
   }
 
   if (response.status === 410) {
