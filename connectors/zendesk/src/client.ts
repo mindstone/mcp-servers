@@ -24,6 +24,21 @@ function parseRetryAfterMs(header: string | null): number {
 }
 
 /**
+ * Render a `Retry-After` header for a model-visible error message. The header
+ * is vendor/proxy-controlled arbitrary printable text, so it is never
+ * interpolated raw: only a non-negative integer is shown (bounded to 5
+ * minutes), anything else falls back to static text.
+ */
+function describeRetryAfter(header: string | null): string {
+  if (!header) return 'a moment';
+  if (/^\d+$/.test(header.trim())) {
+    const seconds = Math.min(parseInt(header.trim(), 10), 300);
+    return `${seconds} seconds`;
+  }
+  return 'a moment';
+}
+
+/**
  * Parse a Zendesk JSON response body. The runtime's JSON parse error can
  * embed a fragment of the (vendor/proxy-controlled, potentially attacker
  * influenced) body; never let that propagate into model-visible output or
@@ -83,8 +98,7 @@ export async function zendeskFetch<T>(
 
     if (response.status === 429) {
       if (method !== 'GET' || attempt >= maxRetries) {
-        const retryAfter = response.headers.get('Retry-After');
-        const waitTime = retryAfter ? `${retryAfter} seconds` : 'a moment';
+        const waitTime = describeRetryAfter(response.headers.get('Retry-After'));
         throw new ZendeskError(
           `Rate limited. Please wait ${waitTime} before retrying.`,
           'RATE_LIMITED',
@@ -139,8 +153,7 @@ export async function zendeskFetch<T>(
         console.error(`Zendesk API error after token refresh (HTTP ${retryResponse.status})`);
 
         if (retryResponse.status === 429) {
-          const retryAfter = retryResponse.headers.get('Retry-After');
-          const waitTime = retryAfter ? `${retryAfter} seconds` : 'a moment';
+          const waitTime = describeRetryAfter(retryResponse.headers.get('Retry-After'));
           throw new ZendeskError(
             `Rate limited. Please wait ${waitTime} before retrying.`,
             'RATE_LIMITED',

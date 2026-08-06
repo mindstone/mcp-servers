@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { ZendeskTicket, ZendeskComment } from '../types.js';
+import { ZendeskError, type ZendeskTicket, type ZendeskComment } from '../types.js';
 import {
   MAX_TICKETS_WITH_COMMENTS,
   MAX_IDS_IN_CONTEXT,
@@ -18,6 +18,20 @@ import {
   wrapUntrustedTicketContent,
 } from '../formatters.js';
 import { withErrorHandling, resolveTempOutputPath, createExclusiveFileWriter } from '../utils.js';
+
+/**
+ * Render the cause of an interrupted pagination for a model-visible
+ * `truncation_reason` field. Only `ZendeskError` messages are
+ * connector-controlled static text; any other error's `message` can embed
+ * vendor/proxy-controlled fragments (and would route around the
+ * INTERNAL_ERROR sanitisation in withErrorHandling by riding an `ok: true`
+ * response), so it is replaced with static text. The raw error is logged
+ * locally for diagnostics.
+ */
+function describeInterruptionCause(error: unknown): string {
+  console.error('[Zendesk] Pagination interrupted:', error);
+  return error instanceof ZendeskError ? error.message : 'an unexpected internal error';
+}
 
 export function registerTicketTools(server: McpServer): void {
   server.registerTool(
@@ -297,7 +311,7 @@ If rate limited or the cursor expires mid-pagination, returns partial results co
               await writer.close();
             } catch { /* best effort */ }
             truncated = true;
-            truncationReason = `Pagination interrupted: ${error instanceof Error ? error.message : String(error)}. ${totalCount} tickets written before error.`;
+            truncationReason = `Pagination interrupted: ${describeInterruptionCause(error)}. ${totalCount} tickets written before error.`;
           } else {
             // Nothing collected: remove the partial export entirely rather
             // than leaving a stub file in the private staging directory.
@@ -374,7 +388,7 @@ If rate limited or the cursor expires mid-pagination, returns partial results co
       } catch (error) {
         if (allResults.length > 0) {
           truncated = true;
-          truncationReason = `Pagination interrupted: ${error instanceof Error ? error.message : String(error)}. Returning ${allResults.length} results collected before the error.`;
+          truncationReason = `Pagination interrupted: ${describeInterruptionCause(error)}. Returning ${allResults.length} results collected before the error.`;
         } else {
           throw error;
         }

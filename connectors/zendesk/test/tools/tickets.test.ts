@@ -293,6 +293,117 @@ describe('Ticket tools', () => {
         fs.unlinkSync(linkPath);
       }
     });
+
+    it('should sanitise the truncation reason when an unexpected error interrupts in-context pagination', async () => {
+      const base = `https://${API_TOKEN_ACCOUNT.subdomain}.zendesk.com/api/v2`;
+      let page = 0;
+      mswServer.use(
+        http.get(`${base}/search/export.json`, () => {
+          page++;
+          if (page === 1) {
+            return HttpResponse.json({
+              results: [makeTicket({ id: 10 })],
+              meta: { has_more: true, after_cursor: 'cursor-1' },
+              links: { next: '' },
+            });
+          }
+          // Malformed page: response.results is undefined, so the runtime
+          // TypeError message ("Cannot read properties of undefined...") is
+          // not connector-controlled text and must not reach the model.
+          return HttpResponse.json({});
+        }),
+      );
+
+      const result = await testClient.callTool('export_zendesk_tickets', {
+        query: 'status:open',
+        max_results: 500,
+        response_format: 'detailed',
+      });
+      expect(result.isError).toBeFalsy();
+      const data = result.json as any;
+      expect(data.ok).toBe(true);
+      expect(data.truncated).toBe(true);
+      expect(data.count).toBe(1);
+      expect(data.truncation_reason).toContain('an unexpected internal error');
+      expect(data.truncation_reason).not.toContain('Cannot read properties');
+      expect(result.text).not.toContain('Cannot read properties');
+    });
+
+    it('should sanitise the truncation reason when an unexpected error interrupts a file export', async () => {
+      const base = `https://${API_TOKEN_ACCOUNT.subdomain}.zendesk.com/api/v2`;
+      let page = 0;
+      mswServer.use(
+        http.get(`${base}/search/export.json`, () => {
+          page++;
+          if (page === 1) {
+            return HttpResponse.json({
+              results: [makeTicket({ id: 10 })],
+              meta: { has_more: true, after_cursor: 'cursor-1' },
+              links: { next: '' },
+            });
+          }
+          return HttpResponse.json({});
+        }),
+      );
+
+      let filePath: string | undefined;
+      try {
+        const result = await testClient.callTool('export_zendesk_tickets', {
+          query: 'status:open',
+          save_to_file: true,
+        });
+        expect(result.isError).toBeFalsy();
+        const data = result.json as any;
+        expect(data.ok).toBe(true);
+        expect(data.truncated).toBe(true);
+        expect(data.count).toBe(1);
+        filePath = data.file_path;
+        expect(data.truncation_reason).toContain('an unexpected internal error');
+        expect(data.truncation_reason).not.toContain('Cannot read properties');
+        expect(result.text).not.toContain('Cannot read properties');
+      } finally {
+        if (filePath) fs.rmSync(path.dirname(filePath), { recursive: true, force: true });
+      }
+    });
+
+    it('should preserve the connector-controlled message when a ZendeskError interrupts pagination', async () => {
+      const base = `https://${API_TOKEN_ACCOUNT.subdomain}.zendesk.com/api/v2`;
+      let page = 0;
+      mswServer.use(
+        http.get(`${base}/search/export.json`, () => {
+          page++;
+          if (page === 1) {
+            return HttpResponse.json({
+              results: [makeTicket({ id: 10 })],
+              meta: { has_more: true, after_cursor: 'cursor-1' },
+              links: { next: '' },
+            });
+          }
+          return HttpResponse.json(
+            { error: 'Rate limited' },
+            { status: 429, headers: { 'Retry-After': '0' } },
+          );
+        }),
+      );
+
+      // Keep the retry sleeps at ~0ms (Retry-After: 0, no jitter).
+      const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+      try {
+        const result = await testClient.callTool('export_zendesk_tickets', {
+          query: 'status:open',
+          max_results: 500,
+          response_format: 'detailed',
+        });
+        expect(result.isError).toBeFalsy();
+        const data = result.json as any;
+        expect(data.ok).toBe(true);
+        expect(data.truncated).toBe(true);
+        expect(data.count).toBe(1);
+        expect(data.truncation_reason).toContain('Rate limited');
+      } finally {
+        randomSpy.mockRestore();
+      }
+    });
   });
 
   describe('get_zendesk_tickets_by_ids', () => {
