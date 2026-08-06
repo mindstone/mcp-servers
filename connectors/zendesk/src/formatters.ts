@@ -42,6 +42,19 @@ export const UNTRUSTED_VIEW_SOURCE = 'external-view';
 export const UNTRUSTED_TICKET_OPEN = `<untrusted-content source="${UNTRUSTED_TICKET_SOURCE}">`;
 export const UNTRUSTED_TICKET_CLOSE = '</untrusted-content>';
 
+const KNOWN_TICKET_STATUSES = new Set(['new', 'open', 'pending', 'hold', 'solved', 'closed']);
+
+/**
+ * Render a ticket status for model-visible output. `zendeskFetch<T>` is an
+ * unchecked cast — the TypeScript enum on `ZendeskTicket.status` carries no
+ * runtime guarantee — so a vendor/proxy-controlled value could be any string
+ * (or a non-string) and would otherwise be rendered unenveloped. Fail closed
+ * to a static placeholder unless the value is a documented Zendesk status.
+ */
+export function safeTicketStatus(status: unknown): string {
+  return typeof status === 'string' && KNOWN_TICKET_STATUSES.has(status) ? status : 'unknown';
+}
+
 /**
  * Wrap a body string in the external-ticket envelope. Returns `undefined`
  * for null/undefined/non-string/empty input so callers can skip the field
@@ -250,15 +263,16 @@ export function wrapCommentBodyFields<
 
 export function formatTicket(ticket: ZendeskTicket, options: FormatOptions = {}): string {
   const format = options.format || 'concise';
+  const status = safeTicketStatus(ticket.status);
 
   if (format === 'concise') {
-    return `#${ticket.id}: ${ticket.subject} [${ticket.status}] (${ticket.priority || 'no priority'})`;
+    return `#${ticket.id}: ${ticket.subject} [${status}] (${ticket.priority || 'no priority'})`;
   }
 
   return [
     `Ticket #${ticket.id}`,
     `Subject: ${ticket.subject}`,
-    `Status: ${ticket.status}`,
+    `Status: ${status}`,
     `Priority: ${ticket.priority || 'none'}`,
     `Type: ${ticket.type || 'none'}`,
     `Requester ID: ${ticket.requester_id}`,

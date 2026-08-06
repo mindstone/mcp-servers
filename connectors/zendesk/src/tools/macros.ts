@@ -4,7 +4,7 @@ import type { ZendeskMacro, ZendeskMacroApplyResult, ZendeskTicket } from '../ty
 import { getAccount } from '../auth.js';
 import { zendeskFetch, noAccountError } from '../client.js';
 import { formatMacro, wrapMacroFields, wrapUntrustedTicketContent, UNTRUSTED_TICKET_SOURCE } from '../formatters.js';
-import { wrapUntrustedJsonStrings } from '../untrusted-content.js';
+import { wrapUntrusted, wrapUntrustedJsonStrings } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
 export function registerMacroTools(server: McpServer): void {
@@ -204,7 +204,13 @@ Example:
         { method: 'PUT', body: JSON.stringify({ ticket: ticketUpdate }) }
       );
 
-      const appliedFields = Object.keys(ticketUpdate);
+      // The applied field names are KEYS of the vendor-supplied preview
+      // ticket — external strings, not connector-controlled constants — so
+      // they are enveloped like any other vendor text before reaching the
+      // model (the apply payload above uses the raw keys, as Zendesk expects).
+      const appliedFields = Object.keys(ticketUpdate).map(
+        key => wrapUntrusted(key, UNTRUSTED_TICKET_SOURCE) ?? key,
+      );
       const hasComment = 'comment' in ticketUpdate;
 
       return JSON.stringify({
