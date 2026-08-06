@@ -205,6 +205,92 @@ describe('agents tools', () => {
     expect(result.json.error).toContain('Provide at least one field to update: name/system_prompt/first_message/voice_id/language/llm_model/temperature/knowledge_base_document_ids or advanced_config.');
   });
 
+  /**
+   * SSRF boundary on the agent authoring passthrough (same class add_agent_tool
+   * closed for tool configs): advanced_config deep-merges into the body, and
+   * ElevenLabs dereferences URL fields inside the agent config server-side
+   * (custom_llm.url on every conversation turn, platform_settings webhooks), so
+   * every `url`-keyed string in the merged body must pass the public-https policy.
+   * No msw handlers are registered in the rejection tests: a validation miss would
+   * surface as a fetch failure instead of the asserted INVALID_URL error.
+   */
+  describe('advanced_config URL policy', () => {
+    it.each([
+      'http://169.254.169.254/latest/meta-data',
+      'https://169.254.169.254/latest/meta-data',
+      'https://10.0.0.8/v1/chat/completions',
+      'https://[::1]/v1',
+      'https://localhost/v1',
+      'http://llm.example.com/v1',
+    ])('create_agent rejects advanced_config custom_llm.url %s before any upstream call', async (url) => {
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('create_agent', {
+        name: 'Support triage',
+        system_prompt: 'Resolve the issue calmly.',
+        first_message: 'Thanks for calling Support.',
+        voice_id: 'voice_abc',
+        advanced_config: {
+          conversation_config: {
+            agent: { prompt: { custom_llm: { url } } },
+          },
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.json).toMatchObject({ ok: false, code: 'INVALID_URL' });
+      expect(result.json.error).toContain('custom_llm.url');
+    });
+
+    it('update_agent rejects a nested platform_settings webhook url before any upstream call', async () => {
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('update_agent', {
+        agent_id: 'agent_test_123',
+        advanced_config: {
+          platform_settings: {
+            conversation_initiation: { webhook: { url: 'https://192.168.1.1/hook' } },
+          },
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.json).toMatchObject({ ok: false, code: 'INVALID_URL' });
+      expect(result.json.error).toContain('platform_settings');
+    });
+
+    it('create_agent accepts a public https custom_llm.url and sends it upstream', async () => {
+      const { handler, captured } = createCreateAgentCapturingHandler();
+      mswServer.use(handler, ...createElevenLabsAgentsHandlers());
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('create_agent', {
+        name: 'Support triage',
+        system_prompt: 'Resolve the issue calmly.',
+        first_message: 'Thanks for calling Support.',
+        voice_id: 'voice_abc',
+        advanced_config: {
+          conversation_config: {
+            agent: { prompt: { custom_llm: { url: 'https://llm.example.com/v1' } } },
+          },
+        },
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(captured.body).toMatchObject({
+        conversation_config: {
+          agent: { prompt: { custom_llm: { url: 'https://llm.example.com/v1' } } },
+        },
+      });
+    });
+  });
+
   it('duplicate_agent forwards the optional name and returns the duplicate id', async () => {
     const { handler, captured } = createDuplicateAgentCapturingHandler();
     mswServer.use(handler, ...createElevenLabsAgentsHandlers());

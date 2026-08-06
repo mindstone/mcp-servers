@@ -10,6 +10,7 @@ import {
 } from '../sanitize.js';
 import { ElevenLabsError } from '../types.js';
 import { unwrapUntrusted, unwrapUntrustedJsonStrings } from '../untrusted-content.js';
+import { validateNestedPublicHttpsUrls } from '../url-safety.js';
 import { withErrorHandling } from '../utils.js';
 
 type Obj = Record<string, unknown>;
@@ -44,7 +45,7 @@ const firstClassAuthoringSchema = {
   knowledge_base_document_ids: z.array(z.string().min(1)).min(1).optional()
     .describe('Optional knowledge-base document IDs to attach in the prompt config.'),
   advanced_config: advancedConfigSchema.optional()
-    .describe('Optional raw agent config fragments. Deep-merged LAST for full-platform reach.'),
+    .describe('Optional raw agent config fragments. Deep-merged LAST for full-platform reach. Every "url"-keyed string in the merged body must be a public https:// address (loopback, private, link-local, and cloud-metadata destinations are rejected).'),
 } satisfies Record<string, z.ZodTypeAny>;
 
 const createAgentSchema = z.object({
@@ -214,9 +215,18 @@ function buildAuthoringPatch(args: Record<string, unknown>): Obj {
 function buildAuthoringBody(args: Record<string, unknown>): Obj {
   const authored = unwrapAuthoredArgs(args);
   const patch = buildAuthoringPatch(authored);
-  return isObj(authored.advanced_config)
+  const body = isObj(authored.advanced_config)
     ? deepMerge(patch, authored.advanced_config) as Obj
     : patch;
+  // Same SSRF boundary `add_agent_tool` applies to its passthrough: the merged
+  // body is what goes on the wire, so every `url`-keyed string in it
+  // (custom_llm.url, platform_settings webhook URLs, …) must pass the
+  // public-https policy before any upstream call. Unlike the tool surface,
+  // there is no first-class url argument here to protect — URLs only ever
+  // arrive inside advanced_config, so this wire-shape revalidation is the
+  // whole boundary, not defense in depth behind one.
+  validateNestedPublicHttpsUrls(body, 'config');
+  return body;
 }
 
 function extractAgentId(result: unknown): string | undefined {
@@ -392,7 +402,10 @@ RELATED TOOLS:
 
 RETURNS: agent_id and, when the follow-up read succeeds, agent.
 
-COST: Uses ElevenLabs agent resources; creation itself is not a read-only action.`,
+COST: Uses ElevenLabs agent resources; creation itself is not a read-only action.
+
+COMMON MISTAKES:
+- URL fields inside advanced_config (custom_llm.url, platform_settings webhook URLs) must be public https:// addresses; loopback, private, link-local, and cloud-metadata destinations are rejected before any upstream call.`,
       inputSchema: createAgentSchema,
       annotations: {
         readOnlyHint: false,
@@ -442,6 +455,7 @@ COST: Uses ElevenLabs agent resources; PATCH is not read-only.
 
 COMMON MISTAKES:
 - PATCH deep-merges partial config, but advanced_config wins last if it targets the same nested path.
+- URL fields inside advanced_config (custom_llm.url, platform_settings webhook URLs) must be public https:// addresses; loopback, private, link-local, and cloud-metadata destinations are rejected before any upstream call.
 - If you are experimenting on a production agent, prefer duplicate_agent first and update the duplicate.`,
       inputSchema: updateAgentSchema,
       annotations: {
