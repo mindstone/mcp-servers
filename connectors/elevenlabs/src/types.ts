@@ -161,11 +161,6 @@ export interface ForcedAlignmentResponse {
   loss?: number;
 }
 
-export interface CloneVoiceResponse {
-  voice_id: string;
-  requires_verification?: boolean;
-}
-
 export interface DialogueInput {
   text: string;
   voice_id: string;
@@ -180,15 +175,6 @@ export interface VoiceDesignPreview {
 
 export interface VoiceDesignResponse {
   previews: VoiceDesignPreview[];
-}
-
-export interface CreateVoiceFromPreviewResponse {
-  voice_id: string;
-}
-
-export interface DubbingCreateResponse {
-  dubbing_id: string;
-  expected_duration_sec?: number;
 }
 
 export interface DubbingStatusResponse {

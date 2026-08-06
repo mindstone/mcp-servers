@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
+import { dubbingCreateResponseSchema, parseApiResponse } from '../api-schemas.js';
 import { elevenLabsBinaryDownload, elevenLabsFetch, elevenLabsJson } from '../client.js';
 import { ENDPOINTS } from '../endpoints.js';
 import {
   ElevenLabsError,
   LONG_REQUEST_TIMEOUT_MS,
-  type DubbingCreateResponse,
   type DubbingStatusResponse,
 } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
@@ -104,12 +104,16 @@ COST: Dubbing credits per minute of source media.`,
         formData.append('source_url', args.source_url);
       }
 
-      let data: DubbingCreateResponse;
+      let data: z.output<typeof dubbingCreateResponseSchema>;
       try {
-        data = await elevenLabsJson<DubbingCreateResponse>(
-          apiKey,
-          ENDPOINTS.DUBBING,
-          { method: 'POST', body: formData, timeoutMs: LONG_REQUEST_TIMEOUT_MS },
+        data = parseApiResponse(
+          dubbingCreateResponseSchema,
+          await elevenLabsJson<unknown>(
+            apiKey,
+            ENDPOINTS.DUBBING,
+            { method: 'POST', body: formData, timeoutMs: LONG_REQUEST_TIMEOUT_MS },
+          ),
+          'dubbing create',
         );
       } catch (error) {
         if (error instanceof ElevenLabsError && error.code === 'TIMEOUT') {
@@ -128,7 +132,10 @@ COST: Dubbing credits per minute of source media.`,
         dubbing_id: data.dubbing_id,
         expected_duration_sec: expectedSec,
         target_lang: args.target_lang,
-        message: `Dubbing job ${data.dubbing_id} submitted. You MUST poll get_dubbing every ~10 seconds until status is ${TERMINAL_STATUS_PHRASE}${expectedSec != null ? ` (expected ~${expectedSec}s)` : ''}.`,
+        // The API-authored dubbing_id is never interpolated into prose (same
+        // stance as get_dubbing's status): it is returned as a structured
+        // field only.
+        message: `Dubbing job submitted (see dubbing_id field). You MUST poll get_dubbing every ~10 seconds until status is ${TERMINAL_STATUS_PHRASE}${expectedSec != null ? ` (expected ~${expectedSec}s)` : ''}.`,
         poll_hint: `Call get_dubbing with this dubbing_id until status is ${TERMINAL_STATUS_PHRASE}; when dubbed, call download_dubbed_audio.`,
       });
     }),

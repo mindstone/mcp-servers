@@ -227,3 +227,29 @@ export const audioWithTimestampsResponseSchema = z.object({
   alignment: characterAlignmentSchema.nullable().optional(),
   normalized_alignment: characterAlignmentSchema.nullable().optional(),
 });
+
+// ── Voice creation / dubbing submit ───────────────────────────────────────
+//
+// The create endpoints return API-authored IDs. They are deliberately NOT
+// grammar-gated: like history `model_id`, they are enum-like but not
+// validated against a closed grammar, so a regex would be a false trust
+// boundary. The schemas below exist to fail closed on shape drift (a
+// non-string ID, a string duration) instead of feeding garbage into tool
+// logic — and the IDs themselves are never interpolated into `message`
+// prose, only returned as structured fields the caller echoes back.
+
+export const cloneVoiceResponseSchema = z.object({
+  voice_id: z.string(),
+  requires_verification: z.boolean().optional(),
+});
+
+export const createVoiceFromPreviewResponseSchema = z.object({
+  voice_id: z.string(),
+});
+
+export const dubbingCreateResponseSchema = z.object({
+  dubbing_id: z.string(),
+  // Finite numbers only: a string duration would be interpolated raw into
+  // the poll-guidance prose downstream.
+  expected_duration_sec: z.number().finite().optional(),
+});

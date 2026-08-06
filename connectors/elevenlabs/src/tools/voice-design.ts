@@ -2,12 +2,12 @@ import * as crypto from 'crypto';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
+import { createVoiceFromPreviewResponseSchema, parseApiResponse } from '../api-schemas.js';
 import { elevenLabsJson } from '../client.js';
 import { ENDPOINTS } from '../endpoints.js';
 import {
   ElevenLabsError,
   LONG_REQUEST_TIMEOUT_MS,
-  type CreateVoiceFromPreviewResponse,
   type VoiceDesignResponse,
 } from '../types.js';
 import { withErrorHandling } from '../utils.js';
@@ -176,21 +176,28 @@ COST: Uses a voice slot; may consume credits depending on plan.`,
         generated_voice_id: args.generated_voice_id,
       };
 
-      const data = await elevenLabsJson<CreateVoiceFromPreviewResponse>(
-        apiKey,
-        ENDPOINTS.TEXT_TO_VOICE,
-        {
-          method: 'POST',
-          body: JSON.stringify(body),
-          timeoutMs: LONG_REQUEST_TIMEOUT_MS,
-        },
+      const data = parseApiResponse(
+        createVoiceFromPreviewResponseSchema,
+        await elevenLabsJson<unknown>(
+          apiKey,
+          ENDPOINTS.TEXT_TO_VOICE,
+          {
+            method: 'POST',
+            body: JSON.stringify(body),
+            timeoutMs: LONG_REQUEST_TIMEOUT_MS,
+          },
+        ),
+        'create voice from preview',
       );
 
       return JSON.stringify({
         ok: true,
         voice_id: data.voice_id,
         voice_name: args.voice_name,
-        message: `Voice "${args.voice_name}" saved with voice_id ${data.voice_id}. Call delete_voice when finished if this was a test.`,
+        // The API-authored voice_id is never interpolated into prose (same
+        // stance as get_dubbing's status): it is returned as a structured
+        // field only.
+        message: `Voice "${args.voice_name}" saved (see voice_id field). Call delete_voice when finished if this was a test.`,
       });
     }),
   );
