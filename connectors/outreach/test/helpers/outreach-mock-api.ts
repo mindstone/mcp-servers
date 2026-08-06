@@ -190,13 +190,13 @@ export function createOutreachHandlers() {
     http.get(`${OUTREACH_API_BASE}/prospects/:id`, ({ request, params }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;
-      if (params.id === 'nonexistent') {
+      if (params.id === '404999') {
         return HttpResponse.json(
           { errors: [{ title: 'Not Found', detail: 'Prospect not found' }] },
           { status: 404 },
         );
       }
-      if (params.id === 'trigger-500') {
+      if (params.id === '500999') {
         return HttpResponse.json(
           { errors: [{ title: 'Internal Server Error', detail: 'Something went wrong' }] },
           { status: 500 },
@@ -285,7 +285,7 @@ export function createOutreachHandlers() {
     http.get(`${OUTREACH_API_BASE}/sequenceTemplates/:id`, ({ request, params }) => {
       const authErr = requireAuth(request.headers.get('authorization'));
       if (authErr) return authErr;
-      if (params.id === 'nonexistent') {
+      if (params.id === '404999') {
         return HttpResponse.json(
           { errors: [{ title: 'Not Found', detail: 'Sequence template not found' }] },
           { status: 404 },

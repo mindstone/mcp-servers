@@ -9,10 +9,12 @@ import {
   type OutreachAccountsConfig,
   type OutreachAccount,
   ConnectorError,
+  MAX_VENDOR_ERROR_CHARS,
   OUTREACH_OAUTH_URL,
   OUTREACH_AUTHORIZE_URL,
 } from './types.js';
 import { BRIDGE_STATE_PATH } from './bridge.js';
+import { wrapUntrusted } from './untrusted-content.js';
 
 /**
  * Default OAuth scope set requested when OUTREACH_OAUTH_SCOPES is not set.
@@ -399,7 +401,12 @@ async function runOAuthCallbackServer(
           res.writeHead(200, { 'Content-Type': 'text/html' });
           res.end('<html><body><h2>Token exchange failed</h2><p>You can close this window.</p></body></html>');
           cleanup();
-          resolve({ success: false, error: `Token exchange failed: ${errText}` });
+          // The token-endpoint body is vendor-authored external text; bound
+          // and envelope it before it reaches model context (invariant #6).
+          const enveloped =
+            wrapUntrusted(errText.slice(0, MAX_VENDOR_ERROR_CHARS), 'outreach:api-error') ??
+            'Unknown error';
+          resolve({ success: false, error: `Token exchange failed: ${enveloped}` });
           return;
         }
 

@@ -1,8 +1,11 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import { createOutreachHandlers, MOCK_ACCESS_TOKEN } from './helpers/outreach-mock-api.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
 import { createTempConfig, type TempConfigResult } from '@mindstone/mcp-test-harness';
+
+const OUTREACH_API_BASE = 'https://api.outreach.io/api/v2';
 
 function setupAuth() {
   return createTempConfig({
@@ -205,6 +208,41 @@ describe('Tool tests — Outreach MCP server', () => {
     expect(result.json).toHaveProperty('records');
   });
 
+  it('list tools fall back to records.length when the API omits meta.count', async () => {
+    mswServer.use(...createOutreachHandlers());
+    mswServer.use(
+      http.get(`${OUTREACH_API_BASE}/sequences`, () =>
+        HttpResponse.json({
+          data: [
+            {
+              id: '301',
+              type: 'sequence',
+              attributes: { name: 'Demo Follow-up', enabled: true, sequenceStepCount: 5 },
+            },
+          ],
+          // No meta at all — the vendor omitted the count.
+        }),
+      ),
+    );
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('outreach_list_sequences', {});
+    expect(result.isError).toBeFalsy();
+    const json = result.json as Record<string, unknown>;
+    expect((json.records as unknown[]).length).toBe(1);
+    // Not the misleading 0 the connector used to report.
+    expect(json.count).toBe(1);
+  });
+
   it('outreach_add_prospect_to_sequence enrolls prospect', async () => {
     mswServer.use(...createOutreachHandlers());
     tempConfig = setupAuth();
@@ -290,10 +328,85 @@ describe('Tool tests — Outreach MCP server', () => {
       },
     });
 
-    const result = await testClient.callTool('outreach_get_sequence_template', { id: 'nonexistent' });
+    const result = await testClient.callTool('outreach_get_sequence_template', { id: '404999' });
     expect(result.isError).toBe(true);
     expect(result.json).toHaveProperty('ok', false);
     expect(result.json).toHaveProperty('code', 'HTTP_404');
+  });
+
+  it('rejects non-numeric (path-traversal) IDs before any API request', async () => {
+    mswServer.use(...createOutreachHandlers());
+    let apiRequests = 0;
+    mswServer.use(
+      http.all(`${OUTREACH_API_BASE}/*`, () => {
+        apiRequests += 1;
+        return HttpResponse.json({ data: [] });
+      }),
+    );
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    for (const [tool, args] of [
+      ['outreach_get_prospect', { id: '../prospects' }],
+      ['outreach_complete_task', { id: '../../tasks' }],
+      ['outreach_get_account', { id: '1/../2' }],
+      ['outreach_get_sequence_template', { id: 'abc' }],
+    ] as const) {
+      const result = await testClient.callTool(tool, args);
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain('numeric');
+    }
+    // Zod rejected every input up front — nothing reached the vendor API.
+    expect(apiRequests).toBe(0);
+  });
+
+  it('outreach_get_sequence_template fails closed on a non-numeric template reference from the vendor', async () => {
+    mswServer.use(...createOutreachHandlers());
+    let templateFetches = 0;
+    mswServer.use(
+      http.get(`${OUTREACH_API_BASE}/sequenceTemplates/:id`, () =>
+        HttpResponse.json({
+          data: {
+            id: '901',
+            type: 'sequenceTemplate',
+            attributes: { enabled: true },
+            relationships: {
+              // Attacker-shaped relationship ID steering the follow-up GET.
+              template: { data: { id: '../sequenceStates', type: 'template' } },
+            },
+          },
+        }),
+      ),
+      http.get(`${OUTREACH_API_BASE}/templates/:id`, () => {
+        templateFetches += 1;
+        return HttpResponse.json({ data: { id: '1001', type: 'template', attributes: {} } });
+      }),
+    );
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('outreach_get_sequence_template', { id: '901' });
+    expect(result.isError).toBe(true);
+    expect(result.json).toHaveProperty('ok', false);
+    expect(result.json).toHaveProperty('code', 'INVALID_RESPONSE');
+    // The steered follow-up request never happened.
+    expect(templateFetches).toBe(0);
   });
 
   it('outreach_remove_prospect_from_sequence pauses by default', async () => {
@@ -358,6 +471,148 @@ describe('Tool tests — Outreach MCP server', () => {
 
     const result = await testClient.callTool('outreach_remove_prospect_from_sequence', {
       prospect_id: '999',
+      sequence_id: '301',
+    });
+    expect(result.isError).toBe(true);
+    expect(result.json).toHaveProperty('ok', false);
+    expect(result.json).toHaveProperty('code', 'NOT_FOUND');
+  });
+
+  it('outreach_remove_prospect_from_sequence acts on the live state, not a finished one listed first', async () => {
+    mswServer.use(...createOutreachHandlers());
+    // Re-enrollment leaves multiple sequenceStates for the same pair, with no
+    // API ordering guarantee: finished record first, live one second.
+    mswServer.use(
+      http.get(`${OUTREACH_API_BASE}/sequenceStates`, () =>
+        HttpResponse.json({
+          data: [
+            {
+              id: '702',
+              type: 'sequenceState',
+              attributes: { state: 'finished' },
+              relationships: {
+                prospect: { data: { id: '101', type: 'prospect' } },
+                sequence: { data: { id: '301', type: 'sequence' } },
+              },
+            },
+            {
+              id: '701',
+              type: 'sequenceState',
+              attributes: { state: 'active' },
+              relationships: {
+                prospect: { data: { id: '101', type: 'prospect' } },
+                sequence: { data: { id: '301', type: 'sequence' } },
+              },
+            },
+          ],
+          meta: { count: 2 },
+        }),
+      ),
+    );
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('outreach_remove_prospect_from_sequence', {
+      prospect_id: '101',
+      sequence_id: '301',
+    });
+    expect(result.isError).toBeFalsy();
+    expect(result.json).toHaveProperty('ok', true);
+    // The live enrollment (701) is paused — not the finished no-op (702).
+    expect(result.json).toHaveProperty('sequence_state_id', '701');
+    expect(result.json).toHaveProperty('state', 'paused');
+  });
+
+  it('outreach_remove_prospect_from_sequence fails closed on multiple live enrollments', async () => {
+    mswServer.use(...createOutreachHandlers());
+    mswServer.use(
+      http.get(`${OUTREACH_API_BASE}/sequenceStates`, () =>
+        HttpResponse.json({
+          data: [
+            {
+              id: '701',
+              type: 'sequenceState',
+              attributes: { state: 'active' },
+              relationships: {
+                prospect: { data: { id: '101', type: 'prospect' } },
+                sequence: { data: { id: '301', type: 'sequence' } },
+              },
+            },
+            {
+              id: '703',
+              type: 'sequenceState',
+              attributes: { state: 'paused' },
+              relationships: {
+                prospect: { data: { id: '101', type: 'prospect' } },
+                sequence: { data: { id: '301', type: 'sequence' } },
+              },
+            },
+          ],
+          meta: { count: 2 },
+        }),
+      ),
+    );
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('outreach_remove_prospect_from_sequence', {
+      prospect_id: '101',
+      sequence_id: '301',
+    });
+    expect(result.isError).toBe(true);
+    expect(result.json).toHaveProperty('ok', false);
+    expect(result.json).toHaveProperty('code', 'AMBIGUOUS_STATE');
+  });
+
+  it('outreach_remove_prospect_from_sequence returns NOT_FOUND when every enrollment is finished', async () => {
+    mswServer.use(...createOutreachHandlers());
+    mswServer.use(
+      http.get(`${OUTREACH_API_BASE}/sequenceStates`, () =>
+        HttpResponse.json({
+          data: [
+            {
+              id: '702',
+              type: 'sequenceState',
+              attributes: { state: 'finished' },
+              relationships: {
+                prospect: { data: { id: '101', type: 'prospect' } },
+                sequence: { data: { id: '301', type: 'sequence' } },
+              },
+            },
+          ],
+          meta: { count: 1 },
+        }),
+      ),
+    );
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('outreach_remove_prospect_from_sequence', {
+      prospect_id: '101',
       sequence_id: '301',
     });
     expect(result.isError).toBe(true);

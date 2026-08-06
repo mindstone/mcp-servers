@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { z } from 'zod';
 import { type BridgeState, REQUEST_TIMEOUT_MS } from './types.js';
 
 /**
@@ -7,11 +8,20 @@ import { type BridgeState, REQUEST_TIMEOUT_MS } from './types.js';
 export const BRIDGE_STATE_PATH =
   process.env.MCP_HOST_BRIDGE_STATE || process.env.MINDSTONE_REBEL_BRIDGE_STATE || '';
 
+// The state file is external input read from disk — validate it (repo
+// convention: Zod at boundaries). A non-integer `port` (e.g. a string like
+// "8080@evil.example") would otherwise be interpolated into the URL below
+// and could redirect the request — and its bearer token — off-loopback.
+const bridgeStateSchema = z.object({
+  port: z.number().int().min(1).max(65535),
+  token: z.string().min(1),
+});
+
 const loadBridgeState = (): BridgeState | null => {
   if (!BRIDGE_STATE_PATH) return null;
   try {
     const raw = fs.readFileSync(BRIDGE_STATE_PATH, 'utf8');
-    return JSON.parse(raw);
+    return bridgeStateSchema.parse(JSON.parse(raw));
   } catch {
     return null;
   }

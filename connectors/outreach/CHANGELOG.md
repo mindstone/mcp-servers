@@ -23,8 +23,13 @@ are maintained manually as part of the PR review checklist.
 
 ### Security
 - Envelope all external, user-authored text returned by the Outreach API (names, emails, subjects, bodies, notes, tags, custom fields) in `<untrusted-content>` envelopes with close-tag breakout escaping, via the single `formatResource` chokepoint (FOX-3490). Vendor-generated structure (ids, timestamps, lifecycle enums) is left raw; every other attribute is enveloped fail-closed.
+- Vendor error text — API error details (including raw non-JSON response bodies) and OAuth token-exchange failure bodies — is now truncated to 500 characters and wrapped in `<untrusted-content source="outreach:api-error">` envelopes before it can reach model context.
+- Outreach resource IDs accepted by tools must now be numeric (`/^\d+$/`); non-numeric values are rejected before any API request, closing path-traversal steering of request URLs. A non-numeric template reference in a vendor response likewise fails closed with `INVALID_RESPONSE` instead of steering the follow-up request.
+- The host bridge state file is now Zod-validated (integer port 1–65535, non-empty token); malformed state is ignored instead of being interpolated into the bridge URL.
 
 ### Fixed
+- `outreach_remove_prospect_from_sequence` now acts on the live (non-finished) sequence state for the prospect+sequence pair. Previously it acted on the first record returned — for a re-enrolled prospect that could pause a finished no-op record and report success while the live enrollment kept sending. Several live states fail closed with `AMBIGUOUS_STATE`; all-finished returns `NOT_FOUND`.
+- List tools now report `count` as the number of records returned when the API omits `meta.count` (previously reported `0` next to a populated `records` array).
 - API responses are now Zod-validated against the expected JSON:API envelope structure instead of being blindly cast; a malformed 200 body surfaces a structured `INVALID_RESPONSE` error instead of confusing downstream failures.
 - `outreach_list_tasks` now filters on the API's actual task `state` attribute (`filter[state]`, values `incomplete`/`completed`); the previous `filter[status]` matched nothing, so status filtering silently returned unfiltered results.
 - `page_offset` parameter descriptions now state that the value is a record offset (the API's `page[offset]`), not a page index.

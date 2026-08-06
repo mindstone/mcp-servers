@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { withErrorHandling } from '../utils.js';
 import {
   outreachFetch,
+  outreachIdSchema,
   formatResources,
   clampLimit,
   paginationParams,
@@ -18,8 +19,8 @@ Returns calls with state, direction (inbound/outbound), outcome (completed/no_an
 answered/completed timestamps, notes, and the callDisposition_id linking to the
 logged call outcome. Useful for meeting prep and reviewing recent activity.`,
       inputSchema: z.object({
-        prospect_id: z.string().optional().describe('Filter calls for a specific prospect'),
-        user_id: z.string().optional().describe('Filter calls made by a specific Outreach user'),
+        prospect_id: outreachIdSchema.optional().describe('Filter calls for a specific prospect'),
+        user_id: outreachIdSchema.optional().describe('Filter calls made by a specific Outreach user'),
         limit: z.number().min(1).max(50).default(25).optional().describe('Max results (default 25, max 50)'),
         page_offset: z.number().min(0).optional().describe('Record offset into the result list for pagination (maps to the API\'s page[offset]; e.g. 25 for the second page with limit 25)'),
       }),
@@ -37,10 +38,13 @@ logged call outcome. Useful for meeting prep and reviewing recent activity.`,
       if (args.user_id) params['filter[user][id]'] = args.user_id;
 
       const response = await outreachFetch('/calls', { params });
+      const records = formatResources(response.data);
       return JSON.stringify({
         ok: true,
-        records: formatResources(response.data),
-        count: response.meta?.count ?? 0,
+        records,
+        // The API may omit meta.count; fall back to the number of records
+        // actually returned rather than reporting a misleading 0.
+        count: response.meta?.count ?? records.length,
         page: response.meta?.page,
       });
     }),
