@@ -40,6 +40,14 @@ function parseDateFilter(value: string | undefined, field: string): Date | undef
   return parsed;
 }
 
+/**
+ * Default page size for email_search_messages when the caller omits `limit`.
+ * Without a default, a no-limit search returned the ENTIRE mailbox in one
+ * response — an unbounded fetch+envelope of every subject/sender. Truncation
+ * stays observable via the existing `hasMore`/`nextBeforeUid` cursor fields.
+ */
+const DEFAULT_SEARCH_LIMIT = 50;
+
 export function registerMessageTools(server: McpServer): void {
   // ── email_search_messages ───────────────────────────────────────
 
@@ -86,7 +94,9 @@ export function registerMessageTools(server: McpServer): void {
           .positive()
           .max(500)
           .optional()
-          .describe('Maximum number of messages to return (integer, max 500)'),
+          .describe(
+            `Maximum number of messages to return (integer, max 500; defaults to ${DEFAULT_SEARCH_LIMIT} when omitted)`,
+          ),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
@@ -97,7 +107,7 @@ export function registerMessageTools(server: McpServer): void {
       const from = args.from?.trim() || undefined;
       const subject = args.subject?.trim() || undefined;
       const unread = args.unread ?? false;
-      const limit = args.limit;
+      const limit = args.limit ?? DEFAULT_SEARCH_LIMIT;
       const beforeUid = args.before_uid;
       const since = parseDateFilter(args.since, 'since');
       const before = parseDateFilter(args.before, 'before');
@@ -130,7 +140,7 @@ export function registerMessageTools(server: McpServer): void {
         const pageUids = beforeUid
           ? sortedUids.filter((uid) => uid < beforeUid)
           : sortedUids;
-        const targetUids = limit ? pageUids.slice(0, limit) : pageUids;
+        const targetUids = pageUids.slice(0, limit);
 
         const messages: Array<{
           uid: number;
