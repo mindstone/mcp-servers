@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-06
+
+### Changed
+
+- Add Google Chat and Meet modules, Drive activity, vacation responder, contacts write; deep auth-handoff fix; canonical envelopes; attachment race hardening
+
 ### Added
 
 - Google Chat module: new `list_chat_spaces`, `list_chat_messages`, and `send_chat_message` tools (spaces, message history, and posting plain-text messages). Uses the narrow Chat scopes (`chat.spaces.readonly`, `chat.messages.readonly`, `chat.messages.create`), registered at startup — accounts connected before this change get reconnect guidance from the scope check. `send_chat_message` carries `destructiveHint`; space names, message text, and sender names are `<untrusted-content>`-enveloped.
