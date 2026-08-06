@@ -158,7 +158,32 @@ WORKFLOW: Finds the prospect's sequence state for the given sequence, then appli
         );
       }
 
-      const stateId = states[0].id;
+      // A prospect can hold several sequenceStates for the same
+      // (prospect, sequence) pair — re-enrolling restarts the sequence and
+      // leaves the finished records behind — and the API guarantees no
+      // ordering on the list. Acting on states[0] could pause a long-finished
+      // record (a no-op) while a live enrollment keeps sending mail. Only a
+      // non-finished state can still send, so act on exactly that one — and
+      // refuse to guess when the API reports several.
+      const liveStates = states.filter(
+        (s) => s.attributes?.state !== 'finished',
+      );
+      if (liveStates.length === 0) {
+        throw new ConnectorError(
+          'No active enrollment found for this prospect in this sequence',
+          'NOT_FOUND',
+          'Every enrollment for this prospect in this sequence is already finished — nothing to pause or remove.',
+        );
+      }
+      if (liveStates.length > 1) {
+        throw new ConnectorError(
+          `Multiple active enrollments (${liveStates.length}) found for this prospect in this sequence`,
+          'AMBIGUOUS_STATE',
+          'The Outreach API reports several live sequence states for this prospect+sequence pair. Resolve the duplicate enrollments in Outreach, then retry.',
+        );
+      }
+
+      const stateId = liveStates[0].id;
       const action = args.action === 'remove' ? 'finish' : 'pause';
       const response = await outreachFetch(`/sequenceStates/${stateId}/actions/${action}`, {
         method: 'POST',
