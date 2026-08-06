@@ -329,9 +329,35 @@ describe('microsoft-sharepoint mock-API integration', () => {
       scope: 'organization',
     });
     expect(result.isError).not.toBe(true);
-    const json = result.json as { ok?: unknown; link: string; type: string; scope: string };
+    const json = result.json as {
+      ok?: unknown;
+      link: string;
+      type?: string;
+      scope?: string;
+      roles?: Array<string | undefined>;
+    };
     expect(json.ok).toBeUndefined();
+    // The sharing URL stays raw so the caller can use it directly.
     expect(json.link).toContain('/share/perm-1');
+    // type/scope/roles are Graph-controlled strings and must be enveloped.
+    expect(json.type).toContain('<untrusted-content');
+    expect(json.type).toContain('view');
+    expect(json.scope).toContain('<untrusted-content');
+    expect(json.roles?.[0]).toContain('<untrusted-content');
+    expect(json.roles?.[0]).toContain('read');
+  });
+
+  it('list_site_lists envelopes the tenant-visible list template', async () => {
+    const result = await client.callTool('list_site_lists', { siteId: 'site-1' });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      count: number;
+      lists: Array<{ displayName?: string; template?: string }>;
+    };
+    expect(json.count).toBeGreaterThan(0);
+    expect(json.lists[0]?.displayName).toContain('<untrusted-content');
+    expect(json.lists[0]?.template).toContain('<untrusted-content');
+    expect(json.lists[0]?.template).toContain('genericList');
   });
 
   it('get_library_tree returns recursive tree payload', async () => {

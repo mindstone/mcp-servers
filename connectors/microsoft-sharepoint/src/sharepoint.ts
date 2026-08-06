@@ -1288,7 +1288,12 @@ export async function listSiteLists(
     webUrl: list.webUrl,
     createdAt: list.createdDateTime,
     modifiedAt: list.lastModifiedDateTime,
-    template: (list.list as Record<string, unknown>)?.template,
+    template: wrapUntrusted(
+      typeof (list.list as Record<string, unknown>)?.template === 'string'
+        ? (list.list as Record<string, string>).template
+        : undefined,
+      'microsoft-sharepoint:list_site_lists:template',
+    ),
     hidden: (list.list as Record<string, unknown>)?.hidden,
   }));
 
@@ -1766,10 +1771,17 @@ export async function createSharingLink(
   return successResult({
     success: true,
     link: response.link?.webUrl,
-    type: response.link?.type,
-    scope: response.link?.scope,
+    // type/scope/roles are Graph-controlled strings on an unvalidated response;
+    // envelope them like the other permission outputs. The webUrl stays raw so
+    // the caller can use the sharing link directly.
+    type: wrapUntrusted(response.link?.type, 'microsoft-sharepoint:create_sharing_link:type'),
+    scope: wrapUntrusted(response.link?.scope, 'microsoft-sharepoint:create_sharing_link:scope'),
     id: response.id,
-    roles: response.roles,
+    roles: Array.isArray(response.roles)
+      ? response.roles.map((role: unknown) =>
+          wrapUntrusted(typeof role === 'string' ? role : undefined, 'microsoft-sharepoint:create_sharing_link:roles'),
+        )
+      : undefined,
   });
 }
 
