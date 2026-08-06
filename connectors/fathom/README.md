@@ -174,7 +174,8 @@ node dist/index.js
 All caller-controllable text returned by these tools (meeting titles, attendee
 names, AI summaries, transcript lines, action item descriptions, team names) is
 wrapped in `<untrusted-content>` envelopes so the host treats meeting content as
-data, not instructions.
+data, not instructions. The same applies to vendor API error bodies surfaced in
+tool errors, which are additionally truncated.
 
 ## Licence
 

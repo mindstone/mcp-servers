@@ -25,6 +25,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Security
 - **fathom**: All external text is enveloped via the shared `wrapUntrusted` helper (vendored `src/untrusted-content.ts`) with close-tag breakout escaping, remediating the FOX-3490 untrusted-content baseline gap.
+- **fathom**: Vendor API error bodies and unhandled-error messages (which can embed response-body fragments) are now truncated and wrapped in `<untrusted-content>` envelopes before reaching model-visible tool errors.
+- **fathom**: The host bridge state file is now schema-validated (integer `port` in 1–65535, non-empty `token`) and read through a hardened open-once path (`O_NOFOLLOW`, regular-file and canonical-inode checks), refusing symlinked or malformed state instead of interpolating it into the loopback URL.
 
 ## [0.2.3] - 2026-05-14
 ### Added
