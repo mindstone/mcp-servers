@@ -20,6 +20,7 @@ are maintained manually as part of the PR review checklist.
 ### Fixed
 - `ga_list_bigquery_links` and `ga_get_global_site_tag` now call the Admin API v1alpha base: neither resource exists on the v1beta surface, so both tools would fail against the real API.
 - `ga_search_change_history_events` no longer silently truncates at the first 100 events — it follows `nextPageToken` until the result set is exhausted.
+- Paginated list tools and change-history search now fail observably with `PAGINATION_LIMIT_EXCEEDED` if the API keeps returning a `nextPageToken` beyond a 250-page safety cap, instead of looping forever on a misbehaving upstream.
 - `dimension_filter` / `metric_filter` inputs are fail-closed validated against the GA4 `FilterExpression` structure instead of being passed through unvalidated.
 
 ### Security

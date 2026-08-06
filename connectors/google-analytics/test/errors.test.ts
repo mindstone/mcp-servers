@@ -319,4 +319,34 @@ describe('error paths', () => {
     const parsed = await callError('ga_search_change_history_events', { property_id: '200' });
     expect(parsed.code).toBe('INVALID_API_RESPONSE');
   });
+
+  it('fails observably with PAGINATION_LIMIT_EXCEEDED when a list endpoint never stops paging', async () => {
+    await setup([
+      http.get(new RegExp(`^${escapeRegex(DATA_BETA)}/properties/[^/]+/audienceExports$`), () =>
+        HttpResponse.json({
+          audienceExports: [{ name: 'properties/200/audienceExports/700', state: 'ACTIVE' }],
+          nextPageToken: 'never-ending',
+        }),
+      ),
+    ]);
+    const parsed = await callError('ga_list_audience_exports', { property_id: '200' });
+    expect(parsed.code).toBe('PAGINATION_LIMIT_EXCEEDED');
+    expect(String(parsed.error)).toContain('did not terminate');
+  });
+
+  it('fails observably with PAGINATION_LIMIT_EXCEEDED when change history never stops paging', async () => {
+    await setup([
+      http.post(
+        new RegExp(`^${escapeRegex(ADMIN_ALPHA)}/accounts/[^/]+:searchChangeHistoryEvents$`),
+        () =>
+          HttpResponse.json({
+            changeHistoryEvents: [{ id: 'evt-1', changeTime: '2026-01-01T00:00:00Z' }],
+            nextPageToken: 'never-ending',
+          }),
+      ),
+    ]);
+    const parsed = await callError('ga_search_change_history_events', { property_id: '200' });
+    expect(parsed.code).toBe('PAGINATION_LIMIT_EXCEEDED');
+    expect(String(parsed.error)).toContain('did not terminate');
+  });
 });

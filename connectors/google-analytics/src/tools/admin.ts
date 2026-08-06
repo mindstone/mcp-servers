@@ -6,7 +6,7 @@
 
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { googleApi, paginate, propertyPath, accountPath, Bases } from '../client.js';
+import { googleApi, paginate, propertyPath, accountPath, Bases, MAX_LIST_PAGES, paginationLimitExceeded } from '../client.js';
 import { GoogleAnalyticsError } from '../types.js';
 import { wrapUntrusted, wrapUntrustedJsonStrings } from '../untrusted-content.js';
 import { parseApiResponse, UNTRUSTED_SOURCES, withErrorHandling } from '../utils.js';
@@ -540,10 +540,17 @@ export function registerAdminTools(server: McpServer): void {
       type ChangeHistoryEvent = z.infer<typeof changeHistoryEventSchema>;
 
       // Follow every page — the previous single-shot request silently
-      // truncated the history at the first 100 events.
+      // truncated the history at the first 100 events. The page cap keeps a
+      // misbehaving upstream from looping forever; hitting it is an
+      // observable error, never a silent truncation.
       const events: ChangeHistoryEvent[] = [];
       let pageToken: string | undefined;
+      let pages = 0;
       do {
+        pages += 1;
+        if (pages > MAX_LIST_PAGES) {
+          paginationLimitExceeded('changeHistoryEvents');
+        }
         const response = parseApiResponse(
           changeHistoryResponseSchema,
           await googleApi(`/${accountPath(parentAccount)}:searchChangeHistoryEvents`, {

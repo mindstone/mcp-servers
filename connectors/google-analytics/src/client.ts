@@ -49,6 +49,26 @@ export const Bases = {
 } as const;
 
 /**
+ * Hard cap on followed list pages. A misbehaving or compromised upstream
+ * that returns a perpetual nextPageToken must fail observably instead of
+ * looping forever and growing memory without bound. 250 pages at the
+ * connector's page sizes (100-200 items) is far beyond any legitimate GA4
+ * collection.
+ */
+export const MAX_LIST_PAGES = 250;
+
+/**
+ * Throw the shared observable failure for pagination that does not terminate.
+ */
+export function paginationLimitExceeded(context: string): never {
+  throw new GoogleAnalyticsError(
+    `Google API pagination for ${context} did not terminate after ${MAX_LIST_PAGES} pages.`,
+    'PAGINATION_LIMIT_EXCEEDED',
+    'The API kept returning a nextPageToken beyond the safety cap. Try again; if the problem persists, narrow the query or check for a connector update.',
+  );
+}
+
+/**
  * Call a Google API endpoint with the configured ADC bearer token.
  * Surfaces the API's `error.message` field on non-2xx responses.
  */
@@ -153,8 +173,13 @@ export async function paginate<T>(
 ): Promise<T[]> {
   const items: T[] = [];
   let pageToken: string | undefined;
+  let pages = 0;
 
   do {
+    pages += 1;
+    if (pages > MAX_LIST_PAGES) {
+      paginationLimitExceeded(options.itemKey);
+    }
     const response = await googleApi<Record<string, unknown>>(apiPath, {
       method: 'GET',
       query: { ...options.query, pageToken },
