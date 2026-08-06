@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 import { wrapUntrusted } from './untrusted-content.js';
 
 const VANTA_REGIONS: Record<string, { api: string; token: string }> = {
@@ -77,17 +79,38 @@ interface VantaPageInfo {
   hasNextPage?: boolean;
 }
 
-interface VantaPaginatedEnvelope<T> {
-  results?: {
-    data?: T[];
-    pageInfo?: VantaPageInfo;
-  };
-}
-
 export interface VantaPaginatedResult<T> {
   data: T[];
   pageInfo: VantaPageInfo;
 }
+
+// External responses are validated with Zod at the client boundary (AGENTS.md
+// > Code conventions: "Validate every tool input and external response with
+// Zod"). These two schemas pin the structural contracts this client depends
+// on — the paginated list envelope and the OAuth token response — and pass
+// everything else through: individual record shapes vary per endpoint and
+// evolve upstream, and `sanitizeExternalText` (src/sanitize.ts) envelopes
+// whatever strings they carry deny-by-default, so record bodies need no
+// per-endpoint schema to stay safe.
+const vantaPaginatedEnvelopeSchema = z.object({
+  results: z
+    .object({
+      data: z.array(z.unknown()),
+      pageInfo: z
+        .object({
+          endCursor: z.string().nullable().optional(),
+          hasNextPage: z.boolean().optional(),
+        })
+        .passthrough()
+        .optional(),
+    })
+    .passthrough(),
+}).passthrough();
+
+const vantaTokenResponseSchema = z.object({
+  access_token: z.string().min(1),
+  expires_in: z.number().optional(),
+}).passthrough();
 
 export class VantaApiError extends Error {
   readonly code: VantaApiErrorCode;
@@ -741,9 +764,9 @@ export class VantaApiClient {
     params: Record<string, unknown> = {},
     paramMap: Record<string, string> = {},
   ): Promise<VantaPaginatedResult<T>> {
-    const response = await this.requestJson<VantaPaginatedEnvelope<T>>(endpoint, { params, paramMap });
-    const data = response.results?.data;
-    if (!Array.isArray(data)) {
+    const response = await this.requestJson<unknown>(endpoint, { params, paramMap });
+    const parsed = vantaPaginatedEnvelopeSchema.safeParse(response);
+    if (!parsed.success) {
       throw new VantaApiError(
         'RESPONSE_INVALID',
         'Vanta returned an unexpected response shape.',
@@ -753,8 +776,8 @@ export class VantaApiClient {
     }
 
     return {
-      data,
-      pageInfo: response.results?.pageInfo ?? {},
+      data: parsed.data.results.data as T[],
+      pageInfo: parsed.data.results.pageInfo ?? {},
     };
   }
 
@@ -888,8 +911,8 @@ export class VantaApiClient {
         );
       }
 
-      const data = (await response.json()) as { access_token?: string; expires_in?: number };
-      if (!data.access_token) {
+      const data = vantaTokenResponseSchema.safeParse(await response.json());
+      if (!data.success) {
         throw new VantaApiError(
           'AUTH',
           'Vanta token response missing access_token.',
@@ -898,8 +921,8 @@ export class VantaApiClient {
         );
       }
 
-      this.cachedToken = data.access_token;
-      const expiresInMs = (data.expires_in ?? TOKEN_TTL_MS / 1000) * 1000;
+      this.cachedToken = data.data.access_token;
+      const expiresInMs = (data.data.expires_in ?? TOKEN_TTL_MS / 1000) * 1000;
       this.tokenExpiresAt = Date.now() + expiresInMs;
       return this.cachedToken;
     } catch (error) {
