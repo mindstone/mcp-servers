@@ -35,6 +35,10 @@ describe('Account tools', () => {
       expect(parsed.character_count).toBe(12_500);
       expect(parsed.character_limit).toBe(30_000);
       expect(parsed.characters_remaining).toBe(17_500);
+      expect(parsed.next_character_count_reset_unix).toBe(1_735_689_600);
+      expect(parsed.next_character_count_reset_iso).toBe(
+        new Date(1_735_689_600 * 1000).toISOString(),
+      );
       expect(parsed.cost).toContain('FREE');
     });
 

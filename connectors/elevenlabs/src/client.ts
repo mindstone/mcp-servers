@@ -205,7 +205,18 @@ export async function elevenLabsJson<T>(
   options: ElevenLabsFetchOptions = {},
 ): Promise<T> {
   const response = await elevenLabsFetch(apiKey, urlPath, options);
-  return (await response.json()) as T;
+  try {
+    return (await response.json()) as T;
+  } catch {
+    // A 200 with a non-JSON body would otherwise surface the runtime's
+    // SyntaxError — whose message embeds an excerpt of the raw upstream body —
+    // through the generic error path, unenveloped.
+    throw new ElevenLabsError(
+      'ElevenLabs returned a non-JSON response body',
+      'INVALID_RESPONSE',
+      'Retry the request; if it persists, the ElevenLabs API response format may have changed.',
+    );
+  }
 }
 
 /** Map response Content-Type to a file extension (OpenAPI drift — don't trust empty schemas). */

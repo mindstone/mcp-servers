@@ -3,11 +3,10 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
 import { elevenLabsJson } from '../client.js';
 import { ENDPOINTS } from '../endpoints.js';
-import { parseApiResponse, workspaceUsageResponseSchema } from '../api-schemas.js';
+import { parseApiResponse, subscriptionResponseSchema, workspaceUsageResponseSchema } from '../api-schemas.js';
 import {
   ElevenLabsError,
   type ModelInfo,
-  type SubscriptionResponse,
 } from '../types.js';
 import { wrapUntrusted, wrapUntrustedJsonStrings } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
@@ -52,7 +51,11 @@ COST: FREE — no credits consumed.`,
         );
       }
 
-      const data = await elevenLabsJson<SubscriptionResponse>(apiKey, ENDPOINTS.USER_SUBSCRIPTION);
+      const data = parseApiResponse(
+        subscriptionResponseSchema,
+        await elevenLabsJson<unknown>(apiKey, ENDPOINTS.USER_SUBSCRIPTION),
+        'subscription',
+      );
 
       const characterCount = data.character_count ?? 0;
       const characterLimit = data.character_limit ?? 0;

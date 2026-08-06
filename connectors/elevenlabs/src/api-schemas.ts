@@ -50,6 +50,23 @@ export const workspaceUsageResponseSchema = z.object({
   rows: z.array(z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))),
 });
 
+// ── Account / subscription ────────────────────────────────────────────────
+
+export const subscriptionResponseSchema = z.object({
+  tier: z.string().optional(),
+  status: z.string().optional(),
+  // Finite numbers only: a string/NaN count would silently poison the
+  // remaining-credit arithmetic downstream.
+  character_count: z.number().finite().optional(),
+  character_limit: z.number().finite().optional(),
+  // Bounded to the range where `reset_unix * 1000` stays a valid JS Date, so
+  // the toISOString() conversion in account.ts cannot throw on an extreme
+  // finite upstream value (same bound as history `date_unix`).
+  next_character_count_reset_unix: z.number().finite().min(0).max(8_640_000_000_000).optional(),
+  voice_slots_used: z.number().finite().optional(),
+  voice_limit: z.number().finite().optional(),
+});
+
 // ── Pronunciation dictionaries ────────────────────────────────────────────
 
 // Response rules are a discriminated union: an `alias` rule must carry `alias`,
