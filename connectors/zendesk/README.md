@@ -9,7 +9,7 @@ Zendesk Support MCP server — tickets, users, comments, macros, account setup, 
 
 ## Status
 
-- **Version:** [0.3.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-zendesk)
+- **Version:** [0.4.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-zendesk)
 - **Auth:** Hybrid (API token or OAuth) ([`ZENDESK_CLIENT_SECRET`](./server.json))
 - **Tools:** [26](./src/tools/) (tickets, users, comments, macros, views, help center, satisfaction)
 - **Surface:** cloud-api

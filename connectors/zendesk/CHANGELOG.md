@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-06
+
+### Changed
+
+- Add Help Center search/get, view execution, user create-or-update, org get, CSAT; canonical null-safe envelopes; staging-dir exports; subdomain-validated credential deletion
+
 ### Security
 - Migrated the untrusted-content envelope from the connector-local hand-rolled implementation to the canonical shared helper (`src/untrusted-content.ts`, vendored from the connector template per security invariant #6) and extended coverage: ticket subjects are now enveloped in every read path (previously only search results), and user names/emails, organization names, and macro titles are enveloped as well.
 - Enveloped the remaining externally authored string fields in `<untrusted-content>` envelopes: macro action values, group names/descriptions, ticket-field titles/descriptions/custom options, view titles, organization domain names, user phone numbers, ticket tags and string custom-field values, Help Center `html_url`, and the `apply_zendesk_macro` preview payload.
