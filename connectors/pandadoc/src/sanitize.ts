@@ -12,12 +12,22 @@
  * Identifiers and URLs are structural: downstream tool calls reference them
  * verbatim (`recipients[].id`, `fields[].uuid`, `contacts[].id`, …), and URLs
  * are surfaced for the user to open — not auto-followed. String values under
- * the keys in `STRUCTURAL_KEYS` are therefore left raw ONLY when they still
- * look like what the key claims to be (identifier charset / parseable
- * http(s) URL); anything else — e.g. prose or a prompt-injection payload
- * smuggled under an `id` or `url` key — is enveloped like any other
- * attacker-controllable text. Dates, status enums, counts, and booleans are
- * passed through unchanged.
+ * the keys in the structural sets are therefore left raw ONLY while they
+ * still match the strict shape of what the key claims to be:
+ *
+ *   - Identifiers: UUID, dense alphanumeric token (8–64 chars), or short
+ *     dash/dot/underscore/tilde-separated segments (≤8 chars each) — the
+ *     shapes real PandaDoc ids take. A natural-language phrase such as
+ *     `SYSTEM-ignore-all-previous-instructions` does NOT match and is
+ *     enveloped. (No charset can perfectly separate ids from prose — a
+ *     separator-free instruction phrase would still pass; this rejects the
+ *     realistic word-separated spellings.)
+ *   - URLs: only `https:` URLs on PandaDoc-owned hosts stay raw (session and
+ *     shared links the user is expected to open). Any other URL — however
+ *     well-formed — is enveloped, because instruction-like path/query text
+ *     is indistinguishable from a legitimate URL string.
+ *
+ * Dates, status enums, counts, and booleans are passed through unchanged.
  */
 import { wrapUntrusted } from './untrusted-content.js';
 
@@ -26,7 +36,7 @@ type Obj = Record<string, unknown>;
 /**
  * Keys whose string values are expected to be identifiers rather than prose.
  * Kept raw so enveloped output stays machine-usable — but only while the
- * value actually matches the identifier charset.
+ * value actually matches one of the strict identifier shapes.
  */
 const IDENTIFIER_KEYS = new Set([
   'id',
@@ -38,22 +48,33 @@ const IDENTIFIER_KEYS = new Set([
 
 /**
  * Keys whose string values are expected to be URLs. Kept raw so the user can
- * open them — but only while the value parses as an http(s) URL.
+ * open them — but only for https URLs on PandaDoc-owned hosts.
  */
 const URL_KEYS = new Set(['url', 'href', 'shared_link', 'avatar']);
 
-/** Conservative identifier charset: PandaDoc ids/uuids are alphanumeric plus separators. */
-const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._~-]{0,199}$/;
+/** UUID (8-4-4-4-12 hex), e.g. folder_uuid / parent_uuid values. */
+const UUID_PATTERN = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+/** Dense alphanumeric token, e.g. the 22-char document/contact ids. */
+const DENSE_TOKEN_PATTERN = /^[A-Za-z0-9]{8,64}$/;
+/** Short separator-joined segments (`doc-1`, `rcpt-1`, `entity_42`); no segment long enough to carry a wordy phrase. */
+const SEGMENTED_ID_PATTERN = /^[A-Za-z0-9]{1,8}(?:[._~-][A-Za-z0-9]{1,8}){0,7}$/;
 
 function isSafeIdentifier(value: string): boolean {
-  return IDENTIFIER_PATTERN.test(value);
+  if (value.length > 64) return false;
+  return (
+    UUID_PATTERN.test(value) ||
+    DENSE_TOKEN_PATTERN.test(value) ||
+    SEGMENTED_ID_PATTERN.test(value)
+  );
 }
 
 function isSafeUrl(value: string): boolean {
   if (value.length > 2048) return false;
   try {
     const parsed = new URL(value);
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+    if (parsed.protocol !== 'https:') return false;
+    const host = parsed.hostname.toLowerCase();
+    return host === 'pandadoc.com' || host.endsWith('.pandadoc.com');
   } catch {
     return false;
   }
