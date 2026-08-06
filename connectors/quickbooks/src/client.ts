@@ -228,10 +228,16 @@ export interface QboQueryPage<T> {
   hasMore: boolean;
 }
 
+/** Intuit caps MAXRESULTS at 1000 regardless of the requested page size. */
+const QBO_MAX_RESULTS = 1000;
+
 /**
  * Run a QuickBooks query and report whether the result was truncated at
  * `limit`. Requests one extra row as a probe so `hasMore` is exact rather
  * than a "returned count equals limit" guess; the probe row is sliced off.
+ * At the Intuit MAXRESULTS cap (1000) the probe row can never come back, so
+ * the function falls back to a full-page heuristic there: a complete page
+ * means there may be more rows.
  */
 export async function qboQueryPage<T>(
   entity: string,
@@ -239,8 +245,13 @@ export async function qboQueryPage<T>(
   limit: number,
   offset = 1,
 ): Promise<QboQueryPage<T>> {
-  const rows = await qboQuery<T>(entity, query, limit + 1, offset);
-  return { rows: rows.slice(0, limit), hasMore: rows.length > limit };
+  const effectiveLimit = Math.min(limit, QBO_MAX_RESULTS);
+  if (effectiveLimit >= QBO_MAX_RESULTS) {
+    const rows = await qboQuery<T>(entity, query, effectiveLimit, offset);
+    return { rows, hasMore: rows.length >= effectiveLimit };
+  }
+  const rows = await qboQuery<T>(entity, query, effectiveLimit + 1, offset);
+  return { rows: rows.slice(0, effectiveLimit), hasMore: rows.length > effectiveLimit };
 }
 
 /**

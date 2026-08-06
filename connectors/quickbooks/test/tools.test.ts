@@ -951,6 +951,85 @@ describe('Non-JSON 2xx responses never leak vendor bytes', () => {
   });
 });
 
+describe('Pagination at the Intuit MAXRESULTS cap', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  /** Mocks a company with `totalRows` estimates; honours MAXRESULTS like Intuit. */
+  function useCappedQueryFixture(totalRows: number, captured: { query: string | null }) {
+    mswServer.use(
+      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
+      http.get(`${PRODUCTION_API_BASE}/query`, async ({ request }) => {
+        const url = new URL(request.url);
+        const q = decodeURIComponent(url.searchParams.get('query') ?? '');
+        captured.query = q;
+        const maxResults = Number(q.match(/MAXRESULTS (\d+)/)?.[1] ?? '0');
+        const rows = Array.from({ length: Math.min(maxResults, totalRows) }, (_, i) => ({
+          Id: String(i + 1),
+          TxnDate: '2026-01-15',
+        }));
+        return HttpResponse.json({ QueryResponse: { Estimate: rows } });
+      }),
+    );
+  }
+
+  it('still signals possible truncation at limit 1000 (full-page heuristic)', async () => {
+    const captured = { query: null as string | null };
+    useCappedQueryFixture(1000, captured);
+    testClient = await createTestClient({ env: defaultEnv() });
+
+    const result = await testClient.callTool('query_quickbooks', {
+      query: 'SELECT * FROM Estimate',
+      limit: 1000,
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(json.count).toBe(1000);
+    expect(json.hasMore).toBe(true);
+    expect(String(json.note)).toContain('truncated');
+    // The +1 probe is suppressed at the cap — Intuit clamps MAXRESULTS to
+    // 1000, so 1001 would silently degrade the signal.
+    expect(captured.query).toContain('MAXRESULTS 1000');
+    expect(captured.query).not.toContain('MAXRESULTS 1001');
+  });
+
+  it('reports hasMore false at limit 1000 when fewer rows exist', async () => {
+    const captured = { query: null as string | null };
+    useCappedQueryFixture(999, captured);
+    testClient = await createTestClient({ env: defaultEnv() });
+
+    const result = await testClient.callTool('query_quickbooks', {
+      query: 'SELECT * FROM Estimate',
+      limit: 1000,
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(json.count).toBe(999);
+    expect(json.hasMore).toBe(false);
+    expect(json.note).toBeUndefined();
+  });
+
+  it('keeps the exact +1 probe just below the cap (limit 999)', async () => {
+    const captured = { query: null as string | null };
+    useCappedQueryFixture(1000, captured);
+    testClient = await createTestClient({ env: defaultEnv() });
+
+    const result = await testClient.callTool('query_quickbooks', {
+      query: 'SELECT * FROM Estimate',
+      limit: 999,
+    });
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(captured.query).toContain('MAXRESULTS 1000');
+    expect(json.count).toBe(999);
+    expect(json.hasMore).toBe(true);
+  });
+});
+
 describe('Malformed input rejected by Zod', () => {
   let testClient: McpTestClient;
 
