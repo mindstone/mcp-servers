@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - `get_sites_delta`: a caller-supplied `deltaLink` is now validated against the same vendor-host policy before it is fetched with the user's auth header.
 - Vendor error text surfaced through tool error responses (Graph `error.message` bodies) is now enveloped in <untrusted-content> so the model treats it as data, not instructions.
 - Enveloped additional tenant-controlled response fields in <untrusted-content>: permission `roles`/`shareId`/`link`/`email`, list column internal `name`, site-page `publishingState`/`pageLayout`, and list `template`.
+- Extended that enveloping to the remaining Graph-controlled strings that still reached tool output raw: `create_sharing_link` `type`/`scope`/`roles` (the sharing URL itself stays raw so callers can use it) and `list_site_lists` `template`. Added close-tag breakout regression tests for the newly enveloped fields.
 - Re-synced the vendored untrusted-content envelope helper with the canonical shared copy (whitespace-tolerant close-tag defanging, key enveloping, unwrap helpers).
 
 ## [0.1.2] - 2026-07-03
