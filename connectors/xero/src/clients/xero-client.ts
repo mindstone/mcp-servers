@@ -7,7 +7,7 @@ import {
   XeroClient,
 } from "xero-node";
 
-import { ensureError } from "../helpers/ensure-error.js";
+import { formatError } from "../helpers/format-error.js";
 import { formatTokenRequestError } from "../helpers/format-token-error.js";
 import { XERO_CUSTOM_CONNECTION_SCOPE } from "./xero-scopes.js";
 
@@ -65,10 +65,8 @@ abstract class MCPXeroClient extends XeroClient {
         const organisation = await this.getOrganisation();
         this.shortCode = organisation.shortCode ?? "";
       } catch (error: unknown) {
-        const err = ensureError(error);
-
         throw new Error(
-          `Failed to get Organisation short code: ${err.message}`,
+          `Failed to get Organisation short code: ${formatError(error)}`,
         );
       }
     }

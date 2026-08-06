@@ -1,7 +1,7 @@
 import { createXeroContact } from "../../handlers/create-xero-contact.handler.js";
 import { z } from "zod";
 import { DeepLinkType, getDeepLink } from "../../helpers/get-deeplink.js";
-import { ensureError } from "../../helpers/ensure-error.js";
+import { formatError } from "../../helpers/format-error.js";
 import { CreateXeroTool } from "../../helpers/create-xero-tool.js";
 
 const CreateContactTool = CreateXeroTool(
@@ -49,13 +49,11 @@ const CreateContactTool = CreateXeroTool(
         ],
       };
     } catch (error) {
-      const err = ensureError(error);
-
       return {
         content: [
           {
             type: "text" as const,
-            text: `Error creating contact: ${err.message}`,
+            text: `Error creating contact: ${formatError(error)}`,
           },
         ],
       };
