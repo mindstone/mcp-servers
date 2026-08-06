@@ -60,6 +60,8 @@ export function sanitizeSnippet(snippet: unknown): unknown {
   wrapField(out, 'title', `${SOURCE}:snippet.title`);
   wrapField(out, 'subject', `${SOURCE}:snippet.subject`);
   wrapField(out, 'body', `${SOURCE}:snippet.body`);
+  wrapField(out, 'source', `${SOURCE}:snippet.source`);
+  wrapField(out, 'createdAt', `${SOURCE}:snippet.createdAt`);
   return out;
 }
 
@@ -72,12 +74,21 @@ export function sanitizeSequence(sequence: unknown): unknown {
   if (!isObj(sequence)) return sequence;
   const out: Obj = { ...sequence };
   wrapField(out, 'name', `${SOURCE}:sequence.name`);
+  wrapField(out, 'timezone', `${SOURCE}:sequence.timezone`);
+  wrapField(out, 'createdAt', `${SOURCE}:sequence.createdAt`);
+  // Variable names are user-authored in Mixmax and unbounded — envelope each.
+  if (Array.isArray(out.variables)) {
+    out.variables = out.variables.map((v) =>
+      typeof v === 'string' ? wrapUntrusted(v, `${SOURCE}:sequence.variables`) : v,
+    );
+  }
   if (Array.isArray(out.stages)) {
     out.stages = out.stages.map((stage) => {
       if (!isObj(stage)) return stage;
       const s: Obj = { ...stage };
       wrapField(s, 'subject', `${SOURCE}:sequence.stages.subject`);
       wrapField(s, 'body', `${SOURCE}:sequence.stages.body`);
+      wrapField(s, 'type', `${SOURCE}:sequence.stages.type`);
       return s;
     });
   }
