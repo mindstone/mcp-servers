@@ -219,10 +219,18 @@ export async function servicenowFetch<T>(
     let errorText: string;
     try {
       const errorBody = (await response.json()) as {
-        error?: { message?: string; detail?: string };
+        error?: { message?: unknown; detail?: unknown };
       };
+      // The vendor body is unchecked: a hostile shape (e.g. an object under
+      // error.message) must not crash the error path — only strings are
+      // picked, anything else falls back to the stringified body.
+      const message = errorBody?.error?.message;
+      const detail = errorBody?.error?.detail;
       errorText =
-        errorBody?.error?.message || errorBody?.error?.detail || JSON.stringify(errorBody);
+        (typeof message === 'string' && message) ||
+        (typeof detail === 'string' && detail) ||
+        JSON.stringify(errorBody) ||
+        'Unknown error';
     } catch {
       errorText = await response.text().catch(() => 'Unknown error');
     }
@@ -241,10 +249,15 @@ export async function servicenowFetch<T>(
   if (!contentType.includes('application/json')) {
     const bodyPreview = await response.text().catch(() => '(could not read body)');
     const isHibernating = bodyPreview.toLowerCase().includes('hibernat');
+    // The Content-Type header is instance-authored too — envelope it like any
+    // other vendor error material before it reaches model-visible output.
+    const safeContentType = contentType
+      ? wrapUntrusted(contentType.slice(0, MAX_VENDOR_ERROR_CHARS), 'servicenow:api-error')
+      : '(absent)';
     throw new ServiceNowError(
       isHibernating
         ? `ServiceNow instance '${getInstance()}' is hibernating. Wake it at https://developer.servicenow.com and try again in a few minutes.`
-        : `ServiceNow returned non-JSON response (Content-Type: ${contentType}). The instance may be down, misconfigured, or returning a login page.`,
+        : `ServiceNow returned non-JSON response (Content-Type: ${safeContentType}). The instance may be down, misconfigured, or returning a login page.`,
       isHibernating ? 'INSTANCE_HIBERNATING' : 'UNEXPECTED_CONTENT_TYPE',
       isHibernating
         ? 'Wake the instance at https://developer.servicenow.com, wait a few minutes, then try again.'
