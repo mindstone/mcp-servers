@@ -120,6 +120,8 @@ export function findIdentityFilesForHost(
     return [];
   }
 
+  const identityFiles: string[] = [];
+
   for (const entry of asEntryArray(config)) {
     const sectionType = normalizeParam(entry.param);
     if (!sectionType) {
@@ -156,11 +158,16 @@ export function findIdentityFilesForHost(
       continue;
     }
 
-    // First matching Host block wins.
-    return findIdentityFilesInSection(entry.config);
+    // OpenSSH semantics: IdentityFile values accumulate across EVERY
+    // matching Host block in config order (all configured identities are
+    // tried in sequence), so the first value comes from the earliest
+    // matching block. Stopping at the first matching block would drop the
+    // user's identity when that block sets no IdentityFile (e.g. only Port)
+    // and a later block does.
+    identityFiles.push(...findIdentityFilesInSection(entry.config));
   }
 
-  return [];
+  return identityFiles;
 }
 
 export function findFirstIdentityFileForHost(

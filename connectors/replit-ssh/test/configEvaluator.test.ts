@@ -151,6 +151,46 @@ describe('config evaluator', () => {
     expect(findIdentityFilesForHost(parsedConfig, 'foo12.replit.dev')).toEqual([]);
   });
 
+  it('falls through to a later matching block when the first matching block sets no IdentityFile (OpenSSH first-value-wins)', async () => {
+    const expectedPath = writeKey('fallback_key');
+    writeConfig(
+      [
+        'Host *.replit.dev',
+        '  Port 22',
+        'Host *',
+        '  IdentityFile ~/.ssh/fallback_key',
+        '',
+      ].join('\n'),
+    );
+
+    const result = await resolveKeyPathForHost('foo.replit.dev');
+
+    expect(result).toEqual({
+      source: 'config',
+      keyPath: expectedPath,
+    });
+  });
+
+  it('accumulates IdentityFile values across all matching blocks in config order', () => {
+    const parsedConfig = SSHConfig.parse(
+      [
+        'Host *.replit.dev',
+        '  IdentityFile ~/.ssh/first_key',
+        'Host foo.replit.dev',
+        '  IdentityFile ~/.ssh/second_key',
+        '',
+      ].join('\n'),
+    );
+
+    expect(findIdentityFilesForHost(parsedConfig, 'foo.replit.dev')).toEqual([
+      '~/.ssh/first_key',
+      '~/.ssh/second_key',
+    ]);
+    expect(findFirstIdentityFileForHost(parsedConfig, 'foo.replit.dev')).toBe(
+      '~/.ssh/first_key',
+    );
+  });
+
   it('honours negated host patterns: an excluded host never selects the block', () => {
     const parsedConfig = SSHConfig.parse(
       'Host *.replit.dev !secret.replit.dev\n  IdentityFile ~/.ssh/pattern_key\n',
