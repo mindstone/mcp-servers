@@ -32,6 +32,12 @@ export type ShortcutsRunResult = {
   exitCode: number;
   /** True when the process was terminated for exceeding the timeout. */
   timedOut?: boolean;
+  /**
+   * True when the timeout fired but termination could not be confirmed:
+   * signal delivery failed, or the process never emitted `close` after
+   * SIGKILL. Callers must not claim the process is gone on this path.
+   */
+  terminationUnconfirmed?: boolean;
 };
 
 /**
@@ -89,7 +95,8 @@ export function resolveTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
  * it exceeds APPLE_SHORTCUTS_TIMEOUT_MS (default 120s): shortcuts that open
  * GUI dialogs otherwise block the tool call indefinitely. If signal delivery
  * fails or the process never emits `close` after SIGKILL, the call settles
- * anyway after a further grace period rather than hanging forever.
+ * anyway after a further grace period rather than hanging forever — with
+ * `terminationUnconfirmed: true`, because the process may still be running.
  *
  * Captured stdout/stderr are bounded at MAX_CAPTURED_OUTPUT_CHARS per stream;
  * further output is dropped and a truncation marker appended, so a shortcut
@@ -145,7 +152,13 @@ export const runShortcuts: ShortcutsRunner = (argv) => {
           logger.warn(
             `"shortcuts ${argv[0]}" did not exit after SIGKILL; releasing the tool call`
           );
-          finish({ stdout, stderr, exitCode: 1, timedOut: true });
+          finish({
+            stdout,
+            stderr,
+            exitCode: 1,
+            timedOut: true,
+            terminationUnconfirmed: true,
+          });
         }, SIGKILL_GRACE_MS);
       }, SIGKILL_GRACE_MS);
     }, timeoutMs);
@@ -207,15 +220,18 @@ function envelope(text: string, source: string): string {
   return wrapped;
 }
 
-function timedOutResult(what: string) {
+function timedOutResult(what: string, terminationUnconfirmed = false) {
   return {
     isError: true as const,
     content: [
       {
         type: "text" as const,
         text:
-          `${what} did not finish within ${resolveTimeoutMs()}ms and was terminated. ` +
-          `Set APPLE_SHORTCUTS_TIMEOUT_MS to allow longer runs.`,
+          terminationUnconfirmed
+            ? `${what} did not finish within ${resolveTimeoutMs()}ms; termination was requested but could not be confirmed — the process may still be running. ` +
+              `Set APPLE_SHORTCUTS_TIMEOUT_MS to allow longer runs.`
+            : `${what} did not finish within ${resolveTimeoutMs()}ms and was terminated. ` +
+              `Set APPLE_SHORTCUTS_TIMEOUT_MS to allow longer runs.`,
       },
     ],
   };
@@ -254,7 +270,7 @@ export function createListShortcutsHandler(runner: ShortcutsRunner = runShortcut
     const result = await runner(argv);
 
     if (result.timedOut) {
-      return timedOutResult("Listing shortcuts");
+      return timedOutResult("Listing shortcuts", result.terminationUnconfirmed);
     }
 
     if (result.exitCode !== 0) {
@@ -345,13 +361,16 @@ export function createRunShortcutHandler(runner: ShortcutsRunner = runShortcuts)
 
       if (result.timedOut) {
         const partial = result.stdout.trim();
+        const outcome = result.terminationUnconfirmed
+          ? `did not finish within ${resolveTimeoutMs()}ms; termination was requested but could not be confirmed — the shortcut may still be running. `
+          : `did not finish within ${resolveTimeoutMs()}ms and was terminated. `;
         return {
           isError: true as const,
           content: [
             {
               type: "text" as const,
               text:
-                `Shortcut "${envelope(parsed.name, SOURCES.run)}" did not finish within ${resolveTimeoutMs()}ms and was terminated. ` +
+                `Shortcut "${envelope(parsed.name, SOURCES.run)}" ${outcome}` +
                 `Set APPLE_SHORTCUTS_TIMEOUT_MS to allow longer runs.` +
                 (partial
                   ? `\nPartial output before termination:\n${envelope(partial, SOURCES.run)}`
@@ -429,7 +448,10 @@ export function createViewShortcutHandler(runner: ShortcutsRunner = runShortcuts
     const result = await runner(["view", parsed.name]);
 
     if (result.timedOut) {
-      return timedOutResult(`Opening shortcut "${envelope(parsed.name, SOURCES.view)}"`);
+      return timedOutResult(
+        `Opening shortcut "${envelope(parsed.name, SOURCES.view)}"`,
+        result.terminationUnconfirmed
+      );
     }
 
     if (result.exitCode !== 0) {

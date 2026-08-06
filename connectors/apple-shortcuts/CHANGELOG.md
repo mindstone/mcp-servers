@@ -25,6 +25,7 @@ are maintained manually as part of the PR review checklist.
 - Captured CLI stdout/stderr is now bounded at 1,000,000 characters per stream; excess output is dropped with a truncation marker, so a shortcut emitting unbounded output cannot exhaust memory before the timeout fires.
 
 ### Fixed
+- Timeout results no longer claim the process "was terminated" when termination could not be confirmed (signal delivery failed, or the process never emitted `close` after SIGKILL): the list/run/view timeout errors now state that the process may still be running on that path, which matters because `apple_shortcuts_run` executes with the logged-in user's permissions.
 - Timeout handling now settles the tool call even when signal delivery fails or the process never emits `close` after SIGKILL (previously the call could hang forever), and signal-delivery failures are logged.
 - `APPLE_SHORTCUTS_TIMEOUT_MS` values that floor below 1ms now fall back to the default (they previously caused near-instant termination), and values above Node's timer range are clamped instead of overflowing to a 1ms timeout.
 - Temporary-input cleanup failures are now logged instead of silently ignored (a failed unlink leaves user input at rest), and the temp-file setup happens inside the `try` so a setup failure still runs cleanup.

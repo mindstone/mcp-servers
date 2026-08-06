@@ -103,6 +103,23 @@ describe("apple-shortcuts smoke", () => {
     expect(result.text).toContain("folder not found");
   });
 
+  it("apple_shortcuts_list does not claim termination when the kill was unconfirmed", async () => {
+    const { client } = await connect({
+      list: {
+        stdout: "",
+        stderr: "",
+        exitCode: 1,
+        timedOut: true,
+        terminationUnconfirmed: true,
+      },
+    });
+    const result = await client.callTool("apple_shortcuts_list", {});
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain("did not finish within");
+    expect(result.text).toContain("may still be running");
+    expect(result.text).not.toContain("was terminated");
+  });
+
   it("apple_shortcuts_run returns enveloped stdout (happy path)", async () => {
     const { client, calls } = await connect({
       run: { stdout: "the weather is fine", stderr: "", exitCode: 0 },
@@ -134,7 +151,42 @@ describe("apple-shortcuts smoke", () => {
     const result = await client.callTool("apple_shortcuts_run", { name: "Dialog" });
     expect(result.isError).toBe(true);
     expect(result.text).toContain("did not finish within");
+    expect(result.text).toContain("was terminated");
     expect(result.text).toContain("APPLE_SHORTCUTS_TIMEOUT_MS");
+  });
+
+  it("apple_shortcuts_run does not claim termination when the kill was unconfirmed", async () => {
+    const { client } = await connect({
+      run: {
+        stdout: "",
+        stderr: "",
+        exitCode: 1,
+        timedOut: true,
+        terminationUnconfirmed: true,
+      },
+    });
+    const result = await client.callTool("apple_shortcuts_run", { name: "Unkillable" });
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain("did not finish within");
+    expect(result.text).toContain("may still be running");
+    expect(result.text).not.toContain("was terminated");
+  });
+
+  it("apple_shortcuts_view does not claim termination when the kill was unconfirmed", async () => {
+    const { client } = await connect({
+      view: {
+        stdout: "",
+        stderr: "",
+        exitCode: 1,
+        timedOut: true,
+        terminationUnconfirmed: true,
+      },
+    });
+    const result = await client.callTool("apple_shortcuts_view", { name: "Unkillable" });
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain("did not finish within");
+    expect(result.text).toContain("may still be running");
+    expect(result.text).not.toContain("was terminated");
   });
 
   it("apple_shortcuts_view opens the editor (happy path)", async () => {

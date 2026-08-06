@@ -230,6 +230,7 @@ describe("runShortcuts timeout", () => {
 
       const result = await pending;
       expect(result.timedOut).toBe(true);
+      expect(result.terminationUnconfirmed).toBe(true);
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toBe("kept-output");
 
@@ -254,7 +255,22 @@ describe("runShortcuts timeout", () => {
 
     const result = await pending;
     expect(result.timedOut).toBe(true);
+    expect(result.terminationUnconfirmed).toBe(true);
     expect(result.exitCode).toBe(1);
+  });
+
+  it("does not flag terminationUnconfirmed when the process closes after the kill signals", async () => {
+    const proc = createFakeProc();
+    spawnMock.mockReturnValue(proc as never);
+
+    const pending = runShortcuts(["run", "Escalated"]);
+    await vi.advanceTimersByTimeAsync(1000); // SIGTERM
+    await vi.advanceTimersByTimeAsync(5000); // SIGKILL
+    proc.emit("close", null);
+
+    const result = await pending;
+    expect(result.timedOut).toBe(true);
+    expect(result.terminationUnconfirmed).toBeUndefined();
   });
 
   it("an error event after the timeout settles the call exactly once", async () => {
