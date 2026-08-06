@@ -751,11 +751,14 @@ export async function downloadAttachment(
   // unbounded JSON document before Zod runs. The bytes themselves are
   // streamed (and capped) below via the $value endpoint instead of an
   // unbounded inline base64 JSON.
+  // $select must explicitly request @odata.type: the not-a-file-attachment
+  // guard below reads that annotation, and a server that omits it under the
+  // default projection would silently fail the guard open.
   const metaBody = await getStreamDrainingErrorBody(
     client,
     `/me/messages/${args.id}/attachments/${args.attachmentId}`,
     signal,
-    'id,name,contentType,size,isInline',
+    'id,name,contentType,size,isInline,@odata.type',
   );
   const metaBuffer = await readStreamWithCap(
     metaBody,

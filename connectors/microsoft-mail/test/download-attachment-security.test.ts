@@ -79,6 +79,15 @@ describe('download_attachment adversarial cases', () => {
     const written = await fs.readFile(json.savedTo);
     expect(written.toString('utf8')).toBe('hello attachment');
     expect((await fs.stat(json.savedTo)).mode & 0o777).toBe(0o600);
+
+    // The metadata fetch must explicitly request @odata.type: the
+    // not-a-file-attachment guard reads that annotation, and the mock always
+    // supplies it — only the request assertion proves the guard cannot be
+    // silently dead against a server that omits the annotation by default.
+    const metaCall = state.requests.find(
+      (r) => r.pathname.endsWith('/attachments/att-1') && !r.pathname.includes('$value'),
+    );
+    expect(metaCall?.search).toContain('@odata.type');
   });
 
   it('never echoes an attacker-authored prose filename as trusted text in the success message', async () => {

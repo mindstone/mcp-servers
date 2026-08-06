@@ -44,6 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Auth-classified Graph errors (consent/tenant 403s, expired tokens) now wrap the formatted upstream error message in an untrusted-content envelope on the `auth_required` response path; previously the shared formatter's output — which embeds the upstream Graph error-body message raw — was passed into model-visible JSON unwrapped.
 - Attacker-controlled attachment `@odata.type` and `contentType` values are now wrapped in untrusted-content envelopes everywhere they surface (previously interpolated raw in the unsupported-type error and returned raw by both attachment tools), and upstream Graph error-body messages on the generic failure path are enveloped instead of interpolated raw.
 - `download_attachment`'s success message no longer echoes the attachment file name: the filename sanitizer constrains the name lexically (no separators, `..`, leading dots, NUL) but cannot neutralize attacker-authored prose, so the message now names only the connector-invented staging directory. `savedTo` still reports the real path (the host needs it), and the raw name surfaces only inside the untrusted-content envelope.
+- The `download_attachment` metadata `$select` now explicitly requests `@odata.type`: the not-a-file-attachment guard reads that annotation, so the request must ask for it rather than rely on the server's default projection (a server omitting it would have silently failed the guard open).
 
 ## [0.2.0] - 2026-07-29
 
