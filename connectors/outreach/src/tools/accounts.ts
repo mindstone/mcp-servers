@@ -37,10 +37,13 @@ Returns company accounts with domain, industry, and owner info.`,
       if (args.domain) params['filter[domain]'] = args.domain;
 
       const response = await outreachFetch('/accounts', { params });
+      const records = formatResources(response.data);
       return JSON.stringify({
         ok: true,
-        records: formatResources(response.data),
-        count: response.meta?.count ?? 0,
+        records,
+        // The API may omit meta.count; fall back to the number of records
+        // actually returned rather than reporting a misleading 0.
+        count: response.meta?.count ?? records.length,
         page: response.meta?.page,
       });
     }),

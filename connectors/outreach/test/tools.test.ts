@@ -208,6 +208,41 @@ describe('Tool tests — Outreach MCP server', () => {
     expect(result.json).toHaveProperty('records');
   });
 
+  it('list tools fall back to records.length when the API omits meta.count', async () => {
+    mswServer.use(...createOutreachHandlers());
+    mswServer.use(
+      http.get(`${OUTREACH_API_BASE}/sequences`, () =>
+        HttpResponse.json({
+          data: [
+            {
+              id: '301',
+              type: 'sequence',
+              attributes: { name: 'Demo Follow-up', enabled: true, sequenceStepCount: 5 },
+            },
+          ],
+          // No meta at all — the vendor omitted the count.
+        }),
+      ),
+    );
+    tempConfig = setupAuth();
+
+    testClient = await createTestClient({
+      env: {
+        OUTREACH_CLIENT_ID: 'test-client-id',
+        OUTREACH_CLIENT_SECRET: 'test-client-secret',
+        OUTREACH_CONFIG_DIR: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    const result = await testClient.callTool('outreach_list_sequences', {});
+    expect(result.isError).toBeFalsy();
+    const json = result.json as Record<string, unknown>;
+    expect((json.records as unknown[]).length).toBe(1);
+    // Not the misleading 0 the connector used to report.
+    expect(json.count).toBe(1);
+  });
+
   it('outreach_add_prospect_to_sequence enrolls prospect', async () => {
     mswServer.use(...createOutreachHandlers());
     tempConfig = setupAuth();
