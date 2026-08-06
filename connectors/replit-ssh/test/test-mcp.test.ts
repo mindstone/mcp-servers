@@ -81,7 +81,8 @@ const EXPECTED_ANNOTATIONS: Record<string, {
   replit_move: {
     readOnlyHint: false,
     destructiveHint: true,
-    idempotentHint: true,
+    // False: a repeated move fails with DESTINATION_EXISTS, it is not a no-op.
+    idempotentHint: false,
     openWorldHint: true,
   },
   replit_delete_file: {
