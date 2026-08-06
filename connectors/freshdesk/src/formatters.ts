@@ -91,6 +91,16 @@ export function wrapUntrustedTicketContent(s: string | null | undefined): string
 }
 
 /**
+ * Render a ticket subject for text output. Fail-closed: a missing, empty,
+ * or (in violation of the declared API shape) non-string subject renders a
+ * connector-authored placeholder — never the raw vendor value, which an
+ * array/object subject would otherwise stringify outside any envelope.
+ */
+export function formatTicketSubject(subject: string | null | undefined): string {
+  return wrapUntrustedTicketContent(subject) ?? '(no subject)';
+}
+
+/**
  * Return a deep copy of the ticket with EVERY string value enveloped —
  * subject and body fields, but also type, requester email, tags, and any
  * unexpected vendor property. `custom_fields` is a free-form vendor map whose
@@ -112,12 +122,12 @@ export function ticketUrl(domain: string, ticketId: number): string {
 export function formatTicketConcise(ticket: FreshdeskTicket, domain: string): string {
   const status = statusToString(ticket.status);
   const priority = priorityToString(ticket.priority);
-  const subject = wrapUntrustedTicketContent(ticket.subject) ?? ticket.subject;
+  const subject = formatTicketSubject(ticket.subject);
   return `#${ticket.id}: ${subject} [${status}] (${priority}) — ${ticketUrl(domain, ticket.id)}`;
 }
 
 export function formatTicketDetailed(ticket: FreshdeskTicket, domain: string): string {
-  const wrappedSubject = wrapUntrustedTicketContent(ticket.subject) ?? ticket.subject;
+  const wrappedSubject = formatTicketSubject(ticket.subject);
   const wrappedHtml = wrapUntrustedTicketContent(ticket.description);
   const wrappedText = wrapUntrustedTicketContent(ticket.description_text);
   const wrappedType = wrapUntrustedTicketContent(ticket.type);
@@ -128,12 +138,23 @@ export function formatTicketDetailed(ticket: FreshdeskTicket, domain: string): s
   const wrappedCreated = wrapField(ticket.created_at, TICKET_SOURCE);
   const wrappedUpdated = wrapField(ticket.updated_at, TICKET_SOURCE);
   const wrappedDueBy = wrapField(ticket.due_by, TICKET_SOURCE);
+  // The raw numeric id is shown alongside the mapped label, but only when
+  // it really is a number — a string-typed status/priority (API shape
+  // violation) must never reach the output unenveloped.
+  const statusId =
+    typeof ticket.status === 'number' && Number.isFinite(ticket.status)
+      ? ` (${ticket.status})`
+      : '';
+  const priorityId =
+    typeof ticket.priority === 'number' && Number.isFinite(ticket.priority)
+      ? ` (${ticket.priority})`
+      : '';
   return [
     `Ticket #${ticket.id}`,
     `URL: ${ticketUrl(domain, ticket.id)}`,
     `Subject: ${wrappedSubject}`,
-    `Status: ${statusToString(ticket.status)} (${ticket.status})`,
-    `Priority: ${priorityToString(ticket.priority)} (${ticket.priority})`,
+    `Status: ${statusToString(ticket.status)}${statusId}`,
+    `Priority: ${priorityToString(ticket.priority)}${priorityId}`,
     `Source: ${sourceToString(ticket.source)}`,
     wrappedType ? `Type: ${wrappedType}` : '',
     `Requester ID: ${ticket.requester_id}`,
@@ -288,7 +309,9 @@ export function wrapCompanyUntrustedFields(company: FreshdeskCompany): Freshdesk
 export function articleStatusToString(status: number | undefined): string {
   if (status === 1) return 'Draft';
   if (status === 2) return 'Published';
-  return status === undefined ? 'Unknown' : `Status ${status}`;
+  // Fail-closed: a non-number status (API shape violation) never reaches
+  // the output raw.
+  return typeof status === 'number' && Number.isFinite(status) ? `Status ${status}` : 'Unknown';
 }
 
 export function formatArticleConcise(article: FreshdeskSolutionArticle): string {

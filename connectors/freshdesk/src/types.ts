@@ -196,15 +196,23 @@ export const SOURCE_MAP: Record<number, string> = {
 };
 
 export function statusToString(status: number): string {
-  return STATUS_MAP[status] || `Custom (${status})`;
+  if (STATUS_MAP[status]) return STATUS_MAP[status];
+  // Fail-closed: only a finite number is interpolated into the fallback
+  // label — a non-number value (API shape violation) never reaches
+  // model-visible output raw.
+  return typeof status === 'number' && Number.isFinite(status) ? `Custom (${status})` : 'Unknown';
 }
 
 export function priorityToString(priority: number): string {
-  return PRIORITY_MAP[priority] || `Unknown (${priority})`;
+  if (PRIORITY_MAP[priority]) return PRIORITY_MAP[priority];
+  return typeof priority === 'number' && Number.isFinite(priority)
+    ? `Unknown (${priority})`
+    : 'Unknown';
 }
 
 export function sourceToString(source: number): string {
-  return SOURCE_MAP[source] || `Unknown (${source})`;
+  if (SOURCE_MAP[source]) return SOURCE_MAP[source];
+  return typeof source === 'number' && Number.isFinite(source) ? `Unknown (${source})` : 'Unknown';
 }
 
 /**

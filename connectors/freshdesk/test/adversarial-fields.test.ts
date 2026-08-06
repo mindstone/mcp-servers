@@ -349,4 +349,64 @@ describe('Adversarial field coverage — every vendor string is enveloped', () =
     expectNoBreakout(await callTool('get_freshdesk_company', { company_id: 900 }));
     expectNoBreakout(await callTool('get_freshdesk_solution_article', { article_id: 500 }));
   });
+
+  // ─── API shape violations fail closed ────────────────────────────
+
+  it('fails closed on a non-string subject (API shape violation)', async () => {
+    mswServer.use(
+      http.get(`${BASE}/tickets/:id`, () =>
+        HttpResponse.json({ ...makeTicket(7), subject: [payload('array-subject')] }),
+      ),
+      http.post(`${BASE}/tickets`, () =>
+        HttpResponse.json({ ...makeTicket(42), subject: [payload('echo-subject')] }, { status: 201 }),
+      ),
+    );
+    await setup();
+
+    // Detailed and concise reads both render a connector-authored
+    // placeholder instead of stringifying the raw vendor value.
+    const detailed = await callTool('get_freshdesk_ticket', { ticket_id: 7 });
+    expect(detailed).toContain('(no subject)');
+    expect(detailed).not.toContain(MARKER);
+
+    const concise = await callTool('get_freshdesk_ticket', {
+      ticket_id: 7,
+      response_format: 'concise',
+    });
+    expect(concise).toContain('(no subject)');
+    expect(concise).not.toContain(MARKER);
+
+    // The vendor-echoed subject in the create response fails closed too.
+    const created = await callTool('create_freshdesk_ticket', {
+      email: 'customer@example.com',
+      subject: 'legit subject',
+      description: '<p>legit body</p>',
+    });
+    expect(created).toContain('(no subject)');
+    expect(created).not.toContain(MARKER);
+  });
+
+  it('fails closed on string-typed status, priority, and source (API shape violation)', async () => {
+    mswServer.use(
+      http.get(`${BASE}/tickets/:id`, () =>
+        HttpResponse.json({
+          ...makeTicket(7),
+          status: payload('status'),
+          priority: payload('priority'),
+          source: payload('source'),
+        }),
+      ),
+    );
+    await setup();
+
+    const detailed = await callTool('get_freshdesk_ticket', { ticket_id: 7 });
+    expect(detailed).toContain('Status: Unknown');
+    expect(detailed).not.toContain(MARKER);
+
+    const concise = await callTool('get_freshdesk_ticket', {
+      ticket_id: 7,
+      response_format: 'concise',
+    });
+    expect(concise).not.toContain(MARKER);
+  });
 });
