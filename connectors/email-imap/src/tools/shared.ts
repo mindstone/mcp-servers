@@ -35,6 +35,14 @@ export function wrapEmailField(text: string | null | undefined): string | null {
 }
 
 /**
+ * Wrap a list of attacker-controlled strings (e.g. IMAP flag keywords, which
+ * a caller can write server-side via email_set_flags) in per-item envelopes.
+ */
+export function wrapEmailFieldList(values: string[]): string[] {
+  return values.map((value) => wrapUntrusted(value, UNTRUSTED_EMAIL_SOURCE) ?? value);
+}
+
+/**
  * Strip one untrusted-content envelope layer from a caller-supplied mailbox
  * name, trim, and FAIL CLOSED when nothing usable remains. Schema validation
  * (`z.string().min(1)` / `.trim().min(1)`) runs BEFORE unwrapping, so an

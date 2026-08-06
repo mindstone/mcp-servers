@@ -83,6 +83,10 @@ export function createImapMock(options: ImapMockOptions = {}) {
     mailboxRename: 0,
     mailboxDelete: 0,
   };
+  /** Flag arguments seen by messageFlagsAdd/messageFlagsRemove, in order. */
+  const flagsCalls: string[][] = [];
+  /** Mailbox paths seen by getMailboxLock, in order. */
+  const mailboxLocks: string[] = [];
 
   class MockImapFlow {
     usable = true;
@@ -127,6 +131,7 @@ export function createImapMock(options: ImapMockOptions = {}) {
     }
 
     async getMailboxLock(mailboxPath: string) {
+      mailboxLocks.push(mailboxPath);
       this.mailbox = {
         path: mailboxPath,
         uidValidity: BigInt(1),
@@ -247,12 +252,14 @@ export function createImapMock(options: ImapMockOptions = {}) {
       return { uidMap: new Map() };
     }
 
-    async messageFlagsAdd(_uids: number[], _flags: string[], _opts?: unknown) {
+    async messageFlagsAdd(_uids: number[], flags: string[], _opts?: unknown) {
       calls.messageFlagsAdd += 1;
+      flagsCalls.push([...flags]);
       return true;
     }
 
-    async messageFlagsRemove(_uids: number[], _flags: string[], _opts?: unknown) {
+    async messageFlagsRemove(_uids: number[], flags: string[], _opts?: unknown) {
+      flagsCalls.push([...flags]);
       return true;
     }
 
@@ -285,5 +292,5 @@ export function createImapMock(options: ImapMockOptions = {}) {
     }
   }
 
-  return { MockImapFlow, constructorCalls, calls };
+  return { MockImapFlow, constructorCalls, calls, flagsCalls, mailboxLocks };
 }
