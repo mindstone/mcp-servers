@@ -8,9 +8,12 @@
  * Base URL: https://api.napkin.ai/v1
  */
 
+import { z } from 'zod';
 import {
   NapkinError,
   getRequestTimeoutMs,
+  createVisualResponseSchema,
+  visualStatusResponseSchema,
   type VisualRequest,
   type VisualStatusResponse,
   type CreateVisualResponse,
@@ -140,12 +143,21 @@ export function validateDownloadUrl(input: string): URL {
 
 /**
  * Make an authenticated request to the Napkin API.
+ *
+ * The response body is validated fail-closed against `schema` before it
+ * reaches tool code (AGENTS.md code conventions: validate every external
+ * response with Zod). Malformed JSON or a shape mismatch surfaces as a
+ * structured INVALID_RESPONSE error — a bare cast would instead let a
+ * malformed payload crash downstream with an unstructured TypeError, and
+ * raw parser messages can embed fragments of the vendor payload, so they
+ * must never reach model-visible output.
  */
-async function napkinFetch<T>(
+async function napkinFetch<S extends z.ZodTypeAny>(
   apiKey: string,
   endpoint: string,
-  options: RequestInit = {},
-): Promise<T> {
+  options: RequestInit,
+  schema: S,
+): Promise<z.infer<S>> {
   const url = `${NAPKIN_API_BASE}${endpoint}`;
 
   console.error(`[Napkin API] ${options.method || 'GET'} ${url}`);
@@ -249,7 +261,33 @@ async function napkinFetch<T>(
     );
   }
 
-  return response.json() as Promise<T>;
+  let rawBody: unknown;
+  try {
+    rawBody = await response.json();
+  } catch {
+    throw new NapkinError(
+      `Napkin API returned an unreadable (non-JSON) response (HTTP ${response.status})`,
+      'INVALID_RESPONSE',
+      'The Napkin API returned an unexpected response. Try again; if the problem persists, check the Napkin status page.',
+    );
+  }
+
+  const parsed = schema.safeParse(rawBody);
+  if (!parsed.success) {
+    // Log only paths and codes — never received values, which can embed
+    // fragments of the vendor payload. stderr is not model-visible.
+    console.error(
+      '[Napkin] Unexpected API response shape:',
+      parsed.error.issues.map((issue) => ({ path: issue.path.join('.'), code: issue.code })),
+    );
+    throw new NapkinError(
+      'Napkin API returned an unexpected response shape',
+      'INVALID_RESPONSE',
+      'The Napkin API response did not match the expected format. Try again; if the problem persists, check the Napkin status page.',
+    );
+  }
+
+  return parsed.data;
 }
 
 /**
@@ -280,10 +318,10 @@ export async function createVisual(
   if (req.width) body.width = req.width;
   if (req.height) body.height = req.height;
 
-  return napkinFetch<CreateVisualResponse>(apiKey, '/visual', {
+  return napkinFetch(apiKey, '/visual', {
     method: 'POST',
     body: JSON.stringify(body),
-  });
+  }, createVisualResponseSchema);
 }
 
 /**
@@ -293,7 +331,7 @@ export async function getVisualStatus(
   apiKey: string,
   requestId: string,
 ): Promise<VisualStatusResponse> {
-  return napkinFetch<VisualStatusResponse>(apiKey, `/visual/${requestId}/status`);
+  return napkinFetch(apiKey, `/visual/${requestId}/status`, {}, visualStatusResponseSchema);
 }
 
 /**

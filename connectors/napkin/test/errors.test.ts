@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import {
   createNapkinHandlers,
@@ -114,6 +115,75 @@ describe('Error handling', () => {
       });
       expect(result.isError).toBe(true);
       expect(result.text).toContain('AUTH_REQUIRED');
+    });
+  });
+
+  describe('Malformed API responses (Zod fail-closed validation)', () => {
+    const BASE = 'https://api.napkin.ai/v1';
+
+    it('a malformed generated_files shape returns a structured INVALID_RESPONSE, not a TypeError', async () => {
+      mswServer.use(
+        http.get(`${BASE}/visual/:id/status`, () =>
+          HttpResponse.json({
+            id: 'some-id',
+            status: 'completed',
+            generated_files: 'MARKER-not-an-array',
+          }),
+        ),
+      );
+      testClient = await createTestClient({
+        env: { NAPKIN_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('napkin_check_status', {
+        request_id: 'some-id',
+      });
+
+      expect(result.isError).toBe(true);
+      const data = result.json as { ok: boolean; error: string; code?: string };
+      expect(data.code).toBe('INVALID_RESPONSE');
+      // Raw parser messages (which can embed vendor payload fragments) must
+      // never reach model-visible output.
+      expect(result.text).not.toContain('MARKER-not-an-array');
+    });
+
+    it('a non-JSON response body returns a structured INVALID_RESPONSE', async () => {
+      mswServer.use(
+        http.post(`${BASE}/visual`, () =>
+          HttpResponse.text('<html>MARKER-not-json</html>', { status: 200 }),
+        ),
+      );
+      testClient = await createTestClient({
+        env: { NAPKIN_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('napkin_generate_visual', {
+        content: 'test',
+      });
+
+      expect(result.isError).toBe(true);
+      const data = result.json as { ok: boolean; error: string; code?: string };
+      expect(data.code).toBe('INVALID_RESPONSE');
+      expect(result.text).not.toContain('MARKER-not-json');
+    });
+
+    it('a response missing required fields returns a structured INVALID_RESPONSE', async () => {
+      mswServer.use(
+        http.get(`${BASE}/visual/:id/status`, () =>
+          HttpResponse.json({ status: 'pending' }),
+        ),
+      );
+      testClient = await createTestClient({
+        env: { NAPKIN_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('napkin_check_status', {
+        request_id: 'some-id',
+      });
+
+      expect(result.isError).toBe(true);
+      const data = result.json as { ok: boolean; error: string; code?: string };
+      expect(data.code).toBe('INVALID_RESPONSE');
     });
   });
 });
