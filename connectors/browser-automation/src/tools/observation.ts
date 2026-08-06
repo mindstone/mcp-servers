@@ -140,14 +140,15 @@ The file is written inside the workspace directory (MCP_WORKSPACE_PATH, or the s
       },
     },
     withErrorHandling(async (args) => {
-      // The CLI writes into a private staging dir, and the PDF is installed
-      // at the validated destination with exclusive-create semantics, so a
-      // post-validation swap cannot redirect the write or clobber an
-      // existing file.
+      // The CLI writes into a private staging dir. Install then re-verifies
+      // the destination directory's canonical identity (pinned before the
+      // CLI ran) and writes with exclusive-create, so a post-validation swap
+      // of an intermediate directory or the leaf is refused rather than
+      // followed outside the workspace.
       const target = createPdfStagingTarget(args.file_path, args.overwrite);
       try {
         await execAgentBrowser(['pdf', target.stagingPath]);
-        installStagedFile(target.stagingPath, target.destPath, args.overwrite);
+        installStagedFile(target, args.overwrite);
         return JSON.stringify({ ok: true, file_path: target.destPath });
       } finally {
         discardStagingDir(target.stagingDir);
