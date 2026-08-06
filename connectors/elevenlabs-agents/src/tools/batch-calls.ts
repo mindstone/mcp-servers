@@ -275,7 +275,9 @@ FREE.`,
       }),
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        // Cancelling terminates queued/scheduled production calls and cannot be
+        // undone — recovery means submitting a new batch.
+        destructiveHint: true,
         idempotentHint: true,
         openWorldHint: true,
       },
