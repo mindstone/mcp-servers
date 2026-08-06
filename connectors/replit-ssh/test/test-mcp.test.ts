@@ -88,7 +88,8 @@ const EXPECTED_ANNOTATIONS: Record<string, {
   replit_delete_file: {
     readOnlyHint: false,
     destructiveHint: true,
-    idempotentHint: true,
+    // False: a repeated delete fails with IO_ERROR "not found", it is not a no-op.
+    idempotentHint: false,
     openWorldHint: true,
   },
   replit_setup_ssh: {

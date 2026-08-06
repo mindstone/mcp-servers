@@ -461,10 +461,12 @@ describe('Replit SSH MCP — file operations against a fake SFTP backend', () =>
   // ── tool annotations ───────────────────────────────────────────────────────
 
   describe('tool annotations', () => {
-    it('replit_move does not advertise idempotentHint (repeat calls fail with DESTINATION_EXISTS)', async () => {
+    it('replit_move and replit_delete_file do not advertise idempotentHint (repeat calls fail, they do not no-op)', async () => {
       const { tools } = await client!.client.listTools();
       const byName = new Map(tools.map((t) => [t.name, t.annotations ?? {}]));
+      // Repeat move fails with DESTINATION_EXISTS; repeat delete fails with IO_ERROR.
       expect(byName.get('replit_move')).toMatchObject({ idempotentHint: false });
+      expect(byName.get('replit_delete_file')).toMatchObject({ idempotentHint: false });
       // Writes that DO no-op on repeat keep the hint.
       expect(byName.get('replit_write_file')).toMatchObject({ idempotentHint: true });
       expect(byName.get('replit_read_file')).toMatchObject({ idempotentHint: true });

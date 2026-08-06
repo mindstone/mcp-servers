@@ -35,6 +35,13 @@ const remoteMoveAnnotations = {
   idempotentHint: false,
 };
 
+// Same for replit_delete_file: it stats the target first, so a repeat call
+// fails with IO_ERROR "not found" rather than no-oping.
+const remoteDeleteAnnotations = {
+  ...remoteWriteAnnotations,
+  idempotentHint: false,
+};
+
 const localWriteAnnotations = {
   readOnlyHint: false,
   destructiveHint: true,
@@ -139,7 +146,7 @@ export function createServer(): McpServer {
       title: 'Delete Replit File',
       description:
         'Permanently delete a file from a Replit project (files only, not directories). Deletion is irreversible — there is no trash. Enabled by default; approval gating is the responsibility of the host tool-approval layer.',
-      annotations: remoteWriteAnnotations,
+      annotations: remoteDeleteAnnotations,
       inputSchema: deleteFileSchema.shape,
     },
     async (input, extra) => textResult(await replitDeleteFile(input, extra?.signal)),
