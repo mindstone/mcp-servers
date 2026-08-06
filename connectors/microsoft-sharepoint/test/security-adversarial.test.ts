@@ -244,6 +244,81 @@ describe('microsoft-sharepoint adversarial hardening', () => {
     });
   });
 
+  describe('close-tag breakout payloads in returned fields', () => {
+    it('defangs breakout text in permission roles, shareId, and grantee email', async () => {
+      mswServer.use(
+        http.get(/^https:\/\/graph\.microsoft\.com\/v1\.0\/drives\/[^/]+\/items\/[^/]+\/permissions$/, () =>
+          HttpResponse.json({
+            value: [
+              {
+                id: 'perm-1',
+                roles: [BREAKOUT_PAYLOAD],
+                shareId: BREAKOUT_PAYLOAD,
+                link: { type: BREAKOUT_PAYLOAD, scope: 'users', webUrl: 'https://contoso.sharepoint.com/share/perm-1' },
+                grantedToV2: { user: { displayName: 'Alice Example', email: BREAKOUT_PAYLOAD } },
+              },
+            ],
+          }),
+        ),
+      );
+      const result = await client.callTool('list_item_permissions', { driveId: 'drive-1', itemId: 'item-1' });
+      expect(result.isError).not.toBe(true);
+      const json = result.json as {
+        permissions: Array<{
+          roles: string[];
+          shareId?: string;
+          link?: { type?: string };
+          grantedTo: Array<{ email?: string }>;
+        }>;
+      };
+      const fields = [
+        json.permissions[0]?.roles[0],
+        json.permissions[0]?.shareId,
+        json.permissions[0]?.link?.type,
+        json.permissions[0]?.grantedTo[0]?.email,
+      ];
+      for (const field of fields) {
+        // Payload text survives as data, but the close-tag variant is neutralised.
+        expect(field).toContain('Ignore prior instructions');
+        expect(field).not.toContain('</UNTRUSTED-CONTENT >');
+        expect(field).toContain('<\\/untrusted-content>');
+      }
+    });
+
+    it('defangs breakout text in a list column name and the list template', async () => {
+      mswServer.use(
+        http.get(/^https:\/\/graph\.microsoft\.com\/v1\.0\/sites\/[^/]+\/lists\/[^/]+\/columns$/, () =>
+          HttpResponse.json({
+            value: [{ id: 'col-1', name: BREAKOUT_PAYLOAD, displayName: BREAKOUT_PAYLOAD, text: {} }],
+          }),
+        ),
+        http.get(/^https:\/\/graph\.microsoft\.com\/v1\.0\/sites\/[^/]+\/lists$/, () =>
+          HttpResponse.json({
+            value: [
+              {
+                id: 'list-1',
+                displayName: 'Tasks',
+                list: { template: BREAKOUT_PAYLOAD, hidden: false },
+              },
+            ],
+          }),
+        ),
+      );
+      const columns = await client.callTool('list_list_columns', { siteId: 'site-1', listId: 'list-1' });
+      expect(columns.isError).not.toBe(true);
+      const columnsJson = columns.json as { columns: Array<{ name?: string; displayName?: string }> };
+      expect(columnsJson.columns[0]?.name).toContain('Ignore prior instructions');
+      expect(columnsJson.columns[0]?.name).not.toContain('</UNTRUSTED-CONTENT >');
+      expect(columnsJson.columns[0]?.displayName).not.toContain('</UNTRUSTED-CONTENT >');
+
+      const lists = await client.callTool('list_site_lists', { siteId: 'site-1' });
+      expect(lists.isError).not.toBe(true);
+      const listsJson = lists.json as { lists: Array<{ template?: string }> };
+      expect(listsJson.lists[0]?.template).toContain('Ignore prior instructions');
+      expect(listsJson.lists[0]?.template).not.toContain('</UNTRUSTED-CONTENT >');
+    });
+  });
+
   describe('get_sites_delta caller-supplied deltaLink', () => {
     it('rejects a non-vendor deltaLink instead of fetching it with credentials', async () => {
       let evilHit = false;
