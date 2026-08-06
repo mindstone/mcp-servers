@@ -106,6 +106,6 @@ Add the connector in **Settings → Connectors** with:
 ## Caveats
 
 - **macOS only** — the `shortcuts` CLI is not available on other platforms.
-- Shortcuts that open GUI dialogs or prompt for confirmation cannot answer from the command line; they are terminated after `APPLE_SHORTCUTS_TIMEOUT_MS` (default 120s) instead of blocking forever.
+- Shortcuts that open GUI dialogs or prompt for confirmation cannot answer from the command line; they are terminated after `APPLE_SHORTCUTS_TIMEOUT_MS` (default 120s) instead of blocking forever. If termination cannot be confirmed (signal delivery fails or the process never exits after SIGKILL), the timeout error says the process may still be running rather than claiming it was stopped.
 - Captured stdout/stderr per invocation is bounded (1,000,000 characters per stream); output beyond the bound is dropped and marked with a truncation notice, so a shortcut emitting unbounded output cannot exhaust memory.
 - Running a shortcut has the same system permissions as the logged-in user — a shortcut can send messages, delete files, make purchases, control devices, or call remote APIs. `apple_shortcuts_run` is annotated `destructiveHint: true` so hosts require explicit user approval before running one.
