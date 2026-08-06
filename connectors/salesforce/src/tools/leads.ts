@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, checkSaveResult, formatVendorErrors, sanitizeRecords } from '../utils.js';
+import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, checkSaveResult, formatVendorErrors, sanitizeRecords, sanitizeExternalData } from '../utils.js';
 import { withConnection } from '../client.js';
 import { ConnectorError, type SaveResult } from '../types.js';
 
@@ -91,9 +91,17 @@ export function registerLeadTools(server: McpServer): void {
           convertedStatus: 'Closed - Converted',
           doNotCreateOpportunity: args.create_opportunity === false,
         };
-        const result = await (conn as unknown as { soap: { convertLead: (req: unknown[]) => Promise<unknown[]> } })
-          .soap.convertLead([leadConvert]);
-        return JSON.stringify({ ok: true, status: 'success', result: result[0] });
+        const result = await conn.soap.convertLead([leadConvert]);
+        const convertResult = result[0];
+        // SOAP convertLead reports record-level failures IN THE RESULT
+        // (success:false + errors[]), not as a fault — checking success is the
+        // only way to avoid reporting a conversion that never happened. The
+        // error messages are org-authored validation-rule text, so they are
+        // enveloped like every other vendor error (invariant #6).
+        if (!convertResult.success) {
+          throw new ConnectorError('Failed to convert lead', 'CONVERT_ERROR', formatVendorErrors(convertResult.errors));
+        }
+        return JSON.stringify({ ok: true, status: 'success', result: sanitizeExternalData(convertResult, 'salesforce:convert_lead:result') });
       });
     }),
   );

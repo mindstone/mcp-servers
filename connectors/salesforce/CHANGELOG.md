@@ -30,10 +30,12 @@ are maintained manually as part of the PR review checklist.
 ### Fixed
 
 - Record sanitization no longer passes whole `attributes` objects or arbitrary `*Id`-keyed strings through raw: `attributes` values are sanitized recursively, and only values actually shaped like a Salesforce ID (15/18-character alphanumeric) stay raw for copy-paste into follow-up calls.
+- `salesforce_convert_lead` now checks the record-level `success` flag in the SOAP conversion result instead of reporting success unconditionally — a validation rule blocking the conversion now surfaces as a `CONVERT_ERROR` failure rather than a conversion that never happened.
 
 ### Security
 
 - Envelope every record field returned by `salesforce_query`, `salesforce_get_records`, and all `salesforce_get_*` tools in `<untrusted-content>` tags so org-authored text (names, emails, descriptions, subjects) is treated as data, not instructions (FOX-3490). Record IDs stay raw so they can be reused in follow-up calls. Org-authored labels in `salesforce_describe_object` and `salesforce_list_objects` are enveloped too.
+- `salesforce_convert_lead` output now gets the same treatment: the conversion result is sanitized (record IDs stay raw), and org-authored conversion error messages (validation-rule text returned in the SOAP result) are enveloped instead of returned raw.
 - Vendor-authored error output (Salesforce validation-rule messages and API error bodies surfaced by jsforce) is now enveloped in `<untrusted-content>` instead of returned raw, and unexpected runtime errors return a generic `INTERNAL_ERROR` message — the raw detail goes to local logs only, so response-body fragments and environment details (e.g. tokens embedded in ad-hoc error text) cannot reach model-visible output.
 
 ## [0.1.3] - 2026-06-12

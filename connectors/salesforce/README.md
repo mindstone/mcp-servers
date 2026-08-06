@@ -211,6 +211,7 @@ Then call `salesforce_connect_account` to start the OAuth flow.
 - Write and disconnect tools are marked so capable hosts can ask for confirmation before changing Salesforce data.
 - SOQL helper paths escape string and `LIKE` values, strip comments quote-safely before applying the query limit cap, and enforce a maximum of 200 records for raw SOQL queries.
 - Record text returned by read tools is wrapped in `<untrusted-content>` envelopes so Salesforce-authored field values are presented to the model as data, not instructions.
+- `salesforce_convert_lead` reports a conversion as failed when Salesforce rejects it at the record level (e.g. a validation rule), instead of claiming success; the org-authored error detail is enveloped the same way.
 
 ## Licence
 
