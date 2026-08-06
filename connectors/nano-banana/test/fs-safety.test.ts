@@ -18,6 +18,7 @@ import {
   readSandboxedWorkspaceFile,
   resolveSavePath,
   resolveSourcePath,
+  writeContainedFileExclusive,
 } from '../src/tools/path-safety.js';
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
@@ -193,5 +194,109 @@ describe('save_path overwrite refusal', () => {
     expect(result.isError).toBe(true);
     expect(result.text).toContain('SAVE_EXISTS');
     expect(fs.readFileSync(existing).equals(originalBytes)).toBe(true);
+  });
+});
+
+describe('writeContainedFileExclusive — swap-proof contained write', () => {
+  let workspaceDir: string;
+
+  beforeEach(() => {
+    workspaceDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'nano-write-')));
+    vi.stubEnv('MCP_WORKSPACE_PATH', workspaceDir);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    try { fs.rmSync(workspaceDir, { recursive: true, force: true }); } catch { /* ignore */ }
+  });
+
+  it('writes a validated path, creating missing directories, and cleans up staging', () => {
+    const resolved = resolveSavePath('new-dir/sub/out.png', 'image/png');
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+
+    const result = writeContainedFileExclusive(resolved.path, ONE_PIXEL_PNG);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(fs.readFileSync(result.path).equals(ONE_PIXEL_PNG)).toBe(true);
+    if (process.platform !== 'win32') {
+      // Written owner-only (0600) via the staging file.
+      expect(fs.statSync(result.path).mode & 0o777).toBe(0o600);
+    }
+    // No staging directory is left behind on the happy path.
+    const leftovers = fs.readdirSync(path.dirname(result.path)).filter((e) => e.startsWith('.nano-banana-staging-'));
+    expect(leftovers).toHaveLength(0);
+  });
+
+  it('fails closed when a directory component is swapped for an escape symlink after validation', () => {
+    if (process.platform === 'win32') return;
+    const outsideDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'nano-write-out-')));
+    try {
+      // Validate while `sub` is a real in-workspace directory…
+      const subDir = path.join(workspaceDir, 'sub');
+      fs.mkdirSync(subDir);
+      const resolved = resolveSavePath('sub/out.png', 'image/png');
+      expect(resolved.ok).toBe(true);
+      if (!resolved.ok) return;
+
+      // …then swap it for a symlink pointing OUTSIDE the workspace, as a
+      // local attacker racing the write would. The write-time
+      // re-canonicalisation must refuse instead of following the symlink.
+      fs.rmdirSync(subDir);
+      fs.symlinkSync(outsideDir, subDir);
+
+      const result = writeContainedFileExclusive(resolved.path, ONE_PIXEL_PNG);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe('rejected');
+        expect(result.error).toMatch(/workspace|sandbox/i);
+      }
+      // Nothing was written outside the workspace.
+      expect(fs.readdirSync(outsideDir)).toHaveLength(0);
+    } finally {
+      try { fs.rmSync(outsideDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  });
+
+  it('refuses a destination symlink planted after validation (never followed, never overwritten)', () => {
+    if (process.platform === 'win32') return;
+    const outsideDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'nano-write-link-')));
+    try {
+      const resolved = resolveSavePath('taken.png', 'image/png');
+      expect(resolved.ok).toBe(true);
+      if (!resolved.ok) return;
+
+      // Plant a symlink at the destination BETWEEN validation and write.
+      const outsideTarget = path.join(outsideDir, 'victim.png');
+      fs.writeFileSync(outsideTarget, Buffer.from('pre-existing user content'));
+      fs.symlinkSync(outsideTarget, resolved.path);
+
+      const result = writeContainedFileExclusive(resolved.path, ONE_PIXEL_PNG);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe('exists');
+      }
+      // The symlink's target is byte-identical — the write never followed it.
+      expect(fs.readFileSync(outsideTarget).equals(Buffer.from('pre-existing user content'))).toBe(true);
+    } finally {
+      try { fs.rmSync(outsideDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  });
+
+  it('refuses to overwrite an existing file (exists), leaving it untouched', () => {
+    const resolved = resolveSavePath('already.png', 'image/png');
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+
+    const original = Buffer.from('pre-existing user content');
+    fs.writeFileSync(resolved.path, original);
+
+    const result = writeContainedFileExclusive(resolved.path, ONE_PIXEL_PNG);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe('exists');
+    }
+    expect(fs.readFileSync(resolved.path).equals(original)).toBe(true);
   });
 });
