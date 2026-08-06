@@ -8,7 +8,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { resolveWorkspaceFilePath } from './path-safety.js';
+import { getReadWorkspaceRoot, resolveWorkspaceFilePath } from './path-safety.js';
 import { KlingError } from './types.js';
 
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png']);
@@ -16,6 +16,94 @@ const IMAGE_MAX_BYTES = 10 * 1_048_576; // Kling limit: image file ≤ 10MB
 
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.m4a', '.aac']);
 const AUDIO_MAX_BYTES = 5 * 1_048_576; // Kling limit: audio file ≤ 5MB
+
+/**
+ * Read a previously validated canonical workspace path, defending against
+ * check-then-use swaps. Exported for fault-injection tests.
+ *
+ * Open once, fstat the descriptor, then RE-VERIFY before reading:
+ * the path must still canonically resolve inside the workspace root AND name
+ * the same inode as the opened descriptor. O_NOFOLLOW alone only covers a
+ * leaf swapped for a symlink; a swapped ANCESTOR directory would redirect
+ * `openSync` outside the sandbox with the leaf still a regular file. The
+ * read then goes through the same descriptor, so the bytes returned are
+ * exactly the inode that was proven in-workspace.
+ */
+export function readSandboxedWorkspaceFile(
+  canonicalPath: string,
+  inputPath: string,
+  kind: 'image' | 'audio',
+  maxBytes: number,
+): string {
+  const openFlags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
+  let fd: number;
+  try {
+    fd = fs.openSync(canonicalPath, openFlags);
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException;
+    if (e?.code === 'ELOOP') {
+      throw new KlingError(
+        `File became a symbolic link after validation, refusing to read it: ${inputPath}`,
+        'PATH_OUTSIDE_WORKSPACE',
+        'The file was swapped for a symlink between validation and read. Retry with a regular file inside the workspace.',
+      );
+    }
+    throw err;
+  }
+
+  try {
+    const stats = fs.fstatSync(fd);
+    if (!stats.isFile()) {
+      throw new KlingError(
+        `Not a regular file: ${inputPath}`,
+        'NOT_A_FILE',
+        'Provide a path to a regular file inside the workspace.',
+      );
+    }
+
+    // Post-open re-verification: the path must still canonically resolve
+    // inside the workspace AND name the same inode as the opened descriptor
+    // (catches an ancestor-directory swap that redirected the open).
+    const root = getReadWorkspaceRoot();
+    let recanonical: string;
+    try {
+      recanonical = fs.realpathSync(canonicalPath);
+    } catch {
+      throw new KlingError(
+        `File path changed during validation, refusing to read it: ${inputPath}`,
+        'PATH_OUTSIDE_WORKSPACE',
+        'The file or a parent directory was replaced between validation and read. Retry with a stable path inside the workspace.',
+      );
+    }
+    if (recanonical !== root && !recanonical.startsWith(root + path.sep)) {
+      throw new KlingError(
+        `File path was swapped to escape the workspace sandbox root (${root}) during validation: ${inputPath}`,
+        'PATH_OUTSIDE_WORKSPACE',
+        'The file or a parent directory was swapped for a symlink between validation and read. Retry with a stable path inside the workspace.',
+      );
+    }
+    const pathStat = fs.statSync(recanonical);
+    if (pathStat.dev !== stats.dev || pathStat.ino !== stats.ino) {
+      throw new KlingError(
+        `File was replaced during validation, refusing to read it: ${inputPath}`,
+        'PATH_OUTSIDE_WORKSPACE',
+        'The file was replaced between validation and read. Retry with a stable path inside the workspace.',
+      );
+    }
+
+    if (stats.size > maxBytes) {
+      throw new KlingError(
+        `${kind === 'image' ? 'Image' : 'Audio'} file exceeds the ${Math.round(maxBytes / 1_048_576)}MB limit: ${inputPath}`,
+        'FILE_TOO_LARGE',
+        `Kling rejects ${kind} files above ${Math.round(maxBytes / 1_048_576)}MB. Compress or trim the file and try again.`,
+      );
+    }
+
+    return fs.readFileSync(fd).toString('base64');
+  } finally {
+    fs.closeSync(fd);
+  }
+}
 
 function encodeLocalMedia(
   inputPath: string,
@@ -41,48 +129,7 @@ function encodeLocalMedia(
     );
   }
 
-  // Open once and validate the OPENED object, then read through the same
-  // descriptor — a check-then-use stat-then-reopen pair would let an
-  // attacker swap the validated file (or an ancestor) for a symlink between
-  // the two operations. O_NOFOLLOW makes the open itself fail if the leaf
-  // was swapped for a symlink after path validation.
-  const openFlags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
-  let fd: number;
-  try {
-    fd = fs.openSync(resolved.path, openFlags);
-  } catch (err) {
-    const e = err as NodeJS.ErrnoException;
-    if (e?.code === 'ELOOP') {
-      throw new KlingError(
-        `File became a symbolic link after validation, refusing to read it: ${inputPath}`,
-        'PATH_OUTSIDE_WORKSPACE',
-        'The file was swapped for a symlink between validation and read. Retry with a regular file inside the workspace.',
-      );
-    }
-    throw err;
-  }
-
-  try {
-    const stats = fs.fstatSync(fd);
-    if (!stats.isFile()) {
-      throw new KlingError(
-        `Not a regular file: ${inputPath}`,
-        'NOT_A_FILE',
-        'Provide a path to a regular file inside the workspace.',
-      );
-    }
-    if (stats.size > maxBytes) {
-      throw new KlingError(
-        `${kind === 'image' ? 'Image' : 'Audio'} file exceeds the ${Math.round(maxBytes / 1_048_576)}MB limit: ${inputPath}`,
-        'FILE_TOO_LARGE',
-        `Kling rejects ${kind} files above ${Math.round(maxBytes / 1_048_576)}MB. Compress or trim the file and try again.`,
-      );
-    }
-
-    return fs.readFileSync(fd).toString('base64');
-  } finally {
-    fs.closeSync(fd);
-  }
+  return readSandboxedWorkspaceFile(resolved.path, inputPath, kind, maxBytes);
 }
 
 /**
