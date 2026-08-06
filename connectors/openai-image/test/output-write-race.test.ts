@@ -157,6 +157,187 @@ describe('generated-image output write race', () => {
     }
   });
 
+  it('refuses when the output directory is swapped for a symlink between the staging write and the link', async () => {
+    const workspace = await makeTempDir('link-race-ws');
+    const outside = await makeTempDir('link-race-outside');
+    const outsideGenerated = path.join(outside, 'generated-images');
+    await fsp.mkdir(outsideGenerated, { recursive: true });
+
+    const connector = await importConnectorModule({
+      MCP_WORKSPACE_PATH: workspace,
+      OPENAI_API_KEY: 'sk-test-Acme-link-race',
+    });
+    mockOpenAIImageResponses();
+
+    // The race reported against the link step: after the staging bytes are
+    // written, the canonical directory is replaced by a symlink. The real
+    // link then fails ENOENT (the staging pathname no longer resolves), and
+    // the exclusive-create fallback would open the destination through the
+    // swapped symlink — outside the fence — unless the directory identity is
+    // re-verified first.
+    const chiefOfStaffDir = path.join(workspace, 'Chief-of-Staff');
+    const realLink = fs.promises.link.bind(fs.promises);
+    let swapped = false;
+    vi.spyOn(fs.promises, 'link').mockImplementation((async (
+      existingPath: fs.PathLike,
+      newPath: fs.PathLike,
+    ) => {
+      if (!swapped) {
+        swapped = true;
+        await fsp.rename(chiefOfStaffDir, `${chiefOfStaffDir}-original`);
+        await fsp.symlink(outside, chiefOfStaffDir);
+      }
+      return realLink(existingPath, newPath);
+    }) as typeof fs.promises.link);
+
+    const pair = await createInMemoryClientPair(connector.createServer());
+    try {
+      const result = (await pair.client.callTool({
+        name: 'generate_image',
+        arguments: { prompt: 'Acme link race probe', quality: 'medium' },
+      })) as CallToolResult;
+
+      expect(result.isError).toBe(true);
+      const payload = extractToolPayload(result);
+      expect(payload.code).toBe('WORKSPACE_FENCE_VIOLATION');
+      expect(payload.error).toContain('changed while the image was being saved');
+
+      // No generated file is left behind outside the fence.
+      expect(await fsp.readdir(outsideGenerated)).toHaveLength(0);
+    } finally {
+      await pair.close();
+    }
+  });
+
+  it('refuses when the swap lands between a failed link and the exclusive-create fallback', async () => {
+    const workspace = await makeTempDir('fallback-race-ws');
+    const outside = await makeTempDir('fallback-race-outside');
+    const outsideGenerated = path.join(outside, 'generated-images');
+    await fsp.mkdir(outsideGenerated, { recursive: true });
+
+    const connector = await importConnectorModule({
+      MCP_WORKSPACE_PATH: workspace,
+      OPENAI_API_KEY: 'sk-test-Acme-fallback-race',
+    });
+    mockOpenAIImageResponses();
+
+    // Simulate a filesystem without hard-link support (link rejects with a
+    // non-EEXIST error) AND a concurrent swap: the fallback's exclusive-create
+    // open must re-verify the directory identity instead of writing through
+    // the swapped symlink.
+    const chiefOfStaffDir = path.join(workspace, 'Chief-of-Staff');
+    let swapped = false;
+    vi.spyOn(fs.promises, 'link').mockImplementation(async () => {
+      if (!swapped) {
+        swapped = true;
+        await fsp.rename(chiefOfStaffDir, `${chiefOfStaffDir}-original`);
+        await fsp.symlink(outside, chiefOfStaffDir);
+      }
+      throw Object.assign(new Error('operation not permitted'), {
+        code: 'EPERM',
+      });
+    });
+
+    const pair = await createInMemoryClientPair(connector.createServer());
+    try {
+      const result = (await pair.client.callTool({
+        name: 'generate_image',
+        arguments: { prompt: 'Acme fallback race probe', quality: 'medium' },
+      })) as CallToolResult;
+
+      expect(result.isError).toBe(true);
+      const payload = extractToolPayload(result);
+      expect(payload.code).toBe('WORKSPACE_FENCE_VIOLATION');
+      expect(payload.error).toContain('changed while the image was being saved');
+
+      expect(await fsp.readdir(outsideGenerated)).toHaveLength(0);
+    } finally {
+      await pair.close();
+    }
+  });
+
+  it('refuses when the swap lands immediately after a successful link', async () => {
+    const workspace = await makeTempDir('post-link-race-ws');
+    const outside = await makeTempDir('post-link-race-outside');
+    const outsideGenerated = path.join(outside, 'generated-images');
+    await fsp.mkdir(outsideGenerated, { recursive: true });
+
+    const connector = await importConnectorModule({
+      MCP_WORKSPACE_PATH: workspace,
+      OPENAI_API_KEY: 'sk-test-Acme-post-link-race',
+    });
+    mockOpenAIImageResponses();
+
+    // The link itself succeeds against the real directory, but the directory
+    // is swapped before the save returns: the post-link identity re-check must
+    // still fail closed rather than report success for a moved target.
+    const chiefOfStaffDir = path.join(workspace, 'Chief-of-Staff');
+    const realLink = fs.promises.link.bind(fs.promises);
+    let swapped = false;
+    vi.spyOn(fs.promises, 'link').mockImplementation((async (
+      existingPath: fs.PathLike,
+      newPath: fs.PathLike,
+    ) => {
+      await realLink(existingPath, newPath);
+      if (!swapped) {
+        swapped = true;
+        await fsp.rename(chiefOfStaffDir, `${chiefOfStaffDir}-original`);
+        await fsp.symlink(outside, chiefOfStaffDir);
+      }
+    }) as typeof fs.promises.link);
+
+    const pair = await createInMemoryClientPair(connector.createServer());
+    try {
+      const result = (await pair.client.callTool({
+        name: 'generate_image',
+        arguments: { prompt: 'Acme post link race probe', quality: 'medium' },
+      })) as CallToolResult;
+
+      expect(result.isError).toBe(true);
+      const payload = extractToolPayload(result);
+      expect(payload.code).toBe('WORKSPACE_FENCE_VIOLATION');
+      expect(payload.error).toContain('changed while the image was being saved');
+
+      expect(await fsp.readdir(outsideGenerated)).toHaveLength(0);
+    } finally {
+      await pair.close();
+    }
+  });
+
+  it('writes through the exclusive-create fallback when hard links are unsupported', async () => {
+    const workspace = await makeTempDir('fallback-stable-ws');
+    const connector = await importConnectorModule({
+      MCP_WORKSPACE_PATH: workspace,
+      OPENAI_API_KEY: 'sk-test-Acme-fallback-stable',
+    });
+    mockOpenAIImageResponses();
+
+    // Filesystem without hard-link support, stable directory: the fallback
+    // must still deliver the image (same no-overwrite semantics as link).
+    vi.spyOn(fs.promises, 'link').mockImplementation(async () => {
+      throw Object.assign(new Error('operation not permitted'), {
+        code: 'EPERM',
+      });
+    });
+
+    const pair = await createInMemoryClientPair(connector.createServer());
+    try {
+      const result = (await pair.client.callTool({
+        name: 'generate_image',
+        arguments: { prompt: 'Acme fallback stable write', quality: 'medium' },
+      })) as CallToolResult;
+
+      expect(result.isError).not.toBe(true);
+      const outputDir = path.join(workspace, 'Chief-of-Staff', 'generated-images');
+      const saved = await fsp.readdir(outputDir);
+      expect(saved).toHaveLength(1);
+      const written = await fsp.readFile(path.join(outputDir, saved[0] as string));
+      expect([...written.subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    } finally {
+      await pair.close();
+    }
+  });
+
   it('still writes normally when the output directory is stable', async () => {
     const workspace = await makeTempDir('write-stable-ws');
     const connector = await importConnectorModule({

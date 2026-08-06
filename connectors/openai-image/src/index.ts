@@ -619,7 +619,11 @@ export const saveImageToDisk = async (
   // breaks the pathname (fails closed, observably) instead of redirecting it;
   // a directory whose canonical identity changed is rejected before any bytes
   // flow. Filesystems without hard-link support fall back to an exclusive
-  // create at the destination (same no-overwrite semantics).
+  // create at the destination (same no-overwrite semantics). The directory's
+  // canonical identity is re-verified before any bytes flow: before the staging
+  // write, immediately before and after the `link`, and around the
+  // exclusive-create fallback (whose `open` would otherwise follow a swapped
+  // symlink after the staging pathname breaks with ENOENT).
   const ensureDirectoryUnchanged = async (): Promise<void> => {
     const currentCanonicalDir = await fs.promises
       .realpath(canonicalSaveDir)
@@ -671,18 +675,29 @@ export const saveImageToDisk = async (
 
       const finalPath = path.join(canonicalSaveDir, filename);
       try {
+        // Re-verify immediately before the link and before the fallback open:
+        // a swap after the staging write would otherwise break the staging
+        // pathname (ENOENT) and redirect the fallback's exclusive-create write
+        // through the swapped symlink, outside the fence.
+        await ensureDirectoryUnchanged();
         await fs.promises.link(stagingFile, finalPath);
+        await ensureDirectoryUnchanged();
       } catch (linkError) {
-        if (getErrorCode(linkError) === 'EEXIST') {
+        if (
+          linkError instanceof OpenAIImageToolError ||
+          getErrorCode(linkError) === 'EEXIST'
+        ) {
           throw linkError;
         }
         // No hard-link support (rare): exclusive-create at the destination.
+        await ensureDirectoryUnchanged();
         const destHandle = await fs.promises.open(finalPath, 'wx', 0o600);
         try {
           await destHandle.writeFile(buffer);
         } finally {
           await destHandle.close().catch(() => undefined);
         }
+        await ensureDirectoryUnchanged();
       }
       return path.join(saveDir, filename);
     } finally {
