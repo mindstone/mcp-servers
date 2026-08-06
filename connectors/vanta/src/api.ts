@@ -639,6 +639,15 @@ export function stringifyToolResult(payload: Record<string, unknown>, maxBytes =
   }
 
   const [arrayKey, arrayValue] = arrayEntry as [string, unknown[]];
+  // pageInfo.endCursor points past EVERY record Vanta returned for this page —
+  // including the `length - best` records truncation is about to drop. Forwarding
+  // it (or hinting at page_cursor) would silently skip those dropped records on
+  // the next call, so the truncated payload omits pageInfo and the hint directs
+  // a smaller page_size instead.
+  const payloadWithoutPageInfo = { ...payload };
+  delete payloadWithoutPageInfo.pageInfo;
+  const truncationHint =
+    'Response exceeded 25KB and records were dropped from this page. Retry with a smaller page_size, then continue paging with page_cursor from that (untruncated) response — a cursor from a truncated response would skip the dropped records.';
   let low = 0;
   let high = arrayValue.length;
   let best = 0;
@@ -646,12 +655,12 @@ export function stringifyToolResult(payload: Record<string, unknown>, maxBytes =
   while (low <= high) {
     const mid = Math.floor((low + high) / 2);
     const candidate = JSON.stringify({
-      ...payload,
+      ...payloadWithoutPageInfo,
       [arrayKey]: arrayValue.slice(0, mid),
       count: mid,
       original_count: arrayValue.length,
       truncated: true,
-      truncation_hint: 'Response exceeded 25KB. Retry with a smaller page_size or use page_cursor to continue.',
+      truncation_hint: truncationHint,
     }, null, 2);
 
     if (Buffer.byteLength(candidate, 'utf8') <= maxBytes) {
@@ -663,12 +672,12 @@ export function stringifyToolResult(payload: Record<string, unknown>, maxBytes =
   }
 
   return JSON.stringify({
-    ...payload,
+    ...payloadWithoutPageInfo,
     [arrayKey]: arrayValue.slice(0, best),
     count: best,
     original_count: arrayValue.length,
     truncated: true,
-    truncation_hint: 'Response exceeded 25KB. Retry with a smaller page_size or use page_cursor to continue.',
+    truncation_hint: truncationHint,
   }, null, 2);
 }
 
