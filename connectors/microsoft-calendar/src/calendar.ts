@@ -253,6 +253,39 @@ function hasExplicitOffset(value: string): boolean {
   return /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value.trim());
 }
 
+/**
+ * Fail-closed gate for a user/model-supplied Graph identifier (`id`,
+ * `calendarId`) that is interpolated into a request path. Runs BEFORE any
+ * network access (mailboxSettings included), so a crafted value is rejected
+ * with zero Graph requests made. Rejected outright rather than merely encoded:
+ * `?`/`#` (query/fragment injection), `%` (pre-encoded payloads — no real
+ * Graph ID contains one, and rejecting it forecloses double-decode ambiguity),
+ * `\` (WHATWG treats it as a path separator for special schemes), whitespace/
+ * control chars, and `.`/`..` path segments (the one traversal form
+ * `encodeURIComponent` cannot neutralise, since it leaves dots untouched).
+ * Real Graph event/calendar IDs (base64-ish, may contain `/`, `+`, `=`) pass
+ * and are additionally `encodeURIComponent`'d at the interpolation site — the
+ * assert + encode pairing mirrors the cohort's hubspot precedent; Graph
+ * decodes the encoded segment server-side.
+ *
+ * The crafted value is deliberately NOT echoed in the error message: this
+ * channel reaches model-visible output raw.
+ */
+const GRAPH_ID_SEGMENT_FORBIDDEN = /[?#%\\\s\x00-\x1f\x7f]/;
+
+function assertGraphIdSegment(value: string, field: string, nextStep: string): void {
+  if (
+    value.length === 0 ||
+    GRAPH_ID_SEGMENT_FORBIDDEN.test(value) ||
+    value.split('/').some((segment) => segment === '.' || segment === '..')
+  ) {
+    throw new CalendarBusinessError(
+      `Invalid "${field}": pass a Microsoft Graph ID exactly as returned by list_events / list_calendars. IDs containing '?', '#', '%', '\\', whitespace, or '.'/'..' path segments are rejected.`,
+      nextStep,
+    );
+  }
+}
+
 function assertWindowOrder(
   start: string,
   end: string,
@@ -628,13 +661,17 @@ export async function listEvents(
   args: ListEventsArgs,
   signal: AbortSignal,
 ): Promise<ListEventsResult> {
+  // Gate the path-interpolated calendar ID before any network access.
+  if (args.calendarId) {
+    assertGraphIdSegment(args.calendarId, 'calendarId', 'list_events');
+  }
   const now = new Date();
   const start = args.startDateTime ?? now.toISOString();
   const end = args.endDateTime ?? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
   const top = Math.min(args.top ?? 50, 100);
 
   const endpoint = args.calendarId
-    ? `/me/calendars/${args.calendarId}/calendarView`
+    ? `/me/calendars/${encodeURIComponent(args.calendarId)}/calendarView`
     : '/me/calendarView';
 
   const [tzInfo, response] = await Promise.all([
@@ -747,8 +784,9 @@ export async function getEvent(
   args: GetEventArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
+  assertGraphIdSegment(args.id, 'id', 'get_event');
   const rawEvent = await client
-    .api(`/me/events/${args.id}`)
+    .api(`/me/events/${encodeURIComponent(args.id)}`)
     .options({ signal })
     .select('id,subject,start,end,location,body,organizer,attendees,isAllDay,webLink,onlineMeeting')
     .get();
@@ -758,7 +796,7 @@ export async function getEvent(
   let attachmentsTruncated = false;
   if (args.includeAttachments) {
     const attachmentsResponse = await client
-      .api(`/me/events/${args.id}/attachments`)
+      .api(`/me/events/${encodeURIComponent(args.id)}/attachments`)
       .options({ signal })
       .select('id,name,contentType,size')
       .get();
@@ -912,6 +950,7 @@ export async function updateEvent(
   if (args.start && args.end) {
     assertWindowOrder(args.start, args.end, 'start', 'end', 'update_event');
   }
+  assertGraphIdSegment(args.id, 'id', 'update_event');
 
   const needsTimezone = !!(args.start || args.end);
   let resolvedTz: string | undefined;
@@ -957,7 +996,7 @@ export async function updateEvent(
   let droppedAttendeesWithoutAddress = 0;
   if (args.addAttendees?.length || args.removeAttendees?.length) {
     const current = await client
-      .api(`/me/events/${args.id}`)
+      .api(`/me/events/${encodeURIComponent(args.id)}`)
       .options({ signal })
       .select('attendees')
       .get();
@@ -995,7 +1034,7 @@ export async function updateEvent(
     );
   }
 
-  await client.api(`/me/events/${args.id}`).options({ signal }).patch(update);
+  await client.api(`/me/events/${encodeURIComponent(args.id)}`).options({ signal }).patch(update);
 
   return {
     success: true,
@@ -1013,7 +1052,8 @@ export async function deleteEvent(
   args: DeleteEventArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
-  await client.api(`/me/events/${args.id}`).options({ signal }).delete();
+  assertGraphIdSegment(args.id, 'id', 'delete_event');
+  await client.api(`/me/events/${encodeURIComponent(args.id)}`).options({ signal }).delete();
   return {
     success: true,
     message: 'Event deleted successfully',
@@ -1025,11 +1065,12 @@ export async function cancelEvent(
   args: CancelEventArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
+  assertGraphIdSegment(args.id, 'id', 'cancel_event');
   const body: Record<string, unknown> = {};
   if (args.comment) {
     body.comment = args.comment;
   }
-  await client.api(`/me/events/${args.id}/cancel`).options({ signal }).post(body);
+  await client.api(`/me/events/${encodeURIComponent(args.id)}/cancel`).options({ signal }).post(body);
   return {
     success: true,
     message: 'Event cancelled successfully',
@@ -1041,7 +1082,8 @@ export async function respondToEvent(
   args: RespondToEventArgs,
   signal: AbortSignal,
 ): Promise<unknown> {
-  const endpoint = `/me/events/${args.id}/${args.response}`;
+  assertGraphIdSegment(args.id, 'id', 'respond_to_event');
+  const endpoint = `/me/events/${encodeURIComponent(args.id)}/${args.response}`;
   const body: Record<string, unknown> = {
     sendResponse: args.sendResponse ?? true,
   };

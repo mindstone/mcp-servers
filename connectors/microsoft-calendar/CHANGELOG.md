@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Stopped logging the mailboxSettings failure message verbatim; only status/code are logged so a vendor response body cannot reach logs unsanitised.
 - Envelope Graph-sourced timezone names before they reach model-visible output (`timezoneInfo.resolved`/`calendarTimezone`/`deviceTimezone` on `list_events` and `find_meeting_times`, plus the `find_meeting_times` `timeZone` field and `note`): `mailboxSettings.timeZone` passes through `windowsToIanaTimezone` unchanged when unknown, so an anomalous tenant-controlled value could previously arrive raw.
 - `list_calendars` now validates the Graph response with Zod and shapes `owner` down to `name`/`address` instead of forwarding the vendor object wholesale. Envelope helpers wrap string values, never object keys, so unknown attacker-injected keys can no longer reach model-visible output.
+- Event/calendar IDs supplied to `list_events`, `get_event`, `update_event`, `delete_event`, `cancel_event`, and `respond_to_event` are now gated before interpolation into Graph request paths: values containing `?`, `#`, `%`, `\`, whitespace, or `.`/`..` path segments are rejected before any network request is made (so a crafted ID cannot reroute the authenticated request within the shared Microsoft token's scope), and accepted IDs are URL-encoded at the interpolation site, matching the sibling connectors.
 
 ## [0.1.2] - 2026-07-03
 

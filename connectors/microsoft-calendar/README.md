@@ -186,6 +186,7 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 - Per-tool Graph calls run under a composed caller + cohort timeout signal.
 - All Graph-sourced text is returned inside `<untrusted-content>` envelopes; structural-looking fields (IDs, URLs, enum-like values, timestamps) pass through raw only when they match their documented closed format and are enveloped otherwise. Vendor error messages are enveloped before they reach the model.
 - Tool inputs are validated fail-closed (email addresses, ISO date-times, bounded numerics, strict recurrence objects) before any Graph request is made.
+- Event/calendar IDs interpolated into Graph request paths are validated fail-closed (rejecting `?`, `#`, `%`, `\`, whitespace, and `.`/`..` segments) before any network request and URL-encoded at the interpolation site, so a crafted ID cannot reroute the authenticated request.
 - Graph pagination is never silently dropped: list endpoints report `truncated` / `attachmentsTruncated` instead of following vendor-supplied continuation URLs.
 
 ## Licence
