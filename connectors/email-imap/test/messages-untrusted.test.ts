@@ -8,7 +8,8 @@
  * attacker-controlled header/metadata text fields: `subject`, `from`, `to`,
  * `messageId`, attachment filenames, and attachment `contentType`/`part`
  * (all server- or sender-supplied). Only genuinely structural non-text fields
- * (uid, date, flags, attachment size) are NOT wrapped.
+ * (uid, date, attachment size) are NOT wrapped; `flags` ARE wrapped, because
+ * flag keywords are server-persisted text writable via email_set_flags.
  */
 
 import { describe, it, expect, afterEach, vi } from 'vitest';

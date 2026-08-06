@@ -79,8 +79,10 @@ export interface ResolvedOutboundAttachment {
 /**
  * Read outbound attachments from canonical in-workspace files (open-once,
  * fstat, read-through-fd) and enforce the aggregate size cap against the
- * descriptor's size. Throws before any network I/O when a path escapes the
- * sandbox or the cap is exceeded.
+ * descriptor's size. Each file's size is checked against the REMAINING
+ * budget before its bytes are read, so an oversized file is refused without
+ * being buffered first. Throws before any network I/O when a path escapes
+ * the sandbox or the cap is exceeded.
  */
 function resolveOutboundAttachments(
   attachments: OutboundAttachment[] | undefined,
@@ -91,7 +93,10 @@ function resolveOutboundAttachments(
   const resolved: ResolvedOutboundAttachment[] = [];
   let totalBytes = 0;
   for (const attachment of attachments) {
-    const read = readWorkspaceAttachment(attachment.path);
+    const read = readWorkspaceAttachment(
+      attachment.path,
+      MAX_OUTBOUND_ATTACHMENT_BYTES - totalBytes,
+    );
     totalBytes += read.sizeBytes;
     if (totalBytes > MAX_OUTBOUND_ATTACHMENT_BYTES) {
       throw new Error(

@@ -53,6 +53,10 @@ export interface ImapMockOptions {
   searchUids?: number[];
   /** If set, messageMove() throws with this message */
   moveError?: string;
+  /** If set, messageCopy() throws with this message */
+  copyError?: string;
+  /** If true, messageCopy() returns a uidMap missing the first requested UID */
+  copyPartialUidMap?: boolean;
 }
 
 /**
@@ -70,11 +74,30 @@ export function createImapMock(options: ImapMockOptions = {}) {
     connectError,
     searchUids,
     moveError,
+    copyError,
+    copyPartialUidMap,
   } = options;
 
   const constructorCalls: unknown[][] = [];
+  /**
+   * Live move/copy behavior — tests may flip these between tool calls to
+   * exercise fallback paths within a single test file.
+   */
+  const behavior = { moveError, copyError, copyPartialUidMap };
   /** Invocation counters shared across all mock instances of this factory. */
-  const calls = { messageMove: 0, messageFlagsAdd: 0, messageDelete: 0 };
+  const calls = {
+    messageMove: 0,
+    messageCopy: 0,
+    messageFlagsAdd: 0,
+    messageDelete: 0,
+    mailboxCreate: 0,
+    mailboxRename: 0,
+    mailboxDelete: 0,
+  };
+  /** Flag arguments seen by messageFlagsAdd/messageFlagsRemove, in order. */
+  const flagsCalls: string[][] = [];
+  /** Mailbox paths seen by getMailboxLock, in order. */
+  const mailboxLocks: string[] = [];
 
   class MockImapFlow {
     usable = true;
@@ -119,6 +142,7 @@ export function createImapMock(options: ImapMockOptions = {}) {
     }
 
     async getMailboxLock(mailboxPath: string) {
+      mailboxLocks.push(mailboxPath);
       this.mailbox = {
         path: mailboxPath,
         uidValidity: BigInt(1),
@@ -228,22 +252,29 @@ export function createImapMock(options: ImapMockOptions = {}) {
 
     async messageMove(uids: number[], _destination: string, _opts?: unknown) {
       calls.messageMove += 1;
-      if (moveError) {
-        throw new Error(moveError);
+      if (behavior.moveError) {
+        throw new Error(behavior.moveError);
       }
       return { uidMap: new Map(uids.map((uid) => [uid, uid + 1000])) };
     }
 
-    async messageCopy(_uids: number[], _destination: string, _opts?: unknown) {
-      return { uidMap: new Map() };
+    async messageCopy(uids: number[], _destination: string, _opts?: unknown) {
+      calls.messageCopy += 1;
+      if (behavior.copyError) {
+        throw new Error(behavior.copyError);
+      }
+      const mappedUids = behavior.copyPartialUidMap ? uids.slice(1) : uids;
+      return { uidMap: new Map(mappedUids.map((uid) => [uid, uid + 1000])) };
     }
 
-    async messageFlagsAdd(_uids: number[], _flags: string[], _opts?: unknown) {
+    async messageFlagsAdd(_uids: number[], flags: string[], _opts?: unknown) {
       calls.messageFlagsAdd += 1;
+      flagsCalls.push([...flags]);
       return true;
     }
 
-    async messageFlagsRemove(_uids: number[], _flags: string[], _opts?: unknown) {
+    async messageFlagsRemove(_uids: number[], flags: string[], _opts?: unknown) {
+      flagsCalls.push([...flags]);
       return true;
     }
 
@@ -257,14 +288,17 @@ export function createImapMock(options: ImapMockOptions = {}) {
     }
 
     async mailboxCreate(_mailbox: string) {
+      calls.mailboxCreate += 1;
       return true;
     }
 
     async mailboxRename(_oldPath: string, _newPath: string) {
+      calls.mailboxRename += 1;
       return true;
     }
 
     async mailboxDelete(_mailbox: string) {
+      calls.mailboxDelete += 1;
       return true;
     }
 
@@ -273,5 +307,5 @@ export function createImapMock(options: ImapMockOptions = {}) {
     }
   }
 
-  return { MockImapFlow, constructorCalls, calls };
+  return { MockImapFlow, constructorCalls, calls, flagsCalls, mailboxLocks, behavior };
 }

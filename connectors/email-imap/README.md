@@ -105,7 +105,10 @@ node dist/index.js
   path (the returned `path` points there), and outbound attachments on
   `email_send` / `email_save_draft` / `email_update_draft` may only be read
   from inside it (paths outside — including via symlinks — are refused).
-  Defaults to the system temp directory when unset.
+  Successful downloads keep their staging directory (it is the container of
+  the returned file); accumulated `email-imap-attachment-*` directories are
+  safe to delete once the files are no longer needed. Defaults to the system
+  temp directory when unset.
 - `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
 - `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
 
@@ -196,19 +199,25 @@ behaviour.
 Every attacker-controlled text field the connector returns — message bodies,
 subjects, from/to display names, Message-IDs, attachment filenames, MIME
 content types and part identifiers, mailbox names and special-use values,
-draft summaries, and error text originating from the IMAP/SMTP server or
-vendor SDKs — is wrapped in an `<untrusted-content …>…</untrusted-content>`
-envelope (with close-tag breakout escaping) so the host LLM treats it as
-data, not instructions. Tools that consume a previously returned value
-(`mailbox`, `part`, mailbox names) accept the enveloped form as-is and strip
-one envelope layer on input.
+message flag keywords (writable via `email_set_flags`, so envelope-shaped
+keywords are rejected on input), draft summaries, and error text originating
+from the IMAP/SMTP server or vendor SDKs — is wrapped in an
+`<untrusted-content …>…</untrusted-content>` envelope (with close-tag
+breakout escaping) so the host LLM treats it as data, not instructions.
+Tools that consume a previously returned value (`mailbox`, `part`, mailbox
+names, flag keywords) accept the enveloped form as-is and strip one envelope
+layer on input.
 
 Beyond `email_send`, the tools annotated `destructiveHint: true` are
 `email_save_draft`, `email_update_draft` (replaces and expunges the old
 draft), `email_create_mailbox`, `email_rename_mailbox`, `email_delete`
 (permanent when no Trash mailbox exists; aborts with a `TRASH_MOVE_FAILED`
 error — leaving the messages in place — when the move to Trash fails, rather
-than silently escalating to a permanent expunge), `email_delete_draft`
+than silently escalating to a permanent expunge), `email_move_messages`
+(its fallback permanently expunges the source messages, and only after the
+copy to the destination is verified complete for every UID — otherwise it
+aborts with a `MOVE_COPY_UNVERIFIED` error), `email_set_flags` (`\Deleted`
+marks messages for permanent expunge on mailbox close), `email_delete_draft`
 (always permanent), and `email_delete_mailbox` (removes the folder and all
 messages inside it). Hosts should gate these behind the same explicit user
 confirmation as `email_send`.
@@ -226,16 +235,16 @@ confirmation as `email_send`.
 - `email_delete_mailbox` — Permanently delete a mailbox/folder and its contents (destructive)
 
 ### Messages
-- `email_search_messages` — Search emails with sender/subject/unread filters, `since`/`before` date filters, and `before_uid` cursor pagination
+- `email_search_messages` — Search emails with sender/subject/unread filters, `since`/`before` date filters, and `before_uid` cursor pagination (returns at most 50 messages when `limit` is omitted; `hasMore: true` signals more results)
 - `email_get_message` — Get full email content by UID (bodies, subjects, addresses, Message-ID, and attachment filenames/MIME metadata are returned inside `<untrusted-content>` envelopes)
 - `email_get_attachment` — Download an attachment into the workspace sandbox (see `MCP_WORKSPACE_PATH`); writes are exclusive-create, so existing files are never overwritten
-- `email_move_messages` — Move emails between folders
+- `email_move_messages` — Move emails between folders (fallback expunge of the source is gated on a verified-complete copy; destructive)
 - `email_delete` — Delete emails (moves to Trash when one exists, otherwise expunges permanently; aborts with an error if the Trash move fails; destructive)
-- `email_set_flags` — Set or remove flags (read, starred) on messages
+- `email_set_flags` — Set or remove flags (read, starred) on messages (flag keywords are returned enveloped and envelope-shaped values are rejected; destructive)
 
 ### Drafts
 - `email_save_draft` — Save a draft email (supports attachments; mutates the remote account — destructive)
-- `email_list_drafts` — List drafts in the Drafts mailbox
+- `email_list_drafts` — List drafts in the Drafts mailbox (at most 50 per call; `hasMore: true` signals more drafts)
 - `email_update_draft` — Replace a draft's content (the new version is saved before the old one is removed; destructive)
 - `email_delete_draft` — Permanently delete a draft (destructive)
 

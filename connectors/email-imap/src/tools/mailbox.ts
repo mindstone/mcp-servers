@@ -5,10 +5,15 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { withErrorHandling } from '../utils.js';
-import { unwrapUntrusted } from '../untrusted-content.js';
 import { getConnection } from '../imap-client.js';
 import { getMailboxLock } from '../imap-client.js';
-import { ensureInitialized, formatAddresses, formatDate, wrapEmailField } from './shared.js';
+import {
+  ensureInitialized,
+  formatAddresses,
+  formatDate,
+  unwrapMailboxName,
+  wrapEmailField,
+} from './shared.js';
 
 export function registerMailboxTools(server: McpServer): void {
   // ── email_list_mailboxes ────────────────────────────────────────
@@ -87,7 +92,7 @@ export function registerMailboxTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       ensureInitialized();
 
-      const mailbox = unwrapUntrusted(args.mailbox?.trim() || 'INBOX');
+      const mailbox = unwrapMailboxName(args.mailbox?.trim() || 'INBOX', 'mailbox');
       const includeLatest = args.includeLatest ?? false;
       const client = await getConnection();
 
@@ -158,7 +163,7 @@ export function registerMailboxTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       ensureInitialized();
 
-      const name = unwrapUntrusted(args.name).trim();
+      const name = unwrapMailboxName(args.name, 'name');
       if (name.toUpperCase() === 'INBOX') {
         throw new Error('INBOX always exists and cannot be created');
       }
@@ -191,8 +196,8 @@ export function registerMailboxTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       ensureInitialized();
 
-      const oldName = unwrapUntrusted(args.old_name).trim();
-      const newName = unwrapUntrusted(args.new_name).trim();
+      const oldName = unwrapMailboxName(args.old_name, 'old_name');
+      const newName = unwrapMailboxName(args.new_name, 'new_name');
       if (oldName.toUpperCase() === 'INBOX' || newName.toUpperCase() === 'INBOX') {
         throw new Error('INBOX cannot be renamed or used as a rename target');
       }
@@ -224,7 +229,7 @@ export function registerMailboxTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       ensureInitialized();
 
-      const name = unwrapUntrusted(args.name).trim();
+      const name = unwrapMailboxName(args.name, 'name');
       if (name.toUpperCase() === 'INBOX') {
         throw new Error('INBOX cannot be deleted');
       }
