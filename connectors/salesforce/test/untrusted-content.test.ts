@@ -359,6 +359,19 @@ describe('tool sources reach the envelope helper (mechanical guard on the source
     expect(contents).toMatch(/sanitizeExternalData\(/);
   });
 
+  it('the lead-conversion path checks success and envelopes its result', async () => {
+    // File-level companion to the behavioral tests in convert-lead.test.ts:
+    // the per-file sanitizeRecords guard above is satisfied by get_leads
+    // alone, so the convert path gets its own reachability check.
+    const nodeFs = await import('node:fs');
+    const nodePath = await import('node:path');
+    const nodeUrl = await import('node:url');
+    const dir = nodePath.dirname(nodeUrl.fileURLToPath(import.meta.url));
+    const contents = nodeFs.readFileSync(nodePath.join(dir, '..', 'src', 'tools', 'leads.ts'), 'utf-8');
+    expect(contents).toMatch(/convertResult\.success/);
+    expect(contents).toMatch(/sanitizeExternalData\(convertResult/);
+  });
+
   it('the sanitize helper itself imports the vendored envelope helper', async () => {
     const nodeFs = await import('node:fs');
     const nodePath = await import('node:path');
@@ -369,7 +382,7 @@ describe('tool sources reach the envelope helper (mechanical guard on the source
     expect(contents).toMatch(/wrapUntrusted\(/);
   });
 
-  it('the vendored envelope helper is byte-for-byte canonical with the shared reference', async () => {
+  it('the vendored envelope helper keeps the canonical whitespace-tolerant close-tag pattern', async () => {
     const nodeFs = await import('node:fs');
     const nodePath = await import('node:path');
     const nodeUrl = await import('node:url');
