@@ -124,6 +124,9 @@ function isNonPublicIpv6(host: string): boolean {
   if ((h0 & 0xff00) === 0xff00) return true; // ff00::/8 multicast
   if (h0 === 0 && h1 === 0 && h5 === 0xffff) return true; // IPv4-mapped ::ffff:0:0/96
   if (h0 === 0x64 && h1 === 0xff9b) return true; // NAT64 64:ff9b::/96
+  if (h0 === 0x2001 && h1 === 0) return true; // Teredo 2001::/32 (tunnels to embedded IPv4)
+  if (h0 === 0x2001 && h1 === 0x0db8) return true; // documentation 2001:db8::/32
+  if (h0 === 0x2002) return true; // 6to4 2002::/16 (relays to embedded IPv4, e.g. 2002:7f00:1:: -> 127.0.0.1)
   return false;
 }
 

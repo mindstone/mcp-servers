@@ -90,6 +90,7 @@ describe('validatePublicHttpsUrl', () => {
     'https://example.com/api/order',
     'https://example.com/api/{order_id}',
     'https://example.com:8443/hook?after={cursor}',
+    'https://[2606:4700:4700::1111]/hook',
   ])('accepts public https URL %s', (value) => {
     expect(() => validatePublicHttpsUrl('url', value)).not.toThrow();
   });
@@ -114,6 +115,9 @@ describe('validatePublicHttpsUrl', () => {
     ['https://[fd00::1]/hook', 'IPv6 unique-local'],
     ['https://[fe80::1]/hook', 'IPv6 link-local'],
     ['https://[::ffff:127.0.0.1]/hook', 'IPv4-mapped IPv6'],
+    ['https://[2002:7f00:1::]/hook', '6to4 relay for 127.0.0.1'],
+    ['https://[2001:0:4137:9e76:3c5b:2c8b:ffff:ffff]/hook', 'Teredo tunnel'],
+    ['https://[2001:db8::1]/hook', 'IPv6 documentation range'],
     ['https://localhost/hook', 'localhost'],
     ['https://printer.local/hook', '.local'],
     ['https://wiki.internal/hook', '.internal'],
