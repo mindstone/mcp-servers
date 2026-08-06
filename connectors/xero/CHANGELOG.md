@@ -17,8 +17,11 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Security
 - Wrap all tool output text in `<untrusted-content>` envelopes with close-tag breakout escaping, so Xero-authored text (contact names, line item descriptions, history details, validation messages) is presented to the model as data, not instructions.
+- Errors thrown from a tool handler now pass through the same `<untrusted-content>` envelope and error formatting as returned results, instead of reaching the model as raw unwrapped text.
+- Unknown thrown values are no longer `JSON.stringify`-ed into error messages, so SDK rejections carrying request headers can never leak credentials into model-visible output.
 
 ### Fixed
+- A failed deep link lookup no longer turns a successful create/update into a tool error; the link is now best-effort and omitted when it cannot be resolved, so the model does not retry (and duplicate) a completed write.
 - Report the actual package version in the MCP server metadata instead of a hardcoded `1.0.0`.
 
 ## [0.0.17] - 2026-06-09
