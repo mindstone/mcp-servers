@@ -23,7 +23,7 @@ Account types: Bank, Accounts Receivable, Other Current Asset, Fixed Asset, Othe
       inputSchema: z.object({
         accountType: z.string().optional().describe('Filter by account type (e.g., "Expense", "Income", "Bank")'),
         active: z.boolean().optional().describe('Filter by active status'),
-        limit: z.number().optional().describe('Max results (default: 100)'),
+        limit: z.number().int().positive().optional().describe('Max results (default: 100)'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },

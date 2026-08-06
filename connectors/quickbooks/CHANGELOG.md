@@ -35,6 +35,7 @@ are maintained manually as part of the PR review checklist.
 - Write-tool input validation is hardened: dates (`dueDate`, `expirationDate`, report `startDate`/`endDate`/`asOfDate`) must be real YYYY-MM-DD calendar dates, line arrays must be non-empty with finite positive amounts (and positive quantities where applicable), customer/vendor email fields must be valid emails, and `customerId`/`itemId`/`vendorId`/`accountId` on the create tools are alphanumeric-validated before any outbound request.
 - List tools (`list_quickbooks_*` and `query_quickbooks`) no longer silently return a truncated first page: output now includes `hasMore` (computed exactly via a one-row probe, not a count-equals-limit guess) plus a `note` with recovery guidance when results were truncated.
 - `hasMore` no longer silently degrades to always-false at `limit: 1000`: Intuit caps MAXRESULTS at 1000, so the one-row probe is suppressed at the cap and a full-page heuristic is used there instead.
+- `limit` on the list/query tools must now be a positive integer (`limit: 0` and `limit: 1.5` are rejected before any outbound request instead of producing an empty page or a server-side error).
 
 ## [0.3.1] - 2026-05-14
 ### Added

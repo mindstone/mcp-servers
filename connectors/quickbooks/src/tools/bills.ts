@@ -21,7 +21,7 @@ Example: {}
 Example: { "vendorId": "123" }`,
       inputSchema: z.object({
         vendorId: z.string().optional().describe('Filter by vendor ID'),
-        limit: z.number().optional().describe('Max results (default: 50)'),
+        limit: z.number().int().positive().optional().describe('Max results (default: 50)'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },

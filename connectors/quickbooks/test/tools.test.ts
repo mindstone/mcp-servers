@@ -1425,6 +1425,34 @@ describe('Input validation hardening (adversarial)', () => {
     expect(outbound.count).toBe(0);
   });
 
+  it('rejects non-positive and non-integer limit values before any outbound request', async () => {
+    const outbound = countOutbound();
+    testClient = await createTestClient({ env: defaultEnv() });
+
+    const badLimits = [0, -5, 1.5];
+    const listTools = [
+      'list_quickbooks_invoices',
+      'list_quickbooks_estimates',
+      'list_quickbooks_customers',
+      'list_quickbooks_vendors',
+      'list_quickbooks_bills',
+      'list_quickbooks_accounts',
+      'list_quickbooks_employees',
+    ];
+    for (const limit of badLimits) {
+      for (const tool of listTools) {
+        const result = await testClient.callTool(tool, { limit });
+        expect(result.isError).toBe(true);
+      }
+      const query = await testClient.callTool('query_quickbooks', {
+        query: 'SELECT * FROM Invoice',
+        limit,
+      });
+      expect(query.isError).toBe(true);
+    }
+    expect(outbound.count).toBe(0);
+  });
+
   it('still accepts well-formed create inputs after hardening', async () => {
     mswServer.use(...createQuickBooksHandlers());
     testClient = await createTestClient({ env: defaultEnv() });

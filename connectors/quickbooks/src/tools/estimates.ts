@@ -29,7 +29,7 @@ WORKFLOW:
         status: z.enum(['Pending', 'Accepted', 'Closed', 'Rejected']).optional()
           .describe('Filter by estimate status'),
         customerId: z.string().optional().describe('Filter by customer ID'),
-        limit: z.number().optional().describe('Max results (default: 50)'),
+        limit: z.number().int().positive().optional().describe('Max results (default: 50)'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },

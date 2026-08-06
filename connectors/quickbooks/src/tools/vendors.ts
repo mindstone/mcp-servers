@@ -22,7 +22,7 @@ Example: { "searchTerm": "Office" }`,
       inputSchema: z.object({
         active: z.boolean().optional().describe('Filter by active status'),
         searchTerm: z.string().optional().describe('Search by display name (partial match)'),
-        limit: z.number().optional().describe('Max results (default: 50)'),
+        limit: z.number().int().positive().optional().describe('Max results (default: 50)'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },

@@ -31,7 +31,7 @@ COMMON MISTAKES:
 - LIKE operator uses % wildcard: DisplayName LIKE '%Smith%'`,
       inputSchema: z.object({
         query: z.string().describe('QuickBooks Query Language statement'),
-        limit: z.number().optional().describe('Max results (default: 100, max: 1000)'),
+        limit: z.number().int().positive().optional().describe('Max results (default: 100, max: 1000)'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },

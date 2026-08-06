@@ -32,7 +32,7 @@ WORKFLOW:
         status: z.enum(['unpaid', 'paid', 'overdue']).optional()
           .describe('Filter: "unpaid", "paid", or "overdue"'),
         customerId: z.string().optional().describe('Filter by customer ID'),
-        limit: z.number().optional().describe('Max results (default: 50)'),
+        limit: z.number().int().positive().optional().describe('Max results (default: 50)'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
