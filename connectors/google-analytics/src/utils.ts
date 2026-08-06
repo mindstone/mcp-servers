@@ -347,12 +347,24 @@ export const metadataFieldSchema = z
 
 type MetadataField = z.infer<typeof metadataFieldSchema>;
 
+/**
+ * apiName prefixes that always identify property-editor-authored definitions
+ * (custom dimensions/metrics and calculated metrics), independent of the
+ * vendor-supplied customDefinition flag.
+ */
+const CUSTOM_API_NAME_PREFIX = /^(customUser|customItem|customEvent|calculatedMetric):/;
+
 /** Map a raw Data-API metadata field into a cleaner shape. */
 export function mapMetadataField(field: MetadataField, kind: 'dimension' | 'metric') {
   // Standard dimension/metric uiName/description are Google-authored
   // documentation. Custom definitions are authored by property editors, so
-  // only those are enveloped (invariant #6).
-  const userAuthored = field.customDefinition === true;
+  // only those are enveloped (invariant #6). Google labels custom fields with
+  // customDefinition: true, but that label is itself vendor-controlled — a
+  // recognised custom apiName prefix is treated as user-authored even when
+  // the flag is absent, so the gate cannot fail open on an unlabeled custom
+  // field.
+  const userAuthored =
+    field.customDefinition === true || CUSTOM_API_NAME_PREFIX.test(field.apiName ?? '');
   return {
     apiName: field.apiName || null,
     uiName: userAuthored
