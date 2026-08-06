@@ -90,8 +90,14 @@ export async function humaansFetch<T>(
   }
 
   if (response.status === 429) {
-    const retryAfter = response.headers.get('Retry-After');
-    const waitTime = retryAfter ? `${retryAfter} seconds` : 'a moment';
+    // The Retry-After header is vendor-controlled text: only a parsed
+    // non-negative integer ever reaches the model-visible message, never the
+    // raw header value.
+    const retryAfterSeconds = parseInt(response.headers.get('Retry-After') ?? '', 10);
+    const waitTime =
+      !isNaN(retryAfterSeconds) && retryAfterSeconds >= 0
+        ? `${retryAfterSeconds} seconds`
+        : 'a moment';
     throw new HumaansError(
       `Rate limited by Humaans API. Please wait ${waitTime} before retrying.`,
       'RATE_LIMITED',
@@ -141,5 +147,16 @@ export async function humaansFetch<T>(
     );
   }
 
-  return response.json() as Promise<T>;
+  try {
+    return (await response.json()) as T;
+  } catch {
+    // A 2xx with a non-JSON body: the parse error message can embed a snippet
+    // of the vendor-controlled body, so it must never reach model-visible
+    // output. Surface a static message instead.
+    throw new HumaansError(
+      'Humaans API returned an invalid JSON response',
+      'API_ERROR',
+      'The Humaans API returned a malformed response. Try again, and check the Humaans API status if it persists.',
+    );
+  }
 }
