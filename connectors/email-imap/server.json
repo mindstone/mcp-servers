@@ -95,7 +95,7 @@
         },
         {
           "name": "MCP_WORKSPACE_PATH",
-          "description": "Workspace directory that email_get_attachment downloads into (email-imap-attachments/ subdirectory). Defaults to the system temp directory.",
+          "description": "Workspace directory that email_get_attachment downloads into (fresh email-imap-attachment-* staging directories). Defaults to the system temp directory.",
           "isRequired": false,
           "format": "string"
         }

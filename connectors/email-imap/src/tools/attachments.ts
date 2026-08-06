@@ -30,10 +30,11 @@ export function registerAttachmentTools(server: McpServer): void {
     {
       description:
         'Download an email attachment to the local workspace. Pass the `part` value from the ' +
-        'attachment metadata returned by email_get_message. The file is saved under ' +
-        '`email-imap-attachments/` inside the workspace directory (MCP_WORKSPACE_PATH, or the ' +
-        'system temp directory when unset); filenames are sanitized and confined to that ' +
-        'directory. Attachments larger than 50 MB are refused.',
+        'attachment metadata returned by email_get_message. The file is written inside a fresh ' +
+        'private `email-imap-attachment-*` staging directory created under the workspace ' +
+        'directory (MCP_WORKSPACE_PATH, or the system temp directory when unset), and the ' +
+        'returned `path` points there; filenames are sanitized to a basename. Attachments ' +
+        'larger than 50 MB are refused.',
       inputSchema: z.object({
         mailbox: z.string().min(1).describe('Mailbox/folder name that contains the message'),
         uid: z.number().int().positive().describe('Message UID from email_search_messages'),
@@ -100,9 +101,9 @@ export function registerAttachmentTools(server: McpServer): void {
           chunks.push(buffer);
         }
 
-        // Exclusive-create write with collision retry: an entry planted
-        // (or concurrently downloaded) after the filename was chosen is
-        // never overwritten.
+        // Staged exclusive-create write: the download lands in a fresh,
+        // unpredictable staging directory under the canonical root, so no
+        // planted entry or parent-directory swap can redirect or overwrite it.
         const downloadDir = await resolveDownloadDir();
         const targetPath = await writeDownloadExclusive(
           downloadDir,

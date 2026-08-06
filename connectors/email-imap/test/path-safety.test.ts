@@ -1,11 +1,12 @@
 /**
  * path-safety adversarial tests — open-once outbound reads (fstat +
- * post-open identity re-verification, read-through-fd) and atomic
- * exclusive-create downloads (no overwrite, collision retry, parent-dir
- * swap detection).
+ * post-open identity re-verification, read-through-fd) and staged
+ * exclusive-create downloads (fresh mkdtemp staging directory under the
+ * canonical root: no-overwrite by construction, parent-directory swap
+ * immunity, deterministic leaf-swap fault injection).
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -108,40 +109,48 @@ describe('path-safety', () => {
     });
   });
 
-  describe('writeDownloadExclusive (atomic no-overwrite downloads)', () => {
-    it('creates the file with the sanitized basename', async () => {
+  describe('writeDownloadExclusive (staged exclusive-create downloads)', () => {
+    it('writes the sanitized basename inside a fresh private staging directory under the canonical root', async () => {
       const dir = await resolveDownloadDir();
       const written = await writeDownloadExclusive(dir, '../../evil.pdf', Buffer.from('PDF'));
+
+      const stagingDir = path.dirname(written);
+      // The staging dir is a fresh, non-symlink mkdtemp child directly
+      // under the canonical root; only the sanitized basename carries over.
+      expect(path.dirname(stagingDir)).toBe(dir.root);
+      expect(path.basename(stagingDir)).toMatch(/^email-imap-attachment-/);
       expect(path.basename(written)).toBe('evil.pdf');
-      expect(written.startsWith(dir.dir + path.sep)).toBe(true);
+      expect(fs.lstatSync(stagingDir).isSymbolicLink()).toBe(false);
+      expect(fs.statSync(stagingDir).mode & 0o777).toBe(0o700);
+      expect(fs.statSync(written).mode & 0o777).toBe(0o600);
       expect(fs.readFileSync(written, 'utf8')).toBe('PDF');
     });
 
-    it('never overwrites an existing file; retries with a numeric suffix', async () => {
+    it('never clobbers a pre-existing same-named file anywhere in the workspace', async () => {
       const dir = await resolveDownloadDir();
-      const first = path.join(dir.dir, 'report.pdf');
-      fs.writeFileSync(first, 'ORIGINAL');
-
-      const second = await writeDownloadExclusive(dir, 'report.pdf', Buffer.from('NEW'));
-      expect(path.basename(second)).toBe('report-1.pdf');
-      expect(fs.readFileSync(first, 'utf8')).toBe('ORIGINAL');
-      expect(fs.readFileSync(second, 'utf8')).toBe('NEW');
-    });
-
-    it('refuses to follow a pre-planted symlink at the target name', async () => {
-      const dir = await resolveDownloadDir();
-      const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'email-imap-outside-'));
-      const outsideFile = path.join(outsideDir, 'victim.pdf');
-      fs.writeFileSync(outsideFile, 'VICTIM');
-      // Attacker plants a symlink at the exact chosen download name,
-      // pointing at an out-of-workspace victim file.
-      fs.symlinkSync(outsideFile, path.join(dir.dir, 'report.pdf'));
+      const sentinel = path.join(workspace, 'report.pdf');
+      fs.writeFileSync(sentinel, 'ORIGINAL');
 
       const written = await writeDownloadExclusive(dir, 'report.pdf', Buffer.from('NEW'));
-      // O_EXCL refuses the symlinked name, so the write lands on a suffix
-      // and the victim is untouched.
-      expect(path.basename(written)).toBe('report-1.pdf');
-      expect(fs.readFileSync(outsideFile, 'utf8')).toBe('VICTIM');
+      expect(written).not.toBe(sentinel);
+      expect(path.basename(written)).toBe('report.pdf');
+      expect(fs.readFileSync(sentinel, 'utf8')).toBe('ORIGINAL');
+      expect(fs.readFileSync(written, 'utf8')).toBe('NEW');
+    });
+
+    it('never writes through a pre-existing same-named symlink, inside or outside the workspace', async () => {
+      const dir = await resolveDownloadDir();
+      const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'email-imap-outside-'));
+      const victim = path.join(outsideDir, 'victim.pdf');
+      fs.writeFileSync(victim, 'VICTIM');
+      // A symlink planted at a guessable path is simply never traversed:
+      // the write stages under a fresh unpredictable directory name.
+      fs.symlinkSync(victim, path.join(workspace, 'report.pdf'));
+
+      const written = await writeDownloadExclusive(dir, 'report.pdf', Buffer.from('NEW'));
+      expect(path.basename(written)).toBe('report.pdf');
+      expect(fs.realpathSync(written).startsWith(dir.root + path.sep)).toBe(true);
+      expect(fs.readFileSync(victim, 'utf8')).toBe('VICTIM');
       fs.rmSync(outsideDir, { recursive: true, force: true });
     });
 
@@ -166,25 +175,129 @@ describe('path-safety', () => {
       ]);
     });
 
-    it('fails closed when the download directory is swapped for a symlink after validation', async () => {
+    it('is immune to a parent-directory swap between validation and the write', async () => {
+      // Adversarial regression: the directory the legacy write path used is
+      // swapped for a symlink (pointing at an attacker-controlled dir outside
+      // the workspace) after resolveDownloadDir has validated the root. The
+      // write never traverses a validated user-visible pathname, so nothing
+      // can be redirected through the swapped directory.
+      const dir = await resolveDownloadDir();
+      const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'email-imap-swap-out-'));
+      const swappedDir = path.join(workspace, 'email-imap-attachments');
+      fs.mkdirSync(swappedDir, { recursive: true });
+      try {
+        // Attacker swaps the formerly-validated directory for a symlink.
+        fs.rmSync(swappedDir, { recursive: true });
+        fs.symlinkSync(outsideDir, swappedDir);
+
+        const written = await writeDownloadExclusive(dir, 'loot.pdf', Buffer.from('X'));
+
+        // Nothing landed outside the workspace…
+        expect(fs.readdirSync(outsideDir)).toEqual([]);
+        // …and the bytes are only inside the fresh staging directory.
+        expect(fs.readFileSync(written, 'utf8')).toBe('X');
+        expect(path.dirname(path.dirname(written))).toBe(dir.root);
+        expect(fs.realpathSync(written).startsWith(dir.root + path.sep)).toBe(true);
+      } finally {
+        // The symlink inside the workspace is removed by afterEach's
+        // whole-workspace cleanup; the outside dir is ours to remove.
+        fs.rmSync(outsideDir, { recursive: true, force: true });
+      }
+    });
+
+    it('keeps every byte inside the workspace under a concurrent directory-swap storm', async () => {
+      const dir = await resolveDownloadDir();
+      const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'email-imap-race-out-'));
+      const swapped = path.join(workspace, 'email-imap-attachments');
+      const held = `${swapped}-held`;
+      fs.mkdirSync(swapped, { recursive: true });
+      // Victim that no write or cleanup may ever touch.
+      const victimOutside = path.join(outsideDir, 'victim-do-not-delete.txt');
+      fs.writeFileSync(victimOutside, 'precious');
+
+      // Attacker loop: repeatedly replace a workspace subdirectory with a
+      // symlink to the outside dir, then swap the real directory back.
+      let swapping = true;
+      const swapper = (async () => {
+        while (swapping) {
+          await fs.promises.rename(swapped, held).catch(() => {});
+          await fs.promises.symlink(outsideDir, swapped).catch(() => {});
+          await fs.promises.rm(swapped, { force: true }).catch(() => {});
+          await fs.promises.rename(held, swapped).catch(() => {});
+        }
+      })();
+
+      const saved: string[] = [];
+      const content = Buffer.from('attachment bytes');
+      try {
+        for (let i = 0; i < 40; i += 1) {
+          saved.push(await writeDownloadExclusive(dir, `probe-${i}.txt`, content));
+        }
+      } finally {
+        swapping = false;
+        await swapper;
+      }
+
+      // No connector bytes ever landed outside the workspace, and the
+      // outside victim was never touched.
+      expect(fs.readdirSync(outsideDir)).toEqual(['victim-do-not-delete.txt']);
+      expect(fs.readFileSync(victimOutside, 'utf8')).toBe('precious');
+      // Every reported success really holds the bytes at the reported path,
+      // inside the canonical root.
+      for (const p of saved) {
+        expect(fs.realpathSync(p).startsWith(dir.root + path.sep)).toBe(true);
+        expect(fs.readFileSync(p)).toEqual(content);
+      }
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    });
+
+    it('refuses a leaf symlink planted between staging-dir creation and the open (fault injection)', async () => {
+      // Deterministic race coverage: a synchronization hook on
+      // fs.promises.open lets the "attacker" act in the exact window after
+      // the staging directory is created but before the leaf is opened,
+      // planting a symlink at the precise path the connector is about to
+      // create. O_EXCL must refuse it — zero bytes written anywhere — and
+      // the rejected write must leave no staging residue.
       const dir = await resolveDownloadDir();
       const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'email-imap-outside-'));
+      const victim = path.join(outsideDir, 'victim.pdf');
+      fs.writeFileSync(victim, 'VICTIM');
 
-      // Rename-and-replace: the validated directory is moved aside and a
-      // symlink to an outside directory takes its place. The pinned dev/ino
-      // identity no longer matches, so the write must refuse — and must not
-      // leave bytes outside the workspace.
-      const movedAside = `${dir.dir}-aside`;
-      fs.renameSync(dir.dir, movedAside);
-      fs.symlinkSync(outsideDir, dir.dir);
+      const realOpen = fs.promises.open;
+      let injected = false;
+      const spy = vi.spyOn(fs.promises, 'open').mockImplementation(((
+        target: fs.PathLike | fs.promises.FileHandle,
+        flags?: string | number,
+        mode?: fs.Mode,
+      ) => {
+        if (!injected && typeof target === 'string') {
+          injected = true;
+          fs.symlinkSync(victim, target);
+        }
+        return realOpen(target as fs.PathLike, flags as string, mode);
+      }) as typeof fs.promises.open);
 
-      await expect(
-        writeDownloadExclusive(dir, 'loot.pdf', Buffer.from('X')),
-      ).rejects.toThrow(/replaced after validation|escape/i);
-      expect(fs.readdirSync(outsideDir)).toEqual([]);
+      try {
+        await expect(
+          writeDownloadExclusive(dir, 'report.pdf', Buffer.from('NEW')),
+        ).rejects.toThrow(/EEXIST/);
+        expect(injected).toBe(true);
+      } finally {
+        spy.mockRestore();
+      }
 
-      fs.rmSync(movedAside, { recursive: true, force: true });
+      // Zero bytes written: the symlink target is untouched…
+      expect(fs.readFileSync(victim, 'utf8')).toBe('VICTIM');
+      // …and the failed write cleaned its whole staging directory up.
+      expect(fs.readdirSync(dir.root)).toEqual([]);
       fs.rmSync(outsideDir, { recursive: true, force: true });
+    });
+
+    it('fails closed when the workspace root does not exist, writing nothing', async () => {
+      const missing = path.join(workspace, 'does-not-exist');
+      process.env.MCP_WORKSPACE_PATH = missing;
+      await expect(resolveDownloadDir()).rejects.toThrow();
+      expect(fs.existsSync(missing)).toBe(false);
     });
   });
 });

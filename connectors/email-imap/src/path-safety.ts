@@ -1,14 +1,14 @@
 /**
  * Workspace-path containment for attachment file I/O (AGENTS.md security
  * invariant #5). Downloaded attachments are written only inside the canonical
- * workspace root (`MCP_WORKSPACE_PATH`, else `os.tmpdir()`), under a fixed
- * `email-imap-attachments/` subdirectory, with attacker-controlled filenames
- * reduced to a sanitized basename; outbound attachment reads are likewise
- * confined to the workspace root. The root and candidates are canonicalised
- * through `fs.realpathSync` so a symlinked root (e.g. macOS /tmp →
- * /private/tmp) cannot confuse the prefix check, and containment is verified
- * with a canonical prefix comparison — never substring checks on
- * non-canonical paths.
+ * workspace root (`MCP_WORKSPACE_PATH`, else `os.tmpdir()`), staged in a
+ * fresh per-download `email-imap-attachment-*` directory, with
+ * attacker-controlled filenames reduced to a sanitized basename; outbound
+ * attachment reads are likewise confined to the workspace root. The root and
+ * candidates are canonicalised through `fs.realpathSync` so a symlinked root
+ * (e.g. macOS /tmp → /private/tmp) cannot confuse the prefix check, and
+ * containment is verified with a canonical prefix comparison — never
+ * substring checks on non-canonical paths.
  *
  * Both directions close their check-then-use races:
  *
@@ -16,17 +16,21 @@
  *    descriptor, after `fstat` + a post-open canonical-containment and
  *    dev/ino identity re-verification — so a symlink/file swap after
  *    validation cannot redirect the bytes that leave as email content.
- *  - Downloads are created with `wx` (O_CREAT|O_EXCL) so an entry planted
- *    after the name was chosen is never overwritten, and the pinned download
- *    directory is re-verified before and after the write so a
- *    rename-and-replace of the parent chain fails closed.
+ *  - Downloads are staged in a fresh, unpredictable directory created
+ *    atomically with `fs.mkdtemp` (mode 0700) directly under the canonical
+ *    workspace root, and the file is created inside it with `wx`
+ *    (O_CREAT|O_EXCL, mode 0600). No validated user-visible pathname is ever
+ *    opened, so a rename-and-replace of any pre-existing directory cannot
+ *    redirect the write outside the workspace — the parent-directory
+ *    check-then-use race is removed by construction, with no
+ *    descriptor-relative APIs, on every platform.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
-const DOWNLOAD_SUBDIR = 'email-imap-attachments';
+const DOWNLOAD_STAGING_PREFIX = 'email-imap-attachment-';
 
 /**
  * Canonical workspace root for attachment file I/O: `MCP_WORKSPACE_PATH`
@@ -196,112 +200,53 @@ export function readWorkspaceAttachment(inputPath: string): WorkspaceAttachmentC
 }
 
 /**
- * The validated download-directory target: canonical path, the canonical
- * workspace root it must stay contained in, and the directory's dev/ino
- * identity at validation time. The identity pins the directory so a
- * rename-and-replace swap after validation is detectable.
+ * The validated attachment-download target: the canonical (symlink-resolved)
+ * workspace root every attachment write must stay contained in. It is the
+ * only path component trusted at write time — see writeDownloadExclusive.
  */
 export interface DownloadDirTarget {
-  dir: string;
   root: string;
-  dev: number;
-  ino: number;
 }
 
 /**
- * Resolve the directory attachment downloads are written into, creating it
- * if needed: `email-imap-attachments/` under the canonical workspace root.
- * Containment holds by construction (fixed subdir) and is re-verified
- * against the canonical root so a symlinked subdirectory pointing outside
- * the workspace is refused. The directory's dev/ino identity is pinned so a
- * later rename-and-replace is detectable.
+ * Resolve the root attachment downloads are saved under, honouring the
+ * repo's file-write invariant: the download root is `MCP_WORKSPACE_PATH` (or
+ * `os.tmpdir()` when unset), canonicalised (symlinks resolved) so the
+ * containment anchor is the real directory, never a symlinked alias, and a
+ * nonexistent or unresolvable root fails closed before any content is
+ * written. This is the intent-validation gate — it decides WHERE downloads
+ * may land; it deliberately returns no user-visible pathname to write to
+ * (see writeDownloadExclusive).
  */
 export async function resolveDownloadDir(): Promise<DownloadDirTarget> {
-  const root = getWorkspaceRoot();
-  const dir = path.join(root, DOWNLOAD_SUBDIR);
-  await fs.promises.mkdir(dir, { recursive: true });
-  const canonicalDir = await fs.promises.realpath(dir);
-
-  if (!isInsideRoot(root, canonicalDir)) {
-    throw new Error(
-      `Attachment download directory escapes the workspace sandbox root (${root}): ${canonicalDir}`,
-    );
-  }
-
-  const identity = await fs.promises.stat(canonicalDir);
-  return { dir: canonicalDir, root, dev: identity.dev, ino: identity.ino };
+  const root = await fs.promises.realpath(getWorkspaceRoot());
+  return { root };
 }
 
 /**
- * Re-verify, against the live filesystem, that the download directory is
- * still the directory resolveDownloadDir() validated: same dev/ino identity
- * (a rename-and-replace with a symlink or a different directory changes it)
- * and still canonically contained in the workspace root. Called after the
- * leaf file is created and again after its content is written, so a
- * parent-directory swap in between fails closed instead of silently
- * redirecting the write outside the workspace.
- */
-export async function assertDownloadDirIntact(target: DownloadDirTarget): Promise<void> {
-  const canonicalDir = await fs.promises.realpath(target.dir);
-  if (!isInsideRoot(target.root, canonicalDir)) {
-    throw new Error(
-      `Attachment download directory escapes the workspace sandbox root (${target.root}): ${canonicalDir}`,
-    );
-  }
-  const current = await fs.promises.stat(target.dir);
-  if (current.dev !== target.dev || current.ino !== target.ino) {
-    throw new Error('Attachment download directory was replaced after validation; refusing to write');
-  }
-}
-
-/**
- * Confirm `fullPath` still names the same file as the open descriptor
- * (dev/ino identity). After a parent-directory swap-and-restore the path
- * would resolve to a different file — or nothing — than the one this
- * connector created, and the write must not proceed.
- */
-async function assertPathMatchesHandle(
-  fullPath: string,
-  handle: fs.promises.FileHandle,
-): Promise<void> {
-  const [viaPath, viaHandle] = await Promise.all([
-    fs.promises.stat(fullPath),
-    handle.stat(),
-  ]);
-  if (viaPath.dev !== viaHandle.dev || viaPath.ino !== viaHandle.ino) {
-    throw new Error(
-      'Attachment path no longer resolves to the file being written; refusing to continue',
-    );
-  }
-}
-
-/**
- * Atomically create `target.dir/<sanitized filename>` and write `content`
- * through the resulting file descriptor. `fs.open(..., 'wx')`
- * (O_CREAT|O_EXCL) fails with EEXIST on any existing entry — including a
- * symlink or hardlink planted after the filename was chosen — so the
- * descriptor we write is provably the file we just created, never a
- * followed symlink target, and existing files are never overwritten. On
- * EEXIST the next `-<n>` suffix is tried, preserving the no-overwrite
- * contract for same-millisecond and concurrent collisions.
+ * Write `content` as `filename` inside a fresh, unpredictable staging
+ * directory created atomically with `fs.mkdtemp` directly under the
+ * canonical download root (mode 0700), and return the path of the saved
+ * file.
  *
- * O_EXCL protects the leaf entry, not the parent chain: a local attacker who
- * can rename the download directory and replace it with a symlink AFTER
- * resolveDownloadDir() validated it could otherwise redirect the create
- * outside the workspace. Node offers no ancestor pinning (no openat /
- * RESOLVE_BENEATH), so the parent chain is re-verified against the pinned
- * directory identity after the create (before any bytes are written) and
- * again after the write, and the path is confirmed to still name the opened
- * descriptor. A detected swap fails closed and the misplaced file is removed
- * (unlink never follows symlinks, so cleanup cannot delete an attacker file
- * through a swapped path).
+ * No validated user-visible pathname is ever opened: the connector invents
+ * the staging directory name, so there is no pre-existing pathname for a
+ * local attacker to pre-plant, rename, or symlink-swap between validation
+ * and the write syscall — the parent-directory check-then-use (TOCTOU) race
+ * that a "validate a directory, then open a path inside it" scheme leaves
+ * open is removed by construction, with no descriptor-relative APIs, on
+ * every platform. The only path component trusted at write time is the
+ * canonical workspace root itself, which a principal whose write access is
+ * scoped to the workspace's contents cannot swap out.
  *
- * Irreducible residual: a swap landing between the post-create verification
- * and the write syscall itself can still place bytes outside the workspace;
- * the post-write verification detects that state and removes the file, so
- * the tool reports failure rather than success — the guarantee is
- * detect-and-refuse, not prevention. Closing that last window would require
- * descriptor-relative opens, which Node does not expose.
+ * The file is created with O_CREAT|O_EXCL ('wx', mode 0600) and fstat-checked
+ * to be a regular file, so even an entry planted inside the fresh staging
+ * directory is never written through (O_EXCL refuses a symlinked leaf).
+ * A same-named file anywhere else is simply never touched: overwrite is
+ * impossible by construction, so no collision-retry suffixing is needed.
+ *
+ * On failure the whole staging directory is removed, so a rejected write
+ * leaves no residue.
  */
 export async function writeDownloadExclusive(
   target: DownloadDirTarget,
@@ -309,37 +254,30 @@ export async function writeDownloadExclusive(
   content: Buffer,
 ): Promise<string> {
   const safeName = sanitizeAttachmentFilename(filename);
-  const ext = path.extname(safeName);
-  const stem = safeName.slice(0, safeName.length - ext.length);
-  for (let attempt = 0; ; attempt += 1) {
-    const candidate = attempt === 0 ? safeName : `${stem}-${attempt}${ext}`;
-    const fullPath = path.join(target.dir, candidate);
-    // The filename is separator-free, but keep the canonical containment
-    // check so a future refactor cannot silently weaken the boundary.
-    if (!isInsideRoot(target.dir, fullPath)) {
-      throw new Error('Resolved attachment path escaped the attachment directory');
+  const stagingDir = await fs.promises.mkdtemp(path.join(target.root, DOWNLOAD_STAGING_PREFIX));
+  const fullPath = path.join(stagingDir, safeName);
+  // The filename is separator-free, but keep the canonical containment
+  // check so a future refactor cannot silently weaken the boundary.
+  const relative = path.relative(stagingDir, fullPath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    await fs.promises.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+    throw new Error('Resolved attachment path escaped the staging directory');
+  }
+  let handle: fs.promises.FileHandle | undefined;
+  try {
+    handle = await fs.promises.open(fullPath, 'wx', 0o600);
+    const stat = await handle.stat();
+    if (!stat.isFile()) {
+      throw new Error('Attachment path does not resolve to a regular file');
     }
-    let handle: fs.promises.FileHandle | undefined;
-    try {
-      handle = await fs.promises.open(fullPath, 'wx');
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === 'EEXIST') continue;
-      throw err;
-    }
-    try {
-      await assertDownloadDirIntact(target);
-      await assertPathMatchesHandle(fullPath, handle);
-      await handle.writeFile(content);
-      await assertDownloadDirIntact(target);
-      await assertPathMatchesHandle(fullPath, handle);
-      return fullPath;
-    } catch (err) {
-      // We created this leaf (O_EXCL), so it is safe — and required — to
-      // remove it wherever the parent chain pointed at creation time.
-      await fs.promises.unlink(fullPath).catch(() => {});
-      throw err;
-    } finally {
-      await handle.close();
-    }
+    await handle.writeFile(content);
+    return fullPath;
+  } catch (err) {
+    // We created the staging directory, so it is safe — and required — to
+    // remove it whole; the write must not leave partial residue behind.
+    await fs.promises.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+    throw err;
+  } finally {
+    await handle?.close();
   }
 }
