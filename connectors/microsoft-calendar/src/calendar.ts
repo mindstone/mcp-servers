@@ -1,6 +1,5 @@
 import {
   windowsToIanaTimezone,
-  type Calendar,
   type Client,
 } from '@mindstone/mcp-server-microsoft-shared';
 import { z } from 'zod';
@@ -30,8 +29,8 @@ export class CalendarBusinessError extends Error {
 // the boundary instead of cast, per the repo rule "validate every tool input
 // and external response with Zod". Schemas are lenient (`.passthrough()`, most
 // fields optional) but fail closed on the shapes the formatters dereference.
-// Only code touched since 0.1.2 validates; the remaining casts in
-// getFreeBusy/listCalendars are tracked as planned debt in the CHANGELOG.
+// Only code touched since 0.1.2 validates; the remaining cast in getFreeBusy
+// is tracked as planned debt in the CHANGELOG.
 // ---------------------------------------------------------------------------
 
 const GraphDateTimeSchema = z.object({
@@ -92,6 +91,22 @@ const GraphScheduleSchema = z
   .object({
     scheduleId: z.string().optional(),
     availabilityView: z.string().optional(),
+  })
+  .passthrough();
+
+// `owner` is deliberately NOT `.passthrough()`: Zod's default strip removes
+// unknown keys, so an attacker-injected key (envelope helpers wrap string
+// VALUES, never keys) cannot reach model-visible output.
+const GraphCalendarSchema = z
+  .object({
+    id: z.string(),
+    name: z.string().optional(),
+    color: z.string().optional(),
+    isDefaultCalendar: z.boolean().optional(),
+    canEdit: z.boolean().optional(),
+    owner: z
+      .object({ name: z.string().optional(), address: z.string().optional() })
+      .optional(),
   })
   .passthrough();
 
@@ -203,6 +218,21 @@ function enumOrEnvelop(
   source: string,
 ): string | undefined {
   return strictOrEnvelop(value, (v) => allowed.has(v.toLowerCase()), source);
+}
+
+/**
+ * mailboxSettings.timeZone is Graph-sourced, and `windowsToIanaTimezone`
+ * returns unknown names as-is — so the resolved/calendar timezone names that
+ * tool output echoes are enveloped unless they match the IANA shape (AGENTS.md
+ * invariant #6). `deviceTimezone` is already constrained to real IANA names by
+ * the Intl validation in resolveTimezone; it goes through the same gate for
+ * uniformity.
+ */
+function envelopedTimezone(value: string, source: string): string;
+function envelopedTimezone(value: string | null, source: string): string | null;
+function envelopedTimezone(value: string | null, source: string): string | null {
+  if (value === null) return null;
+  return strictOrEnvelop(value, (v) => TIMEZONE_NAME_PATTERN.test(v), source) ?? null;
 }
 
 /**
@@ -681,10 +711,19 @@ export async function listEvents(
     kind: 'json',
     data: {
       timezoneInfo: {
-        resolved: tzInfo.resolved,
+        resolved: envelopedTimezone(
+          tzInfo.resolved,
+          'microsoft-calendar:list_events:timezoneInfo.resolved',
+        ),
         source: tzInfo.source,
-        calendarTimezone: tzInfo.calendarTimezone,
-        deviceTimezone: tzInfo.deviceTimezone,
+        calendarTimezone: envelopedTimezone(
+          tzInfo.calendarTimezone,
+          'microsoft-calendar:list_events:timezoneInfo.calendarTimezone',
+        ),
+        deviceTimezone: envelopedTimezone(
+          tzInfo.deviceTimezone,
+          'microsoft-calendar:list_events:timezoneInfo.deviceTimezone',
+        ),
         timezoneMismatch: tzInfo.timezoneMismatch,
       },
       referenceTimeUTC: new Date().toISOString(),
@@ -1223,6 +1262,10 @@ export async function findMeetingTimes(
   const intervalMs = interval * 60_000;
   const durationMs = duration * 60_000;
   const suggestions: Array<{ start: string; end: string }> = [];
+  const resolvedOut = envelopedTimezone(
+    tzInfo.resolved,
+    'microsoft-calendar:find_meeting_times:timeZone',
+  );
   let note: string;
 
   if (unresolvableAttendees.length > 0) {
@@ -1255,21 +1298,27 @@ export async function findMeetingTimes(
         runStart = -1;
       }
     }
-    note = `Times are wall-clock in ${tzInfo.resolved}. Pass a suggestion's start/end directly to create_event. Only fully free slots are suggested (tentative counts as busy).`;
+    note = `Times are wall-clock in ${resolvedOut}. Pass a suggestion's start/end directly to create_event. Only fully free slots are suggested (tentative counts as busy).`;
   }
 
   return {
     timezoneInfo: {
-      resolved: tzInfo.resolved,
+      resolved: resolvedOut,
       source: tzInfo.source,
-      calendarTimezone: tzInfo.calendarTimezone,
-      deviceTimezone: tzInfo.deviceTimezone,
+      calendarTimezone: envelopedTimezone(
+        tzInfo.calendarTimezone,
+        'microsoft-calendar:find_meeting_times:timezoneInfo.calendarTimezone',
+      ),
+      deviceTimezone: envelopedTimezone(
+        tzInfo.deviceTimezone,
+        'microsoft-calendar:find_meeting_times:timezoneInfo.deviceTimezone',
+      ),
       timezoneMismatch: tzInfo.timezoneMismatch,
     },
     attendees: args.attendees,
     durationMinutes: duration,
     intervalMinutes: interval,
-    timeZone: tzInfo.resolved,
+    timeZone: resolvedOut,
     suggestionCount: suggestions.length,
     suggestions,
     unresolvableAttendees,
@@ -1284,7 +1333,11 @@ export async function listCalendars(client: Client, signal: AbortSignal): Promis
     .select('id,name,color,isDefaultCalendar,canEdit,owner')
     .get();
 
-  const calendars: Calendar[] = response.value ?? [];
+  const calendars = parseGraphResponse(
+    z.array(GraphCalendarSchema),
+    response.value ?? [],
+    'list_calendars',
+  );
 
   const formatted = calendars.map((cal) => ({
     id: strictOrEnvelop(cal.id, (v) => GRAPH_ID_PATTERN.test(v), 'microsoft-calendar:list_calendars:id'),
@@ -1292,7 +1345,18 @@ export async function listCalendars(client: Client, signal: AbortSignal): Promis
     color: enumOrEnvelop(cal.color, GRAPH_CALENDAR_COLORS, 'microsoft-calendar:list_calendars:color'),
     isDefault: cal.isDefaultCalendar,
     canEdit: cal.canEdit,
-    owner: wrapUntrustedJsonStrings(cal.owner, 'microsoft-calendar:list_calendars:owner'),
+    // Shape owner explicitly (schema-stripped to name/address) rather than
+    // forwarding the vendor object wholesale — envelope helpers never wrap
+    // object keys, so unknown attacker-injected keys must not survive.
+    owner: cal.owner
+      ? {
+          name: wrapUntrusted(cal.owner.name, 'microsoft-calendar:list_calendars:owner.name'),
+          address: wrapUntrusted(
+            cal.owner.address,
+            'microsoft-calendar:list_calendars:owner.address',
+          ),
+        }
+      : undefined,
   }));
 
   return {
