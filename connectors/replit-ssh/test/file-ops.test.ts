@@ -259,6 +259,23 @@ describe('Replit SSH MCP — file operations against a fake SFTP backend', () =>
     });
   });
 
+  // ── replit_list_files ──────────────────────────────────────────────────────
+
+  describe('replit_list_files', () => {
+    it('reports symlinks as type "symlink", consistent with replit_stat', async () => {
+      fake.addFile('real.txt', 'data');
+      fake.addSymlink('link.txt', 'real.txt');
+      const res = await call<{ ok: boolean; entries: Array<{ name: string; type: string }> }>(
+        'replit_list_files',
+        { host: 'h.replit.dev', user: 'u' },
+      );
+      expect(res.ok).toBe(true);
+      const byName = new Map(res.entries.map((e) => [e.name.includes('link.txt') ? 'link' : 'real', e.type]));
+      expect(byName.get('link')).toBe('symlink');
+      expect(byName.get('real')).toBe('file');
+    });
+  });
+
   // ── replit_move ────────────────────────────────────────────────────────────
 
   describe('replit_move', () => {

@@ -51,6 +51,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Fixed
 
+- `replit_list_files` — symlinks are now reported as `type: "symlink"`
+  instead of being mislabeled `file`, consistent with `replit_stat`'s
+  lstat-based typing (SFTP `readdir` returns lstat-style attributes).
 - `replit_search_files` — per-file content line matches are now capped at 5;
   a file with more matching lines carries `lineMatchesTruncated: true` on the
   match instead of returning an unbounded list (a hot file with the needle on

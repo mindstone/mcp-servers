@@ -43,7 +43,7 @@ export async function replitListFiles(
   try {
     const { sftp } = await getConnection(host, user, key);
 
-    const entries = await sftpOpWithSignal<Array<{ name: string | undefined; type: 'file' | 'directory'; size: number }>>(
+    const entries = await sftpOpWithSignal<Array<{ name: string | undefined; type: 'file' | 'directory' | 'symlink'; size: number }>>(
       signal,
       SSH_CONNECT_TIMEOUT_MS,
       (cb) => {
@@ -52,11 +52,17 @@ export async function replitListFiles(
             cb(err);
             return;
           }
+          // readdir attrs are lstat-style (the link itself, not its target),
+          // consistent with replit_stat's lstat-based typing.
           const result = list
             .filter((entry) => entry.filename !== '.' && entry.filename !== '..')
             .map((entry) => ({
               name: wrapUntrusted(entry.filename, `replit-ssh:list-files:${targetPath}`),
-              type: (entry.attrs.isDirectory() ? 'directory' : 'file') as 'file' | 'directory',
+              type: (entry.attrs.isDirectory()
+                ? 'directory'
+                : entry.attrs.isSymbolicLink()
+                  ? 'symlink'
+                  : 'file') as 'file' | 'directory' | 'symlink',
               size: entry.attrs.size,
             }));
           cb(null, result);

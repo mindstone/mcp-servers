@@ -154,7 +154,7 @@ After the host launches the server, run `replit_setup_ssh` once to generate the 
 ### Read
 
 - `replit_check_connection` — verify SSH connectivity, working directory, and SFTP support. Set `verbose=true` for handshake/auth diagnostics.
-- `replit_list_files` — list files and directories at a path (relative to the project root). Default path is `.`.
+- `replit_list_files` — list files and directories at a path (relative to the project root). Default path is `.`. Entry types are `file`/`directory`/`symlink` (symlinks are reported as links, not followed — consistent with `replit_stat`).
 - `replit_read_file` — read a file. UTF-8 text by default; binary files (detected via null-byte scan) are returned as base64.
 - `replit_search_files` — recursive search by file-name substring and/or text-content substring (case-insensitive), with result caps (`max_results`, default 50) and a depth cap (`max_depth`, default 4). Content search skips binary files and files over 1 MB. Returns matching paths and, for content matches, up to 5 matching lines per file with line numbers (`lineMatchesTruncated: true` when a file has more).
 - `replit_stat` — file/directory metadata (type, size, permissions, mtime/atime) without reading contents. Symlinks are reported as type `symlink` (via `lstat`), not followed.
