@@ -1,7 +1,8 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import * as fs from 'node:fs';
-import { mimeTypeForFileName } from '../src/tools/file-input.js';
+import { mimeTypeForFileName, readSandboxedFile } from '../src/tools/file-input.js';
 import { getAudioWorkspaceRoot, resolveAudioPath } from '../src/tools/path-safety.js';
+import { ElevenLabsError } from '../src/types.js';
 import { validatePublicHttpsUrl } from '../src/url-safety.js';
 
 describe('file-input scaffold', () => {
@@ -35,15 +36,52 @@ describe('path-safety scaffold', () => {
     });
   });
 
-  it('re-checks final realpath containment before readFileSync', () => {
-    const source = fs.readFileSync(new URL('../src/tools/file-input.ts', import.meta.url), 'utf8');
-    const finalRealpath = source.indexOf('const verifiedPath = isRemoteUrl(rawFilePath) ? filePath : fs.realpathSync(filePath);');
-    const finalCheck = source.indexOf('isInsideAudioWorkspaceRoot(verifiedPath, root)');
-    const read = source.indexOf('fs.readFileSync(verifiedPath)');
-    expect(finalRealpath).toBeGreaterThanOrEqual(0);
-    expect(finalCheck).toBeGreaterThan(finalRealpath);
-    expect(finalCheck).toBeLessThan(read);
-    expect(source).toContain("'PATH_SANDBOX_VIOLATION'");
+  it('refuses an in-workspace symlink that resolves outside the root', async () => {
+    // Behavioral coverage for the symlink-escape invariant: the previous test
+    // asserted the realpath re-check only by source-text ordering, which would
+    // pass unchanged if the containment check were inverted or short-circuited.
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'el-agents-workspace-'));
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'el-agents-outside-'));
+    try {
+      const outsideFile = path.join(outside, 'secret-audio.mp3');
+      fs.writeFileSync(outsideFile, 'outside bytes');
+      const linkPath = path.join(workspace, 'escape.mp3');
+      fs.symlinkSync(outsideFile, linkPath);
+      vi.stubEnv('MCP_WORKSPACE_PATH', workspace);
+
+      let caught: unknown;
+      try {
+        readSandboxedFile(linkPath);
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(ElevenLabsError);
+      expect((caught as ElevenLabsError).code).toBe('PATH_SANDBOX_VIOLATION');
+    } finally {
+      fs.rmSync(workspace, { recursive: true, force: true });
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('reads a real file inside the workspace sandbox root', async () => {
+    // Positive control: the sandbox refuses escapes without refusing legitimate
+    // in-workspace reads.
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'el-agents-workspace-'));
+    try {
+      const filePath = path.join(workspace, 'clip.mp3');
+      fs.writeFileSync(filePath, 'audio bytes');
+      vi.stubEnv('MCP_WORKSPACE_PATH', workspace);
+
+      const input = readSandboxedFile(filePath);
+      expect(input.buffer.toString('utf8')).toBe('audio bytes');
+      expect(input.fileName).toBe('clip.mp3');
+    } finally {
+      fs.rmSync(workspace, { recursive: true, force: true });
+    }
   });
 });
 
