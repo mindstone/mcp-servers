@@ -51,6 +51,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Fixed
 
+- `replit_read_file` — files over 1 MiB are now refused with `FILE_TOO_LARGE`
+  (checked via stat before reading, with a post-read length check as backstop)
+  instead of being buffered unbounded into memory; the cap matches the one
+  `replit_search_files` already applies to content search.
 - `replit_list_files` — symlinks are now reported as `type: "symlink"`
   instead of being mislabeled `file`, consistent with `replit_stat`'s
   lstat-based typing (SFTP `readdir` returns lstat-style attributes).

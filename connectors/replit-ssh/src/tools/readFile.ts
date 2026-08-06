@@ -22,6 +22,25 @@ export const readFileSchema = z.object({
 
 export type ReadFileArgs = z.infer<typeof readFileSchema>;
 
+// Bounds how much remote data is buffered into memory for a single read,
+// matching the content-search cap in searchFiles.ts. ssh2's readFile buffers
+// the whole file, so the size is checked via stat BEFORE reading; a post-read
+// length check covers servers that misreport size.
+export const MAX_READ_FILE_BYTES = 1024 * 1024;
+
+function fileTooLargeError(targetPath: string, sizeBytes: number): string {
+  return JSON.stringify({
+    ok: false,
+    error: `File "${targetPath}" is too large to read (${sizeBytes} bytes; the limit is ${MAX_READ_FILE_BYTES} bytes).`,
+    code: 'FILE_TOO_LARGE',
+    action_required: 'File reads are capped at 1 MiB to bound memory use; larger files are refused rather than truncated silently.',
+    next_step: 'Use `replit_search_files` with content_contains to extract specific lines from the file instead.',
+    path: targetPath,
+    sizeBytes,
+    maxBytes: MAX_READ_FILE_BYTES,
+  });
+}
+
 export async function replitReadFile(
   args: ReadFileArgs,
   callerSignal?: AbortSignal,
@@ -59,6 +78,35 @@ export async function replitReadFile(
   try {
     const { sftp } = await getConnection(host, user, key);
 
+    // Pre-flight size check (stat follows symlinks, like readFile does). If
+    // stat itself fails, fall through to the read — readFile surfaces the
+    // authoritative error, and the post-read length check still applies.
+    try {
+      const stats = await sftpOpWithSignal<{ size: number }>(
+        signal,
+        SSH_CONNECT_TIMEOUT_MS,
+        (cb) => {
+          sftp.stat(targetPath, (err: Error | undefined, s) => {
+            if (err) {
+              cb(err);
+              return;
+            }
+            cb(null, s);
+          });
+        },
+      );
+      if (stats.size > MAX_READ_FILE_BYTES) {
+        logOperation('replit_read_file', host, targetPath, 'error', Date.now() - startTime);
+        return fileTooLargeError(targetPath, stats.size);
+      }
+    } catch (statErr: unknown) {
+      if (signal.aborted) return JSON.stringify(buildTimeoutError());
+      const statError = statErr as Error & { code?: string; level?: string };
+      if (statError.code === 'ETIMEDOUT' || statError.level) throw statErr;
+      // stat failed for an ordinary SFTP reason — proceed to the read, which
+      // either succeeds (post-read cap applies) or returns the real error.
+    }
+
     const content = await sftpOpWithSignal<Buffer>(
       signal,
       SSH_CONNECT_TIMEOUT_MS,
@@ -72,6 +120,11 @@ export async function replitReadFile(
         });
       },
     );
+
+    if (content.length > MAX_READ_FILE_BYTES) {
+      logOperation('replit_read_file', host, targetPath, 'error', Date.now() - startTime);
+      return fileTooLargeError(targetPath, content.length);
+    }
 
     const binary = isBinaryContent(content);
 

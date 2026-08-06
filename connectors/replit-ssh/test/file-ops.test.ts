@@ -276,6 +276,34 @@ describe('Replit SSH MCP — file operations against a fake SFTP backend', () =>
     });
   });
 
+  // ── replit_read_file size cap ──────────────────────────────────────────────
+
+  describe('replit_read_file size cap', () => {
+    it('refuses files over 1 MiB with FILE_TOO_LARGE before reading', async () => {
+      fake.addFile('big.txt', Buffer.alloc(1024 * 1024 + 1, 0x41));
+      const res = await call<ToolError & { sizeBytes: number }>('replit_read_file', {
+        host: 'h.replit.dev',
+        user: 'u',
+        path: 'big.txt',
+      });
+      expect(res.ok).toBe(false);
+      expect(res.code).toBe('FILE_TOO_LARGE');
+      expect(res.sizeBytes).toBe(1024 * 1024 + 1);
+    });
+
+    it('reads a file at exactly the 1 MiB cap', async () => {
+      fake.addFile('edge.txt', Buffer.alloc(1024 * 1024, 0x42));
+      const res = await call<{ ok: boolean; size: number; encoding: string }>('replit_read_file', {
+        host: 'h.replit.dev',
+        user: 'u',
+        path: 'edge.txt',
+      });
+      expect(res.ok).toBe(true);
+      expect(res.size).toBe(1024 * 1024);
+      expect(res.encoding).toBe('utf-8');
+    });
+  });
+
   // ── replit_move ────────────────────────────────────────────────────────────
 
   describe('replit_move', () => {
