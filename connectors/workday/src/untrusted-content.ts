@@ -13,17 +13,17 @@
  * `replaceAll` (that family misses whitespace / case close-tag variants like
  * `</untrusted-content >` / `</UNTRUSTED-CONTENT>`).
  *
- * This copy diverges from the reference in three deliberate ways:
+ * This copy diverges from the reference in two deliberate ways:
  *   1. The close-tag matcher below is widened from `[ \t]*` to `\s*` so
  *      newline / carriage-return / form-feed close-tag variants
  *      (`</untrusted-content\n>` etc.) are neutralised too — a strict
  *      superset of the reference behaviour (it only escapes MORE variants).
  *   2. The unwrap helpers (`unwrapUntrusted`, `unwrapUntrustedJsonStrings`)
  *      are dropped — nothing in this connector unwraps.
- *   3. `wrapUntrustedJsonStrings` does not wrap object KEYS (the reference
- *      does). Keys here are connector-authored allowlist names, never
- *      vendor-controlled values.
- * Everything else matches the reference; keep it that way when syncing.
+ * Everything else matches the reference; keep it that way when syncing. In
+ * particular, `wrapUntrustedJsonStrings` MUST wrap object keys like the
+ * reference does: `pickFields`' deny-list feeds arbitrary vendor-shaped
+ * values into it, so keys are vendor-controlled, not connector-authored.
  *
  * `scripts/check-untrusted-coverage.mjs` greps for a reference to
  * `untrusted-content` in any connector that talks to an external system; this
@@ -49,8 +49,8 @@ function escapeCloseTagSentinels(s: string): string {
 /**
  * Wrap a single untrusted string in an `<untrusted-content source="…">`
  * envelope, escaping any embedded close-tag variant so the envelope cannot be
- * broken out of. `undefined` passes through untouched. Idempotent for the same
- * `source`.
+ * broken out of. `undefined` and `null` pass through untouched. Idempotent for
+ * the same `source`.
  */
 export function wrapUntrusted(text: string | null | undefined, source: string): string | undefined {
   if (text === undefined || text === null) return undefined;
@@ -68,8 +68,11 @@ export function wrapUntrusted(text: string | null | undefined, source: string): 
 }
 
 /**
- * Recursively wrap every string value reachable inside `value`. Object keys are
- * structural and NOT wrapped; non-string leaves pass through unchanged.
+ * Recursively wrap every string key and value reachable inside `value`
+ * (strings, arrays, plain-object property keys and values). Keys are wrapped
+ * too — under `pickFields`' deny-list this function receives arbitrary
+ * vendor-shaped values, so a hostile key must not reach the model raw.
+ * Non-string leaves pass through unchanged.
  */
 export function wrapUntrustedJsonStrings<T>(value: T, source: string): T {
   if (typeof value === 'string') {
@@ -80,7 +83,10 @@ export function wrapUntrustedJsonStrings<T>(value: T, source: string): T {
   }
   if (value && typeof value === 'object') {
     return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, wrapUntrustedJsonStrings(item, source)]),
+      Object.entries(value).map(([key, item]) => [
+        wrapUntrusted(key, source) ?? key,
+        wrapUntrustedJsonStrings(item, source),
+      ]),
     ) as T;
   }
   return value;
