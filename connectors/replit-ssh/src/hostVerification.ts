@@ -70,7 +70,12 @@
  *   - Native:    `<host>[,<host>…] SHA256:<base64-fingerprint>`
  *   - OpenSSH:   `<host>[,<host>…] <keytype> <base64-key>` (ssh-keyscan
  *                output; the SHA-256 fingerprint is computed from the key)
- * Comment (`#`), marker (`@…`), and hashed (`|1|…`) lines are ignored.
+ *   - Revoked:   `@revoked <host>[,<host>…] …` (either format above) — an
+ *                active refusal per OpenSSH; a presented key matching a
+ *                revoked entry ALWAYS fails closed (`HOST_KEY_REVOKED`),
+ *                even if the same key is also pinned as valid.
+ * Comment (`#`), other marker (`@cert-authority` — certificates are not
+ * used by this connector), and hashed (`|1|…`) lines are ignored.
  *
  * Storage
  * -------
@@ -121,18 +126,27 @@ const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
 /**
  * Parse one known-hosts line into its hostnames + SHA-256 fingerprint.
  * Accepts the native `<hosts> SHA256:…` format and OpenSSH ssh-keyscan
- * output (`<hosts> <keytype> <base64-key>`). Returns null for comments,
+ * output (`<hosts> <keytype> <base64-key>`). `@revoked`-marked lines are
+ * parsed with `revoked: true` — OpenSSH treats them as an active refusal,
+ * so they must not be silently dropped. Returns null for comments, other
  * marker lines (`@cert-authority` etc.), hashed host entries (`|1|…` —
  * cannot be suffix-matched), and malformed lines.
  */
 function parseKnownHostsLine(
   line: string,
-): { hosts: string[]; fingerprint: string } | null {
+): { hosts: string[]; fingerprint: string; revoked: boolean } | null {
   const trimmed = line.trim();
-  if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('@') || trimmed.startsWith('|')) {
+  if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('|')) {
     return null;
   }
-  const parts = trimmed.split(/\s+/);
+  let fields = trimmed.split(/\s+/);
+  let revoked = false;
+  if (fields[0]!.startsWith('@')) {
+    if (fields[0] !== '@revoked') return null;
+    revoked = true;
+    fields = fields.slice(1);
+  }
+  const parts = fields;
   if (parts.length < 2) return null;
 
   let fingerprint: string | null = null;
@@ -148,28 +162,30 @@ function parseKnownHostsLine(
 
   const hosts = parts[0]!.toLowerCase().split(',').filter(Boolean);
   if (hosts.length === 0) return null;
-  return { hosts, fingerprint };
+  return { hosts, fingerprint, revoked };
 }
 
-function loadKnownHosts(): Map<string, Set<string>> {
+function loadKnownHosts(): { known: Map<string, Set<string>>; revoked: Map<string, Set<string>> } {
   const known = new Map<string, Set<string>>();
+  const revoked = new Map<string, Set<string>>();
   const knownHostsPath = getKnownHostsPath();
   let content: string;
   try {
     content = fs.readFileSync(knownHostsPath, 'utf-8');
   } catch {
-    return known;
+    return { known, revoked };
   }
   for (const line of content.split(/\r?\n/)) {
     const parsed = parseKnownHostsLine(line);
     if (!parsed) continue;
+    const target = parsed.revoked ? revoked : known;
     for (const host of parsed.hosts) {
-      const set = known.get(host) ?? new Set<string>();
+      const set = target.get(host) ?? new Set<string>();
       set.add(parsed.fingerprint);
-      known.set(host, set);
+      target.set(host, set);
     }
   }
-  return known;
+  return { known, revoked };
 }
 
 /**
@@ -223,6 +239,7 @@ function appendKnownHost(host: string, fingerprint: string): void {
 export type HostKeyVerificationOutcome =
   | { ok: true; kind: 'matched' }
   | { ok: true; kind: 'recorded'; fingerprint: string }
+  | { ok: false; kind: 'revoked'; error: StructuredError }
   | { ok: false; kind: 'mismatch'; error: StructuredError }
   | { ok: false; kind: 'unknown'; error: StructuredError };
 
@@ -230,7 +247,24 @@ export function verifyHostKey(
   host: string,
   presentedFingerprint: string,
 ): HostKeyVerificationOutcome {
-  const known = loadKnownHosts();
+  const { known, revoked } = loadKnownHosts();
+  // A `@revoked` entry is an active refusal: it wins over any pin for the
+  // same key and over trust-on-first-use.
+  for (const key of candidateKeys(host)) {
+    if (revoked.get(key)?.has(presentedFingerprint)) {
+      return {
+        ok: false,
+        kind: 'revoked',
+        error: {
+          ok: false,
+          error: `SSH host key for "${host}" is revoked (fingerprint ${presentedFingerprint}). The known-hosts file marks this key with @revoked, which OpenSSH treats as an active refusal.`,
+          code: 'HOST_KEY_REVOKED',
+          action_required: `Refusing to connect. Do not use this host key. If the revocation was a mistake, remove the @revoked line from ${getKnownHostsPath()} after verifying the key out-of-band.`,
+          next_step: `Edit ${getKnownHostsPath()} to remove the @revoked entry for this host (entries are keyed by the stable proxy suffix, e.g. "${pinKeyForHost(host)}"), then retry.`,
+        },
+      };
+    }
+  }
   const recorded = new Set<string>();
   for (const key of candidateKeys(host)) {
     for (const fingerprint of known.get(key) ?? []) {

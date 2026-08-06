@@ -297,6 +297,81 @@ describe('verifyHostKey — auto-TOFU default / mismatch / strict opt-in', () =>
     });
   });
 
+  describe('@revoked markers fail closed (OpenSSH treats them as an active refusal)', () => {
+    const revokedKeyBytes = Buffer.from('fake-revoked-host-key-bytes');
+    const revokedKeyB64 = revokedKeyBytes.toString('base64');
+    const revokedFingerprint = computeSha256Fingerprint(revokedKeyBytes);
+
+    it('refuses a presented key matching a @revoked keyscan-format line, even in default TOFU mode', () => {
+      fs.writeFileSync(knownHostsPath, `@revoked riker.replit.dev ssh-ed25519 ${revokedKeyB64}\n`, { mode: 0o600 });
+      const outcome = verifyHostKey(host, revokedFingerprint);
+      expect(outcome.ok).toBe(false);
+      if (!outcome.ok) {
+        expect(outcome.kind).toBe('revoked');
+        expect(outcome.error.code).toBe('HOST_KEY_REVOKED');
+      }
+      // The refusal must not be recorded as a fresh TOFU pin.
+      expect(fs.readFileSync(knownHostsPath, 'utf-8')).not.toContain(revokedFingerprint);
+    });
+
+    it('refuses a @revoked SHA256: fingerprint line in the native format', () => {
+      fs.writeFileSync(knownHostsPath, `@revoked riker.replit.dev ${fp1}\n`, { mode: 0o600 });
+      const outcome = verifyHostKey(host, fp1);
+      expect(outcome.ok).toBe(false);
+      if (!outcome.ok) {
+        expect(outcome.kind).toBe('revoked');
+      }
+    });
+
+    it('revocation wins over a valid pin for the same key', () => {
+      fs.writeFileSync(
+        knownHostsPath,
+        [
+          `riker.replit.dev ${fp1}`,
+          `@revoked riker.replit.dev ${fp1}`,
+          '',
+        ].join('\n'),
+        { mode: 0o600 },
+      );
+      const outcome = verifyHostKey(host, fp1);
+      expect(outcome.ok).toBe(false);
+      if (!outcome.ok) {
+        expect(outcome.kind).toBe('revoked');
+      }
+    });
+
+    it('refuses a rotated hostname presenting a suffix-keyed @revoked key', () => {
+      fs.writeFileSync(knownHostsPath, `@revoked riker.replit.dev ssh-ed25519 ${revokedKeyB64}\n`, { mode: 0o600 });
+      const outcome = verifyHostKey('xyz-99-qwe.riker.replit.dev', revokedFingerprint);
+      expect(outcome.ok).toBe(false);
+      if (!outcome.ok) {
+        expect(outcome.kind).toBe('revoked');
+      }
+    });
+
+    it('does not affect hosts or keys the revocation does not cover', () => {
+      fs.writeFileSync(knownHostsPath, `@revoked riker.replit.dev ssh-ed25519 ${revokedKeyB64}\n`, { mode: 0o600 });
+      // A different key for the same suffix still gets normal TOFU treatment.
+      const outcome = verifyHostKey(host, fp1);
+      expect(outcome.ok).toBe(true);
+      if (outcome.ok) {
+        expect(outcome.kind).toBe('recorded');
+      }
+    });
+
+    it('@cert-authority lines stay ignored (certificates are not used by this connector)', () => {
+      fs.writeFileSync(knownHostsPath, `@cert-authority *.replit.dev ssh-ed25519 ${revokedKeyB64}\n`, { mode: 0o600 });
+      process.env.MCP_REPLIT_SSH_STRICT_HOST_KEY = '1';
+      // Neither pinned nor revoked: strict mode sees an unknown host.
+      const outcome = verifyHostKey(host, revokedFingerprint);
+      expect(outcome.ok).toBe(false);
+      if (!outcome.ok) {
+        expect(outcome.kind).toBe('unknown');
+        expect(outcome.error.code).toBe('HOST_KEY_UNKNOWN');
+      }
+    });
+  });
+
   describe('known-hosts write hardening', () => {
     it('refuses to append through a symlinked known-hosts path', () => {
       if (process.platform === 'win32') return; // symlinks need privileges on Windows
