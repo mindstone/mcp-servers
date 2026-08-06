@@ -196,8 +196,10 @@ export async function klingFetch<S extends z.ZodTypeAny>(
         getErrorResolution(vendor.code, vendor.message),
       );
     }
-    const retryAfter = response.headers.get('Retry-After');
-    const waitTime = retryAfter ? `${retryAfter} seconds` : '30 seconds';
+    // Retry-After is vendor-controlled text that would otherwise land in
+    // model-visible output unenveloped — accept only a plain seconds value.
+    const retryAfter = response.headers.get('Retry-After')?.trim();
+    const waitTime = retryAfter && /^\d{1,7}$/.test(retryAfter) ? `${retryAfter} seconds` : '30 seconds';
     throw new KlingError(
       `Rate limited by Kling API. Please wait ${waitTime} before retrying.`,
       'RATE_LIMITED',
