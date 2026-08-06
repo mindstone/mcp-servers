@@ -138,6 +138,11 @@ The connector supports four authentication modes, detected once at startup:
 
 **Precedence**: bridge > standalone_oauth > manual_token > unconfigured
 
+## Input & State Semantics
+
+- **Resource IDs must be numeric.** Every tool parameter that takes an Outreach resource ID (`id`, `prospect_id`, `sequence_id`, `account_id`, `mailbox_id`, `user_id`, `owner_id`) accepts digits only (`/^\d+$/`). Non-numeric values are rejected with `VALIDATION_ERROR` before any API request is made — Outreach IDs are always numeric, so anything else indicates a bad value rather than a real lookup.
+- **`outreach_remove_prospect_from_sequence` acts on the live enrollment.** A prospect that was enrolled, finished, and re-enrolled has several sequence-state records; the tool filters to the non-finished ("live") one instead of acting on the first record returned. If more than one live state exists for the prospect+sequence pair the tool fails closed with `AMBIGUOUS_STATE` (no record is modified); if every state is finished it returns `NOT_FOUND`.
+
 ## Untrusted Content Handling
 
 All user-authored text returned by the Outreach API (names, emails, mailing subjects, template bodies, task notes, tags, custom fields) is wrapped in `<untrusted-content source="...">` envelopes so MCP hosts and models treat third-party CRM content as data, not instructions. Vendor-generated structure (IDs, timestamps, lifecycle states) is returned raw. Vendor error text (API error details, non-JSON error bodies, and OAuth token-exchange failures) is truncated to 500 characters and enveloped the same way (`source="outreach:api-error"`) before it appears in error messages.
