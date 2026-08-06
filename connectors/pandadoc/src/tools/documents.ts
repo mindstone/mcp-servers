@@ -10,7 +10,7 @@ import { wrapUntrusted } from '../untrusted-content.js';
 import { isConfigured } from '../auth.js';
 import { MAX_FILE_SIZE, PandaDocError } from '../types.js';
 import { resolveUploadPath } from './path-safety.js';
-import { validatePublicHttpsUrl } from './url-safety.js';
+import { resolvePublicTerminalUrl } from './url-safety.js';
 import {
   sanitizeDocumentCompact,
   sanitizeDocumentDetails,
@@ -604,20 +604,23 @@ RELATED TOOLS:
       if (!isConfigured()) return noApiKeyError();
 
       // The URL is fetched server-side by PandaDoc, which makes this tool an
-      // indirect fetch primitive — refuse literal internal hosts (loopback,
-      // link-local, private ranges) and credential-bearing URLs. DNS and
-      // redirect handling are vendor-side; see src/tools/url-safety.ts.
-      const urlProblem = validatePublicHttpsUrl(args.url);
-      if (urlProblem) {
+      // indirect fetch primitive. The connector enforces what it can: refuse
+      // literal internal hosts and credential-bearing URLs, DNS-resolve the
+      // host and refuse non-public answers, and follow the redirect chain
+      // under the same policy — PandaDoc receives ONLY the terminal URL.
+      // (DNS-rebinding TOCTOU between our lookup and PandaDoc's fetch is
+      // inherently vendor-side; see src/tools/url-safety.ts.)
+      const urlCheck = await resolvePublicTerminalUrl(args.url);
+      if (!urlCheck.ok) {
         return JSON.stringify({
           ok: false,
-          error: `Rejected source URL: ${urlProblem}.`,
+          error: `Rejected source URL: ${urlCheck.error}.`,
           resolution: 'Provide an HTTPS URL on a public host that PandaDoc can reach.',
         });
       }
 
       const body: Record<string, unknown> = {
-        url: args.url,
+        url: urlCheck.url,
         name: args.name,
       };
       if (args.recipients) body.recipients = args.recipients;

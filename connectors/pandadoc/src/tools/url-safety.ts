@@ -4,11 +4,24 @@
  * PandaDoc fetches the supplied URL SERVER-SIDE, so the tool is an indirect
  * fetch primitive: without host classification, a caller could hand PandaDoc
  * a link-local / loopback / private-range destination (cloud metadata
- * endpoints, internal services). DNS resolution and redirect following
- * happen inside PandaDoc's infrastructure and are vendor-side
- * responsibilities; what the connector can and must do is refuse URLs whose
- * literal host is already internal, and refuse credential-bearing URLs.
+ * endpoints, internal services). The connector-side policy therefore has two
+ * layers:
+ *
+ *   1. Literal classification (`validatePublicHttpsUrl`): refuse URLs whose
+ *      literal host is already internal, and refuse credential-bearing URLs.
+ *   2. Resolution (`resolvePublicTerminalUrl`): DNS-resolve the hostname
+ *      ourselves and refuse when ANY answer is non-public; then follow the
+ *      redirect chain ourselves (bounded hops, every hop re-validated —
+ *      literal + DNS) and hand PandaDoc ONLY the terminal URL, so a public
+ *      URL that redirects internally is refused instead of dereferenced.
+ *
+ * What remains vendor-side: an attacker-controlled authoritative DNS server
+ * can answer our lookup with a public address and PandaDoc's later lookup
+ * with an internal one (classic rebinding TOCTOU). No connector-side check
+ * can close that window — only PandaDoc's own egress policy can.
  */
+
+import { promises as dnsPromises } from 'node:dns';
 
 /** Returns true when `host` is an IPv4 literal in a non-public range. */
 function isNonPublicIpv4(host: string): boolean {
@@ -98,7 +111,10 @@ export function validatePublicHttpsUrl(rawUrl: string): string | null {
   if (parsed.username || parsed.password) {
     return 'url must not contain embedded credentials';
   }
-  const host = parsed.hostname.toLowerCase();
+  // The WHATWG parser preserves terminal root-label dots on hostnames
+  // (`localhost.` stays `localhost.`), and `localhost.` is DNS-equivalent to
+  // `localhost`, so classification runs on the trailing-dot-stripped host.
+  const host = parsed.hostname.toLowerCase().replace(/\.+$/, '');
   if (!host) {
     return 'url must contain a host';
   }
@@ -109,4 +125,123 @@ export function validatePublicHttpsUrl(rawUrl: string): string | null {
     return `url host "${host}" is a private, loopback, link-local, or reserved address`;
   }
   return null;
+}
+
+export type ResolveUrlResult =
+  | { ok: true; url: string }
+  | { ok: false; error: string };
+
+export interface UrlResolutionDeps {
+  /** Injectable for tests; defaults to system DNS (`dns.promises.lookup`). */
+  lookupAll?: (hostname: string) => Promise<string[]>;
+  /** Injectable for tests; defaults to the global fetch. */
+  fetchImpl?: typeof fetch;
+}
+
+const MAX_REDIRECT_HOPS = 5;
+const VERIFY_TIMEOUT_MS = 10_000;
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+function isIpLiteralHost(host: string): boolean {
+  // URL.hostname keeps the brackets on IPv6 literals; WHATWG parsing has
+  // already normalised IPv4 shorthand/integer spellings to dotted decimal.
+  return host.startsWith('[') || /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+}
+
+async function defaultLookupAll(hostname: string): Promise<string[]> {
+  const answers = await dnsPromises.lookup(hostname, { all: true, verbatim: true });
+  return answers.map((a) => a.address);
+}
+
+function isNonPublicAnswer(address: string): boolean {
+  return address.includes(':') ? isNonPublicIpv6(address) : isNonPublicIpv4(address);
+}
+
+/**
+ * Enforce the resolution layer of the source-URL policy: DNS-resolve the
+ * host and refuse when ANY answer is non-public, then follow the redirect
+ * chain under this same policy (bounded hops, every hop re-validated) and
+ * return the terminal URL. Callers must hand PandaDoc the RETURNED url, not
+ * the original — that is what makes the redirect half of the policy
+ * enforceable from the connector side.
+ */
+export async function resolvePublicTerminalUrl(
+  rawUrl: string,
+  deps: UrlResolutionDeps = {},
+): Promise<ResolveUrlResult> {
+  const lookupAll = deps.lookupAll ?? defaultLookupAll;
+  const fetchImpl = deps.fetchImpl ?? fetch;
+
+  let current = rawUrl;
+  for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop += 1) {
+    const literalProblem = validatePublicHttpsUrl(current);
+    if (literalProblem) {
+      return { ok: false, error: literalProblem };
+    }
+    const host = new URL(current).hostname.toLowerCase();
+
+    // DNS layer: a hostname is acceptable only when EVERY answer is a public
+    // address. A single non-public answer means the vendor fetch can land on
+    // an internal target, so the whole name is refused.
+    if (!isIpLiteralHost(host)) {
+      let answers: string[];
+      try {
+        answers = await lookupAll(host.replace(/\.+$/, ''));
+      } catch {
+        return { ok: false, error: `url host "${host}" could not be resolved` };
+      }
+      if (answers.length === 0) {
+        return { ok: false, error: `url host "${host}" returned no DNS answers` };
+      }
+      const bad = answers.find((a) => isNonPublicAnswer(a));
+      if (bad !== undefined) {
+        return {
+          ok: false,
+          error: `url host "${host}" resolves to a private, loopback, link-local, or reserved address`,
+        };
+      }
+    }
+
+    // Reachability/redirect layer: dereference the URL ourselves (GET,
+    // manual redirects, body discarded) so the redirect chain is observed
+    // HERE, under this policy, instead of inside PandaDoc's network.
+    let response: Response;
+    try {
+      response = await fetchImpl(current, {
+        method: 'GET',
+        redirect: 'manual',
+        signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS),
+      });
+    } catch {
+      return { ok: false, error: `url could not be reached for verification: ${current}` };
+    }
+    try {
+      await response.body?.cancel();
+    } catch {
+      // Best effort — the status/headers are already available.
+    }
+
+    if (REDIRECT_STATUSES.has(response.status)) {
+      if (hop === MAX_REDIRECT_HOPS) {
+        return { ok: false, error: `url redirected more than ${MAX_REDIRECT_HOPS} times` };
+      }
+      const location = response.headers.get('location');
+      if (!location) {
+        return { ok: false, error: 'redirect response had no Location header' };
+      }
+      let next: URL;
+      try {
+        next = new URL(location, current);
+      } catch {
+        return { ok: false, error: 'redirect response had an invalid Location header' };
+      }
+      current = next.toString();
+      continue;
+    }
+
+    // Any non-redirect status ends the chain. Availability is not the
+    // security boundary (PandaDoc performs its own fetch); host class is.
+    return { ok: true, url: current };
+  }
+  return { ok: false, error: `url redirected more than ${MAX_REDIRECT_HOPS} times` };
 }

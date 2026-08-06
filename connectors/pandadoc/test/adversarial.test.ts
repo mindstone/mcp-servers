@@ -314,6 +314,8 @@ describe('create_document_from_url refuses internal hosts (no network call)', ()
   it('allows a public IP literal host', async () => {
     let requestCount = 0;
     mswServer.use(
+      // The connector verifies the source URL itself before the API call.
+      http.get('https://8.8.8.8/x.pdf', () => new HttpResponse(null, { status: 200 })),
       http.post(`${BASE}/documents`, () => {
         requestCount++;
         return HttpResponse.json({
@@ -471,3 +473,4 @@ describe('list pagination hints never claim completeness', () => {
     expect(json.pagination).toContain('probably no further pages');
   });
 });
+
