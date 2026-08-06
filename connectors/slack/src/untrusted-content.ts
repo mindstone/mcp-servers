@@ -44,8 +44,8 @@ function escapeCloseTagSentinels(s: string): string {
  * broken out of. `undefined` passes through untouched. Idempotent for the same
  * `source`.
  */
-export function wrapUntrusted(text: string | undefined, source: string): string | undefined {
-  if (text === undefined) return undefined;
+export function wrapUntrusted(text: string | null | undefined, source: string): string | undefined {
+  if (text === undefined || text === null) return undefined;
   const open = `<untrusted-content source="${escapeAttr(source)}">`;
   const close = '</untrusted-content>';
   if (text.startsWith(open) && text.endsWith(close) && text.length >= open.length + close.length) {
