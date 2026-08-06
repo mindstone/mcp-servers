@@ -30,7 +30,7 @@ const EXPECTED_ANNOTATIONS: Record<string, {
   replit_write_file: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
   replit_search_files: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   replit_stat: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-  replit_move: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+  replit_move: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   replit_delete_file: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
   replit_setup_ssh: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
 };
