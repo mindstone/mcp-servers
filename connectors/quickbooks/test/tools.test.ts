@@ -832,6 +832,14 @@ describe('update_quickbooks_customer / update_quickbooks_vendor', () => {
 describe('get_quickbooks_report', () => {
   let testClient: McpTestClient;
 
+  // Report payloads are enveloped wholesale — keys included — so look values
+  // up under their enveloped keys (`<untrusted-content source="…">Name</untrusted-content>`).
+  function findWrapped(obj: Record<string, unknown>, name: string): unknown {
+    const key = Object.keys(obj).find((k) => k.endsWith(`>${name}</untrusted-content>`));
+    if (key === undefined) throw new Error(`enveloped key "${name}" not found`);
+    return obj[key];
+  }
+
   afterEach(async () => {
     if (testClient) await testClient.close();
     vi.unstubAllEnvs();
@@ -856,9 +864,14 @@ describe('get_quickbooks_report', () => {
     });
     const json = result.json as Record<string, unknown>;
     expect(json.ok).toBe(true);
-    const report = json.report as { Header: { ReportName: string } };
-    // Report payloads are enveloped wholesale (arbitrary shape).
-    expect(report.Header.ReportName).toBe(
+    // Report payloads are enveloped wholesale (arbitrary shape) — keys AND
+    // values — so navigate via the enveloped keys.
+    const report = json.report as Record<string, unknown>;
+    for (const key of Object.keys(report)) {
+      expect(key.startsWith('<untrusted-content source="quickbooks:get_quickbooks_report:ProfitAndLoss">')).toBe(true);
+    }
+    const header = findWrapped(report, 'Header') as Record<string, unknown>;
+    expect(findWrapped(header, 'ReportName')).toBe(
       '<untrusted-content source="quickbooks:get_quickbooks_report:ProfitAndLoss">ProfitAndLoss</untrusted-content>',
     );
     expect(capturedUrl).toContain('start_date=2026-01-01');
@@ -891,11 +904,15 @@ describe('get_quickbooks_report', () => {
     mswServer.use(...createQuickBooksHandlers());
     testClient = await createTestClient({ env: defaultEnv() });
     const result = await testClient.callTool('get_quickbooks_report', { report: 'BalanceSheet' });
-    const json = result.json as {
-      report: { Rows: { Row: Array<{ Rows: { Row: Array<{ ColData: Array<{ value: string }> }> } }> } };
-    };
-    const cellValue = json.report.Rows.Row[0].Rows.Row[0].ColData[0].value;
-    expect(cellValue).toBe(
+    const json = result.json as Record<string, unknown>;
+    // Keys and values are both enveloped wholesale (arbitrary shape).
+    const report = json.report as Record<string, unknown>;
+    const rows = findWrapped(report, 'Rows') as Record<string, unknown>;
+    const row0 = (findWrapped(rows, 'Row') as unknown[])[0] as Record<string, unknown>;
+    const innerRows = findWrapped(row0, 'Rows') as Record<string, unknown>;
+    const innerRow0 = (findWrapped(innerRows, 'Row') as unknown[])[0] as Record<string, unknown>;
+    const colData = findWrapped(innerRow0, 'ColData') as Array<Record<string, unknown>>;
+    expect(findWrapped(colData[0], 'value')).toBe(
       '<untrusted-content source="quickbooks:get_quickbooks_report:BalanceSheet">Consulting Revenue</untrusted-content>',
     );
   });
