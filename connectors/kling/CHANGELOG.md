@@ -26,6 +26,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Security
 - All Kling API responses are now validated fail-closed with Zod (envelope + per-endpoint `data` schema); malformed JSON or a shape-drifting payload surfaces as a generic `INVALID_RESPONSE` error instead of an unchecked type cast or raw parser text.
+- The default download root (`<workspace>/kling-downloads`, used when `KLING_DOWNLOAD_ROOT` is unset) is now canonicalised and containment-checked against the workspace root, the same as a configured root: a symlink planted at the predictable default path that resolves outside the workspace (CWE-59 squat) is refused fail-closed before any network call, instead of silently redirecting downloads outside the sandbox.
 
 ### Fixed
 - `list_kling_tasks` no longer silently truncates: the output now includes `has_more` plus `next_page` (and a continuation hint) whenever the returned page is full, so the model can tell that more results exist. The tool description no longer promises an ordering the vendor does not guarantee.
