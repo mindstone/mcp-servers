@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import { mswServer } from './helpers/setup.js';
 import { createPandaDocHandlers } from './helpers/pandadoc-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
+import { readUploadFile } from '../src/tools/path-safety.js';
 
 const BASE = 'https://api.pandadoc.com/public/v1';
 
@@ -221,18 +222,55 @@ describe('PandaDoc M3.7 — upload_document sandbox + send_document warning', ()
   });
 
   // ── VAL-PANDADOC-203 ────────────────────────────────────────────
-  it('VAL-PANDADOC-203 — upload validates and reads through ONE open descriptor (static)', async () => {
-    const documentsTs = fs.readFileSync(
-      path.resolve(__dirname, '../src/tools/documents.ts'),
-      'utf-8',
+  it('VAL-PANDADOC-203 — a post-validation symlink swap is refused before a single byte is read (no upload)', async () => {
+    const workspace = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pd-ws-')));
+    const inFile = path.join(workspace, 'in.pdf');
+    writePdf(inFile);
+    const outside = path.join(
+      fs.realpathSync(os.tmpdir()),
+      `pd-race-outside-${process.pid}-${Date.now()}.pdf`,
     );
-    // The sandbox-validated path must be opened once, and both the size
-    // check and the read must go through that descriptor — a stat-then-read
-    // pair of path-based calls is a check-then-use race.
-    expect(documentsTs).toMatch(/fs\.openSync\(resolvedPath, 'r'\)/);
-    expect(documentsTs).toMatch(/fs\.fstatSync\(fd\)/);
-    expect(documentsTs).toMatch(/fs\.readFileSync\(fd\)/);
-    expect(documentsTs).not.toMatch(/fs\.readFileSync\(resolvedPath/);
+    fs.writeFileSync(outside, 'outside secret bytes — must never be uploaded');
+
+    // Fault injection: emulate the local attacker who replaces the approved
+    // leaf with an escaping symlink in the validation→open window — the swap
+    // happens inside `open`, i.e. AFTER sandbox validation has approved the
+    // real file. A plain `open(path, 'r')` would follow the symlink; the
+    // fstat+stat compare would then pass because both observe the same
+    // outside inode. O_NOFOLLOW (or, where unavailable, the post-open
+    // re-resolution) must refuse instead.
+    const originalOpen = fs.promises.open;
+    vi.spyOn(fs.promises, 'open').mockImplementation(async (p, flags) => {
+      if (p === inFile) {
+        fs.rmSync(inFile, { force: true });
+        fs.symlinkSync(outside, inFile);
+      }
+      return originalOpen(p, flags);
+    });
+
+    const upload = uploadHandler();
+    mswServer.use(upload.handler, ...createPandaDocHandlers());
+    testClient = await createTestClient({
+      env: {
+        PANDADOC_API_KEY: 'test-pandadoc-key',
+        MCP_HOST_BRIDGE_STATE: '',
+        MCP_WORKSPACE_PATH: workspace,
+      },
+    });
+
+    try {
+      const result = await testClient.callTool('upload_document', { file_path: inFile });
+      const json = result.json as { ok: boolean; error: string };
+      expect(json.ok).toBe(false);
+      expect(json.error).toMatch(/changed|workspace|sandbox/i);
+      // The vulnerable implementation (plain open + fstat/stat compare)
+      // reads the outside file through the descriptor and uploads it — this
+      // count is the proof that zero outside bytes were read or sent.
+      expect(upload.getCallCount()).toBe(0);
+    } finally {
+      try { fs.unlinkSync(outside); } catch { /* noop */ }
+      fs.rmSync(workspace, { recursive: true, force: true });
+    }
   });
 
   // ── VAL-PANDADOC-204 ────────────────────────────────────────────
@@ -301,6 +339,110 @@ describe('PandaDoc M3.7 — upload_document sandbox + send_document warning', ()
     } finally {
       try { fs.unlinkSync(linkPath); } catch { /* noop */ }
       fs.rmSync(realDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('readUploadFile — race-resistant validate+read (fault injection)', () => {
+  const ONE_KIB = 1024;
+  let workspaceDir: string;
+  let workspaceFile: string;
+
+  beforeEach(() => {
+    workspaceDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pd-race-')));
+    workspaceFile = path.join(workspaceDir, 'in.pdf');
+    writePdf(workspaceFile);
+    vi.stubEnv('MCP_WORKSPACE_PATH', workspaceDir);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    fs.rmSync(workspaceDir, { recursive: true, force: true });
+  });
+
+  it('refuses a leaf swapped for an escaping symlink before open — zero bytes read', async () => {
+    const outside = path.join(
+      fs.realpathSync(os.tmpdir()),
+      `pd-race-outside-${process.pid}-${Date.now()}.pdf`,
+    );
+    fs.writeFileSync(outside, 'outside secret');
+    let readCalls = 0;
+    const swapToSymlink: typeof fs.promises.open = (async (p, flags) => {
+      // Attacker replaces the validated file with an escaping symlink in the
+      // validation→open window. O_NOFOLLOW turns the open itself into ELOOP;
+      // where O_NOFOLLOW is unavailable, the post-open re-resolution still
+      // refuses before the read loop starts.
+      fs.rmSync(p as string, { force: true });
+      fs.symlinkSync(outside, p as string);
+      const handle = await fs.promises.open(p, flags);
+      const originalRead = handle.read.bind(handle);
+      vi.spyOn(handle, 'read').mockImplementation((async (...args: unknown[]) => {
+        readCalls += 1;
+        return (originalRead as (...a: unknown[]) => unknown)(...args);
+      }) as typeof handle.read);
+      return handle;
+    }) as typeof fs.promises.open;
+
+    try {
+      const result = await readUploadFile(workspaceFile, ONE_KIB, swapToSymlink);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.kind).toBe('changed');
+      expect(readCalls).toBe(0);
+    } finally {
+      fs.rmSync(outside, { force: true });
+    }
+  });
+
+  it('refuses when the file is replaced (new inode) after open', async () => {
+    const replaceAfterOpen: typeof fs.promises.open = (async (p, flags) => {
+      const handle = await fs.promises.open(p, flags);
+      fs.rmSync(p as string, { force: true });
+      fs.writeFileSync(p as string, 'REPLACED CONTENT');
+      return handle;
+    }) as typeof fs.promises.open;
+
+    const result = await readUploadFile(workspaceFile, ONE_KIB, replaceAfterOpen);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.kind).toBe('changed');
+  });
+
+  it('refuses when an ancestor directory is swapped for an escaping symlink before open', async () => {
+    const subdir = path.join(workspaceDir, 'sub');
+    fs.mkdirSync(subdir);
+    const innerFile = path.join(subdir, 'inner.pdf');
+    writePdf(innerFile);
+
+    const outsideDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pd-race-ancestor-')));
+    writePdf(path.join(outsideDir, 'inner.pdf'));
+
+    const swapAncestor: typeof fs.promises.open = (async (p, flags) => {
+      fs.rmSync(subdir, { recursive: true, force: true });
+      fs.symlinkSync(outsideDir, subdir);
+      return fs.promises.open(p, flags);
+    }) as typeof fs.promises.open;
+
+    try {
+      const result = await readUploadFile(innerFile, ONE_KIB, swapAncestor);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.kind).toBe('changed');
+    } finally {
+      fs.rmSync(subdir, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it('reads the originally-opened inode even if the path content grows after open', async () => {
+    const appendAfterOpen: typeof fs.promises.open = (async (p, flags) => {
+      const handle = await fs.promises.open(p, flags);
+      fs.appendFileSync(workspaceFile, ' [appended]');
+      return handle;
+    }) as typeof fs.promises.open;
+
+    const result = await readUploadFile(workspaceFile, ONE_KIB, appendAfterOpen);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.buffer.toString('utf8')).toContain('%PDF-1.4');
     }
   });
 });

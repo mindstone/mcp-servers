@@ -125,7 +125,7 @@ node dist/index.js
 - `get_document_details` — Get full details for a document
 - `create_document_from_template` — Create a new document from a template (recipients, tokens, fields, pricing tables, metadata, tags)
 - `upload_document` — Upload a PDF, DOCX, or RTF file to create a document
-- `create_document_from_url` — Create a document from a publicly accessible HTTPS PDF URL
+- `create_document_from_url` — Create a document from a publicly accessible HTTPS PDF URL (the connector DNS-resolves the host and follows redirects before handing PandaDoc the terminal URL, so the URL must be reachable from the machine running the connector)
 - `send_document` — Send a document to recipients for viewing/signing
 - `create_document_session` — Create a shareable view/sign link for a document recipient
 - `download_document` — Download a document as PDF

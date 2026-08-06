@@ -1,8 +1,19 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
+import { promises as dnsPromises } from 'node:dns';
 import { mswServer } from './helpers/setup.js';
 import { createPandaDocHandlers, createPandaDocUnauthorizedHandlers, createPandaDocTimeoutHandlers } from './helpers/pandadoc-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
+
+/** Stub DNS so every hostname resolves to a public address (93.184.216.34 = example.com's documented public IP). */
+function stubPublicDns(): void {
+  vi.spyOn(dnsPromises, 'lookup').mockImplementation(async (hostname, options) => {
+    if (typeof options === 'object' && options?.all) {
+      return [{ address: '93.184.216.34', family: 4 }];
+    }
+    return { address: '93.184.216.34', family: 4 };
+  });
+}
 
 describe('PandaDoc document tools', () => {
   let testClient: McpTestClient;
@@ -10,6 +21,7 @@ describe('PandaDoc document tools', () => {
   afterEach(async () => {
     if (testClient) await testClient.close();
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
   });
 
   // ── list_documents ──────────────────────────────────────────────
@@ -220,8 +232,14 @@ describe('PandaDoc document tools', () => {
   // ── create_document_from_url ────────────────────────────────────────
 
   it('create_document_from_url posts url and metadata to the API', async () => {
+    stubPublicDns();
     let capturedBody: Record<string, unknown> | null = null;
     mswServer.use(
+      // The connector verifies the source URL itself (GET, manual redirects)
+      // before handing the terminal URL to PandaDoc.
+      http.get('https://files.example.com/proposal.pdf', () =>
+        new HttpResponse(null, { status: 200 }),
+      ),
       http.post('https://api.pandadoc.com/public/v1/documents', async ({ request }) => {
         capturedBody = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({
@@ -282,7 +300,11 @@ describe('PandaDoc document tools', () => {
   });
 
   it('create_document_from_url surfaces API errors', async () => {
+    stubPublicDns();
     mswServer.use(
+      http.get('https://files.example.com/missing.pdf', () =>
+        new HttpResponse(null, { status: 200 }),
+      ),
       http.post('https://api.pandadoc.com/public/v1/documents', () =>
         HttpResponse.json({ type: 'bad_request', detail: 'URL not reachable' }, { status: 400 }),
       ),

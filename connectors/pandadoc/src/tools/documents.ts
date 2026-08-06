@@ -9,8 +9,8 @@ import { sanitizeVendorErrorText, withErrorHandling } from '../utils.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { isConfigured } from '../auth.js';
 import { MAX_FILE_SIZE, PandaDocError } from '../types.js';
-import { resolveUploadPath } from './path-safety.js';
-import { validatePublicHttpsUrl } from './url-safety.js';
+import { readUploadFile } from './path-safety.js';
+import { resolvePublicTerminalUrl } from './url-safety.js';
 import {
   sanitizeDocumentCompact,
   sanitizeDocumentDetails,
@@ -93,14 +93,41 @@ function paginationHint(count: number, page: number, pageSize: number): string {
 }
 
 /**
- * Open-ended vendor request structures (fields, pricing-table data, metadata)
- * are still validated as JSON-shaped values — this rejects anything that
- * cannot serialize (functions, undefined leaves, class instances) instead of
- * passing `z.unknown()` straight through.
+ * Semantic request schemas for the open-ended vendor structures. A generic
+ * "any JSON value" check only proves serializability; these schemas validate
+ * the actual PandaDoc shapes (fail-closed) so a malformed structure is
+ * rejected before it reaches the API.
+ *
+ * - fields: `{ "FieldName": { "value": ... } }` — each entry must be an
+ *   object with a scalar `value` (text/date/checkbox pre-fill).
+ * - metadata: string-keyed map of scalar values; nested structures rejected.
+ * - pricing-table options: `currency` (ISO-4217-style 3-letter code) plus
+ *   Tax/Fee/Discount adjustment objects `{ type, value, name? }`.
+ * - pricing-table row data: column-name keys with scalar values, or
+ *   adjustment objects for Tax/Discount/Fee columns.
+ * Shapes per https://developers.pandadoc.com/docs/working-with-pricing-tables
  */
-const jsonValue: z.ZodType<unknown> = z.lazy(() =>
-  z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(jsonValue), z.record(jsonValue)]),
-);
+const scalarValue = z.union([z.string(), z.number(), z.boolean()]);
+
+const pricingAdjustment = z
+  .object({
+    type: z.enum(['percent', 'absolute']),
+    name: z.string().optional(),
+    value: z.number(),
+  })
+  .strict();
+
+const documentFieldsSchema = z.record(z.object({ value: scalarValue }).strict());
+
+const documentMetadataSchema = z.record(scalarValue);
+
+const pricingTableOptionsSchema = z
+  .object({
+    currency: z.string().regex(/^[A-Z]{3}$/, 'currency must be a 3-letter code (e.g., "USD")').optional(),
+  })
+  .catchall(pricingAdjustment);
+
+const pricingRowDataSchema = z.record(z.union([scalarValue, pricingAdjustment]));
 
 /**
  * `info_message` in a create/upload response is vendor-authored text — wrap it
@@ -265,7 +292,7 @@ RELATED TOOLS:
         template_uuid: z.string().min(1).describe('Template ID (from list_templates or PandaDoc app URL)'),
         name: z.string().optional().describe('Document name'),
         recipients: z.array(z.object({
-          email: z.string().describe('Recipient email'),
+          email: z.string().email().describe('Recipient email'),
           first_name: z.string().optional().describe('Recipient first name'),
           last_name: z.string().optional().describe('Recipient last name'),
           role: z.string().optional().describe('Must match a role in the template'),
@@ -275,11 +302,11 @@ RELATED TOOLS:
           name: z.string().describe('Token/variable name from template'),
           value: z.string().describe('Value to fill in'),
         })).optional().describe('Template variables to pre-fill'),
-        fields: z.record(jsonValue).optional().describe('Map of field names to values: { "FieldName": { "value": "text" } }'),
+        fields: documentFieldsSchema.optional().describe('Map of field names to values: { "FieldName": { "value": "text" } }'),
         pricing_tables: z.array(z.object({
           name: z.string().describe('Name of the pricing table in the template to populate'),
           data_merge: z.boolean().optional().describe('If true, all field names in data rows must be the external names defined in the template'),
-          options: z.record(jsonValue).optional().describe('Table options, e.g. { "currency": "USD", "Discount": { "type": "percent", "name": "Global Discount", "value": 10 } }'),
+          options: pricingTableOptionsSchema.optional().describe('Table options, e.g. { "currency": "USD", "Discount": { "type": "percent", "name": "Global Discount", "value": 10 } }'),
           sections: z.array(z.object({
             title: z.string().describe('Section title'),
             default: z.boolean().optional().describe('If true, this is the default section'),
@@ -289,13 +316,14 @@ RELATED TOOLS:
                 qty_editable: z.boolean().optional(),
                 optional_selected: z.boolean().optional(),
                 optional: z.boolean().optional(),
+                multichoice_selected: z.boolean().optional(),
               }).optional().describe('Row options (editable qty, optional row, pre-selected)'),
-              data: z.record(jsonValue).optional().describe('Row values keyed by column name, e.g. { "Name": "Widget", "Price": 10, "QTY": 3, "SKU": "widget-1" }'),
-              custom_fields: z.record(jsonValue).optional().describe('Additional custom column values'),
+              data: pricingRowDataSchema.optional().describe('Row values keyed by column name, e.g. { "Name": "Widget", "Price": 10, "QTY": 3, "SKU": "widget-1" }'),
+              custom_fields: z.record(scalarValue).optional().describe('Additional custom column values'),
             })).optional().describe('Rows to populate in this section'),
           })).optional().describe('Pricing table sections with rows'),
         })).optional().describe('Pricing tables to populate. Requires "Automatically add products to this table" enabled on the template pricing table. All product info must be passed here — products stored in PandaDoc cannot be used.'),
-        metadata: z.record(jsonValue).optional().describe('Custom key-value metadata to associate with the document'),
+        metadata: documentMetadataSchema.optional().describe('Custom key-value metadata to associate with the document'),
         tags: z.array(z.string()).optional().describe('Tags to apply'),
         folder_uuid: z.string().optional().describe('Folder ID to store the document in (see list_document_folders)'),
       }),
@@ -363,7 +391,7 @@ RELATED TOOLS:
         file_path: z.string().min(1).describe('Absolute path to the PDF, DOCX, or RTF file to upload'),
         name: z.string().optional().describe('Document name in PandaDoc (defaults to filename)'),
         recipients: z.array(z.object({
-          email: z.string().describe('Recipient email address'),
+          email: z.string().email().describe('Recipient email address'),
           first_name: z.string().optional().describe('Recipient first name'),
           last_name: z.string().optional().describe('Recipient last name'),
           role: z.string().optional().describe('Recipient role (e.g., "Client", "Signer")'),
@@ -384,21 +412,30 @@ RELATED TOOLS:
       // `~/.ssh/id_rsa` or `/etc/passwd`, where the bytes would otherwise
       // be uploaded to the PandaDoc API as a "document".
       //
-      // `resolveUploadPath` performs lexical containment, then
-      // canonicalises the path through `fs.realpathSync` so a symlink
-      // inside the workspace pointing OUTSIDE the workspace is refused.
+      // `readUploadFile` validates the path AND reads it as one
+      // race-resistant operation: canonical containment, a single
+      // O_NOFOLLOW open, fstat-based type/size checks, an ancestor-swap
+      // re-resolution bound to the opened inode, and a descriptor-bounded
+      // read. See src/tools/path-safety.ts.
       // ----------------------------------------------------------------
-      const sandboxResult = resolveUploadPath(args.file_path);
-      if (!sandboxResult.ok) {
-        return JSON.stringify({
-          ok: false,
-          error: sandboxResult.error,
-          resolution:
+      const readResult = await readUploadFile(args.file_path, MAX_FILE_SIZE);
+      if (!readResult.ok) {
+        const resolutions: Record<string, string> = {
+          'outside-workspace':
             'Place the file under MCP_WORKSPACE_PATH (or os.tmpdir() when ' +
             'the env var is unset) before uploading.',
+          'not-found': 'Check the file path exists and is accessible.',
+          'not-regular-file': 'Pass the path of a PDF, DOCX, or RTF file, not a directory or device.',
+          'too-large': 'Use a smaller file or compress it before uploading.',
+          changed: 'Try the upload again.',
+        };
+        return JSON.stringify({
+          ok: false,
+          error: readResult.error,
+          resolution: resolutions[readResult.kind],
         });
       }
-      const resolvedPath = sandboxResult.path;
+      const resolvedPath = readResult.path;
 
       // Validate file extension (lexical — no disk access).
       const ext = path.extname(resolvedPath).toLowerCase();
@@ -410,63 +447,7 @@ RELATED TOOLS:
         });
       }
 
-      // Open the validated path ONCE, then enforce the size/type policy on
-      // that descriptor and read through it. A check-then-use pair of
-      // separate path-based stat + read calls would let a local attacker
-      // swap the file (or an ancestor) between the check and the read —
-      // re-running realpathSync does not bind a later read to the checked
-      // inode, only a single open descriptor does.
-      let fd: number;
-      try {
-        fd = fs.openSync(resolvedPath, 'r');
-      } catch {
-        return JSON.stringify({
-          ok: false,
-          error: `File not found: ${resolvedPath}`,
-          resolution: 'Check the file path exists and is accessible.',
-        });
-      }
-
-      let fileBuffer: Buffer;
-      try {
-        const fileInfo = fs.fstatSync(fd);
-        if (!fileInfo.isFile()) {
-          return JSON.stringify({
-            ok: false,
-            error: `Not a regular file: ${resolvedPath}`,
-            resolution: 'Pass the path of a PDF, DOCX, or RTF file, not a directory or device.',
-          });
-        }
-        if (fileInfo.size > MAX_FILE_SIZE) {
-          return JSON.stringify({
-            ok: false,
-            error: `File too large (${(fileInfo.size / 1024 / 1024).toFixed(1)}MB). Maximum is 50MB.`,
-            resolution: 'Use a smaller file or compress it before uploading.',
-          });
-        }
-        // If the path stopped naming the opened inode (swap between sandbox
-        // validation and open, or mid-validation), fail closed.
-        let viaPath: fs.Stats;
-        try {
-          viaPath = fs.statSync(resolvedPath);
-        } catch {
-          return JSON.stringify({
-            ok: false,
-            error: 'The file changed while it was being validated.',
-            resolution: 'Try the upload again.',
-          });
-        }
-        if (viaPath.dev !== fileInfo.dev || viaPath.ino !== fileInfo.ino) {
-          return JSON.stringify({
-            ok: false,
-            error: 'The file changed while it was being validated.',
-            resolution: 'Try the upload again.',
-          });
-        }
-        fileBuffer = fs.readFileSync(fd);
-      } finally {
-        fs.closeSync(fd);
-      }
+      const fileBuffer = readResult.buffer;
       const fileName = args.name || path.basename(resolvedPath);
 
       // Build metadata JSON for the 'data' field
@@ -583,18 +564,18 @@ RELATED TOOLS:
           .describe('Secure (HTTPS) and publicly accessible URL to the PDF document'),
         name: z.string().min(1).describe('Document name in PandaDoc'),
         recipients: z.array(z.object({
-          email: z.string().describe('Recipient email address'),
+          email: z.string().email().describe('Recipient email address'),
           first_name: z.string().optional().describe('Recipient first name'),
           last_name: z.string().optional().describe('Recipient last name'),
           role: z.string().optional().describe('Recipient role (e.g., "Client", "Signer")'),
         })).optional().describe('List of document recipients (at least one required for sending)'),
         parse_form_fields: z.boolean().optional().describe('If true, recognizes PDF form fields as PandaDoc fields. Default: false'),
-        fields: z.record(jsonValue).optional().describe('Map of field names to values: { "FieldName": { "value": "text" } }'),
+        fields: documentFieldsSchema.optional().describe('Map of field names to values: { "FieldName": { "value": "text" } }'),
         tokens: z.array(z.object({
           name: z.string().describe('Token/variable name'),
           value: z.string().describe('Value to fill in'),
         })).optional().describe('Tokens (variables) to pre-fill'),
-        metadata: z.record(jsonValue).optional().describe('Custom key-value metadata to associate with the document'),
+        metadata: documentMetadataSchema.optional().describe('Custom key-value metadata to associate with the document'),
         tags: z.array(z.string()).optional().describe('Tags to apply to the document'),
         folder_uuid: z.string().optional().describe('ID of the PandaDoc folder to store the document in (see list_document_folders)'),
       }),
@@ -604,20 +585,23 @@ RELATED TOOLS:
       if (!isConfigured()) return noApiKeyError();
 
       // The URL is fetched server-side by PandaDoc, which makes this tool an
-      // indirect fetch primitive — refuse literal internal hosts (loopback,
-      // link-local, private ranges) and credential-bearing URLs. DNS and
-      // redirect handling are vendor-side; see src/tools/url-safety.ts.
-      const urlProblem = validatePublicHttpsUrl(args.url);
-      if (urlProblem) {
+      // indirect fetch primitive. The connector enforces what it can: refuse
+      // literal internal hosts and credential-bearing URLs, DNS-resolve the
+      // host and refuse non-public answers, and follow the redirect chain
+      // under the same policy — PandaDoc receives ONLY the terminal URL.
+      // (DNS-rebinding TOCTOU between our lookup and PandaDoc's fetch is
+      // inherently vendor-side; see src/tools/url-safety.ts.)
+      const urlCheck = await resolvePublicTerminalUrl(args.url);
+      if (!urlCheck.ok) {
         return JSON.stringify({
           ok: false,
-          error: `Rejected source URL: ${urlProblem}.`,
+          error: `Rejected source URL: ${urlCheck.error}.`,
           resolution: 'Provide an HTTPS URL on a public host that PandaDoc can reach.',
         });
       }
 
       const body: Record<string, unknown> = {
-        url: args.url,
+        url: urlCheck.url,
         name: args.name,
       };
       if (args.recipients) body.recipients = args.recipients;
