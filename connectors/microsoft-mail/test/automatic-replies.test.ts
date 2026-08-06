@@ -57,6 +57,30 @@ describe('automatic replies with MailboxSettings permission', () => {
     expect(call?.method).toBe('GET');
   });
 
+  it('a ZodError whose invalid_enum received echoes the InefficientFilter phrase still takes the schema-validation branch', async () => {
+    // Regression: ZodError.message serializes its issues, and an invalid_enum
+    // issue embeds the upstream `received` value. A poisoned enum carrying
+    // "sort order is too complex" must not be misclassified as Graph's
+    // InefficientFilter rejection (which would skip the Zod sanitizer).
+    const { http, HttpResponse } = await import('msw');
+    mswServer.use(
+      http.get('https://graph.microsoft.com/v1.0/me/mailboxSettings/automaticRepliesSetting', () =>
+        HttpResponse.json({
+          status: 'The restriction or sort order is too complex for this operation.',
+        }),
+      ),
+    );
+    const result = await client.callTool('get_automatic_replies', {});
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string; action_required?: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('failed schema validation');
+    const fullText = `${json.error} ${json.action_required ?? ''}`;
+    expect(fullText).not.toContain('Simplify or remove');
+    // The poisoned upstream value must never echo into model-visible text.
+    expect(fullText).not.toContain('sort order is too complex');
+  });
+
   it('set_automatic_replies patches mailboxSettings with the setting', async () => {
     const result = await client.callTool('set_automatic_replies', {
       status: 'alwaysEnabled',
