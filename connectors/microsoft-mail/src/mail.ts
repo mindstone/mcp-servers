@@ -533,6 +533,56 @@ const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 // bounding what a noncompliant response can make the connector buffer.
 const MAX_METADATA_BYTES = 1024 * 1024;
 
+// Error response bodies are small; this bounds the drain of a non-2xx stream
+// body (see getStreamDrainingErrorBody) so a noncompliant error response
+// cannot make the connector buffer unbounded text either.
+const MAX_ERROR_BODY_BYTES = 64 * 1024;
+
+/**
+ * Fetch a raw content stream, normalizing any non-2xx failure first. The
+ * Graph SDK's getStream() throws an error whose `body` is the *unread
+ * response stream*, not a string: downstream formatting then degrades
+ * (upstream detail is lost, a 403 surfaces with an empty envelope) and the
+ * body stream is left undrained, holding a socket. Read the body with a hard
+ * cap, destroy the stream, and replace `body` with its text so the standard
+ * error classification sees the real upstream payload.
+ */
+async function getStreamDrainingErrorBody(
+  client: Client,
+  apiPath: string,
+  signal: AbortSignal,
+  select?: string,
+) {
+  try {
+    const request = client.api(apiPath).options({ signal });
+    if (select !== undefined) request.select(select);
+    return await request.getStream();
+  } catch (err) {
+    if (err && typeof err === 'object') {
+      const graphErr = err as { body?: unknown };
+      const body = graphErr.body;
+      const isStream =
+        body instanceof Readable ||
+        (body != null &&
+          typeof body === 'object' &&
+          typeof (body as { getReader?: unknown }).getReader === 'function');
+      if (isStream) {
+        try {
+          // readStreamWithCap destroys the stream if the cap is exceeded; a
+          // fully-read body is drained by consumption.
+          const text = await readStreamWithCap(body, MAX_ERROR_BODY_BYTES, () => new Error('cap'));
+          graphErr.body = text.toString('utf8');
+        } catch {
+          // A body that cannot be read degrades exactly as before: the error
+          // still surfaces, just without upstream detail.
+          graphErr.body = undefined;
+        }
+      }
+    }
+    throw err;
+  }
+}
+
 /**
  * Reject anything that is not a plain filename before it is joined onto the
  * attachment directory (same rule family as the other file-writing
@@ -701,11 +751,12 @@ export async function downloadAttachment(
   // unbounded JSON document before Zod runs. The bytes themselves are
   // streamed (and capped) below via the $value endpoint instead of an
   // unbounded inline base64 JSON.
-  const metaBody = await client
-    .api(`/me/messages/${args.id}/attachments/${args.attachmentId}`)
-    .options({ signal })
-    .select('id,name,contentType,size,isInline')
-    .getStream();
+  const metaBody = await getStreamDrainingErrorBody(
+    client,
+    `/me/messages/${args.id}/attachments/${args.attachmentId}`,
+    signal,
+    'id,name,contentType,size,isInline',
+  );
   const metaBuffer = await readStreamWithCap(
     metaBody,
     MAX_METADATA_BYTES,
@@ -752,10 +803,11 @@ export async function downloadAttachment(
     throw new Error(sizeLimitMessage);
   }
 
-  const body = await client
-    .api(`/me/messages/${args.id}/attachments/${args.attachmentId}/$value`)
-    .options({ signal })
-    .getStream();
+  const body = await getStreamDrainingErrorBody(
+    client,
+    `/me/messages/${args.id}/attachments/${args.attachmentId}/$value`,
+    signal,
+  );
   const content = await readStreamWithCap(body, MAX_ATTACHMENT_BYTES, () => new Error(sizeLimitMessage));
 
   const target = await resolveAttachmentDir();

@@ -266,6 +266,43 @@ describe('download_attachment adversarial cases', () => {
     }
   });
 
+  it('surfaces enveloped upstream detail when the $value endpoint returns 404', async () => {
+    // Regression: getStream() throws a GraphError whose `body` is the unread
+    // response stream; without draining it, the 404 degraded to a bare
+    // "Microsoft Graph API error (HTTP 404)" and the socket was never
+    // released. The upstream message must now reach the model — enveloped.
+    const { http, HttpResponse } = await import('msw');
+    mswServer.use(
+      http.get('https://graph.microsoft.com/v1.0/me/messages/:id/attachments/:attachmentId/\\$value', () =>
+        HttpResponse.json(
+          { error: { code: 'ErrorItemNotFound', message: 'The specified object was not found in the store.' } },
+          { status: 404 },
+        ),
+      ),
+    );
+    const json = errorJson(await callDownload('att-1'));
+    expect(json.error).toContain('<untrusted-content source="microsoft-mail:graph-error">');
+    expect(json.error).toContain('The specified object was not found in the store.');
+  });
+
+  it('surfaces enveloped upstream detail when the $value endpoint returns 403', async () => {
+    // Regression: an undrained error-body stream made this path emit an empty
+    // envelope `<untrusted-content ...></untrusted-content> (HTTP 403)`.
+    const { http, HttpResponse } = await import('msw');
+    mswServer.use(
+      http.get('https://graph.microsoft.com/v1.0/me/messages/:id/attachments/:attachmentId/\\$value', () =>
+        HttpResponse.json(
+          { error: { code: 'ErrorAccessDenied', message: 'Access is denied. The tenant policy blocks this app.' } },
+          { status: 403 },
+        ),
+      ),
+    );
+    const json = errorJson(await callDownload('att-1'));
+    expect(json.error).toContain('<untrusted-content source="microsoft-mail:graph-error">Access is denied.');
+    // Permission guidance is still honest: re-authenticating will not help.
+    expect(json.error).toContain('re-authenticating the same account will not change that');
+  });
+
   it('fails closed when MCP_WORKSPACE_PATH does not exist, writing nothing', async () => {
     const missing = path.join(workspace, 'does-not-exist');
     vi.stubEnv('MCP_WORKSPACE_PATH', missing);
