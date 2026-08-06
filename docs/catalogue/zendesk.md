@@ -13,7 +13,7 @@ Zendesk Support MCP server — tickets, users, comments, macros, account setup, 
 
 | Field | Value |
 |-------|-------|
-| Version | 0.3.2 |
+| Version | 0.4.0 |
 | Auth | Hybrid (`ZENDESK_CLIENT_SECRET`) |
 | Tools | 26 (tickets, users, comments, macros, views, help-center, satisfaction) |
 | Surface | cloud API |
