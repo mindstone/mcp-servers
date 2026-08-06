@@ -12,8 +12,15 @@ export const BRIDGE_STATE_PATH =
 // convention: Zod at boundaries). A non-integer `port` (e.g. a string like
 // "8080@evil.example") would otherwise be interpolated into the URL below
 // and could redirect the request — and its bearer token — off-loopback.
+// The host writes `port` as a JSON number today; a numeric string is accepted
+// and coerced so a host-side serialisation change doesn't silently degrade the
+// connector to "Bridge not available". Non-numeric strings coerce to NaN and
+// are rejected by the int check.
 const bridgeStateSchema = z.object({
-  port: z.number().int().min(1).max(65535),
+  port: z
+    .union([z.number(), z.string()])
+    .transform(Number)
+    .pipe(z.number().int().min(1).max(65535)),
   token: z.string().min(1),
 });
 

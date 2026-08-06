@@ -58,6 +58,35 @@ describe('Bridge state validation — Outreach MCP server', () => {
     }
   });
 
+  it('accepts a numeric-string port and coerces it', async () => {
+    // The host writes `port` as a JSON number; tolerate a string form of the
+    // same value so a host-side serialisation change doesn't degrade the
+    // connector to 'Bridge not available'.
+    const { bridgeRequest } = await importBridge(JSON.stringify({ port: '9999', token: 'bridge-token' }));
+    const fetchSpy = vi.fn().mockResolvedValue({
+      json: async () => ({ success: true, username: 'jane@example.com' }),
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const result = await bridgeRequest('/mcp/configure');
+    expect(result).toEqual({ success: true, username: 'jane@example.com' });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('http://127.0.0.1:9999/mcp/configure');
+  });
+
+  it('refuses non-numeric-string and empty ports', async () => {
+    for (const port of ['8080@evil.example', '', 'eighty']) {
+      const { bridgeRequest } = await importBridge(JSON.stringify({ port, token: 'bridge-token' }));
+      const fetchSpy = vi.fn();
+      vi.stubGlobal('fetch', fetchSpy);
+
+      const result = await bridgeRequest('/mcp/configure');
+      expect(result).toEqual({ success: false, error: 'Bridge not available' });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    }
+  });
+
   it('accepts a well-formed state and calls the loopback bridge with its token', async () => {
     const { bridgeRequest } = await importBridge(JSON.stringify({ port: 9999, token: 'bridge-token' }));
     const fetchSpy = vi.fn().mockResolvedValue({
