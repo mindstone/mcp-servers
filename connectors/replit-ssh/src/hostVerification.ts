@@ -48,12 +48,22 @@
  * proxy. Keying the pin on the full hostname would make every restart look
  * like a brand-new host (fresh TOFU accept, mismatch branch never exercised).
  * Pins are therefore recorded under the hostname with its first DNS label
- * stripped (e.g. `riker.replit.dev`), and lookup matches any entry whose
- * hostname equals the connected host OR is a DNS suffix of it — so an entry
+ * stripped (e.g. `riker.replit.dev`), and lookup consults exactly two keys:
+ * the connected host itself and that one-label-stripped pin key — so an entry
  * for `riker.replit.dev` covers `*.riker.replit.dev`, and a pre-populated
  * `ssh-keyscan riker.replit.dev` line works for every project behind that
  * proxy. If the presented fingerprint is not among the recorded fingerprints
  * for any matching entry, the connection fails closed.
+ *
+ * The stripping stops at three labels: a pin key is never shorter than one
+ * label above the registrable domain, so a three-label host such as
+ * `riker.replit.dev` pins under its full hostname. A bare `replit.dev`
+ * entry must never act as a pin — it would be consulted for every host this
+ * connector can reach, turning one first-contact interception of any
+ * three-label `*.replit.dev` name into a fingerprint accepted for ALL
+ * Replit hosts (hostVerifier runs before authentication, so the pin is
+ * recorded even when auth fails). For the same reason lookup never walks
+ * the full DNS suffix ladder down to the last two labels.
  *
  * Accepted line formats
  * ---------------------
@@ -163,28 +173,29 @@ function loadKnownHosts(): Map<string, Set<string>> {
 }
 
 /**
- * Every entry key that can pin `host`: the full hostname plus each DNS
- * suffix down to the last two labels (e.g. for `a.b.replit.dev`:
- * `a.b.replit.dev`, `b.replit.dev`, `replit.dev`). Suffix entries are how
- * pins survive Replit's per-project hostname rotation.
+ * Every entry key that can pin `host`: the full hostname plus the pin key
+ * recorded for it (first label stripped, but never shorter than three
+ * labels — see pinKeyForHost). Lookup deliberately does NOT walk the full
+ * DNS suffix ladder: a bare two-label entry such as `replit.dev` would
+ * otherwise act as a universal pin accepted for every reachable host.
  */
 function candidateKeys(host: string): string[] {
-  const labels = host.toLowerCase().split('.');
-  const keys: string[] = [];
-  for (let i = 0; i <= labels.length - 2; i++) {
-    keys.push(labels.slice(i).join('.'));
-  }
-  return keys.length > 0 ? keys : [host.toLowerCase()];
+  const lower = host.toLowerCase();
+  const pinKey = pinKeyForHost(lower);
+  return pinKey === lower ? [lower] : [lower, pinKey];
 }
 
 /**
  * The key a new TOFU pin is recorded under: the hostname with its first
  * label stripped (the stable proxy suffix), so a project restart — which
- * rotates only the first label — does not look like a new host.
+ * rotates only the first label — does not look like a new host. The
+ * stripping stops at three labels: a three-label host pins under its full
+ * hostname, because a two-label pin (`replit.dev`) would be a universal
+ * pin consulted for every host under the registrable domain.
  */
 function pinKeyForHost(host: string): string {
   const labels = host.toLowerCase().split('.');
-  return labels.length > 2 ? labels.slice(1).join('.') : host.toLowerCase();
+  return labels.length > 3 ? labels.slice(1).join('.') : host.toLowerCase();
 }
 
 function appendKnownHost(host: string, fingerprint: string): void {
