@@ -251,6 +251,14 @@ export function stageUploadSource(inputPath: string, stagingDir: string, index: 
 export interface PdfStagingTarget {
   /** Validated final destination for the PDF. */
   destPath: string;
+  /**
+   * Canonical realpath of destPath's parent directory, pinned at validation
+   * time (the parent is created before the CLI runs). installStagedFile
+   * re-verifies it before writing, so an intermediate directory swapped to
+   * a symlink during the CLI call is refused instead of followed outside
+   * the workspace.
+   */
+  canonicalParentDir: string;
   /** Private staging path the CLI should write to. */
   stagingPath: string;
   /** Remove with discardStagingDir once installed (or on failure). */
@@ -285,9 +293,25 @@ export function createPdfStagingTarget(filePath: string, overwrite: boolean): Pd
     );
   }
 
+  // Create the parent directory NOW, before the multi-second CLI call, and
+  // pin its canonical identity. resolved.path is canonical, so the realpath
+  // of the freshly prepared parent must equal it exactly; a mismatch means
+  // a component changed under us and the destination cannot be trusted.
+  const parentDir = path.dirname(resolved.path);
+  fs.mkdirSync(parentDir, { recursive: true });
+  const canonicalParentDir = fs.realpathSync(parentDir);
+  if (canonicalParentDir !== parentDir) {
+    throw new ConnectorError(
+      `file_path parent directory changed while it was being prepared: ${filePath}`,
+      'PATH_OUTSIDE_WORKSPACE',
+      'Retry the call, or choose a different file_path inside the workspace directory.',
+    );
+  }
+
   const stagingDir = createStagingDir('browser-pdf-');
   return {
     destPath: resolved.path,
+    canonicalParentDir,
     stagingPath: path.join(stagingDir, sanitiseBasename(resolved.path, 'page.pdf')),
     stagingDir,
   };
@@ -296,14 +320,25 @@ export function createPdfStagingTarget(filePath: string, overwrite: boolean): Pd
 /**
  * Install a staged PDF at its validated destination.
  *
- * The install never writes through a pre-existing filesystem entry:
- * exclusive-create (COPYFILE_EXCL) fails with EEXIST on anything already at
- * the destination — including a planted symlink. With `overwrite`, the old
- * entry is removed first and the same exclusive-create follows, so a swap
- * planted in between still surfaces as an EEXIST refusal instead of a write
- * through an attacker-chosen path.
+ * Two defences, one per path component class:
+ *   - Leaf: the install never writes through a pre-existing filesystem
+ *     entry. Exclusive-create (COPYFILE_EXCL) fails with EEXIST on anything
+ *     already at the destination — including a planted symlink. With
+ *     `overwrite`, the old entry is removed first and the same
+ *     exclusive-create follows, so a leaf swap planted in between surfaces
+ *     as an EEXIST refusal instead of a write through an attacker-chosen
+ *     path.
+ *   - Intermediate directories: exclusive-create guards only the final
+ *     component, so the parent's canonical identity (pinned at validation,
+ *     before the CLI ran) is re-verified immediately before installing. A
+ *     directory swapped to a symlink during the CLI call is refused rather
+ *     than followed outside the workspace — for the write and, with
+ *     `overwrite`, for the preceding delete. (A swap landing after this
+ *     re-check but before the copy is a sub-millisecond residual window, on
+ *     par with any local check-then-use race.)
  */
-export function installStagedFile(stagingPath: string, destPath: string, overwrite: boolean): void {
+export function installStagedFile(target: PdfStagingTarget, overwrite: boolean): void {
+  const { stagingPath, destPath, canonicalParentDir } = target;
   let staged: fs.Stats;
   try {
     staged = fs.lstatSync(stagingPath);
@@ -322,12 +357,29 @@ export function installStagedFile(stagingPath: string, destPath: string, overwri
     );
   }
 
+  const parentDir = path.dirname(destPath);
+  let currentParentDir: string;
+  try {
+    currentParentDir = fs.realpathSync(parentDir);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new ConnectorError(
+      `Destination directory cannot be resolved (${reason}): ${destPath}`,
+      'PATH_OUTSIDE_WORKSPACE',
+      'Retry the call, or choose a different file_path inside the workspace directory.',
+    );
+  }
+  if (currentParentDir !== canonicalParentDir) {
+    throw new ConnectorError(
+      `Destination directory changed while the PDF was being generated: ${destPath}`,
+      'PATH_OUTSIDE_WORKSPACE',
+      'Retry the call, or choose a different file_path inside the workspace directory.',
+    );
+  }
+
   if (overwrite) {
     fs.rmSync(destPath, { force: true });
   }
-  // Parent directories were validated as inside the workspace by
-  // resolveWorkspaceWritePath; create any missing tail before installing.
-  fs.mkdirSync(path.dirname(destPath), { recursive: true });
   try {
     fs.copyFileSync(stagingPath, destPath, fs.constants.COPYFILE_EXCL);
   } catch (err) {

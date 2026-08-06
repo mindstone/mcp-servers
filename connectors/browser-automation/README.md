@@ -219,7 +219,7 @@ Both tools are marked `destructiveHint: true`, so hosts can require user confirm
 
 Additional hardening:
 
-- **Staged file hand-off.** Validated files are never re-opened by pathname. `browser_upload` sources are opened once, verified to be regular files (directories, devices, and FIFOs are refused), and copied into a fresh private staging directory that the CLI consumes; `browser_pdf` has the CLI write into a fresh private staging directory and then installs the PDF at the requested path with exclusive-create semantics. A file or symlink planted after validation cannot redirect the read or the write.
+- **Staged file hand-off.** Validated files are never re-opened by pathname. `browser_upload` sources are opened once, verified to be regular files (directories, devices, and FIFOs are refused), and copied into a fresh private staging directory that the CLI consumes. `browser_pdf` has the CLI write into a fresh private staging directory, then installs the PDF at the requested path: the destination directory's canonical identity is pinned before the CLI runs and re-verified before installing, so an intermediate directory swapped to a symlink mid-call is refused, and exclusive-create semantics refuse a file or symlink planted at the destination leaf instead of writing through it.
 - **No silent overwrite.** `browser_pdf` refuses an existing `file_path` with a `FILE_EXISTS` error unless the caller explicitly passes `overwrite: true`.
 - **Enveloped errors.** Error output from the `agent-browser` CLI can contain page-authored text; it is wrapped in `<untrusted-content>` envelopes (with close-tag breakout escaping) before reaching the model, and timeout errors do not echo the command's argument values.
 

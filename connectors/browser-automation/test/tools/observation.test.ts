@@ -449,6 +449,86 @@ describe('browser_pdf', () => {
     expect(fs.readFileSync(dest, 'utf8')).toBe('planted');
   });
 
+  it('refuses to install when an intermediate directory is swapped to a symlink during the CLI call', async () => {
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-pdf-outside-'));
+    const reportsDir = path.join(workspace, 'reports');
+    try {
+      const childProcess = await import('node:child_process');
+      const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
+      mockExecFile.mockImplementation((_cmd: string, args: string[], _opts: unknown, callback: Function) => {
+        capturedArgs.push(args);
+        if (args[0] === 'pdf') {
+          fs.writeFileSync(args[1], 'pdf-bytes');
+          // Swap the validated parent directory for a symlink to an outside
+          // directory in the window between validation and install.
+          fs.rmSync(reportsDir, { recursive: true, force: true });
+          fs.symlinkSync(outsideDir, reportsDir);
+        }
+        callback(null, '', '');
+      });
+
+      testClient = await createTestClient({
+        env: { AGENT_BROWSER_SHOW_WINDOW: 'false', MCP_WORKSPACE_PATH: workspace },
+      });
+
+      const result = await testClient.client.callTool({
+        name: 'browser_pdf',
+        arguments: { file_path: 'reports/page.pdf' },
+      });
+      const parsed = parseResult(result);
+
+      // The install must refuse rather than write through the symlinked
+      // parent, and nothing may land outside the workspace.
+      expect(parsed.ok).toBe(false);
+      expect(result.isError).toBe(true);
+      expect(parsed.code).toBe('PATH_OUTSIDE_WORKSPACE');
+      expect(fs.existsSync(path.join(outsideDir, 'page.pdf'))).toBe(false);
+    } finally {
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not delete through a swapped intermediate directory when overwrite is true', async () => {
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-pdf-outside-'));
+    const outsideFile = path.join(outsideDir, 'page.pdf');
+    fs.writeFileSync(outsideFile, 'outside-contents');
+    const reportsDir = path.join(workspace, 'reports');
+    fs.mkdirSync(reportsDir);
+    fs.writeFileSync(path.join(reportsDir, 'page.pdf'), 'previous-contents');
+    try {
+      const childProcess = await import('node:child_process');
+      const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
+      mockExecFile.mockImplementation((_cmd: string, args: string[], _opts: unknown, callback: Function) => {
+        capturedArgs.push(args);
+        if (args[0] === 'pdf') {
+          fs.writeFileSync(args[1], 'pdf-bytes');
+          // Replace the validated parent with a symlink whose target holds a
+          // same-named file: the overwrite delete must not reach it.
+          fs.rmSync(reportsDir, { recursive: true, force: true });
+          fs.symlinkSync(outsideDir, reportsDir);
+        }
+        callback(null, '', '');
+      });
+
+      testClient = await createTestClient({
+        env: { AGENT_BROWSER_SHOW_WINDOW: 'false', MCP_WORKSPACE_PATH: workspace },
+      });
+
+      const result = await testClient.client.callTool({
+        name: 'browser_pdf',
+        arguments: { file_path: 'reports/page.pdf', overwrite: true },
+      });
+      const parsed = parseResult(result);
+
+      expect(parsed.ok).toBe(false);
+      expect(result.isError).toBe(true);
+      expect(parsed.code).toBe('PATH_OUTSIDE_WORKSPACE');
+      expect(fs.readFileSync(outsideFile, 'utf8')).toBe('outside-contents');
+    } finally {
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
   it('rejects an empty file_path at the schema boundary', async () => {
     testClient = await createTestClient({
       env: { AGENT_BROWSER_SHOW_WINDOW: 'false', MCP_WORKSPACE_PATH: workspace },
