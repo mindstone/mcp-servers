@@ -80,9 +80,9 @@ export function sanitizeTimeAwayAllocation(allocation: unknown, source: string):
   return wrapNestedName(allocation, 'timeAwayPolicy', source);
 }
 
-/** Wrap the admin-authored note field on a job role. */
+/** Wrap the admin-authored job title, department, and note on a job role. */
 export function sanitizeJobRole(role: unknown, source: string): unknown {
-  return wrapFields(role, ['note'], source);
+  return wrapFields(role, ['jobTitle', 'department', 'note'], source);
 }
 
 /** Wrap the admin-authored name on a time away type. */
@@ -107,12 +107,12 @@ const PERSON_FREE_TEXT_FIELDS = [
 
 /**
  * Wrap the free-text fields on a person profile (full or compact): names,
- * bio, remote location, job title / department (top-level and inside the
- * embedded `jobRole`), embedded team names, and social links.
+ * bio, remote location, job title / department / note (top-level and inside
+ * the embedded `jobRole`), embedded team names, and social links.
  */
 export function sanitizePersonProfile(person: unknown, source: string): unknown {
   let out = wrapFields(person, PERSON_FREE_TEXT_FIELDS, source);
-  out = wrapNestedFields(out, 'jobRole', ['jobTitle', 'department'], source);
+  out = wrapNestedFields(out, 'jobRole', ['jobTitle', 'department', 'note'], source);
   out = wrapNameList(out, 'teams', source);
   out = wrapStringListField(out, 'socialLinks', source);
   return out;

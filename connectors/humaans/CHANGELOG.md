@@ -24,6 +24,7 @@ are maintained manually as part of the PR review checklist.
 - Envelope the admin-authored type `name` on `list_humaans_time_away_types` — the same names already enveloped when embedded on time away entries; the dedicated list endpoint was returning them raw.
 - Envelope the self-/manager-editable free-text fields on person profiles (`firstName`/`lastName`/`preferredName`, `bio`, social links, embedded team names, job title / department) returned by `get_humaans_me`, `get_humaans_person`, and `list_humaans_people`. Structured tokens (id, email, status, dates) stay raw so they remain usable as filter values.
 - Envelope the admin-authored `label`/`city`/`country` on `list_humaans_locations` and the `name` on `get_humaans_company`.
+- Envelope the admin-authored `jobTitle` / `department` returned by `list_humaans_job_roles` / `get_humaans_job_role`, and the `note` on a `jobRole` object embedded in person profiles — the same Humaans-authored strings the people tools already envelop; the job-roles endpoints were returning them raw.
 - Parse the vendor-controlled `Retry-After` header to a non-negative integer before it reaches rate-limit messages; the raw header value no longer reaches the model.
 - Guard the success-path JSON parse: a malformed 2xx response body now yields a static error message instead of leaking a snippet of the vendor-controlled body through the parser's error message.
 
