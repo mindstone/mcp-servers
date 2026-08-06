@@ -767,8 +767,13 @@ export async function downloadAttachment(
     name: wrapUntrusted(attachment.name, 'microsoft-mail:download_attachment:name'),
     contentType: wrapUntrusted(attachment.contentType, 'microsoft-mail:download_attachment:contentType'),
     size: content.byteLength,
+    // `savedTo` stays the real path — the host needs it to open the file. The
+    // human-facing message names only the connector-invented directory: the
+    // file name is attacker-authored prose that the sanitizer constrains
+    // lexically but cannot neutralize, so it must not be echoed as trusted
+    // text next to the enveloped `name` above (invariant #6).
     savedTo: fullPath,
-    message: `Attachment saved to ${fullPath}`,
+    message: `Attachment saved in ${path.dirname(fullPath)}`,
   };
 }
 
