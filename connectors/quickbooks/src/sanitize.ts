@@ -23,7 +23,9 @@
  * string unless its key matches the narrow structural predicate below
  * (identifiers, sync tokens, Ref ID markers, enums, dates/timestamps —
  * values the model must echo back verbatim as follow-up tool arguments, or
- * format-constrained tokens that cannot carry prose). A field-by-field
+ * format-constrained tokens that cannot carry prose) AND the value passes a
+ * shape guard, so a hostile value under a trusted key name is still
+ * enveloped. A field-by-field
  * allow-list of free-text keys was rejected: the QBO entity surface keeps
  * growing new vendor-defined fields (and the review already caught
  * `PrimaryEmailAddr.Address`, `PrimaryPhone.FreeFormNumber`, and postal
@@ -78,11 +80,28 @@ function isStructuralKey(key: string): boolean {
 }
 
 /**
+ * Shape guard for structural values. Genuine QBO identifiers, sync tokens,
+ * Ref ID markers, enums, and date/timestamp strings are short tokens of word
+ * characters and punctuation — never whitespace or markup. A value under a
+ * structural key that fails this check (e.g. a compromised API returning
+ * prose or a close-tag breakout under `Id`) is NOT trusted by key name
+ * alone: it is enveloped like free text. Legitimate multi-word enum values
+ * (e.g. an AccountType containing spaces) are enveloped too — the model can
+ * still read them, they are just marked untrusted like every other
+ * vendor-authored string.
+ */
+const STRUCTURAL_VALUE_SHAPE = /^[\w.:+-]{1,64}$/;
+
+function isTrustedStructuralValue(key: string, value: string): boolean {
+  return isStructuralKey(key) && STRUCTURAL_VALUE_SHAPE.test(value);
+}
+
+/**
  * Recursively envelope every string inside a typed QBO payload unless its
- * key is structural (handles nested Line arrays, *Ref objects, addresses,
- * contact points). `CustomerMemo.value` is free text despite the `value`
- * key, so it is enveloped explicitly. Non-object values pass through
- * unchanged.
+ * key is structural AND its value passes the structural shape guard above
+ * (handles nested Line arrays, *Ref objects, addresses, contact points).
+ * `CustomerMemo.value` is free text despite the `value` key, so it is
+ * enveloped explicitly. Non-object values pass through unchanged.
  */
 export function sanitizeQboEntity(value: unknown, source: string): unknown {
   if (Array.isArray(value)) {
@@ -99,7 +118,7 @@ export function sanitizeQboEntity(value: unknown, source: string): unknown {
           ? wrapUntrusted(item.value, `${source}:CustomerMemo`)
           : item.value,
       };
-    } else if (typeof item === 'string' && !isStructuralKey(key)) {
+    } else if (typeof item === 'string' && !isTrustedStructuralValue(key, item)) {
       out[key] = wrapUntrusted(item, `${source}:${key}`);
     } else {
       out[key] = sanitizeQboEntity(item, source);

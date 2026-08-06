@@ -23,6 +23,7 @@ are maintained manually as part of the PR review checklist.
 - `download_quickbooks_invoice_pdf` no longer writes to a predictable temp path with an unconditional `writeFileSync` (which followed pre-existing symlinks and silently overwrote existing files). Downloads land in a fresh `mkdtempSync` staging directory (mode 0700) under the canonical temp root, opened `O_CREAT|O_EXCL` (mode 0600), fstat-verified, and written through the single descriptor.
 - Vendor error text (QuickBooks `Fault` Detail/Message) and Intuit OAuth error descriptions are enveloped in `<untrusted-content>` before they can reach model output, so a compromised API/OAuth response cannot inject instructions or break out of the surrounding envelope.
 - Typed entity payloads (`sanitizeQboEntity`) are now sanitized deny-by-default: every string is enveloped unless its key is a narrow structural predicate (IDs, SyncToken, `*Ref.value` markers, enums, dates/timestamps). This closes the allow-list gaps that left `PrimaryEmailAddr.Address`, `PrimaryPhone.FreeFormNumber`, postal-address fields, and any future vendor-defined free-text fields unwrapped.
+- Structural values are no longer trusted by key name alone: a value under a structural key (`Id`, `SyncToken`, `TxnDate`, …) that fails a shape check (short punctuation tokens only) is enveloped like free text, so a compromised API cannot smuggle prose or a close-tag breakout past the structural allow-list.
 
 ### Changed
 - QuickBooks `minorversion` is centralized in one constant and bumped from 65 to 75 (was hardcoded at every call site).
