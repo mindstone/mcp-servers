@@ -23,20 +23,6 @@ export class ElevenLabsError extends Error {
 // ElevenLabs API types
 // ---------------------------------------------------------------------------
 
-export interface VoiceResult {
-  voice_id: string;
-  name: string;
-  category?: string;
-  description?: string;
-  preview_url?: string;
-  labels?: Record<string, string>;
-}
-
-export interface VoicesResponse {
-  voices: VoiceResult[];
-  has_more?: boolean;
-}
-
 /**
  * ElevenLabs music composition section.
  *
@@ -113,77 +99,9 @@ export interface AudioResult {
   sizeBytes: number;
 }
 
-export interface ModelLanguage {
-  language_id: string;
-  name: string;
-}
-
-export interface ModelInfo {
-  model_id: string;
-  name: string;
-  can_do_text_to_speech?: boolean;
-  can_do_voice_conversion?: boolean;
-  can_be_finetuned?: boolean;
-  token_cost_factor?: number;
-  languages?: ModelLanguage[];
-}
-
-export interface SharedVoiceResult {
-  voice_id: string;
-  name: string;
-  description?: string;
-  category?: string;
-  gender?: string;
-  age?: string;
-  accent?: string;
-  language?: string;
-  locale?: string;
-  descriptive?: string;
-  use_case?: string;
-  preview_url?: string;
-  labels?: Record<string, string>;
-}
-
-export interface SharedVoicesResponse {
-  voices: SharedVoiceResult[];
-  has_more?: boolean;
-}
-
-export interface ForcedAlignmentWord {
-  text: string;
-  start: number;
-  end: number;
-}
-
-export interface ForcedAlignmentResponse {
-  characters?: Array<{ text: string; start: number; end: number }>;
-  words?: ForcedAlignmentWord[];
-  loss?: number;
-}
-
 export interface DialogueInput {
   text: string;
   voice_id: string;
-}
-
-export interface VoiceDesignPreview {
-  generated_voice_id: string;
-  audio_base_64?: string;
-  text?: string;
-  media_type?: string;
-}
-
-export interface VoiceDesignResponse {
-  previews: VoiceDesignPreview[];
-}
-
-export interface DubbingStatusResponse {
-  dubbing_id: string;
-  name?: string;
-  status: string;
-  target_languages?: string[];
-  error?: string;
-  error_message?: string;
 }
 
 import { envelopeApiErrorDetail } from './error-detail.js';

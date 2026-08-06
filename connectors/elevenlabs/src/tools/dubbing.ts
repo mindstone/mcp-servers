@@ -1,13 +1,12 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
-import { dubbingCreateResponseSchema, parseApiResponse } from '../api-schemas.js';
+import { dubbingCreateResponseSchema, dubbingStatusResponseSchema, parseApiResponse } from '../api-schemas.js';
 import { elevenLabsBinaryDownload, elevenLabsFetch, elevenLabsJson } from '../client.js';
 import { ENDPOINTS } from '../endpoints.js';
 import {
   ElevenLabsError,
   LONG_REQUEST_TIMEOUT_MS,
-  type DubbingStatusResponse,
 } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
@@ -175,11 +174,12 @@ COST: FREE — status read only.`,
         );
       }
 
-      let data: DubbingStatusResponse;
+      let data: z.output<typeof dubbingStatusResponseSchema>;
       try {
-        data = await elevenLabsJson<DubbingStatusResponse>(
-          apiKey,
-          ENDPOINTS.dubbing(args.dubbing_id),
+        data = parseApiResponse(
+          dubbingStatusResponseSchema,
+          await elevenLabsJson<unknown>(apiKey, ENDPOINTS.dubbing(args.dubbing_id)),
+          'dubbing status',
         );
       } catch (error) {
         if (error instanceof ElevenLabsError && error.code === 'HTTP_404') {

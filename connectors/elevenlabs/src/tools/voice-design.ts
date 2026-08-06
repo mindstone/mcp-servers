@@ -2,13 +2,12 @@ import * as crypto from 'crypto';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
-import { createVoiceFromPreviewResponseSchema, parseApiResponse } from '../api-schemas.js';
+import { createVoiceFromPreviewResponseSchema, parseApiResponse, voiceDesignResponseSchema } from '../api-schemas.js';
 import { elevenLabsJson } from '../client.js';
 import { ENDPOINTS } from '../endpoints.js';
 import {
   ElevenLabsError,
   LONG_REQUEST_TIMEOUT_MS,
-  type VoiceDesignResponse,
 } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 import { writeWorkspaceArtifact } from './path-safety.js';
@@ -86,25 +85,25 @@ COST: Uses voice-design credits per preview.`,
         body.auto_generate_text = args.auto_generate_text ?? true;
       }
 
-      const data = await elevenLabsJson<VoiceDesignResponse>(
-        apiKey,
-        ENDPOINTS.TEXT_TO_VOICE_DESIGN,
-        {
-          method: 'POST',
-          body: JSON.stringify(body),
-          timeoutMs: LONG_REQUEST_TIMEOUT_MS,
-        },
+      const data = parseApiResponse(
+        voiceDesignResponseSchema,
+        await elevenLabsJson<unknown>(
+          apiKey,
+          ENDPOINTS.TEXT_TO_VOICE_DESIGN,
+          {
+            method: 'POST',
+            body: JSON.stringify(body),
+            timeoutMs: LONG_REQUEST_TIMEOUT_MS,
+          },
+        ),
+        'voice design',
       );
 
-      const previews = (data.previews ?? []).map((preview) => {
+      const previews = data.previews.map((preview) => {
         const generatedVoiceId = preview.generated_voice_id;
-        if (!generatedVoiceId) {
-          throw new ElevenLabsError(
-            'Voice design response missing generated_voice_id',
-            'INVALID_RESPONSE',
-            'Retry design_voice with a shorter description or different sample text.',
-          );
-        }
+        // audio_base_64 is already grammar-gated as canonical base64 by the
+        // response schema, so the decode below cannot silently truncate; here
+        // we only fail closed on its absence.
         if (!preview.audio_base_64) {
           throw new ElevenLabsError(
             'Voice design preview missing audio_base_64',

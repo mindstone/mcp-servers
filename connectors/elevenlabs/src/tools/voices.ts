@@ -1,17 +1,24 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
+import {
+  parseApiResponse,
+  sharedVoiceResultSchema,
+  sharedVoicesResponseSchema,
+  voiceResultSchema,
+  voicesResponseSchema,
+} from '../api-schemas.js';
 import { elevenLabsJson } from '../client.js';
 import { ENDPOINTS, voicesV2Url } from '../endpoints.js';
 import {
   ElevenLabsError,
   VOICE_NOT_FOUND_RESOLUTION,
-  type SharedVoicesResponse,
-  type VoiceResult,
-  type VoicesResponse,
 } from '../types.js';
 import { wrapUntrusted, wrapUntrustedJsonStrings } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
+
+type VoiceResult = z.output<typeof voiceResultSchema>;
+type SharedVoiceResult = z.output<typeof sharedVoiceResultSchema>;
 
 function sanitizeVoiceSummary(v: VoiceResult) {
   return {
@@ -24,7 +31,7 @@ function sanitizeVoiceSummary(v: VoiceResult) {
   };
 }
 
-function sanitizeSharedVoice(v: SharedVoicesResponse['voices'][number]) {
+function sanitizeSharedVoice(v: SharedVoiceResult) {
   return {
     voice_id: v.voice_id,
     name: wrapUntrusted(v.name, 'elevenlabs:search_shared_voices:name'),
@@ -88,7 +95,11 @@ COST: FREE — no credits consumed.`,
       if (args.category) params.set('category', args.category);
       params.set('page_size', String(Math.min(100, args.page_size ?? 20)));
 
-      const data = await elevenLabsJson<VoicesResponse>(apiKey, voicesV2Url(params));
+      const data = parseApiResponse(
+        voicesResponseSchema,
+        await elevenLabsJson<unknown>(apiKey, voicesV2Url(params)),
+        'voices list',
+      );
       const voices = data.voices.map(sanitizeVoiceSummary);
 
       return JSON.stringify({
@@ -140,7 +151,11 @@ COST: FREE — no credits consumed.`,
 
       let data: VoiceResult;
       try {
-        data = await elevenLabsJson<VoiceResult>(apiKey, ENDPOINTS.voice(args.voice_id));
+        data = parseApiResponse(
+          voiceResultSchema,
+          await elevenLabsJson<unknown>(apiKey, ENDPOINTS.voice(args.voice_id)),
+          'voice detail',
+        );
       } catch (error) {
         if (error instanceof ElevenLabsError && error.code === 'HTTP_404') {
           throw new ElevenLabsError(
@@ -225,12 +240,16 @@ COST: FREE — no credits consumed.`,
       params.set('page_size', String(Math.min(100, args.page_size ?? 20)));
 
       const qs = params.toString();
-      const data = await elevenLabsJson<SharedVoicesResponse>(
-        apiKey,
-        `${ENDPOINTS.SHARED_VOICES}${qs ? `?${qs}` : ''}`,
+      const data = parseApiResponse(
+        sharedVoicesResponseSchema,
+        await elevenLabsJson<unknown>(
+          apiKey,
+          `${ENDPOINTS.SHARED_VOICES}${qs ? `?${qs}` : ''}`,
+        ),
+        'shared voices',
       );
 
-      const voices = (data.voices ?? []).map(sanitizeSharedVoice);
+      const voices = data.voices.map(sanitizeSharedVoice);
 
       return JSON.stringify({
         ok: true,

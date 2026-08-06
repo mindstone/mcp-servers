@@ -174,7 +174,7 @@ export const historyResponseSchema = z.object({
 // ── Text-to-speech with timestamps ────────────────────────────────────────
 
 /** Canonical base64 (padding included); rejects whitespace and foreign chars. */
-const base64Schema = z
+export const base64Schema = z
   .string()
   .min(1)
   .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/);
@@ -252,4 +252,128 @@ export const dubbingCreateResponseSchema = z.object({
   // Finite numbers only: a string duration would be interpolated raw into
   // the poll-guidance prose downstream.
   expected_duration_sec: z.number().finite().optional(),
+});
+
+// ── Dubbing status / voices / models / alignment / music plan ────────────
+
+/**
+ * GET /v1/dubbing/{id}. `dubbing_id` is optional: the status endpoint does not
+ * always echo it, and get_dubbing falls back to the caller-supplied ID.
+ * `status` and `target_languages` must be strings — a drifted non-string
+ * would otherwise crash the envelope helpers downstream with a raw TypeError
+ * instead of a structured INVALID_RESPONSE.
+ */
+export const dubbingStatusResponseSchema = z.object({
+  dubbing_id: z.string().optional(),
+  name: z.string().optional(),
+  status: z.string(),
+  target_languages: z.array(z.string()).optional(),
+  error: z.string().optional(),
+  error_message: z.string().optional(),
+});
+
+export const voiceResultSchema = z.object({
+  voice_id: z.string(),
+  name: z.string(),
+  category: z.string().optional(),
+  description: z.string().nullable().optional(),
+  preview_url: z.string().optional(),
+  labels: z.record(z.string()).optional(),
+});
+
+/** GET /v2/voices (list/search). */
+export const voicesResponseSchema = z.object({
+  voices: z.array(voiceResultSchema),
+  has_more: z.boolean().optional(),
+});
+
+export const sharedVoiceResultSchema = z.object({
+  voice_id: z.string(),
+  name: z.string(),
+  description: z.string().nullable().optional(),
+  category: z.string().optional(),
+  gender: z.string().optional(),
+  age: z.string().optional(),
+  accent: z.string().nullable().optional(),
+  language: z.string().optional(),
+  locale: z.string().optional(),
+  descriptive: z.string().nullable().optional(),
+  use_case: z.string().nullable().optional(),
+  preview_url: z.string().optional(),
+  labels: z.record(z.string()).optional(),
+});
+
+/** GET /v1/shared-voices. */
+export const sharedVoicesResponseSchema = z.object({
+  voices: z.array(sharedVoiceResultSchema),
+  has_more: z.boolean().optional(),
+});
+
+export const modelInfoSchema = z.object({
+  model_id: z.string(),
+  name: z.string(),
+  can_do_text_to_speech: z.boolean().optional(),
+  can_do_voice_conversion: z.boolean().optional(),
+  can_be_finetuned: z.boolean().optional(),
+  token_cost_factor: z.number().finite().optional(),
+  languages: z
+    .array(
+      z.object({
+        language_id: z.string(),
+        name: z.string(),
+      }),
+    )
+    .optional(),
+});
+
+/** GET /v1/models — a bare array; a non-array payload must fail closed. */
+export const modelInfoListResponseSchema = z.array(modelInfoSchema);
+
+const alignmentWordSchema = z.object({
+  text: z.string(),
+  start: z.number().finite(),
+  end: z.number().finite(),
+});
+
+/** POST /v1/forced-alignment. */
+export const forcedAlignmentResponseSchema = z.object({
+  characters: z.array(alignmentWordSchema).optional(),
+  words: z.array(alignmentWordSchema).optional(),
+  loss: z.number().finite().optional(),
+});
+
+/**
+ * POST /v1/music/plan. Sections require a finite duration_ms — the connector
+ * sums them for total_duration_seconds, and a string/missing duration would
+ * silently poison that arithmetic.
+ */
+export const musicPlanResponseSchema = z.object({
+  positive_global_styles: z.array(z.string()).optional(),
+  negative_global_styles: z.array(z.string()).optional(),
+  sections: z.array(
+    z.object({
+      section_name: z.string(),
+      duration_ms: z.number().finite(),
+      positive_local_styles: z.array(z.string()).optional(),
+      negative_local_styles: z.array(z.string()).optional(),
+      lines: z.array(z.string()).optional(),
+    }),
+  ),
+});
+
+/**
+ * POST /v1/text-to-voice/design. `audio_base_64` is grammar-gated with the
+ * canonical base64 schema because the connector decodes it to a workspace
+ * artifact: `Buffer.from(x, 'base64')` silently discards invalid characters,
+ * so unvalidated input could write a truncated/empty file reported as success.
+ */
+export const voiceDesignResponseSchema = z.object({
+  previews: z.array(
+    z.object({
+      generated_voice_id: z.string(),
+      audio_base_64: base64Schema.optional(),
+      text: z.string().optional(),
+      media_type: z.string().optional(),
+    }),
+  ),
 });

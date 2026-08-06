@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
+import { musicPlanResponseSchema, parseApiResponse } from '../api-schemas.js';
 import { elevenLabsJson, elevenLabsAudio } from '../client.js';
 import { ENDPOINTS } from '../endpoints.js';
 import { ElevenLabsError, type MusicPlanResponse, type CompositionPlan } from '../types.js';
@@ -251,16 +252,20 @@ COST: FREE — no credits consumed.`,
       const durationSeconds = args.duration_seconds ?? 30;
       const durationMs = Math.max(3000, Math.min(600000, durationSeconds * 1000));
 
-      const plan = await elevenLabsJson<MusicPlanResponse>(apiKey, ENDPOINTS.MUSIC_PLAN, {
-        method: 'POST',
-        body: JSON.stringify({
-          prompt: args.prompt,
-          music_length_ms: durationMs,
-          model_id: 'music_v1',
+      const plan = parseApiResponse(
+        musicPlanResponseSchema,
+        await elevenLabsJson<unknown>(apiKey, ENDPOINTS.MUSIC_PLAN, {
+          method: 'POST',
+          body: JSON.stringify({
+            prompt: args.prompt,
+            music_length_ms: durationMs,
+            model_id: 'music_v1',
+          }),
         }),
-      });
+        'music plan',
+      );
 
-      const totalDurationMs = plan.sections.reduce((sum, s) => sum + (s.duration_ms || 0), 0);
+      const totalDurationMs = plan.sections.reduce((sum, s) => sum + s.duration_ms, 0);
 
       const displayPlan = wrapMusicPlanForDisplay(plan);
 

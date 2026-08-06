@@ -3,10 +3,9 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
 import { elevenLabsJson } from '../client.js';
 import { ENDPOINTS } from '../endpoints.js';
-import { parseApiResponse, subscriptionResponseSchema, workspaceUsageResponseSchema } from '../api-schemas.js';
+import { parseApiResponse, modelInfoListResponseSchema, subscriptionResponseSchema, workspaceUsageResponseSchema } from '../api-schemas.js';
 import {
   ElevenLabsError,
-  type ModelInfo,
 } from '../types.js';
 import { wrapUntrusted, wrapUntrustedJsonStrings } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
@@ -246,7 +245,7 @@ RELATED TOOLS:
 - generate_speech: consumes a model_id from this list
 - check_subscription: confirm credits before generation
 
-RETURNS: models[] with model_id, name, languages[], and capability booleans (TTS, voice conversion, finetuning).
+RETURNS: models[] with model_id (raw round-trip handle for generate_speech), enveloped name, languages[] with enveloped language_id/name, and capability booleans (TTS, voice conversion, finetuning).
 
 COST: FREE — no credits consumed.`,
       inputSchema: z.object({}),
@@ -262,9 +261,16 @@ COST: FREE — no credits consumed.`,
         );
       }
 
-      const raw = await elevenLabsJson<ModelInfo[]>(apiKey, ENDPOINTS.MODELS);
-
-      const models = (Array.isArray(raw) ? raw : []).map((m) => ({
+      const models = parseApiResponse(
+        modelInfoListResponseSchema,
+        await elevenLabsJson<unknown>(apiKey, ENDPOINTS.MODELS),
+        'models list',
+      ).map((m) => ({
+        // model_id stays raw: it is a round-trip handle the caller passes to
+        // generate_speech, whose own input schema gates it against a closed
+        // enum (speech.ts) — the same raw-ID stance as voice_id/dubbing_id.
+        // language_id is display-only, so it is enveloped like the names
+        // (same treatment as list_history model_id).
         model_id: m.model_id,
         name: wrapUntrusted(m.name, 'elevenlabs:list_models:name'),
         can_do_text_to_speech: m.can_do_text_to_speech,
@@ -272,7 +278,7 @@ COST: FREE — no credits consumed.`,
         can_be_finetuned: m.can_be_finetuned,
         token_cost_factor: m.token_cost_factor,
         languages: (m.languages ?? []).map((lang) => ({
-          language_id: lang.language_id,
+          language_id: wrapUntrusted(lang.language_id, 'elevenlabs:list_models:language_id'),
           name: wrapUntrusted(lang.name, 'elevenlabs:list_models:language_name'),
         })),
       }));

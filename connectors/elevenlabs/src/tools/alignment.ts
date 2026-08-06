@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
+import { forcedAlignmentResponseSchema, parseApiResponse } from '../api-schemas.js';
 import { elevenLabsJson } from '../client.js';
 import { ENDPOINTS } from '../endpoints.js';
-import { ElevenLabsError, type ForcedAlignmentResponse } from '../types.js';
+import { ElevenLabsError } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 import { readSandboxedFile, sandboxedFileToBlob } from './file-input.js';
@@ -49,10 +50,14 @@ COST: Credits based on audio duration.`,
       formData.append('file', sandboxedFileToBlob(fileInput), fileInput.fileName);
       formData.append('text', args.text);
 
-      const data = await elevenLabsJson<ForcedAlignmentResponse>(
-        apiKey,
-        ENDPOINTS.FORCED_ALIGNMENT,
-        { method: 'POST', body: formData },
+      const data = parseApiResponse(
+        forcedAlignmentResponseSchema,
+        await elevenLabsJson<unknown>(
+          apiKey,
+          ENDPOINTS.FORCED_ALIGNMENT,
+          { method: 'POST', body: formData },
+        ),
+        'forced alignment',
       );
 
       const words = (data.words ?? []).map((w) => ({

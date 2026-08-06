@@ -4,12 +4,11 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
 import { elevenLabsJson, elevenLabsAudio, extensionFromContentType } from '../client.js';
 import { ENDPOINTS, voicesV2Url } from '../endpoints.js';
-import { audioWithTimestampsResponseSchema, parseApiResponse } from '../api-schemas.js';
+import { audioWithTimestampsResponseSchema, parseApiResponse, voicesResponseSchema } from '../api-schemas.js';
 import {
   ElevenLabsError,
   VOICE_NOT_FOUND_RESOLUTION,
   type CharacterAlignment,
-  type VoicesResponse,
 } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
@@ -34,8 +33,12 @@ async function lookupVoiceByName(apiKey: string, name: string) {
     search: name,
     page_size: '5',
   });
-  const data = await elevenLabsJson<VoicesResponse>(apiKey, voicesV2Url(params));
-  if (!data.voices || data.voices.length === 0) {
+  const data = parseApiResponse(
+    voicesResponseSchema,
+    await elevenLabsJson<unknown>(apiKey, voicesV2Url(params)),
+    'voices list',
+  );
+  if (data.voices.length === 0) {
     throw new ElevenLabsError(
       `No voice found matching "${name}"`,
       'VOICE_NOT_FOUND',
@@ -58,8 +61,12 @@ async function lookupVoiceByName(apiKey: string, name: string) {
  */
 async function pickDefaultVoice(apiKey: string) {
   const params = new URLSearchParams({ page_size: '20' });
-  const data = await elevenLabsJson<VoicesResponse>(apiKey, voicesV2Url(params));
-  if (!data.voices || data.voices.length === 0) {
+  const data = parseApiResponse(
+    voicesResponseSchema,
+    await elevenLabsJson<unknown>(apiKey, voicesV2Url(params)),
+    'voices list',
+  );
+  if (data.voices.length === 0) {
     throw new ElevenLabsError(
       'No voice specified and the account has no voices.',
       'VOICE_NOT_FOUND',

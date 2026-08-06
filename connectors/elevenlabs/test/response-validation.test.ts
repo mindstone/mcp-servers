@@ -440,4 +440,121 @@ describe('external response validation (fail-closed)', () => {
     expect(JSON.parse(result.text).code).toBe('INVALID_RESPONSE');
     expect(result.text).not.toContain(bodySnippet);
   });
+
+  it('get_dubbing rejects a non-string status instead of crashing the envelope helper', async () => {
+    // Previously an unchecked cast: a numeric status reached
+    // wrapUntrusted(...).startsWith and surfaced as a raw TypeError.
+    mswServer.use(
+      http.get(`${BASE_V1}/dubbing/:dubbingId`, () =>
+        HttpResponse.json({ dubbing_id: 'd1', status: 42, target_languages: ['es'] }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('get_dubbing', { dubbing_id: 'd1' });
+  });
+
+  it('get_dubbing rejects a non-string target_languages entry', async () => {
+    mswServer.use(
+      http.get(`${BASE_V1}/dubbing/:dubbingId`, () =>
+        HttpResponse.json({ dubbing_id: 'd1', status: 'dubbing', target_languages: ['es', 42] }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('get_dubbing', { dubbing_id: 'd1' });
+  });
+
+  it('list_models rejects a non-array payload instead of reporting ok with count 0', async () => {
+    mswServer.use(
+      http.get(`${BASE_V1}/models`, () => HttpResponse.json({ models: [] })),
+    );
+    await openClient();
+    await expectInvalidResponse('list_models', {});
+  });
+
+  it('list_models rejects an entry missing its name', async () => {
+    mswServer.use(
+      http.get(`${BASE_V1}/models`, () =>
+        HttpResponse.json([{ model_id: 'eleven_v3' }]),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('list_models', {});
+  });
+
+  it('list_voices rejects a voice entry without a string voice_id', async () => {
+    mswServer.use(
+      http.get('https://api.elevenlabs.io/v2/voices', () =>
+        HttpResponse.json({ voices: [{ name: 'Rachel' }], has_more: false }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('list_voices', {});
+  });
+
+  it('get_voice rejects a detail payload without a string name', async () => {
+    mswServer.use(
+      http.get(`${BASE_V1}/voices/:voiceId`, () =>
+        HttpResponse.json({ voice_id: 'voice-rachel-001' }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('get_voice', { voice_id: 'voice-rachel-001' });
+  });
+
+  it('search_shared_voices rejects an entry without a string voice_id', async () => {
+    mswServer.use(
+      http.get(`${BASE_V1}/shared-voices`, () =>
+        HttpResponse.json({ voices: [{ name: 'Narrator' }], has_more: false }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('search_shared_voices', {});
+  });
+
+  it('create_music_plan rejects a section without a finite duration_ms', async () => {
+    // Previously an unchecked cast: a string duration silently poisoned the
+    // total-duration arithmetic via `s.duration_ms || 0`.
+    mswServer.use(
+      http.post(`${BASE_V1}/music/plan`, () =>
+        HttpResponse.json({
+          sections: [{ section_name: 'Intro', duration_ms: 'ten seconds' }],
+        }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('create_music_plan', { prompt: 'jazz piano' });
+  });
+
+  it('forced_alignment rejects a word with a non-numeric start time', async () => {
+    mswServer.use(
+      http.post(`${BASE_V1}/forced-alignment`, () =>
+        HttpResponse.json({ words: [{ text: 'Hi.', start: '0.0', end: 0.4 }], loss: 0.01 }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('forced_alignment', { file_path: clipPath, text: 'Hi.' });
+  });
+
+  it('design_voice rejects non-canonical base64 audio instead of writing a truncated artifact', async () => {
+    // Buffer.from(x, 'base64') silently discards invalid characters, so an
+    // unvalidated payload could write a truncated/empty file reported as
+    // success. The response schema grammar-gates the field first.
+    mswServer.use(
+      http.post(`${BASE_V1}/text-to-voice/design`, () =>
+        HttpResponse.json({
+          previews: [
+            {
+              generated_voice_id: 'gen-voice-preview-001',
+              audio_base_64: 'SGVsbG8h!!!truncated',
+              media_type: 'audio/mpeg',
+            },
+          ],
+        }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('design_voice', {
+      voice_description: 'calm middle-aged narrator',
+    });
+  });
 });

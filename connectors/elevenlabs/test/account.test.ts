@@ -81,6 +81,9 @@ describe('Account tools', () => {
       expect(parsed.models[0].name).toBe(
         '<untrusted-content source="elevenlabs:list_models:name">Eleven v3</untrusted-content>',
       );
+      expect(parsed.models[0].languages[0].language_id).toBe(
+        '<untrusted-content source="elevenlabs:list_models:language_id">en</untrusted-content>',
+      );
       expect(parsed.models[0].languages[0].name).toBe(
         '<untrusted-content source="elevenlabs:list_models:language_name">English</untrusted-content>',
       );
