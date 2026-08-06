@@ -4,10 +4,8 @@
   "discoveredAt": "2026-06-11",
   "gappedConnectors": [],
   "exemptConnectors": {
-    "napkin": "Generation connector — returns only generation IDs/status/asset URLs.",
     "kling": "Generation connector — returns only task IDs/status/asset URLs.",
-    "openai-image": "Generation connector — returns only IDs/status/asset URLs or binary image data.",
-    "workday": "Field-allowlist (pickFields, types.ts) — id/descriptor/email/businessTitle/isManager/yearsOfService/href only; no free-text surfaces."
+    "openai-image": "Generation connector — returns only IDs/status/asset URLs or binary image data."
   },
   "exemptNote": "exemptConnectors are connectors that trip the static network heuristic (they call fetch) but were reviewed and confirmed to return NO model-visible external/attacker-controllable text. This is the in-repo equivalent of a per-file `// untrusted-content-exempt:` marker, used because editing each connector's own source was out of scope for the FOX-3490 prevention-machinery change. If such a connector later starts returning external text, move it to gappedConnectors (or envelope it)."
 }
