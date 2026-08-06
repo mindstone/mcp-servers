@@ -860,7 +860,10 @@ RELATED TOOLS:
       // existing file, and a pre-positioned file or symlink can neither be
       // clobbered nor redirect the write (O_EXCL fails on any existing
       // entry, including symlinks).
-      const safeBase = `pandadoc_${args.document_id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+      // Bound the id-derived portion: an over-long document_id would
+      // otherwise surface a raw ENAMETOOLONG from the open below through
+      // the generic error path. The random suffix keeps names unique.
+      const safeBase = `pandadoc_${args.document_id.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100)}`;
       let outputPath: string | undefined;
       for (let attempt = 0; attempt < 3 && !outputPath; attempt += 1) {
         const candidate = path.join(

@@ -15,10 +15,14 @@
  *      literal + DNS) and hand PandaDoc ONLY the terminal URL, so a public
  *      URL that redirects internally is refused instead of dereferenced.
  *
- * What remains vendor-side: an attacker-controlled authoritative DNS server
- * can answer our lookup with a public address and PandaDoc's later lookup
- * with an internal one (classic rebinding TOCTOU). No connector-side check
- * can close that window — only PandaDoc's own egress policy can.
+ * What remains open: DNS-rebinding TOCTOU. An attacker-controlled
+ * authoritative DNS server can answer the policy lookup with a public
+ * address and a later lookup with an internal one. That window applies to
+ * PandaDoc's own fetch (only PandaDoc's egress policy can close it) and,
+ * narrowly, to this connector's verification GET below — its DNS resolution
+ * is independent of the `lookupAll` check above. The verification impact is
+ * bounded (the body is discarded and only redirect-vs-not is observable,
+ * with every redirect hop re-validated), but the window is not zero.
  */
 
 import { promises as dnsPromises } from 'node:dns';
