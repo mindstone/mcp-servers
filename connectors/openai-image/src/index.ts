@@ -18,6 +18,8 @@ const packageJson = require('../package.json') as { version: string };
 
 export const SERVER_VERSION = packageJson.version;
 export const DEFAULT_OPENAI_IMAGE_REQUEST_TIMEOUT_MS = 180_000;
+// Matches the documented ceiling in server.json / README (max 30 minutes).
+export const MAX_OPENAI_IMAGE_REQUEST_TIMEOUT_MS = 1_800_000;
 export const NOT_CONFIGURED_RESOLUTION =
   "Set OPENAI_API_KEY in your MCP host's settings.";
 const MAX_LOCAL_IMAGE_BYTES = 25 * 1024 * 1024;
@@ -213,8 +215,17 @@ export const resolveRequestTimeoutMs = (): number => {
     return DEFAULT_OPENAI_IMAGE_REQUEST_TIMEOUT_MS;
   }
 
-  const parsed = parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
+  // Strict whole-string integer parsing: parseInt would silently truncate
+  // values like '1e9' or '180000abc'.
+  const trimmed = raw.trim();
+  const parsed = /^\d+$/u.test(trimmed)
+    ? Number(trimmed)
+    : Number.NaN;
+  if (
+    !Number.isSafeInteger(parsed) ||
+    parsed <= 0 ||
+    parsed > MAX_OPENAI_IMAGE_REQUEST_TIMEOUT_MS
+  ) {
     logger.warn(
       '[openai-image] Invalid OPENAI_IMAGE_REQUEST_TIMEOUT_MS; using default.',
       { rawValue: raw, fallbackMs: DEFAULT_OPENAI_IMAGE_REQUEST_TIMEOUT_MS },
@@ -619,7 +630,11 @@ export const saveImageToDisk = async (
   // breaks the pathname (fails closed, observably) instead of redirecting it;
   // a directory whose canonical identity changed is rejected before any bytes
   // flow. Filesystems without hard-link support fall back to an exclusive
-  // create at the destination (same no-overwrite semantics).
+  // create at the destination (same no-overwrite semantics). The directory's
+  // canonical identity is re-verified before any bytes flow: before the staging
+  // write, immediately before and after the `link`, and around the
+  // exclusive-create fallback (whose `open` would otherwise follow a swapped
+  // symlink after the staging pathname breaks with ENOENT).
   const ensureDirectoryUnchanged = async (): Promise<void> => {
     const currentCanonicalDir = await fs.promises
       .realpath(canonicalSaveDir)
@@ -671,18 +686,29 @@ export const saveImageToDisk = async (
 
       const finalPath = path.join(canonicalSaveDir, filename);
       try {
+        // Re-verify immediately before the link and before the fallback open:
+        // a swap after the staging write would otherwise break the staging
+        // pathname (ENOENT) and redirect the fallback's exclusive-create write
+        // through the swapped symlink, outside the fence.
+        await ensureDirectoryUnchanged();
         await fs.promises.link(stagingFile, finalPath);
+        await ensureDirectoryUnchanged();
       } catch (linkError) {
-        if (getErrorCode(linkError) === 'EEXIST') {
+        if (
+          linkError instanceof OpenAIImageToolError ||
+          getErrorCode(linkError) === 'EEXIST'
+        ) {
           throw linkError;
         }
         // No hard-link support (rare): exclusive-create at the destination.
+        await ensureDirectoryUnchanged();
         const destHandle = await fs.promises.open(finalPath, 'wx', 0o600);
         try {
           await destHandle.writeFile(buffer);
         } finally {
           await destHandle.close().catch(() => undefined);
         }
+        await ensureDirectoryUnchanged();
       }
       return path.join(saveDir, filename);
     } finally {
@@ -1092,7 +1118,7 @@ const loadLocalEditImage = async (
   const mime = options?.pngOnly ? 'image/png' : getSupportedImageMime(realPath);
   if (!mime) {
     throw workspaceFenceError(
-      `Unsupported image type: ${extension || path.basename(resolvedPath)}. Supported: PNG, JPEG, WEBP.`,
+      `Unsupported image type: ${envelopeToolInput(extension || path.basename(resolvedPath))}. Supported: PNG, JPEG, WEBP.`,
     );
   }
 
