@@ -15,6 +15,10 @@ import {
   type VisualStatusResponse,
   type CreateVisualResponse,
 } from './types.js';
+import { wrapUntrusted } from './untrusted-content.js';
+
+/** Envelope source label for vendor-authored HTTP error text (invariant #6). */
+const VENDOR_ERROR_SOURCE = 'napkin-api-error';
 
 const NAPKIN_API_BASE = 'https://api.napkin.ai/v1';
 
@@ -418,8 +422,10 @@ export async function downloadFile(
   }
 
   if (!response.ok) {
+    // The HTTP reason phrase is vendor-controlled free text — envelope it so
+    // it reaches model-visible output as data, not instructions.
     throw new NapkinError(
-      `Download failed (HTTP ${response.status}): ${response.statusText}`,
+      `Download failed (HTTP ${response.status}): ${wrapUntrusted(response.statusText, VENDOR_ERROR_SOURCE) ?? ''}`,
       'DOWNLOAD_ERROR',
       'The download URL may have expired. Generate a new visual and download promptly.',
     );
