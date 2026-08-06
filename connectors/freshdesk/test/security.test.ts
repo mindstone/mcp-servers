@@ -29,9 +29,13 @@ describe('Subdomain validation — configure_freshdesk rejects malicious domains
 
   for (const { domain, label } of maliciousDomains) {
     it(`rejects ${label}: "${domain}"`, async () => {
-      // No mock handlers needed — request should never be made
+      // Isolate from any developer-machine config; no mock handlers
+      // needed — request should never be made
+      const tempConfig = createTempConfig({ accounts: [], defaultAccountKey: 'defaultDomain' });
+      cleanupConfig = tempConfig.cleanup;
       testClient = await createTestClient({
         env: {
+          FRESHDESK_CONFIG_PATH: tempConfig.configPath,
           MCP_HOST_BRIDGE_STATE: '',
         },
       });
@@ -48,8 +52,11 @@ describe('Subdomain validation — configure_freshdesk rejects malicious domains
   }
 
   it('rejects empty string (caught by Zod schema)', async () => {
+    const tempConfig = createTempConfig({ accounts: [], defaultAccountKey: 'defaultDomain' });
+    cleanupConfig = tempConfig.cleanup;
     testClient = await createTestClient({
       env: {
+        FRESHDESK_CONFIG_PATH: tempConfig.configPath,
         MCP_HOST_BRIDGE_STATE: '',
       },
     });
@@ -204,9 +211,11 @@ describe('Subdomain validation — freshdeskFetch defence-in-depth', () => {
 
 describe('No outbound HTTP for invalid domains', () => {
   let testClient: McpTestClient;
+  let cleanupConfig: (() => void) | undefined;
 
   afterEach(async () => {
     if (testClient) await testClient.close();
+    if (cleanupConfig) cleanupConfig();
     vi.unstubAllEnvs();
   });
 
@@ -226,8 +235,11 @@ describe('No outbound HTTP for invalid domains', () => {
       }),
     );
 
+    const tempConfig = createTempConfig({ accounts: [], defaultAccountKey: 'defaultDomain' });
+    cleanupConfig = tempConfig.cleanup;
     testClient = await createTestClient({
       env: {
+        FRESHDESK_CONFIG_PATH: tempConfig.configPath,
         MCP_HOST_BRIDGE_STATE: '',
       },
     });
@@ -254,8 +266,13 @@ describe('Error messages are host-neutral', () => {
   });
 
   it('no-account error uses host-neutral language', async () => {
+    // Isolate from any developer-machine config so the no-account error
+    // path is exercised regardless of local state.
+    const tempConfig = createTempConfig({ accounts: [], defaultAccountKey: 'defaultDomain' });
+    cleanupConfig = tempConfig.cleanup;
     testClient = await createTestClient({
       env: {
+        FRESHDESK_CONFIG_PATH: tempConfig.configPath,
         MCP_HOST_BRIDGE_STATE: '',
       },
     });
