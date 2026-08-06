@@ -105,7 +105,10 @@ node dist/index.js
   path (the returned `path` points there), and outbound attachments on
   `email_send` / `email_save_draft` / `email_update_draft` may only be read
   from inside it (paths outside — including via symlinks — are refused).
-  Defaults to the system temp directory when unset.
+  Successful downloads keep their staging directory (it is the container of
+  the returned file); accumulated `email-imap-attachment-*` directories are
+  safe to delete once the files are no longer needed. Defaults to the system
+  temp directory when unset.
 - `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
 - `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
 

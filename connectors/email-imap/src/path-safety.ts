@@ -264,6 +264,12 @@ export async function resolveDownloadDir(): Promise<DownloadDirTarget> {
  *
  * On failure the whole staging directory is removed, so a rejected write
  * leaves no residue.
+ *
+ * On SUCCESS the staging directory is intentionally kept: the returned path
+ * points inside it and the downloaded file is the tool's payload, so
+ * removing the directory would delete the download itself. Accumulated
+ * `email-imap-attachment-*` directories under the workspace root are safe
+ * for the host or user to delete once the files are no longer needed.
  */
 export async function writeDownloadExclusive(
   target: DownloadDirTarget,
