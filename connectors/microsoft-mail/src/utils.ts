@@ -279,19 +279,15 @@ export function buildErrorResponse(err: unknown): CallToolResult {
       isError: true,
     };
   }
-  if (isInefficientFilterError(err)) {
-    return errorResponse({
-      error: formatGenericGraphError(err),
-      action_required:
-        'Simplify or remove the $filter argument and retry. Microsoft Graph cannot service this filter (for example when combined with a sort order), so retrying as-is or re-authenticating will not help.',
-      next_step: 'list_emails',
-    });
-  }
   // A ZodError here means a Graph response failed boundary validation. Its
   // formatted issues can echo attacker-controlled values (e.g. an unexpected
   // enum value from the mailbox), so never pass the raw message through —
   // report the failure class only, with the offending field paths logged
-  // locally for debugging.
+  // locally for debugging. This branch must run before the InefficientFilter
+  // check below: ZodError.message serializes its issues, and an invalid_enum
+  // issue embeds the upstream `received` value, so a poisoned enum could
+  // otherwise smuggle the filter phrase into the message match and skip this
+  // sanitizer entirely.
   if (err instanceof ZodError) {
     log.warn('Microsoft Graph response failed schema validation', {
       paths: err.issues.map((issue) => issue.path.join('.')),
@@ -302,6 +298,14 @@ export function buildErrorResponse(err: unknown): CallToolResult {
       action_required:
         'Retry the call. If it keeps failing, the upstream response shape has changed and the connector needs an update.',
       next_step: 'Retry the same tool call',
+    });
+  }
+  if (isInefficientFilterError(err)) {
+    return errorResponse({
+      error: formatGenericGraphError(err),
+      action_required:
+        'Simplify or remove the $filter argument and retry. Microsoft Graph cannot service this filter (for example when combined with a sort order), so retrying as-is or re-authenticating will not help.',
+      next_step: 'list_emails',
     });
   }
   // Generic non-auth failure: re-authentication cannot fix filesystem,
