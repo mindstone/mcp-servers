@@ -388,6 +388,40 @@ describe('external response validation (fail-closed)', () => {
     await expectInvalidResponse('check_subscription', {});
   });
 
+  it('clone_voice rejects a creation payload without a string voice_id', async () => {
+    mswServer.use(
+      http.post(`${BASE_V1}/voices/add`, () =>
+        HttpResponse.json({ requires_verification: false }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('clone_voice', { name: 'test-clone', files: [clipPath] });
+  });
+
+  it('create_voice_from_preview rejects a payload with a non-string voice_id', async () => {
+    mswServer.use(
+      http.post(`${BASE_V1}/text-to-voice`, () => HttpResponse.json({ voice_id: 42 })),
+    );
+    await openClient();
+    await expectInvalidResponse('create_voice_from_preview', {
+      voice_name: 'rebel-test-designed',
+      voice_description: 'calm middle-aged narrator',
+      generated_voice_id: 'gen-voice-preview-001',
+    });
+  });
+
+  it('create_dubbing rejects a payload with a string expected_duration_sec', async () => {
+    // Previously an unchecked cast: this string was interpolated raw into the
+    // poll-guidance prose as "expected ~thirtys".
+    mswServer.use(
+      http.post(`${BASE_V1}/dubbing`, () =>
+        HttpResponse.json({ dubbing_id: 'dub-1', expected_duration_sec: 'thirty' }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('create_dubbing', { file_path: clipPath, target_lang: 'es' });
+  });
+
   it('a 200 with a non-JSON body surfaces INVALID_RESPONSE without echoing the body excerpt', async () => {
     const bodySnippet = 'upstream-non-json-marker-do-not-echo';
     mswServer.use(

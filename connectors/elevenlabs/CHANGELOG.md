@@ -12,6 +12,7 @@ are maintained manually as part of the PR review checklist.
 ## [Unreleased]
 
 ### Security
+- `clone_voice`, `create_voice_from_preview`, and `create_dubbing` responses are now Zod-validated fail-closed (`INVALID_RESPONSE` on shape drift) instead of unchecked casts, and their API-authored IDs (`voice_id` / `dubbing_id`) are no longer interpolated into the `message` / `poll_hint` prose — they are returned as structured fields only (the same stance `get_dubbing` already takes for `status`). A non-numeric `expected_duration_sec` no longer leaks into the poll-guidance prose either.
 - `get_dubbing` now envelopes the API-authored `status` and `target_languages` fields (enum-like but not validated against a closed grammar — the same stance as `list_history` `model_id`/`source`), and the unvalidated `status` is no longer interpolated into the `message` prose; the lifecycle classification is carried by `is_terminal` and `next_step` instead.
 - `check_subscription` responses are now Zod-validated fail-closed (`INVALID_RESPONSE` on shape drift) instead of an unchecked cast: character counts must be finite numbers, and `next_character_count_reset_unix` is bounded so the ISO-date conversion cannot throw on an extreme finite upstream value.
 - A 200 response with a non-JSON body now surfaces a structured `INVALID_RESPONSE` error instead of the runtime's JSON parse error, whose message embeds an excerpt of the raw upstream body.

@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getApiKey } from '../auth.js';
+import { cloneVoiceResponseSchema, parseApiResponse } from '../api-schemas.js';
 import { elevenLabsFetch, elevenLabsJson } from '../client.js';
 import { ENDPOINTS } from '../endpoints.js';
 import {
   ElevenLabsError,
   VOICE_NOT_FOUND_RESOLUTION,
-  type CloneVoiceResponse,
 } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 import { readSandboxedFile, sandboxedFileToBlob } from './file-input.js';
@@ -64,17 +64,24 @@ COST: Uses a voice slot; may consume credits depending on plan.`,
       }
       formData.append('remove_background_noise', String(args.remove_background_noise ?? false));
 
-      const data = await elevenLabsJson<CloneVoiceResponse>(
-        apiKey,
-        ENDPOINTS.VOICES_ADD,
-        { method: 'POST', body: formData },
+      const data = parseApiResponse(
+        cloneVoiceResponseSchema,
+        await elevenLabsJson<unknown>(
+          apiKey,
+          ENDPOINTS.VOICES_ADD,
+          { method: 'POST', body: formData },
+        ),
+        'voice clone',
       );
 
       return JSON.stringify({
         ok: true,
         voice_id: data.voice_id,
         requires_verification: data.requires_verification ?? false,
-        message: `Voice clone created with voice_id ${data.voice_id}.`,
+        // The API-authored voice_id is never interpolated into prose (same
+        // stance as get_dubbing's status): it is returned as a structured
+        // field only.
+        message: 'Voice clone created (see voice_id field).',
         hint: 'Call delete_voice when finished if this was a test artifact.',
       });
     }),
