@@ -1,5 +1,7 @@
 import * as fs from 'fs';
+import { z } from 'zod';
 import { type BridgeState, REQUEST_TIMEOUT_MS } from './types.js';
+import { wrapUntrusted } from './untrusted-content.js';
 
 /**
  * Path to bridge state file, supporting both current and legacy env vars.
@@ -9,6 +11,26 @@ export const BRIDGE_STATE_PATH =
 
 /** Bridge state is a tiny { port, token } JSON document. */
 const MAX_BRIDGE_STATE_BYTES = 16 * 1024;
+
+export interface BridgeResponse {
+  success: boolean;
+  warning?: string;
+  error?: string;
+}
+
+/**
+ * The bridge is a loopback HTTP server inside the host app, but its response
+ * is still external data at a trust boundary — any local process able to bind
+ * the port can answer, so the body is runtime-validated (never a bare cast)
+ * and its free-text fields (`warning` / `error`) are enveloped as untrusted
+ * content before they can reach model-visible output (AGENTS.md invariants
+ * #6 and "validate every external response with Zod").
+ */
+const bridgeResponseSchema = z.object({
+  success: z.boolean(),
+  warning: z.string().optional(),
+  error: z.string().optional(),
+});
 
 const loadBridgeState = (): BridgeState | null => {
   if (!BRIDGE_STATE_PATH) return null;
@@ -69,7 +91,7 @@ const loadBridgeState = (): BridgeState | null => {
 export const bridgeRequest = async (
   urlPath: string,
   body: Record<string, unknown>,
-): Promise<{ success: boolean; warning?: string; error?: string }> => {
+): Promise<BridgeResponse> => {
   const bridge = loadBridgeState();
   if (!bridge) {
     return { success: false, error: 'Bridge not available' };
@@ -88,12 +110,31 @@ export const bridgeRequest = async (
     return { success: false, error: `Bridge returned ${response.status}: unauthorized. Check host app authentication.` };
   }
 
+  let raw: unknown;
   try {
-    return (await response.json()) as { success: boolean; warning?: string; error?: string };
+    raw = await response.json();
   } catch {
     return {
       success: false,
       error: `Bridge returned a malformed response (HTTP ${response.status}).`,
     };
   }
+  const parsed = bridgeResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: `Bridge returned an unexpected response shape (HTTP ${response.status}).`,
+    };
+  }
+  // Envelope bridge-supplied free text here, at the boundary, so no caller can
+  // surface it raw (injection via `</untrusted-content>` breakout is escaped).
+  return {
+    success: parsed.data.success,
+    ...(parsed.data.warning !== undefined
+      ? { warning: wrapUntrusted(parsed.data.warning, 'talentlms:bridge.warning') }
+      : {}),
+    ...(parsed.data.error !== undefined
+      ? { error: wrapUntrusted(parsed.data.error, 'talentlms:bridge.error') }
+      : {}),
+  };
 };
