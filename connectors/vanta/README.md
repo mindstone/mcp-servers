@@ -119,13 +119,14 @@ Vanta accepts `.pdf`, `.docx`, `.jpg`, `.png`, and `.xlsx` files.
 
 This server enforces:
 
-- External text authored inside the Vanta tenant (names, descriptions, notes, remediation text, integration connection errors, people directory entries, risk custom fields) is wrapped in `<untrusted-content>` envelopes — with close-tag breakout escaping — before it reaches the model. Identifiers, statuses, dates, URLs, and pagination cursors stay verbatim so they can be quoted back into follow-up tool calls.
+- Every string in a Vanta API response is wrapped in an `<untrusted-content>` envelope — with close-tag breakout escaping — before it reaches the model, unless it is a grammar-checked structural literal (identifiers, enum-like statuses, ISO-8601 dates, http(s) URLs, pagination cursors) that must stay verbatim so it can be quoted back into follow-up tool calls. This deny-by-default walk means fields Vanta adds later, and attacker-influenced fields the connector does not know (e.g. scanner-authored package identifiers), fail closed — enveloped — rather than reaching the model raw. External message text in API and OAuth error bodies is enveloped the same way; credential-shaped values are redacted.
 - HTTPS-only URL validation on both upload tools (rejects `file:`, `localhost`, RFC1918, link-local incl. cloud metadata addresses, IPv6 loopback/ULA, and hostnames whose DNS records resolve to any of those).
 - Bounded document fetching: at most 3 redirects, **each hop re-validated** through the same URL guard, a 30-second timeout, and a 25 MB size cap enforced while streaming (a source cannot lie its way past the cap with a false `Content-Length`).
 - Content-Type handling is header sanitization, not byte-level MIME sniffing: untrustworthy source labels are replaced with `application/octet-stream`.
 - Distinct, structured failures for every refusal — blocked host, non-HTTPS, oversize, timeout, redirect limit — rather than a generic error.
 - 50-requests-per-minute rate limiting with single-flight token exchange.
-- Response truncation at 25 KB with binary-search trimming.
+- Zod validation of external responses at the client boundary (paginated list envelopes and the OAuth token response); a malformed payload fails with a structured `RESPONSE_INVALID`/`AUTH` error instead of an unchecked cast.
+- Response truncation at 25 KB with binary-search trimming; a truncated response drops `pageInfo` and directs a smaller-`page_size` retry, because the full-page cursor would silently skip the dropped records.
 - Bearer-token redaction in all error messages.
 
 ## License

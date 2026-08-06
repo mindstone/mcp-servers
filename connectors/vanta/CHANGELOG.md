@@ -17,10 +17,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - The `getById` fallback scan (used when a direct GET-by-ID returns 404) now cursor-paginates the collection until the item is found or the collection is exhausted, instead of scanning only the first 100 records. The scan is bounded at 50 pages (5,000 records — one minute of the shared rate-limit budget), and hitting the bound reports a partial scan rather than a false not-found.
+- Truncated tool responses (payload over 25 KB) no longer include `pageInfo`, and the truncation hint no longer suggests following `page_cursor`: the full-page cursor points past the records truncation dropped, so paging from it would silently skip them. Retry with a smaller `page_size` and continue paging from that (untruncated) response instead.
 
 ### Security
 
 - Every Vanta API response now passes through an untrusted-content sanitize layer (FOX-3490): text fields authored inside the Vanta tenant (names, descriptions, notes, remediation text, integration connection error messages, people directory entries, risk custom-field values) are wrapped in `<untrusted-content>` envelopes with close-tag breakout escaping before they reach the model. Identifiers, statuses, dates, URLs, and pagination cursors are deliberately left verbatim so the model can quote them into follow-up tool calls.
+- Envelope coverage is now deny-by-default: every string in a Vanta response is enveloped unless it is a grammar-checked structural literal (id, enum-like status/severity, ISO-8601 timestamp, http(s) URL, or pagination cursor). Fields Vanta adds later — and attacker-influenced fields the connector does not name, such as scanner-authored package identifiers — now fail closed (enveloped) instead of reaching the model raw. Prose under a structural-looking key name fails the grammar gate and is enveloped; credential-shaped values are redacted rather than enveloped.
+- Error responses now envelope message text lifted from a Vanta API or OAuth error body, closing the failure-path gap where external text reached the model unenveloped. Connector-authored fallback messages and recovery guidance stay unenveloped.
+- Vanta responses are now validated with Zod at the client boundary: the paginated list envelope and the OAuth token response have schemas (replacing the last hand-rolled structural check), and a malformed payload fails with a structured `RESPONSE_INVALID`/`AUTH` error instead of an unchecked cast.
 
 ## [0.2.0] - 2026-07-30
 
