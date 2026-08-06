@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { humaansFetch } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
-import { sanitizeList, sanitizeTimeAwayAllocation, sanitizeTimeAwayEntry } from '../sanitize.js';
+import { sanitizeList, sanitizeTimeAwayAllocation, sanitizeTimeAwayEntry, sanitizeTimeAwayType } from '../sanitize.js';
 import type { HumaansListResponse } from '../types.js';
 
 function paginationHint(total: number, skip: number, count: number): string {
@@ -176,7 +176,11 @@ RELATED TOOLS:
       const hint = paginationHint(result.total, result.skip, result.data.length);
       return JSON.stringify({
         ok: true,
-        timeAwayTypes: result.data,
+        timeAwayTypes: sanitizeList(
+          result.data,
+          sanitizeTimeAwayType,
+          'humaans:list_humaans_time_away_types',
+        ),
         count: result.data.length,
         total: result.total,
         pagination: hint,

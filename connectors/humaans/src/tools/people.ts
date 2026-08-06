@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { humaansFetch } from '../client.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
+import { sanitizePersonProfile } from '../sanitize.js';
 import type { HumaansListResponse, PersonCompact } from '../types.js';
 
 // Fields to include in compact person list responses (allowlist for security)
@@ -36,12 +37,15 @@ function compactPerson(person: Record<string, unknown>): PersonCompact {
   return compact as unknown as PersonCompact;
 }
 
-function sanitizePerson(person: Record<string, unknown>): Record<string, unknown> {
+function sanitizePerson(person: Record<string, unknown>, source: string): unknown {
   const sanitized = { ...person };
   for (const field of PERSON_SENSITIVE_FIELDS) {
     delete sanitized[field];
   }
-  return sanitized;
+  // Everything that remains is vendor-authored; envelope the free-text fields
+  // (names, bio, social links, team names, job title) before they reach the
+  // model (invariant #6).
+  return sanitizePersonProfile(sanitized, source);
 }
 
 function paginationHint(total: number, skip: number, count: number): string {
@@ -82,7 +86,7 @@ RELATED TOOLS:
       if (!isConfigured()) return noApiKeyError();
 
       const me = await humaansFetch<Record<string, unknown>>('/me');
-      return JSON.stringify({ ok: true, person: sanitizePerson(me) });
+      return JSON.stringify({ ok: true, person: sanitizePerson(me, 'humaans:get_humaans_me') });
     }),
   );
 
@@ -133,7 +137,9 @@ RELATED TOOLS:
         `/people?${params.toString()}`,
       );
 
-      const people = result.data.map(compactPerson);
+      const people = result.data.map((person) =>
+        sanitizePersonProfile(compactPerson(person), 'humaans:list_humaans_people'),
+      );
       const hint = paginationHint(result.total, result.skip, people.length);
 
       return JSON.stringify({
@@ -172,7 +178,7 @@ WORKFLOW - To find a person:
       const person = await humaansFetch<Record<string, unknown>>(
         `/people/${encodeURIComponent(args.personId)}`,
       );
-      return JSON.stringify({ ok: true, person: sanitizePerson(person) });
+      return JSON.stringify({ ok: true, person: sanitizePerson(person, 'humaans:get_humaans_person') });
     }),
   );
 }
