@@ -24,6 +24,7 @@ are maintained manually as part of the PR review checklist.
 - Vendor error text (QuickBooks `Fault` Detail/Message) and Intuit OAuth error descriptions are enveloped in `<untrusted-content>` before they can reach model output, so a compromised API/OAuth response cannot inject instructions or break out of the surrounding envelope.
 - Typed entity payloads (`sanitizeQboEntity`) are now sanitized deny-by-default: every string is enveloped unless its key is a narrow structural predicate (IDs, SyncToken, `*Ref.value` markers, enums, dates/timestamps). This closes the allow-list gaps that left `PrimaryEmailAddr.Address`, `PrimaryPhone.FreeFormNumber`, postal-address fields, and any future vendor-defined free-text fields unwrapped.
 - Structural values are no longer trusted by key name alone: a value under a structural key (`Id`, `SyncToken`, `TxnDate`, …) that fails a shape check (short punctuation tokens only) is enveloped like free text, so a compromised API cannot smuggle prose or a close-tag breakout past the structural allow-list.
+- A 2xx response with a non-JSON body (API or OAuth token endpoint) no longer propagates the runtime's JSON parse error — whose message embeds a snippet of the vendor-controlled body — to model output. The connector now returns a static `INVALID_RESPONSE` / `AUTH_FAILED` error instead.
 
 ### Changed
 - QuickBooks `minorversion` is centralized in one constant and bumped from 65 to 75 (was hardcoded at every call site).

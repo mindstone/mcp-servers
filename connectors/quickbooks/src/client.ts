@@ -145,7 +145,19 @@ export async function qboFetch<T>(
   options: RequestInit = {},
 ): Promise<T> {
   const response = await qboRequest(entityPath, options);
-  return await response.json() as T;
+  try {
+    return await response.json() as T;
+  } catch {
+    // A 2xx with a non-JSON body: the runtime's JSON parse error embeds a
+    // snippet of the (vendor-controlled) body in its message. Do not
+    // propagate it — surface a static error so raw vendor bytes never reach
+    // model output via withErrorHandling's generic branch.
+    throw new QuickBooksError(
+      `QuickBooks API returned a non-JSON response to ${options.method || 'GET'} ${entityPath}.`,
+      'INVALID_RESPONSE',
+      'The API returned an unexpected response format. Retry the request; if it persists, check the QuickBooks API status.',
+    );
+  }
 }
 
 /**

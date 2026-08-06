@@ -169,11 +169,23 @@ export async function getAccessToken(): Promise<string> {
     );
   }
 
-  const tokenData = await response.json() as {
+  let tokenData: {
     access_token: string;
     refresh_token?: string;
     expires_in: number;
   };
+  try {
+    tokenData = await response.json() as typeof tokenData;
+  } catch {
+    // Same non-JSON-2xx guard as the API client: the parse error message
+    // embeds a snippet of the (Intuit-controlled) body, so surface a static
+    // error instead of letting it reach model output.
+    throw new QuickBooksError(
+      `OAuth token endpoint returned a non-JSON response (${response.status}).`,
+      'AUTH_FAILED',
+      'Try again; if it persists, re-configure with configure_quickbooks.',
+    );
+  }
 
   cachedAccessToken = tokenData.access_token;
   // Expire 60 seconds early to avoid edge cases
