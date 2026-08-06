@@ -38,6 +38,8 @@ interface GoogleApiOptions {
   body?: unknown;
   baseUrl?: string;
   signal?: AbortSignal;
+  /** Internal/test override for the request timeout; defaults to 30s. */
+  timeoutMs?: number;
 }
 
 /** Bases the client may target. Re-exported for tests and tools. */
@@ -76,7 +78,7 @@ export async function googleApi<T = unknown>(
   apiPath: string,
   options: GoogleApiOptions = {},
 ): Promise<T> {
-  const { method = 'GET', query, body, baseUrl = ADMIN_BASE_URL, signal } = options;
+  const { method = 'GET', query, body, baseUrl = ADMIN_BASE_URL, signal, timeoutMs } = options;
 
   const token = await getAccessToken();
   const url = new URL(`${baseUrl}${apiPath}`);
@@ -88,10 +90,19 @@ export async function googleApi<T = unknown>(
     }
   }
 
-  const controller = signal ? undefined : new AbortController();
-  const timer = controller
-    ? setTimeout(() => controller.abort(), DEFAULT_REQUEST_TIMEOUT_MS)
-    : undefined;
+  // The request timeout is unconditional: an externally supplied signal must
+  // not disable it, so the external signal is forwarded into our own
+  // controller rather than replacing it.
+  const controller = new AbortController();
+  const forwardAbort = () => controller.abort();
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener('abort', forwardAbort, { once: true });
+  }
+  const timer = setTimeout(
+    () => controller.abort(),
+    timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
+  );
 
   try {
     const response = await fetch(url, {
@@ -103,7 +114,7 @@ export async function googleApi<T = unknown>(
         ...(body ? { 'Content-Type': 'application/json' } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
-      signal: signal ?? controller?.signal,
+      signal: controller.signal,
     });
 
     const text = await response.text();
@@ -148,7 +159,8 @@ export async function googleApi<T = unknown>(
 
     return data as T;
   } finally {
-    if (timer) clearTimeout(timer);
+    clearTimeout(timer);
+    if (signal) signal.removeEventListener('abort', forwardAbort);
   }
 }
 
