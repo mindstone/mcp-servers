@@ -9,7 +9,7 @@ import { sanitizeVendorErrorText, withErrorHandling } from '../utils.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { isConfigured } from '../auth.js';
 import { MAX_FILE_SIZE, PandaDocError } from '../types.js';
-import { resolveUploadPath } from './path-safety.js';
+import { readUploadFile } from './path-safety.js';
 import { resolvePublicTerminalUrl } from './url-safety.js';
 import {
   sanitizeDocumentCompact,
@@ -412,21 +412,30 @@ RELATED TOOLS:
       // `~/.ssh/id_rsa` or `/etc/passwd`, where the bytes would otherwise
       // be uploaded to the PandaDoc API as a "document".
       //
-      // `resolveUploadPath` performs lexical containment, then
-      // canonicalises the path through `fs.realpathSync` so a symlink
-      // inside the workspace pointing OUTSIDE the workspace is refused.
+      // `readUploadFile` validates the path AND reads it as one
+      // race-resistant operation: canonical containment, a single
+      // O_NOFOLLOW open, fstat-based type/size checks, an ancestor-swap
+      // re-resolution bound to the opened inode, and a descriptor-bounded
+      // read. See src/tools/path-safety.ts.
       // ----------------------------------------------------------------
-      const sandboxResult = resolveUploadPath(args.file_path);
-      if (!sandboxResult.ok) {
-        return JSON.stringify({
-          ok: false,
-          error: sandboxResult.error,
-          resolution:
+      const readResult = await readUploadFile(args.file_path, MAX_FILE_SIZE);
+      if (!readResult.ok) {
+        const resolutions: Record<string, string> = {
+          'outside-workspace':
             'Place the file under MCP_WORKSPACE_PATH (or os.tmpdir() when ' +
             'the env var is unset) before uploading.',
+          'not-found': 'Check the file path exists and is accessible.',
+          'not-regular-file': 'Pass the path of a PDF, DOCX, or RTF file, not a directory or device.',
+          'too-large': 'Use a smaller file or compress it before uploading.',
+          changed: 'Try the upload again.',
+        };
+        return JSON.stringify({
+          ok: false,
+          error: readResult.error,
+          resolution: resolutions[readResult.kind],
         });
       }
-      const resolvedPath = sandboxResult.path;
+      const resolvedPath = readResult.path;
 
       // Validate file extension (lexical — no disk access).
       const ext = path.extname(resolvedPath).toLowerCase();
@@ -438,63 +447,7 @@ RELATED TOOLS:
         });
       }
 
-      // Open the validated path ONCE, then enforce the size/type policy on
-      // that descriptor and read through it. A check-then-use pair of
-      // separate path-based stat + read calls would let a local attacker
-      // swap the file (or an ancestor) between the check and the read —
-      // re-running realpathSync does not bind a later read to the checked
-      // inode, only a single open descriptor does.
-      let fd: number;
-      try {
-        fd = fs.openSync(resolvedPath, 'r');
-      } catch {
-        return JSON.stringify({
-          ok: false,
-          error: `File not found: ${resolvedPath}`,
-          resolution: 'Check the file path exists and is accessible.',
-        });
-      }
-
-      let fileBuffer: Buffer;
-      try {
-        const fileInfo = fs.fstatSync(fd);
-        if (!fileInfo.isFile()) {
-          return JSON.stringify({
-            ok: false,
-            error: `Not a regular file: ${resolvedPath}`,
-            resolution: 'Pass the path of a PDF, DOCX, or RTF file, not a directory or device.',
-          });
-        }
-        if (fileInfo.size > MAX_FILE_SIZE) {
-          return JSON.stringify({
-            ok: false,
-            error: `File too large (${(fileInfo.size / 1024 / 1024).toFixed(1)}MB). Maximum is 50MB.`,
-            resolution: 'Use a smaller file or compress it before uploading.',
-          });
-        }
-        // If the path stopped naming the opened inode (swap between sandbox
-        // validation and open, or mid-validation), fail closed.
-        let viaPath: fs.Stats;
-        try {
-          viaPath = fs.statSync(resolvedPath);
-        } catch {
-          return JSON.stringify({
-            ok: false,
-            error: 'The file changed while it was being validated.',
-            resolution: 'Try the upload again.',
-          });
-        }
-        if (viaPath.dev !== fileInfo.dev || viaPath.ino !== fileInfo.ino) {
-          return JSON.stringify({
-            ok: false,
-            error: 'The file changed while it was being validated.',
-            resolution: 'Try the upload again.',
-          });
-        }
-        fileBuffer = fs.readFileSync(fd);
-      } finally {
-        fs.closeSync(fd);
-      }
+      const fileBuffer = readResult.buffer;
       const fileName = args.name || path.basename(resolvedPath);
 
       // Build metadata JSON for the 'data' field
