@@ -517,7 +517,20 @@ RELATED TOOLS:
         );
       }
 
-      const result = await response.json() as DocumentCreateResponse;
+      // Mirror pandadocFetch's fail-closed JSON handling: a JSON.parse
+      // failure message is runtime-generated and can echo body fragments —
+      // never surface it (or the body) to the model.
+      const responseText = await response.text();
+      let result: DocumentCreateResponse;
+      try {
+        result = (responseText ? JSON.parse(responseText) : {}) as DocumentCreateResponse;
+      } catch {
+        throw new PandaDocError(
+          `PandaDoc API returned a malformed (non-JSON) response (status ${response.status}).`,
+          'INVALID_RESPONSE',
+          'Try the upload again. If it persists, the PandaDoc API may be degraded.',
+        );
+      }
 
       return JSON.stringify({
         ok: true,

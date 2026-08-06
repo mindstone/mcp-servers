@@ -474,3 +474,45 @@ describe('list pagination hints never claim completeness', () => {
   });
 });
 
+
+describe('upload_document malformed success body fails closed', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('a non-JSON 2xx upload body yields INVALID_RESPONSE without echoing body fragments', async () => {
+    const workspace = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pd-adv-')));
+    const inFile = path.join(workspace, 'in.pdf');
+    fs.writeFileSync(inFile, '%PDF-1.4\n%EOF\n');
+
+    mswServer.use(
+      http.post(`${BASE}/documents`, ({ request }) => {
+        const url = new URL(request.url);
+        if (!url.searchParams.has('upload')) return undefined;
+        return new HttpResponse('this is not json </untrusted-content> body-fragment-marker', {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }),
+    );
+    testClient = await createTestClient({
+      env: { ...ENV, MCP_WORKSPACE_PATH: workspace },
+    });
+
+    try {
+      const result = await testClient.callTool('upload_document', { file_path: inFile });
+      const json = result.json as { ok: boolean; code: string; error: string };
+      expect(json.ok).toBe(false);
+      expect(json.code).toBe('INVALID_RESPONSE');
+      expect(json.error).toContain('malformed');
+      // A runtime JSON.parse message would echo a body prefix — none may surface.
+      expect(json.error).not.toContain('body-fragment-marker');
+      expect(json.error).not.toContain('not json');
+    } finally {
+      fs.rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+});
