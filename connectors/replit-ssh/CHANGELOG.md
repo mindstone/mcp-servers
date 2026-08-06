@@ -13,6 +13,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   (SFTP realpath response), and all diagnostic event details (server banner,
   keyboard-interactive prompts, handshake/debug/error text) — including on
   the failure path, where diagnostics are returned unconditionally.
+- The known-hosts store now accepts OpenSSH `ssh-keyscan` output
+  (`<host> <keytype> <base64-key>`, computing the SHA-256 fingerprint from
+  the key) in addition to native `SHA256:…` fingerprint lines, so the
+  documented `MCP_REPLIT_SSH_STRICT_HOST_KEY=1` pre-population flow actually
+  works. Comment, marker (`@…`), and hashed-host (`|1|…`) lines are ignored.
+- Host-key pins are now recorded and matched by the stable proxy suffix
+  (first DNS label stripped, e.g. `riker.replit.dev`) instead of the
+  rotating per-project hostname. Previously every Replit project restart
+  produced a fresh unknown host and a silent fresh TOFU accept, so the
+  fail-closed mismatch branch — the real MitM defence — was rarely
+  exercised; suffix entries also make `ssh-keyscan riker.replit.dev` pins
+  apply to every project behind that proxy.
 - Migrated the untrusted-content envelope helper to the canonical shared implementation: close-tag breakout escaping now neutralises case and horizontal-whitespace variants (`</UNTRUSTED-CONTENT>`, `</untrusted-content >`, tab variants), not just the exact lowercase no-whitespace spelling.
 
 ### Added

@@ -91,7 +91,6 @@ describe('verifyHostKey — auto-TOFU default / mismatch / strict opt-in', () =>
       expect(outcome.kind).toBe('recorded');
     }
     const file = fs.readFileSync(knownHostsPath, 'utf-8');
-    expect(file).toContain(host.toLowerCase());
     expect(file).toContain(fp1);
   });
 
@@ -135,6 +134,110 @@ describe('verifyHostKey — auto-TOFU default / mismatch / strict opt-in', () =>
     verifyHostKey(host.toUpperCase(), fp1);
     const outcome = verifyHostKey(host.toLowerCase(), fp1);
     expect(outcome.ok).toBe(true);
+  });
+
+  describe('stable proxy suffix pinning (Replit rotates per-project hostnames)', () => {
+    const rotatedHost = 'xyz-99-qwe.riker.replit.dev';
+
+    it('records the pin under the first-label-stripped suffix, not the rotating full hostname', () => {
+      verifyHostKey(host, fp1);
+      const file = fs.readFileSync(knownHostsPath, 'utf-8');
+      expect(file).toContain(`riker.replit.dev ${fp1}`);
+      expect(file).not.toContain(host.toLowerCase());
+    });
+
+    it('MATCHES a rotated hostname against the pin recorded for the same proxy suffix', () => {
+      verifyHostKey(host, fp1);
+      const outcome = verifyHostKey(rotatedHost, fp1);
+      expect(outcome.ok).toBe(true);
+      if (outcome.ok) {
+        expect(outcome.kind).toBe('matched');
+      }
+    });
+
+    it('FAILS CLOSED when a rotated hostname presents a DIFFERENT key than the suffix pin', () => {
+      verifyHostKey(host, fp1);
+      const outcome = verifyHostKey(rotatedHost, fp2);
+      expect(outcome.ok).toBe(false);
+      if (!outcome.ok) {
+        expect(outcome.kind).toBe('mismatch');
+        expect(outcome.error.code).toBe('HOST_KEY_MISMATCH');
+      }
+    });
+
+    it('still honours a legacy exact-full-hostname entry', () => {
+      fs.writeFileSync(knownHostsPath, `${host} ${fp1}\n`, { mode: 0o600 });
+      const outcome = verifyHostKey(host, fp1);
+      expect(outcome.ok).toBe(true);
+      if (outcome.ok) {
+        expect(outcome.kind).toBe('matched');
+      }
+    });
+  });
+
+  describe('OpenSSH ssh-keyscan line format (strict-mode pre-population)', () => {
+    const keyBytes = Buffer.from('fake-ed25519-host-key-bytes');
+    const keyB64 = keyBytes.toString('base64');
+    const keyFingerprint = computeSha256Fingerprint(keyBytes);
+
+    it('computes the SHA256 fingerprint from a keyscan key line and matches it in strict mode', () => {
+      fs.writeFileSync(knownHostsPath, `riker.replit.dev ssh-ed25519 ${keyB64}\n`, { mode: 0o600 });
+      process.env.MCP_REPLIT_SSH_STRICT_HOST_KEY = '1';
+      const outcome = verifyHostKey(host, keyFingerprint);
+      expect(outcome.ok).toBe(true);
+      if (outcome.ok) {
+        expect(outcome.kind).toBe('matched');
+      }
+    });
+
+    it('accepts a keyscan line whose fingerprint then matches ANY host under the suffix', () => {
+      fs.writeFileSync(knownHostsPath, `riker.replit.dev ssh-ed25519 ${keyB64}\n`, { mode: 0o600 });
+      const outcome = verifyHostKey('another-00-uuid.riker.replit.dev', keyFingerprint);
+      expect(outcome.ok).toBe(true);
+    });
+
+    it('collects a fingerprint SET from multiple key lines for the same suffix', () => {
+      const otherKeyBytes = Buffer.from('fake-rsa-host-key-bytes');
+      fs.writeFileSync(
+        knownHostsPath,
+        [
+          `riker.replit.dev ssh-ed25519 ${keyB64}`,
+          `riker.replit.dev ssh-rsa ${otherKeyBytes.toString('base64')}`,
+          '',
+        ].join('\n'),
+        { mode: 0o600 },
+      );
+      expect(verifyHostKey(host, keyFingerprint).ok).toBe(true);
+      expect(verifyHostKey(host, computeSha256Fingerprint(otherKeyBytes)).ok).toBe(true);
+      const outcome = verifyHostKey(host, fp1);
+      expect(outcome.ok).toBe(false);
+      if (!outcome.ok) {
+        expect(outcome.kind).toBe('mismatch');
+      }
+    });
+
+    it('ignores comment, marker, hashed-host, and malformed lines without failing open', () => {
+      fs.writeFileSync(
+        knownHostsPath,
+        [
+          '# comment',
+          '@cert-authority *.replit.dev ssh-ed25519 AAAA',
+          '|1|hashedhost ssh-ed25519 AAAA',
+          'riker.replit.dev ssh-ed25519 !!!not-base64!!!',
+          'lonelyhost',
+          '',
+        ].join('\n'),
+        { mode: 0o600 },
+      );
+      process.env.MCP_REPLIT_SSH_STRICT_HOST_KEY = '1';
+      // None of those lines may pin the host — strict mode must still refuse.
+      const outcome = verifyHostKey(host, fp1);
+      expect(outcome.ok).toBe(false);
+      if (!outcome.ok) {
+        expect(outcome.kind).toBe('unknown');
+        expect(outcome.error.code).toBe('HOST_KEY_UNKNOWN');
+      }
+    });
   });
 
   describe('strict mode opt-in (MCP_REPLIT_SSH_STRICT_HOST_KEY=1)', () => {
