@@ -128,6 +128,8 @@ export function registerGenerationTools(server: McpServer): void {
       return JSON.stringify(
         {
           success: true,
+          // Raw interpolation is safe: createVisualResponseSchema constrains
+          // id to machineIdSchema (no whitespace or markup).
           request_id: result.id,
           status: result.status,
           message: `Visual generation started. Use napkin_check_status with request_id "${result.id}" to check progress. Poll every 3-5 seconds until status is "completed".`,
@@ -166,9 +168,15 @@ export function registerGenerationTools(server: McpServer): void {
 
       if (status.status === 'completed') {
         response.generated_files = status.generated_files?.map((f) => ({
+          // IDs/URL stay raw — machineIdSchema/fileUrlSchema in types.ts
+          // enforce the charset that makes that safe. visual_query is
+          // vendor-echoed free text, so it is enveloped instead.
           url: f.url,
           visual_id: f.visual_id,
-          visual_query: f.visual_query,
+          visual_query:
+            f.visual_query === undefined
+              ? undefined
+              : wrapUntrusted(f.visual_query, NAPKIN_API_SOURCE),
           style_id: f.style_id,
           width: f.width,
           height: f.height,
@@ -178,7 +186,8 @@ export function registerGenerationTools(server: McpServer): void {
         if (status.warnings?.length) {
           // Vendor-authored free text — envelope so the model treats it as
           // data, not instructions (invariant #6). Codes stay raw: they are
-          // short machine identifiers, not free text.
+          // machine identifiers, a carve-out enforced by machineIdSchema in
+          // types.ts (bounded charset, no whitespace or markup).
           response.warnings = status.warnings.map((w) => ({
             ...w,
             message: wrapUntrusted(w.message, NAPKIN_API_SOURCE),

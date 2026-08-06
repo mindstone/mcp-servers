@@ -96,26 +96,47 @@ export interface VisualRequest {
   height?: number;
 }
 
+/**
+ * Machine identifiers (request IDs, error/warning codes, visual/style IDs,
+ * color mode) are relayed RAW in tool output — no `<untrusted-content>`
+ * envelope — so tool output stays directly usable. That carve-out is only
+ * safe because this schema enforces it: bounded length and a charset with no
+ * whitespace or markup, so the value can never smuggle an envelope close tag
+ * or prose into model-visible output. A violation fails closed as
+ * INVALID_RESPONSE upstream in client.ts.
+ */
+export const machineIdSchema = z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/);
+
+/**
+ * File URLs are likewise relayed raw (the model must be able to pass them
+ * back to napkin_download_visual). HTTPS-only with no whitespace, quotes, or
+ * angle brackets — enough to make an envelope-breakout or markup payload
+ * unrepresentable.
+ */
+export const fileUrlSchema = z.string().regex(/^https:\/\/[^\s<>"']{1,2048}$/);
+
 export const generatedFileSchema = z.object({
-  url: z.string(),
-  visual_id: z.string(),
+  url: fileUrlSchema,
+  visual_id: machineIdSchema,
+  // Natural-language free text — enveloped at relay time in generation.ts,
+  // not constrained here (legitimate values can contain spaces).
   visual_query: z.string().optional(),
-  style_id: z.string(),
+  style_id: machineIdSchema,
   width: z.number(),
   height: z.number(),
-  color_mode: z.string().optional(),
+  color_mode: machineIdSchema.optional(),
 });
 export type GeneratedFile = z.infer<typeof generatedFileSchema>;
 
 export const statusWarningSchema = z.object({
   message: z.string(),
-  code: z.string(),
+  code: machineIdSchema,
 });
 export type StatusWarning = z.infer<typeof statusWarningSchema>;
 export type StatusError = StatusWarning;
 
 export const visualStatusResponseSchema = z.object({
-  id: z.string(),
+  id: machineIdSchema,
   status: requestStatusSchema,
   request: z.record(z.unknown()).optional(),
   generated_files: z.array(generatedFileSchema).optional(),
@@ -126,7 +147,7 @@ export const visualStatusResponseSchema = z.object({
 export type VisualStatusResponse = z.infer<typeof visualStatusResponseSchema>;
 
 export const createVisualResponseSchema = z.object({
-  id: z.string(),
+  id: machineIdSchema,
   status: requestStatusSchema,
   request: z.record(z.unknown()).optional(),
 });
