@@ -1,3 +1,5 @@
+import { wrapUntrusted } from './untrusted-content.js';
+
 const VANTA_REGIONS: Record<string, { api: string; token: string }> = {
   us: { api: 'https://api.vanta.com/v1', token: 'https://api.vanta.com/oauth/token' },
   eu: { api: 'https://api.vanta.com/v1', token: 'https://api.vanta.com/oauth/token' },
@@ -92,6 +94,13 @@ export class VantaApiError extends Error {
   readonly action_required: string;
   readonly next_step: string;
   readonly status?: number;
+  /**
+   * True when `message` was lifted from the Vanta API response body (external,
+   * potentially attacker-influenced text) rather than authored by this
+   * connector. `toToolErrorResponse` envelopes such messages per AGENTS.md
+   * security invariant #6; connector-authored guidance stays unenveloped.
+   */
+  readonly externalMessage: boolean;
 
   constructor(
     code: VantaApiErrorCode,
@@ -99,6 +108,7 @@ export class VantaApiError extends Error {
     action_required: string,
     next_step: string,
     status?: number,
+    externalMessage = false,
   ) {
     super(message);
     this.name = 'VantaApiError';
@@ -106,6 +116,7 @@ export class VantaApiError extends Error {
     this.action_required = action_required;
     this.next_step = next_step;
     this.status = status;
+    this.externalMessage = externalMessage;
   }
 }
 
@@ -211,13 +222,19 @@ const sanitizeErrorText = (text: string): string => {
   return sanitized;
 };
 
-const readErrorMessage = (body: unknown, fallback: string): string => {
-  if (!isRecord(body)) return fallback;
+/**
+ * Lift the human-readable message out of a Vanta error body. `external` is
+ * true exactly when the text came from the response body (external content,
+ * AGENTS.md invariant #6) and false when the connector-authored fallback was
+ * used instead.
+ */
+const readErrorMessage = (body: unknown, fallback: string): { message: string; external: boolean } => {
+  if (!isRecord(body)) return { message: fallback, external: false };
   let raw: string | undefined;
   if (typeof body.message === 'string') raw = body.message;
   else if (typeof body.error === 'string') raw = body.error;
   else if (isRecord(body.error) && typeof body.error.message === 'string') raw = body.error.message;
-  return raw ? sanitizeErrorText(raw) : fallback;
+  return raw ? { message: sanitizeErrorText(raw), external: true } : { message: fallback, external: false };
 };
 
 // Vanta answers a bad scope request with an OAuth `invalid_scope` error, which needs
@@ -535,7 +552,7 @@ export async function validateDocumentUrlWithDns(
 const makeHttpError = async (response: Response): Promise<VantaApiError> => {
   const body = await parseErrorBody(response);
   const fallback = `Vanta API request failed with HTTP ${response.status}`;
-  const message = readErrorMessage(body, fallback);
+  const { message, external } = readErrorMessage(body, fallback);
 
   if (response.status === 401 || response.status === 403) {
     return new VantaApiError(
@@ -544,6 +561,7 @@ const makeHttpError = async (response: Response): Promise<VantaApiError> => {
       'The Vanta API rejected the request as unauthorized.',
       `Verify VANTA_CLIENT_ID and VANTA_CLIENT_SECRET are correct and that the OAuth client is a Manage Vanta app; this connector requests these scopes at token exchange: ${REQUESTED_TOKEN_SCOPE_STRING}.`,
       response.status,
+      external,
     );
   }
 
@@ -554,6 +572,7 @@ const makeHttpError = async (response: Response): Promise<VantaApiError> => {
       'Vanta did not find a resource with that ID.',
       'Use an ID returned by a Vanta list tool and try again.',
       response.status,
+      external,
     );
   }
 
@@ -564,6 +583,7 @@ const makeHttpError = async (response: Response): Promise<VantaApiError> => {
       'Vanta rate-limited the request.',
       'Wait a moment, then retry with a smaller page_size or fewer concurrent calls.',
       response.status,
+      external,
     );
   }
 
@@ -573,6 +593,7 @@ const makeHttpError = async (response: Response): Promise<VantaApiError> => {
     'Vanta returned an API error.',
     'Try again with narrower filters; if the problem persists, check the Vanta status page.',
     response.status,
+    external,
   );
 };
 
@@ -580,7 +601,11 @@ export const toToolErrorResponse = (error: unknown): string => {
   if (error instanceof VantaApiError) {
     return JSON.stringify({
       ok: false,
-      error: error.message,
+      // External message text (lifted from a Vanta error body) is enveloped
+      // per AGENTS.md invariant #6 — the envelope is as load-bearing on the
+      // failure path as on the success path. Connector-authored messages and
+      // guidance stay unenveloped.
+      error: error.externalMessage ? wrapUntrusted(error.message, 'vanta:error') : error.message,
       code: error.code,
       action_required: error.action_required,
       next_step: error.next_step,
@@ -838,7 +863,7 @@ export class VantaApiClient {
 
       if (!response.ok) {
         const body = await parseErrorBody(response);
-        const message = readErrorMessage(body, `Token request failed with HTTP ${response.status}`);
+        const { message, external } = readErrorMessage(body, `Token request failed with HTTP ${response.status}`);
         const scopeRejected = mentionsInvalidScope(body);
         throw new VantaApiError(
           'AUTH',
@@ -850,6 +875,7 @@ export class VantaApiClient {
             ? `This connector requests all of: ${REQUESTED_TOKEN_SCOPE_STRING}. Open the Vanta Developer Console, confirm the app type is "Manage Vanta", and update the app so it may request every scope listed — the document-upload scope is separate from vanta-api.all:write and is required by the evidence-upload tools.`
             : 'Verify VANTA_CLIENT_ID and VANTA_CLIENT_SECRET in the Vanta Developer Console; regenerate the client secret if needed.',
           response.status,
+          external,
         );
       }
 
