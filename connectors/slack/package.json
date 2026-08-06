@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-slack",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "mcpName": "io.github.mindstone/mcp-server-slack",
   "description": "Slack workspace MCP server — channels, messages, threads, reactions, users, files, bookmarks, scheduling via Slack Web API",
   "license": "FSL-1.1-MIT",

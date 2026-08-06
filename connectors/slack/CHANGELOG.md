@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-06
+
+### Changed
+
+- Migrate search to Real-Time Search API with loud fallback; scheduled messages, update/delete, upload, pins, reminders, bookmarks, emoji; canonical envelopes
+
 ### Added
 
 - `list_scheduled_slack_messages` and `delete_scheduled_slack_message` — inspect and cancel pending scheduled messages. Closes the asymmetry where `schedule_slack_message` could create a scheduled message but nothing in the connector could list or cancel one.
