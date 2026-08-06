@@ -42,6 +42,29 @@ describe('Account tools', () => {
       expect(parsed.cost).toContain('FREE');
     });
 
+    it('surfaces a legitimate reset unix of 0 instead of dropping the ISO field', async () => {
+      mswServer.use(
+        http.get(`${BASE_V1}/user/subscription`, () =>
+          HttpResponse.json({
+            tier: 'starter',
+            character_count: 100,
+            character_limit: 30_000,
+            next_character_count_reset_unix: 0,
+          }),
+        ),
+      );
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('check_subscription', {});
+      expect(result.isError).toBeFalsy();
+      const parsed = JSON.parse(result.text);
+      expect(parsed.ok).toBe(true);
+      expect(parsed.next_character_count_reset_unix).toBe(0);
+      expect(parsed.next_character_count_reset_iso).toBe('1970-01-01T00:00:00.000Z');
+    });
+
     it('returns AUTH_REQUIRED without an API key', async () => {
       testClient = await createTestClient({
         env: { ELEVENLABS_API_KEY: '', MCP_HOST_BRIDGE_STATE: '' },

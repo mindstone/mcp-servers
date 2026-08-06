@@ -60,7 +60,9 @@ COST: FREE — no credits consumed.`,
       const characterLimit = data.character_limit ?? 0;
       const remaining = Math.max(0, characterLimit - characterCount);
       const resetUnix = data.next_character_count_reset_unix;
-      const resetIso = resetUnix
+      // `!= null`, not truthiness: the schema admits 0 (.min(0)) and a legit
+      // epoch reset must still surface the ISO field instead of being dropped.
+      const resetIso = resetUnix != null
         ? new Date(resetUnix * 1000).toISOString()
         : undefined;
 
