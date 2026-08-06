@@ -218,9 +218,12 @@ node dist/index.js
 Text authored inside QuickBooks (customer/vendor display names, memos, line
 descriptions, report cells) is attacker-influenceable, so the connector wraps
 it in `<untrusted-content source="quickbooks:…">` envelopes before returning
-it to the model (typed entity payloads envelope the known free-text fields;
-`query_quickbooks`, `get_quickbooks_entity`, and reports envelope every string
-value wholesale). Structural values such as `Id`, `SyncToken`, dates, and
+it to the model. Typed entity payloads are sanitized deny-by-default: every
+string is enveloped — including strings inside arrays, which have no key
+context — unless its key is a narrow structural predicate (IDs, `SyncToken`,
+dates/timestamps, enums) and its value passes a shape guard. `query_quickbooks`,
+`get_quickbooks_entity`, and reports envelope every string value wholesale.
+Structural values such as `Id`, `SyncToken`, dates, and
 amounts are left untouched so they stay usable as inputs to follow-up calls.
 
 ## Licence

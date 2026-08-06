@@ -101,9 +101,15 @@ function isTrustedStructuralValue(key: string, value: string): boolean {
  * key is structural AND its value passes the structural shape guard above
  * (handles nested Line arrays, *Ref objects, addresses, contact points).
  * `CustomerMemo.value` is free text despite the `value` key, so it is
- * enveloped explicitly. Non-object values pass through unchanged.
+ * enveloped explicitly.
+ *
+ * A string reached without a key context — an array element, or a bare
+ * top-level payload — has no structural key that could vouch for it, so it
+ * is enveloped unconditionally (the same order `wrapUntrustedJsonStrings`
+ * uses). Only non-string leaves (numbers, booleans, null) pass through.
  */
 export function sanitizeQboEntity(value: unknown, source: string): unknown {
+  if (typeof value === 'string') return wrapUntrusted(value, source);
   if (Array.isArray(value)) {
     return value.map((item) => sanitizeQboEntity(item, source));
   }
@@ -118,8 +124,10 @@ export function sanitizeQboEntity(value: unknown, source: string): unknown {
           ? wrapUntrusted(item.value, `${source}:CustomerMemo`)
           : item.value,
       };
-    } else if (typeof item === 'string' && !isTrustedStructuralValue(key, item)) {
-      out[key] = wrapUntrusted(item, `${source}:${key}`);
+    } else if (typeof item === 'string') {
+      out[key] = isTrustedStructuralValue(key, item)
+        ? item
+        : wrapUntrusted(item, `${source}:${key}`);
     } else {
       out[key] = sanitizeQboEntity(item, source);
     }
