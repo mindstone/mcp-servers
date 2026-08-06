@@ -12,6 +12,7 @@ import { MAX_FILE_SIZE, PandaDocError } from '../types.js';
 import { readUploadFile } from './path-safety.js';
 import { resolvePublicTerminalUrl } from './url-safety.js';
 import {
+  isSafeIdentifier,
   sanitizeDocumentCompact,
   sanitizeDocumentDetails,
   sanitizeRecipients,
@@ -516,7 +517,20 @@ RELATED TOOLS:
         );
       }
 
-      const result = await response.json() as DocumentCreateResponse;
+      // Mirror pandadocFetch's fail-closed JSON handling: a JSON.parse
+      // failure message is runtime-generated and can echo body fragments —
+      // never surface it (or the body) to the model.
+      const responseText = await response.text();
+      let result: DocumentCreateResponse;
+      try {
+        result = (responseText ? JSON.parse(responseText) : {}) as DocumentCreateResponse;
+      } catch {
+        throw new PandaDocError(
+          `PandaDoc API returned a malformed (non-JSON) response (status ${response.status}).`,
+          'INVALID_RESPONSE',
+          'Try the upload again. If it persists, the PandaDoc API may be degraded.',
+        );
+      }
 
       return JSON.stringify({
         ok: true,
@@ -595,7 +609,12 @@ RELATED TOOLS:
       if (!urlCheck.ok) {
         return JSON.stringify({
           ok: false,
-          error: `Rejected source URL: ${urlCheck.error}.`,
+          // The rejection reason can embed an attacker-chosen redirect URL
+          // or host — envelope it before it reaches the model (invariant #6).
+          error: `Rejected source URL: ${
+            wrapUntrusted(urlCheck.error, 'pandadoc:create_document_from_url:rejected_url') ??
+            urlCheck.error
+          }.`,
           resolution: 'Provide an HTTPS URL on a public host that PandaDoc can reach.',
         });
       }
@@ -749,6 +768,19 @@ RELATED TOOLS:
         },
       );
 
+      // The session id is interpolated into the signing URL below, so it
+      // must actually BE an identifier: anything else (instruction-bearing
+      // text from a hostile or compromised response) would produce a
+      // URL-shaped string carrying attacker prose. There is no enveloped
+      // form of a usable link — fail closed instead.
+      if (typeof result.id !== 'string' || !isSafeIdentifier(result.id)) {
+        throw new PandaDocError(
+          'PandaDoc API returned a malformed session response (unexpected session id).',
+          'INVALID_RESPONSE',
+          'Try the request again. If it persists, the PandaDoc API may be degraded.',
+        );
+      }
+
       return JSON.stringify({
         ok: true,
         session: {
@@ -828,7 +860,10 @@ RELATED TOOLS:
       // existing file, and a pre-positioned file or symlink can neither be
       // clobbered nor redirect the write (O_EXCL fails on any existing
       // entry, including symlinks).
-      const safeBase = `pandadoc_${args.document_id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+      // Bound the id-derived portion: an over-long document_id would
+      // otherwise surface a raw ENAMETOOLONG from the open below through
+      // the generic error path. The random suffix keeps names unique.
+      const safeBase = `pandadoc_${args.document_id.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100)}`;
       let outputPath: string | undefined;
       for (let attempt = 0; attempt < 3 && !outputPath; attempt += 1) {
         const candidate = path.join(

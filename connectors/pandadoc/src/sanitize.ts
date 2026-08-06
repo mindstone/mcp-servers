@@ -13,7 +13,10 @@
  * verbatim (`recipients[].id`, `fields[].uuid`, `contacts[].id`, …), and URLs
  * are surfaced for the user to open — not auto-followed. String values under
  * the keys in the structural sets are therefore left raw ONLY while they
- * still match the strict shape of what the key claims to be:
+ * still match the strict shape of what the key claims to be — and this
+ * applies on EVERY output path, including the compact list/status
+ * projections whose top-level `id`/`uuid` is the value downstream tools
+ * reference:
  *
  *   - Identifiers: UUID, dense alphanumeric token (8–64 chars), or short
  *     dash/dot/underscore/tilde-separated segments (≤8 chars each) — the
@@ -59,7 +62,7 @@ const DENSE_TOKEN_PATTERN = /^[A-Za-z0-9]{8,64}$/;
 /** Short separator-joined segments (`doc-1`, `rcpt-1`, `entity_42`); no segment long enough to carry a wordy phrase. */
 const SEGMENTED_ID_PATTERN = /^[A-Za-z0-9]{1,8}(?:[._~-][A-Za-z0-9]{1,8}){0,7}$/;
 
-function isSafeIdentifier(value: string): boolean {
+export function isSafeIdentifier(value: string): boolean {
   if (value.length > 64) return false;
   return (
     UUID_PATTERN.test(value) ||
@@ -125,10 +128,32 @@ function wrapStructuralValue(key: string, item: unknown, source: string): unknow
   return wrapJsonStrings(item, source);
 }
 
-/** Wrap the workspace-authored `name` on a compact document object. */
+/**
+ * Validate the structural fields (identifiers, URLs) present at the top
+ * level of `obj`: values stay raw only while they match the strict
+ * identifier/URL shape, otherwise they are enveloped like any other
+ * external text. Non-string values and absent keys pass through untouched.
+ * The compact projections (list/status responses) are built by hand, so
+ * their top-level `id`/`uuid` never passes through `wrapJsonStrings` —
+ * this is what applies the same fail-safe rule to them.
+ */
+function sanitizeStructuralFields(obj: Obj, source: string): Obj {
+  const out: Obj = { ...obj };
+  for (const key of Object.keys(out)) {
+    if (IDENTIFIER_KEYS.has(key) || URL_KEYS.has(key)) {
+      out[key] = wrapStructuralValue(key, out[key], source);
+    }
+  }
+  return out;
+}
+
+/**
+ * Wrap the workspace-authored `name` on a compact document object, and
+ * validate any structural identifier/URL fields before they stay raw.
+ */
 export function sanitizeDocumentCompact(doc: unknown, source: string): unknown {
   if (!isObj(doc)) return doc;
-  return { ...doc, name: wrapStr(doc.name, `${source}:name`) };
+  return sanitizeStructuralFields({ ...doc, name: wrapStr(doc.name, `${source}:name`) }, source);
 }
 
 /**
@@ -151,16 +176,22 @@ export function sanitizeDocumentDetails(doc: unknown, source: string): unknown {
   return out;
 }
 
-/** Wrap the workspace-authored `name` on a template list item. */
+/**
+ * Wrap the workspace-authored `name` on a template list item, and validate
+ * any structural identifier/URL fields before they stay raw.
+ */
 export function sanitizeTemplate(tpl: unknown, source: string): unknown {
   if (!isObj(tpl)) return tpl;
-  return { ...tpl, name: wrapStr(tpl.name, `${source}:name`) };
+  return sanitizeStructuralFields({ ...tpl, name: wrapStr(tpl.name, `${source}:name`) }, source);
 }
 
-/** Wrap the workspace-authored `name` on a document folder. */
+/**
+ * Wrap the workspace-authored `name` on a document folder, and validate any
+ * structural identifier/URL fields before they stay raw.
+ */
 export function sanitizeFolder(folder: unknown, source: string): unknown {
   if (!isObj(folder)) return folder;
-  return { ...folder, name: wrapStr(folder.name, `${source}:name`) };
+  return sanitizeStructuralFields({ ...folder, name: wrapStr(folder.name, `${source}:name`) }, source);
 }
 
 /** Wrap every non-structural string field on a contact (names, email, company, address, …). */
@@ -169,10 +200,13 @@ export function sanitizeContact(contact: unknown, source: string): unknown {
   return wrapJsonStrings(contact, source);
 }
 
-/** Wrap the workspace-authored `name` on a content-library list item. */
+/**
+ * Wrap the workspace-authored `name` on a content-library list item, and
+ * validate any structural identifier/URL fields before they stay raw.
+ */
 export function sanitizeContentLibraryItem(item: unknown, source: string): unknown {
   if (!isObj(item)) return item;
-  return { ...item, name: wrapStr(item.name, `${source}:name`) };
+  return sanitizeStructuralFields({ ...item, name: wrapStr(item.name, `${source}:name`) }, source);
 }
 
 /**

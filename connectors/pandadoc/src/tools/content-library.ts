@@ -6,7 +6,6 @@ import { isConfigured } from '../auth.js';
 import {
   sanitizeContentLibraryItem,
   sanitizeContentLibraryItemDetails,
-  sanitizeList,
 } from '../sanitize.js';
 import type { ContentLibraryItemListResponse } from '../types.js';
 
@@ -30,6 +29,49 @@ function paginationHint(count: number, page: number, pageSize: number): string {
     return `Showing ${count} results (page ${page}). This page is not full, so there are probably no further pages; the API does not report totals.`;
   }
   return `Showing ${count} results (page ${page}). This page is full, so more results may exist — try page=${page + 1}. The API does not report totals.`;
+}
+
+// Responses are projected onto the known fields BEFORE sanitizing
+// (fail-closed, matching the document tools): anything outside the known
+// shape — including fields PandaDoc adds later — never reaches the model.
+function formatContentLibraryItem(
+  item: Record<string, unknown>,
+  source: string,
+): unknown {
+  return sanitizeContentLibraryItem(
+    {
+      id: item.id,
+      name: item.name,
+      date_created: item.date_created,
+      date_modified: item.date_modified,
+      version: item.version,
+    },
+    source,
+  );
+}
+
+function formatContentLibraryItemDetails(
+  item: Record<string, unknown>,
+  source: string,
+): unknown {
+  return sanitizeContentLibraryItemDetails(
+    {
+      id: item.id,
+      name: item.name,
+      date_created: item.date_created,
+      date_modified: item.date_modified,
+      content_date_modified: item.content_date_modified,
+      version: item.version,
+      created_by: item.created_by,
+      metadata: item.metadata,
+      tokens: item.tokens,
+      fields: item.fields,
+      pricing: item.pricing,
+      tags: item.tags,
+      roles: item.roles,
+    },
+    source,
+  );
 }
 
 export function registerContentLibraryTools(server: McpServer): void {
@@ -79,10 +121,8 @@ RELATED TOOLS:
         `/content-library-items?${params.toString()}`,
       );
 
-      const items = sanitizeList(
-        result.results || [],
-        sanitizeContentLibraryItem,
-        'pandadoc:list_content_library_items',
+      const items = (result.results || []).map((item) =>
+        formatContentLibraryItem(item, 'pandadoc:list_content_library_items'),
       ) as Array<Record<string, unknown>>;
       const hint = paginationHint(items.length, args.page, args.count);
 
@@ -117,7 +157,7 @@ RELATED TOOLS:
 
       return JSON.stringify({
         ok: true,
-        item: sanitizeContentLibraryItemDetails(result, 'pandadoc:get_content_library_item_details'),
+        item: formatContentLibraryItemDetails(result, 'pandadoc:get_content_library_item_details'),
       });
     }),
   );

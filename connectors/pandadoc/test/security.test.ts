@@ -446,3 +446,34 @@ describe('readUploadFile — race-resistant validate+read (fault injection)', ()
     }
   });
 });
+
+describe('download_document filename derivation is bounded', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('an over-long document_id cannot surface a raw ENAMETOOLONG', async () => {
+    mswServer.use(
+      http.get(`${BASE}/documents/:id/download`, () =>
+        new HttpResponse(Buffer.from('PDF_CONTENT_MOCK'), {
+          status: 200,
+          headers: { 'Content-Type': 'application/pdf' },
+        }),
+      ),
+    );
+    testClient = await createTestClient({
+      env: { PANDADOC_API_KEY: 'test-pandadoc-key', MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const longId = 'x'.repeat(500);
+    const result = await testClient.callTool('download_document', { document_id: longId });
+    const json = result.json as { ok: boolean; file_path: string };
+    expect(json.ok).toBe(true);
+    // 'pandadoc_' (9) + id slice (<=100) + '_' + 12 hex + '.pdf' (4) = 126 max.
+    expect(path.basename(json.file_path).length).toBeLessThanOrEqual(126);
+    fs.unlinkSync(json.file_path);
+  });
+});
