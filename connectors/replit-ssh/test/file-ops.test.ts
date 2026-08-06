@@ -425,6 +425,19 @@ describe('Replit SSH MCP — file operations against a fake SFTP backend', () =>
     });
   });
 
+  // ── tool annotations ───────────────────────────────────────────────────────
+
+  describe('tool annotations', () => {
+    it('replit_move does not advertise idempotentHint (repeat calls fail with DESTINATION_EXISTS)', async () => {
+      const { tools } = await client!.client.listTools();
+      const byName = new Map(tools.map((t) => [t.name, t.annotations ?? {}]));
+      expect(byName.get('replit_move')).toMatchObject({ idempotentHint: false });
+      // Writes that DO no-op on repeat keep the hint.
+      expect(byName.get('replit_write_file')).toMatchObject({ idempotentHint: true });
+      expect(byName.get('replit_read_file')).toMatchObject({ idempotentHint: true });
+    });
+  });
+
   // ── replit_search_files ────────────────────────────────────────────────────
 
   describe('replit_search_files', () => {

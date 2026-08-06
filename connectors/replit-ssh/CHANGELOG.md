@@ -65,6 +65,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   silently discard invalid characters (which wrote corrupted bytes while the
   read-back verification still reported `verified: true`). Line-wrapping
   whitespace is tolerated.
+- `replit_move` — tool annotations no longer claim `idempotentHint: true`;
+  a repeated move fails with `DESTINATION_EXISTS` rather than no-oping, so
+  advertising idempotence was wrong.
 - `replit_list_files` — symlinks are now reported as `type: "symlink"`
   instead of being mislabeled `file`, consistent with `replit_stat`'s
   lstat-based typing (SFTP `readdir` returns lstat-style attributes).

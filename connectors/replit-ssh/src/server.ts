@@ -28,6 +28,13 @@ const remoteWriteAnnotations = {
   openWorldHint: true,
 };
 
+// replit_move fails a repeat call with DESTINATION_EXISTS rather than
+// no-oping, so it must not advertise idempotence.
+const remoteMoveAnnotations = {
+  ...remoteWriteAnnotations,
+  idempotentHint: false,
+};
+
 const localWriteAnnotations = {
   readOnlyHint: false,
   destructiveHint: true,
@@ -120,7 +127,7 @@ export function createServer(): McpServer {
       title: 'Move Replit File',
       description:
         'Move or rename a file or directory within a Replit project. Never overwrites: fails if the destination already exists. The destination parent directory must already exist.',
-      annotations: remoteWriteAnnotations,
+      annotations: remoteMoveAnnotations,
       inputSchema: moveFileSchema.shape,
     },
     async (input, extra) => textResult(await replitMoveFile(input, extra?.signal)),
