@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Security
 
+- `replit_check_connection` now wraps every peer-authored field it returns in
+  `<untrusted-content>` envelopes: the server version, the working directory
+  (SFTP realpath response), and all diagnostic event details (server banner,
+  keyboard-interactive prompts, handshake/debug/error text) — including on
+  the failure path, where diagnostics are returned unconditionally.
 - Migrated the untrusted-content envelope helper to the canonical shared implementation: close-tag breakout escaping now neutralises case and horizontal-whitespace variants (`</UNTRUSTED-CONTENT>`, `</untrusted-content >`, tab variants), not just the exact lowercase no-whitespace spelling.
 
 ### Added

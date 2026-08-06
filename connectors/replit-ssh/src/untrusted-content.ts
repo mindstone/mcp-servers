@@ -23,6 +23,9 @@
  *   - `replit_list_files` directory entry names (file names on the remote
  *     are attacker-influenced)
  *   - `replit_search_files` matched paths and matched content lines
+ *   - `replit_check_connection` peer-authored fields: server version,
+ *     working directory (realpath response), and diagnostic event details
+ *     (banner, keyboard-interactive prompts, handshake/debug/error text)
  */
 
 const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content\s*>/gi;

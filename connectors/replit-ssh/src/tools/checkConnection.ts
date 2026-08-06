@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { translateSshError } from '../errors.js';
 import { validatePrivateKey } from '../keyResolution.js';
+import type { SshDiagnosticResult } from '../ssh.js';
 import {
   createDiagnosticSshConnection,
   logOperation,
@@ -11,6 +12,7 @@ import {
   sftpOpWithSignal,
 } from '../ssh.js';
 import { buildTimeoutError, composeRequestSignal } from '../timeouts.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 
 export const checkConnectionSchema = z.object({
   host: z.string().describe('SSH host (e.g., "<uuid>-00-<hash>.riker.replit.dev")'),
@@ -22,6 +24,34 @@ export const checkConnectionSchema = z.object({
 });
 
 export type CheckConnectionArgs = z.infer<typeof checkConnectionSchema>;
+
+// AGENTS.md invariant #6: several fields this tool returns are authored by
+// the remote SSH peer (server version, realpath response, banner,
+// keyboard-interactive prompts, ssh2 error/debug text) and MUST be enveloped
+// before they reach the model — including on the failure path, which returns
+// diagnostics unconditionally. Event names are local constants; only the
+// `detail` strings can carry peer text, so they are wrapped uniformly.
+const DIAGNOSTICS_SOURCE = 'replit-ssh:check-connection:diagnostics';
+const SERVER_VERSION_SOURCE = 'replit-ssh:check-connection:server-version';
+const WORKING_DIRECTORY_SOURCE = 'replit-ssh:check-connection:working-directory';
+
+function buildDiagnostics(
+  diagResult: SshDiagnosticResult,
+  keyType: string,
+  keyFingerprint: string,
+  note?: string,
+): Record<string, unknown> {
+  return {
+    durationMs: diagResult.durationMs,
+    events: diagResult.events.map((event) => ({
+      ...event,
+      detail: wrapUntrusted(event.detail, DIAGNOSTICS_SOURCE),
+    })),
+    keyType,
+    keyFingerprint,
+    ...(note ? { note } : {}),
+  };
+}
 
 export async function replitCheckConnection(
   args: CheckConnectionArgs,
@@ -54,7 +84,7 @@ export async function replitCheckConnection(
     logOperation('replit_check_connection', host, '.', 'error', Date.now() - startTime);
 
     if (signal.aborted) {
-      return JSON.stringify({ ...buildTimeoutError(), diagnostics: { durationMs: diagResult.durationMs, events: diagResult.events, keyType, keyFingerprint } });
+      return JSON.stringify({ ...buildTimeoutError(), diagnostics: buildDiagnostics(diagResult, keyType, keyFingerprint) });
     }
 
     const userError = translateSshError(
@@ -64,12 +94,7 @@ export async function replitCheckConnection(
 
     return JSON.stringify({
       ...userError,
-      diagnostics: {
-        durationMs: diagResult.durationMs,
-        events: diagResult.events,
-        keyType,
-        keyFingerprint,
-      },
+      diagnostics: buildDiagnostics(diagResult, keyType, keyFingerprint),
     });
   }
 
@@ -101,18 +126,13 @@ export async function replitCheckConnection(
 
     const result: Record<string, unknown> = {
       ok: true,
-      workingDirectory: sftpResult.workingDirectory,
+      workingDirectory: wrapUntrusted(sftpResult.workingDirectory, WORKING_DIRECTORY_SOURCE),
       sftpSupported: true,
-      serverVersion: diagResult.serverVersion,
+      serverVersion: wrapUntrusted(diagResult.serverVersion ?? 'unknown', SERVER_VERSION_SOURCE),
     };
 
     if (verbose) {
-      result.diagnostics = {
-        durationMs: diagResult.durationMs,
-        events: diagResult.events,
-        keyType,
-        keyFingerprint,
-      };
+      result.diagnostics = buildDiagnostics(diagResult, keyType, keyFingerprint);
     }
 
     return JSON.stringify(result);
@@ -122,26 +142,24 @@ export async function replitCheckConnection(
       return JSON.stringify({
         ...buildTimeoutError(),
         sshConnected: true,
-        diagnostics: {
-          durationMs: diagResult.durationMs,
-          events: diagResult.events,
+        diagnostics: buildDiagnostics(
+          diagResult,
           keyType,
           keyFingerprint,
-          note: 'SSH connection succeeded but the SFTP probe timed out.',
-        },
+          'SSH connection succeeded but the SFTP probe timed out.',
+        ),
       });
     }
     const sftpError = translateSshError(err as Error & { code?: string; level?: string }, { proxyReachable: true, handshakeCompleted: true });
     return JSON.stringify({
       ...sftpError,
       sshConnected: true,
-      diagnostics: {
-        durationMs: diagResult.durationMs,
-        events: diagResult.events,
+      diagnostics: buildDiagnostics(
+        diagResult,
         keyType,
         keyFingerprint,
-        note: 'SSH connection succeeded but SFTP channel failed.',
-      },
+        'SSH connection succeeded but SFTP channel failed.',
+      ),
     });
   } finally {
     client.end();
