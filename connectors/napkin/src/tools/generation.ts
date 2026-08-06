@@ -11,6 +11,10 @@ import {
   type SortStrategy,
 } from '../types.js';
 import { withErrorHandling } from '../utils.js';
+import { wrapUntrusted } from '../untrusted-content.js';
+
+/** Envelope source label for vendor-authored free text (invariant #6). */
+const NAPKIN_API_SOURCE = 'napkin-api';
 
 function requireApiKey(): string {
   if (!hasApiKey()) {
@@ -171,14 +175,27 @@ export function registerGenerationTools(server: McpServer): void {
           color_mode: f.color_mode,
         }));
         if (status.credits) response.credits = status.credits;
-        if (status.warnings?.length) response.warnings = status.warnings;
+        if (status.warnings?.length) {
+          // Vendor-authored free text — envelope so the model treats it as
+          // data, not instructions (invariant #6). Codes stay raw: they are
+          // short machine identifiers, not free text.
+          response.warnings = status.warnings.map((w) => ({
+            ...w,
+            message: wrapUntrusted(w.message, NAPKIN_API_SOURCE),
+          }));
+        }
         const fileCount = status.generated_files?.length ?? 0;
         response.message = `Generation complete! ${fileCount} visual(s) ready. Use the URLs in generated_files to view or call napkin_download_visual to save to disk. URLs expire in 30 minutes.`;
       } else if (status.status === 'failed') {
-        response.error = status.error;
-        response.message = status.error
-          ? `Generation failed: ${status.error.message} (code: ${status.error.code})`
-          : 'Generation failed. Please try again with different content or parameters.';
+        if (status.error) {
+          // Vendor-authored free text — envelope before it reaches
+          // model-visible output (invariant #6).
+          const safeMessage = wrapUntrusted(status.error.message, NAPKIN_API_SOURCE);
+          response.error = { ...status.error, message: safeMessage };
+          response.message = `Generation failed: ${safeMessage} (code: ${status.error.code})`;
+        } else {
+          response.message = 'Generation failed. Please try again with different content or parameters.';
+        }
       } else {
         response.message = 'Generation in progress. Poll again in 3-5 seconds.';
       }

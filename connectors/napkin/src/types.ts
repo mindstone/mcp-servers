@@ -5,6 +5,9 @@
  * complete in <5s. Downloads can be larger, but 60s gives ample headroom
  * for a single signed-URL fetch. Override via `NAPKIN_REQUEST_TIMEOUT_MS`.
  */
+
+import { z } from 'zod';
+
 export const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
 
 /**
@@ -58,6 +61,10 @@ export class NapkinError extends Error {
 
 // ---------------------------------------------------------------------------
 // Napkin API types
+//
+// Every external response body is validated fail-closed with these Zod
+// schemas before it reaches tool code (AGENTS.md code conventions). The
+// exported types are inferred from the schemas so the two can never drift.
 // ---------------------------------------------------------------------------
 
 export type OutputFormat = 'svg' | 'png' | 'ppt';
@@ -65,7 +72,9 @@ export type ColorMode = 'light' | 'dark' | 'both';
 export type Orientation = 'auto' | 'horizontal' | 'vertical' | 'square';
 export type TextExtractionMode = 'auto' | 'rewrite' | 'preserve';
 export type SortStrategy = 'relevance' | 'random' | 'variation';
-export type RequestStatus = 'pending' | 'completed' | 'failed';
+
+export const requestStatusSchema = z.enum(['pending', 'completed', 'failed']);
+export type RequestStatus = z.infer<typeof requestStatusSchema>;
 
 export interface VisualRequest {
   content: string;
@@ -87,41 +96,41 @@ export interface VisualRequest {
   height?: number;
 }
 
-export interface GeneratedFile {
-  url: string;
-  visual_id: string;
-  visual_query?: string;
-  style_id: string;
-  width: number;
-  height: number;
-  color_mode?: string;
-}
+export const generatedFileSchema = z.object({
+  url: z.string(),
+  visual_id: z.string(),
+  visual_query: z.string().optional(),
+  style_id: z.string(),
+  width: z.number(),
+  height: z.number(),
+  color_mode: z.string().optional(),
+});
+export type GeneratedFile = z.infer<typeof generatedFileSchema>;
 
-export interface StatusWarning {
-  message: string;
-  code: string;
-}
+export const statusWarningSchema = z.object({
+  message: z.string(),
+  code: z.string(),
+});
+export type StatusWarning = z.infer<typeof statusWarningSchema>;
+export type StatusError = StatusWarning;
 
-export interface StatusError {
-  message: string;
-  code: string;
-}
+export const visualStatusResponseSchema = z.object({
+  id: z.string(),
+  status: requestStatusSchema,
+  request: z.record(z.unknown()).optional(),
+  generated_files: z.array(generatedFileSchema).optional(),
+  warnings: z.array(statusWarningSchema).optional(),
+  error: statusWarningSchema.optional(),
+  credits: z.object({ consumed: z.number() }).optional(),
+});
+export type VisualStatusResponse = z.infer<typeof visualStatusResponseSchema>;
 
-export interface VisualStatusResponse {
-  id: string;
-  status: RequestStatus;
-  request?: Record<string, unknown>;
-  generated_files?: GeneratedFile[];
-  warnings?: StatusWarning[];
-  error?: StatusError;
-  credits?: { consumed: number };
-}
-
-export interface CreateVisualResponse {
-  id: string;
-  status: RequestStatus;
-  request?: Record<string, unknown>;
-}
+export const createVisualResponseSchema = z.object({
+  id: z.string(),
+  status: requestStatusSchema,
+  request: z.record(z.unknown()).optional(),
+});
+export type CreateVisualResponse = z.infer<typeof createVisualResponseSchema>;
 
 export const FORMAT_EXTENSIONS: Record<string, string> = {
   svg: '.svg',
