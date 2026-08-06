@@ -183,4 +183,41 @@ describe('Auth — loadAccounts and account resolution', () => {
     const diskData = JSON.parse(fs.readFileSync(path.join(tempDir, 'accounts.json'), 'utf8'));
     expect(diskData.accounts).toHaveLength(1);
   });
+
+  it('should reject traversal subdomains without deleting anything outside the config root', async () => {
+    // A decoy "other connector" credentials tree OUTSIDE the Zendesk config
+    // root: "../../<decoy>/credentials/team" must never be reached.
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zendesk-other-connector-'));
+    const decoyFile = path.join(outsideDir, 'credentials', 'team.token.json');
+    fs.mkdirSync(path.dirname(decoyFile), { recursive: true });
+    fs.writeFileSync(decoyFile, '{"access_token":"other-connector-secret"}');
+    fs.writeFileSync(path.join(tempDir, 'accounts.json'), JSON.stringify({
+      accounts: [{ subdomain: 'legit', email: 'a@legit.com', apiToken: 'tok' }],
+      defaultSubdomain: 'legit',
+    }));
+    // A real token file INSIDE the config root: a `../`-style subdomain must
+    // not delete it either.
+    const legitToken = path.join(tempDir, 'credentials', 'legit.token.json');
+    fs.mkdirSync(path.dirname(legitToken), { recursive: true });
+    fs.writeFileSync(legitToken, '{"access_token":"legit"}');
+
+    const auth = await import('../src/auth.js');
+    try {
+      // The exact relative path from <config>/credentials to the decoy file
+      // (minus the .token.json suffix) — what an attacker would pass as the
+      // "subdomain" to delete another connector's credentials.
+      const traversal = path.relative(path.join(tempDir, 'credentials'), decoyFile.replace(/\.token\.json$/, ''));
+      expect(() => auth.removeAccount(traversal)).toThrow('Invalid Zendesk subdomain');
+      expect(() => auth.removeAccount('../../slack/credentials/team')).toThrow('Invalid Zendesk subdomain');
+      expect(() => auth.removeAccount('../legit')).toThrow('Invalid Zendesk subdomain');
+      // Zero deletions, anywhere: both token files survive, and the accounts
+      // registry was not mutated either.
+      expect(fs.existsSync(decoyFile)).toBe(true);
+      expect(fs.existsSync(legitToken)).toBe(true);
+      const diskData = JSON.parse(fs.readFileSync(path.join(tempDir, 'accounts.json'), 'utf8'));
+      expect(diskData.accounts).toHaveLength(1);
+    } finally {
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
 });

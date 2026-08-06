@@ -246,6 +246,12 @@ export async function getAccount(subdomain?: string): Promise<ZendeskAccount | u
 }
 
 export function removeAccount(subdomain: string): void {
+  // The subdomain is joined into a credentials file path and unlinked below,
+  // so validate it like every other subdomain sink BEFORE any mutation: a
+  // traversal value (e.g. "../../slack/credentials/team") must never reach
+  // writeFileSync/unlinkSync, where it would delete another connector's
+  // stored credentials outside the Zendesk config root.
+  assertValidSubdomain(subdomain);
   const idx = accountsConfig.accounts.findIndex(a => a.subdomain === subdomain);
   if (idx >= 0) {
     accountsConfig.accounts.splice(idx, 1);

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { createTempConfig, createBridgeHandlers } from '@mindstone/mcp-test-harness';
 import { mswServer } from './helpers/setup.js';
@@ -116,6 +117,47 @@ describe('Account tools — remove_zendesk_account', () => {
     const data = result.json as any;
     expect(data.ok).toBe(true);
     expect(data.message).toContain('Disconnected');
+  });
+
+  it('should reject a traversal subdomain and keep all credentials intact', async () => {
+    const tempConfig = createTempConfig({
+      accounts: [API_TOKEN_ACCOUNT],
+      defaultAccount: API_TOKEN_ACCOUNT.subdomain,
+      prefix: 'zendesk-test-',
+    });
+    cleanup = tempConfig.cleanup;
+
+    // A decoy credentials file OUTSIDE the Zendesk config root that a
+    // traversal subdomain would otherwise reach and delete.
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zendesk-decoy-'));
+    const decoyFile = path.join(outsideDir, 'credentials', 'team.token.json');
+    fs.mkdirSync(path.dirname(decoyFile), { recursive: true });
+    fs.writeFileSync(decoyFile, '{"access_token":"decoy"}');
+
+    testClient = await createTestClient({
+      env: {
+        ZENDESK_CONFIG_PATH: tempConfig.configPath,
+        MCP_HOST_BRIDGE_STATE: '',
+      },
+    });
+
+    try {
+      const result = await testClient.callTool('remove_zendesk_account', {
+        subdomain: '../../zendesk-decoy/credentials/team',
+      });
+      expect(result.isError).toBeFalsy();
+      const data = result.json as any;
+      expect(data.ok).toBe(false);
+      expect(data.error).toContain('Invalid subdomain');
+      // The decoy and the real account both survive.
+      expect(fs.existsSync(decoyFile)).toBe(true);
+      const list = await testClient.callTool('list_zendesk_accounts', {});
+      const listData = list.json as any;
+      expect(listData.ok).toBe(true);
+      expect(listData.accounts).toHaveLength(1);
+    } finally {
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
   });
 });
 

@@ -82,6 +82,19 @@ Use list_zendesk_accounts to see available subdomains.`,
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
+      // Validate BEFORE any deletion: the subdomain flows into a credentials
+      // file path in removeAccount, so invalid input (including path
+      // traversal) must fail closed with an actionable error here, and the
+      // sink re-asserts regardless of caller.
+      try {
+        assertValidSubdomain(args.subdomain);
+      } catch {
+        return JSON.stringify({
+          ok: false,
+          error: 'Invalid subdomain',
+          resolution: 'Provide the Zendesk subdomain exactly as shown by list_zendesk_accounts (letters, digits, and hyphens only).',
+        });
+      }
       removeAccount(args.subdomain);
       return JSON.stringify({
         ok: true,
