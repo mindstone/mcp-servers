@@ -207,7 +207,17 @@ export async function elevenLabsJson<T>(
   const response = await elevenLabsFetch(apiKey, urlPath, options);
   try {
     return (await response.json()) as T;
-  } catch {
+  } catch (error) {
+    // A body-read abort or mid-stream timeout rejects here too — report it as
+    // TIMEOUT so the remediation advice matches the actual fault, instead of
+    // mislabelling a transient network failure as an API format change.
+    if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+      throw new ElevenLabsError(
+        'Timed out reading the ElevenLabs response body',
+        'TIMEOUT',
+        'The response took too long to download. Try again or check if the ElevenLabs API is available.',
+      );
+    }
     // A 200 with a non-JSON body would otherwise surface the runtime's
     // SyntaxError — whose message embeds an excerpt of the raw upstream body —
     // through the generic error path, unenveloped.

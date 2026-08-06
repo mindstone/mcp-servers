@@ -54,4 +54,46 @@ describe('client timeoutMs override (R2)', () => {
 
     expect(timeoutSpy).not.toHaveBeenCalled();
   });
+
+  it('reports a response body read abort as TIMEOUT, not as a non-JSON body', async () => {
+    // A mid-stream abort/timeout rejects response.json() too; mislabelling it
+    // as "the API response format may have changed" sends the caller down the
+    // wrong remediation path for a transient network fault.
+    mswServer.use(
+      http.get(
+        `${BASE_V1}/user/subscription`,
+        () =>
+          new HttpResponse(
+            new ReadableStream({
+              start(streamController) {
+                streamController.enqueue(new TextEncoder().encode('{"tier":"sta'));
+                streamController.error(new DOMException('The operation timed out', 'TimeoutError'));
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+      ),
+    );
+
+    await expect(elevenLabsJson(MOCK_API_KEY, '/user/subscription')).rejects.toMatchObject({
+      code: 'TIMEOUT',
+    });
+  });
+
+  it('still reports a genuine non-JSON 200 body as INVALID_RESPONSE', async () => {
+    mswServer.use(
+      http.get(
+        `${BASE_V1}/user/subscription`,
+        () =>
+          new HttpResponse('<html>not json</html>', {
+            status: 200,
+            headers: { 'Content-Type': 'text/html' },
+          }),
+      ),
+    );
+
+    await expect(elevenLabsJson(MOCK_API_KEY, '/user/subscription')).rejects.toMatchObject({
+      code: 'INVALID_RESPONSE',
+    });
+  });
 });

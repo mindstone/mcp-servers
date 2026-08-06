@@ -36,6 +36,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 - `check_subscription` no longer drops a legitimate `next_character_count_reset_unix` of `0` (admitted by the response schema): the ISO reset field is now emitted for it.
+- A response body read that aborts or times out mid-stream now surfaces `TIMEOUT` with retry guidance instead of being mislabelled as a non-JSON ("API response format may have changed") error.
 - `get_usage_stats` no longer reports a minutes-denominated `total_usage` column as credits, silently zeroes numeric-string values, pads short rows with nulls, or labels missing group values as `unknown`.
 - `transcribe_audio` now rejects `num_speakers` / `diarization_threshold` when `diarize` is not `true` (previously accepted and forwarded), and the `num_speakers` + `diarization_threshold` conflict is rejected too — both before any network request is made.
 
