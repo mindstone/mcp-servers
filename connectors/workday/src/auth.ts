@@ -14,6 +14,8 @@
 
 import { isIP } from 'node:net';
 
+import { z } from 'zod';
+
 import { WorkdayError, USER_AGENT, REQUEST_TIMEOUT_MS, RECRUITING_API_VERSION_DEFAULT } from './types.js';
 import { bridgeRequest } from './bridge.js';
 
@@ -219,6 +221,14 @@ export function validateHost(rawHost: string): { valid: boolean; host?: string; 
     return { valid: false, error: 'Host is required.' };
   }
 
+  // Refuse an explicit port even when it equals the https default — WHATWG
+  // URL parsing normalizes `host:443` away, so the `url.port` check below
+  // cannot see it. (Bare IPv6 without brackets also matches; it is invalid
+  // URL host syntax and would be refused below regardless.)
+  if (/:\d*$/.test(host)) {
+    return { valid: false, error: 'Host must be a bare hostname (no port, path, or credentials).' };
+  }
+
   // WHATWG URL parsing normalizes non-canonical IPv4 spellings (127.1,
   // 0x7f000001, 2130706433, 0177.0.0.1) to dotted-quad, so loopback/private
   // literals in disguise cannot slip past the checks below.
@@ -251,6 +261,14 @@ export function validateHost(rawHost: string): { valid: boolean; host?: string; 
 // (split-horizon DNS, DNS rebinding). Before any credential-bearing request,
 // resolve the host and re-check every A/AAAA record against the same
 // non-public deny list. Fail-closed: an unresolvable host is refused.
+//
+// Call sites: getAccessToken (Basic credential, below) and workdayFetch in
+// client.ts (bearer token — the token cache short-circuits the check here, so
+// data requests must re-run the guard themselves). Best-effort by nature:
+// fetch resolves the name again independently, so a record flipped between
+// the guard and the connect is not caught; closing that fully would require
+// pinning the resolved IP via a custom dispatcher, which undici does not
+// expose through the global fetch used here.
 
 export type DnsLookupFn = (
   hostname: string,
@@ -334,6 +352,33 @@ if (_envHost) {
 
 // ── Token exchange ──
 
+// The token body is vendor/proxy-controlled. Validate it before caching: a
+// hostile endpoint could return an absurd expires_in (pinning the cached
+// token open for the process lifetime) or a malformed/missing access_token.
+// Bounds: 60s-24h. Below 60s the 60-second cache skew would force a
+// re-exchange on every call anyway; above 24h a stolen token stays usable
+// far beyond any legitimate Workday lifetime (real tokens last ~1h).
+const tokenResponseSchema = z.object({
+  access_token: z.string().min(1),
+  token_type: z.string(),
+  expires_in: z.number().int().min(60).max(86_400),
+  refresh_token: z.string().min(1).optional(),
+});
+
+export type TokenResponse = z.infer<typeof tokenResponseSchema>;
+
+export function parseTokenResponse(data: unknown): TokenResponse {
+  const parsed = tokenResponseSchema.safeParse(data);
+  if (!parsed.success) {
+    throw new WorkdayError(
+      'OAuth token endpoint returned a malformed or out-of-bounds response.',
+      'AUTH_FAILED',
+      'Re-configure with configure_workday_credentials. If the problem persists, check the API Client registration in Workday.',
+    );
+  }
+  return parsed.data;
+}
+
 export async function getAccessToken(): Promise<string> {
   if (!clientId || !clientSecret) {
     throw new WorkdayError(
@@ -406,12 +451,7 @@ export async function getAccessToken(): Promise<string> {
     );
   }
 
-  const tokenData = await response.json() as {
-    access_token: string;
-    token_type: string;
-    expires_in: number;
-    refresh_token?: string;
-  };
+  const tokenData = parseTokenResponse(await response.json());
 
   cachedAccessToken = tokenData.access_token;
   tokenExpiresAt = Date.now() + (tokenData.expires_in - 60) * 1000;

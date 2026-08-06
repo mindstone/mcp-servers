@@ -5,25 +5,36 @@
  * LLM, so the model treats third-party / attacker-controllable text as DATA,
  * not as instructions.
  *
- * This is the canonical implementation a new connector ships with. It is a
- * VENDORED copy of the shared reference in `test-harness/src/untrusted-content.ts`
- * — connectors cannot `import` the test-harness at runtime (it is a
- * test/dev-only `file:` dependency that is never published into a connector's
- * `dist/`), so the helper lives in the connector's own runtime source. Keep
- * this byte-for-byte in sync with the shared reference; do NOT weaken the
- * escaping back to a simple `replaceAll` (that family misses whitespace / case
- * close-tag variants like `</untrusted-content >` / `</UNTRUSTED-CONTENT>`).
+ * This is a VENDORED copy of the shared reference in
+ * `test-harness/src/untrusted-content.ts` — connectors cannot `import` the
+ * test-harness at runtime (it is a test/dev-only `file:` dependency that is
+ * never published into a connector's `dist/`), so the helper lives in the
+ * connector's own runtime source. Do NOT weaken the escaping back to a simple
+ * `replaceAll` (that family misses whitespace / case close-tag variants like
+ * `</untrusted-content >` / `</UNTRUSTED-CONTENT>`).
+ *
+ * This copy diverges from the reference in three deliberate ways:
+ *   1. The close-tag matcher below is widened from `[ \t]*` to `\s*` so
+ *      newline / carriage-return / form-feed close-tag variants
+ *      (`</untrusted-content\n>` etc.) are neutralised too — a strict
+ *      superset of the reference behaviour (it only escapes MORE variants).
+ *   2. The unwrap helpers (`unwrapUntrusted`, `unwrapUntrustedJsonStrings`)
+ *      are dropped — nothing in this connector unwraps.
+ *   3. `wrapUntrustedJsonStrings` does not wrap object KEYS (the reference
+ *      does). Keys here are connector-authored allowlist names, never
+ *      vendor-controlled values.
+ * Everything else matches the reference; keep it that way when syncing.
  *
  * `scripts/check-untrusted-coverage.mjs` greps for a reference to
  * `untrusted-content` in any connector that talks to an external system; this
  * file (and the call sites that import from it) is what satisfies that gate.
  */
 
-// NOTE: the shared reference uses `[ \t]*` here; this copy deliberately
-// widens the matcher to `\s*` so newline / carriage-return / form-feed
-// close-tag variants (`</untrusted-content\n>` etc.) are neutralised too.
-// This is a strict superset of the reference behaviour — it only escapes
-// MORE variants, never fewer. Keep everything else byte-for-byte in sync.
+// NOTE: divergence (1) from the header — the shared reference uses `[ \t]*`
+// here; this copy deliberately widens the matcher to `\s*` so newline /
+// carriage-return / form-feed close-tag variants (`</untrusted-content\n>`
+// etc.) are neutralised too. This is a strict superset of the reference
+// behaviour — it only escapes MORE variants, never fewer.
 const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content\s*>/gi;
 const ESCAPED_UNTRUSTED_CLOSE_TAG = '<\\/untrusted-content>';
 

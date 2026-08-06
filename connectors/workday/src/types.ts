@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { z } from 'zod';
-import { wrapUntrusted } from './untrusted-content.js';
+import { wrapUntrustedJsonStrings } from './untrusted-content.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json') as { version: string };
@@ -88,26 +88,20 @@ export const paginationOffsetSchema = z.number().int().min(0).max(1_000_000);
 
 // ── Field allowlisting ──
 
-// Human-authored / free-text fields whose values are authored inside Workday
-// (vendor-controlled). These MUST be enveloped in `<untrusted-content>` before
-// reaching the model (AGENTS.md security invariant #6): a Workday user able to
-// set a descriptor, title, email, or status string could otherwise inject a
-// close-tag breakout or model instructions directly into tool output.
+// Every allowlisted value is vendor-controlled data (AGENTS.md security
+// invariant #6), so the envelope decision is a DENY-list, not an allowlist:
+// every string reachable in a picked value is wrapped in an
+// `<untrusted-content>` envelope, recursively through arrays and objects, and
+// only identity fields stay raw. A string-typed value the connector did not
+// anticipate (e.g. the vendor sends `startDate` as free text, or a normally
+// scalar field arrives as an array/object) is therefore enveloped rather than
+// leaked — adding a field to an allowlist can never silently create a raw
+// text surface.
+//
 // Identity fields (`id`, `href`) stay raw by design — the model round-trips
 // them back into subsequent tool calls as path parameters, so enveloping them
 // would corrupt tool chaining.
-const EXTERNAL_TEXT_FIELDS: ReadonlySet<string> = new Set([
-  'descriptor',
-  'primaryWorkEmail',
-  'businessTitle',
-  'name',
-  'title',
-  'type',
-  'jobType',
-  'unitOfTime',
-  'status',
-  'recruitingStatus',
-]);
+const RAW_IDENTITY_FIELDS: ReadonlySet<string> = new Set(['id', 'href']);
 
 export function pickFields<T extends readonly string[]>(
   obj: Record<string, unknown>,
@@ -117,10 +111,9 @@ export function pickFields<T extends readonly string[]>(
   for (const field of fields) {
     if (field in obj) {
       const value = obj[field];
-      result[field] =
-        typeof value === 'string' && EXTERNAL_TEXT_FIELDS.has(field)
-          ? wrapUntrusted(value, 'workday')
-          : value;
+      result[field] = RAW_IDENTITY_FIELDS.has(field)
+        ? value
+        : wrapUntrustedJsonStrings(value, 'workday');
     }
   }
   return result;

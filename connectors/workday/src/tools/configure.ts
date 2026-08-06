@@ -12,6 +12,7 @@ import { withErrorHandling } from '../utils.js';
 import {
   validateHost,
   assertHostResolvesPublic,
+  parseTokenResponse,
   setHost,
   setTenant,
   setClientId,
@@ -20,6 +21,7 @@ import {
   clearTokenCache,
 } from '../auth.js';
 import { bridgeRequest } from '../bridge.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 
 export function registerConfigureTools(server: McpServer): void {
   server.registerTool(
@@ -143,12 +145,17 @@ COMMON MISTAKES:
         });
       }
 
-      const tokenData = await tokenResponse.json() as {
-        access_token: string;
-        token_type: string;
-        expires_in: number;
-        refresh_token?: string;
-      };
+      // The token body is vendor/proxy-controlled — validate shape and bounds
+      // (bounded expires_in) before using it for the API probe.
+      let tokenData;
+      try {
+        tokenData = parseTokenResponse(await tokenResponse.json());
+      } catch (error) {
+        if (error instanceof WorkdayError) {
+          return JSON.stringify({ ok: false, error: error.message, resolution: error.resolution });
+        }
+        throw error;
+      }
 
       // API probe
       const testUrl = `https://${host}/ccx/api/v1/${tenant}/workers?limit=1`;
@@ -204,8 +211,11 @@ COMMON MISTAKES:
       });
 
       if (!result.success) {
+        // Bridge-authored error text crosses a process boundary — envelope it
+        // like any other non-connector-authored string before it reaches the
+        // model.
         throw new WorkdayError(
-          result.error || 'Failed to configure Workday via bridge.',
+          wrapUntrusted(result.error, 'workday-bridge') ?? 'Failed to configure Workday via bridge.',
           'BRIDGE_ERROR',
           'Check that the host application is running and bridge is available.',
         );
@@ -220,7 +230,7 @@ COMMON MISTAKES:
       clearTokenCache();
 
       const message = result.warning
-        ? `Workday configured successfully. Note: ${result.warning}`
+        ? `Workday configured successfully. Note: ${wrapUntrusted(result.warning, 'workday-bridge')}`
         : 'Workday configured successfully! Try list_workday_workers to browse your team.';
       return JSON.stringify({ ok: true, message });
     }),
