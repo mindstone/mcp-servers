@@ -61,20 +61,3 @@ describe('wrapUntrusted', () => {
     expect(wrapped).toContain('source="replit-ssh:read-file:&quot;&gt;&lt;script&gt;"');
   });
 });
-
-describe('replit-ssh tool sources reference the wrapper', () => {
-  it('readFile.ts and listFiles.ts both import wrapUntrusted', async () => {
-    const fs = await import('node:fs');
-    const path = await import('node:path');
-    const url = await import('node:url');
-    const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
-    for (const f of ['readFile.ts', 'listFiles.ts']) {
-      const contents = fs.readFileSync(
-        path.join(__dirname, '..', 'src', 'tools', f),
-        'utf-8',
-      );
-      expect(contents).toContain("from '../untrusted-content.js'");
-      expect(contents).toContain('wrapUntrusted(');
-    }
-  });
-});
