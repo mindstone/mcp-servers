@@ -274,6 +274,72 @@ describe('phone number tools', () => {
     expect(result.text).not.toContain(TWILIO_SID);
     expect(result.text).toContain('[redacted]');
   });
+
+  it('redacts SIP trunk credentials reflected in the import success payload', async () => {
+    // A trunk username is not a credential-shaped key for the sanitizer, so a
+    // reflected value would be disclosed (enveloped but model-visible) unless
+    // the import path strips the exact submitted values like the Twilio pair.
+    const TRUNK_USERNAME = 'trunk-user-8f3a2b';
+    const TRUNK_PASSWORD = 'trunk-secret-9d2c4e';
+    const reflecting = http.post(
+      'https://api.elevenlabs.io/v1/convai/phone-numbers',
+      () => HttpResponse.json({
+        phone_number_id: 'pn_imported_123',
+        provider: 'sip_trunk',
+        echoed_note: `trunk ${TRUNK_USERNAME} registered`,
+      }),
+    );
+    mswServer.use(reflecting, ...createElevenLabsAgentsHandlers());
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('import_phone_number', {
+      provider: 'sip_trunk',
+      phone_number: '+14155559876',
+      label: 'SIP line',
+      outbound_trunk_config: {
+        address: 'sip.example.com',
+        credentials: { username: TRUNK_USERNAME, password: TRUNK_PASSWORD },
+      },
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(result.text).not.toContain(TRUNK_USERNAME);
+    expect(result.text).not.toContain(TRUNK_PASSWORD);
+    expect(result.text).toContain('[redacted]');
+    expect(result.json.phone_number.phone_number_id).toBe('pn_imported_123');
+  });
+
+  it('redacts SIP trunk credentials quoted inside an upstream error detail', async () => {
+    const TRUNK_USERNAME = 'trunk-user-8f3a2b';
+    const failing = http.post(
+      'https://api.elevenlabs.io/v1/convai/phone-numbers',
+      () => HttpResponse.json(
+        { detail: { message: `SIP trunk rejected credentials for ${TRUNK_USERNAME}` } },
+        { status: 422 },
+      ),
+    );
+    mswServer.use(failing, ...createElevenLabsAgentsHandlers());
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('import_phone_number', {
+      provider: 'sip_trunk',
+      phone_number: '+14155559876',
+      label: 'SIP line',
+      inbound_trunk_config: {
+        allowed_numbers: ['+14155559876'],
+        username: TRUNK_USERNAME,
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.json).toMatchObject({ ok: false, code: 'HTTP_422' });
+    expect(result.text).not.toContain(TRUNK_USERNAME);
+    expect(result.text).toContain('[redacted]');
+  });
 });
 
 describe('redactCredentialValues', () => {

@@ -31,6 +31,43 @@ function extractNextCursor(result: unknown): string | undefined {
         : undefined;
 }
 
+/**
+ * Credential-shaped keys inside SIP trunk configs (`inbound_trunk_config` /
+ * `outbound_trunk_config` carry `credentials: {username, password}` and
+ * similar). `username` is not in the sanitizer's credential-key set, so a
+ * reflected trunk username would be disclosed (enveloped, but model-visible);
+ * collecting the exact values here lets `redactCredentialValues` strip them
+ * from success payloads and error details just like the Twilio pair.
+ */
+const TRUNK_CREDENTIAL_KEYS = new Set([
+  'username',
+  'password',
+  'token',
+  'secret',
+  'auth_token',
+  'authorization',
+]);
+
+function collectTrunkCredentialValues(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap(collectTrunkCredentialValues);
+  }
+  if (typeof value !== 'object' || value === null) return [];
+  const out: string[] = [];
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof entry === 'string' && TRUNK_CREDENTIAL_KEYS.has(key.toLowerCase())) {
+      // Same discipline as the Twilio format validation: a value containing a
+      // JSON delimiter could double as a substring-replacement weapon against
+      // the serialized output, so it is left to the sanitizer's key-based
+      // redaction instead of being collected for exact-value replacement.
+      if (!/["\\]/.test(entry)) out.push(entry);
+    } else {
+      out.push(...collectTrunkCredentialValues(entry));
+    }
+  }
+  return out;
+}
+
 export function registerPhoneNumberTools(server: McpServer): void {
   server.registerTool(
     'list_phone_numbers',
@@ -279,7 +316,15 @@ COMMON MISTAKES:
       // non-credential-shaped key, or quoted inside an error detail — the exact
       // values are stripped before anything becomes model-visible. (Values
       // under credential-shaped keys are redacted by the sanitizer itself.)
-      const submittedSecrets = [args.twilio_sid, args.twilio_token];
+      // SIP trunk configs carry their own credentials (a trunk `username` is
+      // not a credential-shaped key for the sanitizer), so those exact values
+      // are collected for the same treatment.
+      const submittedSecrets = [
+        args.twilio_sid,
+        args.twilio_token,
+        ...collectTrunkCredentialValues(args.inbound_trunk_config),
+        ...collectTrunkCredentialValues(args.outbound_trunk_config),
+      ];
       let result: unknown;
       try {
         result = await elevenLabsJson<unknown>(
