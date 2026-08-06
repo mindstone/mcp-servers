@@ -1107,7 +1107,7 @@ const loadLocalEditImage = async (
   const mime = options?.pngOnly ? 'image/png' : getSupportedImageMime(realPath);
   if (!mime) {
     throw workspaceFenceError(
-      `Unsupported image type: ${extension || path.basename(resolvedPath)}. Supported: PNG, JPEG, WEBP.`,
+      `Unsupported image type: ${envelopeToolInput(extension || path.basename(resolvedPath))}. Supported: PNG, JPEG, WEBP.`,
     );
   }
 
