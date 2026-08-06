@@ -56,8 +56,8 @@ function unescapeCloseTagSentinels(s: string): string {
  * internal close-tag variants), the original string is returned unchanged so
  * `wrapUntrusted(wrapUntrusted(s, src), src) === wrapUntrusted(s, src)`.
  */
-export function wrapUntrusted(text: string | undefined, source: string): string | undefined {
-  if (text === undefined) return undefined;
+export function wrapUntrusted(text: string | null | undefined, source: string): string | undefined {
+  if (text === undefined || text === null) return undefined;
   const open = `<untrusted-content source="${escapeAttr(source)}">`;
   const close = '</untrusted-content>';
   if (text.startsWith(open) && text.endsWith(close) && text.length >= open.length + close.length) {
