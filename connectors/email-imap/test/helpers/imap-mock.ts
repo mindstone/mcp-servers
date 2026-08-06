@@ -74,7 +74,15 @@ export function createImapMock(options: ImapMockOptions = {}) {
 
   const constructorCalls: unknown[][] = [];
   /** Invocation counters shared across all mock instances of this factory. */
-  const calls = { messageMove: 0, messageFlagsAdd: 0, messageDelete: 0 };
+  const calls = {
+    messageMove: 0,
+    messageCopy: 0,
+    messageFlagsAdd: 0,
+    messageDelete: 0,
+    mailboxCreate: 0,
+    mailboxRename: 0,
+    mailboxDelete: 0,
+  };
 
   class MockImapFlow {
     usable = true;
@@ -235,6 +243,7 @@ export function createImapMock(options: ImapMockOptions = {}) {
     }
 
     async messageCopy(_uids: number[], _destination: string, _opts?: unknown) {
+      calls.messageCopy += 1;
       return { uidMap: new Map() };
     }
 
@@ -257,14 +266,17 @@ export function createImapMock(options: ImapMockOptions = {}) {
     }
 
     async mailboxCreate(_mailbox: string) {
+      calls.mailboxCreate += 1;
       return true;
     }
 
     async mailboxRename(_oldPath: string, _newPath: string) {
+      calls.mailboxRename += 1;
       return true;
     }
 
     async mailboxDelete(_mailbox: string) {
+      calls.mailboxDelete += 1;
       return true;
     }
 

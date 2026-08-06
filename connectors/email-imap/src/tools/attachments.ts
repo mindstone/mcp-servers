@@ -11,6 +11,7 @@ import { resolveDownloadDir, writeDownloadExclusive } from '../path-safety.js';
 import {
   ensureInitialized,
   collectMessageParts,
+  unwrapMailboxName,
   wrapEmailField,
   type MessageParts,
 } from './shared.js';
@@ -56,7 +57,7 @@ export function registerAttachmentTools(server: McpServer): void {
       ensureInitialized();
 
       const { mailbox: rawMailbox, uid } = args;
-      const mailbox = unwrapUntrusted(rawMailbox);
+      const mailbox = unwrapMailboxName(rawMailbox, 'mailbox');
       // `part` round-trips from email_get_message's attachment metadata,
       // where it is enveloped as server-supplied text — strip one envelope
       // layer so wrapped and manually-authored identifiers both work.

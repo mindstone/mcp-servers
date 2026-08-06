@@ -9,7 +9,7 @@ import type { MessageAddressObject, MessageStructureObject } from 'imapflow';
 import type { ClientConfig } from '../types.js';
 import { getConnection } from '../imap-client.js';
 import { getPreset, listPresetKeys } from '../presets.js';
-import { wrapUntrusted } from '../untrusted-content.js';
+import { wrapUntrusted, unwrapUntrusted } from '../untrusted-content.js';
 
 /**
  * Envelope source tag for every attacker-controlled string an email message
@@ -32,6 +32,28 @@ export function wrapEmailField(text: string | null | undefined): string | null {
     return null;
   }
   return wrapUntrusted(text, UNTRUSTED_EMAIL_SOURCE) ?? null;
+}
+
+/**
+ * Strip one untrusted-content envelope layer from a caller-supplied mailbox
+ * name, trim, and FAIL CLOSED when nothing usable remains. Schema validation
+ * (`z.string().min(1)` / `.trim().min(1)`) runs BEFORE unwrapping, so an
+ * enveloped-but-empty value such as
+ * `<untrusted-content source="external-email"></untrusted-content>` passes
+ * the schema as 62 non-blank characters and would otherwise reach the
+ * network as an empty mailbox name (`mailboxCreate('')` / `mailboxDelete('')`
+ * / `getMailboxLock('')`). The non-empty check must run on the value that is
+ * actually sent to the server.
+ */
+export function unwrapMailboxName(raw: string, field: string): string {
+  const value = unwrapUntrusted(raw).trim();
+  if (value.length === 0) {
+    throw new Error(
+      `"${field}" must be a non-empty mailbox name after removing any ` +
+        'untrusted-content envelope',
+    );
+  }
+  return value;
 }
 
 /**

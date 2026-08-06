@@ -6,7 +6,6 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SearchObject } from 'imapflow';
 import { withErrorHandling } from '../utils.js';
-import { unwrapUntrusted } from '../untrusted-content.js';
 import { getConnection, getMailboxLock } from '../imap-client.js';
 import {
   ensureInitialized,
@@ -15,6 +14,7 @@ import {
   downloadPartAsText,
   collectMessageParts,
   ensureMailboxExists,
+  unwrapMailboxName,
   wrapEmailField,
   resolveTrashMailbox,
   type MessageParts,
@@ -103,7 +103,7 @@ export function registerMessageTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       ensureInitialized();
 
-      const mailbox = unwrapUntrusted(args.mailbox);
+      const mailbox = unwrapMailboxName(args.mailbox, 'mailbox');
       const from = args.from?.trim() || undefined;
       const subject = args.subject?.trim() || undefined;
       const unread = args.unread ?? false;
@@ -219,7 +219,7 @@ export function registerMessageTools(server: McpServer): void {
       ensureInitialized();
 
       const { mailbox: rawMailbox, uid } = args;
-      const mailbox = unwrapUntrusted(rawMailbox);
+      const mailbox = unwrapMailboxName(rawMailbox, 'mailbox');
 
       const lock = await getMailboxLock(mailbox);
 
@@ -313,8 +313,8 @@ export function registerMessageTools(server: McpServer): void {
       ensureInitialized();
 
       const { uids, mailbox: rawMailbox, destination: rawDestination } = args;
-      const mailbox = unwrapUntrusted(rawMailbox);
-      const destination = unwrapUntrusted(rawDestination);
+      const mailbox = unwrapMailboxName(rawMailbox, 'mailbox');
+      const destination = unwrapMailboxName(rawDestination, 'destination');
 
       await ensureMailboxExists(destination);
 
@@ -383,7 +383,7 @@ export function registerMessageTools(server: McpServer): void {
       ensureInitialized();
 
       const { uids, mailbox: rawMailbox } = args;
-      const mailbox = unwrapUntrusted(rawMailbox);
+      const mailbox = unwrapMailboxName(rawMailbox, 'mailbox');
 
       const lock = await getMailboxLock(mailbox);
       try {
