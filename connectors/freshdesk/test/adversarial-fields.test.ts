@@ -11,6 +11,7 @@ import {
   makeContact,
   makeCompany,
   makeArticle,
+  makeConversation,
 } from './fixtures/freshdesk-data.js';
 
 /**
@@ -275,5 +276,77 @@ describe('Adversarial field coverage — every vendor string is enveloped', () =
 
     const text = await callTool('get_freshdesk_solution_article', { article_id: 500 });
     expectNoBreakout(text);
+  });
+
+  // ─── Vendor timestamps ───────────────────────────────────────────
+
+  it('envelopes ticket created_at, updated_at, and due_by (detailed text)', async () => {
+    mswServer.use(
+      http.get(`${BASE}/tickets/:id`, () =>
+        HttpResponse.json(
+          makeTicket(7, {
+            created_at: payload('created'),
+            updated_at: payload('updated'),
+            due_by: payload('due'),
+          }),
+        ),
+      ),
+    );
+    await setup();
+
+    const text = await callTool('get_freshdesk_ticket', { ticket_id: 7 });
+    expectNoBreakout(text);
+  });
+
+  it('envelopes conversation created_at', async () => {
+    mswServer.use(
+      http.get(`${BASE}/tickets/:id`, () =>
+        HttpResponse.json({
+          ...makeTicket(7),
+          conversations: [makeConversation(1, { created_at: payload('conv-created') })],
+        }),
+      ),
+    );
+    await setup();
+
+    const text = await callTool('get_freshdesk_ticket', {
+      ticket_id: 7,
+      include_conversations: true,
+    });
+    expectNoBreakout(text);
+  });
+
+  it('envelopes contact, company, and article created_at/updated_at', async () => {
+    mswServer.use(
+      http.get(`${BASE}/contacts/:id`, () =>
+        HttpResponse.json(
+          makeContact(100, {
+            created_at: payload('contact-created'),
+            updated_at: payload('contact-updated'),
+          }),
+        ),
+      ),
+      http.get(`${BASE}/companies/:id`, () =>
+        HttpResponse.json(
+          makeCompany(900, {
+            created_at: payload('company-created'),
+            updated_at: payload('company-updated'),
+          }),
+        ),
+      ),
+      http.get(`${BASE}/solutions/articles/:id`, () =>
+        HttpResponse.json(
+          makeArticle(500, {
+            created_at: payload('article-created'),
+            updated_at: payload('article-updated'),
+          }),
+        ),
+      ),
+    );
+    await setup();
+
+    expectNoBreakout(await callTool('get_freshdesk_contact', { contact_id: 100 }));
+    expectNoBreakout(await callTool('get_freshdesk_company', { company_id: 900 }));
+    expectNoBreakout(await callTool('get_freshdesk_solution_article', { article_id: 500 }));
   });
 });

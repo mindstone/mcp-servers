@@ -123,6 +123,11 @@ export function formatTicketDetailed(ticket: FreshdeskTicket, domain: string): s
   const wrappedType = wrapUntrustedTicketContent(ticket.type);
   const wrappedEmail = wrapUntrustedTicketContent(ticket.email);
   const wrappedTags = wrapFieldList(ticket.tags, TICKET_SOURCE);
+  // Vendor-authored timestamp strings are enveloped too, matching the
+  // detailed-JSON mode (wrapValuesDeep catches every string there).
+  const wrappedCreated = wrapField(ticket.created_at, TICKET_SOURCE);
+  const wrappedUpdated = wrapField(ticket.updated_at, TICKET_SOURCE);
+  const wrappedDueBy = wrapField(ticket.due_by, TICKET_SOURCE);
   return [
     `Ticket #${ticket.id}`,
     `URL: ${ticketUrl(domain, ticket.id)}`,
@@ -135,9 +140,9 @@ export function formatTicketDetailed(ticket: FreshdeskTicket, domain: string): s
     wrappedEmail ? `Requester Email: ${wrappedEmail}` : '',
     ticket.responder_id ? `Assignee ID: ${ticket.responder_id}` : 'Assignee: unassigned',
     ticket.group_id ? `Group ID: ${ticket.group_id}` : '',
-    `Created: ${ticket.created_at}`,
-    `Updated: ${ticket.updated_at}`,
-    ticket.due_by ? `Due by: ${ticket.due_by}` : '',
+    wrappedCreated ? `Created: ${wrappedCreated}` : '',
+    wrappedUpdated ? `Updated: ${wrappedUpdated}` : '',
+    wrappedDueBy ? `Due by: ${wrappedDueBy}` : '',
     wrappedTags ? `Tags: ${wrappedTags}` : '',
     wrappedHtml ? `Description (HTML):\n${wrappedHtml}` : '',
     wrappedText ? `Description (text):\n${wrappedText}` : '',
@@ -150,7 +155,8 @@ export function formatConversation(conv: FreshdeskConversation): string {
   const type = conv.private ? 'Internal note' : conv.incoming ? 'Customer reply' : 'Agent reply';
   const wrappedHtml = wrapUntrustedTicketContent(conv.body);
   const wrappedText = wrapUntrustedTicketContent(conv.body_text);
-  const lines: string[] = [`[${conv.created_at}] ${type} (User ${conv.user_id}):`];
+  const created = wrapField(conv.created_at, TICKET_SOURCE) ?? '(unknown time)';
+  const lines: string[] = [`[${created}] ${type} (User ${conv.user_id}):`];
   if (wrappedHtml) lines.push(`Body (HTML): ${wrappedHtml}`);
   if (wrappedText) lines.push(`Body (text): ${wrappedText}`);
   return lines.join('\n');
@@ -210,6 +216,8 @@ export function formatContactDetailed(contact: FreshdeskContact): string {
   const phone = wrapField(contact.phone, CONTACT_SOURCE);
   const mobile = wrapField(contact.mobile, CONTACT_SOURCE);
   const tags = wrapFieldList(contact.tags, CONTACT_SOURCE);
+  const created = wrapField(contact.created_at, CONTACT_SOURCE);
+  const updated = wrapField(contact.updated_at, CONTACT_SOURCE);
   return [
     `Contact #${contact.id}`,
     `Name: ${name ?? '(no name)'}`,
@@ -221,8 +229,8 @@ export function formatContactDetailed(contact: FreshdeskContact): string {
     address ? `Address: ${address}` : '',
     tags ? `Tags: ${tags}` : '',
     description ? `Description: ${description}` : '',
-    contact.created_at ? `Created: ${contact.created_at}` : '',
-    contact.updated_at ? `Updated: ${contact.updated_at}` : '',
+    created ? `Created: ${created}` : '',
+    updated ? `Updated: ${updated}` : '',
   ]
     .filter(Boolean)
     .join('\n');
@@ -250,6 +258,8 @@ export function formatCompanyDetailed(company: FreshdeskCompany): string {
   const industry = wrapField(company.industry, COMPANY_SOURCE);
   const tier = wrapField(company.tier, COMPANY_SOURCE);
   const healthScore = wrapField(company.health_score, COMPANY_SOURCE);
+  const created = wrapField(company.created_at, COMPANY_SOURCE);
+  const updated = wrapField(company.updated_at, COMPANY_SOURCE);
   return [
     `Company #${company.id}`,
     `Name: ${name ?? '(unnamed)'}`,
@@ -259,8 +269,8 @@ export function formatCompanyDetailed(company: FreshdeskCompany): string {
     healthScore ? `Health score: ${healthScore}` : '',
     description ? `Description: ${description}` : '',
     note ? `Note: ${note}` : '',
-    company.created_at ? `Created: ${company.created_at}` : '',
-    company.updated_at ? `Updated: ${company.updated_at}` : '',
+    created ? `Created: ${created}` : '',
+    updated ? `Updated: ${updated}` : '',
   ]
     .filter(Boolean)
     .join('\n');
@@ -291,6 +301,8 @@ export function formatArticleDetailed(article: FreshdeskSolutionArticle): string
   const wrappedHtml = wrapField(article.description, ARTICLE_SOURCE);
   const wrappedText = wrapField(article.description_text, ARTICLE_SOURCE);
   const tags = wrapFieldList(article.tags, ARTICLE_SOURCE);
+  const created = wrapField(article.created_at, ARTICLE_SOURCE);
+  const updated = wrapField(article.updated_at, ARTICLE_SOURCE);
   return [
     `Article #${article.id}`,
     `Title: ${title ?? '(untitled)'}`,
@@ -298,8 +310,8 @@ export function formatArticleDetailed(article: FreshdeskSolutionArticle): string
     article.folder_id ? `Folder ID: ${article.folder_id}` : '',
     article.category_id ? `Category ID: ${article.category_id}` : '',
     tags ? `Tags: ${tags}` : '',
-    article.created_at ? `Created: ${article.created_at}` : '',
-    article.updated_at ? `Updated: ${article.updated_at}` : '',
+    created ? `Created: ${created}` : '',
+    updated ? `Updated: ${updated}` : '',
     wrappedHtml ? `Description (HTML):\n${wrappedHtml}` : '',
     wrappedText ? `Description (text):\n${wrappedText}` : '',
   ]
