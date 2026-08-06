@@ -190,6 +190,87 @@ describe('microsoft-calendar adversarial security coverage', () => {
     expectNoRawBreakout(result.text);
   });
 
+  it('list_events envelopes an anomalous Graph-supplied mailbox timezone', async () => {
+    mswServer.use(
+      http.get(`${GRAPH_BASE}/me/mailboxSettings`, () =>
+        HttpResponse.json({ timeZone: `Custom Zone ${BREAKOUT}` }),
+      ),
+    );
+    const result = await client.callTool('list_events', {});
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      timezoneInfo: { resolved: string; calendarTimezone: string };
+    };
+    expect(json.timezoneInfo.resolved).toContain('<untrusted-content');
+    expect(json.timezoneInfo.calendarTimezone).toContain('<untrusted-content');
+    expectNoRawBreakout(result.text);
+  });
+
+  it('find_meeting_times envelopes an anomalous Graph-supplied mailbox timezone', async () => {
+    mswServer.use(
+      http.get(`${GRAPH_BASE}/me/mailboxSettings`, () =>
+        HttpResponse.json({ timeZone: `Custom Zone ${BREAKOUT}` }),
+      ),
+      http.post(`${GRAPH_BASE}/me/calendar/getSchedule`, () =>
+        HttpResponse.json({
+          value: [{ scheduleId: 'alice@example.com', availabilityView: '0000' }],
+        }),
+      ),
+    );
+    const result = await client.callTool('find_meeting_times', {
+      attendees: ['alice@example.com'],
+      startDateTime: '2026-05-20T09:00:00',
+      endDateTime: '2026-05-20T11:00:00',
+      durationMinutes: 30,
+    });
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      timezoneInfo: { resolved: string; calendarTimezone: string };
+      timeZone: string;
+      note: string;
+    };
+    expect(json.timezoneInfo.resolved).toContain('<untrusted-content');
+    expect(json.timezoneInfo.calendarTimezone).toContain('<untrusted-content');
+    expect(json.timeZone).toContain('<untrusted-content');
+    expect(json.note).toContain('<untrusted-content');
+    expectNoRawBreakout(result.text);
+  });
+
+  it('list_calendars strips hostile owner keys and envelopes owner fields', async () => {
+    mswServer.use(
+      http.get(`${GRAPH_BASE}/me/calendars`, () =>
+        HttpResponse.json({
+          value: [
+            {
+              id: 'cal-1',
+              name: `Team ${BREAKOUT}`,
+              color: 'auto',
+              isDefaultCalendar: true,
+              canEdit: true,
+              owner: {
+                name: `Mallory ${BREAKOUT_UPPER}`,
+                address: 'mallory@example.com',
+                [`${BREAKOUT_NEWLINE}`]: 'injected-key-value',
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    const result = await client.callTool('list_calendars', {});
+    expect(result.isError).not.toBe(true);
+    const json = result.json as {
+      calendars: Array<{ name: string; owner?: Record<string, unknown> }>;
+    };
+    // The hostile extra key must not survive — envelope helpers never wrap
+    // object keys, so the connector strips them instead.
+    expect(Object.keys(json.calendars[0]?.owner ?? {})).toEqual(['name', 'address']);
+    expect(json.calendars[0]?.owner?.name).toContain('<untrusted-content');
+    expect(json.calendars[0]?.name).toContain('<untrusted-content');
+    expect(result.text).not.toContain('injected-key-value');
+    expectNoRawBreakout(result.text);
+  });
+
   // -----------------------------------------------------------------------
   // Vendor error text must be enveloped before it reaches the model
   // -----------------------------------------------------------------------
@@ -205,14 +286,15 @@ describe('microsoft-calendar adversarial security coverage', () => {
     const result = await client.callTool('list_events', {});
     expect(result.isError).toBe(true);
     expectNoRawBreakout(result.text);
-    if (result.text.includes('INJECT_MARKER')) {
-      const json = result.json as { ok: boolean; error: string };
-      expect(json.ok).toBe(false);
-      expect(json.error).toContain('<untrusted-content source="microsoft-calendar:graph-error">');
-      expect(json.error.indexOf('INJECT_MARKER')).toBeGreaterThan(
-        json.error.indexOf('<untrusted-content source="microsoft-calendar:graph-error">'),
-      );
-    }
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    // The vendor-authored message does reach the model — but only inside the
+    // graph-error envelope, with its close-tag breakout escaped.
+    expect(json.error).toContain('INJECT_MARKER');
+    expect(json.error).toContain('<untrusted-content source="microsoft-calendar:graph-error">');
+    expect(json.error.indexOf('INJECT_MARKER')).toBeGreaterThan(
+      json.error.indexOf('<untrusted-content source="microsoft-calendar:graph-error">'),
+    );
   });
 
   it('cancel_event surfaces an upstream failure as an enveloped error', async () => {
