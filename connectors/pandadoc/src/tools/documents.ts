@@ -609,7 +609,12 @@ RELATED TOOLS:
       if (!urlCheck.ok) {
         return JSON.stringify({
           ok: false,
-          error: `Rejected source URL: ${urlCheck.error}.`,
+          // The rejection reason can embed an attacker-chosen redirect URL
+          // or host — envelope it before it reaches the model (invariant #6).
+          error: `Rejected source URL: ${
+            wrapUntrusted(urlCheck.error, 'pandadoc:create_document_from_url:rejected_url') ??
+            urlCheck.error
+          }.`,
           resolution: 'Provide an HTTPS URL on a public host that PandaDoc can reach.',
         });
       }
