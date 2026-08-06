@@ -12,6 +12,7 @@ import { MAX_FILE_SIZE, PandaDocError } from '../types.js';
 import { readUploadFile } from './path-safety.js';
 import { resolvePublicTerminalUrl } from './url-safety.js';
 import {
+  isSafeIdentifier,
   sanitizeDocumentCompact,
   sanitizeDocumentDetails,
   sanitizeRecipients,
@@ -748,6 +749,19 @@ RELATED TOOLS:
           body: JSON.stringify(body),
         },
       );
+
+      // The session id is interpolated into the signing URL below, so it
+      // must actually BE an identifier: anything else (instruction-bearing
+      // text from a hostile or compromised response) would produce a
+      // URL-shaped string carrying attacker prose. There is no enveloped
+      // form of a usable link — fail closed instead.
+      if (typeof result.id !== 'string' || !isSafeIdentifier(result.id)) {
+        throw new PandaDocError(
+          'PandaDoc API returned a malformed session response (unexpected session id).',
+          'INVALID_RESPONSE',
+          'Try the request again. If it persists, the PandaDoc API may be degraded.',
+        );
+      }
 
       return JSON.stringify({
         ok: true,
