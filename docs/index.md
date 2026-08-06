@@ -5,7 +5,7 @@ title: mcp-servers catalogue
 
 # mcp-servers catalogue
 
-A machine-readable index of the [mindstone/mcp-servers](https://github.com/mindstone/mcp-servers) monorepo: 38 source-available MCP servers, audited weekly by the [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/mindstone/mcp-servers).
+A machine-readable index of the [mindstone/mcp-servers](https://github.com/mindstone/mcp-servers) monorepo: 39 source-available MCP servers, audited weekly by the [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/mindstone/mcp-servers).
 
 Each row links to a per-connector page generated from the connector's `STATUS.json`. The data on this site is derived from the source repository on every push to `main` — if it looks stale, the data isn't.
 
@@ -46,6 +46,7 @@ Each row links to a per-connector page generated from the connector's `STATUS.js
 | [slack](./catalogue/slack.html) | Slack workspace MCP server — channels, messages, threads, reactions, users, files, bookmarks, and scheduled messages via the Slack Web API. | 0.3.0 | OAuth (host-orchestrated) | 39 | cloud API |
 | [talentlms](./catalogue/talentlms.html) | TalentLMS MCP server for Model Context Protocol hosts. Manage users, courses, groups, branches, categories, enrolments, reporting, and assessments in TalentLMS through a standardised MCP interface. | 0.3.0 | API key | 28 | cloud API |
 | [vanta](./catalogue/vanta.html) | Vanta compliance MCP server — read and write vulnerabilities, tests, controls, people, vendors, documents, and compliance summaries via the Vanta API. | 0.2.0 | OAuth | 25 | cloud API |
+| [wise](./catalogue/wise.html) | Wise &#40;formerly TransferWise&#41; MCP server for Model Context Protocol hosts. Check multi-currency balances and exchange rates, review transactions and activity, manage recipients, price transfers with quotes — and, with an explicit opt-in, create, fund, and cancel transfers — all through a standardised MCP interface. | 0.1.0 | API key | 17 | cloud API |
 | [workday](./catalogue/workday.html) | Workday HCM MCP server for Model Context Protocol hosts. Query workers, profiles, direct reports, organizations, locations, jobs, time off, and job requisitions in Workday through a standardised MCP interface using OAuth 2.0 authentication. | 0.2.2 | OAuth | 9 | cloud API |
 | [xero](./catalogue/xero.html) | This is a Model Context Protocol &#40;MCP&#41; server implementation for Xero. It provides a bridge between the MCP protocol and Xero's API, allowing for standardized access to Xero's accounting and business features. | 0.0.17 | OAuth | 70 | cloud API |
 | [zendesk](./catalogue/zendesk.html) | Zendesk Support MCP server — tickets, users, comments, macros, account setup, and support-workflow discovery through a standard stdio MCP package. | 0.4.0 | Hybrid | 26 | cloud API |

@@ -1,0 +1,10 @@
+{
+  "id": "bundled-wise",
+  "name": "Wise",
+  "description": "Wise (formerly TransferWise) multi-currency account. Check balances and exchange rates, review transactions, manage recipients, price transfers with quotes. 'What's my EUR balance?' or 'How much would sending £500 to Germany cost?'",
+  "category": "productivity",
+  "icon": "banknote",
+  "maturity": "stable",
+  "verifiedSource": "https://github.com/mindstone/mcp-servers",
+  "requiresSetup": true
+}
