@@ -28,9 +28,13 @@
  *   * A static deny-list of sensitive paths (`~/.ssh/**`, `~/.aws/**`,
  *     `~/.bashrc`, `~/.zshrc`, `/etc/**`) is refused EVEN WHEN the configured
  *     root would otherwise allow it (e.g. the workspace root being `$HOME`).
- *   * The actual write (see tools/download.ts) opens with O_EXCL (atomic
- *     refuse-on-existing) unless the caller passes `overwrite: true`, always
- *     with O_NOFOLLOW + fstat verification of the opened object.
+ *   * The actual write (see tools/download.ts) goes to a fresh, unpredictable
+ *     `fs.mkdtempSync` staging directory (0700) inside the canonical root, so
+ *     no validated pathname is re-trusted for the byte write. Placement is
+ *     then a metadata operation: a hard link that fails EEXIST on any
+ *     pre-existing path (default no-clobber), or — with `overwrite: true` —
+ *     an atomic rename that replaces the destination directory entry without
+ *     ever following or writing through a planted symlink/hardlink.
  */
 
 import * as fs from 'fs';
@@ -118,11 +122,18 @@ function isPathInDenyList(resolvedAbs: string): { hit: true; reason: string } | 
  *  4. A pre-existing symlink or non-regular-file target is refused (writing
  *     through it could clobber an out-of-root file even with overwrite=true).
  *
- * Returns the realpath-resolved write target on success, or throws a
- * structured `KlingError` otherwise. Auto-creates the download root directory
- * if missing so the default works out-of-the-box.
+ * Returns the realpath-resolved write target on success — plus, when the
+ * target already exists as a regular file, its device+inode identity so the
+ * overwrite placement in `tools/download.ts` can refuse to clobber a file
+ * that was swapped in after validation — or throws a structured `KlingError`.
+ * Auto-creates the download root directory if missing so the default works
+ * out-of-the-box.
  */
-export function assertDownloadPathInRoot(outputPath: string): { resolved: string; root: string } {
+export function assertDownloadPathInRoot(outputPath: string): {
+  resolved: string;
+  root: string;
+  existing?: { dev: number; ino: number };
+} {
   const lexicalRoot = getDownloadRoot();
   // Auto-create the root so the default just works. Tolerate failures here —
   // they'll surface later when we try to canonicalise it.
@@ -178,7 +189,8 @@ export function assertDownloadPathInRoot(outputPath: string): { resolved: string
   // (4) Refuse to write through a pre-existing symlink or any non-regular
   // file at the target — the parent-dir realpath check above does not inspect
   // the terminal filename. ENOENT (target does not yet exist) is the happy
-  // path: the caller's O_EXCL / O_NOFOLLOW open handles the create atomically.
+  // path: the caller's exclusive placement handles the create atomically.
+  let existing: { dev: number; ino: number } | undefined;
   try {
     const lst = fs.lstatSync(resolved);
     if (lst.isSymbolicLink()) {
@@ -195,6 +207,7 @@ export function assertDownloadPathInRoot(outputPath: string): { resolved: string
         'Remove or rename the existing target before retrying, or pick a different output_path. Kling downloads only write to fresh paths or to existing regular files (with overwrite=true).',
       );
     }
+    existing = { dev: lst.dev, ino: lst.ino };
   } catch (err) {
     if (err instanceof KlingError) throw err;
     const e = err as NodeJS.ErrnoException;
@@ -207,7 +220,7 @@ export function assertDownloadPathInRoot(outputPath: string): { resolved: string
     }
   }
 
-  return { resolved, root: realRoot };
+  return { resolved, root: realRoot, existing };
 }
 
 /**

@@ -109,6 +109,35 @@ describe('list_kling_tasks pagination continuation', () => {
     expect(json.has_more).toBe(false);
     expect(json.next_page).toBeUndefined();
   });
+
+  it('preserves vendor task order verbatim (no silent re-sorting or dropping)', async () => {
+    mswServer.use(
+      http.get(`${BASE}/videos/text2video`, () =>
+        HttpResponse.json({
+          code: 0,
+          message: 'success',
+          // Deliberately NOT newest-first: the connector must not reorder.
+          data: [
+            { task_id: 'task-old', task_status: 'succeed', created_at: 1000 },
+            { task_id: 'task-new', task_status: 'submitted', created_at: 3000 },
+            { task_id: 'task-mid', task_status: 'processing', created_at: 2000 },
+          ],
+        }),
+      ),
+    );
+    testClient = await createTestClient({ env: clientEnv() });
+
+    const result = await testClient.callTool('list_kling_tasks', { page: 1, page_size: 30 });
+
+    const json = result.json as { ok: boolean; count: number; tasks: Array<{ task_id: string }> };
+    expect(json.ok).toBe(true);
+    expect(json.count).toBe(3);
+    expect(json.tasks.map((t) => t.task_id)).toEqual([
+      '<untrusted-content source="kling-api">task-old</untrusted-content>',
+      '<untrusted-content source="kling-api">task-new</untrusted-content>',
+      '<untrusted-content source="kling-api">task-mid</untrusted-content>',
+    ]);
+  });
 });
 
 describe('check_kling_task multi-result surfacing', () => {
