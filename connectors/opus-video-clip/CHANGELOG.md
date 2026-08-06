@@ -41,6 +41,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   the pre-existing file fully intact instead of truncated to 0 bytes.
 
 ### Fixed
+- `opus_upload_video` no longer claims to be idempotent: every invocation
+  requests a fresh upload link and creates a new, potentially billable
+  project. The cross-call uploadId → project cache behind the old claim
+  could never hit (a new uploadId is minted per call) and has been
+  removed; the tool description now states plainly that calling it twice
+  uploads and bills twice.
 - GCS resumable upload recovery: the HTTP client no longer auto-follows
   redirects (308 Resume Incomplete is a control signal the connector must
   see itself, and silently following redirects anywhere else bypasses
