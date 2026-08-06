@@ -65,14 +65,24 @@ const STRUCTURAL_LITERAL_STRING_COLLECTION_KEYS = new Set([
 /**
  * Keys whose *values* are arbitrary collaborator-authored maps or schema fragments
  * — webhook `request_headers`, `advanced_config` passthroughs, JSON-Schema parameter
- * fragments. Inside them key names are data, not API schema: a property named
- * `status` there is not proof that its value is a trusted enum, and a property named
- * `tool_id` is not proof of a trusted id. Descending into one of these keys disables
- * the structural-literal exemption for the whole subtree — every string is enveloped
- * (credential redaction still applies). Over-inclusion fails closed (a genuine
- * structural value gets enveloped, cosmetic); under-inclusion fails open, so the set
- * errs toward covering every open-map shape the ConvAI tool-configuration surface
- * can reflect.
+ * fragments, conversation-initiation caller data. Inside them key names are data,
+ * not API schema: a property named `status` there is not proof that its value is a
+ * trusted enum, and a property named `tool_id` is not proof of a trusted id.
+ * Descending into one of these keys disables the structural-literal exemption for
+ * the whole subtree — every string is enveloped (credential redaction still
+ * applies). Over-inclusion fails closed (a genuine structural value gets
+ * enveloped, cosmetic); under-inclusion fails open, so the set errs toward
+ * covering every open-map shape the ConvAI tool-configuration surface can
+ * reflect.
+ *
+ * The conversation/call/batch surfaces carry no `advanced_config` passthrough, so
+ * they run ancestor-name-only trust — but they *do* reflect caller-authored open
+ * maps submitted with call initiation (`conversation_initiation_client_data`,
+ * `conversation_config_override`, `custom_llm_extra_body`, `overrides`), and
+ * ElevenLabs echoes those maps back on exactly these surfaces. Without a cutoff
+ * here, a two-word alphabet-conforming value (or any digit-bearing one, which
+ * defeats the phrase grammar) under a structural-looking key inside such a map
+ * reached the model unenveloped.
  */
 const ARBITRARY_MAP_KEYS = new Set([
   'request_headers',
@@ -92,6 +102,10 @@ const ARBITRARY_MAP_KEYS = new Set([
   'json_schema',
   'input_schema',
   'secrets',
+  'conversation_initiation_client_data',
+  'conversation_config_override',
+  'custom_llm_extra_body',
+  'overrides',
 ]);
 
 function isArbitraryMapKey(key: string): boolean {
