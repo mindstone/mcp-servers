@@ -46,7 +46,7 @@ function unescapeCloseTagSentinels(s: string): string {
  * envelope, escaping any embedded close-tag variant so the envelope cannot be
  * broken out of.
  *
- * `undefined` is passed through untouched so callers can apply the wrapper
+ * `undefined` and `null` are passed through untouched so callers can apply the wrapper
  * uniformly to optional fields without branching.
  *
  * Idempotent: when `text` is already a properly-shaped envelope for the SAME
