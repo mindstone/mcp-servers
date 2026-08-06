@@ -76,6 +76,14 @@ export function isBinaryContent(buffer: Buffer): boolean {
   return false;
 }
 
+// Tool-supplied paths may contain control characters (validatePath blocks
+// traversal, not control bytes). Strip ASCII control chars — including \n,
+// \r and ESC — so a path cannot forge log lines or smuggle terminal escape
+// sequences into stderr.
+function sanitizeForLog(value: string): string {
+  return value.replace(/[\x00-\x1f\x7f]/g, '');
+}
+
 export function logOperation(
   tool: string,
   host: string,
@@ -85,7 +93,7 @@ export function logOperation(
 ): void {
   const redactedHost = host.split('.')[0] + '.***';
   console.error(
-    `[replit-ssh] tool=${tool} host=${redactedHost} path=${opPath} result=${result} duration=${durationMs}ms`,
+    `[replit-ssh] tool=${tool} host=${redactedHost} path=${sanitizeForLog(opPath)} result=${result} duration=${durationMs}ms`,
   );
 }
 
