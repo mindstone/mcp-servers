@@ -358,19 +358,25 @@ async function runOAuthCallbackServer(
       const returnedState = url.searchParams.get('state');
       const error = url.searchParams.get('error');
 
-      if (error) {
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end('<html><body><h2>Authentication failed</h2><p>You can close this window.</p></body></html>');
-        cleanup();
-        resolve({ success: false, error: `OAuth error: ${error}` });
-        return;
-      }
-
       if (returnedState !== state) {
         res.writeHead(400, { 'Content-Type': 'text/html' });
         res.end('<html><body><h2>Invalid state parameter</h2><p>Please try again.</p></body></html>');
         cleanup();
         resolve({ success: false, error: 'OAuth state mismatch — possible CSRF attack.' });
+        return;
+      }
+
+      if (error) {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<html><body><h2>Authentication failed</h2><p>You can close this window.</p></body></html>');
+        cleanup();
+        // The OAuth provider's error parameter is external text — and any page
+        // that can reach the loopback callback during the flow can supply it.
+        // Bound and envelope it before it reaches model context (invariant #6).
+        const enveloped =
+          wrapUntrusted(error.slice(0, MAX_VENDOR_ERROR_CHARS), 'outreach:api-error') ??
+          'Unknown error';
+        resolve({ success: false, error: `OAuth error: ${enveloped}` });
         return;
       }
 
@@ -447,10 +453,14 @@ async function runOAuthCallbackServer(
         res.writeHead(500, { 'Content-Type': 'text/html' });
         res.end('<html><body><h2>Authentication error</h2><p>You can close this window.</p></body></html>');
         cleanup();
-        resolve({
-          success: false,
-          error: `Token exchange error: ${err instanceof Error ? err.message : String(err)}`,
-        });
+        // A thrown message can embed vendor text (a non-JSON token-endpoint
+        // body surfaces inside Node's JSON.parse error), so bound and envelope
+        // it like any other external text (invariant #6).
+        const detail = err instanceof Error ? err.message : String(err);
+        const enveloped =
+          wrapUntrusted(detail.slice(0, MAX_VENDOR_ERROR_CHARS), 'outreach:api-error') ??
+          'Unknown error';
+        resolve({ success: false, error: `Token exchange error: ${enveloped}` });
       }
     });
 
