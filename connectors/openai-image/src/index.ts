@@ -761,7 +761,12 @@ const getLocalImageReadError = (
   if (code === 'ELOOP') {
     return `${imageLabel} path contains a symbolic link loop: ${safeInputPath}`;
   }
-  return `Failed to read ${imageLabel.toLowerCase()}: ${safeInputPath} — ${getErrorMessage(error)}`;
+  // Never append the raw OS error message: it embeds the caller-controlled
+  // path again, un-enveloped, and path-collapsing can reassemble a close-tag
+  // variant split across the final segment — a breakout channel. Node's
+  // ErrnoException codes are safe uppercase identifiers.
+  const codeSuffix = code ? ` (error ${code})` : '';
+  return `Failed to read ${imageLabel.toLowerCase()}: ${safeInputPath}${codeSuffix}`;
 };
 
 const isInsideZone = (realPath: string, zoneRoot: string): boolean => {
