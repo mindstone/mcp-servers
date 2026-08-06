@@ -6,7 +6,7 @@
 
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { googleApi, paginate, propertyPath, accountPath, Bases, MAX_LIST_PAGES, paginationLimitExceeded } from '../client.js';
+import { googleApi, paginate, propertyPath, accountPath, assertResourceIdSegment, Bases, MAX_LIST_PAGES, paginationLimitExceeded } from '../client.js';
 import { GoogleAnalyticsError } from '../types.js';
 import { wrapUntrusted, wrapUntrustedJsonStrings } from '../untrusted-content.js';
 import { parseApiResponse, UNTRUSTED_SOURCES, withErrorHandling } from '../utils.js';
@@ -413,7 +413,12 @@ export function registerAdminTools(server: McpServer): void {
           'ga_get_global_site_tag is only meaningful for properties with at least one web data stream. Use ga_list_data_streams to see what streams exist.',
         );
       }
-      const streamId = webStream.name.split('/').pop();
+      // The stream ID comes from a vendor-supplied resource name; confine it
+      // to a single safe path segment before URL interpolation.
+      const streamId = assertResourceIdSegment(
+        webStream.name.split('/').pop() ?? '',
+        'data stream ID',
+      );
       const response = parseApiResponse(
         globalSiteTagSchema,
         await googleApi(`/${property}/dataStreams/${streamId}/globalSiteTag`, {

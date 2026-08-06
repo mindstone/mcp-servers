@@ -218,6 +218,27 @@ export async function paginate<T>(
   return items;
 }
 
+/**
+ * Resource IDs are interpolated into URL paths. Constrain them to the
+ * character set Google actually uses so traversal or query/fragment
+ * characters (`.`, `/`, `?`, `#`) can never reshape the request path —
+ * inputs arrive from tool arguments (model-influenced) or from vendor
+ * responses (e.g. a property's parent account).
+ */
+const RESOURCE_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+/** Assert that a stripped resource ID is a single safe path segment. */
+export function assertResourceIdSegment(id: string, label: string): string {
+  if (!RESOURCE_ID_PATTERN.test(id)) {
+    throw new GoogleAnalyticsError(
+      `The ${label} contains characters that are not valid in a GA4 resource ID.`,
+      'INVALID_RESOURCE_ID',
+      `Pass a bare ${label} (letters, digits, "_" or "-") or the full resource name exactly as returned by a list/get tool.`,
+    );
+  }
+  return id;
+}
+
 /** Resolve `properties/<id>`, accepting either bare IDs or prefixed forms. */
 export function propertyPath(propertyId?: string): string {
   const resolved = propertyId || process.env.GA4_PROPERTY_ID;
@@ -229,11 +250,11 @@ export function propertyPath(propertyId?: string): string {
     );
   }
   const clean = String(resolved).replace(/^properties\//, '');
-  return `properties/${clean}`;
+  return `properties/${assertResourceIdSegment(clean, 'property ID')}`;
 }
 
 /** Resolve `accounts/<id>`, accepting either bare IDs or prefixed forms. */
 export function accountPath(accountId: string): string {
   const clean = String(accountId).replace(/^accounts\//, '');
-  return `accounts/${clean}`;
+  return `accounts/${assertResourceIdSegment(clean, 'account ID')}`;
 }

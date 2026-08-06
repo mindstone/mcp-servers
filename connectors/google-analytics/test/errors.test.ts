@@ -371,4 +371,32 @@ describe('error paths', () => {
     expect(parsed.code).toBe('PAGINATION_LIMIT_EXCEEDED');
     expect(String(parsed.error)).toContain('did not terminate');
   });
+
+  it('rejects a property ID containing path-traversal characters', async () => {
+    await setup();
+    const parsed = await callError('ga_run_report', {
+      property_id: '200/../../v1beta/accountSummaries',
+      metrics: ['totalUsers'],
+    });
+    expect(parsed.code).toBe('INVALID_RESOURCE_ID');
+  });
+
+  it('rejects an audience export ID containing path-traversal characters', async () => {
+    await setup();
+    const parsed = await callError('ga_query_audience_export', {
+      property_id: '200',
+      export_id: '700/../audienceExports',
+    });
+    expect(parsed.code).toBe('INVALID_RESOURCE_ID');
+  });
+
+  it('rejects a vendor-supplied parent account containing path-traversal characters', async () => {
+    await setup([
+      http.get(new RegExp(`^${escapeRegex(ADMIN_BETA)}/properties/[^/]+$`), () =>
+        HttpResponse.json({ name: 'properties/200', parent: 'accounts/../accountSummaries' }),
+      ),
+    ]);
+    const parsed = await callError('ga_search_change_history_events', { property_id: '200' });
+    expect(parsed.code).toBe('INVALID_RESOURCE_ID');
+  });
 });
