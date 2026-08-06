@@ -240,6 +240,24 @@ describe('verifyHostKey — auto-TOFU default / mismatch / strict opt-in', () =>
     });
   });
 
+  describe('known-hosts write hardening', () => {
+    it('refuses to append through a symlinked known-hosts path', () => {
+      if (process.platform === 'win32') return; // symlinks need privileges on Windows
+      const target = path.join(tempDir, 'elsewhere');
+      fs.writeFileSync(target, '', 'utf-8');
+      fs.symlinkSync(target, knownHostsPath);
+
+      const outcome = verifyHostKey(host, fp1);
+      expect(outcome.ok).toBe(false);
+      if (!outcome.ok) {
+        expect(outcome.kind).toBe('unknown');
+        expect(outcome.error.code).toBe('HOST_KEY_RECORD_FAILED');
+      }
+      // Nothing was appended through the symlink.
+      expect(fs.readFileSync(target, 'utf-8')).toBe('');
+    });
+  });
+
   describe('strict mode opt-in (MCP_REPLIT_SSH_STRICT_HOST_KEY=1)', () => {
     beforeEach(() => {
       process.env.MCP_REPLIT_SSH_STRICT_HOST_KEY = '1';

@@ -25,6 +25,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   fail-closed mismatch branch — the real MitM defence — was rarely
   exercised; suffix entries also make `ssh-keyscan riker.replit.dev` pins
   apply to every project behind that proxy.
+- The known-hosts append path now refuses to write through a symlinked
+  known-hosts file (failing closed with `HOST_KEY_RECORD_FAILED`), matching
+  the symlink guard the private-key write path already had.
 - Migrated the untrusted-content envelope helper to the canonical shared implementation: close-tag breakout escaping now neutralises case and horizontal-whitespace variants (`</UNTRUSTED-CONTENT>`, `</untrusted-content >`, tab variants), not just the exact lowercase no-whitespace spelling.
 
 ### Added

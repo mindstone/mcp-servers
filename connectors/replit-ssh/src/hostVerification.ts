@@ -193,6 +193,12 @@ function appendKnownHost(host: string, fingerprint: string): void {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true, mode: KNOWN_HOSTS_DIR_MODE });
   }
+  // Match the private-key write path's hardening: never append through a
+  // symlink — a local attacker could redirect the pin into another file.
+  const existingStats = fs.lstatSync(knownHostsPath, { throwIfNoEntry: false });
+  if (existingStats?.isSymbolicLink()) {
+    throw new Error(`Refusing to append to symlinked known-hosts path "${knownHostsPath}".`);
+  }
   fs.appendFileSync(knownHostsPath, `${host.toLowerCase()} ${fingerprint}\n`, {
     mode: KNOWN_HOSTS_FILE_MODE,
   });
