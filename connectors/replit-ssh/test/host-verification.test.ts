@@ -175,6 +175,63 @@ describe('verifyHostKey — auto-TOFU default / mismatch / strict opt-in', () =>
     });
   });
 
+  describe('pin key never widens to the bare registrable domain', () => {
+    const threeLabelHost = 'riker.replit.dev';
+
+    it('pins a three-label host under its FULL hostname, not under `replit.dev`', () => {
+      verifyHostKey(threeLabelHost, fp1);
+      const file = fs.readFileSync(knownHostsPath, 'utf-8');
+      expect(file).toContain(`${threeLabelHost} ${fp1}`);
+      expect(file).not.toMatch(/^replit\.dev /m);
+    });
+
+    it('a bare `replit.dev` entry does NOT pin a four-label host', () => {
+      fs.writeFileSync(knownHostsPath, `replit.dev ${fp1}\n`, { mode: 0o600 });
+      // Not consulted as a pin: the host is treated as unknown and a fresh
+      // TOFU pin is recorded under its own suffix key instead.
+      const outcome = verifyHostKey(host, fp1);
+      expect(outcome.ok).toBe(true);
+      if (outcome.ok) {
+        expect(outcome.kind).toBe('recorded');
+      }
+      const file = fs.readFileSync(knownHostsPath, 'utf-8');
+      expect(file).toContain(`riker.replit.dev ${fp1}`);
+    });
+
+    it('a bare `replit.dev` entry does NOT pin a three-label host either', () => {
+      fs.writeFileSync(knownHostsPath, `replit.dev ${fp1}\n`, { mode: 0o600 });
+      const outcome = verifyHostKey(threeLabelHost, fp1);
+      expect(outcome.ok).toBe(true);
+      if (outcome.ok) {
+        expect(outcome.kind).toBe('recorded');
+      }
+    });
+
+    it('strict mode still refuses when only a bare `replit.dev` entry exists', () => {
+      fs.writeFileSync(knownHostsPath, `replit.dev ${fp1}\n`, { mode: 0o600 });
+      process.env.MCP_REPLIT_SSH_STRICT_HOST_KEY = '1';
+      const outcome = verifyHostKey(host, fp1);
+      expect(outcome.ok).toBe(false);
+      if (!outcome.ok) {
+        expect(outcome.kind).toBe('unknown');
+        expect(outcome.error.code).toBe('HOST_KEY_UNKNOWN');
+      }
+    });
+
+    it('a pin recorded via a three-label host does not leak to sibling three-label hosts', () => {
+      verifyHostKey(threeLabelHost, fp1);
+      // A different three-label host must not match the riker pin…
+      const sibling = verifyHostKey('pike.replit.dev', fp1);
+      expect(sibling.ok).toBe(true);
+      if (sibling.ok) {
+        expect(sibling.kind).toBe('recorded');
+      }
+      // …while the riker pin still matches riker itself and its projects.
+      expect(verifyHostKey(threeLabelHost, fp1).ok).toBe(true);
+      expect(verifyHostKey(host, fp1).ok).toBe(true);
+    });
+  });
+
   describe('OpenSSH ssh-keyscan line format (strict-mode pre-population)', () => {
     const keyBytes = Buffer.from('fake-ed25519-host-key-bytes');
     const keyB64 = keyBytes.toString('base64');

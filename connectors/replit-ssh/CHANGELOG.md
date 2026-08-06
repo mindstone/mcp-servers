@@ -24,7 +24,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   produced a fresh unknown host and a silent fresh TOFU accept, so the
   fail-closed mismatch branch — the real MitM defence — was rarely
   exercised; suffix entries also make `ssh-keyscan riker.replit.dev` pins
-  apply to every project behind that proxy.
+  apply to every project behind that proxy. The stripping stops at three
+  labels: a three-label host pins under its full hostname, and a bare
+  `replit.dev` entry is never consulted as a pin. Without that floor, one
+  pin recorded under `replit.dev` (e.g. via first contact with any
+  three-label `*.replit.dev` name, before authentication) would be
+  accepted as the host key for EVERY Replit host.
 - The known-hosts append path now refuses to write through a symlinked
   known-hosts file (failing closed with `HOST_KEY_RECORD_FAILED`), matching
   the symlink guard the private-key write path already had.
