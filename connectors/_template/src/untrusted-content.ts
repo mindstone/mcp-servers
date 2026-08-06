@@ -45,7 +45,7 @@ function unescapeCloseTagSentinels(s: string): string {
  * envelope, escaping any embedded close-tag variant so the envelope cannot be
  * broken out of.
  *
- * `undefined` is passed through untouched so callers can apply the wrapper
+ * `undefined` and `null` are passed through untouched so callers can apply the wrapper
  * uniformly to optional fields without branching.
  *
  * Idempotent: when `text` is already a properly-shaped envelope for the SAME
@@ -53,8 +53,8 @@ function unescapeCloseTagSentinels(s: string): string {
  * internal close-tag variants), the original string is returned unchanged so
  * `wrapUntrusted(wrapUntrusted(s, src), src) === wrapUntrusted(s, src)`.
  */
-export function wrapUntrusted(text: string | undefined, source: string): string | undefined {
-  if (text === undefined) return undefined;
+export function wrapUntrusted(text: string | null | undefined, source: string): string | undefined {
+  if (text === undefined || text === null) return undefined;
   const open = `<untrusted-content source="${escapeAttr(source)}">`;
   const close = '</untrusted-content>';
   if (text.startsWith(open) && text.endsWith(close) && text.length >= open.length + close.length) {
