@@ -517,6 +517,48 @@ describe('Opus tool behaviour (MSW-mocked)', () => {
       });
       expect(result.isError).toBe(true);
     });
+
+    it('creates a new project on every invocation (NOT idempotent across calls)', async () => {
+      let clipProjectPosts = 0;
+      mswServer.use(...createOpusHandlers());
+      // Override the create-project handler to count calls. The upload-links
+      // mock returns the SAME uploadId for both invocations, so any
+      // cross-call dedup cache keyed on uploadId would show up here.
+      mswServer.use(
+        http.post(`${BASE}/api/clip-projects`, () => {
+          clipProjectPosts += 1;
+          return HttpResponse.json({ ...makeProjectResponse() }, { status: 201 });
+        }),
+      );
+      const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'opus-upload-ws-'));
+      try {
+        const videoFile = path.join(workspace, 'demo.mp4');
+        fs.writeFileSync(videoFile, Buffer.alloc(1024, 7));
+        testClient = await createTestClient({
+          env: { OPUS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '', MCP_WORKSPACE_PATH: workspace },
+        });
+        const first = await testClient.callTool('opus_upload_video', { file_path: videoFile });
+        const second = await testClient.callTool('opus_upload_video', { file_path: videoFile });
+        expect(first.isError).toBeFalsy();
+        expect(second.isError).toBeFalsy();
+        // Two calls, two billable projects — matching the tool description.
+        expect(clipProjectPosts).toBe(2);
+      } finally {
+        // Let the GCS PUT read-stream finish releasing the file before cleanup.
+        await new Promise((r) => setTimeout(r, 100));
+        fs.rmSync(workspace, { recursive: true, force: true });
+      }
+    });
+
+    it('upload tool description states the tool is not idempotent', async () => {
+      testClient = await createTestClient({
+        env: { OPUS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+      const toolsResult = await testClient.client.listTools();
+      const upload = toolsResult.tools.find((t) => t.name === 'opus_upload_video');
+      expect(upload?.description).toContain('NOT idempotent');
+      expect(upload?.description).not.toContain('will NOT create two billable projects');
+    });
   });
 
   describe('error normalisation', () => {

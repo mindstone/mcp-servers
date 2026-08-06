@@ -191,4 +191,40 @@ describe('opus_download_clip', () => {
     expect(result.text).toContain('DOWNLOAD_FAILED');
     expect(fs.existsSync(out)).toBe(false);
   });
+
+  it('failed overwrite leaves the pre-existing file fully intact (no truncation)', async () => {
+    mswServer.use(
+      http.get(`${CDN}/media/*`, () => HttpResponse.json({ error: 'gone' }, { status: 410 })),
+    );
+    const client = await freshClient();
+    const out = path.join(workspace, 'clip.mp4');
+    fs.writeFileSync(out, 'pre-existing-bytes');
+    const result = await client.callTool('opus_download_clip', {
+      url: CLIP_URL,
+      output_path: out,
+      overwrite: true,
+    });
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('DOWNLOAD_FAILED');
+    // The download is staged to a temp sibling and only renamed into place
+    // on success: the victim keeps its content (not 0 bytes) and no temp
+    // staging file lingers.
+    expect(fs.readFileSync(out, 'utf8')).toBe('pre-existing-bytes');
+    expect(fs.readdirSync(workspace)).toEqual(['clip.mp4']);
+  });
+
+  it('successful overwrite leaves no temp staging files behind', async () => {
+    serveClip();
+    const client = await freshClient();
+    const out = path.join(workspace, 'clip.mp4');
+    fs.writeFileSync(out, 'pre-existing');
+    const result = await client.callTool('opus_download_clip', {
+      url: CLIP_URL,
+      output_path: out,
+      overwrite: true,
+    });
+    expect(result.isError).toBeFalsy();
+    expect(fs.readFileSync(out)).toEqual(Buffer.from(CLIP_BYTES));
+    expect(fs.readdirSync(workspace)).toEqual(['clip.mp4']);
+  });
 });

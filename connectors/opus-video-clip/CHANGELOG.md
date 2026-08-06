@@ -35,10 +35,18 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Poll responses (`opus_get_censor_job_status`, `opus_get_social_copy_job`)
   no longer include the raw `retry_after_header` field; use
   `next_poll_after_seconds`.
-- Failed overwrite downloads no longer delete the pre-existing target
-  file; cleanup only removes files the tool itself created.
+- Overwrite downloads are now staged to a temporary sibling file and
+  atomically renamed into place only after the bytes have landed, so a
+  failed overwrite (expired URL, refused redirect, stream error) leaves
+  the pre-existing file fully intact instead of truncated to 0 bytes.
 
 ### Fixed
+- `opus_upload_video` no longer claims to be idempotent: every invocation
+  requests a fresh upload link and creates a new, potentially billable
+  project. The cross-call uploadId → project cache behind the old claim
+  could never hit (a new uploadId is minted per call) and has been
+  removed; the tool description now states plainly that calling it twice
+  uploads and bills twice.
 - GCS resumable upload recovery: the HTTP client no longer auto-follows
   redirects (308 Resume Incomplete is a control signal the connector must
   see itself, and silently following redirects anywhere else bypasses

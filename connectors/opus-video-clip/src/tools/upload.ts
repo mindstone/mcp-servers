@@ -16,13 +16,6 @@ import {
   UploadedVideoAttrSchema,
 } from './projects.js';
 
-/**
- * Cache of completed uploadId → projectId so a network glitch between
- * step 3 (upload complete) and step 4 (create project) doesn't end up
- * creating two billable projects for the same upload — see D9.
- */
-const completedProjectByUploadId = new Map<string, unknown>();
-
 interface UploadLinkResponse {
   url: string;
   uploadId: string;
@@ -265,8 +258,10 @@ async function putUploadBytes(
  *  3. PUT  <session-url> with file bytes   → 200/201
  *  4. POST /api/clip-projects { videoUrl: uploadId, ... } → project
  *
- * Step 4 is idempotent-cached by uploadId so a transient retry after a
- * successful upload doesn't create a second billable project.
+ * The flow is NOT idempotent across invocations: every call requests a
+ * fresh upload link (new uploadId) and creates a new, potentially billable
+ * project. Recovery is within a single call only — an ambiguous step-3
+ * failure resumes the byte upload from the committed offset.
  */
 async function performUpload(args: {
   filePath: string;
@@ -325,11 +320,8 @@ async function performUpload(args: {
       }
     }
 
-    // Step 4 — Create clip project (idempotent on uploadId).
-    if (completedProjectByUploadId.has(link.uploadId)) {
-      const cached = completedProjectByUploadId.get(link.uploadId) as ClipProjectResponse;
-      return { uploadId: link.uploadId, project: cached, resumed };
-    }
+    // Step 4 — Create clip project. Every invocation reaches this with a
+    // fresh uploadId, so a repeated tool call creates another project.
     const projectBody: Record<string, unknown> = {
       videoUrl: link.uploadId,
     };
@@ -345,7 +337,6 @@ async function performUpload(args: {
       body: JSON.stringify(projectBody),
     });
 
-    completedProjectByUploadId.set(link.uploadId, project);
     return { uploadId: link.uploadId, project, resumed };
   } finally {
     try {
@@ -364,7 +355,7 @@ export function registerUploadTools(server: McpServer): void {
         'Upload a local video file to OpusClip and create a clipping project in a single step. ' +
         'Orchestrates the 4-step Opus / Google Cloud Storage resumable upload: (1) request an upload link, (2) start a GCS resumable session, (3) PUT the video bytes (with automatic offset-query recovery on ambiguous failures), (4) create the project. ' +
         'Pass `file_path` as an absolute filesystem path. Optional `brandTemplateId`, `curationPref`, `renderPref`, `importPref`, `uploadedVideoAttr`, and `conclusionActions` are forwarded to `opus_create_project`. ' +
-        'On retryable network failures the same `uploadId` is reused, so calling this tool twice in a row will NOT create two billable projects. ' +
+        'This tool is NOT idempotent: every invocation uploads the file and creates a NEW, potentially billable project — do not call it twice for the same source video. ' +
         `Per-chunk upload timeout is OPUS_UPLOAD_TIMEOUT_MS (default ${Math.round(getUploadTimeoutMs() / 1000)}s).`,
       inputSchema: z.object({
         file_path: z
