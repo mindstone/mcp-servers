@@ -1,4 +1,5 @@
 import { xeroClient } from "../clients/xero-client.js";
+import { formatError } from "./format-error.js";
 import {
   contactDeepLink,
   creditNoteDeepLink,
@@ -20,17 +21,33 @@ export enum DeepLinkType {
 }
 
 /**
- * Gets a deep link for a specific type and item ID.
- * This will also fetch the org short code from the Xero client.
+ * Gets a deep link for a specific type and item ID, or `null` when the link
+ * cannot be resolved. Best-effort by design: every caller has already
+ * committed a successful write in Xero, so a deeplink failure must never
+ * surface as a tool error — the model would retry and duplicate the record.
  * @param type
  * @param itemId
  * @returns
  */
-export const getDeepLink = async (type: DeepLinkType, itemId: string) => {
-  const orgShortCode = await xeroClient.getShortCode();
+export const getDeepLink = async (
+  type: DeepLinkType,
+  itemId: string,
+): Promise<string | null> => {
+  let orgShortCode: string | undefined;
+  try {
+    orgShortCode = await xeroClient.getShortCode();
+  } catch (error) {
+    console.warn(
+      `Failed to resolve Xero deep link: ${formatError(error)}`,
+    );
+    return null;
+  }
 
   if (!orgShortCode) {
-    throw new Error("Failed to retrieve organisation short code");
+    console.warn(
+      "Failed to resolve Xero deep link: no organisation short code",
+    );
+    return null;
   }
 
   switch (type) {

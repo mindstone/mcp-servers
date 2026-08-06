@@ -3,6 +3,7 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ToolDefinition } from "../types/tool-definition.js";
 import { ZodRawShapeCompat } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import { wrapUntrusted } from "../untrusted-content.js";
+import { formatError } from "./format-error.js";
 
 /**
  * AGENTS.md security invariant #6: any text block a tool returns can carry
@@ -36,9 +37,21 @@ export const CreateXeroTool =
     name: name,
     description: description,
     schema: schema,
-    handler: (async (args, extra) =>
-      envelopToolResult(
-        await handler(args, extra),
-        `xero.${name}`,
-      )) as ToolCallback<Args>,
+    handler: (async (args, extra) => {
+      try {
+        return envelopToolResult(await handler(args, extra), `xero.${name}`);
+      } catch (error) {
+        // A rejection would otherwise bypass the envelope: the SDK serialises
+        // the raw error message into a plain, unwrapped text block. Format it
+        // (whitelisted fields only — SDK rejections can carry bearer tokens)
+        // and route it through the same choke point as any other result.
+        return envelopToolResult(
+          {
+            content: [{ type: "text" as const, text: formatError(error) }],
+            isError: true,
+          },
+          `xero.${name}`,
+        );
+      }
+    }) as ToolCallback<Args>,
   });
