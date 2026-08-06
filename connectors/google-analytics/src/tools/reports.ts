@@ -11,11 +11,16 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { googleApi, propertyPath, Bases } from '../client.js';
 import { filterExpressionSchema } from '../filters.js';
-import { DEFAULT_ROW_WARNING_THRESHOLD, type DataApiResponse } from '../types.js';
+import {
+  dataApiResponseSchema,
+  DEFAULT_ROW_WARNING_THRESHOLD,
+  type DataApiResponse,
+} from '../types.js';
 import {
   compactObject,
   dimensionOrderBy,
   formatRows,
+  parseApiResponse,
   parseOrderBy,
   toNameList,
   UNTRUSTED_SOURCES,
@@ -136,11 +141,15 @@ async function estimateRowsForReport(
     limit: '1',
     returnPropertyQuota: false,
   };
-  const response = await googleApi<DataApiResponse>(`/${property}:runReport`, {
-    method: 'POST',
-    body: sampleRequest,
-    baseUrl: Bases.data,
-  });
+  const response = parseApiResponse(
+    dataApiResponseSchema,
+    await googleApi(`/${property}:runReport`, {
+      method: 'POST',
+      body: sampleRequest,
+      baseUrl: Bases.data,
+    }),
+    'runReport (row estimate)',
+  );
   return response.rowCount ?? 0;
 }
 
@@ -231,11 +240,15 @@ async function buildAndRunReport(args: RunReportArgs) {
     }));
   }
 
-  const response = await googleApi<DataApiResponse>(`/${property}:runReport`, {
-    method: 'POST',
-    body: finalRequest,
-    baseUrl: Bases.data,
-  });
+  const response: DataApiResponse = parseApiResponse(
+    dataApiResponseSchema,
+    await googleApi(`/${property}:runReport`, {
+      method: 'POST',
+      body: finalRequest,
+      baseUrl: Bases.data,
+    }),
+    'runReport',
+  );
 
   return {
     property,
@@ -280,27 +293,31 @@ export function registerReportTools(server: McpServer): void {
       const metrics = toNameList(args.metrics);
       const property = propertyPath(args.property_id);
 
-      const response = await googleApi<DataApiResponse>(`/${property}:runPivotReport`, {
-        method: 'POST',
-        body: compactObject({
-          dateRanges: [{ startDate: args.start_date, endDate: args.end_date }],
-          dimensions: dimensions.map((name) => ({ name })),
-          metrics: metrics.map((name) => ({ name })),
-          pivots: args.pivots.map((pivot) =>
-            compactObject({
-              fieldNames: pivot.field_names,
-              limit: pivot.limit !== undefined ? String(pivot.limit) : undefined,
-              offset: pivot.offset !== undefined ? String(pivot.offset) : undefined,
-              orderBys: parseOrderBy(pivot.order_bys, dimensions, metrics),
-            }),
-          ),
-          dimensionFilter: args.dimension_filter,
-          metricFilter: args.metric_filter,
-          keepEmptyRows: args.keep_empty_rows,
-          returnPropertyQuota: args.return_property_quota,
+      const response: DataApiResponse = parseApiResponse(
+        dataApiResponseSchema,
+        await googleApi(`/${property}:runPivotReport`, {
+          method: 'POST',
+          body: compactObject({
+            dateRanges: [{ startDate: args.start_date, endDate: args.end_date }],
+            dimensions: dimensions.map((name) => ({ name })),
+            metrics: metrics.map((name) => ({ name })),
+            pivots: args.pivots.map((pivot) =>
+              compactObject({
+                fieldNames: pivot.field_names,
+                limit: pivot.limit !== undefined ? String(pivot.limit) : undefined,
+                offset: pivot.offset !== undefined ? String(pivot.offset) : undefined,
+                orderBys: parseOrderBy(pivot.order_bys, dimensions, metrics),
+              }),
+            ),
+            dimensionFilter: args.dimension_filter,
+            metricFilter: args.metric_filter,
+            keepEmptyRows: args.keep_empty_rows,
+            returnPropertyQuota: args.return_property_quota,
+          }),
+          baseUrl: Bases.data,
         }),
-        baseUrl: Bases.data,
-      });
+        'runPivotReport',
+      );
 
       return JSON.stringify({
         ok: true,
@@ -353,9 +370,9 @@ export function registerReportTools(server: McpServer): void {
       const metricList = metrics.length ? metrics : ['activeUsers'];
       const property = propertyPath(args.property_id);
 
-      const response = await googleApi<DataApiResponse>(
-        `/${property}:runRealtimeReport`,
-        {
+      const response: DataApiResponse = parseApiResponse(
+        dataApiResponseSchema,
+        await googleApi(`/${property}:runRealtimeReport`, {
           method: 'POST',
           body: compactObject({
             dimensions: dimensions.map((name) => ({ name })),
@@ -367,7 +384,8 @@ export function registerReportTools(server: McpServer): void {
             returnPropertyQuota: args.return_property_quota,
           }),
           baseUrl: Bases.data,
-        },
+        }),
+        'runRealtimeReport',
       );
 
       return JSON.stringify({
@@ -389,16 +407,20 @@ export function registerReportTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const property = propertyPath(args.property_id);
-      const response = await googleApi<DataApiResponse>(`/${property}:runReport`, {
-        method: 'POST',
-        body: {
-          dateRanges: [{ startDate: 'today', endDate: 'today' }],
-          metrics: [{ name: 'activeUsers' }],
-          limit: '1',
-          returnPropertyQuota: true,
-        },
-        baseUrl: Bases.data,
-      });
+      const response = parseApiResponse(
+        dataApiResponseSchema,
+        await googleApi(`/${property}:runReport`, {
+          method: 'POST',
+          body: {
+            dateRanges: [{ startDate: 'today', endDate: 'today' }],
+            metrics: [{ name: 'activeUsers' }],
+            limit: '1',
+            returnPropertyQuota: true,
+          },
+          baseUrl: Bases.data,
+        }),
+        'runReport (quota snapshot)',
+      );
       return JSON.stringify({
         ok: true,
         property,

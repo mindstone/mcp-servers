@@ -234,6 +234,31 @@ describe('report task tools', () => {
     expect(parsed.code).toBe('INVALID_API_RESPONSE');
   });
 
+  it('fails closed with INVALID_API_RESPONSE when reportTasks:query returns malformed rows', async () => {
+    mswServer.use(...createGoogleHandlers());
+    mswServer.use(
+      http.post(
+        new RegExp(
+          `^${'https://analyticsdata.googleapis.com/v1alpha'.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/properties/[^/]+/reportTasks/[^/]+:query$`,
+        ),
+        () => HttpResponse.json({ rowCount: 1, rows: [{ metricValues: 'not-an-array' }] }),
+      ),
+    );
+    testClient = await createTestClient({
+      env: {
+        GOOGLE_APPLICATION_CREDENTIALS: FIXTURE_ADC,
+        GA4_PROPERTY_ID: '200',
+      },
+    });
+    const result = await testClient.client.callTool({
+      name: 'ga_query_report_task',
+      arguments: { task_id: '800' },
+    });
+    const parsed = parseToolResult(result);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.code).toBe('INVALID_API_RESPONSE');
+  });
+
   it('returns a structured error when task_id is empty', async () => {
     await setup();
     const result = await testClient.client.callTool({

@@ -9,7 +9,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { googleApi, paginate, propertyPath, accountPath, Bases } from '../client.js';
 import { GoogleAnalyticsError } from '../types.js';
 import { wrapUntrusted, wrapUntrustedJsonStrings } from '../untrusted-content.js';
-import { UNTRUSTED_SOURCES, withErrorHandling } from '../utils.js';
+import { parseApiResponse, UNTRUSTED_SOURCES, withErrorHandling } from '../utils.js';
 
 const READ_ONLY = {
   readOnlyHint: true,
@@ -22,34 +22,163 @@ const requiredPropertyId = z.object({
   property_id: z.string().describe('GA4 property ID, with or without the properties/ prefix.'),
 });
 
-interface CustomDimension {
-  name?: string;
-  parameterName?: string;
-  displayName?: string;
-  description?: string;
-  scope?: string;
-  disallowAdsPersonalization?: boolean;
-}
+/**
+ * Runtime shapes of Admin API resources, validated at the boundary
+ * (fail-closed) instead of only TypeScript-cast. .passthrough() keeps the
+ * surfaces forward-compatible with new vendor fields.
+ */
+const customDimensionSchema = z
+  .object({
+    name: z.string().optional(),
+    parameterName: z.string().optional(),
+    displayName: z.string().optional(),
+    description: z.string().optional(),
+    scope: z.string().optional(),
+    disallowAdsPersonalization: z.boolean().optional(),
+  })
+  .passthrough();
 
-interface CustomMetric {
-  name?: string;
-  parameterName?: string;
-  displayName?: string;
-  description?: string;
-  measurementUnit?: string;
-  restrictedMetricType?: string[];
-}
+const customMetricSchema = z
+  .object({
+    name: z.string().optional(),
+    parameterName: z.string().optional(),
+    displayName: z.string().optional(),
+    description: z.string().optional(),
+    measurementUnit: z.string().optional(),
+    restrictedMetricType: z.array(z.string()).optional(),
+  })
+  .passthrough();
 
-interface DataStream {
-  name?: string;
-  displayName?: string;
-  type?: string;
-  createTime?: string;
-  updateTime?: string;
-  webStreamData?: { defaultUri?: string; measurementId?: string };
-  androidAppStreamData?: unknown;
-  iosAppStreamData?: unknown;
-}
+const dataStreamSchema = z
+  .object({
+    name: z.string().optional(),
+    displayName: z.string().optional(),
+    type: z.string().optional(),
+    createTime: z.string().optional(),
+    updateTime: z.string().optional(),
+    webStreamData: z
+      .object({
+        defaultUri: z.string().optional(),
+        measurementId: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
+    androidAppStreamData: z.unknown().optional(),
+    iosAppStreamData: z.unknown().optional(),
+  })
+  .passthrough();
+
+const googleAdsLinkSchema = z
+  .object({
+    name: z.string().optional(),
+    customerId: z.string().optional(),
+    canManageClients: z.boolean().optional(),
+    adsPersonalizationEnabled: z.boolean().optional(),
+    creatorEmailAddress: z.string().optional(),
+  })
+  .passthrough();
+
+const keyEventSchema = z
+  .object({
+    name: z.string().optional(),
+    eventName: z.string().optional(),
+    createTime: z.string().optional(),
+    countingMethod: z.string().optional(),
+    defaultValue: z.unknown().optional(),
+    deletable: z.boolean().optional(),
+  })
+  .passthrough();
+
+const audienceSchema = z
+  .object({
+    name: z.string().optional(),
+    displayName: z.string().optional(),
+    description: z.string().optional(),
+    membershipDurationDays: z.number().optional(),
+    adsPersonalizationEnabled: z.boolean().optional(),
+    exclusionDurationMode: z.string().optional(),
+    filterClauses: z.array(z.unknown()).optional(),
+    createTime: z.string().optional(),
+  })
+  .passthrough();
+
+const channelGroupSchema = z
+  .object({
+    name: z.string().optional(),
+    displayName: z.string().optional(),
+    description: z.string().optional(),
+    systemDefined: z.boolean().optional(),
+    groupingRule: z.array(z.unknown()).optional(),
+  })
+  .passthrough();
+
+const bigQueryLinkSchema = z
+  .object({
+    name: z.string().optional(),
+    project: z.string().optional(),
+    exportStreams: z.array(z.string()).optional(),
+    dailyExportEnabled: z.boolean().optional(),
+    streamingExportEnabled: z.boolean().optional(),
+    freshDailyExportEnabled: z.boolean().optional(),
+    includeAdvertisingId: z.boolean().optional(),
+  })
+  .passthrough();
+
+const firebaseLinkSchema = z
+  .object({
+    name: z.string().optional(),
+    project: z.string().optional(),
+    createTime: z.string().optional(),
+  })
+  .passthrough();
+
+const dataRetentionSettingsSchema = z
+  .object({
+    name: z.string().optional(),
+    eventDataRetention: z.string().optional(),
+    resetUserDataOnNewActivity: z.boolean().optional(),
+  })
+  .passthrough();
+
+const globalSiteTagSchema = z
+  .object({
+    name: z.string().optional(),
+    snippet: z.string().optional(),
+  })
+  .passthrough();
+
+const propertyParentSchema = z
+  .object({
+    parent: z.string().optional(),
+  })
+  .passthrough();
+
+const changeHistoryEventSchema = z
+  .object({
+    id: z.string().optional(),
+    changeTime: z.string().optional(),
+    actorType: z.string().optional(),
+    userActorEmail: z.string().optional(),
+    changes: z
+      .array(
+        z
+          .object({
+            action: z.string().optional(),
+            resource: z.string().optional(),
+            resourceAfterChange: z.unknown().optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
+  })
+  .passthrough();
+
+const changeHistoryResponseSchema = z
+  .object({
+    changeHistoryEvents: z.array(changeHistoryEventSchema).optional(),
+    nextPageToken: z.string().optional(),
+  })
+  .passthrough();
 
 export function registerAdminTools(server: McpServer): void {
   server.registerTool(
@@ -63,12 +192,14 @@ export function registerAdminTools(server: McpServer): void {
     withErrorHandling(async (args) => {
       const property = propertyPath(args.property_id);
       const [customDimensions, customMetrics] = await Promise.all([
-        paginate<CustomDimension>(`/${property}/customDimensions`, {
+        paginate(`/${property}/customDimensions`, {
           itemKey: 'customDimensions',
+          itemSchema: customDimensionSchema,
           query: { pageSize: 200 },
         }),
-        paginate<CustomMetric>(`/${property}/customMetrics`, {
+        paginate(`/${property}/customMetrics`, {
           itemKey: 'customMetrics',
+          itemSchema: customMetricSchema,
           query: { pageSize: 200 },
         }),
       ]);
@@ -104,14 +235,9 @@ export function registerAdminTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const property = propertyPath(args.property_id);
-      const links = await paginate<{
-        name?: string;
-        customerId?: string;
-        canManageClients?: boolean;
-        adsPersonalizationEnabled?: boolean;
-        creatorEmailAddress?: string;
-      }>(`/${property}/googleAdsLinks`, {
+      const links = await paginate(`/${property}/googleAdsLinks`, {
         itemKey: 'googleAdsLinks',
+        itemSchema: googleAdsLinkSchema,
         query: { pageSize: 200 },
       });
       return JSON.stringify({
@@ -139,15 +265,9 @@ export function registerAdminTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const property = propertyPath(args.property_id);
-      const keyEvents = await paginate<{
-        name?: string;
-        eventName?: string;
-        createTime?: string;
-        countingMethod?: string;
-        defaultValue?: unknown;
-        deletable?: boolean;
-      }>(`/${property}/keyEvents`, {
+      const keyEvents = await paginate(`/${property}/keyEvents`, {
         itemKey: 'keyEvents',
+        itemSchema: keyEventSchema,
         query: { pageSize: 200 },
       });
       return JSON.stringify({
@@ -175,8 +295,9 @@ export function registerAdminTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const property = propertyPath(args.property_id);
-      const dataStreams = await paginate<DataStream>(`/${property}/dataStreams`, {
+      const dataStreams = await paginate(`/${property}/dataStreams`, {
         itemKey: 'dataStreams',
+        itemSchema: dataStreamSchema,
         query: { pageSize: 200 },
       });
       return JSON.stringify({
@@ -206,17 +327,9 @@ export function registerAdminTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const property = propertyPath(args.property_id);
-      const audiences = await paginate<{
-        name?: string;
-        displayName?: string;
-        description?: string;
-        membershipDurationDays?: number;
-        adsPersonalizationEnabled?: boolean;
-        exclusionDurationMode?: string;
-        filterClauses?: unknown[];
-        createTime?: string;
-      }>(`/${property}/audiences`, {
+      const audiences = await paginate(`/${property}/audiences`, {
         itemKey: 'audiences',
+        itemSchema: audienceSchema,
         query: { pageSize: 200 },
         baseUrl: Bases.adminAlpha,
       });
@@ -251,14 +364,9 @@ export function registerAdminTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const property = propertyPath(args.property_id);
-      const channelGroups = await paginate<{
-        name?: string;
-        displayName?: string;
-        description?: string;
-        systemDefined?: boolean;
-        groupingRule?: unknown[];
-      }>(`/${property}/channelGroups`, {
+      const channelGroups = await paginate(`/${property}/channelGroups`, {
         itemKey: 'channelGroups',
+        itemSchema: channelGroupSchema,
         query: { pageSize: 200 },
         baseUrl: Bases.adminAlpha,
       });
@@ -290,8 +398,9 @@ export function registerAdminTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const property = propertyPath(args.property_id);
-      const dataStreams = await paginate<DataStream>(`/${property}/dataStreams`, {
+      const dataStreams = await paginate(`/${property}/dataStreams`, {
         itemKey: 'dataStreams',
+        itemSchema: dataStreamSchema,
         query: { pageSize: 200 },
       });
       const webStream = dataStreams.find(
@@ -305,9 +414,12 @@ export function registerAdminTools(server: McpServer): void {
         );
       }
       const streamId = webStream.name.split('/').pop();
-      const response = await googleApi<{ snippet?: string; name?: string }>(
-        `/${property}/dataStreams/${streamId}/globalSiteTag`,
-        { baseUrl: Bases.adminAlpha },
+      const response = parseApiResponse(
+        globalSiteTagSchema,
+        await googleApi(`/${property}/dataStreams/${streamId}/globalSiteTag`, {
+          baseUrl: Bases.adminAlpha,
+        }),
+        'globalSiteTag.get',
       );
       return JSON.stringify({
         ok: true,
@@ -329,16 +441,9 @@ export function registerAdminTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const property = propertyPath(args.property_id);
-      const links = await paginate<{
-        name?: string;
-        project?: string;
-        exportStreams?: string[];
-        dailyExportEnabled?: boolean;
-        streamingExportEnabled?: boolean;
-        freshDailyExportEnabled?: boolean;
-        includeAdvertisingId?: boolean;
-      }>(`/${property}/bigQueryLinks`, {
+      const links = await paginate(`/${property}/bigQueryLinks`, {
         itemKey: 'bigQueryLinks',
+        itemSchema: bigQueryLinkSchema,
         query: { pageSize: 200 },
         baseUrl: Bases.adminAlpha,
       });
@@ -367,11 +472,11 @@ export function registerAdminTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const property = propertyPath(args.property_id);
-      const response = await googleApi<{
-        name?: string;
-        eventDataRetention?: string;
-        resetUserDataOnNewActivity?: boolean;
-      }>(`/${property}/dataRetentionSettings`);
+      const response = parseApiResponse(
+        dataRetentionSettingsSchema,
+        await googleApi(`/${property}/dataRetentionSettings`),
+        'dataRetentionSettings.get',
+      );
       return JSON.stringify({
         ok: true,
         property,
@@ -391,12 +496,9 @@ export function registerAdminTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const property = propertyPath(args.property_id);
-      const links = await paginate<{
-        name?: string;
-        project?: string;
-        createTime?: string;
-      }>(`/${property}/firebaseLinks`, {
+      const links = await paginate(`/${property}/firebaseLinks`, {
         itemKey: 'firebaseLinks',
+        itemSchema: firebaseLinkSchema,
         query: { pageSize: 200 },
       });
       return JSON.stringify({
@@ -421,7 +523,11 @@ export function registerAdminTools(server: McpServer): void {
     },
     withErrorHandling(async (args) => {
       const property = propertyPath(args.property_id);
-      const propertyDetails = await googleApi<{ parent?: string }>(`/${property}`);
+      const propertyDetails = parseApiResponse(
+        propertyParentSchema,
+        await googleApi(`/${property}`),
+        'properties.get',
+      );
       const parentAccount = propertyDetails.parent;
       if (!parentAccount) {
         throw new GoogleAnalyticsError(
@@ -431,37 +537,28 @@ export function registerAdminTools(server: McpServer): void {
         );
       }
 
-      interface ChangeHistoryEvent {
-        id?: string;
-        changeTime?: string;
-        actorType?: string;
-        userActorEmail?: string;
-        changes?: Array<{
-          action?: string;
-          resource?: string;
-          resourceAfterChange?: unknown;
-        }>;
-      }
+      type ChangeHistoryEvent = z.infer<typeof changeHistoryEventSchema>;
 
       // Follow every page — the previous single-shot request silently
       // truncated the history at the first 100 events.
       const events: ChangeHistoryEvent[] = [];
       let pageToken: string | undefined;
       do {
-        const response = await googleApi<{
-          changeHistoryEvents?: ChangeHistoryEvent[];
-          nextPageToken?: string;
-        }>(`/${accountPath(parentAccount)}:searchChangeHistoryEvents`, {
-          method: 'POST',
-          body: {
-            resourceType: ['PROPERTY'],
-            action: ['CREATED', 'UPDATED', 'DELETED'],
-            property,
-            pageSize: 100,
-            pageToken,
-          },
-          baseUrl: Bases.adminAlpha,
-        });
+        const response = parseApiResponse(
+          changeHistoryResponseSchema,
+          await googleApi(`/${accountPath(parentAccount)}:searchChangeHistoryEvents`, {
+            method: 'POST',
+            body: {
+              resourceType: ['PROPERTY'],
+              action: ['CREATED', 'UPDATED', 'DELETED'],
+              property,
+              pageSize: 100,
+              pageToken,
+            },
+            baseUrl: Bases.adminAlpha,
+          }),
+          'searchChangeHistoryEvents',
+        );
         events.push(...(response.changeHistoryEvents || []));
         pageToken = response.nextPageToken || undefined;
       } while (pageToken);

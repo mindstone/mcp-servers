@@ -17,7 +17,7 @@ import {
   DEFAULT_REQUEST_TIMEOUT_MS,
 } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
-import { UNTRUSTED_SOURCES } from './utils.js';
+import { parseApiResponse, UNTRUSTED_SOURCES } from './utils.js';
 
 /** Shape of the standard Google API error payload, validated at the boundary. */
 const apiErrorPayloadSchema = z
@@ -136,10 +136,20 @@ export async function googleApi<T = unknown>(
  * Iterate paginated list endpoints, accumulating all items. Used for the
  * smaller admin collections (account summaries, properties, links) where
  * full enumeration is the expected mode.
+ *
+ * Every page's items are fail-closed validated against `itemSchema` at the
+ * boundary (INVALID_API_RESPONSE on shape mismatch) instead of being
+ * TypeScript-cast only. A non-string nextPageToken ends pagination rather
+ * than being coerced into a query parameter.
  */
 export async function paginate<T>(
   apiPath: string,
-  options: { itemKey: string; query?: GoogleApiOptions['query']; baseUrl?: string },
+  options: {
+    itemKey: string;
+    itemSchema: z.ZodType<T>;
+    query?: GoogleApiOptions['query'];
+    baseUrl?: string;
+  },
 ): Promise<T[]> {
   const items: T[] = [];
   let pageToken: string | undefined;
@@ -150,9 +160,14 @@ export async function paginate<T>(
       query: { ...options.query, pageToken },
       baseUrl: options.baseUrl,
     });
-    const page = (response?.[options.itemKey] as T[] | undefined) || [];
+    const page = parseApiResponse(
+      z.array(options.itemSchema),
+      response?.[options.itemKey] ?? [],
+      `${options.itemKey}.list`,
+    );
     items.push(...page);
-    pageToken = response?.nextPageToken as string | undefined;
+    const rawToken = response?.nextPageToken;
+    pageToken = typeof rawToken === 'string' && rawToken !== '' ? rawToken : undefined;
   } while (pageToken);
 
   return items;

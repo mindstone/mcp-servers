@@ -2,6 +2,8 @@
  * Shared types and constants for the Google Analytics MCP server.
  */
 
+import { z } from 'zod';
+
 export const ANALYTICS_SCOPE = 'https://www.googleapis.com/auth/analytics.readonly';
 
 /** Default base URL for the GA Admin API. v1beta is generally available. */
@@ -45,18 +47,44 @@ export class GoogleAnalyticsError extends Error {
   }
 }
 
-/** Response shape from the Data API runReport / runPivotReport / runRealtimeReport calls. */
-export interface DataApiResponse {
-  rowCount?: number;
-  dimensionHeaders?: Array<{ name: string }>;
-  metricHeaders?: Array<{ name: string }>;
-  rows?: Array<{
-    dimensionValues?: Array<{ value: string }>;
-    metricValues?: Array<{ value: string }>;
-  }>;
-  totals?: Array<{ metricValues?: Array<{ value: string }> }>;
-  maximums?: Array<{ metricValues?: Array<{ value: string }> }>;
-  minimums?: Array<{ metricValues?: Array<{ value: string }> }>;
-  pivotHeaders?: unknown[];
-  propertyQuota?: unknown;
-}
+/**
+ * Runtime shape of the Data API runReport / runPivotReport / runRealtimeReport
+ * responses (and reportTasks:query, which returns the same row payload).
+ * Validated at the boundary (fail-closed) instead of only TypeScript-cast;
+ * .passthrough() keeps the surface forward-compatible with new vendor fields.
+ * pivotHeaders / propertyQuota stay opaque: pivot headers are enveloped
+ * wholesale downstream and quota snapshots are vendor-numeric structures.
+ */
+const dataApiHeaderSchema = z.object({ name: z.string().optional() }).passthrough();
+const dataApiValueSchema = z.object({ value: z.string().optional() }).passthrough();
+
+export const dataApiResponseSchema = z
+  .object({
+    rowCount: z.number().optional(),
+    dimensionHeaders: z.array(dataApiHeaderSchema).optional(),
+    metricHeaders: z.array(dataApiHeaderSchema).optional(),
+    rows: z
+      .array(
+        z
+          .object({
+            dimensionValues: z.array(dataApiValueSchema).optional(),
+            metricValues: z.array(dataApiValueSchema).optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
+    totals: z
+      .array(z.object({ metricValues: z.array(dataApiValueSchema).optional() }).passthrough())
+      .optional(),
+    maximums: z
+      .array(z.object({ metricValues: z.array(dataApiValueSchema).optional() }).passthrough())
+      .optional(),
+    minimums: z
+      .array(z.object({ metricValues: z.array(dataApiValueSchema).optional() }).passthrough())
+      .optional(),
+    pivotHeaders: z.array(z.unknown()).optional(),
+    propertyQuota: z.unknown().optional(),
+  })
+  .passthrough();
+
+export type DataApiResponse = z.infer<typeof dataApiResponseSchema>;

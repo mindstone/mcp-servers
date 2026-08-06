@@ -29,6 +29,7 @@ are maintained manually as part of the PR review checklist.
 - `reportMetadata.errorMessage` on report tasks is enveloped before returning.
 - `ga_create_audience_export` and `ga_create_report_task` are now annotated `destructiveHint: true` so hosts can gate these quota-charging server-side materialisations behind explicit user approval.
 - Audience-export and report-task API responses are validated against Zod schemas at the boundary instead of being TypeScript-cast only.
+- All remaining external API responses are now validated the same way (fail-closed `INVALID_API_RESPONSE` on shape mismatch): report rows (`runReport`, pivot, realtime, batch, `reportTasks:query`), every paginated admin list, account summaries, property details, metadata, compatibility, retention settings, global site tag, and change-history pages. A non-string `nextPageToken` now ends pagination instead of being coerced into a query parameter.
 
 ## [0.1.1] - 2026-05-14
 ### Added
