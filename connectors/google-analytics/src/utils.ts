@@ -1,7 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z, ZodError } from 'zod';
 import { GoogleAnalyticsError, type DataApiResponse } from './types.js';
-import { wrapUntrusted } from './untrusted-content.js';
+import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
 
 /** Envelope source labels used across the connector. */
 export const UNTRUSTED_SOURCES = {
@@ -340,8 +340,8 @@ export const metadataFieldSchema = z
     customDefinition: z.boolean().optional(),
     deprecatedApiNames: z.array(z.string()).optional(),
     allowedInSegments: z.boolean().optional(),
-    dimensionCompatibleMetrics: z.unknown().optional(),
-    metricCompatibleDimensions: z.unknown().optional(),
+    dimensionCompatibleMetrics: z.array(z.string()).optional(),
+    metricCompatibleDimensions: z.array(z.string()).optional(),
   })
   .passthrough();
 
@@ -363,11 +363,21 @@ export function mapMetadataField(field: MetadataField, kind: 'dimension' | 'metr
       : field.description || null,
     category: categoriseField(field, kind),
     type: field.type || null,
-    expression: field.expression || null,
+    // The expression of a custom calculated metric is property-editor-authored
+    // — envelope it under the same gate as uiName/description (invariant #6).
+    expression: userAuthored
+      ? wrapUntrusted(field.expression, UNTRUSTED_SOURCES.metadata) ?? null
+      : field.expression || null,
     customDefinition: field.customDefinition || false,
     deprecatedApiNames: field.deprecatedApiNames || [],
     allowedInSegments: field.allowedInSegments || false,
-    dimensionCompatibleMetrics: field.dimensionCompatibleMetrics || undefined,
-    metricCompatibleDimensions: field.metricCompatibleDimensions || undefined,
+    // Vendor-echoed field-name lists — envelope before model output
+    // (invariant #6).
+    dimensionCompatibleMetrics: field.dimensionCompatibleMetrics
+      ? wrapUntrustedJsonStrings(field.dimensionCompatibleMetrics, UNTRUSTED_SOURCES.metadata)
+      : undefined,
+    metricCompatibleDimensions: field.metricCompatibleDimensions
+      ? wrapUntrustedJsonStrings(field.metricCompatibleDimensions, UNTRUSTED_SOURCES.metadata)
+      : undefined,
   };
 }

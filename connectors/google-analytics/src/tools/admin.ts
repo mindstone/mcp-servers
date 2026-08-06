@@ -63,8 +63,20 @@ const dataStreamSchema = z
       })
       .passthrough()
       .optional(),
-    androidAppStreamData: z.unknown().optional(),
-    iosAppStreamData: z.unknown().optional(),
+    androidAppStreamData: z
+      .object({
+        packageName: z.string().optional(),
+        firebaseAppId: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
+    iosAppStreamData: z
+      .object({
+        bundleId: z.string().optional(),
+        firebaseAppId: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
   })
   .passthrough();
 
@@ -84,7 +96,7 @@ const keyEventSchema = z
     eventName: z.string().optional(),
     createTime: z.string().optional(),
     countingMethod: z.string().optional(),
-    defaultValue: z.unknown().optional(),
+    defaultValue: z.union([z.number(), z.string()]).optional(),
     deletable: z.boolean().optional(),
   })
   .passthrough();
@@ -278,7 +290,11 @@ export function registerAdminTools(server: McpServer): void {
           eventName: wrapUntrusted(item.eventName, UNTRUSTED_SOURCES.admin) || null,
           createTime: item.createTime || null,
           countingMethod: item.countingMethod || null,
-          defaultValue: item.defaultValue || null,
+          // Property-editor-authored value — envelope string content
+          // (invariant #6); numbers pass through unchanged.
+          defaultValue: item.defaultValue
+            ? wrapUntrustedJsonStrings(item.defaultValue, UNTRUSTED_SOURCES.admin)
+            : null,
           deletable: item.deletable || false,
         })),
       });
@@ -309,9 +325,18 @@ export function registerAdminTools(server: McpServer): void {
           type: stream.type || null,
           createTime: stream.createTime || null,
           updateTime: stream.updateTime || null,
-          webStreamData: stream.webStreamData || null,
-          androidAppStreamData: stream.androidAppStreamData || null,
-          iosAppStreamData: stream.iosAppStreamData || null,
+          // Stream-data blobs are property-editor-authored (the defaultUri is
+          // the editor's typed website URL) — enveloped wholesale, the same
+          // treatment as audience filter clauses (invariant #6).
+          webStreamData: stream.webStreamData
+            ? wrapUntrustedJsonStrings(stream.webStreamData, UNTRUSTED_SOURCES.admin)
+            : null,
+          androidAppStreamData: stream.androidAppStreamData
+            ? wrapUntrustedJsonStrings(stream.androidAppStreamData, UNTRUSTED_SOURCES.admin)
+            : null,
+          iosAppStreamData: stream.iosAppStreamData
+            ? wrapUntrustedJsonStrings(stream.iosAppStreamData, UNTRUSTED_SOURCES.admin)
+            : null,
         })),
       });
     }),
@@ -431,7 +456,9 @@ export function registerAdminTools(server: McpServer): void {
         property,
         dataStream: webStream.name,
         displayName: wrapUntrusted(webStream.displayName, UNTRUSTED_SOURCES.admin) || null,
-        globalSiteTag: response?.snippet || null,
+        // The gtag.js snippet is external-system text rendered into model
+        // context — envelope it like every other vendor string (invariant #6).
+        globalSiteTag: wrapUntrusted(response?.snippet, UNTRUSTED_SOURCES.admin) || null,
         globalSiteTagName: response?.name || null,
       });
     }),
