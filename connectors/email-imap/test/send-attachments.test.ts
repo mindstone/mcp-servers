@@ -163,6 +163,50 @@ describe('outbound attachments (email_send / email_save_draft)', () => {
     expect(mockTransport.sendMail).not.toHaveBeenCalled();
   });
 
+  it('refuses an over-cap attachment before buffering its bytes', async () => {
+    await setupClient();
+    // Sparse file: 26 MB on the descriptor without allocating 26 MB of data.
+    const bigPath = path.join(workspace, 'big.bin');
+    fs.writeFileSync(bigPath, '');
+    fs.truncateSync(bigPath, 26 * 1024 * 1024);
+
+    const result = await testClient.callTool('email_send', {
+      to: 'alice@example.com',
+      text: 'See attached',
+      attachments: [{ path: bigPath }],
+    });
+
+    expect(result.isError).toBe(true);
+    const json = result.json as Record<string, unknown>;
+    // The "attachment budget" refusal is the PRE-READ check on the
+    // descriptor's fstat size; the post-read aggregate check has a different
+    // message ("aggregate cap"), so this string proves the oversized file
+    // was refused before its bytes were buffered into memory.
+    expect(json.error as string).toContain('attachment budget');
+    expect(mockTransport.sendMail).not.toHaveBeenCalled();
+  });
+
+  it('enforces the 25 MB aggregate cap across multiple attachments', async () => {
+    await setupClient();
+    const first = path.join(workspace, 'first.bin');
+    const second = path.join(workspace, 'second.bin');
+    fs.writeFileSync(first, '');
+    fs.truncateSync(first, 20 * 1024 * 1024);
+    fs.writeFileSync(second, '');
+    fs.truncateSync(second, 10 * 1024 * 1024);
+
+    const result = await testClient.callTool('email_send', {
+      to: 'alice@example.com',
+      text: 'See attached',
+      attachments: [{ path: first }, { path: second }],
+    });
+
+    expect(result.isError).toBe(true);
+    const json = result.json as Record<string, unknown>;
+    expect(json.error as string).toContain('attachment budget');
+    expect(mockTransport.sendMail).not.toHaveBeenCalled();
+  });
+
   it('email_save_draft attaches workspace files to the stored draft', async () => {
     await setupClient();
     const filePath = path.join(workspace, 'draft-note.txt');

@@ -131,8 +131,15 @@ export interface WorkspaceAttachmentContent {
  * any violation. Used for OUTBOUND attachment reads (email_send /
  * email_save_draft / email_update_draft): a path outside the sandbox must
  * never leave the process as email content.
+ *
+ * When `maxBytes` is given, the descriptor's `fstat` size is checked against
+ * it BEFORE any bytes are read — an oversized file is refused without being
+ * buffered into memory first.
  */
-export function readWorkspaceAttachment(inputPath: string): WorkspaceAttachmentContent {
+export function readWorkspaceAttachment(
+  inputPath: string,
+  maxBytes?: number,
+): WorkspaceAttachmentContent {
   const root = getWorkspaceRoot();
 
   const expanded = inputPath.startsWith('~')
@@ -169,6 +176,16 @@ export function readWorkspaceAttachment(inputPath: string): WorkspaceAttachmentC
     const fdStat = fs.fstatSync(fd);
     if (!fdStat.isFile()) {
       throw new Error(`Attachment path is not a file: ${inputPath}`);
+    }
+
+    // Enforce the caller's byte budget from the descriptor's fstat BEFORE
+    // reading: an oversized in-workspace file must not be fully buffered
+    // into memory before the refusal.
+    if (maxBytes !== undefined && fdStat.size > maxBytes) {
+      throw new Error(
+        `Attachment is ${fdStat.size} bytes, exceeding the remaining ${maxBytes}-byte ` +
+          `attachment budget: ${inputPath}`,
+      );
     }
 
     // Post-open re-verification: the path must still canonically resolve
