@@ -26,8 +26,10 @@ are maintained manually as part of the PR review checklist.
 
 ### Security
 - All Kling API responses are now validated fail-closed with Zod (envelope + per-endpoint `data` schema); malformed JSON or a shape-drifting payload surfaces as a generic `INVALID_RESPONSE` error instead of an unchecked type cast or raw parser text.
+- The default download root (`<workspace>/kling-downloads`, used when `KLING_DOWNLOAD_ROOT` is unset) is now canonicalised and containment-checked against the workspace root, the same as a configured root: a symlink planted at the predictable default path that resolves outside the workspace (CWE-59 squat) is refused fail-closed before any network call, instead of silently redirecting downloads outside the sandbox.
 
 ### Fixed
+- `server.json` now declares the optional `MCP_WORKSPACE_PATH` and `KLING_DOWNLOAD_ROOT` environment variables the connector reads (previously only documented in the README).
 - `list_kling_tasks` no longer silently truncates: the output now includes `has_more` plus `next_page` (and a continuation hint) whenever the returned page is full, so the model can tell that more results exist. The tool description no longer promises an ordering the vendor does not guarantee.
 - Credit-consuming production writes (`generate_kling_video`, `generate_kling_image_to_video`, `extend_kling_video`, `generate_kling_lip_sync`, `generate_kling_image`) now carry `destructiveHint: true` — they create vendor jobs and spend account credits, and were previously annotated `destructiveHint: false`.
 - `klingFetch` no longer sends the bearer JWT to arbitrary absolute URLs: only the exact Kling API origin is accepted (the `/account/costs` endpoint at the domain root keeps working).

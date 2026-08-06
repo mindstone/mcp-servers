@@ -260,6 +260,37 @@ describe('Kling download_kling_video sandbox', () => {
     expect(calls.length).toBe(0); // refused before any network call
   });
 
+  it('refuses a squatter symlink planted at the default download root', async () => {
+    const { handler, calls } = makeDownloadHandler();
+    mswServer.use(...createKlingHandlers(), handler);
+
+    // CWE-59 squat: the default root `<workspace>/kling-downloads` is a
+    // predictable path — replace it with a symlink pointing outside the
+    // workspace before the connector ever runs.
+    fs.symlinkSync(outsideRoot, path.join(workspace, 'kling-downloads'));
+
+    testClient = await createTestClient({
+      env: {
+        KLING_ACCESS_KEY: ACCESS_KEY,
+        KLING_SECRET_KEY: SECRET_KEY,
+        MCP_HOST_BRIDGE_STATE: '',
+        MCP_WORKSPACE_PATH: workspace,
+        KLING_DOWNLOAD_ROOT: '',
+      },
+    });
+
+    const result = await testClient.callTool('download_kling_video', {
+      url: REMOTE_URL,
+      output_path: path.join(workspace, 'kling-downloads', 'clip.mp4'),
+    });
+
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('DOWNLOAD_ROOT_OUTSIDE_WORKSPACE');
+    expect(calls.length).toBe(0); // refused before any network call
+    expect(fs.readdirSync(outsideRoot)).toHaveLength(0); // nothing written outside
+  });
+
   it('refuses output_path outside the download root', async () => {
     const { handler, calls } = makeDownloadHandler();
     mswServer.use(...createKlingHandlers(), handler);

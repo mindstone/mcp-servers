@@ -17,6 +17,9 @@
  *   * `KLING_DOWNLOAD_ROOT` may redirect the root, but only to a directory
  *     that itself canonicalises INSIDE the workspace root; anything else is
  *     refused fail-closed with explicit guidance (never silently widened).
+ *     The DEFAULT root gets the same canonical containment check — a symlink
+ *     planted at the predictable default path that resolves outside the
+ *     workspace (a CWE-59 squat) is refused, not followed.
  *   * The root is auto-created if missing so the default works out-of-the-box.
  *   * The PARENT DIR of the requested output_path is canonicalised via
  *     `fs.realpathSync` and checked against the canonicalised root, catching
@@ -50,19 +53,21 @@ const isUnder = (p: string, root: string): boolean => p === root || p.startsWith
 
 /**
  * The canonicalised download root. Defaults to `<workspace>/kling-downloads`.
- * A configured `KLING_DOWNLOAD_ROOT` must canonicalise inside the read
- * workspace root — otherwise the env var would silently re-widen the write
- * surface beyond the repository-approved roots, so it is refused fail-closed.
+ * Both the default and a configured `KLING_DOWNLOAD_ROOT` must canonicalise
+ * inside the read workspace root — otherwise the predictable default path
+ * (a symlink planted there redirects downloads outside the sandbox, CWE-59)
+ * or the env var would silently re-widen the write surface beyond the
+ * repository-approved roots, so either is refused fail-closed.
  */
 export function getDownloadRoot(): string {
   const workspaceRoot = getReadWorkspaceRoot();
   const raw = process.env[KLING_DOWNLOAD_ROOT_ENV];
-  if (!raw || raw.length === 0) {
-    return path.join(workspaceRoot, DEFAULT_DOWNLOAD_DIRNAME);
-  }
+  const isDefault = !raw || raw.length === 0;
+  const lexical = raw && raw.length > 0
+    ? path.resolve(raw)
+    : path.join(workspaceRoot, DEFAULT_DOWNLOAD_DIRNAME);
 
-  const lexical = path.resolve(raw);
-  // Auto-create so a not-yet-existing configured root canonicalises cleanly.
+  // Auto-create so a not-yet-existing root canonicalises cleanly.
   try {
     fs.mkdirSync(lexical, { recursive: true });
   } catch {
@@ -75,6 +80,13 @@ export function getDownloadRoot(): string {
     real = lexical;
   }
   if (!isUnder(real, workspaceRoot)) {
+    if (isDefault) {
+      throw new KlingError(
+        `The default download directory resolves outside the workspace sandbox root (${workspaceRoot}): ${lexical} -> ${real}. It may have been replaced by a symlink.`,
+        'DOWNLOAD_ROOT_OUTSIDE_WORKSPACE',
+        `Remove or replace ${lexical} so the default download directory is a real directory inside the workspace, or set ${KLING_DOWNLOAD_ROOT_ENV} to a different directory inside the workspace.`,
+      );
+    }
     throw new KlingError(
       `${KLING_DOWNLOAD_ROOT_ENV} must be inside the workspace sandbox root (${workspaceRoot}). Got: ${raw}`,
       'DOWNLOAD_ROOT_OUTSIDE_WORKSPACE',
