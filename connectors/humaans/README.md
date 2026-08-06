@@ -145,7 +145,7 @@ node dist/index.js
 ## Data handling
 
 - Person list responses are field-allowlisted; person detail responses strip sensitive fields (tax ID, personal email/phone, home address, birthday, profile photo).
-- Free-text fields authored in Humaans (time-away `note`/`reviewNote`, job-role `note`, time-away type and policy names, team names, person profile free text such as names/`bio`/social links/job title, location labels/cities, the company name) are returned inside `<untrusted-content>` envelopes so the model treats them as data, not instructions.
+- Free-text fields authored in Humaans (time-away `note`/`reviewNote`, job-role `note`/`jobTitle`/`department`, time-away type and policy names, team names, person profile free text such as names/`bio`/social links/job title, location labels/cities, the company name) are returned inside `<untrusted-content>` envelopes so the model treats them as data, not instructions.
 - Humaans API error bodies are enveloped (and non-JSON bodies capped) before they reach the model; `Retry-After` reaches rate-limit messages only as a parsed integer, and a malformed 2xx body yields a static error rather than a parser message embedding a body snippet.
 
 ## Licence

@@ -117,8 +117,14 @@ describe('Humaans company & location tools', () => {
 
     expect(json.ok).toBe(true);
     expect(json.jobRoles).toHaveLength(2);
-    expect(json.jobRoles[0].jobTitle).toBe('Senior Engineer');
-    expect(json.jobRoles[0].department).toBe('Engineering');
+    // Job titles and departments are authored in Humaans — they arrive
+    // enveloped, matching the people tools (invariant #6)
+    expect(json.jobRoles[0].jobTitle).toBe(
+      '<untrusted-content source="humaans:list_humaans_job_roles:jobTitle">Senior Engineer</untrusted-content>',
+    );
+    expect(json.jobRoles[0].department).toBe(
+      '<untrusted-content source="humaans:list_humaans_job_roles:department">Engineering</untrusted-content>',
+    );
   });
 
   it('get_humaans_job_role returns a specific job role', async () => {
@@ -131,7 +137,9 @@ describe('Humaans company & location tools', () => {
 
     expect(json.ok).toBe(true);
     expect(json.jobRole.id).toBe('role-001');
-    expect(json.jobRole.jobTitle).toBe('Senior Engineer');
+    expect(json.jobRole.jobTitle).toBe(
+      '<untrusted-content source="humaans:get_humaans_job_role:jobTitle">Senior Engineer</untrusted-content>',
+    );
     expect(json.jobRole.effectiveDate).toBe('2024-01-01');
   });
 
