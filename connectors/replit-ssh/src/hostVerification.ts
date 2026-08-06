@@ -41,6 +41,27 @@
  *    error. Operators using this mode pre-populate the known-hosts
  *    file out-of-band (e.g. via `ssh-keyscan riker.replit.dev`).
  *
+ * Pinning key — stable proxy suffix
+ * ---------------------------------
+ * Replit rotates the per-project hostname (`<uuid>-00-<hash>.riker.replit.dev`)
+ * when a project restarts, while the SSH endpoint behind it is the stable
+ * proxy. Keying the pin on the full hostname would make every restart look
+ * like a brand-new host (fresh TOFU accept, mismatch branch never exercised).
+ * Pins are therefore recorded under the hostname with its first DNS label
+ * stripped (e.g. `riker.replit.dev`), and lookup matches any entry whose
+ * hostname equals the connected host OR is a DNS suffix of it — so an entry
+ * for `riker.replit.dev` covers `*.riker.replit.dev`, and a pre-populated
+ * `ssh-keyscan riker.replit.dev` line works for every project behind that
+ * proxy. If the presented fingerprint is not among the recorded fingerprints
+ * for any matching entry, the connection fails closed.
+ *
+ * Accepted line formats
+ * ---------------------
+ *   - Native:    `<host>[,<host>…] SHA256:<base64-fingerprint>`
+ *   - OpenSSH:   `<host>[,<host>…] <keytype> <base64-key>` (ssh-keyscan
+ *                output; the SHA-256 fingerprint is computed from the key)
+ * Comment (`#`), marker (`@…`), and hashed (`|1|…`) lines are ignored.
+ *
  * Storage
  * -------
  * The known-hosts file path is resolved in this order:
@@ -48,8 +69,8 @@
  *   2. `$MCP_WORKSPACE_PATH/.replit-ssh-known-hosts`
  *   3. `$HOME/.replit-mcp/known_hosts`
  *
- * The file is written atomically and chmod 0o600. The parent directory
- * is created with mode 0o700.
+ * The file is chmod 0o600 and its parent directory is created with mode
+ * 0o700. Appends refuse to write through a symlinked known-hosts path.
  */
 import { createHash } from 'crypto';
 import * as fs from 'fs';
@@ -74,8 +95,54 @@ export function computeSha256Fingerprint(hostKey: Buffer): string {
   return `SHA256:${b64}`;
 }
 
-function loadKnownHosts(): Map<string, string> {
-  const known = new Map<string, string>();
+// OpenSSH host-key algorithm names accepted in ssh-keyscan-style lines.
+const OPENSSH_KEY_TYPES = new Set([
+  'ssh-ed25519',
+  'ssh-rsa',
+  'ecdsa-sha2-nistp256',
+  'ecdsa-sha2-nistp384',
+  'ecdsa-sha2-nistp521',
+  'sk-ssh-ed25519@openssh.com',
+  'sk-ecdsa-sha2-nistp256@openssh.com',
+]);
+
+const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
+
+/**
+ * Parse one known-hosts line into its hostnames + SHA-256 fingerprint.
+ * Accepts the native `<hosts> SHA256:…` format and OpenSSH ssh-keyscan
+ * output (`<hosts> <keytype> <base64-key>`). Returns null for comments,
+ * marker lines (`@cert-authority` etc.), hashed host entries (`|1|…` —
+ * cannot be suffix-matched), and malformed lines.
+ */
+function parseKnownHostsLine(
+  line: string,
+): { hosts: string[]; fingerprint: string } | null {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('@') || trimmed.startsWith('|')) {
+    return null;
+  }
+  const parts = trimmed.split(/\s+/);
+  if (parts.length < 2) return null;
+
+  let fingerprint: string | null = null;
+  if (parts[1]!.startsWith('SHA256:')) {
+    fingerprint = parts[1]!;
+  } else if (parts.length >= 3 && OPENSSH_KEY_TYPES.has(parts[1]!) && BASE64_PATTERN.test(parts[2]!)) {
+    const keyBytes = Buffer.from(parts[2]!, 'base64');
+    if (keyBytes.length > 0) {
+      fingerprint = computeSha256Fingerprint(keyBytes);
+    }
+  }
+  if (!fingerprint) return null;
+
+  const hosts = parts[0]!.toLowerCase().split(',').filter(Boolean);
+  if (hosts.length === 0) return null;
+  return { hosts, fingerprint };
+}
+
+function loadKnownHosts(): Map<string, Set<string>> {
+  const known = new Map<string, Set<string>>();
   const knownHostsPath = getKnownHostsPath();
   let content: string;
   try {
@@ -84,14 +151,40 @@ function loadKnownHosts(): Map<string, string> {
     return known;
   }
   for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const parts = trimmed.split(/\s+/);
-    if (parts.length >= 2) {
-      known.set(parts[0]!.toLowerCase(), parts[1]!);
+    const parsed = parseKnownHostsLine(line);
+    if (!parsed) continue;
+    for (const host of parsed.hosts) {
+      const set = known.get(host) ?? new Set<string>();
+      set.add(parsed.fingerprint);
+      known.set(host, set);
     }
   }
   return known;
+}
+
+/**
+ * Every entry key that can pin `host`: the full hostname plus each DNS
+ * suffix down to the last two labels (e.g. for `a.b.replit.dev`:
+ * `a.b.replit.dev`, `b.replit.dev`, `replit.dev`). Suffix entries are how
+ * pins survive Replit's per-project hostname rotation.
+ */
+function candidateKeys(host: string): string[] {
+  const labels = host.toLowerCase().split('.');
+  const keys: string[] = [];
+  for (let i = 0; i <= labels.length - 2; i++) {
+    keys.push(labels.slice(i).join('.'));
+  }
+  return keys.length > 0 ? keys : [host.toLowerCase()];
+}
+
+/**
+ * The key a new TOFU pin is recorded under: the hostname with its first
+ * label stripped (the stable proxy suffix), so a project restart — which
+ * rotates only the first label — does not look like a new host.
+ */
+function pinKeyForHost(host: string): string {
+  const labels = host.toLowerCase().split('.');
+  return labels.length > 2 ? labels.slice(1).join('.') : host.toLowerCase();
 }
 
 function appendKnownHost(host: string, fingerprint: string): void {
@@ -99,6 +192,12 @@ function appendKnownHost(host: string, fingerprint: string): void {
   const dir = path.dirname(knownHostsPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true, mode: KNOWN_HOSTS_DIR_MODE });
+  }
+  // Match the private-key write path's hardening: never append through a
+  // symlink — a local attacker could redirect the pin into another file.
+  const existingStats = fs.lstatSync(knownHostsPath, { throwIfNoEntry: false });
+  if (existingStats?.isSymbolicLink()) {
+    throw new Error(`Refusing to append to symlinked known-hosts path "${knownHostsPath}".`);
   }
   fs.appendFileSync(knownHostsPath, `${host.toLowerCase()} ${fingerprint}\n`, {
     mode: KNOWN_HOSTS_FILE_MODE,
@@ -121,9 +220,14 @@ export function verifyHostKey(
   presentedFingerprint: string,
 ): HostKeyVerificationOutcome {
   const known = loadKnownHosts();
-  const recorded = known.get(host.toLowerCase());
-  if (recorded) {
-    if (recorded === presentedFingerprint) {
+  const recorded = new Set<string>();
+  for (const key of candidateKeys(host)) {
+    for (const fingerprint of known.get(key) ?? []) {
+      recorded.add(fingerprint);
+    }
+  }
+  if (recorded.size > 0) {
+    if (recorded.has(presentedFingerprint)) {
       return { ok: true, kind: 'matched' };
     }
     return {
@@ -131,10 +235,10 @@ export function verifyHostKey(
       kind: 'mismatch',
       error: {
         ok: false,
-        error: `SSH host-key mismatch for "${host}". Expected ${recorded}, server presented ${presentedFingerprint}. This is either a key rotation by Replit or an active man-in-the-middle attack.`,
+        error: `SSH host-key mismatch for "${host}". Recorded ${[...recorded].join(', ')}, server presented ${presentedFingerprint}. This is either a key rotation by Replit or an active man-in-the-middle attack.`,
         code: 'HOST_KEY_MISMATCH',
-        action_required: `Refusing to connect. Verify the new fingerprint out-of-band (e.g., via ssh-keyscan from a trusted network or the Replit support docs). If the change is legitimate, remove the stale entry from ${getKnownHostsPath()} and reconnect.`,
-        next_step: `Edit ${getKnownHostsPath()} to remove the line for this host, then retry.`,
+        action_required: `Refusing to connect. Verify the new fingerprint out-of-band (e.g., via ssh-keyscan from a trusted network or the Replit support docs). If the change is legitimate, remove the stale entries from ${getKnownHostsPath()} and reconnect.`,
+        next_step: `Edit ${getKnownHostsPath()} to remove the lines pinning this host (entries are keyed by the stable proxy suffix, e.g. "${pinKeyForHost(host)}"), then retry.`,
       },
     };
   }
@@ -150,13 +254,13 @@ export function verifyHostKey(
         ok: false,
         error: `Unknown SSH host "${host}" (fingerprint ${presentedFingerprint}). Strict host-key checking is enabled and refuses unknown hosts.`,
         code: 'HOST_KEY_UNKNOWN',
-        action_required: `Either pre-populate ${getKnownHostsPath()} with the expected fingerprint (e.g. via \`ssh-keyscan riker.replit.dev\` from a trusted network) or unset MCP_REPLIT_SSH_STRICT_HOST_KEY to fall back to trust-on-first-use.`,
-        next_step: `Add a line "${host.toLowerCase()} ${presentedFingerprint}" to ${getKnownHostsPath()} after verifying the fingerprint out-of-band, then retry.`,
+        action_required: `Either pre-populate ${getKnownHostsPath()} with the expected fingerprint (e.g. via \`ssh-keyscan riker.replit.dev\` from a trusted network — OpenSSH key lines and "SHA256:…" fingerprint lines are both accepted) or unset MCP_REPLIT_SSH_STRICT_HOST_KEY to fall back to trust-on-first-use.`,
+        next_step: `Add a line "${pinKeyForHost(host)} ${presentedFingerprint}" to ${getKnownHostsPath()} after verifying the fingerprint out-of-band, then retry.`,
       },
     };
   }
   try {
-    appendKnownHost(host, presentedFingerprint);
+    appendKnownHost(pinKeyForHost(host), presentedFingerprint);
     return { ok: true, kind: 'recorded', fingerprint: presentedFingerprint };
   } catch (err) {
     return {

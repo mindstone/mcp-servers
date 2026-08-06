@@ -8,6 +8,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Security
 
+- `replit_check_connection` now wraps every peer-authored field it returns in
+  `<untrusted-content>` envelopes: the server version, the working directory
+  (SFTP realpath response), and all diagnostic event details (server banner,
+  keyboard-interactive prompts, handshake/debug/error text) — including on
+  the failure path, where diagnostics are returned unconditionally.
+- The known-hosts store now accepts OpenSSH `ssh-keyscan` output
+  (`<host> <keytype> <base64-key>`, computing the SHA-256 fingerprint from
+  the key) in addition to native `SHA256:…` fingerprint lines, so the
+  documented `MCP_REPLIT_SSH_STRICT_HOST_KEY=1` pre-population flow actually
+  works. Comment, marker (`@…`), and hashed-host (`|1|…`) lines are ignored.
+- Host-key pins are now recorded and matched by the stable proxy suffix
+  (first DNS label stripped, e.g. `riker.replit.dev`) instead of the
+  rotating per-project hostname. Previously every Replit project restart
+  produced a fresh unknown host and a silent fresh TOFU accept, so the
+  fail-closed mismatch branch — the real MitM defence — was rarely
+  exercised; suffix entries also make `ssh-keyscan riker.replit.dev` pins
+  apply to every project behind that proxy.
+- The known-hosts append path now refuses to write through a symlinked
+  known-hosts file (failing closed with `HOST_KEY_RECORD_FAILED`), matching
+  the symlink guard the private-key write path already had.
 - Migrated the untrusted-content envelope helper to the canonical shared implementation: close-tag breakout escaping now neutralises case and horizontal-whitespace variants (`</UNTRUSTED-CONTENT>`, `</untrusted-content >`, tab variants), not just the exact lowercase no-whitespace spelling.
 
 ### Added
@@ -31,6 +51,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Fixed
 
+- `replit_read_file` — files over 1 MiB are now refused with `FILE_TOO_LARGE`
+  (checked via stat before reading, with a post-read length check as backstop)
+  instead of being buffered unbounded into memory; the cap matches the one
+  `replit_search_files` already applies to content search.
+- `~/.ssh/config` evaluation — negated `Host` patterns (`Host *.replit.dev
+  !secret.replit.dev`) are now honoured per OpenSSH semantics: a host matching
+  a `!`-pattern never selects that block's `IdentityFile`. Previously the `!`
+  was treated as a literal character (and space-separated pattern lists were
+  dropped entirely), so a block could apply to hosts the config excluded.
+- `replit_write_file` — `encoding: "base64"` content is now validated
+  strictly and rejected when malformed, instead of letting Node's decoder
+  silently discard invalid characters (which wrote corrupted bytes while the
+  read-back verification still reported `verified: true`). Line-wrapping
+  whitespace is tolerated.
+- `replit_move` — tool annotations no longer claim `idempotentHint: true`;
+  a repeated move fails with `DESTINATION_EXISTS` rather than no-oping, so
+  advertising idempotence was wrong.
+- `replit_list_files` — symlinks are now reported as `type: "symlink"`
+  instead of being mislabeled `file`, consistent with `replit_stat`'s
+  lstat-based typing (SFTP `readdir` returns lstat-style attributes).
 - `replit_search_files` — per-file content line matches are now capped at 5;
   a file with more matching lines carries `lineMatchesTruncated: true` on the
   match instead of returning an unbounded list (a hot file with the needle on

@@ -5,14 +5,17 @@
  * LLM, so the model treats third-party / attacker-controllable text as DATA,
  * not as instructions.
  *
- * This is the canonical implementation a new connector ships with. It is a
- * VENDORED copy of the shared reference in `test-harness/src/untrusted-content.ts`
- * — connectors cannot `import` the test-harness at runtime (it is a
- * test/dev-only `file:` dependency that is never published into a connector's
- * `dist/`), so the helper lives in the connector's own runtime source. Keep
- * this byte-for-byte in sync with the shared reference; do NOT weaken the
- * escaping back to a simple `replaceAll` (that family misses whitespace / case
- * close-tag variants like `</untrusted-content >` / `</UNTRUSTED-CONTENT>`).
+ * This is a VENDORED copy of the shared reference in
+ * `test-harness/src/untrusted-content.ts` — connectors cannot `import` the
+ * test-harness at runtime (it is a test/dev-only `file:` dependency that is
+ * never published into a connector's `dist/`), so the helper lives in the
+ * connector's own runtime source. `wrapUntrusted` (the security-critical
+ * escaping and idempotence behaviour) is byte-for-byte identical to the
+ * reference; the reference's `unwrapUntrusted*` helpers are omitted as
+ * unused here, and this copy's `wrapUntrustedJsonStrings` wraps string
+ * VALUES only (not object keys). Do NOT weaken the escaping back to a
+ * simple `replaceAll` (that family misses whitespace / case close-tag
+ * variants like `</untrusted-content >` / `</UNTRUSTED-CONTENT>`).
  *
  * `scripts/check-untrusted-coverage.mjs` greps for a reference to
  * `untrusted-content` in any connector that talks to an external system; this
@@ -23,6 +26,9 @@
  *   - `replit_list_files` directory entry names (file names on the remote
  *     are attacker-influenced)
  *   - `replit_search_files` matched paths and matched content lines
+ *   - `replit_check_connection` peer-authored fields: server version,
+ *     working directory (realpath response), and diagnostic event details
+ *     (banner, keyboard-interactive prompts, handshake/debug/error text)
  */
 
 const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content\s*>/gi;

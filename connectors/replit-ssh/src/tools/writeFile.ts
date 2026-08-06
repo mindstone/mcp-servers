@@ -66,6 +66,25 @@ export async function replitWriteFile(
     });
   }
 
+  // Node's base64 decoder silently DISCARDS invalid characters, which would
+  // write corrupted bytes while the read-back verification (against the same
+  // mis-decoded buffer) still reports verified: true. Reject anything outside
+  // the base64 alphabet instead. Whitespace is tolerated (line-wrapped input)
+  // and stripped before decoding.
+  let normalizedContent = content;
+  if (encoding === 'base64') {
+    normalizedContent = content.replace(/\s+/g, '');
+    if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(normalizedContent)) {
+      return JSON.stringify({
+        ok: false,
+        error: 'The "content" parameter is not valid base64.',
+        code: 'PATH_INVALID',
+        action_required: 'Base64 content may only contain A-Z, a-z, 0-9, +, / and trailing = padding (whitespace is ignored).',
+        next_step: 'Re-encode the file content as base64 and retry `replit_write_file`.',
+      });
+    }
+  }
+
   const pathResult = validatePath(rawPath);
   if ('ok' in pathResult) return JSON.stringify(pathResult);
   const targetPath = pathResult.path;
@@ -89,7 +108,7 @@ export async function replitWriteFile(
   const signal = composeRequestSignal(callerSignal);
   try {
     const { sftp } = await getConnection(host, user, key);
-    const contentBuffer = encoding === 'base64' ? Buffer.from(content, 'base64') : Buffer.from(content, 'utf-8');
+    const contentBuffer = encoding === 'base64' ? Buffer.from(normalizedContent, 'base64') : Buffer.from(content, 'utf-8');
     const expectedHash = createHash('sha256').update(contentBuffer).digest('hex');
 
     const parentDir = posixPath.dirname(targetPath);

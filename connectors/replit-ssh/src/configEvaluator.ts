@@ -21,12 +21,23 @@ function normalizeParam(param: unknown): string {
 }
 
 function splitHostPatterns(rawValue: unknown): string[] {
-  if (typeof rawValue !== 'string') {
-    return [];
-  }
+  // ssh-config emits a plain string for comma-only pattern lists and an
+  // array of {val} tokens when patterns are space-separated.
+  const rawPatterns = typeof rawValue === 'string'
+    ? [rawValue]
+    : Array.isArray(rawValue)
+      ? rawValue.map((token) => {
+          if (typeof token === 'string') return token;
+          if (token && typeof token === 'object') {
+            const parsedToken = token as ParsedToken;
+            if (typeof parsedToken.val === 'string') return parsedToken.val;
+          }
+          return '';
+        })
+      : [];
 
-  return rawValue
-    .split(/\s+/)
+  return rawPatterns
+    .flatMap((segment) => segment.split(/\s+/))
     .flatMap((segment) => segment.split(','))
     .map((segment) => segment.trim())
     .filter(Boolean);
@@ -129,7 +140,18 @@ export function findIdentityFilesForHost(
       continue;
     }
 
-    const sectionMatches = patterns.some((pattern) => matchesHostPattern(pattern, normalizedHost));
+    // OpenSSH semantics: a Host block applies when the host matches at least
+    // one positive pattern and no negated (!) pattern. A leading "!" must not
+    // be treated as a literal character.
+    const positive = patterns.filter((pattern) => !pattern.startsWith('!'));
+    const negative = patterns
+      .filter((pattern) => pattern.startsWith('!'))
+      .map((pattern) => pattern.slice(1))
+      .filter(Boolean);
+
+    const sectionMatches =
+      positive.some((pattern) => matchesHostPattern(pattern, normalizedHost)) &&
+      !negative.some((pattern) => matchesHostPattern(pattern, normalizedHost));
     if (!sectionMatches) {
       continue;
     }
