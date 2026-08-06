@@ -478,6 +478,45 @@ describe('Freshdesk accounts.json loading', () => {
     }
   });
 
+  it('drops previously loaded accounts when accounts.json becomes a non-regular file', async () => {
+    const tc = createTempConfig({
+      accounts: [{ domain: 'testacme', apiKey: 'mock-test-key' }],
+      defaultAccount: 'testacme',
+      defaultAccountKey: 'defaultDomain',
+    });
+
+    try {
+      testClient = await createTestClient({
+        env: { FRESHDESK_CONFIG_PATH: tc.configPath, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      let result = await testClient.client.callTool({
+        name: 'list_freshdesk_accounts',
+        arguments: {},
+      });
+      let parsed = JSON.parse(
+        (result.content as Array<{ type: string; text: string }>)[0].text,
+      );
+      expect(parsed.accounts).toHaveLength(1);
+
+      // Hot-reload must not keep serving credentials when the file is
+      // replaced by a directory (or any other non-regular file).
+      unlinkSync(join(tc.configPath, 'accounts.json'));
+      mkdirSync(join(tc.configPath, 'accounts.json'));
+
+      result = await testClient.client.callTool({
+        name: 'list_freshdesk_accounts',
+        arguments: {},
+      });
+      parsed = JSON.parse(
+        (result.content as Array<{ type: string; text: string }>)[0].text,
+      );
+      expect(parsed.accounts).toHaveLength(0);
+    } finally {
+      tc.cleanup();
+    }
+  });
+
   it('fails closed to no accounts when accounts.json is deleted', async () => {
     const tc = createTempConfig({
       accounts: [{ domain: 'testacme', apiKey: 'mock-test-key' }],
