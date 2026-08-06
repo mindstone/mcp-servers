@@ -55,6 +55,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   known-hosts file (failing closed with `HOST_KEY_RECORD_FAILED`), matching
   the symlink guard the private-key write path already had.
 - Migrated the untrusted-content envelope helper to the canonical shared implementation: close-tag breakout escaping now neutralises case and horizontal-whitespace variants (`</UNTRUSTED-CONTENT>`, `</untrusted-content >`, tab variants), not just the exact lowercase no-whitespace spelling.
+- `@revoked` markers in the known-hosts file are now honoured as an active
+  refusal (matching OpenSSH): a presented host key matching a revoked entry
+  fails closed with `HOST_KEY_REVOKED`, even when the same key is also
+  pinned as valid. Previously all `@`-prefixed lines were silently ignored,
+  so a revoked key fell through to trust-on-first-use acceptance.
+  `@cert-authority` lines stay ignored (this connector does not use
+  certificates).
+- Operation log lines (stderr) now strip ASCII control characters from the
+  tool-supplied path before interpolating it, so a path containing `\n`,
+  `\r`, or ANSI escape bytes can no longer forge log entries or inject
+  terminal escape sequences.
 
 ### Added
 
@@ -94,6 +105,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - `replit_move` — tool annotations no longer claim `idempotentHint: true`;
   a repeated move fails with `DESTINATION_EXISTS` rather than no-oping, so
   advertising idempotence was wrong.
+- `replit_delete_file` — tool annotations no longer claim
+  `idempotentHint: true`; a repeated delete fails with `IO_ERROR`
+  "not found" rather than no-oping (the tool stats the target first).
+- `~/.ssh/config` evaluation — `IdentityFile` values now accumulate across
+  every matching `Host` block in config order instead of stopping at the
+  first matching block. Previously a config whose earliest matching block
+  set only `Port` (no `IdentityFile`) resolved to the connector's default
+  key even when a later block configured the user's key, diverging from
+  OpenSSH's first-value-wins semantics.
 - `replit_list_files` — symlinks are now reported as `type: "symlink"`
   instead of being mislabeled `file`, consistent with `replit_stat`'s
   lstat-based typing (SFTP `readdir` returns lstat-style attributes).
