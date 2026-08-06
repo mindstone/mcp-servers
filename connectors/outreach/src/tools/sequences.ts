@@ -187,7 +187,19 @@ WORKFLOW: Finds the prospect's sequence state for the given sequence, then appli
         );
       }
 
-      const stateId = liveStates[0].id;
+      // The ID comes from the vendor response and is interpolated into a
+      // state-changing POST path, so apply the same numeric-ID contract as the
+      // model-supplied IDs (fail closed on anything else rather than posting to
+      // an attacker-steered path — `..` segments normalise within the API base).
+      const stateIdParsed = outreachIdSchema.safeParse(liveStates[0].id);
+      if (!stateIdParsed.success) {
+        throw new ConnectorError(
+          'Outreach API returned an unexpected response shape',
+          'INVALID_RESPONSE',
+          'The sequence state carried a non-numeric ID. Try again; if it persists, reconnect with outreach_connect_account.',
+        );
+      }
+      const stateId = stateIdParsed.data;
       const action = args.action === 'remove' ? 'finish' : 'pause';
       const response = await outreachFetch(`/sequenceStates/${stateId}/actions/${action}`, {
         method: 'POST',
