@@ -253,11 +253,19 @@ export function resolveSavePath(savePath: string, mimeType: string): ResolveResu
  * read fails closed instead of reading an out-of-sandbox target.
  *
  * `root` must be the canonical workspace root from `getSourceWorkspaceRoot()`.
+ *
+ * `maxBytes` bounds the read: the descriptor's `fstat` size is checked
+ * BEFORE any bytes are loaded (a huge in-workspace file must not be read
+ * into memory only to be refused afterwards), and the bytes actually read
+ * are re-checked afterwards so a file that grows between `fstat` and read
+ * cannot push past the cap. Over-cap results carry
+ * `code: 'SOURCE_IMAGE_TOO_LARGE'`.
  */
 export function readSandboxedWorkspaceFile(
   canonicalPath: string,
   root: string,
-): { ok: true; content: Buffer } | { ok: false; error: string } {
+  maxBytes: number,
+): { ok: true; content: Buffer } | { ok: false; error: string; code?: string } {
   const isInsideRoot = (p: string): boolean =>
     p === root || p.startsWith(root + path.sep);
 
@@ -275,6 +283,16 @@ export function readSandboxedWorkspaceFile(
     const fdStat = fs.fstatSync(fd);
     if (!fdStat.isFile()) {
       return { ok: false, error: `Source image path is not a file: ${canonicalPath}` };
+    }
+
+    // Per-image byte cap BEFORE reading: refuse oversized files from the
+    // fstat size rather than loading them into memory first.
+    if (fdStat.size > maxBytes) {
+      return {
+        ok: false,
+        code: 'SOURCE_IMAGE_TOO_LARGE',
+        error: `Source image exceeds the per-image size limit (${fdStat.size} bytes; max ${maxBytes}).`,
+      };
     }
 
     // Post-open re-verification: the path must still canonically resolve
@@ -299,8 +317,133 @@ export function readSandboxedWorkspaceFile(
       };
     }
 
-    return { ok: true, content: fs.readFileSync(fd) };
+    const content = fs.readFileSync(fd);
+    // A file that grew between fstat and read must not push past the cap.
+    if (content.length > maxBytes) {
+      return {
+        ok: false,
+        code: 'SOURCE_IMAGE_TOO_LARGE',
+        error: `Source image grew past the per-image size limit (${maxBytes} bytes) while reading; refusing.`,
+      };
+    }
+    return { ok: true, content };
   } finally {
     fs.closeSync(fd);
   }
+}
+
+export type ContainedWriteResult =
+  | { ok: true; path: string }
+  | { ok: false; reason: 'exists' | 'rejected' | 'failed'; error: string };
+
+/**
+ * Write `data` to `finalPath` (a path ALREADY returned by `resolveSavePath`)
+ * without ever re-trusting the resolve-time pathname, closing the
+ * check-then-use race on the write side.
+ *
+ *  1. The destination directory is created and then canonicalised NOW (not
+ *     at resolve time) and required to still sit inside the canonical
+ *     workspace root — a directory component swapped for an escape symlink
+ *     since `resolveSavePath` ran fails closed here.
+ *  2. The bytes are staged in a fresh, unpredictable directory created
+ *     atomically with `fs.mkdtempSync` (mode 0700) directly inside the
+ *     just-verified directory, carrying over only the basename. The staging
+ *     file is opened O_CREAT|O_EXCL (mode 0600), fstat-checked to be a
+ *     regular file, and written through the single descriptor.
+ *  3. The finished file is hard-linked into place: `linkSync` fails EEXIST
+ *     when the destination name is taken — by a real file OR a planted
+ *     symlink — so existing content is never overwritten and a symlink is
+ *     never followed. The staging directory is a child of the destination
+ *     directory, so the link is always same-filesystem; filesystems without
+ *     hard-link support fall back to an exclusive create at the destination
+ *     (same no-overwrite semantics).
+ *
+ * Returns a discriminated result so callers can keep their structured error
+ * contract: 'exists' (destination taken), 'rejected' (containment violated
+ * at write time), 'failed' (ordinary I/O error).
+ */
+export function writeContainedFileExclusive(finalPath: string, data: Buffer): ContainedWriteResult {
+  const root = getWorkspaceRoot();
+  const isInsideRoot = (p: string): boolean =>
+    p === root || p.startsWith(root + path.sep);
+
+  const dir = path.dirname(finalPath);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch (err) {
+    return { ok: false, reason: 'failed', error: errMessage(err) };
+  }
+
+  let canonicalDir: string;
+  try {
+    canonicalDir = fs.realpathSync(dir);
+  } catch (err) {
+    return { ok: false, reason: 'failed', error: errMessage(err) };
+  }
+  if (!isInsideRoot(canonicalDir)) {
+    return {
+      ok: false,
+      reason: 'rejected',
+      error: `Save directory was swapped to escape the workspace sandbox root (${root}); refusing to write.`,
+    };
+  }
+
+  const baseName = path.basename(finalPath);
+  let stagingDir: string;
+  try {
+    stagingDir = fs.mkdtempSync(path.join(canonicalDir, '.nano-banana-staging-'));
+  } catch (err) {
+    return { ok: false, reason: 'failed', error: errMessage(err) };
+  }
+
+  try {
+    const stagingFile = path.join(stagingDir, baseName);
+    let stagingFd: number;
+    try {
+      stagingFd = fs.openSync(stagingFile, 'wx', 0o600);
+    } catch (err) {
+      return { ok: false, reason: 'failed', error: errMessage(err) };
+    }
+    try {
+      if (!fs.fstatSync(stagingFd).isFile()) {
+        return { ok: false, reason: 'failed', error: 'Save staging path is not a regular file.' };
+      }
+      fs.writeFileSync(stagingFd, data);
+    } finally {
+      fs.closeSync(stagingFd);
+    }
+
+    const linkTarget = path.join(canonicalDir, baseName);
+    try {
+      fs.linkSync(stagingFile, linkTarget);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+        return { ok: false, reason: 'exists', error: 'a file already exists at that path' };
+      }
+      // No hard-link support (rare): exclusive-create at the destination.
+      let destFd: number;
+      try {
+        destFd = fs.openSync(linkTarget, 'wx', 0o600);
+      } catch (openErr) {
+        if ((openErr as NodeJS.ErrnoException).code === 'EEXIST') {
+          return { ok: false, reason: 'exists', error: 'a file already exists at that path' };
+        }
+        return { ok: false, reason: 'failed', error: errMessage(openErr) };
+      }
+      try {
+        fs.writeFileSync(destFd, data);
+      } finally {
+        fs.closeSync(destFd);
+      }
+    }
+    return { ok: true, path: linkTarget };
+  } finally {
+    try {
+      fs.rmSync(stagingDir, { recursive: true, force: true });
+    } catch { /* best effort */ }
+  }
+}
+
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }

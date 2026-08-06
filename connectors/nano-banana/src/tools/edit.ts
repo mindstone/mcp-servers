@@ -1,4 +1,3 @@
-import * as fs from 'fs';
 import * as path from 'path';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -18,8 +17,8 @@ import {
   type GenerationConfig,
   type ImageConfig,
 } from '../types.js';
-import { getSourceWorkspaceRoot, readSandboxedWorkspaceFile, resolveSavePath, resolveSourcePath } from './path-safety.js';
-import { fetchRemoteImage, isRemoteImageUrl, validateRemoteImageUrlWithDns } from './remote-image.js';
+import { getSourceWorkspaceRoot, readSandboxedWorkspaceFile, resolveSavePath, resolveSourcePath, writeContainedFileExclusive } from './path-safety.js';
+import { fetchRemoteImage, isRemoteImageUrl, MAX_REMOTE_IMAGE_BYTES, validateRemoteImageUrlWithDns } from './remote-image.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 
 const MODEL_DESCRIPTION =
@@ -134,9 +133,17 @@ function loadLocalSourceImage(rawSource: string): LoadSourceResult {
   }
 
   try {
-    const readResult = readSandboxedWorkspaceFile(sourcePath, getSourceWorkspaceRoot());
+    // The same per-image byte cap applies to local reads as to remote
+    // fetches (MAX_REMOTE_IMAGE_BYTES) — enforced from the fstat size
+    // before any bytes are loaded into memory.
+    const readResult = readSandboxedWorkspaceFile(sourcePath, getSourceWorkspaceRoot(), MAX_REMOTE_IMAGE_BYTES);
     if (!readResult.ok) {
-      return { ok: false, errorText: JSON.stringify({ ok: false, error: readResult.error }) };
+      return {
+        ok: false,
+        errorText: JSON.stringify(readResult.code === 'SOURCE_IMAGE_TOO_LARGE'
+          ? { ok: false, error: readResult.error, code: readResult.code, resolution: 'Use an image under 20MB, or downscale it below the per-image limit.' }
+          : { ok: false, error: readResult.error }),
+      };
     }
     const imageBuffer = readResult.content;
     console.error(`[NanoBanana] Read source image: ${imageBuffer.length} bytes, type: ${sourceMimeType}`);
@@ -375,23 +382,19 @@ export function registerEditTools(server: McpServer): void {
             isError: true,
           };
         }
-        try {
-          fs.mkdirSync(path.dirname(resolveResult.path), { recursive: true });
-          // 'wx' (O_CREAT|O_EXCL): never truncate an existing file — a
-          // silent overwrite of user content is a data-loss bug.
-          fs.writeFileSync(resolveResult.path, Buffer.from(imageData, 'base64'), { flag: 'wx' });
-          savedPath = resolveResult.path;
+        // The write goes through writeContainedFileExclusive: the
+        // destination directory is re-canonicalised at write time (a
+        // directory swap since resolveSavePath fails closed), the bytes are
+        // staged in a fresh mkdtemp dir and hard-linked into place — an
+        // existing file (or planted symlink) at the target is never
+        // truncated or followed.
+        const writeResult = writeContainedFileExclusive(resolveResult.path, Buffer.from(imageData, 'base64'));
+        if (writeResult.ok) {
+          savedPath = writeResult.path;
           console.error(`[NanoBanana] Saved edited image to: ${savedPath}`);
-        } catch (saveError) {
-          // EEXIST from the 'wx' write means the target file exists (refuse
-          // overwrite); EEXIST can also bubble up from mkdir when a path
-          // segment is a regular file — discriminate on the actual target.
-          const isExists =
-            (saveError as NodeJS.ErrnoException).code === 'EEXIST' &&
-            fs.existsSync(resolveResult.path);
-          const errMsg = isExists
-            ? 'a file already exists at that path'
-            : saveError instanceof Error ? saveError.message : String(saveError);
+        } else {
+          const isExists = writeResult.reason === 'exists';
+          const errMsg = isExists ? 'a file already exists at that path' : writeResult.error;
           const saveCode = isExists ? 'SAVE_EXISTS' : 'SAVE_FAILED';
           const saveResolution = isExists
             ? 'Choose a different save_path (or delete the existing file) and try again. The edited image is included inline in this result.'

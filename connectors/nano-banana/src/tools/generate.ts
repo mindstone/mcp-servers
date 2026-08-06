@@ -1,5 +1,3 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -17,7 +15,7 @@ import {
   type GenerationConfig,
   type ImageConfig,
 } from '../types.js';
-import { resolveSavePath } from './path-safety.js';
+import { resolveSavePath, writeContainedFileExclusive } from './path-safety.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 
 const MODEL_DESCRIPTION =
@@ -169,23 +167,19 @@ export function registerGenerateTools(server: McpServer): void {
             isError: true,
           };
         }
-        try {
-          fs.mkdirSync(path.dirname(resolveResult.path), { recursive: true });
-          // 'wx' (O_CREAT|O_EXCL): never truncate an existing file — a
-          // silent overwrite of user content is a data-loss bug.
-          fs.writeFileSync(resolveResult.path, Buffer.from(imageData, 'base64'), { flag: 'wx' });
-          savedPath = resolveResult.path;
+        // The write goes through writeContainedFileExclusive: the
+        // destination directory is re-canonicalised at write time (a
+        // directory swap since resolveSavePath fails closed), the bytes are
+        // staged in a fresh mkdtemp dir and hard-linked into place — an
+        // existing file (or planted symlink) at the target is never
+        // truncated or followed.
+        const writeResult = writeContainedFileExclusive(resolveResult.path, Buffer.from(imageData, 'base64'));
+        if (writeResult.ok) {
+          savedPath = writeResult.path;
           console.error(`[NanoBanana] Saved to: ${savedPath}`);
-        } catch (saveError) {
-          // EEXIST from the 'wx' write means the target file exists (refuse
-          // overwrite); EEXIST can also bubble up from mkdir when a path
-          // segment is a regular file — discriminate on the actual target.
-          const isExists =
-            (saveError as NodeJS.ErrnoException).code === 'EEXIST' &&
-            fs.existsSync(resolveResult.path);
-          const errMsg = isExists
-            ? 'a file already exists at that path'
-            : saveError instanceof Error ? saveError.message : String(saveError);
+        } else {
+          const isExists = writeResult.reason === 'exists';
+          const errMsg = isExists ? 'a file already exists at that path' : writeResult.error;
           const saveCode = isExists ? 'SAVE_EXISTS' : 'SAVE_FAILED';
           const saveResolution = isExists
             ? 'Choose a different save_path (or delete the existing file) and try again. The generated image is included inline in this result.'

@@ -231,6 +231,8 @@ describe('nano_banana_edit — remote source image URLs', () => {
 
     expect(result.isError).toBe(true);
     expect(result.text).toContain('REMOTE_IMAGE_NOT_IMAGE');
+    // The remote-server-controlled Content-Type value is never echoed raw.
+    expect(result.text).not.toContain('text/html');
     expect(geminiBodies).toHaveLength(0);
   });
 
