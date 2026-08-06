@@ -100,11 +100,12 @@ node dist/index.js
   unencrypted. With this env var unset, the connector refuses to start
   when a cleartext port is configured.
 - `MCP_WORKSPACE_PATH` — workspace directory used for attachment file I/O.
-  `email_get_attachment` downloads into an `email-imap-attachments/`
-  subdirectory of this path, and outbound attachments on `email_send` /
-  `email_save_draft` / `email_update_draft` may only be read from inside it
-  (paths outside — including via symlinks — are refused). Defaults to the
-  system temp directory when unset.
+  `email_get_attachment` downloads into a fresh, private
+  `email-imap-attachment-*` staging directory created directly under this
+  path (the returned `path` points there), and outbound attachments on
+  `email_send` / `email_save_draft` / `email_update_draft` may only be read
+  from inside it (paths outside — including via symlinks — are refused).
+  Defaults to the system temp directory when unset.
 - `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
 - `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
 
