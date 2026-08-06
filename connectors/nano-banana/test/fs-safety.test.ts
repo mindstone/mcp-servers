@@ -76,7 +76,7 @@ describe('readSandboxedWorkspaceFile — open-once descriptor read', () => {
     expect(resolved.ok).toBe(true);
     if (!resolved.ok) return;
 
-    const result = readSandboxedWorkspaceFile(resolved.path, getSourceWorkspaceRoot());
+    const result = readSandboxedWorkspaceFile(resolved.path, getSourceWorkspaceRoot(), 1024);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.content.equals(ONE_PIXEL_PNG)).toBe(true);
@@ -91,7 +91,7 @@ describe('readSandboxedWorkspaceFile — open-once descriptor read', () => {
     expect(resolved.ok).toBe(true);
     if (!resolved.ok) return;
 
-    const result = readSandboxedWorkspaceFile(resolved.path, getSourceWorkspaceRoot());
+    const result = readSandboxedWorkspaceFile(resolved.path, getSourceWorkspaceRoot(), 1024);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toMatch(/not a file/i);
@@ -117,13 +117,29 @@ describe('readSandboxedWorkspaceFile — open-once descriptor read', () => {
       fs.unlinkSync(filePath);
       fs.symlinkSync(escapeTarget, filePath);
 
-      const result = readSandboxedWorkspaceFile(resolved.path, getSourceWorkspaceRoot());
+      const result = readSandboxedWorkspaceFile(resolved.path, getSourceWorkspaceRoot(), 1024);
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error).toMatch(/workspace|sandbox|replaced|changed/i);
       }
     } finally {
       try { fs.rmSync(outsideDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  });
+
+  it('refuses an oversized file from its fstat size, before reading any bytes', () => {
+    const filePath = path.join(workspaceDir, 'big.png');
+    fs.writeFileSync(filePath, Buffer.alloc(1025, 0x41));
+
+    const resolved = resolveSourcePath(filePath);
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+
+    const result = readSandboxedWorkspaceFile(resolved.path, getSourceWorkspaceRoot(), 1024);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('SOURCE_IMAGE_TOO_LARGE');
+      expect(result.error).toMatch(/size limit/i);
     }
   });
 });

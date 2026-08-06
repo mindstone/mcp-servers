@@ -18,7 +18,7 @@ import {
   type ImageConfig,
 } from '../types.js';
 import { getSourceWorkspaceRoot, readSandboxedWorkspaceFile, resolveSavePath, resolveSourcePath, writeContainedFileExclusive } from './path-safety.js';
-import { fetchRemoteImage, isRemoteImageUrl, validateRemoteImageUrlWithDns } from './remote-image.js';
+import { fetchRemoteImage, isRemoteImageUrl, MAX_REMOTE_IMAGE_BYTES, validateRemoteImageUrlWithDns } from './remote-image.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 
 const MODEL_DESCRIPTION =
@@ -133,9 +133,17 @@ function loadLocalSourceImage(rawSource: string): LoadSourceResult {
   }
 
   try {
-    const readResult = readSandboxedWorkspaceFile(sourcePath, getSourceWorkspaceRoot());
+    // The same per-image byte cap applies to local reads as to remote
+    // fetches (MAX_REMOTE_IMAGE_BYTES) — enforced from the fstat size
+    // before any bytes are loaded into memory.
+    const readResult = readSandboxedWorkspaceFile(sourcePath, getSourceWorkspaceRoot(), MAX_REMOTE_IMAGE_BYTES);
     if (!readResult.ok) {
-      return { ok: false, errorText: JSON.stringify({ ok: false, error: readResult.error }) };
+      return {
+        ok: false,
+        errorText: JSON.stringify(readResult.code === 'SOURCE_IMAGE_TOO_LARGE'
+          ? { ok: false, error: readResult.error, code: readResult.code, resolution: 'Use an image under 20MB, or downscale it below the per-image limit.' }
+          : { ok: false, error: readResult.error }),
+      };
     }
     const imageBuffer = readResult.content;
     console.error(`[NanoBanana] Read source image: ${imageBuffer.length} bytes, type: ${sourceMimeType}`);

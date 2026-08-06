@@ -253,11 +253,19 @@ export function resolveSavePath(savePath: string, mimeType: string): ResolveResu
  * read fails closed instead of reading an out-of-sandbox target.
  *
  * `root` must be the canonical workspace root from `getSourceWorkspaceRoot()`.
+ *
+ * `maxBytes` bounds the read: the descriptor's `fstat` size is checked
+ * BEFORE any bytes are loaded (a huge in-workspace file must not be read
+ * into memory only to be refused afterwards), and the bytes actually read
+ * are re-checked afterwards so a file that grows between `fstat` and read
+ * cannot push past the cap. Over-cap results carry
+ * `code: 'SOURCE_IMAGE_TOO_LARGE'`.
  */
 export function readSandboxedWorkspaceFile(
   canonicalPath: string,
   root: string,
-): { ok: true; content: Buffer } | { ok: false; error: string } {
+  maxBytes: number,
+): { ok: true; content: Buffer } | { ok: false; error: string; code?: string } {
   const isInsideRoot = (p: string): boolean =>
     p === root || p.startsWith(root + path.sep);
 
@@ -275,6 +283,16 @@ export function readSandboxedWorkspaceFile(
     const fdStat = fs.fstatSync(fd);
     if (!fdStat.isFile()) {
       return { ok: false, error: `Source image path is not a file: ${canonicalPath}` };
+    }
+
+    // Per-image byte cap BEFORE reading: refuse oversized files from the
+    // fstat size rather than loading them into memory first.
+    if (fdStat.size > maxBytes) {
+      return {
+        ok: false,
+        code: 'SOURCE_IMAGE_TOO_LARGE',
+        error: `Source image exceeds the per-image size limit (${fdStat.size} bytes; max ${maxBytes}).`,
+      };
     }
 
     // Post-open re-verification: the path must still canonically resolve
@@ -299,7 +317,16 @@ export function readSandboxedWorkspaceFile(
       };
     }
 
-    return { ok: true, content: fs.readFileSync(fd) };
+    const content = fs.readFileSync(fd);
+    // A file that grew between fstat and read must not push past the cap.
+    if (content.length > maxBytes) {
+      return {
+        ok: false,
+        code: 'SOURCE_IMAGE_TOO_LARGE',
+        error: `Source image grew past the per-image size limit (${maxBytes} bytes) while reading; refusing.`,
+      };
+    }
+    return { ok: true, content };
   } finally {
     fs.closeSync(fd);
   }

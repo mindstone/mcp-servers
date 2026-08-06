@@ -13,6 +13,7 @@ import { mswServer } from './helpers/setup.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
 import { MOCK_API_KEY, createMockGeminiResponse } from './fixtures/nano-banana-data.js';
 import { MAX_COMBINED_SOURCE_IMAGE_BYTES } from '../src/tools/edit.js';
+import { MAX_REMOTE_IMAGE_BYTES } from '../src/tools/remote-image.js';
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -110,6 +111,24 @@ describe('tool annotations and fail-closed input validation', () => {
 
     expect(result.isError).toBe(true);
     expect(result.text).toContain('SOURCE_IMAGES_TOO_LARGE');
+    expect(geminiBodies).toHaveLength(0);
+  });
+
+  it('enforces the per-image byte cap on a LOCAL source file (parity with remote fetches)', async () => {
+    await makeClient();
+
+    // One local file over the per-image limit: refused from its fstat size
+    // without shipping anything to Gemini.
+    const oversized = path.join(workspaceDir, 'huge.png');
+    fs.writeFileSync(oversized, Buffer.alloc(MAX_REMOTE_IMAGE_BYTES + 1, 0x41));
+
+    const result = await testClient.callTool('nano_banana_edit', {
+      source_image_path: oversized,
+      prompt: 'rotate',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('SOURCE_IMAGE_TOO_LARGE');
     expect(geminiBodies).toHaveLength(0);
   });
 });
