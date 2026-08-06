@@ -605,25 +605,57 @@ export const saveImageToDisk = async (
   const buffer = validateBase64ImageData(b64);
   ensureBufferMatchesImageFormat(buffer, extension);
 
-  // Open-then-verify (write side of the MED-1 pattern): the fence approved the
-  // canonical directory above, but a local race could swap the directory for a
-  // symlink between validation and the write. Open the output file with 'wx'
-  // (fresh inode, descriptor-pinned), then re-canonicalise the directory and
-  // refuse before any bytes flow if it no longer resolves to the approved
-  // directory. Writes go through the descriptor, so a later path swap cannot
-  // redirect the bytes.
+  // Write through the canonical directory, never the validated pathname
+  // (write side of the MED-1 pattern): a local race could swap a component of
+  // `saveDir` for a symlink between validation and the write, and a swap-back
+  // before any post-open re-check would let bytes flow outside the fence
+  // through the already-opened descriptor. The canonical path contains no
+  // symlink components, so no swap can redirect it. The bytes are staged in a
+  // fresh, unpredictable mkdtemp directory (0700) created atomically inside
+  // the canonical directory, written through a single descriptor, then
+  // hard-linked into place — link(2) fails with EEXIST when the destination
+  // name is taken (by a real file OR a planted symlink), so existing content
+  // is never overwritten. A mid-flight swap of a real ancestor directory
+  // breaks the pathname (fails closed, observably) instead of redirecting it;
+  // a directory whose canonical identity changed is rejected before any bytes
+  // flow. Filesystems without hard-link support fall back to an exclusive
+  // create at the destination (same no-overwrite semantics).
+  const ensureDirectoryUnchanged = async (): Promise<void> => {
+    const currentCanonicalDir = await fs.promises
+      .realpath(canonicalSaveDir)
+      .catch(() => null);
+    if (currentCanonicalDir !== canonicalSaveDir) {
+      throw new WorkspaceFenceToolError(
+        'Generated image folder changed while the image was being saved.',
+        'Check the output folder for symbolic links or other changes, then try again.',
+      );
+    }
+  };
+
   const writeAttempt = async (): Promise<string> => {
     const filename = generateFilename(prompt, index, count, extension);
-    const savePath = path.join(saveDir, filename);
-    const handle = await fs.promises.open(savePath, 'wx', 0o600);
-    let directorySwapped = false;
+    let stagingDir: string;
     try {
-      const postOpenCanonicalDir = await fs.promises
-        .realpath(saveDir)
-        .catch(() => null);
-      if (postOpenCanonicalDir !== canonicalSaveDir) {
-        directorySwapped = true;
-      } else {
+      stagingDir = await fs.promises.mkdtemp(
+        path.join(canonicalSaveDir, '.openai-image-staging-'),
+      );
+    } catch (stagingError) {
+      // A mid-flight directory swap breaks the canonical pathname (ENOENT) —
+      // surface the fence violation rather than a generic write failure.
+      await ensureDirectoryUnchanged();
+      throw stagingError;
+    }
+    try {
+      const stagingFile = path.join(stagingDir, filename);
+      let handle: fs.promises.FileHandle;
+      try {
+        handle = await fs.promises.open(stagingFile, 'wx', 0o600);
+      } catch (openError) {
+        await ensureDirectoryUnchanged();
+        throw openError;
+      }
+      try {
+        await ensureDirectoryUnchanged();
         await handle.writeFile(buffer);
         const stats = await handle.stat();
         if (stats.size === 0) {
@@ -633,21 +665,31 @@ export const saveImageToDisk = async (
             'Try the request again.',
           );
         }
+      } finally {
+        await handle.close().catch(() => undefined);
       }
-    } finally {
-      await handle.close().catch(() => undefined);
-    }
 
-    if (directorySwapped) {
-      // The fresh empty file may have landed outside the fence; remove it best
-      // effort (the random filename makes collateral unlink infeasible).
-      await fs.promises.unlink(savePath).catch(() => undefined);
-      throw new WorkspaceFenceToolError(
-        'Generated image folder changed while the image was being saved.',
-        'Check the output folder for symbolic links or other changes, then try again.',
-      );
+      const finalPath = path.join(canonicalSaveDir, filename);
+      try {
+        await fs.promises.link(stagingFile, finalPath);
+      } catch (linkError) {
+        if (getErrorCode(linkError) === 'EEXIST') {
+          throw linkError;
+        }
+        // No hard-link support (rare): exclusive-create at the destination.
+        const destHandle = await fs.promises.open(finalPath, 'wx', 0o600);
+        try {
+          await destHandle.writeFile(buffer);
+        } finally {
+          await destHandle.close().catch(() => undefined);
+        }
+      }
+      return path.join(saveDir, filename);
+    } finally {
+      await fs.promises
+        .rm(stagingDir, { recursive: true, force: true })
+        .catch(() => undefined);
     }
-    return savePath;
   };
 
   try {
