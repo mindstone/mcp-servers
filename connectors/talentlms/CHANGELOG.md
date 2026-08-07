@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-07
+
+### Changed
+
+- TalentLMS connector: canonical result envelopes, untrusted-content fencing, pagination fix; expanded course/user actions.
+
 ### Added
 - **users**: New `update_talentlms_user` tool (POST `/edituser`) for updating name, email, login, password, bio, timezone, and deactivation date. Like `create_talentlms_user`, the `user_type` parameter is restricted to the non-privileged `Learner`/`Trainer` enum.
 - **categories**: New `list_talentlms_categories` tool for browsing the course category tree.
