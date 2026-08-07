@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-07
+
+### Changed
+
+- Add OAuth 2.0 auth, change-request create, service catalog reads, work notes/comments; canonical envelopes; security/errors test parity
+
 ### Added
 - `update_servicenow_incident` now accepts `work_notes` and `comments`, so notes can be appended to an incident's journal — previously there was no way to add a note or comment to an incident.
 - New tool: `create_servicenow_change_request` — create a change request (short_description, description, type, assignment_group, category, risk), symmetric with `create_servicenow_incident`. Marked `destructiveHint: true`.
