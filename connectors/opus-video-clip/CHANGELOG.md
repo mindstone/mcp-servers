@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-07
+
+### Changed
+
+- Opus video clip connector: canonical result envelopes, untrusted-content fencing, and hardening sync; new download action.
+
 ### Added
 - `opus_download_clip` — download an exported clip MP4 (`uriForExport` URL)
   to a local file, with SSRF validation (HTTPS only, no private/loopback
