@@ -131,6 +131,7 @@ export interface FreshdeskContact {
   description?: string;
   address?: string;
   tags?: string[];
+  custom_fields?: Record<string, unknown>;
   active?: boolean;
   deleted?: boolean;
   created_at?: string;
@@ -148,6 +149,7 @@ export interface FreshdeskCompany {
   health_score?: string;
   account_tier?: string;
   renewal_date?: string;
+  custom_fields?: Record<string, unknown>;
   created_at?: string;
   updated_at?: string;
 }
