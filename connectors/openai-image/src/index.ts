@@ -129,6 +129,28 @@ class WorkspaceFenceToolError extends OpenAIImageToolError {
 const modelSupportsModeration = (model: string): boolean =>
   model.startsWith('gpt-image-2');
 
+// F-2: `moderation: 'low'` weakens OpenAI's content filtering on the user's
+// account and is a model-controllable tool input, so it is gated behind an
+// explicit env opt-in. Read per call (like configuredApiKey) so a host can
+// toggle it without respawning the server.
+const allowsLowModeration = (): boolean => {
+  const raw = process.env.OPENAI_IMAGE_ALLOW_LOW_MODERATION?.trim().toLowerCase();
+  return raw === '1' || raw === 'true';
+};
+
+const resolveModeration = (
+  requested: 'auto' | 'low' | undefined,
+): 'auto' | 'low' => {
+  if (requested === 'low' && !allowsLowModeration()) {
+    throw new OpenAIImageToolError(
+      'INVALID_INPUT',
+      "moderation: 'low' is not enabled on this server.",
+      'Omit moderation (auto is the default), or set OPENAI_IMAGE_ALLOW_LOW_MODERATION=1 in the server environment to opt in.',
+    );
+  }
+  return requested ?? 'auto';
+};
+
 // gpt-image-2 rejects background: 'transparent' upstream (OpenAI Images API,
 // verified 2026-08). Unknown models (OPENAI_IMAGE_MODEL overrides) pass
 // through to upstream validation, matching the configuredModel() philosophy.
@@ -983,7 +1005,7 @@ export const resolveWorkspaceScopedImagePath = async (
   inputPath: string,
   imageLabel: string,
 ): Promise<
-  | { resolvedPath: string; realPath: string }
+  | { resolvedPath: string; realPath: string; workspaceReal: string }
   | {
       errorText: string;
       safeFenceResolution?: string;
@@ -1039,7 +1061,7 @@ export const resolveWorkspaceScopedImagePath = async (
     };
   }
 
-  return { resolvedPath, realPath: targetReal };
+  return { resolvedPath, realPath: targetReal, workspaceReal };
 };
 
 export const getSupportedImageMime = (filePath: string): string | null => {
@@ -1093,7 +1115,7 @@ const loadLocalEditImage = async (
     );
   }
 
-  const { resolvedPath, realPath } = resolvedPathResult;
+  const { resolvedPath, realPath, workspaceReal } = resolvedPathResult;
   const extension = path.extname(realPath).toLowerCase();
 
   if (options?.pngOnly && extension !== '.png') {
@@ -1125,8 +1147,8 @@ const loadLocalEditImage = async (
   // Open-then-validate (closes the MED-1 check-then-use window): the fence
   // validated the canonical path above, but reading by path afterwards would
   // let a local race swap the file between check and read. Open a descriptor,
-  // confirm it is the same inode the fence validated, and read through the
-  // descriptor so a path swap cannot redirect the read outside the fence.
+  // confirm it is the same inode the baseline stat observed, and read through
+  // the descriptor so a path swap cannot redirect the read outside the fence.
   let handle: fs.promises.FileHandle | undefined;
   try {
     handle = await fs.promises.open(resolvedPath, 'r');
@@ -1135,6 +1157,80 @@ const loadLocalEditImage = async (
       throw workspaceFenceError(
         `${imageLabel} changed while it was being verified: ${safeInputPath}`,
       );
+    }
+
+    // Bind the fence decision to the opened inode (F-1): the baseline stat
+    // above is captured after the fence through the same pathname, so a
+    // symlink swapped in post-fence would pass the dev/ino agreement check on
+    // its out-of-fence target. Now that the descriptor pins the inode,
+    // re-resolve the canonical path and require it to be byte-identical to the
+    // path the fence approved — a swap (or swap-back) that changed what the
+    // pathname resolves to is caught here. Reads then flow through the pinned
+    // descriptor, so a later swap cannot redirect them.
+    //
+    // realpathSync/lstatSync on purpose: the async pair would be two libuv
+    // work items separated by a full event-loop turn — an attacker-widenable
+    // window (threadpool contention, FUSE stalls). The sync pair runs as two
+    // adjacent syscalls on this thread, shrinking the decisive realpath→lstat
+    // window to the minimum Node allows without openat. The blocking cost of
+    // two tiny stats is negligible.
+    const postOpenRealPath = fs.realpathSync(resolvedPath);
+    if (postOpenRealPath !== realPath) {
+      throw workspaceFenceError(
+        `${imageLabel} changed while it was being verified: ${safeInputPath}`,
+      );
+    }
+
+    // Require the canonical path to still name the pinned inode. lstat (not
+    // stat): a canonical path has no symlink leaf by construction, so a leaf
+    // swapped for a symlink between the realpath and this call is exposed as
+    // an inode mismatch instead of being followed to the attacker's target.
+    const postOpenStats = fs.lstatSync(postOpenRealPath);
+    if (
+      postOpenStats.dev !== openedStats.dev ||
+      postOpenStats.ino !== openedStats.ino
+    ) {
+      throw workspaceFenceError(
+        `${imageLabel} changed while it was being verified: ${safeInputPath}`,
+      );
+    }
+
+    // On Linux, ask the kernel for the canonical path of the pinned inode
+    // itself and re-check containment on that: /proc/self/fd resolves the
+    // descriptor, not the (raceable) pathname, so no path re-resolution window
+    // remains. Residual, documented in the README security notes: on platforms
+    // without /proc (and without openat/F_GETPATH in Node) a
+    // directory-component swap timed between the realpath and lstat above can
+    // still redirect the lstat — the same unclosable-syscall-instant class as
+    // the write side's check→link window. The hardlink blind spot
+    // (canonical-prefix containment cannot see hard links) is a pre-existing,
+    // cohort-wide platform limitation, unchanged.
+    if (process.platform === 'linux') {
+      let descriptorPath: string;
+      try {
+        descriptorPath = await fs.promises.realpath(
+          `/proc/self/fd/${handle.fd}`,
+        );
+      } catch (error) {
+        // Distinguish a missing /proc (minimal container/chroot — an
+        // environment problem the operator must fix) from a raced or deleted
+        // image path (an ordinary read failure).
+        if (!fs.existsSync('/proc/self/fd')) {
+          throw workspaceFenceError(
+            `${imageLabel} could not be verified safely: the /proc filesystem is unavailable in this environment, so the workspace fence cannot pin the opened file: ${safeInputPath}`,
+          );
+        }
+        throw workspaceFenceError(
+          getLocalImageReadError(imageLabel, inputPath, error),
+        );
+      }
+      if (
+        !(await isInsideConfiguredCanonicalZone(descriptorPath, workspaceReal))
+      ) {
+        throw workspaceFenceError(
+          `${imageLabel} changed while it was being verified: ${safeInputPath}`,
+        );
+      }
     }
     if (openedStats.size === 0) {
       throw workspaceFenceError(`${imageLabel} is empty (0 bytes): ${safeInputPath}`);
@@ -1441,7 +1537,9 @@ const generateImageSchema = z.object({
   moderation: z
     .enum(['auto', 'low'])
     .optional()
-    .describe('Content moderation strictness.'),
+    .describe(
+      "Content moderation strictness. 'low' requires OPENAI_IMAGE_ALLOW_LOW_MODERATION=1 in the server environment.",
+    ),
   output_format: z
     .enum(['png', 'jpeg', 'webp'])
     .optional()
@@ -1505,7 +1603,9 @@ const editImageSchema = z.object({
   moderation: z
     .enum(['auto', 'low'])
     .optional()
-    .describe('Content moderation strictness.'),
+    .describe(
+      "Content moderation strictness. 'low' requires OPENAI_IMAGE_ALLOW_LOW_MODERATION=1 in the server environment.",
+    ),
   output_format: z
     .enum(['png', 'jpeg', 'webp'])
     .optional()
@@ -1627,7 +1727,7 @@ const registerTools = (targetServer: McpServer): void => {
         const size = input.size ?? 'square';
         const quality = input.quality ?? 'high';
         const count = input.count ?? 1;
-        const moderation = input.moderation ?? 'auto';
+        const moderation = resolveModeration(input.moderation);
         const { outputFormat, outputExtension, outputMime, outputCompression } =
           resolveOutputOptions(input);
         ensureTransparentBackgroundSupported(input.background, outputFormat, model);
@@ -1717,7 +1817,7 @@ const registerTools = (targetServer: McpServer): void => {
         const size = input.size ?? 'square';
         const quality = input.quality ?? 'high';
         const count = input.count ?? 1;
-        const moderation = input.moderation ?? 'auto';
+        const moderation = resolveModeration(input.moderation);
         const { outputFormat, outputExtension, outputMime, outputCompression } =
           resolveOutputOptions(input);
         ensureTransparentBackgroundSupported(input.background, outputFormat, model);

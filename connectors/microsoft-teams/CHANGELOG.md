@@ -4,6 +4,12 @@ All notable changes to this connector will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-07
+
+### Changed
+
+- Microsoft Teams connector: canonical result envelopes, untrusted-content fencing, and hardening sync; expanded messaging/channel actions.
+
 ### Security
 
 - Envelope Microsoft Graph error text in `<untrusted-content>` before returning it to the model, so vendor-controlled error bodies cannot inject instructions into the conversation.

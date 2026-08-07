@@ -7,7 +7,7 @@ Email IMAP/SMTP MCP server for Model Context Protocol hosts. Read, search, send,
 
 ## Status
 
-- **Version:** [0.2.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-email-imap)
+- **Version:** [0.3.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-email-imap)
 - **Auth:** App password ([`EMAIL_IMAP_PASSWORD`](./server.json))
 - **Tools:** [17](./src/tools/) (mailbox, messages, drafts, send)
 - **Surface:** local-protocol

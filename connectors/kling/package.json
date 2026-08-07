@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-kling",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "mcpName": "io.github.mindstone/mcp-server-kling",
   "description": "Kling AI video generation MCP server for Model Context Protocol hosts",
   "license": "FSL-1.1-MIT",

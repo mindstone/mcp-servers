@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-07
+
+### Changed
+
+- Microsoft Files (OneDrive/SharePoint) connector: canonical result envelopes, untrusted-content fencing, and hardening sync; expanded file actions.
+
 ### Added
 - Permission-management tools: `invite_to_file` (share a file or folder with specific people by email, read or write), `list_file_permissions`, and `revoke_file_permission`, backed by the Graph `/invite` and `/permissions` endpoints. Grantee names and emails are returned inside `<untrusted-content>` envelopes, and the Graph permission payloads are validated with Zod at the boundary.
 - Version-history tools: `list_file_versions` and `restore_file_version` (replaces the current content with an earlier version; carries `destructiveHint`), backed by the Graph `/versions` and `/restoreVersion` endpoints.

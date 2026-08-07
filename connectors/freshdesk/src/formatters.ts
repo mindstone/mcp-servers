@@ -58,8 +58,9 @@ function wrapFieldList(list: string[] | null | undefined, source: string): strin
  * Recursively wrap every string VALUE reachable inside `value` in an
  * untrusted-content envelope. Object keys are part of the connector's output
  * contract and stay raw; free-form maps whose KEYS are also authored in
- * Freshdesk (e.g. ticket `custom_fields`, ticket-field `choices`) are wrapped
- * with `wrapUntrustedJsonStrings` instead, which envelopes keys as well.
+ * Freshdesk (ticket/contact/company `custom_fields`, ticket-field `choices`)
+ * are wrapped with `wrapUntrustedJsonStrings` instead, which envelopes keys
+ * as well.
  */
 function wrapValuesDeep<T>(value: T, source: string): T {
   if (typeof value === 'string') {
@@ -260,9 +261,16 @@ export function formatContactDetailed(contact: FreshdeskContact): string {
 /**
  * Return a deep copy of the contact with every string value enveloped (name,
  * email, phone, mobile, tags, … and any unexpected vendor property).
+ * `custom_fields` is a free-form vendor map whose keys are Freshdesk-authored
+ * too (a tenant-staff-authored field definition controls them), so it is
+ * enveloped wholesale (keys included) via `wrapUntrustedJsonStrings`.
  */
 export function wrapContactUntrustedFields(contact: FreshdeskContact): FreshdeskContact {
-  return wrapValuesDeep(contact, CONTACT_SOURCE);
+  const wrapped = wrapValuesDeep(contact, CONTACT_SOURCE);
+  if (contact.custom_fields && typeof contact.custom_fields === 'object') {
+    wrapped.custom_fields = wrapUntrustedJsonStrings(contact.custom_fields, CONTACT_SOURCE);
+  }
+  return wrapped;
 }
 
 export function formatCompanyConcise(company: FreshdeskCompany): string {
@@ -300,10 +308,17 @@ export function formatCompanyDetailed(company: FreshdeskCompany): string {
 /**
  * Return a deep copy of the company with every string value enveloped (name,
  * domains, industry, tier, health score, … and any unexpected vendor
- * property).
+ * property). `custom_fields` is a free-form vendor map whose keys are
+ * Freshdesk-authored too (a tenant-staff-authored field definition controls
+ * them), so it is enveloped wholesale (keys included) via
+ * `wrapUntrustedJsonStrings`.
  */
 export function wrapCompanyUntrustedFields(company: FreshdeskCompany): FreshdeskCompany {
-  return wrapValuesDeep(company, COMPANY_SOURCE);
+  const wrapped = wrapValuesDeep(company, COMPANY_SOURCE);
+  if (company.custom_fields && typeof company.custom_fields === 'object') {
+    wrapped.custom_fields = wrapUntrustedJsonStrings(company.custom_fields, COMPANY_SOURCE);
+  }
+  return wrapped;
 }
 
 export function articleStatusToString(status: number | undefined): string {

@@ -58,6 +58,12 @@
           "description": "When set, serve MCP over HTTP on this port bound to 127.0.0.1 (loopback only) instead of stdio. Intended for host-managed local deployments; stdio hosts omit it.",
           "isRequired": false,
           "format": "number"
+        },
+        {
+          "name": "OPENAI_IMAGE_ALLOW_LOW_MODERATION",
+          "description": "Opt-in gate for the moderation: 'low' tool input, which weakens OpenAI's content filtering on your account. Set to 1 to allow it; when unset, moderation: 'low' fails fast with INVALID_INPUT.",
+          "isRequired": false,
+          "format": "string"
         }
       ]
     }

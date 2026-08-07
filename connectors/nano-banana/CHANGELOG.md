@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-07
+
+### Changed
+
+- Nano Banana (Gemini image) connector: canonical result envelopes, untrusted-content fencing, and hardening sync; expanded image actions.
+
 ### Added
 - `nano_banana_generate` / `nano_banana_edit`: new optional `image_size` parameter (`"1K"` / `"2K"` / `"4K"`, default `"1K"`), forwarded as `generationConfig.imageConfig.imageSize`. An explicit `image_size` is refused with a structured `UNSUPPORTED_IMAGE_SIZE` error on `gemini-2.5-flash-image`, which only produces ~1K output.
 - `nano_banana_edit`: multi-image input via the new `source_image_paths` array (up to 14 reference images, combinable with the legacy `source_image_path`) for multi-image composition/fusion. Every local source path stays sandboxed under `MCP_WORKSPACE_PATH` exactly as before.

@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-07
+
+### Changed
+
+- Salesforce connector: canonical result envelopes, untrusted-content fencing, API pinned v66.0; expanded record/query actions.
+
 ### Added
 
 - New Case tools: `salesforce_get_cases`, `salesforce_create_case`, `salesforce_update_case` for support/customer-success workflows.

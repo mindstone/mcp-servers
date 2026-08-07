@@ -13,7 +13,7 @@ PandaDoc document automation MCP server for Model Context Protocol hosts. Create
 
 | Field | Value |
 |-------|-------|
-| Version | 0.2.2 |
+| Version | 0.3.0 |
 | Auth | API key (`PANDADOC_API_KEY`) |
 | Tools | 15 (documents, templates, folders, contacts, content-library) |
 | Surface | cloud API |

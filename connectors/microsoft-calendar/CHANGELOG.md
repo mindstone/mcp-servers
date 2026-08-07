@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-07
+
+### Changed
+
+- Microsoft Calendar connector: canonical result envelopes, untrusted-content fencing, and hardening sync; expanded event/calendar actions.
+
 ### Added
 - `get_event` gains `includeAttachments` to list attachment metadata (id, name, contentType, size).
 - `cancel_event` tool: organizer-side cancellation with an optional message to attendees (distinct from `delete_event`, which gives no message).

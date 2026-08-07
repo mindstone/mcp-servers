@@ -1,8 +1,8 @@
 {
   "name": "@mindstone/mcp-server-nano-banana",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "mcpName": "io.github.mindstone/mcp-server-nano-banana",
-  "description": "Nano Banana MCP server \u2014 Google Gemini image generation and editing via Model Context Protocol",
+  "description": "Nano Banana MCP server — Google Gemini image generation and editing via Model Context Protocol",
   "license": "FSL-1.1-MIT",
   "type": "module",
   "bin": {

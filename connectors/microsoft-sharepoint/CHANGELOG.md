@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-07
+
+### Changed
+
+- Microsoft SharePoint connector: canonical result envelopes, untrusted-content fencing, and hardening sync; expanded page/list/permission actions.
+
 ### Added
 
 - `upload_library_file_binary` tool for binary and large files: base64-encoded content (up to 100MB decoded) uploaded through a Graph resumable upload session with 320 KiB-aligned chunking. Defaults to `conflictBehavior: "rename"` so an upload never silently overwrites an existing file.

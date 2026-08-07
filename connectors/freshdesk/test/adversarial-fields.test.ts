@@ -226,6 +226,80 @@ describe('Adversarial field coverage — every vendor string is enveloped', () =
 
   // ─── Contacts & companies ────────────────────────────────────────
 
+  it('envelopes contact custom_fields keys and values (detailed JSON)', async () => {
+    mswServer.use(
+      http.get(`${BASE}/contacts`, () =>
+        HttpResponse.json([
+          makeContact(100, {
+            // A tenant-staff-authored custom-field definition controls the
+            // key: a close-tag breakout attempt must be enveloped too.
+            custom_fields: { [payload('contact-cf-key')]: payload('contact-cf-value') },
+          }),
+        ]),
+      ),
+    );
+    await setup();
+
+    const text = await callTool('list_freshdesk_contacts', { response_format: 'detailed' });
+    expectNoBreakout(text);
+
+    const parsed = JSON.parse(text);
+    const contact = parsed.contacts[0];
+    const cfKey = Object.keys(contact.custom_fields)[0];
+    expect(cfKey).toContain('<untrusted-content source="external-contact">');
+    expect(contact.custom_fields[cfKey]).toContain('<untrusted-content source="external-contact">');
+  });
+
+  it('envelopes searched contact custom_fields keys and values (detailed JSON)', async () => {
+    mswServer.use(
+      http.get(`${BASE}/search/contacts`, () =>
+        HttpResponse.json({
+          total: 1,
+          results: [
+            makeContact(100, {
+              custom_fields: { [payload('search-cf-key')]: payload('search-cf-value') },
+            }),
+          ],
+        }),
+      ),
+    );
+    await setup();
+
+    const text = await callTool('search_freshdesk_contacts', {
+      query: "email:'jane@acme.com'",
+      response_format: 'detailed',
+    });
+    expectNoBreakout(text);
+
+    const parsed = JSON.parse(text);
+    const contact = parsed.contacts[0];
+    const cfKey = Object.keys(contact.custom_fields)[0];
+    expect(cfKey).toContain('<untrusted-content source="external-contact">');
+    expect(contact.custom_fields[cfKey]).toContain('<untrusted-content source="external-contact">');
+  });
+
+  it('envelopes company custom_fields keys and values (detailed JSON)', async () => {
+    mswServer.use(
+      http.get(`${BASE}/companies`, () =>
+        HttpResponse.json([
+          makeCompany(900, {
+            custom_fields: { [payload('company-cf-key')]: payload('company-cf-value') },
+          }),
+        ]),
+      ),
+    );
+    await setup();
+
+    const text = await callTool('list_freshdesk_companies', { response_format: 'detailed' });
+    expectNoBreakout(text);
+
+    const parsed = JSON.parse(text);
+    const company = parsed.companies[0];
+    const cfKey = Object.keys(company.custom_fields)[0];
+    expect(cfKey).toContain('<untrusted-content source="external-company">');
+    expect(company.custom_fields[cfKey]).toContain('<untrusted-content source="external-company">');
+  });
+
   it('envelopes contact email, phone, mobile, and tags', async () => {
     mswServer.use(
       http.get(`${BASE}/contacts/:id`, () =>

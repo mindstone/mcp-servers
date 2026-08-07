@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-07
+
+### Changed
+
+- PandaDoc connector: canonical result envelopes, untrusted-content fencing, and hardening sync; expanded document/template actions.
+
 ### Security
 - Envelope all workspace-authored text returned by the document and template tools (names, recipients, created_by, fields, tokens, metadata, tags, grand_total, linked_objects) in `<untrusted-content>` envelopes with close-tag breakout escaping, via the shared `wrapUntrusted` helper vendored at `src/untrusted-content.ts` and field-level wrappers in `src/sanitize.ts`. Identifiers and URLs stay raw so downstream tool calls can still reference them. (FOX-3490 remediation.)
 - Vendor-controlled text on error paths is no longer model-visible raw: API/upload error bodies and `info_message` responses are truncated and enveloped in `<untrusted-content>`, download failures surface only the numeric HTTP status (raw `statusText` dropped), malformed JSON responses fail closed with a generic message (no body fragments), and arbitrary runtime errors are API-key-redacted and length-bounded.
