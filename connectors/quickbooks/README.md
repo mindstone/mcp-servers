@@ -7,7 +7,7 @@ QuickBooks Online MCP server for Model Context Protocol hosts. Manage invoices, 
 
 ## Status
 
-- **Version:** [0.3.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-quickbooks)
+- **Version:** [0.4.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-quickbooks)
 - **Auth:** OAuth ([`QUICKBOOKS_REFRESH_TOKEN`](./server.json))
 - **Tools:** [21](./src/tools/) (customers, vendors, invoices, bills, estimates, reports)
 - **Surface:** cloud-api

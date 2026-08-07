@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-07
+
+### Changed
+
+- QuickBooks connector: canonical result envelopes, untrusted-content fencing, sparse updates, minorversion 75; expanded invoice/report actions.
+
 ### Added
 - `get_quickbooks_report` — financial reports (ProfitAndLoss, BalanceSheet, CashFlow, AgedReceivables, AgedPayables) from the dedicated `/reports` endpoint, which `query_quickbooks` cannot reach. Date-range reports take `startDate`/`endDate`, aging reports take `asOfDate`, and `accountingMethod` is optional.
 - `send_quickbooks_invoice_email` — email an invoice to its customer (optional `sendTo` override). Gated behind `QB_ALLOW_PROD_WRITES=1` with `destructiveHint`, since it emails a real customer.

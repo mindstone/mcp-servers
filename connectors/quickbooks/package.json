@@ -1,8 +1,8 @@
 {
   "name": "@mindstone/mcp-server-quickbooks",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "mcpName": "io.github.mindstone/mcp-server-quickbooks",
-  "description": "QuickBooks Online MCP server for Model Context Protocol hosts \u2014 invoices, bills, customers, vendors, accounts",
+  "description": "QuickBooks Online MCP server for Model Context Protocol hosts — invoices, bills, customers, vendors, accounts",
   "license": "FSL-1.1-MIT",
   "type": "module",
   "bin": {
