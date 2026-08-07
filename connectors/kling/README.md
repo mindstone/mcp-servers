@@ -7,7 +7,7 @@ Kling AI video and image generation MCP server for Model Context Protocol hosts.
 
 ## Status
 
-- **Version:** [0.3.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-kling)
+- **Version:** [0.4.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-kling)
 - **Auth:** API key ([`KLING_ACCESS_KEY`](./server.json))
 - **Tools:** [10](./src/tools/) (video-generation, image-generation, tasks, account, downloads)
 - **Surface:** cloud-api

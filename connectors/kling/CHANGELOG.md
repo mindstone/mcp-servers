@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-07
+
+### Changed
+
+- Kling video-generation connector: canonical result envelopes, untrusted-content fencing, and hardening sync; expanded generation/query actions.
+
 ### Added
 - `download_kling_video` — save generated videos/images to local disk before the 30-day URL expiry. Output is sandboxed to the download root (default `<workspace>/kling-downloads`; `KLING_DOWNLOAD_ROOT` may redirect it within the workspace) with lexical + realpath containment, a sensitive-path deny-list, symlink refusal at the target, atomic no-clobber writes (opt-in `overwrite`), Kling-host-only SSRF validation, and manual redirect following with per-hop revalidation.
 - `generate_kling_image_to_video` now accepts a local image file via `image_path` (previously a public HTTPS URL was mandatory). Local reads are confined to `MCP_WORKSPACE_PATH` (or the system temp directory) with canonical-prefix containment that refuses symlink escape; jpg/jpeg/png up to 10MB are sent to Kling as base64.
