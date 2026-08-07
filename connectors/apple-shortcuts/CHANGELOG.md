@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-07
+
+### Changed
+
+- Apple Shortcuts connector: canonical result envelopes, untrusted-content fencing, timeout+kill controls; new view action.
+
 ### Added
 - New tool `apple_shortcuts_view`: opens a named shortcut in the Shortcuts app editor (`shortcuts view`) so the user can review what it does before running it.
 - `APPLE_SHORTCUTS_TIMEOUT_MS` (default `120000`): `shortcuts` CLI invocations that exceed the timeout are terminated (SIGTERM, then SIGKILL after a 5s grace period) and reported as errors, instead of blocking the tool call forever when a shortcut opens a GUI dialog.

@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-apple-shortcuts",
   "title": "Apple Shortcuts",
   "description": "MCP server for Apple Shortcuts via the macOS shortcuts CLI",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-apple-shortcuts",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
