@@ -9,7 +9,7 @@ Browser control you can watch: open pages, sign in, click around, fill forms, ta
 
 ## Status
 
-- **Version:** [0.1.8](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-browser-automation)
+- **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-browser-automation)
 - **Auth:** None ([`server.json`](./server.json))
 - **Tools:** [21](./src/tools/) (navigation, observation, interaction, sessions, files)
 - **Surface:** browser-automation

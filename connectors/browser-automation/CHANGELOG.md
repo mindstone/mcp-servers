@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-07
+
+### Changed
+
+- Browser automation connector: canonical snapshot envelopes, untrusted-content fencing, and hardening sync; expanded navigation/interaction actions.
+
 ### Added
 - `browser_get_text` — clean page-text extraction (whole page or a single element) for reading and summarising workflows.
 - `browser_pdf` — save the current page as a PDF. Output paths are constrained to the workspace directory (`MCP_WORKSPACE_PATH`, or the system temp directory when unset) with canonical containment that refuses `..` traversal, out-of-workspace absolutes, and symlink escapes.
