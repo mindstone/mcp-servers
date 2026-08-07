@@ -9,7 +9,7 @@ List and search meetings, view details, read transcripts, and manage teams via F
 
 ## Status
 
-- **Version:** [0.2.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-fathom)
+- **Version:** [0.3.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-fathom)
 - **Auth:** API key ([`FATHOM_API_KEY`](./server.json))
 - **Tools:** [12](./src/tools/) (meetings, transcripts, action items, recordings, teams, webhooks)
 - **Surface:** cloud-api

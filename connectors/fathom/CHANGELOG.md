@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-07
+
+### Changed
+
+- Fathom connector: canonical result envelopes, untrusted-content fencing; expanded meeting/transcript actions.
+
 ### Added
 - **fathom**: New `get_fathom_action_items` tool — aggregates action items across meetings with the same server-side filters as `list_fathom_meetings`, returning open items by default (`include_completed` opt-in) with meeting context, assignee, and recording playback links. `get_fathom_meeting` now returns action items alongside the summary, and `list_fathom_meetings` gains an `include_action_items` flag mapping to the upstream query parameter.
 - **fathom**: New recording download tools — `request_fathom_recording_download` starts async download generation (`POST /recordings/{id}/download`) and `get_fathom_recording_download_status` polls it for the short-lived signed URL.

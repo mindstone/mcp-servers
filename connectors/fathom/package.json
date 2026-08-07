@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-fathom",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "mcpName": "io.github.mindstone/mcp-server-fathom",
   "description": "Fathom AI meeting transcription MCP server for Model Context Protocol hosts",
   "license": "FSL-1.1-MIT",
