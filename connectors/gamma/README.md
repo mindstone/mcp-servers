@@ -9,7 +9,7 @@ Gamma MCP server for creating Gamma presentations, documents, webpages, and soci
 
 ## Status
 
-- **Version:** [0.3.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-gamma)
+- **Version:** [0.4.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-gamma)
 - **Auth:** API key ([`GAMMA_API_KEY`](./server.json))
 - **Tools:** [6](./src/tools/) (themes, folders, generation)
 - **Surface:** cloud-api

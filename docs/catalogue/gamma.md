@@ -13,7 +13,7 @@ Gamma MCP server for creating Gamma presentations, documents, webpages, and soci
 
 | Field | Value |
 |-------|-------|
-| Version | 0.3.3 |
+| Version | 0.4.0 |
 | Auth | API key (`GAMMA_API_KEY`) |
 | Tools | 6 (themes, folders, generation) |
 | Surface | cloud API |

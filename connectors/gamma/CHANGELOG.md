@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-06
+
+### Changed
+
+- Canonical envelopes on all external text; fail-closed Zod responses; download URL allow-list with redirect revalidation; generationId schema; polling observability
+
 ### Security
 - `gamma_list_themes` and `gamma_list_folders` now return workspace-authored theme and folder names inside `<untrusted-content>` envelopes with close-tag breakout escaping (repo security invariant #6). Theme `colorKeywords`/`toneKeywords` are enveloped too; IDs, cursors, and the theme type stay raw, and response fields are enumerated explicitly so vendor-added unknown fields cannot pass through.
 - Re-vendored the canonical strong `<untrusted-content>` envelope helper: close-tag breakout escaping now neutralises every case/whitespace variant (including newline, carriage-return, and form-feed before `>`), not just space/tab.

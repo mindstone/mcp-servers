@@ -222,8 +222,8 @@ it to the model. Typed entity payloads are sanitized deny-by-default: every
 string is enveloped — including strings inside arrays, which have no key
 context — unless its key is a narrow structural predicate (IDs, `SyncToken`,
 dates/timestamps, enums) and its value passes a shape guard. `query_quickbooks`,
-`get_quickbooks_entity`, and reports envelope every string value wholesale.
-Structural values such as `Id`, `SyncToken`, dates, and
+`get_quickbooks_entity`, and reports envelope every string key and value
+wholesale. Structural values such as `Id`, `SyncToken`, dates, and
 amounts are left untouched so they stay usable as inputs to follow-up calls.
 
 ## Licence
