@@ -6,6 +6,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-07
+
+### Changed
+
+- Vanta connector: canonical result envelopes, untrusted-content fencing, cursor pagination fix; expanded compliance/framework actions.
+
 ### Added
 
 - Added `vanta_list_frameworks` and `vanta_get_framework` (`GET /v1/frameworks`, `GET /v1/frameworks/{frameworkId}`), exposing per-framework control, document, and test counters — and requirement categories with mapped controls on the detail view — without parsing the aggregate compliance summary.
