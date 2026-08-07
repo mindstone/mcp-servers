@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.mindstone/mcp-server-workday",
   "title": "Workday",
-  "description": "Workday HCM MCP server for Model Context Protocol hosts \u2014 workers, profiles, organizations",
-  "version": "0.2.2",
+  "description": "Workday HCM MCP server for Model Context Protocol hosts — workers, profiles, organizations",
+  "version": "0.3.0",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-workday",
-      "version": "0.2.2",
+      "version": "0.3.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

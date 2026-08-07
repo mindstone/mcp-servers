@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-07
+
+### Changed
+
+- Workday connector: canonical result envelopes, untrusted-content fencing, honest client-side search; expanded org/people actions.
+
 ### Added
 - **tools**: `list_workday_direct_reports` — list a worker's direct reports (`GET /workers/{id}/directReports`), enabling org-chart questions.
 - **tools**: `list_workday_time_off` — list a worker's time-off entries from the `absenceManagement/v1` service family; comment/reason free-text fields are excluded from the response.
