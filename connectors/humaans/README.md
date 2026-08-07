@@ -7,7 +7,7 @@ Humaans HR platform MCP server for Model Context Protocol hosts. Query employee 
 
 ## Status
 
-- **Version:** [0.2.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-humaans)
+- **Version:** [0.3.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-humaans)
 - **Auth:** API key ([`HUMAANS_API_KEY`](./server.json))
 - **Tools:** [16](./src/tools/) (people, job-roles, time-away, company, teams)
 - **Surface:** cloud-api

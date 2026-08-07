@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-07
+
+### Changed
+
+- Humaans connector: canonical result envelopes, untrusted-content fencing; expanded people/allocation/team actions.
+
 ### Added
 - `list_humaans_time_away_allocations` — list time away allocations (the policy assignment behind each person's PTO balance), with `personId` filter and pagination.
 - `cancel_humaans_time_away` — cancel a time away entry via `DELETE /api/time-away/:id`; annotated `destructiveHint: true`. Closes the create-without-cancel asymmetry.

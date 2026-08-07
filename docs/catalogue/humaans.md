@@ -13,7 +13,7 @@ Humaans HR platform MCP server for Model Context Protocol hosts. Query employee 
 
 | Field | Value |
 |-------|-------|
-| Version | 0.2.2 |
+| Version | 0.3.0 |
 | Auth | API key (`HUMAANS_API_KEY`) |
 | Tools | 16 (people, job-roles, time-away, company, teams) |
 | Surface | cloud API |

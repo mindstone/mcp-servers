@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-humaans",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "mcpName": "io.github.mindstone/mcp-server-humaans",
   "description": "Humaans HR platform MCP server for Model Context Protocol hosts",
   "license": "FSL-1.1-MIT",
