@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-microsoft-calendar",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "mcpName": "io.github.mindstone/mcp-server-microsoft-calendar",
   "description": "Microsoft 365 Outlook calendar via Graph: list, get, create, update, respond, free/busy.",
   "license": "FSL-1.1-MIT",
