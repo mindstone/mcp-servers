@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-07
+
+### Changed
+
+- Email IMAP connector: canonical result envelopes, untrusted-content fencing, pagination and attachment handling; expanded mailbox actions.
+
 ### Added
 - **email-imap**: `email_search_messages` gains `before_uid` cursor pagination (responses now return `hasMore` + `nextBeforeUid` when older pages exist) and `since`/`before` date filters — older history in busy inboxes is now reachable.
 - **email-imap**: new `email_delete` tool — moves messages to the account's Trash mailbox when one exists, otherwise marks `\Deleted` and expunges permanently; annotated `destructiveHint: true`.
