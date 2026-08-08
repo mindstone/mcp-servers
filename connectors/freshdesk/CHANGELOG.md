@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-08
+
+### Changed
+
+- Freshdesk connector: canonical result envelopes, agents/groups + knowledge-base tools, 429 backoff; contact/company custom_fields key-enveloping.
+
 ### Added
 - `list_freshdesk_agents` and `list_freshdesk_groups` tools — discover valid agent and group IDs for the existing `responder_id`/`group_id` assignment parameters on ticket create/update. Names and descriptions are returned inside untrusted-content envelopes.
 - Contact and company read tools: `list_freshdesk_contacts` (email/company filters), `search_freshdesk_contacts` (Freshdesk query syntax), `get_freshdesk_contact`, `list_freshdesk_companies`, `get_freshdesk_company`. Names, job titles, addresses, descriptions, and notes are returned inside untrusted-content envelopes.
