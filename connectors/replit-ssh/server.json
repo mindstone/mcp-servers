@@ -38,12 +38,6 @@
           "description": "Explicit path to the connector's SSH known-hosts file. Defaults to $MCP_WORKSPACE_PATH/.replit-ssh-known-hosts, then $HOME/.replit-mcp/known_hosts.",
           "isRequired": false,
           "format": "filepath"
-        },
-        {
-          "name": "MCP_REPLIT_SSH_ALLOW_DELETE",
-          "description": "Set to 1 to enable the replit_delete_file tool. Deletion is irreversible on Replit (no trash), so the tool is disabled unless this opt-in is set.",
-          "isRequired": false,
-          "format": "string"
         }
       ]
     }

@@ -256,12 +256,13 @@ describe('Replit SSH MCP — mock tests', () => {
       );
     });
 
-    it('replit_delete_file schema requires path and documents the env opt-in', async () => {
+    it('replit_delete_file schema requires path and documents irreversibility', async () => {
       client = await createTestClient(tempHome);
       const tools = await listTools(client);
       const tool = tools.find((t) => t.name === 'replit_delete_file')!;
       expect(tool.inputSchema.required).toEqual(expect.arrayContaining(['host', 'user', 'path']));
-      expect(tool.description).toContain('MCP_REPLIT_SSH_ALLOW_DELETE');
+      expect(tool.description).toContain('irreversible');
+      expect(tool.annotations).toMatchObject({ destructiveHint: true });
     });
   });
 
@@ -459,7 +460,6 @@ describe('Replit SSH MCP — mock tests', () => {
     });
 
     it('replit_delete_file rejects .. traversal', async () => {
-      vi.stubEnv('MCP_REPLIT_SSH_ALLOW_DELETE', '1');
       client = await createTestClient(tempHome);
       const res = await callToolJson<StructuredError>(client, 'replit_delete_file', {
         host: REPLIT_HOST,
@@ -577,8 +577,7 @@ describe('Replit SSH MCP — mock tests', () => {
       expect(res.code).toBe('HOST_NOT_ALLOWED');
     });
 
-    it('replit_delete_file also enforces host allowlist (with delete enabled)', async () => {
-      vi.stubEnv('MCP_REPLIT_SSH_ALLOW_DELETE', '1');
+    it('replit_delete_file also enforces host allowlist', async () => {
       client = await createTestClient(tempHome);
       const res = await callToolJson<StructuredError>(client, 'replit_delete_file', {
         host: 'evil.example.com',

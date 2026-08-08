@@ -138,7 +138,7 @@ export function createServer(): McpServer {
     {
       title: 'Delete Replit File',
       description:
-        'Permanently delete a file from a Replit project (files only, not directories). Deletion is irreversible — there is no trash. Disabled by default; requires MCP_REPLIT_SSH_ALLOW_DELETE=1 in the server environment.',
+        'Permanently delete a file from a Replit project (files only, not directories). Deletion is irreversible — there is no trash. Enabled by default; approval gating is the responsibility of the host tool-approval layer.',
       annotations: remoteWriteAnnotations,
       inputSchema: deleteFileSchema.shape,
     },

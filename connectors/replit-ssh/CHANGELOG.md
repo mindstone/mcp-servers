@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Changed
+
+- `replit_delete_file` is now enabled by default. The
+  `MCP_REPLIT_SSH_ALLOW_DELETE=1` environment opt-in (and the
+  `DELETE_DISABLED` error code) has been removed: capability-first — the
+  tool still carries `destructiveHint: true`, and approval gating is the
+  responsibility of the host's tool-approval layer. Deletion remains
+  irreversible (Replit has no trash) and directories are still refused.
+
 ## [0.2.0] - 2026-08-08
 
 ### Changed

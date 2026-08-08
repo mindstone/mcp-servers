@@ -20,13 +20,9 @@ export const deleteFileSchema = z.object({
 
 export type DeleteFileArgs = z.infer<typeof deleteFileSchema>;
 
-// AGENTS.md invariant #7: irreversible deletion requires an explicit env
-// opt-in on top of destructiveHint — there is no trash/undo on the remote.
-// Read at call time (not module load) so tests and hosts can toggle it.
-function deleteAllowed(): boolean {
-  return process.env.MCP_REPLIT_SSH_ALLOW_DELETE === '1';
-}
-
+// Deletion is irreversible on the remote (no trash/undo). The tool is
+// enabled by default — gating is the host's tool-approval layer's job,
+// signalled via destructiveHint.
 export async function replitDeleteFile(
   args: DeleteFileArgs,
   callerSignal?: AbortSignal,
@@ -52,16 +48,6 @@ export async function replitDeleteFile(
       code: 'PATH_INVALID',
       action_required: 'The path "." refers to the project root directory, which cannot be deleted.',
       next_step: 'Provide a file path like "tmp/output.log" instead of "."',
-    });
-  }
-
-  if (!deleteAllowed()) {
-    return JSON.stringify({
-      ok: false,
-      error: 'File deletion is disabled. Set MCP_REPLIT_SSH_ALLOW_DELETE=1 in the server environment to enable it.',
-      code: 'DELETE_DISABLED',
-      action_required: 'Deleting files is irreversible on Replit (no trash), so this tool requires an explicit opt-in.',
-      next_step: 'Restart the MCP server with MCP_REPLIT_SSH_ALLOW_DELETE=1 set, then retry. Leave it unset to keep deletion disabled.',
     });
   }
 

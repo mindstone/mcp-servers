@@ -422,21 +422,7 @@ describe('Replit SSH MCP — file operations against a fake SFTP backend', () =>
   // ── replit_delete_file ─────────────────────────────────────────────────────
 
   describe('replit_delete_file', () => {
-    it('is disabled without MCP_REPLIT_SSH_ALLOW_DELETE=1', async () => {
-      fake.addFile('tmp.log', 'log');
-      const res = await call<ToolError>('replit_delete_file', {
-        host: 'h.replit.dev',
-        user: 'u',
-        path: 'tmp.log',
-      });
-      expect(res.ok).toBe(false);
-      expect(res.code).toBe('DELETE_DISABLED');
-      expect(res.next_step).toContain('MCP_REPLIT_SSH_ALLOW_DELETE');
-      expect(fake.fsMap.has('tmp.log')).toBe(true);
-    });
-
-    it('deletes a file when the env opt-in is set', async () => {
-      vi.stubEnv('MCP_REPLIT_SSH_ALLOW_DELETE', '1');
+    it('deletes a file by default (no env opt-in required)', async () => {
       fake.addFile('tmp.log', 'log');
       const res = await call<{ ok: boolean; path: string; deleted: boolean }>('replit_delete_file', {
         host: 'h.replit.dev',
@@ -448,8 +434,7 @@ describe('Replit SSH MCP — file operations against a fake SFTP backend', () =>
       expect(fake.fsMap.has('tmp.log')).toBe(false);
     });
 
-    it('refuses to delete directories even when enabled', async () => {
-      vi.stubEnv('MCP_REPLIT_SSH_ALLOW_DELETE', '1');
+    it('refuses to delete directories', async () => {
       fake.addFile('src/a.ts', 'x');
       const res = await call<ToolError>('replit_delete_file', {
         host: 'h.replit.dev',
@@ -462,8 +447,7 @@ describe('Replit SSH MCP — file operations against a fake SFTP backend', () =>
       expect(fake.fsMap.has('src/a.ts')).toBe(true);
     });
 
-    it('returns IO_ERROR for a missing file when enabled', async () => {
-      vi.stubEnv('MCP_REPLIT_SSH_ALLOW_DELETE', '1');
+    it('returns IO_ERROR for a missing file', async () => {
       const res = await call<ToolError>('replit_delete_file', {
         host: 'h.replit.dev',
         user: 'u',
