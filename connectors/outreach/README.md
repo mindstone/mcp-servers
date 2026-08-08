@@ -40,7 +40,7 @@ After clicking the button, your host will prompt you to fill: `OUTREACH_CLIENT_I
 
 ## Status
 
-- **Version:** [0.1.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-outreach)
+- **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-outreach)
 - **Auth:** OAuth (local 127.0.0.1 callback) ([`OUTREACH_CLIENT_SECRET`](./server.json))
 - **Tools:** [22](./src/tools/) (prospects, sequences, accounts, tasks, calls, mailboxes)
 - **Surface:** cloud-api

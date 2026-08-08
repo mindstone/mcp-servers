@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-outreach",
   "title": "Outreach",
   "description": "Outreach sales engagement MCP server: prospects, sequences, accounts, tasks, and mailings",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-outreach",
-      "version": "0.1.3",
+      "version": "0.2.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

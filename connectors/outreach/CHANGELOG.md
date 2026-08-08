@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-08
+
+### Changed
+
+- Outreach connector: canonical result envelopes, untrusted-content fencing, scope widening; expanded prospect/sequence actions.
+
 ### Added
 - `outreach_list_sequence_steps` — list a sequence's steps (type, interval, order, linked template IDs).
 - `outreach_get_sequence_template` — read a sequence template including the resolved email `subject`/`bodyHtml`, unlocking sequence-copy review and drafting workflows.
