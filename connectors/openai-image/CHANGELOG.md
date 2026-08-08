@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-08
+
+### Changed
+
+- OpenAI image connector: request-timeout ceiling, strict parsing, read-fence inode binding against symlink-swap races, moderation opt-in gate.
+
 ### Added
 
 - `output_format` (`png | jpeg | webp`) and `output_compression` (0–100, jpeg/webp only) options on `generate_image` and `edit_image`. Saved filename extensions (`.png` / `.jpg` / `.webp`) and inline preview MIME types follow the chosen format. `output_compression` combined with `png` output fails fast with a structured `INVALID_INPUT` error before any API call.

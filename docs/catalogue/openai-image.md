@@ -13,7 +13,7 @@ OpenAI image generation MCP server — text-to-image and image edits via OpenAI'
 
 | Field | Value |
 |-------|-------|
-| Version | 0.2.0 |
+| Version | 0.3.0 |
 | Auth | API key (`OPENAI_API_KEY`) |
 | Tools | 2 (image-generation, image-editing) |
 | Surface | cloud API |
