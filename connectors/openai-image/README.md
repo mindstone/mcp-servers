@@ -123,7 +123,6 @@ node dist/index.js
 - `OPENAI_IMAGE_REQUEST_TIMEOUT_MS` — optional override (positive integer ms, max 30 min) for the OpenAI image API timeout. Default: `180000` (3 min). Sized for `quality: 'high'` generation, which OpenAI documents as taking up to ~2 min for complex prompts; lower for tighter bounds.
 - `MCP_ALLOWED_SYMLINK_ROOTS` — optional JSON array of absolute paths. The connector reads (and writes generated images) through in-workspace symlinks whose canonical targets land inside `MCP_WORKSPACE_PATH` **or** one of these declared roots — the same roots the host's built-in file tools trust for declared Spaces. Fail-closed: if the value is missing, empty, malformed JSON, not an array, or **any** entry is non-string / empty / relative, the whole value is rejected and the connector falls back to strict workspace-only containment with one structured stderr warning. Standalone OSS users omit it; Rebel's host injects it automatically from your declared Spaces.
 - `MCP_HTTP_PORT` — optional. When set, the server speaks MCP over HTTP on this port bound to `127.0.0.1` (loopback only, non-loopback `Host` headers are rejected) instead of stdio. Intended for host-managed local deployments; stdio hosts omit it.
-- `OPENAI_IMAGE_ALLOW_LOW_MODERATION` — optional opt-in gate. The `moderation: 'low'` tool input weakens OpenAI's content filtering on your account, so it is refused with `INVALID_INPUT` unless this is set to `1`. Unset means `auto` only.
 
 ## Host configuration examples
 
@@ -173,7 +172,7 @@ Inputs:
 - `size` (`square | portrait | landscape`, optional) — 1024x1024, 1024x1536, 1536x1024.
 - `quality` (`low | medium | high | auto`, optional) — defaults to `high`. Medium is usually about 50 seconds and $0.04; high can take up to 3 minutes and cost about $0.21. Lower quality is dramatically cheaper.
 - `count` (integer 1–8, optional) — defaults to 1. Cost scales linearly with count.
-- `moderation` (`auto | low`, optional) — content moderation strictness. `low` weakens OpenAI's content filtering on your account, so it requires `OPENAI_IMAGE_ALLOW_LOW_MODERATION=1` in the server environment; without it the call fails fast with `INVALID_INPUT`.
+- `moderation` (`auto | low`, optional) — content moderation strictness, defaults to `auto`. `low` weakens OpenAI's content filtering on your account and is passed through like any other tool input; invocation gating is the host's tool-approval layer's job.
 - `output_format` (`png | jpeg | webp`, optional) — output file format, defaults to `png`. The saved filename extension and inline preview MIME type follow the chosen format (`.png` / `.jpg` / `.webp`).
 - `output_compression` (integer 0–100, optional) — compression level; only valid with `jpeg` or `webp` output. Combining it with `png` fails fast with a structured `INVALID_INPUT` error before any API call.
 - `background` (`transparent | opaque | auto`, optional) — background style. `transparent` produces a cutout with an alpha channel and requires `png`/`webp` output plus a transparency-capable model: `gpt-image-2` rejects transparent backgrounds upstream, so the tool fails fast with `INVALID_INPUT` and a resolution pointing at `OPENAI_IMAGE_MODEL=gpt-image-1.5` (or `gpt-image-1`). Unknown model overrides are passed through to upstream validation, matching the connector's existing `OPENAI_IMAGE_MODEL` philosophy.

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Moderation opt-in gate removed.** `moderation: 'low'` no longer requires `OPENAI_IMAGE_ALLOW_LOW_MODERATION=1` and is allowed by default like any other tool input; invocation gating is the host's tool-approval layer's job. The env variable, its `server.json` declaration, and the gate wording in the tool schemas and README are gone.
+
 ## [0.3.0] - 2026-08-08
 
 ### Changed

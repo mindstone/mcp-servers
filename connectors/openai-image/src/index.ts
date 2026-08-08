@@ -129,27 +129,13 @@ class WorkspaceFenceToolError extends OpenAIImageToolError {
 const modelSupportsModeration = (model: string): boolean =>
   model.startsWith('gpt-image-2');
 
-// F-2: `moderation: 'low'` weakens OpenAI's content filtering on the user's
-// account and is a model-controllable tool input, so it is gated behind an
-// explicit env opt-in. Read per call (like configuredApiKey) so a host can
-// toggle it without respawning the server.
-const allowsLowModeration = (): boolean => {
-  const raw = process.env.OPENAI_IMAGE_ALLOW_LOW_MODERATION?.trim().toLowerCase();
-  return raw === '1' || raw === 'true';
-};
-
+// `moderation` is a plain tool input like any other: both 'auto' (the
+// default) and 'low' are forwarded upstream when the model supports it.
+// Invocation gating is the host's tool-approval layer's job, not this
+// connector's.
 const resolveModeration = (
   requested: 'auto' | 'low' | undefined,
-): 'auto' | 'low' => {
-  if (requested === 'low' && !allowsLowModeration()) {
-    throw new OpenAIImageToolError(
-      'INVALID_INPUT',
-      "moderation: 'low' is not enabled on this server.",
-      'Omit moderation (auto is the default), or set OPENAI_IMAGE_ALLOW_LOW_MODERATION=1 in the server environment to opt in.',
-    );
-  }
-  return requested ?? 'auto';
-};
+): 'auto' | 'low' => requested ?? 'auto';
 
 // gpt-image-2 rejects background: 'transparent' upstream (OpenAI Images API,
 // verified 2026-08). Unknown models (OPENAI_IMAGE_MODEL overrides) pass
@@ -1537,9 +1523,7 @@ const generateImageSchema = z.object({
   moderation: z
     .enum(['auto', 'low'])
     .optional()
-    .describe(
-      "Content moderation strictness. 'low' requires OPENAI_IMAGE_ALLOW_LOW_MODERATION=1 in the server environment.",
-    ),
+    .describe('Content moderation strictness (defaults to auto).'),
   output_format: z
     .enum(['png', 'jpeg', 'webp'])
     .optional()
@@ -1603,9 +1587,7 @@ const editImageSchema = z.object({
   moderation: z
     .enum(['auto', 'low'])
     .optional()
-    .describe(
-      "Content moderation strictness. 'low' requires OPENAI_IMAGE_ALLOW_LOW_MODERATION=1 in the server environment.",
-    ),
+    .describe('Content moderation strictness (defaults to auto).'),
   output_format: z
     .enum(['png', 'jpeg', 'webp'])
     .optional()
