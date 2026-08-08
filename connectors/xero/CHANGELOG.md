@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-08
+
+### Changed
+
+- First Mindstone-owned release of the Xero connector (maintained build of Xero's community server): canonical envelopes, expanded bank/budget/report tools, writes enabled by default.
+
 ### Added
 - New report tools: `list-bank-summary` (per-account balances and movements), `list-budget-summary` (budget vs actuals), and `list-executive-summary` (key financial metrics snapshot). These use the report scopes the connector already requests.
 - New `email-invoice` tool that emails a copy of an AUTHORISED invoice to its related contact via Xero.

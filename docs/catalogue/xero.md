@@ -13,7 +13,7 @@ This is a Model Context Protocol &#40;MCP&#41; server implementation for Xero. I
 
 | Field | Value |
 |-------|-------|
-| Version | 0.0.17 |
+| Version | 0.1.0 |
 | Auth | OAuth (`XERO_CLIENT_ID`, `XERO_CLIENT_SECRET`, `XERO_CLIENT_BEARER_TOKEN`) |
 | Tools | 70 (invoices, contacts, reports, payroll) |
 | Surface | cloud API |
