@@ -9,11 +9,11 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 - New report tools: `list-bank-summary` (per-account balances and movements), `list-budget-summary` (budget vs actuals), and `list-executive-summary` (key financial metrics snapshot). These use the report scopes the connector already requests.
-- New `email-invoice` tool that emails a copy of an AUTHORISED invoice to its related contact via Xero. Gated behind `XERO_ALLOW_WRITES=1` like the other write tools.
-- New purchase order tools: `list-purchase-orders` (status/date filters, sorting, pagination) and `create-purchase-order` (defaults to DRAFT; optional currency validated against the organisation before any write). Purchase orders are covered by the `accounting.invoices` scope the connector already requests. `create-purchase-order` is gated behind `XERO_ALLOW_WRITES=1`.
+- New `email-invoice` tool that emails a copy of an AUTHORISED invoice to its related contact via Xero.
+- New purchase order tools: `list-purchase-orders` (status/date filters, sorting, pagination) and `create-purchase-order` (defaults to DRAFT; optional currency validated against the organisation before any write). Purchase orders are covered by the `accounting.invoices` scope the connector already requests.
 
 ### Changed
-- Write tools (create/update/delete, history notes) now refuse to run unless `XERO_ALLOW_WRITES=1` is set in the host environment — a secure-by-default guard against accidental writes to a real Xero organisation. Read-only tools are unaffected. Set `XERO_ALLOW_WRITES=1` to opt in.
+- Write tools (create/update/delete, history notes, emailing invoices) are enabled by default; the `XERO_ALLOW_WRITES` environment-variable gate has been removed. Write approval is the host application's responsibility (e.g. its tool-approval layer), keeping the connector capability-first.
 
 ### Security
 - Wrap all tool output text in `<untrusted-content>` envelopes with close-tag breakout escaping, so Xero-authored text (contact names, line item descriptions, history details, validation messages) is presented to the model as data, not instructions.

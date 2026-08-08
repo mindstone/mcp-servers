@@ -21,8 +21,6 @@ function childEnv(): Record<string, string> {
   }
   env.XERO_CLIENT_ID = "test-client-id";
   env.XERO_CLIENT_SECRET = "test-client-secret";
-  // The write gate must be exercised closed; never inherit an opt-in.
-  delete env.XERO_ALLOW_WRITES;
   return env;
 }
 
@@ -89,7 +87,7 @@ describe("Xero MCP server smoke", () => {
     }
   }, 30_000);
 
-  it("refuses write tools while XERO_ALLOW_WRITES is unset", async () => {
+  it("runs write tools by default, reaching the Xero API layer", async () => {
     const transport = new StdioClientTransport({
       command: process.execPath,
       args: [path.join(connectorRoot, "dist/index.js")],
@@ -97,7 +95,7 @@ describe("Xero MCP server smoke", () => {
       env: childEnv(),
       stderr: "pipe",
     });
-    const client = new Client({ name: "xero-write-gate-test", version: "1.0.0" });
+    const client = new Client({ name: "xero-write-default-test", version: "1.0.0" });
 
     try {
       await client.connect(transport);
@@ -118,11 +116,13 @@ describe("Xero MCP server smoke", () => {
         },
       });
 
-      expect(result.isError).toBe(true);
+      // The tool must attempt the write against Xero (which fails at the API
+      // layer with test credentials) rather than refusing up front.
       const text = (result.content as Array<{ type: string; text?: string }>)
         .map((block) => (block.type === "text" ? block.text : ""))
         .join("\n");
-      expect(text).toContain("XERO_ALLOW_WRITES=1");
+      expect(text).not.toContain("refuses to run");
+      expect(text).toContain("Error creating invoice");
     } finally {
       await client.close();
       await transport.close();
