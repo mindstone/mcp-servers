@@ -44,8 +44,8 @@ interface InitClientsOptions {
  *     a provider the user did not pick (no `'icloud'` fallback).
  *  2. For `provider: custom`, default to TLS for both IMAP (993) and SMTP
  *     (587 STARTTLS / 465 implicit). Cleartext ports (`imap=143`,
- *     `smtp=25`) are refused unless the user opts in by setting
- *     `EMAIL_IMAP_ALLOW_PLAINTEXT=1`.
+ *     `smtp=25`) are allowed when configured — capability-first: the
+ *     user's host owns the plaintext decision.
  *
  * Pure function (no I/O); thin enough that unit tests can drive it
  * directly without standing up the IMAP/SMTP clients.
@@ -114,23 +114,14 @@ function resolveCustomConfig(
   const smtpPort =
     options.smtpPort ?? parseInt(process.env.EMAIL_IMAP_SMTP_PORT || '587', 10);
 
-  const allowPlaintext = process.env.EMAIL_IMAP_ALLOW_PLAINTEXT === '1';
-
-  if ((imapPort === 143 || smtpPort === 25) && !allowPlaintext) {
-    throw new Error(
-      `Custom provider with cleartext ports (imap_port=${imapPort}, smtp_port=${smtpPort}) ` +
-        `requires TLS by default. Set EMAIL_IMAP_ALLOW_PLAINTEXT=1 to opt out ` +
-        `(NOT recommended — credentials and message bodies will travel in plaintext).`,
-    );
-  }
-
-  // Imap TLS: cleartext only when on port 143 AND user opted in.
-  const imapTls = options.imapTls ?? !(imapPort === 143 && allowPlaintext);
+  // IMAP TLS: cleartext when on port 143 (allowed by default — the host
+  // owns the plaintext decision).
+  const imapTls = options.imapTls ?? imapPort !== 143;
   // SMTP secure: implicit TLS on 465.
   const smtpSecure = options.smtpSecure ?? smtpPort === 465;
-  // SMTP requireTLS: force STARTTLS upgrade unless the user opted into
-  // plaintext on port 25.
-  const smtpRequireTLS = !(smtpPort === 25 && allowPlaintext);
+  // SMTP requireTLS: force STARTTLS upgrade except on the plaintext
+  // submission port 25.
+  const smtpRequireTLS = smtpPort !== 25;
 
   return {
     imapHost,

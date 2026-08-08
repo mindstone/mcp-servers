@@ -67,12 +67,6 @@
           "format": "number"
         },
         {
-          "name": "EMAIL_IMAP_ALLOW_PLAINTEXT",
-          "description": "Set to 1 to opt into cleartext IMAP/SMTP (strongly discouraged)",
-          "isRequired": false,
-          "format": "string"
-        },
-        {
           "name": "EMAIL_IMAP_MAX_RECIPIENTS",
           "description": "Safety cap: maximum combined To+CC+BCC recipients per email_send call. Defaults to 25; raising bypasses spam-prevention guardrails against prompt-injection-driven mass sends.",
           "isRequired": false,

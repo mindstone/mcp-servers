@@ -92,13 +92,10 @@ node dist/index.js
   **not** silently fall back to a default provider.
 - `EMAIL_IMAP_IMAP_HOST` — custom IMAP host (optional, for `custom` providers)
 - `EMAIL_IMAP_SMTP_HOST` — custom SMTP host (optional, for `custom` providers)
-- `EMAIL_IMAP_IMAP_PORT` — custom IMAP port (default: `993`)
+- `EMAIL_IMAP_IMAP_PORT` — custom IMAP port (default: `993`). Cleartext
+  ports (`imap_port=143`, `smtp_port=25`) are allowed when configured —
+  your host owns the plaintext decision.
 - `EMAIL_IMAP_SMTP_PORT` — custom SMTP port (default: `587`)
-- `EMAIL_IMAP_ALLOW_PLAINTEXT` — set to `1` to opt into cleartext IMAP
-  (`imap_port=143`) or SMTP (`smtp_port=25`) for `provider: custom`.
-  **Strongly discouraged** — credentials and message bodies will travel
-  unencrypted. With this env var unset, the connector refuses to start
-  when a cleartext port is configured.
 - `MCP_WORKSPACE_PATH` — workspace directory used for attachment file I/O.
   `email_get_attachment` downloads into a fresh, private
   `email-imap-attachment-*` staging directory created directly under this

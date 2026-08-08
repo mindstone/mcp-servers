@@ -26,8 +26,9 @@ vi.mock('nodemailer', () => ({
  *     outlook),
  *   - refuse to start (throw) when no domain match exists — never silently
  *     fall back to iCloud,
- *   - require TLS for `provider: custom` unless the user explicitly opts
- *     out via `EMAIL_IMAP_ALLOW_PLAINTEXT=1`.
+ *   - require TLS for `provider: custom` by default, while allowing
+ *     cleartext ports (imap=143, smtp=25) when configured — capability-first:
+ *     the host owns the plaintext decision.
  */
 
 describe('Provider compat — auto-detect (VAL-EMAIL-010..013, 019)', () => {
@@ -143,7 +144,7 @@ describe('Provider compat — auto-detect (VAL-EMAIL-010..013, 019)', () => {
   });
 });
 
-describe('Provider compat — custom TLS enforcement (VAL-EMAIL-014..018)', () => {
+describe('Provider compat — custom TLS defaults & plaintext allowance (VAL-EMAIL-014..018)', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
   });
@@ -152,13 +153,12 @@ describe('Provider compat — custom TLS enforcement (VAL-EMAIL-014..018)', () =
     vi.unstubAllEnvs();
   });
 
-  it('VAL-EMAIL-014 — custom provider with no plaintext escape requires TLS (positive)', async () => {
+  it('VAL-EMAIL-014 — custom provider defaults to TLS (positive)', async () => {
     vi.stubEnv('EMAIL_IMAP_PROVIDER', 'custom');
     vi.stubEnv('EMAIL_IMAP_IMAP_HOST', 'imap.example.com');
     vi.stubEnv('EMAIL_IMAP_SMTP_HOST', 'smtp.example.com');
     vi.stubEnv('EMAIL_IMAP_IMAP_PORT', '');
     vi.stubEnv('EMAIL_IMAP_SMTP_PORT', '');
-    vi.stubEnv('EMAIL_IMAP_ALLOW_PLAINTEXT', '');
 
     vi.resetModules();
     const { resolveClientConfig } = await import('../src/tools/index.js');
@@ -171,53 +171,12 @@ describe('Provider compat — custom TLS enforcement (VAL-EMAIL-014..018)', () =
     expect(cfg.smtpRequireTLS).toBe(true);
   });
 
-  it('VAL-EMAIL-015 — custom + imap_port=143 + no plaintext escape → fail fast', async () => {
+  it('VAL-EMAIL-015 — custom + imap_port=143 → plaintext allowed by default', async () => {
     vi.stubEnv('EMAIL_IMAP_PROVIDER', 'custom');
     vi.stubEnv('EMAIL_IMAP_IMAP_HOST', 'imap.example.com');
     vi.stubEnv('EMAIL_IMAP_SMTP_HOST', 'smtp.example.com');
     vi.stubEnv('EMAIL_IMAP_IMAP_PORT', '143');
     vi.stubEnv('EMAIL_IMAP_SMTP_PORT', '');
-    vi.stubEnv('EMAIL_IMAP_ALLOW_PLAINTEXT', '');
-
-    vi.resetModules();
-    const { resolveClientConfig } = await import('../src/tools/index.js');
-
-    expect(() =>
-      resolveClientConfig({
-        email: 'me@example.com',
-        password: 'pw',
-        provider: 'custom',
-      }),
-    ).toThrow(/plaintext|TLS required|EMAIL_IMAP_ALLOW_PLAINTEXT/);
-  });
-
-  it('VAL-EMAIL-016 — custom + smtp_port=25 + no plaintext escape → fail fast', async () => {
-    vi.stubEnv('EMAIL_IMAP_PROVIDER', 'custom');
-    vi.stubEnv('EMAIL_IMAP_IMAP_HOST', 'imap.example.com');
-    vi.stubEnv('EMAIL_IMAP_SMTP_HOST', 'smtp.example.com');
-    vi.stubEnv('EMAIL_IMAP_IMAP_PORT', '');
-    vi.stubEnv('EMAIL_IMAP_SMTP_PORT', '25');
-    vi.stubEnv('EMAIL_IMAP_ALLOW_PLAINTEXT', '');
-
-    vi.resetModules();
-    const { resolveClientConfig } = await import('../src/tools/index.js');
-
-    expect(() =>
-      resolveClientConfig({
-        email: 'me@example.com',
-        password: 'pw',
-        provider: 'custom',
-      }),
-    ).toThrow(/plaintext|TLS required|EMAIL_IMAP_ALLOW_PLAINTEXT/);
-  });
-
-  it('VAL-EMAIL-017 — EMAIL_IMAP_ALLOW_PLAINTEXT=1 escape hatch works for imap_port=143', async () => {
-    vi.stubEnv('EMAIL_IMAP_PROVIDER', 'custom');
-    vi.stubEnv('EMAIL_IMAP_IMAP_HOST', 'imap.example.com');
-    vi.stubEnv('EMAIL_IMAP_SMTP_HOST', 'smtp.example.com');
-    vi.stubEnv('EMAIL_IMAP_IMAP_PORT', '143');
-    vi.stubEnv('EMAIL_IMAP_SMTP_PORT', '587');
-    vi.stubEnv('EMAIL_IMAP_ALLOW_PLAINTEXT', '1');
 
     vi.resetModules();
     const { resolveClientConfig } = await import('../src/tools/index.js');
@@ -228,6 +187,62 @@ describe('Provider compat — custom TLS enforcement (VAL-EMAIL-014..018)', () =
     });
     expect(cfg.imapTls).toBe(false);
     expect(cfg.imapPort).toBe(143);
+  });
+
+  it('VAL-EMAIL-016 — custom + smtp_port=25 → plaintext allowed by default', async () => {
+    vi.stubEnv('EMAIL_IMAP_PROVIDER', 'custom');
+    vi.stubEnv('EMAIL_IMAP_IMAP_HOST', 'imap.example.com');
+    vi.stubEnv('EMAIL_IMAP_SMTP_HOST', 'smtp.example.com');
+    vi.stubEnv('EMAIL_IMAP_IMAP_PORT', '');
+    vi.stubEnv('EMAIL_IMAP_SMTP_PORT', '25');
+
+    vi.resetModules();
+    const { resolveClientConfig } = await import('../src/tools/index.js');
+    const cfg = resolveClientConfig({
+      email: 'me@example.com',
+      password: 'pw',
+      provider: 'custom',
+    });
+    expect(cfg.smtpPort).toBe(25);
+    expect(cfg.smtpRequireTLS).toBe(false);
+  });
+
+  it('VAL-EMAIL-017 — explicit imapTls override still wins on a cleartext port', async () => {
+    vi.stubEnv('EMAIL_IMAP_PROVIDER', 'custom');
+    vi.stubEnv('EMAIL_IMAP_IMAP_HOST', 'imap.example.com');
+    vi.stubEnv('EMAIL_IMAP_SMTP_HOST', 'smtp.example.com');
+    vi.stubEnv('EMAIL_IMAP_IMAP_PORT', '143');
+    vi.stubEnv('EMAIL_IMAP_SMTP_PORT', '587');
+
+    vi.resetModules();
+    const { resolveClientConfig } = await import('../src/tools/index.js');
+    const cfg = resolveClientConfig({
+      email: 'me@example.com',
+      password: 'pw',
+      provider: 'custom',
+      imapTls: true,
+    });
+    expect(cfg.imapTls).toBe(true);
+    expect(cfg.imapPort).toBe(143);
+  });
+
+  it('VAL-EMAIL-017b — explicit imapTls: false override wins on a TLS port', async () => {
+    vi.stubEnv('EMAIL_IMAP_PROVIDER', 'custom');
+    vi.stubEnv('EMAIL_IMAP_IMAP_HOST', 'imap.example.com');
+    vi.stubEnv('EMAIL_IMAP_SMTP_HOST', 'smtp.example.com');
+    vi.stubEnv('EMAIL_IMAP_IMAP_PORT', '993');
+    vi.stubEnv('EMAIL_IMAP_SMTP_PORT', '587');
+
+    vi.resetModules();
+    const { resolveClientConfig } = await import('../src/tools/index.js');
+    const cfg = resolveClientConfig({
+      email: 'me@example.com',
+      password: 'pw',
+      provider: 'custom',
+      imapTls: false,
+    });
+    expect(cfg.imapTls).toBe(false);
+    expect(cfg.imapPort).toBe(993);
   });
 
   it('VAL-EMAIL-018 — known providers continue to resolve when EMAIL_IMAP_PROVIDER is set explicitly', async () => {

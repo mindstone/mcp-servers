@@ -45,8 +45,8 @@ export interface ClientConfig {
   smtpSecure: boolean;
   /**
    * When true, force STARTTLS upgrade for SMTP submission. Always true for
-   * known-provider presets and for `provider: custom` unless the user has
-   * explicitly opted into plaintext via `EMAIL_IMAP_ALLOW_PLAINTEXT=1`.
+   * known-provider presets and for `provider: custom` unless the custom
+   * SMTP port is 25 (plaintext submission is allowed when configured).
    */
   smtpRequireTLS: boolean;
   email: string;

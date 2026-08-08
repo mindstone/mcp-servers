@@ -46,8 +46,8 @@ export async function getTransport(): Promise<MailTransporter> {
     secure: config.secure,
     // Force STARTTLS upgrade for plain-port (587) submission so a hostile
     // DNS / MITM cannot keep the connection in cleartext. Only `false`
-    // when the user has explicitly opted into plaintext for `provider:
-    // custom` via `EMAIL_IMAP_ALLOW_PLAINTEXT=1`.
+    // when `provider: custom` is configured for the plaintext submission
+    // port (25) — plaintext is allowed when configured.
     requireTLS: config.requireTLS ?? !config.secure,
     auth: {
       user: config.user,
