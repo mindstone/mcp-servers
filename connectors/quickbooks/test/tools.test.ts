@@ -141,8 +141,6 @@ describe('create_quickbooks_invoice', () => {
   });
 
   it('creates an invoice', async () => {
-    // Mutating tools require QB_ALLOW_PROD_WRITES=1 (M3.13 secure-by-default gate).
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
     mswServer.use(...createQuickBooksHandlers());
     testClient = await createTestClient({ env: defaultEnv() });
 
@@ -165,8 +163,6 @@ describe('create_quickbooks_customer', () => {
   });
 
   it('creates a customer', async () => {
-    // Mutating tools require QB_ALLOW_PROD_WRITES=1 (M3.13 secure-by-default gate).
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
     mswServer.use(...createQuickBooksHandlers());
     testClient = await createTestClient({ env: defaultEnv() });
 
@@ -207,8 +203,6 @@ describe('create_quickbooks_bill', () => {
   });
 
   it('creates a bill', async () => {
-    // Mutating tools require QB_ALLOW_PROD_WRITES=1 (M3.13 secure-by-default gate).
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
     mswServer.use(...createQuickBooksHandlers());
     testClient = await createTestClient({ env: defaultEnv() });
 
@@ -250,8 +244,6 @@ describe('create_quickbooks_vendor', () => {
   });
 
   it('creates a vendor', async () => {
-    // Mutating tools require QB_ALLOW_PROD_WRITES=1 (M3.13 secure-by-default gate).
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
     mswServer.use(...createQuickBooksHandlers());
     testClient = await createTestClient({ env: defaultEnv() });
 
@@ -310,8 +302,7 @@ describe('send_quickbooks_invoice_email', () => {
     vi.unstubAllEnvs();
   });
 
-  it('sends an invoice email when the write gate is open', async () => {
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
+  it('sends an invoice email', async () => {
     let capturedUrl = '';
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
@@ -335,26 +326,26 @@ describe('send_quickbooks_invoice_email', () => {
     expect(capturedUrl).toContain('sendTo=billing%40example.com');
   });
 
-  it('refuses without QB_ALLOW_PROD_WRITES and never hits the API', async () => {
+  it('sends by default without any write-gate opt-in', async () => {
     let postCount = 0;
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
-      http.post(`${PRODUCTION_API_BASE}/invoice/:invoiceId/send`, () => {
+      http.post(`${PRODUCTION_API_BASE}/invoice/:invoiceId/send`, ({ params }) => {
         postCount++;
-        return HttpResponse.json({ Invoice: { Id: 'should-not-happen' } });
+        return HttpResponse.json({
+          Invoice: { Id: params.invoiceId as string, EmailStatus: 'EmailSent' },
+        });
       }),
     );
 
     testClient = await createTestClient({ env: defaultEnv() });
     const result = await testClient.callTool('send_quickbooks_invoice_email', { invoiceId: 'inv-001' });
     const json = result.json as Record<string, unknown>;
-    expect(json.ok).toBe(false);
-    expect(String(json.error)).toContain('QB_ALLOW_PROD_WRITES');
-    expect(postCount).toBe(0);
+    expect(json.ok).toBe(true);
+    expect(postCount).toBe(1);
   });
 
   it('rejects an invalid invoice ID', async () => {
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
     mswServer.use(...createQuickBooksHandlers());
     testClient = await createTestClient({ env: defaultEnv() });
     const result = await testClient.callTool('send_quickbooks_invoice_email', {
@@ -599,7 +590,6 @@ describe('create_quickbooks_estimate', () => {
   });
 
   it('creates an estimate', async () => {
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
     mswServer.use(...createQuickBooksHandlers());
     testClient = await createTestClient({ env: defaultEnv() });
 
@@ -612,13 +602,13 @@ describe('create_quickbooks_estimate', () => {
     expect(json.message).toBe('Estimate created.');
   });
 
-  it('refuses without QB_ALLOW_PROD_WRITES and never hits the API', async () => {
+  it('creates an estimate by default without any write-gate opt-in', async () => {
     let postCount = 0;
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
       http.post(`${PRODUCTION_API_BASE}/estimate`, () => {
         postCount++;
-        return HttpResponse.json({ Estimate: { Id: 'should-not-happen' } });
+        return HttpResponse.json({ Estimate: { Id: 'e-1' } });
       }),
     );
 
@@ -628,9 +618,8 @@ describe('create_quickbooks_estimate', () => {
       lines: [{ description: 'x', amount: 100 }],
     });
     const json = result.json as Record<string, unknown>;
-    expect(json.ok).toBe(false);
-    expect(String(json.error)).toContain('QB_ALLOW_PROD_WRITES');
-    expect(postCount).toBe(0);
+    expect(json.ok).toBe(true);
+    expect(postCount).toBe(1);
   });
 });
 
@@ -643,7 +632,6 @@ describe('update_quickbooks_invoice', () => {
   });
 
   it('sparse-updates an invoice with an explicit syncToken (no read-first)', async () => {
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
     let getCount = 0;
     let capturedBody: Record<string, unknown> | null = null;
     mswServer.use(
@@ -679,7 +667,6 @@ describe('update_quickbooks_invoice', () => {
   });
 
   it('reads the entity first when syncToken is omitted', async () => {
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
     let capturedBody: Record<string, unknown> | null = null;
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
@@ -702,7 +689,7 @@ describe('update_quickbooks_invoice', () => {
     expect(capturedBody).toMatchObject({ Id: 'inv-1', SyncToken: '7', sparse: true });
   });
 
-  it('refuses without QB_ALLOW_PROD_WRITES and never hits the API', async () => {
+  it('updates by default without any write-gate opt-in (reads SyncToken first)', async () => {
     let outboundCount = 0;
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
@@ -712,7 +699,7 @@ describe('update_quickbooks_invoice', () => {
       }),
       http.post(`${PRODUCTION_API_BASE}/invoice`, () => {
         outboundCount++;
-        return HttpResponse.json({ Invoice: { Id: 'should-not-happen' } });
+        return HttpResponse.json({ Invoice: { Id: 'inv-1', SyncToken: '1' } });
       }),
     );
 
@@ -722,13 +709,11 @@ describe('update_quickbooks_invoice', () => {
       memo: 'x',
     });
     const json = result.json as Record<string, unknown>;
-    expect(json.ok).toBe(false);
-    expect(String(json.error)).toContain('QB_ALLOW_PROD_WRITES');
-    expect(outboundCount).toBe(0);
+    expect(json.ok).toBe(true);
+    expect(outboundCount).toBe(2);
   });
 
   it('rejects an update with no fields', async () => {
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
     mswServer.use(...createQuickBooksHandlers());
     testClient = await createTestClient({ env: defaultEnv() });
     const result = await testClient.callTool('update_quickbooks_invoice', { invoiceId: 'inv-1' });
@@ -747,7 +732,6 @@ describe('update_quickbooks_customer / update_quickbooks_vendor', () => {
   });
 
   it('sparse-updates a customer', async () => {
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
     let capturedBody: Record<string, unknown> | null = null;
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
@@ -777,7 +761,6 @@ describe('update_quickbooks_customer / update_quickbooks_vendor', () => {
   });
 
   it('sparse-updates a vendor (reads SyncToken first)', async () => {
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
     let capturedBody: Record<string, unknown> | null = null;
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
@@ -806,13 +789,13 @@ describe('update_quickbooks_customer / update_quickbooks_vendor', () => {
     });
   });
 
-  it('update_quickbooks_customer refuses without the write gate', async () => {
+  it('update_quickbooks_customer writes by default without any write-gate opt-in', async () => {
     let postCount = 0;
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
       http.post(`${PRODUCTION_API_BASE}/customer`, () => {
         postCount++;
-        return HttpResponse.json({ Customer: { Id: 'should-not-happen' } });
+        return HttpResponse.json({ Customer: { Id: 'c1', SyncToken: '1' } });
       }),
     );
 
@@ -823,9 +806,8 @@ describe('update_quickbooks_customer / update_quickbooks_vendor', () => {
       displayName: 'X',
     });
     const json = result.json as Record<string, unknown>;
-    expect(json.ok).toBe(false);
-    expect(String(json.error)).toContain('QB_ALLOW_PROD_WRITES');
-    expect(postCount).toBe(0);
+    expect(json.ok).toBe(true);
+    expect(postCount).toBe(1);
   });
 });
 
@@ -1355,7 +1337,6 @@ describe('Input validation hardening (adversarial)', () => {
   it('rejects malformed dates on estimate, invoice, and report tools', async () => {
     const outbound = countOutbound();
     testClient = await createTestClient({ env: defaultEnv() });
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
 
     const badDates = ['2026-13-99', '2026-02-30', 'not-a-date', '2026-2-3', '2026/01/01'];
     for (const bad of badDates) {
@@ -1397,7 +1378,6 @@ describe('Input validation hardening (adversarial)', () => {
   it('rejects empty line arrays, non-positive amounts, and non-positive quantities', async () => {
     const outbound = countOutbound();
     testClient = await createTestClient({ env: defaultEnv() });
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
 
     const badLineSets: Array<Record<string, unknown>> = [
       { lines: [] },
@@ -1432,7 +1412,6 @@ describe('Input validation hardening (adversarial)', () => {
   it('rejects malformed customer/item/vendor/account IDs before the POST', async () => {
     const outbound = countOutbound();
     testClient = await createTestClient({ env: defaultEnv() });
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
     const injected = "1' OR '1'='1";
 
     const cases: Array<[string, Record<string, unknown>]> = [
@@ -1455,7 +1434,6 @@ describe('Input validation hardening (adversarial)', () => {
   it('rejects malformed email addresses on customer and vendor writes', async () => {
     const outbound = countOutbound();
     testClient = await createTestClient({ env: defaultEnv() });
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
 
     const cases: Array<[string, Record<string, unknown>]> = [
       ['create_quickbooks_customer', { displayName: 'Acme', email: 'not-an-email' }],
@@ -1501,7 +1479,6 @@ describe('Input validation hardening (adversarial)', () => {
   it('still accepts well-formed create inputs after hardening', async () => {
     mswServer.use(...createQuickBooksHandlers());
     testClient = await createTestClient({ env: defaultEnv() });
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
 
     const estimate = await testClient.callTool('create_quickbooks_estimate', {
       customerId: 'cust-001',

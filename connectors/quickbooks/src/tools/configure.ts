@@ -47,9 +47,8 @@ COMMON MISTAKES:
           .describe('"sandbox" or "production" (default: production)'),
       }),
       // configure_quickbooks stores credentials via the host bridge; it does NOT
-      // perform any destructive write against the user's QuickBooks company data.
-      // The QB_ALLOW_PROD_WRITES gate (see utils.ts) targets QuickBooks data
-      // mutations only, so configure_quickbooks is annotated as non-destructive.
+      // perform any destructive write against the user's QuickBooks company data,
+      // so configure_quickbooks is annotated as non-destructive.
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     },
     withErrorHandling(async (args) => {

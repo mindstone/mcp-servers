@@ -1,15 +1,15 @@
 /**
- * VAL-QB-101..501 — Secure-by-default write gate.
+ * VAL-QB-101..501 — Production writes run by default (capability-first).
  *
  * All mutating QuickBooks tools (`create_quickbooks_invoice`, `_bill`,
- * `_customer`, `_vendor`) MUST refuse to execute unless the host has
- * explicitly set `QB_ALLOW_PROD_WRITES=1`. The error message must
- * reference the env var by name and explain the rationale, and the
- * upstream QuickBooks API must NOT be hit (msw handler invocation count
- * must be 0).
+ * `_customer`, `_vendor`, `_estimate`, `update_*`,
+ * `send_quickbooks_invoice_email`) execute their write without any
+ * environment opt-in: capability is enabled by default and the host's
+ * tool-approval layer is the gate. These tests assert each write tool
+ * reaches the (mocked) QuickBooks API with no write-gate env var set.
  */
 
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import { createQuickBooksHandlers } from './helpers/quickbooks-mock-server.js';
@@ -41,175 +41,14 @@ function defaultEnv() {
   };
 }
 
-const REASON_PHRASE_RE = /safety|production|destructive|guard|secure-by-default|prevent.*accident/i;
-
-describe('VAL-QB-101..106 — gate closed by default (env unset / wrong value)', () => {
+describe('VAL-QB-101..104 — write tools run by default (no env opt-in)', () => {
   let testClient: McpTestClient;
-
-  beforeEach(() => {
-    // Make sure the env var is unset for the negative tests.
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '');
-  });
 
   afterEach(async () => {
     if (testClient) await testClient.close();
-    vi.unstubAllEnvs();
   });
 
-  it('VAL-QB-101 — env unset: create_quickbooks_invoice refuses without hitting upstream', async () => {
-    let postCount = 0;
-    mswServer.use(
-      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
-      http.post(`${PRODUCTION_API_BASE}/invoice`, () => {
-        postCount++;
-        return HttpResponse.json({ Invoice: { Id: 'should-not-happen' } });
-      }),
-    );
-
-    testClient = await createTestClient({ env: defaultEnv() });
-
-    const result = await testClient.callTool('create_quickbooks_invoice', {
-      customerId: '123',
-      lines: [{ description: 'x', amount: 100 }],
-    });
-    const json = result.json as Record<string, unknown>;
-    expect(json.ok).toBe(false);
-    expect(String(json.error)).toContain('QB_ALLOW_PROD_WRITES');
-    expect(String(json.error)).toMatch(REASON_PHRASE_RE);
-    expect(postCount).toBe(0);
-  });
-
-  it('VAL-QB-102 — env unset: create_quickbooks_bill refuses without hitting upstream', async () => {
-    let postCount = 0;
-    mswServer.use(
-      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
-      http.post(`${PRODUCTION_API_BASE}/bill`, () => {
-        postCount++;
-        return HttpResponse.json({ Bill: { Id: 'should-not-happen' } });
-      }),
-    );
-
-    testClient = await createTestClient({ env: defaultEnv() });
-
-    const result = await testClient.callTool('create_quickbooks_bill', {
-      vendorId: 'vend-1',
-      lines: [{ description: 'office supplies', amount: 50 }],
-    });
-    const json = result.json as Record<string, unknown>;
-    expect(json.ok).toBe(false);
-    expect(String(json.error)).toContain('QB_ALLOW_PROD_WRITES');
-    expect(String(json.error)).toMatch(REASON_PHRASE_RE);
-    expect(postCount).toBe(0);
-  });
-
-  it('VAL-QB-103 — env unset: create_quickbooks_customer refuses without hitting upstream', async () => {
-    let postCount = 0;
-    mswServer.use(
-      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
-      http.post(`${PRODUCTION_API_BASE}/customer`, () => {
-        postCount++;
-        return HttpResponse.json({ Customer: { Id: 'should-not-happen' } });
-      }),
-    );
-
-    testClient = await createTestClient({ env: defaultEnv() });
-
-    const result = await testClient.callTool('create_quickbooks_customer', {
-      displayName: 'Acme Corp',
-    });
-    const json = result.json as Record<string, unknown>;
-    expect(json.ok).toBe(false);
-    expect(String(json.error)).toContain('QB_ALLOW_PROD_WRITES');
-    expect(String(json.error)).toMatch(REASON_PHRASE_RE);
-    expect(postCount).toBe(0);
-  });
-
-  it('VAL-QB-104 — env unset: create_quickbooks_vendor refuses without hitting upstream', async () => {
-    let postCount = 0;
-    mswServer.use(
-      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
-      http.post(`${PRODUCTION_API_BASE}/vendor`, () => {
-        postCount++;
-        return HttpResponse.json({ Vendor: { Id: 'should-not-happen' } });
-      }),
-    );
-
-    testClient = await createTestClient({ env: defaultEnv() });
-
-    const result = await testClient.callTool('create_quickbooks_vendor', {
-      displayName: 'New Vendor',
-    });
-    const json = result.json as Record<string, unknown>;
-    expect(json.ok).toBe(false);
-    expect(String(json.error)).toContain('QB_ALLOW_PROD_WRITES');
-    expect(String(json.error)).toMatch(REASON_PHRASE_RE);
-    expect(postCount).toBe(0);
-  });
-
-  it('VAL-QB-105 — empty-string env value also refuses', async () => {
-    // Stub explicitly to '' (already done in beforeEach).
-    let postCount = 0;
-    mswServer.use(
-      http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
-      http.post(`${PRODUCTION_API_BASE}/invoice`, () => {
-        postCount++;
-        return HttpResponse.json({ Invoice: { Id: 'should-not-happen' } });
-      }),
-    );
-
-    testClient = await createTestClient({ env: defaultEnv() });
-
-    const result = await testClient.callTool('create_quickbooks_invoice', {
-      customerId: '123',
-      lines: [{ description: 'x', amount: 100 }],
-    });
-    const json = result.json as Record<string, unknown>;
-    expect(json.ok).toBe(false);
-    expect(String(json.error)).toContain('QB_ALLOW_PROD_WRITES');
-    expect(postCount).toBe(0);
-  });
-
-  it.each([['true'], ['yes'], ['0'], [' 1 '], ['TRUE']])(
-    'VAL-QB-106 — wrong env value %j keeps the gate closed',
-    async (badValue) => {
-      vi.stubEnv('QB_ALLOW_PROD_WRITES', badValue);
-
-      let postCount = 0;
-      mswServer.use(
-        http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
-        http.post(`${PRODUCTION_API_BASE}/invoice`, () => {
-          postCount++;
-          return HttpResponse.json({ Invoice: { Id: 'should-not-happen' } });
-        }),
-      );
-
-      testClient = await createTestClient({ env: defaultEnv() });
-
-      const result = await testClient.callTool('create_quickbooks_invoice', {
-        customerId: '123',
-        lines: [{ description: 'x', amount: 100 }],
-      });
-      const json = result.json as Record<string, unknown>;
-      expect(json.ok).toBe(false);
-      expect(String(json.error)).toContain('QB_ALLOW_PROD_WRITES');
-      expect(postCount).toBe(0);
-    },
-  );
-});
-
-describe('VAL-QB-201..204 — gate open with QB_ALLOW_PROD_WRITES=1', () => {
-  let testClient: McpTestClient;
-
-  beforeEach(() => {
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '1');
-  });
-
-  afterEach(async () => {
-    if (testClient) await testClient.close();
-    vi.unstubAllEnvs();
-  });
-
-  it('VAL-QB-201 — create_quickbooks_invoice succeeds and posts upstream once', async () => {
+  it('VAL-QB-101 — create_quickbooks_invoice posts upstream once', async () => {
     let postCount = 0;
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
@@ -232,7 +71,7 @@ describe('VAL-QB-201..204 — gate open with QB_ALLOW_PROD_WRITES=1', () => {
     expect(postCount).toBe(1);
   });
 
-  it('VAL-QB-202 — create_quickbooks_bill succeeds and posts upstream once', async () => {
+  it('VAL-QB-102 — create_quickbooks_bill posts upstream once', async () => {
     let postCount = 0;
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
@@ -255,7 +94,7 @@ describe('VAL-QB-201..204 — gate open with QB_ALLOW_PROD_WRITES=1', () => {
     expect(postCount).toBe(1);
   });
 
-  it('VAL-QB-203 — create_quickbooks_customer succeeds and posts upstream once', async () => {
+  it('VAL-QB-103 — create_quickbooks_customer posts upstream once', async () => {
     let postCount = 0;
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
@@ -277,7 +116,7 @@ describe('VAL-QB-201..204 — gate open with QB_ALLOW_PROD_WRITES=1', () => {
     expect(postCount).toBe(1);
   });
 
-  it('VAL-QB-204 — create_quickbooks_vendor succeeds and posts upstream once', async () => {
+  it('VAL-QB-104 — create_quickbooks_vendor posts upstream once', async () => {
     let postCount = 0;
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
@@ -300,19 +139,14 @@ describe('VAL-QB-201..204 — gate open with QB_ALLOW_PROD_WRITES=1', () => {
   });
 });
 
-describe('VAL-QB-301 — read-only tools unaffected by gate', () => {
+describe('VAL-QB-301 — read-only tools still work', () => {
   let testClient: McpTestClient;
-
-  beforeEach(() => {
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '');
-  });
 
   afterEach(async () => {
     if (testClient) await testClient.close();
-    vi.unstubAllEnvs();
   });
 
-  it('list_quickbooks_invoices succeeds without QB_ALLOW_PROD_WRITES', async () => {
+  it('list_quickbooks_invoices succeeds', async () => {
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
       http.get(`${PRODUCTION_API_BASE}/query`, () =>
@@ -327,7 +161,7 @@ describe('VAL-QB-301 — read-only tools unaffected by gate', () => {
     expect(Array.isArray(json.invoices)).toBe(true);
   });
 
-  it('list_quickbooks_customers succeeds without QB_ALLOW_PROD_WRITES', async () => {
+  it('list_quickbooks_customers succeeds', async () => {
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
       http.get(`${PRODUCTION_API_BASE}/query`, () =>
@@ -342,7 +176,7 @@ describe('VAL-QB-301 — read-only tools unaffected by gate', () => {
     expect(Array.isArray(json.customers)).toBe(true);
   });
 
-  it('list_quickbooks_bills succeeds without QB_ALLOW_PROD_WRITES', async () => {
+  it('list_quickbooks_bills succeeds', async () => {
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
       http.get(`${PRODUCTION_API_BASE}/query`, () =>
@@ -357,7 +191,7 @@ describe('VAL-QB-301 — read-only tools unaffected by gate', () => {
     expect(Array.isArray(json.bills)).toBe(true);
   });
 
-  it('list_quickbooks_vendors succeeds without QB_ALLOW_PROD_WRITES', async () => {
+  it('list_quickbooks_vendors succeeds', async () => {
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
       http.get(`${PRODUCTION_API_BASE}/query`, () =>
@@ -372,7 +206,7 @@ describe('VAL-QB-301 — read-only tools unaffected by gate', () => {
     expect(Array.isArray(json.vendors)).toBe(true);
   });
 
-  it('list_quickbooks_accounts succeeds without QB_ALLOW_PROD_WRITES', async () => {
+  it('list_quickbooks_accounts succeeds', async () => {
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
       http.get(`${PRODUCTION_API_BASE}/query`, () =>
@@ -387,7 +221,7 @@ describe('VAL-QB-301 — read-only tools unaffected by gate', () => {
     expect(Array.isArray(json.accounts)).toBe(true);
   });
 
-  it('list_quickbooks_employees succeeds without QB_ALLOW_PROD_WRITES', async () => {
+  it('list_quickbooks_employees succeeds', async () => {
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
       http.get(`${PRODUCTION_API_BASE}/query`, () =>
@@ -402,7 +236,7 @@ describe('VAL-QB-301 — read-only tools unaffected by gate', () => {
     expect(Array.isArray(json.employees)).toBe(true);
   });
 
-  it('query_quickbooks succeeds without QB_ALLOW_PROD_WRITES', async () => {
+  it('query_quickbooks succeeds', async () => {
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
       http.get(`${PRODUCTION_API_BASE}/query`, () =>
@@ -418,7 +252,7 @@ describe('VAL-QB-301 — read-only tools unaffected by gate', () => {
     expect(json.ok).toBe(true);
   });
 
-  it('get_quickbooks_entity succeeds without QB_ALLOW_PROD_WRITES', async () => {
+  it('get_quickbooks_entity succeeds', async () => {
     mswServer.use(...createQuickBooksHandlers());
 
     testClient = await createTestClient({ env: defaultEnv() });
@@ -431,27 +265,32 @@ describe('VAL-QB-301 — read-only tools unaffected by gate', () => {
   });
 });
 
-describe('VAL-QB-302 — every destructiveHint:true tool is gated', () => {
+describe('VAL-QB-302 — every destructiveHint:true tool executes its write by default', () => {
   let testClient: McpTestClient;
-
-  beforeEach(() => {
-    vi.stubEnv('QB_ALLOW_PROD_WRITES', '');
-  });
 
   afterEach(async () => {
     if (testClient) await testClient.close();
-    vi.unstubAllEnvs();
   });
 
-  it('every tool whose annotation has destructiveHint:true returns the QB_ALLOW_PROD_WRITES gate error', async () => {
-    // Set up handlers for both query (non-destructive) and POST (would-be destructive) so any
-    // accidental upstream call would be observable. We assert no destructive POST is made.
+  it('every tool whose annotation has destructiveHint:true reaches the QuickBooks API', async () => {
     let destructivePostCount = 0;
     mswServer.use(
       http.post(TOKEN_URL, () => HttpResponse.json(createTokenResponse())),
-      http.post(`${PRODUCTION_API_BASE}/:entityType`, () => {
+      // update_quickbooks_invoice reads the SyncToken first when it is omitted.
+      http.get(`${PRODUCTION_API_BASE}/invoice/:id`, () =>
+        HttpResponse.json({ Invoice: { Id: 'inv-1', SyncToken: '0' } }),
+      ),
+      http.post(`${PRODUCTION_API_BASE}/invoice/:invoiceId/send`, ({ params }) => {
         destructivePostCount++;
-        return HttpResponse.json({});
+        return HttpResponse.json({
+          Invoice: { Id: params.invoiceId as string, EmailStatus: 'EmailSent' },
+        });
+      }),
+      http.post(`${PRODUCTION_API_BASE}/:entityType`, ({ params }) => {
+        destructivePostCount++;
+        const entityType = params.entityType as string;
+        const key = entityType.charAt(0).toUpperCase() + entityType.slice(1);
+        return HttpResponse.json({ [key]: { Id: 'mock-1', SyncToken: '1' } });
       }),
     );
 
@@ -484,29 +323,24 @@ describe('VAL-QB-302 — every destructiveHint:true tool is gated', () => {
       },
       send_quickbooks_invoice_email: { invoiceId: 'inv-1' },
       update_quickbooks_invoice: { invoiceId: 'inv-1', memo: 'Net 30' },
-      update_quickbooks_customer: { customerId: 'c1', email: 'ap@example.com' },
-      update_quickbooks_vendor: { vendorId: 'v1', email: 'ap@example.com' },
+      update_quickbooks_customer: { customerId: 'c1', syncToken: '0', email: 'ap@example.com' },
+      update_quickbooks_vendor: { vendorId: 'v1', syncToken: '0', email: 'ap@example.com' },
     };
 
     for (const t of destructive) {
       const input = minimalInputs[t.name];
-      // The contract calls out that mutating tools = create_invoice/_bill/_customer/_vendor
-      // (and any others). If a future destructive tool is added without an entry here,
-      // fail loudly so it does not silently slip past the gate.
+      // If a future destructive tool is added without an entry here,
+      // fail loudly so it does not silently slip through untested.
       expect(
         input,
-        `No minimal input mapping for destructive tool '${t.name}'. Add one and ensure the gate covers it.`,
+        `No minimal input mapping for destructive tool '${t.name}'. Add one and assert it executes by default.`,
       ).toBeDefined();
 
       const result = await testClient.callTool(t.name, input);
       const json = result.json as Record<string, unknown>;
-      expect(json.ok, `tool ${t.name} should be gated`).toBe(false);
-      expect(
-        String(json.error),
-        `tool ${t.name} error should mention QB_ALLOW_PROD_WRITES`,
-      ).toContain('QB_ALLOW_PROD_WRITES');
+      expect(json.ok, `tool ${t.name} should execute its write by default`).toBe(true);
     }
 
-    expect(destructivePostCount).toBe(0);
+    expect(destructivePostCount).toBe(destructive.length);
   });
 });

@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeQboql, validateAlphanumericId, requireProdWritesEnabled, qboDate } from '../utils.js';
+import { withErrorHandling, escapeQboql, validateAlphanumericId, qboDate } from '../utils.js';
 import { qboFetch, qboQueryPage, truncationNote } from '../client.js';
 import { QBO_MINOR_VERSION } from '../types.js';
 import { sanitizeQboEntity } from '../sanitize.js';
@@ -65,7 +65,6 @@ WORKFLOW:
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      requireProdWritesEnabled();
       validateAlphanumericId(args.vendorId, 'vendorId');
       for (const line of args.lines) {
         if (line.accountId) validateAlphanumericId(line.accountId, 'accountId');

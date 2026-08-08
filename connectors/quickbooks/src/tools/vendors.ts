@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeQboql, requireProdWritesEnabled, validateAlphanumericId } from '../utils.js';
+import { withErrorHandling, escapeQboql, validateAlphanumericId } from '../utils.js';
 import { qboFetch, qboQueryPage, qboSparseUpdate, truncationNote } from '../client.js';
 import { QBO_MINOR_VERSION, QuickBooksError } from '../types.js';
 import { sanitizeQboEntity } from '../sanitize.js';
@@ -64,7 +64,6 @@ Example: { "displayName": "AWS", "email": "billing@aws.amazon.com", "companyName
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      requireProdWritesEnabled();
       const vendorBody: Record<string, unknown> = { DisplayName: args.displayName };
       if (args.email) vendorBody.PrimaryEmailAddr = { Address: args.email };
       if (args.phone) vendorBody.PrimaryPhone = { FreeFormNumber: args.phone };
@@ -90,7 +89,7 @@ Example: { "displayName": "AWS", "email": "billing@aws.amazon.com", "companyName
 Example: { "vendorId": "123", "email": "ap@example.com" }
 Example: { "vendorId": "123", "active": false }
 
-Requires QB_ALLOW_PROD_WRITES=1. If syncToken is omitted the vendor is read
+If syncToken is omitted the vendor is read
 first to obtain the current one (QuickBooks rejects stale SyncTokens).
 Setting active to false deactivates the vendor.`,
       inputSchema: z.object({
@@ -106,7 +105,6 @@ Setting active to false deactivates the vendor.`,
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      requireProdWritesEnabled();
       validateAlphanumericId(args.vendorId, 'vendorId');
 
       const fields: Record<string, unknown> = {};

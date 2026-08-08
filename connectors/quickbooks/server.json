@@ -56,12 +56,6 @@
           "format": "string"
         },
         {
-          "name": "QB_ALLOW_PROD_WRITES",
-          "description": "Set to exactly 1 to enable mutating tools (secure-by-default; required since 0.3.0)",
-          "isRequired": false,
-          "format": "string"
-        },
-        {
           "name": "MCP_HOST_BRIDGE_STATE",
           "description": "Optional path to a host bridge state file used for credential management",
           "isRequired": false,

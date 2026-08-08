@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeQboql, requireProdWritesEnabled, validateAlphanumericId } from '../utils.js';
+import { withErrorHandling, escapeQboql, validateAlphanumericId } from '../utils.js';
 import { qboFetch, qboQueryPage, qboSparseUpdate, truncationNote } from '../client.js';
 import { QBO_MINOR_VERSION, QuickBooksError } from '../types.js';
 import { sanitizeQboEntity } from '../sanitize.js';
@@ -65,7 +65,6 @@ Example: { "displayName": "Jane Smith", "email": "jane@smith.com", "phone": "555
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      requireProdWritesEnabled();
       const customerBody: Record<string, unknown> = { DisplayName: args.displayName };
       if (args.email) customerBody.PrimaryEmailAddr = { Address: args.email };
       if (args.phone) customerBody.PrimaryPhone = { FreeFormNumber: args.phone };
@@ -91,7 +90,7 @@ Example: { "displayName": "Jane Smith", "email": "jane@smith.com", "phone": "555
 Example: { "customerId": "123", "email": "ap@example.com" }
 Example: { "customerId": "123", "active": false }
 
-Requires QB_ALLOW_PROD_WRITES=1. If syncToken is omitted the customer is read
+If syncToken is omitted the customer is read
 first to obtain the current one (QuickBooks rejects stale SyncTokens).
 Setting active to false deactivates the customer.`,
       inputSchema: z.object({
@@ -107,7 +106,6 @@ Setting active to false deactivates the customer.`,
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      requireProdWritesEnabled();
       validateAlphanumericId(args.customerId, 'customerId');
 
       const fields: Record<string, unknown> = {};

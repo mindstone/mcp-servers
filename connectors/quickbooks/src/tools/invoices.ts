@@ -7,7 +7,7 @@ import * as os from 'os';
 import * as path from 'path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeQboql, validateAlphanumericId, requireProdWritesEnabled, qboDate } from '../utils.js';
+import { withErrorHandling, escapeQboql, validateAlphanumericId, qboDate } from '../utils.js';
 import { qboFetch, qboFetchBinary, qboQueryPage, qboSparseUpdate, truncationNote } from '../client.js';
 import { QBO_MINOR_VERSION, QuickBooksError } from '../types.js';
 import { sanitizeQboEntity } from '../sanitize.js';
@@ -93,7 +93,6 @@ COMMON MISTAKES:
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      requireProdWritesEnabled();
       validateAlphanumericId(args.customerId, 'customerId');
       for (const line of args.lines) {
         if (line.itemId) validateAlphanumericId(line.itemId, 'itemId');
@@ -134,7 +133,7 @@ COMMON MISTAKES:
 Example: { "invoiceId": "123", "dueDate": "2026-04-01" }
 Example: { "invoiceId": "123", "memo": "Net 30", "privateNote": "Chased 2026-03-01" }
 
-Requires QB_ALLOW_PROD_WRITES=1. If syncToken is omitted the invoice is read
+If syncToken is omitted the invoice is read
 first to obtain the current one (QuickBooks rejects stale SyncTokens).`,
       inputSchema: z.object({
         invoiceId: z.string().describe('Invoice ID (required)'),
@@ -147,7 +146,6 @@ first to obtain the current one (QuickBooks rejects stale SyncTokens).`,
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      requireProdWritesEnabled();
       validateAlphanumericId(args.invoiceId, 'invoiceId');
 
       const fields: Record<string, unknown> = {};
@@ -183,7 +181,7 @@ WORKFLOW:
 1. Use list_quickbooks_invoices to find the invoice ID
 2. Send to the invoice's billing email, or override with sendTo
 
-Requires QB_ALLOW_PROD_WRITES=1 — this emails a real customer.`,
+Note: this emails a real customer.`,
       inputSchema: z.object({
         invoiceId: z.string().describe('Invoice ID (required)'),
         sendTo: z.string().email().optional()
@@ -192,7 +190,6 @@ Requires QB_ALLOW_PROD_WRITES=1 — this emails a real customer.`,
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      requireProdWritesEnabled();
       validateAlphanumericId(args.invoiceId, 'invoiceId');
 
       const params = new URLSearchParams({ minorversion: QBO_MINOR_VERSION });
