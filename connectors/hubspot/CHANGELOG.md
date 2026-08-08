@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Removed
+
+- **hubspot**: `HUBSPOT_SCOPE_TIER` env override removed. The scope tier is a user-controllable property of the OAuth grant, so the non-user-controllable env-var gate is gone; the tier now derives solely from the connected account's stored `scopeTier` (falling back to `full`, and failing closed to `readonly` when `accounts.json` is unreadable).
+
 ## [0.4.0] - 2026-08-05
 
 ### Changed

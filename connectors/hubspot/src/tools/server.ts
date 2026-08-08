@@ -180,10 +180,7 @@ export class HubSpotServer {
   }
 
   private async getScopeTier(): Promise<'readonly' | 'full'> {
-    // Priority: env var > selected account's stored tier > default 'full'
-    if (process.env.HUBSPOT_SCOPE_TIER === 'readonly' || process.env.HUBSPOT_SCOPE_TIER === 'full') {
-      return process.env.HUBSPOT_SCOPE_TIER;
-    }
+    // Priority: selected account's stored tier (from the OAuth grant) > default 'full'
     try {
       const accountManager = getAccountManager();
       const accounts = await accountManager.getAccounts();
@@ -232,7 +229,7 @@ export class HubSpotServer {
 
   private setupRequestHandlers(): void {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-      // Get scope tier from env var or stored account config
+      // Get scope tier from the stored account config (OAuth grant)
       const scopeTier = await this.getScopeTier();
 
       // Filter tools based on tier

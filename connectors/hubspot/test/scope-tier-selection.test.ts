@@ -54,16 +54,25 @@ describe('HubSpotServer getScopeTier', () => {
     delete process.env.HUBSPOT_ACCOUNT_EMAIL;
   });
 
-  it('uses HUBSPOT_SCOPE_TIER env override when present', async () => {
+  it('ignores the removed HUBSPOT_SCOPE_TIER env var; tier derives from the OAuth grant only', async () => {
     process.env.HUBSPOT_SCOPE_TIER = 'readonly';
     process.env.HUBSPOT_ACCOUNT_EMAIL = 'selected@example.com';
     getAccountsMock.mockResolvedValue([{ email: 'selected@example.com', scopeTier: 'full' }]);
 
     const server = new HubSpotServer();
+    await expect(readScopeTier(server)).resolves.toBe('full');
+  });
+
+  it('cannot be escalated by the removed env var: stored readonly grant stays readonly', async () => {
+    process.env.HUBSPOT_SCOPE_TIER = 'full';
+    process.env.HUBSPOT_ACCOUNT_EMAIL = 'selected@example.com';
+    getAccountsMock.mockResolvedValue([{ email: 'selected@example.com', scopeTier: 'readonly' }]);
+
+    const server = new HubSpotServer();
     await expect(readScopeTier(server)).resolves.toBe('readonly');
   });
 
-  it('uses the selected account tier from HUBSPOT_ACCOUNT_EMAIL when env override is absent', async () => {
+  it('uses the selected account tier from HUBSPOT_ACCOUNT_EMAIL', async () => {
     process.env.HUBSPOT_ACCOUNT_EMAIL = 'selected@example.com';
     getAccountsMock.mockResolvedValue([
       { email: 'other@example.com', scopeTier: 'readonly' },

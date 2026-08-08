@@ -82,12 +82,6 @@
           "format": "number"
         },
         {
-          "name": "HUBSPOT_SCOPE_TIER",
-          "description": "OAuth scope tier — 'readonly' or 'full'. Overrides the per-account stored tier",
-          "isRequired": false,
-          "format": "string"
-        },
-        {
           "name": "HUBSPOT_REFRESH_LOCK_STALE_MS",
           "description": "Stale-lock detection threshold for the credential refresh mutex (advanced)",
           "isRequired": false,
