@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-08
+
+### Changed
+
+- Ship Google Tasks and Forms modules by default (106 to 116 tools): the ENABLE_GOOGLE_TASKS_FORMS flag is removed; scope gaps get reconnect guidance like every other module.
+
 ### Changed
 
 - The Google Tasks and Forms tools are now always registered — the `ENABLE_GOOGLE_TASKS_FORMS` feature flag is removed. Previously the 6 Tasks and 4 Forms tools (and their OAuth scopes) were hidden unless the host set `ENABLE_GOOGLE_TASKS_FORMS=true`, which end users could not do; the connector now ships 116 tools by default instead of 106. Accounts connected before this change may lack the Tasks/Forms scopes and will get reconnect guidance from the scope check, same as any newly added scope.
