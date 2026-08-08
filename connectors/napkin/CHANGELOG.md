@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-08
+
+### Changed
+
+- Napkin connector: canonical result envelopes, untrusted-content fencing, and hardening sync; expanded visual-generation actions.
+
 ### Added
 - **napkin**: Add `napkin_list_styles` tool exposing the 15 built-in Napkin style catalog (IDs, descriptions, categories) so models can pick a `style_id` without copying one from the app UI. Static catalog data — no API key or network call required.
 
