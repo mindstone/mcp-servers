@@ -2,7 +2,7 @@
 
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Google Workspace MCP server — Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Chat, Meet, Comments, and account diagnostics, with optional Tasks and Forms behind a feature flag.
+Google Workspace MCP server — Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Chat, Meet, Tasks, Forms, Comments, and account diagnostics.
 
 *Multi-account Google Workspace MCP. Host-orchestrated OAuth (the connector neither runs a callback server nor mints OAuth URLs), atomic per-account credential writes, and a structured `auth_required` handoff so the host drives the sign-in flow rather than the server.*
 
@@ -10,7 +10,7 @@ Google Workspace MCP server — Gmail, Calendar, Drive, Docs, Sheets, Slides, Co
 
 - **Version:** [0.3.0](./CHANGELOG.md) · npm: not yet published
 - **Auth:** OAuth (host-orchestrated) ([`GOOGLE_CLIENT_SECRET`](./server.json))
-- **Tools:** [106](./src/tools/definitions/) (Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Chat, Meet, Comments, Account; +10 gated Tasks/Forms behind `ENABLE_GOOGLE_TASKS_FORMS=true`)
+- **Tools:** [116](./src/tools/definitions/) (Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Chat, Meet, Tasks, Forms, Comments, Account)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -89,7 +89,6 @@ This server is designed to run alongside a host application that performs the Go
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `ENABLE_GOOGLE_TASKS_FORMS` | `false` | Set to `true` to register the additional Google Tasks and Forms tools. |
 | `GOOGLE_WORKSPACE_REQUEST_TIMEOUT_MS` | `60000` | Outbound Google API request timeout in milliseconds (max `300000` = 5 min). |
 
 `GOOGLE_WORKSPACE_DISABLE_REFRESH=1` may be injected by a host to make the connector return `auth_required` instead of refreshing tokens. It is intentionally not a user-facing setup variable.
@@ -153,7 +152,7 @@ Until the host has written `${ACCOUNTS_PATH}` and the matching per-account token
 }
 ```
 
-## Tools (106)
+## Tools (116)
 
 The full list lives under [`src/tools/definitions/`](./src/tools/definitions/) and is also surfaced in [`tools-inventory.json`](./tools-inventory.json). Grouped by domain:
 
@@ -171,10 +170,8 @@ The full list lives under [`src/tools/definitions/`](./src/tools/definitions/) a
 | Meet | 3 | List conference records, list transcripts, and read transcript entries (speaker + text). |
 | Comments | 5 | List/create/reply/resolve/delete Drive comments. |
 | Account | 3 | List, authenticate, and remove workspace accounts. |
-| Tasks (gated) | 6 | Registered only when `ENABLE_GOOGLE_TASKS_FORMS=true`. |
-| Forms (gated) | 4 | Registered only when `ENABLE_GOOGLE_TASKS_FORMS=true`. |
-
-The `## Status` block counts the 106 default-enabled tools; the additional 10 Tasks + Forms tools register when the feature flag is set.
+| Tasks | 6 | List task lists, and list/create/update/complete/delete tasks. |
+| Forms | 4 | Read-only access to forms and their responses. |
 
 ### Shared drives
 

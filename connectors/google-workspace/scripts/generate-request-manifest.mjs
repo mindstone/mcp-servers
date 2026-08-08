@@ -3,7 +3,6 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-process.env.ENABLE_GOOGLE_TASKS_FORMS = 'true';
 
 const { allTools } = await import(pathToFileURL(path.join(root, 'dist/tools/definitions/index.js')).href);
 

@@ -15,7 +15,7 @@ let cleanupDir: string | undefined;
  * proceeds and the failure surfaces in the service layer — the gap this file
  * guards); a 400 invalid_grant is a dead grant (reconnect required).
  */
-async function loadHandlers(tasksForms: boolean) {
+async function loadHandlers() {
   cleanupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'google-workspace-auth-gap-'));
   const credentialsPath = path.join(cleanupDir, 'credentials');
   fs.mkdirSync(credentialsPath, { recursive: true, mode: 0o700 });
@@ -48,7 +48,6 @@ async function loadHandlers(tasksForms: boolean) {
   vi.stubEnv('GOOGLE_CLIENT_ID', 'mock-client-id');
   vi.stubEnv('GOOGLE_CLIENT_SECRET', 'mock-client-secret');
   vi.stubEnv('MCP_WORKSPACE_PATH', cleanupDir);
-  vi.stubEnv('ENABLE_GOOGLE_TASKS_FORMS', tasksForms ? 'true' : '');
   vi.resetModules();
   const { initializeAllServices } = await import('../src/utils/service-initializer.js');
   await initializeAllServices();
@@ -85,7 +84,7 @@ afterEach(() => {
 describe('service-layer auth failures keep their signal', () => {
   it('transient refresh blip surfaces as a retryable auth error, not a flattened string (Tasks)', async () => {
     mockRefresh(500, { error: 'internal error' });
-    const { tasks } = await loadHandlers(true);
+    const { tasks } = await loadHandlers();
     const error = await tasks.handleListTaskLists({ email: TEST_EMAIL }).catch(e => e);
     expect((error as { code?: unknown }).code).toBe('TEMPORARY_AUTH_ERROR');
   }, 30000);
@@ -98,7 +97,7 @@ describe('service-layer auth failures keep their signal', () => {
     ['Contacts', 'contacts', 'handleGetContacts', { person_fields: 'names' }],
   ] as const)('%s: transient blip keeps TEMPORARY_AUTH_ERROR', async (_label, mod, fn, extra) => {
     mockRefresh(500, { error: 'internal error' });
-    const handlers = await loadHandlers(true);
+    const handlers = await loadHandlers();
     const handler = (handlers[mod] as Record<string, (p: unknown) => Promise<unknown>>)[fn];
     const error = await handler({ email: TEST_EMAIL, ...extra }).catch((e: unknown) => e);
     expect((error as { code?: unknown }).code).toBe('TEMPORARY_AUTH_ERROR');
@@ -106,7 +105,7 @@ describe('service-layer auth failures keep their signal', () => {
 
   it('dead grant surfaces AUTH_REQUIRED and maps to the auth_required handoff', async () => {
     mockRefresh(400, { error: 'invalid_grant', error_description: 'Token has been revoked.' });
-    const { tasks, formatErrorResponse } = await loadHandlers(true);
+    const { tasks, formatErrorResponse } = await loadHandlers();
     const error = await tasks.handleListTaskLists({ email: TEST_EMAIL }).catch(e => e);
     expect((error as { code?: unknown }).code).toBe('AUTH_REQUIRED');
 
@@ -117,7 +116,7 @@ describe('service-layer auth failures keep their signal', () => {
 
   it('dead grant in Docs/Comments also keeps AUTH_REQUIRED through the service catch', async () => {
     mockRefresh(400, { error: 'invalid_grant', error_description: 'Token has been revoked.' });
-    const { docs, comments } = await loadHandlers(false);
+    const { docs, comments } = await loadHandlers();
     const docsError = await docs.handleReadDocument({ email: TEST_EMAIL, document_id: 'doc-1' }).catch(e => e);
     expect((docsError as { code?: unknown }).code).toBe('AUTH_REQUIRED');
     const commentsError = await comments.handleListComments({ email: TEST_EMAIL, file_id: 'file-1' }).catch(e => e);

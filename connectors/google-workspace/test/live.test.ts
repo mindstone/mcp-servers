@@ -114,7 +114,6 @@ async function spawnProbeClient(entryPoint: string, workspacePath: string, extra
       GOOGLE_CLIENT_SECRET: credentials.clientSecret,
       ACCOUNTS_PATH: accountsPath,
       CREDENTIALS_PATH: credentialsPath,
-      ENABLE_GOOGLE_TASKS_FORMS: 'true',
       MCP_WORKSPACE_PATH: workspacePath,
       ...extraEnv,
     },

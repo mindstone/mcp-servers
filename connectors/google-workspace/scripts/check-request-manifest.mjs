@@ -15,7 +15,6 @@ const script = path.join(root, 'scripts/generate-request-manifest.mjs');
 const result = spawnSync(process.execPath, [script], {
   cwd: root,
   stdio: 'pipe',
-  env: { ...process.env, ENABLE_GOOGLE_TASKS_FORMS: 'true' },
   encoding: 'utf8',
 });
 

@@ -80,7 +80,6 @@ function createWorkspaceEnv(): void {
   vi.stubEnv('CREDENTIALS_PATH', credentialsPath);
   vi.stubEnv('GOOGLE_CLIENT_ID', 'mock-client-id');
   vi.stubEnv('GOOGLE_CLIENT_SECRET', 'mock-client-secret');
-  vi.stubEnv('ENABLE_GOOGLE_TASKS_FORMS', 'true');
   vi.stubEnv('MCP_WORKSPACE_PATH', cleanupDir);
 }
 

@@ -49,14 +49,6 @@
           "format": "filepath"
         },
         {
-          "name": "ENABLE_GOOGLE_TASKS_FORMS",
-          "description": "Set to true to register Google Tasks and Forms tools",
-          "isRequired": false,
-          "isSecret": false,
-          "default": "false",
-          "format": "string"
-        },
-        {
           "name": "GOOGLE_WORKSPACE_REQUEST_TIMEOUT_MS",
           "description": "Outbound Google API request timeout in milliseconds (max 300000 = 5 min)",
           "isRequired": false,

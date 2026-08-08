@@ -11,13 +11,12 @@
  * - Docs (documents)
  * - Slides (presentations)
  * - Sheets (spreadsheets)
- * - Tasks (task lists, tasks) - requires ENABLE_GOOGLE_TASKS_FORMS=true
- * - Forms (read-only access to forms and responses) - requires ENABLE_GOOGLE_TASKS_FORMS=true
+ * - Tasks (task lists, tasks)
+ * - Forms (read-only access to forms and responses)
  */
 
 import { createRequire } from 'node:module';
 import { ToolMetadata } from "../../modules/tools/registry.js";
-import { TASKS_FORMS_ENABLED } from "../../utils/service-initializer.js";
 
 // Import tool definitions from each module
 export { accountTools } from "./account.js";
@@ -69,7 +68,6 @@ function withCohortAnnotations(tool: ToolMetadata): ToolMetadata {
 }
 
 // Export all tools combined - maintains backward compatibility
-// Tasks and Forms are only included if ENABLE_GOOGLE_TASKS_FORMS=true
 const rawTools: ToolMetadata[] = [
   ...accountTools,
   ...gmailTools,
@@ -83,8 +81,8 @@ const rawTools: ToolMetadata[] = [
   ...commentsTools,
   ...chatTools,
   ...meetTools,
-  ...(TASKS_FORMS_ENABLED ? tasksTools : []),
-  ...(TASKS_FORMS_ENABLED ? formsTools : []),
+  ...tasksTools,
+  ...formsTools,
 ];
 
 export const allTools: ToolMetadata[] = rawTools.map(withCohortAnnotations);

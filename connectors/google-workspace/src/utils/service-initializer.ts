@@ -26,17 +26,6 @@ import { CONTACTS_SCOPES } from '../modules/contacts/scopes.js';
 import { scopeRegistry } from '../modules/tools/scope-registry.js';
 import { applyDefaultGoogleRequestOptions } from './request-timeout.js';
 
-/**
- * Feature flag for Tasks and Forms APIs.
- * 
- * These features require additional OAuth scopes that need to be configured
- * in the Google Cloud Console and may require Google verification.
- * Set ENABLE_GOOGLE_TASKS_FORMS=true to enable once scopes are configured.
- * 
- * See: docs/plans/finished/260116_GoogleWorkspace_MCP_Improvements.md
- */
-export const TASKS_FORMS_ENABLED = process.env.ENABLE_GOOGLE_TASKS_FORMS === 'true';
-
 // Function to register contacts scopes
 function registerContactsScopes(): void {
   scopeRegistry.registerScope("contacts", CONTACTS_SCOPES.READONLY);
@@ -59,15 +48,9 @@ export async function initializeAllServices(): Promise<void> {
     registerContactsScopes();
     registerChatScopes();
     registerMeetScopes();
-    
-    // Tasks and Forms require additional OAuth scopes - only register if enabled
-    if (TASKS_FORMS_ENABLED) {
-      registerTasksScopes();
-      registerFormsScopes();
-      logger.info('Tasks and Forms scopes registered (ENABLE_GOOGLE_TASKS_FORMS=true)');
-    } else {
-      logger.info('Tasks and Forms disabled (set ENABLE_GOOGLE_TASKS_FORMS=true to enable)');
-    }
+    registerTasksScopes();
+    registerFormsScopes();
+    logger.info('Tasks and Forms scopes registered');
 
     // Initialize account module first as other services depend on it
     logger.info('Initializing account module...');
@@ -86,16 +69,10 @@ export async function initializeAllServices(): Promise<void> {
       initializeContactsModule().then(() => logger.info('Contacts module initialized')),
       initializeChatModule().then(() => logger.info('Chat module initialized')),
       initializeMeetModule().then(() => logger.info('Meet module initialized')),
+      initializeTasksModule().then(() => logger.info('Tasks module initialized')),
+      initializeFormsModule().then(() => logger.info('Forms module initialized')),
     ];
-    
-    // Only initialize Tasks and Forms if enabled
-    if (TASKS_FORMS_ENABLED) {
-      modulePromises.push(
-        initializeTasksModule().then(() => logger.info('Tasks module initialized')),
-        initializeFormsModule().then(() => logger.info('Forms module initialized'))
-      );
-    }
-    
+
     await Promise.all(modulePromises);
 
     logger.info('All services initialized successfully');
