@@ -79,7 +79,6 @@ node dist/index.js
 
 - `WISE_API_TOKEN` — Wise API token. Optional if you connect via the `configure_wise` tool instead; when set, it takes precedence over any stored token.
 - `WISE_ENVIRONMENT` — `production` (default) or `sandbox`. Sandbox requires a token created in the [Wise sandbox](https://sandbox.transferwise.tech).
-- `WISE_ALLOW_MONEY_MOVEMENT` — set to exactly `1` to enable the tools that move money (`create_wise_transfer`, `fund_wise_transfer`, `cancel_wise_transfer`). Off by default; see Security below.
 - `WISE_CONFIG_PATH` — path to the config directory that stores the token written by `configure_wise` (defaults to `~/.mcp/wise`).
 - `WISE_REQUEST_TIMEOUT_MS` — outbound request timeout in milliseconds (default `30000`).
 - `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management.
@@ -144,21 +143,21 @@ node dist/index.js
 ### Transfers
 - `list_wise_transfers` — List transfers with filters (status, currencies, created-date window)
 - `get_wise_transfer` — Current state of one transfer
-- `create_wise_transfer` — Create a transfer from a quote to a recipient (gated; not funded yet)
-- `fund_wise_transfer` — Fund a created transfer from a Wise balance (gated; moves money)
-- `cancel_wise_transfer` — Cancel a transfer before the `funds_converted` stage (gated)
+- `create_wise_transfer` — Create a transfer from a quote to a recipient (not funded yet)
+- `fund_wise_transfer` — Fund a created transfer from a Wise balance (moves money)
+- `cancel_wise_transfer` — Cancel a transfer before the `funds_converted` stage
 
 ### Typical payout flow
 
 1. `list_wise_profiles` → pick a `profile_id`
 2. `create_wise_quote` — price the transfer and lock a rate
 3. (New recipient) `get_wise_recipient_requirements` → `create_wise_recipient`
-4. `create_wise_transfer` — requires `WISE_ALLOW_MONEY_MOVEMENT=1`
-5. `fund_wise_transfer` — requires `WISE_ALLOW_MONEY_MOVEMENT=1`; pays from a Wise balance
+4. `create_wise_transfer` — creates the transfer (not funded yet)
+5. `fund_wise_transfer` — pays from a Wise balance; this is the step that moves money
 
 ## Security
 
-- **Money movement is opt-in.** `create_wise_transfer`, `fund_wise_transfer`, and `cancel_wise_transfer` refuse to run unless `WISE_ALLOW_MONEY_MOVEMENT` is exactly `1`. Quote and recipient creation never move money.
+- **Money movement runs by default.** `create_wise_transfer`, `fund_wise_transfer`, and `cancel_wise_transfer` are always available and declare `destructiveHint: true` — gating of individual invocations is the host's tool-approval layer's job, not the connector's. Quote and recipient creation never move money; only `fund_wise_transfer` debits a balance.
 - **Untrusted-content envelopes.** Strings authored by external parties (recipient names and bank details, transfer references, statement descriptions and merchant names, activity titles, quote notices) are wrapped in `<untrusted-content source="…">` envelopes so the host LLM treats them as data, not instructions. Connector-controlled metadata (ids, amounts, currencies, statuses, timestamps) is returned raw.
 - **Credential storage.** Tokens written by `configure_wise` are stored in `credentials.json` under `WISE_CONFIG_PATH` with `0600` permissions (config directory `0700`). Only the two fixed Wise hosts (`api.wise.com`, `api.wise-sandbox.com`) are ever contacted — there is no arbitrary base-URL override.
 - **Error hygiene.** Vendor error bodies, raw `Retry-After` header text, and query-bearing URLs are never written to logs or surfaced in tool errors; tokens never appear in error messages.

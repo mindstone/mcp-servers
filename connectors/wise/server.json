@@ -35,13 +35,6 @@
           "format": "string"
         },
         {
-          "name": "WISE_ALLOW_MONEY_MOVEMENT",
-          "description": "Set to \"1\" to enable tools that move money (create/fund/cancel transfers). Off by default.",
-          "isRequired": false,
-          "isSecret": false,
-          "format": "string"
-        },
-        {
           "name": "WISE_REQUEST_TIMEOUT_MS",
           "description": "Outbound request timeout in milliseconds (default 30000).",
           "isRequired": false,

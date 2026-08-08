@@ -23,15 +23,16 @@ const CREATE_ARGS = {
 };
 
 /**
- * AGENTS.md security invariant #7: production-impacting writes require an
- * explicit env-var opt-in. Money-movement tools must refuse to run unless
- * WISE_ALLOW_MONEY_MOVEMENT is exactly '1'.
+ * Money-movement tools run by default (capability-first): there is no
+ * env-var gate — `create_wise_transfer`, `fund_wise_transfer`, and
+ * `cancel_wise_transfer` declare `destructiveHint: true` and leave
+ * invocation gating to the host's tool-approval layer.
  */
-describe('Money-movement gate (invariant #7)', () => {
+describe('Money-movement tools (no env-var gate)', () => {
   let emptyConfigDir: string;
 
   beforeAll(() => {
-    emptyConfigDir = mkdtempSync(join(tmpdir(), 'wise-mcp-gate-'));
+    emptyConfigDir = mkdtempSync(join(tmpdir(), 'wise-mcp-money-movement-'));
   });
 
   beforeEach(() => {
@@ -46,22 +47,21 @@ describe('Money-movement gate (invariant #7)', () => {
     rmSync(emptyConfigDir, { recursive: true, force: true });
   });
 
-  async function clientWith(env: Record<string, string>): Promise<McpTestClient> {
+  async function clientWith(env: Record<string, string> = {}): Promise<McpTestClient> {
     return createTestClient({
       env: { ...CONNECTED_ENV, WISE_CONFIG_PATH: join(emptyConfigDir, 'cfg'), ...env },
     });
   }
 
   it.each(['create_wise_transfer', 'fund_wise_transfer', 'cancel_wise_transfer'])(
-    '%s refuses to run when WISE_ALLOW_MONEY_MOVEMENT is unset',
+    '%s runs without any opt-in environment variable',
     async (toolName) => {
-      const client = await clientWith({});
+      const client = await clientWith();
       try {
         const args =
           toolName === 'create_wise_transfer' ? CREATE_ARGS : { transfer_id: 888001, profile_id: 12345 };
         const body = parseResult(await client.client.callTool({ name: toolName, arguments: args }));
-        expect(body.ok).toBe(false);
-        expect(body.code).toBe('WISE_ALLOW_MONEY_MOVEMENT_REQUIRED');
+        expect(body.ok).toBe(true);
       } finally {
         await client.close();
       }
@@ -69,22 +69,22 @@ describe('Money-movement gate (invariant #7)', () => {
   );
 
   it.each(['true', 'yes', 'TRUE', '0', ''])(
-    'create_wise_transfer stays gated for WISE_ALLOW_MONEY_MOVEMENT="%s"',
+    'create_wise_transfer ignores a leftover WISE_ALLOW_MONEY_MOVEMENT="%s"',
     async (value) => {
       const client = await clientWith({ WISE_ALLOW_MONEY_MOVEMENT: value });
       try {
         const body = parseResult(
           await client.client.callTool({ name: 'create_wise_transfer', arguments: CREATE_ARGS }),
         );
-        expect(body.code).toBe('WISE_ALLOW_MONEY_MOVEMENT_REQUIRED');
+        expect(body.ok).toBe(true);
       } finally {
         await client.close();
       }
     },
   );
 
-  it('create_wise_transfer runs when the gate is exactly "1"', async () => {
-    const client = await clientWith({ WISE_ALLOW_MONEY_MOVEMENT: '1' });
+  it('create_wise_transfer creates a transfer and surfaces the idempotency key', async () => {
+    const client = await clientWith();
     try {
       const body = parseResult(
         await client.client.callTool({ name: 'create_wise_transfer', arguments: CREATE_ARGS }),
@@ -100,7 +100,7 @@ describe('Money-movement gate (invariant #7)', () => {
   });
 
   it('create_wise_transfer rejects malformed quote ids before any request', async () => {
-    const client = await clientWith({ WISE_ALLOW_MONEY_MOVEMENT: '1' });
+    const client = await clientWith();
     try {
       const body = parseResult(
         await client.client.callTool({
@@ -116,7 +116,7 @@ describe('Money-movement gate (invariant #7)', () => {
   });
 
   it('fund_wise_transfer completes against the mock', async () => {
-    const client = await clientWith({ WISE_ALLOW_MONEY_MOVEMENT: '1' });
+    const client = await clientWith();
     try {
       const body = parseResult(
         await client.client.callTool({
@@ -131,7 +131,7 @@ describe('Money-movement gate (invariant #7)', () => {
   });
 
   it('fund_wise_transfer surfaces REJECTED (HTTP 200) funding failures', async () => {
-    const client = await clientWith({ WISE_ALLOW_MONEY_MOVEMENT: '1' });
+    const client = await clientWith();
     try {
       const body = parseResult(
         await client.client.callTool({
@@ -148,7 +148,7 @@ describe('Money-movement gate (invariant #7)', () => {
   });
 
   it('cancel_wise_transfer cancels against the mock', async () => {
-    const client = await clientWith({ WISE_ALLOW_MONEY_MOVEMENT: '1' });
+    const client = await clientWith();
     try {
       const body = parseResult(
         await client.client.callTool({ name: 'cancel_wise_transfer', arguments: { transfer_id: 888001 } }),

@@ -69,14 +69,16 @@ describe('Smoke test — tool registration', () => {
     }
   });
 
-  it('marks money-movement tools as gated in their descriptions', async () => {
+  it('describes money-movement tools as moving money without an env-var gate', async () => {
     testClient = await createTestClient({ env: CONNECTED_ENV });
 
     const toolsResult = await testClient.client.listTools();
     for (const name of ['create_wise_transfer', 'fund_wise_transfer', 'cancel_wise_transfer']) {
       const tool = toolsResult.tools.find((t) => t.name === name);
-      expect(tool!.description).toContain('WISE_ALLOW_MONEY_MOVEMENT');
+      expect(tool!.description).not.toContain('WISE_ALLOW_MONEY_MOVEMENT');
     }
+    const fundTool = toolsResult.tools.find((t) => t.name === 'fund_wise_transfer');
+    expect(fundTool!.description).toContain('MOVES MONEY');
   });
 });
 

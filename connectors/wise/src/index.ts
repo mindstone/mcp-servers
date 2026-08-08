@@ -8,7 +8,6 @@
  * Environment variables:
  * - WISE_API_TOKEN: API token for authentication (alternative to configure_wise)
  * - WISE_ENVIRONMENT: "production" (default) or "sandbox"
- * - WISE_ALLOW_MONEY_MOVEMENT: set to "1" to enable transfer create/fund/cancel tools
  * - WISE_REQUEST_TIMEOUT_MS: outbound request timeout (default 30000)
  * - WISE_CONFIG_PATH: override the credential storage directory
  * - MCP_HOST_BRIDGE_STATE: Path to host app bridge state file (primary, optional)

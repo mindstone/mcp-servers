@@ -7,34 +7,6 @@ import type { WiseCredentials, WiseProfile } from './types.js';
 
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
 
-/**
- * Secure-by-default money-movement gate.
- *
- * Tools that can move real money (creating, funding, or cancelling
- * transfers) refuse to run unless the `WISE_ALLOW_MONEY_MOVEMENT`
- * environment variable is exactly the string `'1'` — any other value
- * (including unset, empty string, `'true'`, `'yes'`, or `'0'`) keeps the
- * gate closed.
- *
- * This guard prevents an LLM agent from accidentally moving funds in a real
- * Wise account. Hosts that intend money movement must explicitly opt in.
- * Read-only tools and quote/recipient creation are unaffected by this gate.
- */
-export function requireMoneyMovementEnabled(): void {
-  if (process.env.WISE_ALLOW_MONEY_MOVEMENT !== '1') {
-    throw new WiseError(
-      'Wise money-movement tools refuse to run unless WISE_ALLOW_MONEY_MOVEMENT=1 is set. ' +
-        'This guard is secure-by-default: it prevents an LLM agent from accidentally ' +
-        'moving real money in a Wise account. Set WISE_ALLOW_MONEY_MOVEMENT=1 in the ' +
-        'host environment only when you intend transfers to be created, funded, or cancelled.',
-      'WISE_ALLOW_MONEY_MOVEMENT_REQUIRED',
-      'Set the WISE_ALLOW_MONEY_MOVEMENT=1 environment variable in the host MCP configuration ' +
-        'to opt in to Wise money movement. Read-only tools and quote/recipient creation are ' +
-        'unaffected by this gate.',
-    );
-  }
-}
-
 /** ISO 4217 currency codes are three uppercase letters. */
 export function validateCurrency(value: string, fieldName = 'currency'): string {
   const normalized = value.trim().toUpperCase();

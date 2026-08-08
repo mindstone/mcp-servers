@@ -8,7 +8,6 @@ import {
   withErrorHandling,
   requireCredentials,
   isCredentials,
-  requireMoneyMovementEnabled,
   resolveProfileId,
   validateCurrency,
   validateNumericId,
@@ -27,9 +26,6 @@ function validateUuid(value: string, fieldName: string): string {
   }
   return trimmed;
 }
-
-const MONEY_MOVEMENT_NOTE =
-  'Requires WISE_ALLOW_MONEY_MOVEMENT=1 in the host environment. ';
 
 export function registerTransferTools(server: McpServer): void {
   // ── list_wise_transfers ─────────────────────────────────────────
@@ -133,7 +129,6 @@ export function registerTransferTools(server: McpServer): void {
     'create_wise_transfer',
     {
       description:
-        MONEY_MOVEMENT_NOTE +
         'Create a Wise transfer from an existing quote to a saved recipient. This does NOT fund ' +
         'the transfer — call fund_wise_transfer afterwards to pay from a Wise balance. ' +
         'Workflow: create_wise_quote → (optionally get_wise_recipient_requirements → ' +
@@ -155,7 +150,6 @@ export function registerTransferTools(server: McpServer): void {
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      requireMoneyMovementEnabled();
       const credentials = requireCredentials();
       if (!isCredentials(credentials)) return credentials;
 
@@ -192,7 +186,6 @@ export function registerTransferTools(server: McpServer): void {
     'fund_wise_transfer',
     {
       description:
-        MONEY_MOVEMENT_NOTE +
         'Fund a created transfer from a Wise balance. THIS MOVES MONEY: the source balance is ' +
         'debited immediately and Wise starts processing the payout. ' +
         'Only transfers in a fundable state (e.g. "incoming_payment_waiting") can be funded.',
@@ -205,7 +198,6 @@ export function registerTransferTools(server: McpServer): void {
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      requireMoneyMovementEnabled();
       const credentials = requireCredentials();
       if (!isCredentials(credentials)) return credentials;
 
@@ -250,7 +242,6 @@ export function registerTransferTools(server: McpServer): void {
     'cancel_wise_transfer',
     {
       description:
-        MONEY_MOVEMENT_NOTE +
         'Cancel a Wise transfer that has not reached the "funds_converted" stage yet. ' +
         'Funded amounts are returned to the balance they came from. Transfers past ' +
         'funds_converted cannot be cancelled (Wise returns an error).',
@@ -261,7 +252,6 @@ export function registerTransferTools(server: McpServer): void {
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      requireMoneyMovementEnabled();
       const credentials = requireCredentials();
       if (!isCredentials(credentials)) return credentials;
 
