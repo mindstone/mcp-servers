@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-hubspot",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "mcpName": "io.github.mindstone/mcp-server-hubspot",
   "description": "HubSpot MCP server — CRM objects, associations, properties, marketing, files, workflows, and account diagnostics",
   "license": "FSL-1.1-MIT",
