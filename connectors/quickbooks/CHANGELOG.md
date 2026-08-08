@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-08-08
+
+### Changed
+
+- Enable production writes by default: the QB_ALLOW_PROD_WRITES gate is removed; invocation gating is the host tool-approval layer's job.
+
 ### Changed
 - **Write gate removed**: the `QB_ALLOW_PROD_WRITES=1` secure-by-default gate (introduced in 0.3.0) is gone. All mutating tools (every `create_*`, `update_*`, and `send_quickbooks_invoice_email`) now execute production writes by default — capability-first, with the host's tool-approval layer as the gate. The `QB_ALLOW_PROD_WRITES` environment variable is no longer read and has been dropped from `server.json` and the README.
 
