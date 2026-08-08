@@ -13,7 +13,7 @@ Google Analytics 4 MCP server for Model Context Protocol hosts. Discover account
 
 | Field | Value |
 |-------|-------|
-| Version | 0.1.1 |
+| Version | 0.2.0 |
 | Auth | OAuth (—) |
 | Tools | 34 (accounts, schema, reporting, admin) |
 | Surface | cloud API |

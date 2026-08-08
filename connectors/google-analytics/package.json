@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-google-analytics",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "mcpName": "io.github.mindstone/mcp-server-google-analytics",
   "description": "Google Analytics 4 MCP server with reporting, schema discovery, and admin visibility tools",
   "license": "FSL-1.1-MIT",

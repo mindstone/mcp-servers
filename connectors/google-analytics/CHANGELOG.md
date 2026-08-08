@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-08
+
+### Changed
+
+- Google Analytics connector: canonical result envelopes, untrusted-content fencing, two v1beta endpoint fixes; expanded audience/report actions.
+
 ### Added
 - `ga_list_audiences` and `ga_list_channel_groups` (Admin API v1alpha) — list configured audiences (with filter clauses) and channel groups (with grouping rules).
 - Audience export tools (Data API v1beta): `ga_create_audience_export`, `ga_get_audience_export`, `ga_list_audience_exports`, `ga_query_audience_export` — user-level snapshots of audiences, including predictive segments.

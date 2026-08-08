@@ -7,7 +7,7 @@ Google Analytics 4 MCP server for Model Context Protocol hosts. Discover account
 
 ## Status
 
-- **Version:** [0.1.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-google-analytics)
+- **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-google-analytics)
 - **Auth:** OAuth via Google ADC ([`GOOGLE_APPLICATION_CREDENTIALS`](./server.json))
 - **Tools:** [34](./src/tools/) (accounts, schema, reporting, admin)
 - **Surface:** cloud-api

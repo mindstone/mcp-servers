@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-google-analytics",
   "title": "Google Analytics 4",
   "description": "Google Analytics 4 MCP server with reporting, schema discovery, and admin visibility tools",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-google-analytics",
-      "version": "0.1.1",
+      "version": "0.2.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
