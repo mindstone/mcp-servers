@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-08
+
+### Changed
+
+- Enable file delete by default: the MCP_REPLIT_SSH_ALLOW_DELETE gate is removed; invocation gating is the host tool-approval layer's job.
+
 ### Changed
 
 - `replit_delete_file` is now enabled by default. The

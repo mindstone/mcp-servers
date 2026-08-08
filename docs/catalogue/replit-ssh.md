@@ -13,7 +13,7 @@ Replit SSH MCP server — read, write, list, search, stat, move, and delete file
 
 | Field | Value |
 |-------|-------|
-| Version | 0.2.0 |
+| Version | 0.2.1 |
 | Auth | None (—) |
 | Tools | 9 (connection, files, ssh-setup) |
 | Surface | local protocol |

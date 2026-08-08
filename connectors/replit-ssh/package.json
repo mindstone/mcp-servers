@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-replit-ssh",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "mcpName": "io.github.mindstone/mcp-server-replit-ssh",
   "description": "Replit SSH MCP server — read, write, list, and check files on Replit projects over SSH/SFTP, plus generate the local SSH key and config.",
   "license": "FSL-1.1-MIT",
