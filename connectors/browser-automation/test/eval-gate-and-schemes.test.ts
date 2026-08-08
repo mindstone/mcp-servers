@@ -2,8 +2,8 @@
  * M3.12 — VAL-BROWSER-001..401
  *
  * Behavioural tests for:
- *   (a) `browser_evaluate` registration is gated behind
- *       BROWSER_AUTOMATION_ALLOW_EVAL=1; when enabled the annotation has
+ *   (a) `browser_evaluate` is registered by default (capability-first; the
+ *       host's tool-approval layer gates invocations) and carries
  *       destructiveHint: true.
  *   (b) `browser_navigate` / `browser_authenticate` reject every blocked
  *       URL scheme before the agent-browser CLI is invoked.
@@ -50,7 +50,7 @@ function parseResult(result: { content: unknown }): ParsedToolResult {
   return JSON.parse(content[0].text);
 }
 
-describe('M3.12 — browser_evaluate eval gate (VAL-BROWSER-001..003)', () => {
+describe('M3.12 — browser_evaluate registered by default (VAL-BROWSER-001..003)', () => {
   let testClient: McpTestClient | undefined;
 
   afterEach(async () => {
@@ -62,10 +62,8 @@ describe('M3.12 — browser_evaluate eval gate (VAL-BROWSER-001..003)', () => {
     vi.restoreAllMocks();
   });
 
-  it('VAL-BROWSER-001 — eval gate ON: browser_evaluate is registered', async () => {
-    testClient = await createTestClient({
-      env: { BROWSER_AUTOMATION_ALLOW_EVAL: '1' },
-    });
+  it('VAL-BROWSER-001 — default env: browser_evaluate is registered', async () => {
+    testClient = await createTestClient();
 
     const tools = (await testClient.client.listTools()).tools;
     const evalTool = tools.find((t) => t.name === 'browser_evaluate');
@@ -73,47 +71,25 @@ describe('M3.12 — browser_evaluate eval gate (VAL-BROWSER-001..003)', () => {
     expect(evalTool).toBeDefined();
   });
 
-  it('VAL-BROWSER-002 — eval gate UNSET: browser_evaluate is NOT registered', async () => {
-    // Env var unset entirely.
-    testClient = await createTestClient();
-
-    const tools = (await testClient.client.listTools()).tools;
-    const evalTool = tools.find((t) => t.name === 'browser_evaluate');
-
-    expect(evalTool).toBeUndefined();
-  });
-
-  it('VAL-BROWSER-002 — eval gate EMPTY-STRING: browser_evaluate is NOT registered', async () => {
-    testClient = await createTestClient({
-      env: { BROWSER_AUTOMATION_ALLOW_EVAL: '' },
-    });
-
-    const tools = (await testClient.client.listTools()).tools;
-    const evalTool = tools.find((t) => t.name === 'browser_evaluate');
-
-    expect(evalTool).toBeUndefined();
-  });
-
-  it('VAL-BROWSER-002 — only the literal value "1" opens the gate', async () => {
-    for (const value of ['true', 'yes', '0', ' 1 ', 'TRUE']) {
-      // Each iteration uses a fresh client and stubbed env.
+  it('VAL-BROWSER-002 — legacy BROWSER_AUTOMATION_ALLOW_EVAL values are inert', async () => {
+    // Deliberate regression guard: the retired opt-in env var must not gate
+    // registration — the tool stays in the list whatever value it holds.
+    for (const value of ['', '0', 'false']) {
       const client = await createTestClient({
         env: { BROWSER_AUTOMATION_ALLOW_EVAL: value },
       });
       try {
         const tools = (await client.client.listTools()).tools;
         const evalTool = tools.find((t) => t.name === 'browser_evaluate');
-        expect(evalTool, `value=${JSON.stringify(value)} should not open the gate`).toBeUndefined();
+        expect(evalTool, `value=${JSON.stringify(value)} should not remove the tool`).toBeDefined();
       } finally {
         await client.close();
       }
     }
   });
 
-  it('VAL-BROWSER-003 — when registered, browser_evaluate has destructiveHint: true', async () => {
-    testClient = await createTestClient({
-      env: { BROWSER_AUTOMATION_ALLOW_EVAL: '1' },
-    });
+  it('VAL-BROWSER-003 — browser_evaluate has destructiveHint: true', async () => {
+    testClient = await createTestClient();
 
     const tools = (await testClient.client.listTools()).tools;
     const evalTool = tools.find((t) => t.name === 'browser_evaluate');
@@ -317,8 +293,11 @@ describe('M3.12 — README security section (VAL-BROWSER-301..304)', () => {
     expect(readme).toMatch(/^##\s+Security/im);
   });
 
-  it('VAL-BROWSER-302 — documents BROWSER_AUTOMATION_ALLOW_EVAL', () => {
-    expect(readme).toContain('BROWSER_AUTOMATION_ALLOW_EVAL');
+  it('VAL-BROWSER-302 — documents browser_evaluate default-on + host confirmation', () => {
+    expect(readme).toContain('browser_evaluate');
+    expect(readme).toMatch(/browser_evaluate[\s\S]{0,400}(by default|unconditionally|enabled)/i);
+    // The retired opt-in env var must not be documented anymore.
+    expect(readme).not.toContain('BROWSER_AUTOMATION_ALLOW_EVAL');
   });
 
   it('VAL-BROWSER-303 — documents cookie / session persistence + SESSION_NAME default mcp', () => {

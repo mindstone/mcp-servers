@@ -117,7 +117,6 @@ No API keys or credentials are required. The server communicates with the browse
 |---|---|---|
 | `AGENT_BROWSER_SESSION_NAME` | No | Session name for browser persistence (default: `mcp`) |
 | `AGENT_BROWSER_SHOW_WINDOW` | No | Set to `false` to run without a visible browser window. Default is visible (`true`). |
-| `BROWSER_AUTOMATION_ALLOW_EVAL` | No | Set to `1` to register the `browser_evaluate` tool. Off by default. See [Security notes](#security-notes). |
 | `MCP_WORKSPACE_PATH` | No | Workspace directory that `browser_pdf` writes into and `browser_upload` reads from. Defaults to the system temp directory. See [Security notes](#security-notes). |
 
 ### MCP Host Configuration
@@ -133,7 +132,7 @@ No API keys or credentials are required. The server communicates with the browse
 }
 ```
 
-## Available Tools (20 by default; +1 when `BROWSER_AUTOMATION_ALLOW_EVAL=1`)
+## Available Tools (21)
 
 ### Navigation
 - **browser_navigate** — Navigate to a URL
@@ -157,7 +156,7 @@ No API keys or credentials are required. The server communicates with the browse
 - **browser_select** — Select an option from a dropdown
 - **browser_hover** — Hover over an element
 - **browser_upload** — Upload workspace files to a file input (regular files only, staged privately before upload)
-- **browser_evaluate** — Execute JavaScript in the page context (gated; see [Security notes](#security-notes))
+- **browser_evaluate** — Execute JavaScript in the page context (on by default; `destructiveHint: true` so hosts can require confirmation — see [Security notes](#security-notes))
 
 ### Session Management
 - **browser_tabs** — List open tabs or switch to a tab
@@ -177,15 +176,9 @@ The typical workflow uses accessibility snapshots for reliable element targeting
 
 Browser automation has a large attack surface: the agent-browser CLI controls a real headless browser that loads URLs you pass it, runs page-side JavaScript, and persists cookies and session state across runs. Read this section before deploying.
 
-### `browser_evaluate` is gated behind `BROWSER_AUTOMATION_ALLOW_EVAL`
+### `browser_evaluate` runs by default — host confirmation is the gate
 
-`browser_evaluate` lets the model execute arbitrary JavaScript inside the page context — the security equivalent of giving the model a shell on whatever site it has just navigated to. To prevent prompt-injected content from doing this silently, the tool is **only registered when the host explicitly opts in**:
-
-```bash
-BROWSER_AUTOMATION_ALLOW_EVAL=1 mcp-server-browser-automation
-```
-
-Without this env var, `browser_evaluate` is **not** in the tools list at all — the LLM cannot even see it. When enabled, the tool is marked so MCP hosts can require explicit user confirmation before each invocation.
+`browser_evaluate` lets the model execute arbitrary JavaScript inside the page context — the security equivalent of giving the model a shell on whatever site it has just navigated to. The tool is registered **unconditionally** (capability-first); the safeguard is the host's tool-approval layer. The tool is marked `destructiveHint: true`, so MCP hosts SHOULD require explicit user confirmation before each invocation. Do not configure a host to auto-approve this tool.
 
 ### URL scheme deny-list
 
@@ -207,7 +200,7 @@ To override the session name (for example, to keep separate profiles per project
 ### Recommended deployment posture
 
 - **Run the connector against a separate browser profile** — a dedicated `AGENT_BROWSER_SESSION_NAME` per MCP host. Do not reuse your daily browser profile: the connector reads and overwrites cookies in whichever profile it is pointed at, and a malicious page can ride the existing session of any site you are logged into.
-- **Leave `browser_evaluate` disabled** unless the host implements user confirmation for every call. The default (off) is the safe choice.
+- **Require host confirmation for `browser_evaluate`** — it runs by default; every call executes arbitrary JavaScript in the page context.
 - **Require host confirmation** for `browser_authenticate` and any flow that may navigate to authenticated sites — otherwise prompt injection in fetched content can drive the browser at sites the user is logged into.
 - **Returned page content is enveloped as untrusted** — accessibility snapshots, page text, titles, URLs, tab lists, and `browser_evaluate` outputs come from arbitrary websites and may contain prompt-injection attempts. The connector wraps them in `<untrusted-content source="…">` envelopes (with close-tag breakout escaping) so hosts and models treat them as data, not instructions. Keep that treatment on your side: don't strip the envelopes, and don't let page text alone trigger irreversible actions.
 

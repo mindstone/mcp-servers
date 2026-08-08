@@ -11,6 +11,9 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Removed
+- `BROWSER_AUTOMATION_ALLOW_EVAL` opt-in gate: `browser_evaluate` now runs by default — it is registered unconditionally (capability-first), keeping `destructiveHint: true` so the host's tool-approval layer gates each invocation with explicit user confirmation. The env var is no longer consulted and has been dropped from `server.json` and the README. (Released as a patch; `npm run mcp:release` promotes this entry.)
+
 ## [0.2.0] - 2026-08-07
 
 ### Changed
