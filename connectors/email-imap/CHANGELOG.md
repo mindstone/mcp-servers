@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-08
+
+### Changed
+
+- Allow plaintext connections by default: the EMAIL_IMAP_ALLOW_PLAINTEXT gate is removed; TLS defaults are port-derived and explicit overrides win.
+
 ### Removed
 - **email-imap**: plaintext gate removed — the `EMAIL_IMAP_ALLOW_PLAINTEXT` env var is gone and cleartext ports (`imap_port=143`, `smtp_port=25`) for `provider: custom` are now allowed by default when configured (capability-first: the user's host owns the plaintext decision). TLS remains the default on standard ports.
 
