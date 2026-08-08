@@ -9,7 +9,7 @@ Replit SSH MCP server — read, write, list, search, stat, move, and delete file
 
 ## Status
 
-- **Version:** [0.1.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-replit-ssh)
+- **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-replit-ssh)
 - **Auth:** Local SSH key on disk (`~/.ssh/rebel-replit` by default; resolved via `~/.ssh/config` `IdentityFile` if set). No env-var-supplied secrets.
 - **Tools:** [9](./src/server.ts) (connection, files, ssh-setup)
 - **Surface:** local-protocol
