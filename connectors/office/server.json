@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-office",
   "title": "Microsoft Office",
   "description": "Microsoft Office MCP server: read and edit Word documents, Excel workbooks, and PowerPoint files",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-office",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
@@ -29,13 +29,13 @@
         },
         {
           "name": "MCP_OFFICE_SIDECAR_DISABLE",
-          "description": "Kill-switch \u2014 set to 1 to refuse to spawn or talk to the sidecar",
+          "description": "Kill-switch — set to 1 to refuse to spawn or talk to the sidecar",
           "isRequired": false,
           "format": "string"
         },
         {
           "name": "REBEL_DISABLE_OFFICE_SIDECAR",
-          "description": "DEPRECATED legacy alias for MCP_OFFICE_SIDECAR_DISABLE \u2014 still honored for backward compatibility with v0.1.1 operator-set kill-switches; will be removed in a future major version. Use MCP_OFFICE_SIDECAR_DISABLE instead.",
+          "description": "DEPRECATED legacy alias for MCP_OFFICE_SIDECAR_DISABLE — still honored for backward compatibility with v0.1.1 operator-set kill-switches; will be removed in a future major version. Use MCP_OFFICE_SIDECAR_DISABLE instead.",
           "isRequired": false,
           "format": "string"
         },
