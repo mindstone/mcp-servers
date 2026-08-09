@@ -7,7 +7,7 @@ Workday HCM MCP server for Model Context Protocol hosts. Query workers, profiles
 
 ## Status
 
-- **Version:** [0.3.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-workday)
+- **Version:** [0.3.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-workday)
 - **Auth:** OAuth ([`WORKDAY_REFRESH_TOKEN`](./server.json))
 - **Tools:** [9](./src/tools/) (workers, organizations, time off, recruiting, locations, jobs)
 - **Surface:** cloud-api

@@ -13,7 +13,7 @@ Workday HCM MCP server for Model Context Protocol hosts. Query workers, profiles
 
 | Field | Value |
 |-------|-------|
-| Version | 0.3.0 |
+| Version | 0.3.1 |
 | Auth | OAuth (`WORKDAY_CLIENT_SECRET`, `WORKDAY_REFRESH_TOKEN`) |
 | Tools | 9 (workers, organizations, time-off, recruiting, locations, jobs) |
 | Surface | cloud API |

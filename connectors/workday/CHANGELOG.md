@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-09
+
+### Changed
+
+- Close 5 deferred findings plus the NAT64 guard: vendor-total sanitization, href raw-field removal, Retry-After cap, tenant-name validation, IPv6 transition denies.
+
 ### Fixed
 - **pagination**: vendor-reported `total` is now shape-validated (non-negative integer) before use — a malformed or out-of-range value falls back to the page length instead of being interpolated raw into the pagination hint or corrupting the search scan-exhaustion check.
 - **untrusted content**: `href` no longer stays raw in `pickFields` — no registered tool accepts an href/URL argument, so the round-trip rationale only covers `id`; hrefs are now enveloped like every other vendor-controlled string.

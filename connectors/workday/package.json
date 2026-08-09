@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-workday",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "mcpName": "io.github.mindstone/mcp-server-workday",
   "description": "Workday HCM MCP server for Model Context Protocol hosts — workers, profiles, organizations",
   "license": "FSL-1.1-MIT",
