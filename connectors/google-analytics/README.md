@@ -79,7 +79,7 @@ This server uses Google Application Default Credentials (ADC). Mint ADC for a us
 
 ```bash
 gcloud auth application-default login \
-  --scopes=https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/cloud-platform \
+  --scopes=https://www.googleapis.com/auth/analytics.readonly \
   --client-id-file=/absolute/path/to/oauth-client-secret.json
 ```
 

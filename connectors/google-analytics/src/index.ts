@@ -13,7 +13,7 @@
  *
  * To mint ADC for a user account, install the gcloud CLI then run:
  *   gcloud auth application-default login \
- *     --scopes=https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/cloud-platform \
+ *     --scopes=https://www.googleapis.com/auth/analytics.readonly \
  *     --client-id-file=/absolute/path/to/oauth-client-secret.json
  *
  * For service accounts, set GOOGLE_APPLICATION_CREDENTIALS to the service account
@@ -31,6 +31,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('Fatal error:', error);
+  console.error('Fatal error:', error instanceof Error ? `${error.name}: ${error.message}` : String(error));
   process.exit(1);
 });

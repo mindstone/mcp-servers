@@ -32,7 +32,7 @@ export function getAuth(): GoogleAuth {
     throw new GoogleAnalyticsError(
       'GOOGLE_APPLICATION_CREDENTIALS is not set.',
       'CREDENTIALS_NOT_CONFIGURED',
-      'Set GOOGLE_APPLICATION_CREDENTIALS to the absolute path of your ADC or service-account JSON. To mint ADC, install the Google Cloud CLI then run: gcloud auth application-default login --scopes=https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/cloud-platform --client-id-file=/path/to/oauth-client.json',
+      'Set GOOGLE_APPLICATION_CREDENTIALS to the absolute path of your ADC or service-account JSON. To mint ADC, install the Google Cloud CLI then run: gcloud auth application-default login --scopes=https://www.googleapis.com/auth/analytics.readonly --client-id-file=/path/to/oauth-client.json',
     );
   }
 
@@ -72,7 +72,7 @@ export async function getAccessToken(): Promise<string> {
     throw new GoogleAnalyticsError(
       'Failed to obtain Google access token.',
       'TOKEN_FETCH_FAILED',
-      'Re-run `gcloud auth application-default login` to refresh credentials, then reconnect this connector in your MCP host.',
+      'Re-run `gcloud auth application-default login --scopes=https://www.googleapis.com/auth/analytics.readonly` to refresh credentials, then reconnect this connector in your MCP host.',
     );
   }
   return token;

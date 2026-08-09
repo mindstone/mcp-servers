@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+- Setup docs no longer recommend the over-broad `cloud-platform` scope when minting ADC — the connector only needs `analytics.readonly`, so the full-GCP scope is dropped from the `gcloud` command shown in the README and error resolutions.
+- Server stderr logging no longer dumps full error objects: unexpected API errors and fatal startup errors are logged as bounded `name: message` strings, so OAuth token-refresh failures can't write `refresh_token`/`client_secret` request config to logs.
+
 ## [0.2.0] - 2026-08-08
 
 ### Changed

@@ -76,7 +76,10 @@ export function withErrorHandling<T>(
       // vendor/proxy-controlled fragments from deep library stacks. Log the
       // detail to server stderr (not model-visible) and return a sanitised
       // message instead of the raw error text.
-      console.error('[google-analytics] Unexpected error:', error);
+      console.error(
+        '[google-analytics] Unexpected error:',
+        error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      );
       return {
         content: [
           {
@@ -110,7 +113,7 @@ function mapAuthError(
       error: 'Your Google credentials have expired or been revoked.',
       code: 'CREDENTIALS_EXPIRED',
       resolution:
-        'Re-run `gcloud auth application-default login --scopes=https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/cloud-platform --client-id-file=/path/to/your/oauth-client.json` and reconnect this connector in your MCP host.',
+        'Re-run `gcloud auth application-default login --scopes=https://www.googleapis.com/auth/analytics.readonly --client-id-file=/path/to/your/oauth-client.json` and reconnect this connector in your MCP host.',
     };
   }
   if (/ENOENT|no such file/i.test(message)) {
