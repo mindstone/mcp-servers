@@ -250,6 +250,29 @@ describe('SSRF URL validation', () => {
     }
   });
 
+  it('rejects IPv6 transition prefixes embedding an IPv4 address (NAT64/6to4/::/96, 100::/64)', () => {
+    // Assert the specific non-public-address reason: an IPv6 literal never
+    // matches the vendor host allow-list, so a bare not-null assertion would
+    // pass even with these deny rules deleted.
+    const cases: Array<[string, string]> = [
+      // NAT64 well-known prefix embedding loopback and the IMDS address.
+      ['https://[64:ff9b::7f00:1]/', 'IPv6 NAT64 prefix'],
+      ['https://[64:ff9b::a9fe:a9fe]/', 'IPv6 NAT64 prefix'],
+      // 6to4 embedding the IMDS address.
+      ['https://[2002:a9fe:a9fe::]/', 'IPv6 6to4 range'],
+      // IPv4-compatible ::/96 (WHATWG-normalised to hex form ::7f00:1).
+      ['https://[::127.0.0.1]/', 'IPv4-compatible IPv6'],
+      ['https://[::7f00:1]/', 'IPv4-compatible IPv6'],
+      // Discard-only 100::/64.
+      ['https://[100::1]/', 'IPv6 discard-only range'],
+    ];
+    for (const [url, reason] of cases) {
+      const error = validateOutboundUrlSync(url, DOWNLOAD_ALLOWED_HOST_SUFFIXES);
+      expect(error).toContain('non-public address');
+      expect(error).toContain(reason);
+    }
+  });
+
   it('rejects reserved IPv4 ranges beyond RFC1918', () => {
     for (const ip of ['100.64.0.1', '198.18.0.1', '192.0.2.1', '203.0.113.1', '224.0.0.1', '240.0.0.1', '192.0.0.1']) {
       expect(validateOutboundUrlSync(`https://${ip}/`, DOWNLOAD_ALLOWED_HOST_SUFFIXES)).not.toBeNull();

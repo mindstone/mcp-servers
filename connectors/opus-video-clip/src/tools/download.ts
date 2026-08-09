@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
+import { once } from 'events';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { requireApiKey } from '../auth.js';
@@ -14,6 +15,17 @@ import {
 import { withErrorHandling } from '../utils.js';
 
 const MAX_REDIRECTS = 5;
+
+// Hard cap on downloaded bytes (2 GiB) — enforced while streaming, so a
+// missing or lying Content-Length cannot push the write past the bound.
+const MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024;
+
+// Test seam: lets tests shrink the cap instead of streaming 2 GiB (same
+// pattern as setDnsLookupForTesting in url-safety.ts).
+let maxDownloadBytes = MAX_DOWNLOAD_BYTES;
+export function setMaxDownloadBytesForTesting(n: number | null): void {
+  maxDownloadBytes = n ?? MAX_DOWNLOAD_BYTES;
+}
 
 function urlRejected(message: string): OpusError {
   return new OpusError(
@@ -283,16 +295,50 @@ export function registerDownloadTools(server: McpServer): void {
 
         const fileHandle = fs.createWriteStream(writePath, { fd });
         fdReleased = true;
+        // The 'finish'/'error' listeners are attached BEFORE the write loop:
+        // an error emitted by an early write must reject this promise, not
+        // escape as an unhandled 'error' event. The noop catch keeps the
+        // rejection handled on the abort path below, where the byte cap
+        // throws before writeSettled is ever awaited.
+        const writeSettled = new Promise<void>((resolve, reject) => {
+          fileHandle.on('finish', resolve);
+          fileHandle.on('error', reject);
+        });
+        writeSettled.catch(() => undefined);
         try {
-          for await (const chunk of response.body as AsyncIterable<Uint8Array>) {
-            fileHandle.write(chunk);
-            bytesWritten += chunk.length;
+          // Explicit reader rather than for-await iteration: aborting the
+          // loop mid-body (the byte cap below) must not await the async
+          // iterator's return() — some mocked transports never settle it.
+          const reader = response.body.getReader();
+          try {
+            for (;;) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              bytesWritten += value.byteLength;
+              if (bytesWritten > maxDownloadBytes) {
+                // Not awaited — some mocked transports never settle cancel().
+                reader.cancel().catch(() => undefined);
+                throw new OpusError(
+                  `Download exceeded the maximum size of ${maxDownloadBytes} bytes.`,
+                  'DOWNLOAD_TOO_LARGE',
+                  'The clip is too large to download through the connector. Download it manually from the uriForExport URL.',
+                );
+              }
+              // Honour backpressure: write() returning false means the
+              // internal buffer is full — wait for 'drain' instead of
+              // buffering the rest of the response in memory. Race against
+              // writeSettled: an asynchronous write failure (ENOSPC/EIO)
+              // auto-destroys the stream, after which 'drain' never fires —
+              // waiting on it alone would hang and leak the fd/staging file.
+              if (!fileHandle.write(value)) {
+                await Promise.race([once(fileHandle, 'drain'), writeSettled]);
+              }
+            }
+          } finally {
+            reader.releaseLock();
           }
           fileHandle.end();
-          await new Promise<void>((resolve, reject) => {
-            fileHandle.on('finish', resolve);
-            fileHandle.on('error', reject);
-          });
+          await writeSettled;
         } catch (streamErr) {
           fileHandle.destroy();
           try {

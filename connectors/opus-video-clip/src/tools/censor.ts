@@ -70,13 +70,23 @@ export function registerCensorTools(server: McpServer): void {
           2,
         );
       }
+      // jobId is upstream-controlled and unchecked (opusFetch casts without
+      // validating): interpolate it into prose only when it is a well-shaped
+      // identifier STRING, otherwise envelop its string coercion (invariant
+      // #6 — a non-string value coerced raw into the message would be the
+      // same injection). The JSON field stays raw so the model can feed the
+      // id back into opus_get_censor_job_status verbatim.
+      const jobIdForMessage =
+        typeof jobId === 'string' && /^[A-Za-z0-9_-]+$/.test(jobId)
+          ? jobId
+          : (wrapUntrusted(String(jobId), 'opus:create_censor_job:jobId') ?? '');
       return JSON.stringify(
         {
           ok: true,
           jobId,
           message:
             upstreamMessage ??
-            `Censor job created. Poll opus_get_censor_job_status with jobId="${jobId}" every 5-10 seconds until status is "CONCLUDED" or "FAILED".`,
+            `Censor job created. Poll opus_get_censor_job_status with jobId="${jobIdForMessage}" every 5-10 seconds until status is "CONCLUDED" or "FAILED".`,
         },
         null,
         2,

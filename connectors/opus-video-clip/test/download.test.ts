@@ -213,6 +213,27 @@ describe('opus_download_clip', () => {
     expect(fs.readdirSync(workspace)).toEqual(['clip.mp4']);
   });
 
+  it('aborts a download that exceeds the byte cap and removes the partial file', async () => {
+    serveClip(new Uint8Array(8192).fill(1));
+    const client = await freshClient();
+    // Shrink the cap on the FRESH download module instance (createTestClient
+    // resets the module registry — same pattern as the DNS stub above).
+    const { setMaxDownloadBytesForTesting } = await import('../src/tools/download.js');
+    setMaxDownloadBytesForTesting(4096);
+    try {
+      const out = path.join(workspace, 'clip.mp4');
+      const result = await client.callTool('opus_download_clip', {
+        url: CLIP_URL,
+        output_path: out,
+      });
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain('DOWNLOAD_TOO_LARGE');
+      expect(fs.existsSync(out)).toBe(false);
+    } finally {
+      setMaxDownloadBytesForTesting(null);
+    }
+  });
+
   it('successful overwrite leaves no temp staging files behind', async () => {
     serveClip();
     const client = await freshClient();

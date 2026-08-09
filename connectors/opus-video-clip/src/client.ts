@@ -203,9 +203,11 @@ async function opusFetchRaw<T>(
   }
   try {
     return JSON.parse(text) as T;
-  } catch (error) {
+  } catch {
+    // Never embed error.message here: V8 JSON parse errors quote a prefix of
+    // the response body, which is upstream-controlled text (invariant #6).
     throw new OpusError(
-      `Unable to parse Opus API response as JSON: ${error instanceof Error ? error.message : String(error)}`,
+      'Unable to parse Opus API response as JSON.',
       'API_ERROR',
       'The response body was not valid JSON. Report this to Opus support with the request details.',
     );

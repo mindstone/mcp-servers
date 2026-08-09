@@ -113,3 +113,15 @@ export function sanitizeCollection(collection: unknown, source: string): unknown
   if (!isObj(collection)) return collection;
   return { ...collection, collectionName: wrapStr(collection.collectionName, `${source}:collectionName`) };
 }
+
+/**
+ * Wrap non-structural strings on a collection-export `contentList` entry.
+ * `contentId` is fed back into later tool calls and `uriForExport` is a
+ * download URL surfaced for the user, so both stay raw (structural); any
+ * other string the upstream adds is enveloped fail-closed, same treatment
+ * as `sanitizeProject`.
+ */
+export function sanitizeExportedContent(entry: unknown, source: string): unknown {
+  if (!isObj(entry)) return entry;
+  return sanitizeProjectObject(entry, source);
+}

@@ -7,6 +7,13 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- The outbound-URL SSRF guard now also refuses IPv6 transition prefixes that embed an IPv4 address — NAT64 `64:ff9b::/96`, 6to4 `2002::/16`, and IPv4-compatible `::/96` — plus the discard-only `100::/64`, closing the gap where e.g. `64:ff9b::7f00:1` (127.0.0.1) or `64:ff9b::a9fe:a9fe` (the 169.254.169.254 cloud metadata endpoint) passed validation.
+- Remaining unenveloped upstream-text sites are now enveloped or dropped: unexpected string fields on `opus_export_collection` `contentList` entries (`contentId`/`uriForExport` stay raw for round-tripping), the `opus_remove_clip_from_collection` upstream `status` string, the response-body prefix V8 quotes into JSON parse errors (no longer embedded in the thrown error), and upstream `jobId` values interpolated into the `opus_create_censor_job` / `opus_create_social_copy_job` guidance messages (still raw in the JSON field, shape-gated or enveloped in prose).
+- `opus_download_clip` now enforces a 2 GiB download cap while streaming (failing with `DOWNLOAD_TOO_LARGE` and removing the partial file), honours write backpressure (`drain`), and attaches the stream error listener before the write loop instead of after it.
+- `opus_create_social_copy_job` is now annotated `destructiveHint: true`, matching `opus_create_censor_job` — it creates a billable generation job on the production account.
+
 ## [0.2.0] - 2026-08-07
 
 ### Changed

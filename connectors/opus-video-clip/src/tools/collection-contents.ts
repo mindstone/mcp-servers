@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { requireApiKey } from '../auth.js';
 import { opusFetch } from '../client.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
 interface OpusSuccessResponse<T> {
@@ -82,7 +83,9 @@ export function registerCollectionContentTools(server: McpServer): void {
       return JSON.stringify(
         {
           ok: true,
-          status: result.data ?? 'success',
+          // The upstream status string is external text — envelop it
+          // (invariant #6) rather than returning it raw.
+          status: wrapUntrusted(result.data, 'opus:remove_clip_from_collection:status') ?? 'success',
           collectionId: args.collectionId,
           contentId: args.contentId,
         },

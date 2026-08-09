@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { requireApiKey } from '../auth.js';
 import { opusFetch } from '../client.js';
-import { sanitizeCollection, sanitizeList } from '../sanitize.js';
+import { sanitizeCollection, sanitizeExportedContent, sanitizeList } from '../sanitize.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
 
@@ -133,7 +133,10 @@ export function registerCollectionTools(server: McpServer): void {
           ok: true,
           collectionId: args.collectionId,
           count: data.contentList?.length ?? 0,
-          contentList: data.contentList ?? [],
+          // contentId / uriForExport stay raw (round-tripped into later tool
+          // calls / opened by the user); any other upstream string on the
+          // entry is enveloped fail-closed (invariant #6).
+          contentList: sanitizeList(data.contentList ?? [], sanitizeExportedContent, 'opus:export_collection'),
         },
         null,
         2,

@@ -111,7 +111,9 @@ export function registerSocialPostingTools(server: McpServer): void {
           .optional()
           .describe('If true, bypass the cached result for this clip/account pair.'),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      // destructiveHint: creates a generation job (billable compute) on the
+      // production Opus account — same treatment as opus_create_censor_job.
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       requireApiKey();
@@ -122,11 +124,23 @@ export function registerSocialPostingTools(server: McpServer): void {
           body: JSON.stringify(args),
         },
       );
+      const jobId = result.data?.jobId;
+      // jobId is upstream-controlled and unchecked (opusFetch casts without
+      // validating): interpolate it into prose only when it is a well-shaped
+      // identifier STRING, otherwise envelop its string coercion (invariant
+      // #6 — a non-string value coerced raw into the message would be the
+      // same injection). The JSON field stays raw for round-tripping.
+      const jobIdForMessage =
+        jobId === undefined || jobId === null
+          ? ''
+          : typeof jobId === 'string' && /^[A-Za-z0-9_-]+$/.test(jobId)
+            ? jobId
+            : (wrapUntrusted(String(jobId), 'opus:create_social_copy_job:jobId') ?? '');
       return JSON.stringify(
         {
           ok: true,
-          jobId: result.data?.jobId,
-          message: `Social copy job created. Poll opus_get_social_copy_job with jobId="${result.data?.jobId}" every 3-5 seconds until status is "COMPLETED" or "FAILED".`,
+          jobId,
+          message: `Social copy job created. Poll opus_get_social_copy_job with jobId="${jobIdForMessage}" every 3-5 seconds until status is "COMPLETED" or "FAILED".`,
         },
         null,
         2,
