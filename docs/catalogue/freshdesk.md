@@ -13,7 +13,7 @@ Freshdesk Support MCP server for Model Context Protocol hosts. Manage helpdesk t
 
 | Field | Value |
 |-------|-------|
-| Version | 0.3.0 |
+| Version | 0.3.1 |
 | Auth | API key (—) |
 | Tools | 20 (accounts, tickets, contacts, companies, solutions, discovery) |
 | Surface | cloud API |
