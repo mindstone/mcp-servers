@@ -8,6 +8,7 @@ import {
   formatContactDetailed,
   formatCompanyConcise,
   formatCompanyDetailed,
+  numOrNull,
   wrapContactUntrustedFields,
   wrapCompanyUntrustedFields,
 } from '../formatters.js';
@@ -133,7 +134,10 @@ export function registerContactTools(server: McpServer): void {
       );
 
       const format = args.response_format || 'concise';
-      const total = response.total;
+      // `total` is vendor-controlled: guard it before the `of ${total}`
+      // template and the hasMore comparison so a non-number value (API shape
+      // violation) neither leaks raw nor silently misreports pagination.
+      const total = numOrNull(response.total) ?? response.results.length;
       const hasMore = total > page * 30;
 
       if (format === 'concise') {

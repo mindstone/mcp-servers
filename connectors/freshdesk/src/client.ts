@@ -9,7 +9,9 @@
  * retries, honouring Retry-After capped at 30s, plus jitter) because they
  * are idempotent; writes are not retried automatically — a retried POST
  * could create duplicate tickets/replies — and surface RATE_LIMITED
- * immediately.
+ * immediately. All attempts share one wall-clock budget (RETRY_BUDGET_MS)
+ * so a hostile endpoint cannot hold a tool call open for minutes with a
+ * fresh per-attempt timeout each round.
  *
  * Auth: Authorization: Basic base64(apiKey:X)
  * Base URL: https://{domain}.freshdesk.com/api/v2
@@ -23,6 +25,14 @@ export interface FreshdeskFetchOptions extends RequestInit {
 }
 
 const MAX_RATE_LIMIT_RETRIES = 2;
+
+/**
+ * Total wall-clock budget for one freshdeskFetch call, including rate-limit
+ * retries and backoff sleeps. A fresh 30s per-attempt timeout without an
+ * aggregate bound would let a hostile endpoint hold a single tool call for
+ * ~2.5 minutes (3 × 30s timeouts + 2 × ~30.5s sleeps).
+ */
+const RETRY_BUDGET_MS = 90_000;
 
 /**
  * Parse a Retry-After header into milliseconds, capped at 30s so a hostile
@@ -80,6 +90,9 @@ export async function freshdeskFetch<T>(
   // Build auth header: Basic base64("{apiKey}:X")
   const authHeader = `Basic ${Buffer.from(`${apiKey}:X`).toString('base64')}`;
   const method = (fetchOptions.method ?? 'GET').toUpperCase();
+  // One shared deadline across all attempts and backoff sleeps (see
+  // RETRY_BUDGET_MS).
+  const retryDeadline = Date.now() + RETRY_BUDGET_MS;
 
   for (let attempt = 0; attempt <= MAX_RATE_LIMIT_RETRIES; attempt++) {
     // Log method + path only. The full URL can carry query params holding
@@ -90,14 +103,25 @@ export async function freshdeskFetch<T>(
     let response: Response;
 
     try {
+      const remainingMs = retryDeadline - Date.now();
+      if (remainingMs <= 0) {
+        throw new FreshdeskError(
+          'Request to Freshdesk API timed out',
+          'TIMEOUT',
+          'The request took too long. Try again or check if the Freshdesk instance is available.',
+        );
+      }
       response = await fetch(url, {
         ...fetchOptions,
-        signal: fetchOptions.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        signal: fetchOptions.signal ?? AbortSignal.timeout(Math.min(REQUEST_TIMEOUT_MS, remainingMs)),
         headers: {
+          // Caller-supplied headers first so the injected credential and
+          // JSON content negotiation always win (no call site passes headers
+          // today — unreachable by construction after this ordering).
+          ...(fetchOptions.headers as Record<string, string>),
           Authorization: authHeader,
           'Content-Type': 'application/json',
           Accept: 'application/json',
-          ...(fetchOptions.headers as Record<string, string>),
         },
       });
     } catch (error) {
@@ -114,23 +138,32 @@ export async function freshdeskFetch<T>(
     // Handle rate limiting: retry idempotent GETs in place, honouring
     // Retry-After; everything else surfaces RATE_LIMITED immediately.
     if (response.status === 429) {
-      if (method !== 'GET' || attempt >= MAX_RATE_LIMIT_RETRIES) {
-        // The Retry-After header is vendor-controlled text: only a parsed
-        // non-negative integer ever reaches the model-visible message, never
-        // the raw header value.
-        const retryAfterSeconds = parseInt(response.headers.get('Retry-After') ?? '', 10);
-        const waitTime =
-          !isNaN(retryAfterSeconds) && retryAfterSeconds >= 0
-            ? `${retryAfterSeconds} seconds`
-            : 'a moment';
-        throw new FreshdeskError(
+      // The Retry-After header is vendor-controlled text: only a parsed
+      // non-negative integer ever reaches the model-visible message, never
+      // the raw header value.
+      const retryAfterSeconds = parseInt(response.headers.get('Retry-After') ?? '', 10);
+      const waitTime =
+        !isNaN(retryAfterSeconds) && retryAfterSeconds >= 0
+          ? `${retryAfterSeconds} seconds`
+          : 'a moment';
+      const rateLimitedError = () =>
+        new FreshdeskError(
           `Rate limited. Please wait ${waitTime} before retrying.`,
           'RATE_LIMITED',
           `Wait ${waitTime} and try again. Freshdesk rate limits vary by plan (Blossom: 100/min, Estate: 400/min, Forest: 700/min).`,
         );
-      }
       const waitMs = parseRetryAfterMs(response.headers.get('Retry-After'));
       const jitter = Math.floor(Math.random() * 500);
+      // Surface RATE_LIMITED rather than retry when out of attempts, when
+      // the request is a write, or when the backoff would not finish within
+      // the shared wall-clock budget.
+      if (
+        method !== 'GET' ||
+        attempt >= MAX_RATE_LIMIT_RETRIES ||
+        waitMs + jitter > retryDeadline - Date.now()
+      ) {
+        throw rateLimitedError();
+      }
       console.error(
         `[Freshdesk API] Rate limited, retrying in ${waitMs + jitter}ms (attempt ${attempt + 1}/${MAX_RATE_LIMIT_RETRIES})`,
       );

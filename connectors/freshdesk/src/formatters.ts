@@ -8,7 +8,9 @@
  * `<untrusted-content source="…">…</untrusted-content>` envelopes via the
  * canonical shared helper (vendored at `./untrusted-content.ts`) so the host
  * LLM treats it as data, not instructions. Only non-string connector metadata
- * (numeric ids, statuses, priorities) is left untouched.
+ * (numeric ids, statuses, priorities) is left unenveloped — and even those
+ * are rendered through a finite-number guard, so an API shape violation
+ * (string/object id) never reaches model-visible output raw.
  */
 
 import type {
@@ -52,6 +54,26 @@ function wrapField(s: string | null | undefined, source: string): string | undef
 function wrapFieldList(list: string[] | null | undefined, source: string): string | undefined {
   if (!list || list.length === 0) return undefined;
   return list.map((item) => wrapUntrusted(item, source)).join(', ');
+}
+
+/**
+ * Render a vendor-supplied id for text output. Fail-closed: only a finite
+ * number stringifies; anything else (an API shape violation, e.g. a string
+ * carrying a spoofed close tag) renders a connector-authored placeholder so
+ * the raw vendor value never reaches model-visible output unenveloped.
+ */
+export function formatNumericId(value: unknown): string {
+  return typeof value === 'number' && Number.isFinite(value) ? String(value) : '(unknown id)';
+}
+
+/**
+ * Return `value` only when it really is a finite number, else `null` — for
+ * echoing vendor fields (id, status, priority, search totals) in structured
+ * JSON output where a non-number value (API shape violation) must not pass
+ * through raw.
+ */
+export function numOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 /**
@@ -116,15 +138,15 @@ export function wrapTicketUntrustedFields(ticket: FreshdeskTicket): FreshdeskTic
   return wrapped;
 }
 
-export function ticketUrl(domain: string, ticketId: number): string {
-  return `https://${domain}.freshdesk.com/a/tickets/${ticketId}`;
+export function ticketUrl(domain: string, ticketId: unknown): string {
+  return `https://${domain}.freshdesk.com/a/tickets/${formatNumericId(ticketId)}`;
 }
 
 export function formatTicketConcise(ticket: FreshdeskTicket, domain: string): string {
   const status = statusToString(ticket.status);
   const priority = priorityToString(ticket.priority);
   const subject = formatTicketSubject(ticket.subject);
-  return `#${ticket.id}: ${subject} [${status}] (${priority}) — ${ticketUrl(domain, ticket.id)}`;
+  return `#${formatNumericId(ticket.id)}: ${subject} [${status}] (${priority}) — ${ticketUrl(domain, ticket.id)}`;
 }
 
 export function formatTicketDetailed(ticket: FreshdeskTicket, domain: string): string {
@@ -151,17 +173,19 @@ export function formatTicketDetailed(ticket: FreshdeskTicket, domain: string): s
       ? ` (${ticket.priority})`
       : '';
   return [
-    `Ticket #${ticket.id}`,
+    `Ticket #${formatNumericId(ticket.id)}`,
     `URL: ${ticketUrl(domain, ticket.id)}`,
     `Subject: ${wrappedSubject}`,
     `Status: ${statusToString(ticket.status)}${statusId}`,
     `Priority: ${priorityToString(ticket.priority)}${priorityId}`,
     `Source: ${sourceToString(ticket.source)}`,
     wrappedType ? `Type: ${wrappedType}` : '',
-    `Requester ID: ${ticket.requester_id}`,
+    `Requester ID: ${formatNumericId(ticket.requester_id)}`,
     wrappedEmail ? `Requester Email: ${wrappedEmail}` : '',
-    ticket.responder_id ? `Assignee ID: ${ticket.responder_id}` : 'Assignee: unassigned',
-    ticket.group_id ? `Group ID: ${ticket.group_id}` : '',
+    ticket.responder_id
+      ? `Assignee ID: ${formatNumericId(ticket.responder_id)}`
+      : 'Assignee: unassigned',
+    ticket.group_id ? `Group ID: ${formatNumericId(ticket.group_id)}` : '',
     wrappedCreated ? `Created: ${wrappedCreated}` : '',
     wrappedUpdated ? `Updated: ${wrappedUpdated}` : '',
     wrappedDueBy ? `Due by: ${wrappedDueBy}` : '',
@@ -178,7 +202,7 @@ export function formatConversation(conv: FreshdeskConversation): string {
   const wrappedHtml = wrapUntrustedTicketContent(conv.body);
   const wrappedText = wrapUntrustedTicketContent(conv.body_text);
   const created = wrapField(conv.created_at, TICKET_SOURCE) ?? '(unknown time)';
-  const lines: string[] = [`[${created}] ${type} (User ${conv.user_id}):`];
+  const lines: string[] = [`[${created}] ${type} (User ${formatNumericId(conv.user_id)}):`];
   if (wrappedHtml) lines.push(`Body (HTML): ${wrappedHtml}`);
   if (wrappedText) lines.push(`Body (text): ${wrappedText}`);
   return lines.join('\n');
@@ -190,20 +214,20 @@ export function formatTicketField(field: FreshdeskTicketField): string {
   const label = wrapField(field.label, FIELD_SOURCE) ?? '(unlabeled)';
   const name = wrapField(field.name, FIELD_SOURCE) ?? '(unnamed)';
   const type = wrapField(field.type, FIELD_SOURCE) ?? 'unknown';
-  return `${label} (ID: ${field.id}, name: ${name}, type: ${type})${required}${closure}`;
+  return `${label} (ID: ${formatNumericId(field.id)}, name: ${name}, type: ${type})${required}${closure}`;
 }
 
 export function formatAgentConcise(agent: FreshdeskAgent): string {
   const name = wrapField(agent.contact?.name, AGENT_SOURCE) ?? '(no name)';
   const email = wrapField(agent.contact?.email, AGENT_SOURCE) ?? 'no email';
   const availability = agent.available === false ? 'unavailable' : 'available';
-  return `#${agent.id}: ${name} <${email}> (${availability})`;
+  return `#${formatNumericId(agent.id)}: ${name} <${email}> (${availability})`;
 }
 
 export function formatGroupConcise(group: FreshdeskGroup): string {
   const name = wrapField(group.name, GROUP_SOURCE) ?? '(unnamed)';
   const type = wrapField(group.group_type, GROUP_SOURCE);
-  return `#${group.id}: ${name}${type ? `, type: ${type}` : ''}`;
+  return `#${formatNumericId(group.id)}: ${name}${type ? `, type: ${type}` : ''}`;
 }
 
 /**
@@ -225,8 +249,8 @@ export function wrapGroupUntrustedFields(group: FreshdeskGroup): FreshdeskGroup 
 export function formatContactConcise(contact: FreshdeskContact): string {
   const name = wrapField(contact.name, CONTACT_SOURCE) ?? '(no name)';
   const email = wrapField(contact.email, CONTACT_SOURCE) ?? 'no email';
-  const company = contact.company_id ? ` — company #${contact.company_id}` : '';
-  return `#${contact.id}: ${name} <${email}>${company}`;
+  const company = contact.company_id ? ` — company #${formatNumericId(contact.company_id)}` : '';
+  return `#${formatNumericId(contact.id)}: ${name} <${email}>${company}`;
 }
 
 export function formatContactDetailed(contact: FreshdeskContact): string {
@@ -241,13 +265,13 @@ export function formatContactDetailed(contact: FreshdeskContact): string {
   const created = wrapField(contact.created_at, CONTACT_SOURCE);
   const updated = wrapField(contact.updated_at, CONTACT_SOURCE);
   return [
-    `Contact #${contact.id}`,
+    `Contact #${formatNumericId(contact.id)}`,
     `Name: ${name ?? '(no name)'}`,
     email ? `Email: ${email}` : '',
     phone ? `Phone: ${phone}` : '',
     mobile ? `Mobile: ${mobile}` : '',
     jobTitle ? `Job Title: ${jobTitle}` : '',
-    contact.company_id ? `Company ID: ${contact.company_id}` : '',
+    contact.company_id ? `Company ID: ${formatNumericId(contact.company_id)}` : '',
     address ? `Address: ${address}` : '',
     tags ? `Tags: ${tags}` : '',
     description ? `Description: ${description}` : '',
@@ -276,7 +300,7 @@ export function wrapContactUntrustedFields(contact: FreshdeskContact): Freshdesk
 export function formatCompanyConcise(company: FreshdeskCompany): string {
   const name = wrapField(company.name, COMPANY_SOURCE) ?? '(unnamed)';
   const domains = wrapFieldList(company.domains, COMPANY_SOURCE);
-  return `#${company.id}: ${name}${domains ? ` (${domains})` : ''}`;
+  return `#${formatNumericId(company.id)}: ${name}${domains ? ` (${domains})` : ''}`;
 }
 
 export function formatCompanyDetailed(company: FreshdeskCompany): string {
@@ -290,7 +314,7 @@ export function formatCompanyDetailed(company: FreshdeskCompany): string {
   const created = wrapField(company.created_at, COMPANY_SOURCE);
   const updated = wrapField(company.updated_at, COMPANY_SOURCE);
   return [
-    `Company #${company.id}`,
+    `Company #${formatNumericId(company.id)}`,
     `Name: ${name ?? '(unnamed)'}`,
     domains ? `Domains: ${domains}` : '',
     industry ? `Industry: ${industry}` : '',
@@ -331,7 +355,7 @@ export function articleStatusToString(status: number | undefined): string {
 
 export function formatArticleConcise(article: FreshdeskSolutionArticle): string {
   const title = wrapField(article.title, ARTICLE_SOURCE) ?? '(untitled)';
-  return `#${article.id}: ${title} [${articleStatusToString(article.status)}]`;
+  return `#${formatNumericId(article.id)}: ${title} [${articleStatusToString(article.status)}]`;
 }
 
 export function formatArticleDetailed(article: FreshdeskSolutionArticle): string {
@@ -342,11 +366,11 @@ export function formatArticleDetailed(article: FreshdeskSolutionArticle): string
   const created = wrapField(article.created_at, ARTICLE_SOURCE);
   const updated = wrapField(article.updated_at, ARTICLE_SOURCE);
   return [
-    `Article #${article.id}`,
+    `Article #${formatNumericId(article.id)}`,
     `Title: ${title ?? '(untitled)'}`,
     `Status: ${articleStatusToString(article.status)}`,
-    article.folder_id ? `Folder ID: ${article.folder_id}` : '',
-    article.category_id ? `Category ID: ${article.category_id}` : '',
+    article.folder_id ? `Folder ID: ${formatNumericId(article.folder_id)}` : '',
+    article.category_id ? `Category ID: ${formatNumericId(article.category_id)}` : '',
     tags ? `Tags: ${tags}` : '',
     created ? `Created: ${created}` : '',
     updated ? `Updated: ${updated}` : '',

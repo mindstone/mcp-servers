@@ -14,6 +14,17 @@ are maintained manually as part of the PR review checklist.
 ### Fixed
 
 - Re-synced the vendored `<untrusted-content>` envelope helper with the canonical hardened reference: attribute-bearing close-tag variants (`</untrusted-content foo>`) and spoofed open tags inside wrapped content are now escaped, closing an envelope-breakout gap an LLM parser could read as an envelope boundary.
+### Security
+- Vendor-supplied numeric fields are now rendered through a finite-number guard in every output path: ticket/contact/company/agent/group/article/field/conversation ids, `requester_id`/`responder_id`/`group_id`/`company_id`/`folder_id`/`category_id`, ticket URLs, and search-result `total` values can no longer interpolate an API-shape-violation value (e.g. a string carrying a spoofed close tag) into model-visible output raw — they render a connector-authored `(unknown id)` placeholder or `null` instead.
+- `create_freshdesk_ticket` / `update_freshdesk_ticket` now echo `id`, `status`, and `priority` only when they really are finite numbers (`null` otherwise), closing the raw vendor echo in the structured response.
+- The host-bridge state file is validated before use: a non-integer `port` (e.g. `"80@attacker.example"`, which WHATWG URL parsing would redirect off-host along with the plaintext API key and bridge bearer token) or empty `token` now fails closed to "Bridge not available".
+- Bridge responses no longer leak bridge-controlled bytes: a non-JSON body becomes a fixed connector-authored error instead of a native parse error quoting body fragments, and bridge-authored `warning`/`error` strings are enveloped as untrusted content before reaching model-visible output.
+- `accounts.json` writes no longer follow symlinks (`O_NOFOLLOW` where available) and are chmodded `0o600` through the file descriptor whether or not the file pre-existed — the `mode` argument alone only applies at creation.
+- A failed `accounts.json` read no longer turns into silent multi-account credential destruction: `upsertAccount`/`removeAccount` distinguish a legitimately absent file (ENOENT) from an unreadable or corrupt one and refuse the write with `ACCOUNTS_UNREADABLE` on the latter, instead of truncating the file down to a single account while reporting `ok: true`.
+
+### Fixed
+- 429 retries now share one wall-clock budget (90s) across all attempts and backoff sleeps instead of a fresh 30s timeout per attempt — a hostile endpoint could previously hold a single tool call open for ~2.5 minutes; exceeding the budget surfaces `RATE_LIMITED`/`TIMEOUT`.
+- Caller-supplied fetch headers are now spread before the injected `Authorization`/`Content-Type`/`Accept` headers, so the credential always wins (latent — no call site passes custom headers today).
 
 ## [0.3.0] - 2026-08-08
 

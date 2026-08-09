@@ -15,6 +15,8 @@ import {
   formatTicketDetailed,
   formatConversation,
   formatTicketSubject,
+  formatNumericId,
+  numOrNull,
   wrapTicketUntrustedFields,
 } from '../formatters.js';
 import { withErrorHandling, noAccountError } from '../utils.js';
@@ -213,7 +215,10 @@ export function registerTicketTools(server: McpServer): void {
       );
 
       const format = args.response_format || 'concise';
-      const total = response.total;
+      // `total` is vendor-controlled: guard it before the `of ${total}`
+      // template and the hasMore comparison so a non-number value (API shape
+      // violation) neither leaks raw nor silently misreports pagination.
+      const total = numOrNull(response.total) ?? response.results.length;
       const hasMore = total > page * 30;
 
       if (format === 'concise') {
@@ -318,12 +323,14 @@ export function registerTicketTools(server: McpServer): void {
 
       return JSON.stringify({
         ok: true,
-        message: `Created ticket #${ticket.id}`,
+        message: `Created ticket #${formatNumericId(ticket.id)}`,
         ticket: {
-          id: ticket.id,
+          // id/status/priority come back from the vendor unvalidated: echo
+          // only real finite numbers, never a raw API-shape-violation value.
+          id: numOrNull(ticket.id),
           subject: formatTicketSubject(ticket.subject),
-          status: ticket.status,
-          priority: ticket.priority,
+          status: numOrNull(ticket.status),
+          priority: numOrNull(ticket.priority),
           url: ticketUrl(account.domain, ticket.id),
         },
       });
@@ -405,10 +412,12 @@ export function registerTicketTools(server: McpServer): void {
         ok: true,
         message: `Updated ticket #${args.ticket_id}`,
         ticket: {
-          id: ticket.id,
+          // id/status/priority come back from the vendor unvalidated: echo
+          // only real finite numbers, never a raw API-shape-violation value.
+          id: numOrNull(ticket.id),
           subject: formatTicketSubject(ticket.subject),
-          status: ticket.status,
-          priority: ticket.priority,
+          status: numOrNull(ticket.status),
+          priority: numOrNull(ticket.priority),
           url: ticketUrl(account.domain, ticket.id),
         },
       });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { http, HttpResponse } from 'msw';
+import { http, HttpResponse, delay } from 'msw';
 import { mswServer } from './helpers/setup.js';
 import { freshdeskFetch } from '../src/client.js';
 import { FreshdeskError } from '../src/types.js';
@@ -109,6 +109,36 @@ describe('freshdeskFetch rate-limit handling', () => {
       const result = await promise;
       expect(result.id).toBe(1);
       expect(requestCount).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('refuses a backoff that would exceed the shared wall-clock retry budget', async () => {
+    let requestCount = 0;
+    mswServer.use(
+      http.get(`${BASE}/tickets`, async () => {
+        requestCount++;
+        // The first (and only) response consumes most of the 90s shared
+        // budget, so a 30s backoff can no longer fit inside it — the loop
+        // must surface RATE_LIMITED instead of sleeping and retrying.
+        await delay(80_000);
+        return HttpResponse.json(
+          { message: 'Rate limit exceeded' },
+          { status: 429, headers: { 'Retry-After': '30' } },
+        );
+      }),
+    );
+
+    const { vi } = await import('vitest');
+    vi.useFakeTimers();
+    try {
+      const promise = freshdeskFetch('testacme', API_KEY, '/tickets');
+      const assertion = expect(promise).rejects.toMatchObject({ code: 'RATE_LIMITED' });
+      await vi.advanceTimersByTimeAsync(95_000);
+      await assertion;
+      // No retry was attempted: the backoff would have overrun the budget.
+      expect(requestCount).toBe(1);
     } finally {
       vi.useRealTimers();
     }

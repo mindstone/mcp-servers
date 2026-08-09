@@ -16,6 +16,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import type { AccountsConfig, AccountInfo, FreshdeskAccount } from './types.js';
+import { FreshdeskError } from './types.js';
 
 const CONFIG_PATH =
   process.env.FRESHDESK_CONFIG_PATH || path.join(os.homedir(), '.mcp', 'freshdesk');
@@ -41,15 +42,23 @@ export function getConfigPath(): string {
  * closed to "no accounts" — including resetting previously loaded
  * credentials — which surfaces as the observable "No Freshdesk account
  * connected" error from every tool.
+ *
+ * Returns `true` when the load was healthy — including a legitimately
+ * absent file (ENOENT, the normal "no accounts yet" state) — and `false`
+ * when the file exists but could not be read or parsed. Write paths
+ * (`upsertAccount` / `removeAccount`) MUST refuse to save after a `false`
+ * return: the in-memory config has been reset to empty, and saving it
+ * would truncate the file and silently destroy every other stored
+ * account's credentials.
  */
-export function loadAccounts(): void {
+export function loadAccounts(): boolean {
   const accountsPath = path.join(CONFIG_PATH, 'accounts.json');
   let fd: number | undefined;
   try {
     fd = fs.openSync(accountsPath, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
     if (!fs.fstatSync(fd).isFile()) {
       accountsConfig = { accounts: [] };
-      return;
+      return false;
     }
     const raw = fs.readFileSync(fd, 'utf8');
     const parsed = JSON.parse(raw) as Record<string, unknown>;
@@ -58,11 +67,20 @@ export function loadAccounts(): void {
         accounts: parsed.accounts as AccountInfo[],
         defaultDomain: typeof parsed.defaultDomain === 'string' ? parsed.defaultDomain : undefined,
       };
-    } else {
-      accountsConfig = { accounts: [] };
+      return true;
     }
-  } catch {
     accountsConfig = { accounts: [] };
+    return false;
+  } catch (error) {
+    accountsConfig = { accounts: [] };
+    // A legitimately absent file is the normal "no accounts yet" state; any
+    // other failure means the on-disk config may still hold accounts the
+    // in-memory reset would destroy on the next save.
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      (error as NodeJS.ErrnoException).code === 'ENOENT'
+    );
   } finally {
     if (fd !== undefined) fs.closeSync(fd);
   }
@@ -110,6 +128,13 @@ export function getAccount(domain?: string): FreshdeskAccount | undefined {
 
 /**
  * Save accounts.json with secure file permissions.
+ *
+ * The file is opened with O_NOFOLLOW so a symlink planted at accounts.json
+ * cannot redirect the write into an attacker-chosen target, and chmodded to
+ * 0o600 through the descriptor whether or not the file pre-existed (the
+ * mode argument to open applies only at creation). O_NOFOLLOW is
+ * unavailable on some platforms (e.g. Windows); the mode enforcement still
+ * applies there.
  */
 export function saveAccounts(config: AccountsConfig): void {
   // Ensure config directory exists with 0o700 permissions
@@ -118,17 +143,44 @@ export function saveAccounts(config: AccountsConfig): void {
   }
 
   const accountsPath = path.join(CONFIG_PATH, 'accounts.json');
-  fs.writeFileSync(accountsPath, JSON.stringify(config, null, 2), { mode: 0o600 });
+  const fd = fs.openSync(
+    accountsPath,
+    fs.constants.O_WRONLY |
+      fs.constants.O_CREAT |
+      fs.constants.O_TRUNC |
+      (fs.constants.O_NOFOLLOW ?? 0),
+    0o600,
+  );
+  try {
+    fs.fchmodSync(fd, 0o600);
+    fs.writeFileSync(fd, JSON.stringify(config, null, 2));
+  } finally {
+    fs.closeSync(fd);
+  }
 
   // Update in-memory state
   accountsConfig = config;
 }
 
 /**
+ * Refuse a read-modify-write when the on-disk accounts.json could not be
+ * read or parsed. loadAccounts() has reset the in-memory config to empty in
+ * that state, so saving would truncate the file and silently destroy every
+ * other stored account's credentials — fail loudly instead.
+ */
+function assertAccountsReadable(): void {
+  throw new FreshdeskError(
+    'Stored accounts could not be read; refusing to modify them',
+    'ACCOUNTS_UNREADABLE',
+    'The accounts file exists but could not be read or parsed. Fix or remove it and try again.',
+  );
+}
+
+/**
  * Remove an account by domain. Returns true if found and removed.
  */
 export function removeAccount(domain: string): boolean {
-  loadAccounts();
+  if (!loadAccounts()) assertAccountsReadable();
 
   const idx = accountsConfig.accounts.findIndex((a) => a.domain === domain);
   if (idx < 0) return false;
@@ -148,7 +200,7 @@ export function removeAccount(domain: string): boolean {
  * Add or update an account. Saves to disk with proper permissions.
  */
 export function upsertAccount(info: AccountInfo): void {
-  loadAccounts();
+  if (!loadAccounts()) assertAccountsReadable();
 
   const idx = accountsConfig.accounts.findIndex((a) => a.domain === info.domain);
   if (idx >= 0) {
