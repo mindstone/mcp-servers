@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-09
+
+### Changed
+
+- Close NAT64 guard + A4 envelope fail-closed sites, A8 download hardening with 2GiB cap, A9 destructiveHint on social-copy jobs.
+
 ### Fixed
 
 - The outbound-URL SSRF guard now also refuses IPv6 transition prefixes that embed an IPv4 address — NAT64 `64:ff9b::/96`, 6to4 `2002::/16`, and IPv4-compatible `::/96` — plus the discard-only `100::/64`, closing the gap where e.g. `64:ff9b::7f00:1` (127.0.0.1) or `64:ff9b::a9fe:a9fe` (the 169.254.169.254 cloud metadata endpoint) passed validation.
