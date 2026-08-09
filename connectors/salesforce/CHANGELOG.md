@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+
+- Envelope auth-tool external text (`username`, bridge/OAuth `error`, and the stored `username` / `instance_url` / `connected_at` in `salesforce_list_connected_accounts`) in `<untrusted-content>` tags before it reaches model-visible output, closing the residual raw channel from the 0.2.0 security review (addendum C). The account list now exposes a connector-authored account `ref` (hash of the storage id, which stays internal) that `salesforce_disconnect_account` accepts in place of the username.
+
 ## [0.2.0] - 2026-08-07
 
 ### Changed

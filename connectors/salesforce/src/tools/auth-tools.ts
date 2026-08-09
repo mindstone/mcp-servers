@@ -1,9 +1,22 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { withErrorHandling } from '../utils.js';
+import { withErrorHandling, sanitizeExternalData } from '../utils.js';
 import { getAuthMode, loadAccounts, loadToken, startStandaloneOAuth } from '../auth.js';
 import { bridgeRequest } from '../bridge.js';
 import { listConnectedAccounts, removeAccount } from '../client.js';
+
+// Disconnect needs a raw handle the model can copy verbatim into
+// salesforce_disconnect_account, but the storage id is username-derived
+// (sanitizeFilename) — passing it through raw would re-open the very channel
+// the envelopes below close. Instead the account list exposes a
+// connector-authored `ref` (truncated hash of the storage id): stable across
+// calls, shaped like data, and containing zero external text.
+function accountRef(accountId: unknown): string {
+  return `acct_${createHash('sha256').update(String(accountId)).digest('hex').slice(0, 12)}`;
+}
+
+const ACCOUNT_REF_SHAPE = /^acct_[0-9a-f]{12}$/;
 
 export function registerAuthTools(server: McpServer): void {
   server.registerTool(
@@ -53,17 +66,22 @@ After connecting, verify with salesforce_list_connected_accounts.`,
           {},
         );
         if (result.success) {
+          // The bridge username is host/org-authored external text: envelope
+          // it before it reaches model-visible output (AGENTS.md invariant #6).
+          const username = result.username ? sanitizeExternalData(result.username, 'salesforce:auth') : undefined;
           return JSON.stringify({
             ok: true,
             status: 'authenticated',
-            message: `Successfully connected Salesforce account${result.username ? `: ${result.username}` : ''}`,
-            username: result.username,
+            message: `Successfully connected Salesforce account${username ? `: ${username}` : ''}`,
+            username,
             next_step: 'You can now use Salesforce tools. Try salesforce_list_connected_accounts to verify.',
           });
         }
         return JSON.stringify({
           ok: false,
-          error: result.error || 'Failed to authenticate with Salesforce',
+          error: result.error
+            ? sanitizeExternalData(result.error, 'salesforce:auth')
+            : 'Failed to authenticate with Salesforce',
           action_required: 'Please try calling salesforce_connect_account again.',
         });
       }
@@ -71,17 +89,18 @@ After connecting, verify with salesforce_list_connected_accounts.`,
       // standalone_oauth
       const result = await startStandaloneOAuth();
       if (result.success) {
+        const username = result.username ? sanitizeExternalData(result.username, 'salesforce:auth') : undefined;
         return JSON.stringify({
           ok: true,
           status: 'authenticated',
-          message: `Successfully connected Salesforce account${result.username ? `: ${result.username}` : ''}`,
-          username: result.username,
+          message: `Successfully connected Salesforce account${username ? `: ${username}` : ''}`,
+          username,
           next_step: 'You can now use Salesforce tools. Try salesforce_list_connected_accounts to verify.',
         });
       }
       return JSON.stringify({
         ok: false,
-        error: result.error || 'Failed to authenticate',
+        error: result.error ? sanitizeExternalData(result.error, 'salesforce:auth') : 'Failed to authenticate',
         action_required: 'Please try calling salesforce_connect_account again.',
       });
     }),
@@ -150,11 +169,15 @@ This MCP instance operates on a single Salesforce account. If no account is conn
         const hasValidToken = token && (token.expires_at ?? 0) > Date.now();
         const hasRefresh = token && !!token.refresh_token;
         return {
-          username: a.username,
-          instance_url: a.instance_url,
+          // Connector-authored raw handle for salesforce_disconnect_account
+          // (the storage id stays internal — it is username-derived and would
+          // re-open the channel the envelopes below close).
+          ref: accountRef(a.id),
+          username: a.username ? sanitizeExternalData(a.username, 'salesforce:auth') : a.username,
+          instance_url: a.instance_url ? sanitizeExternalData(a.instance_url, 'salesforce:auth') : a.instance_url,
           is_sandbox: a.is_sandbox,
           status: hasValidToken || hasRefresh ? 'active' : 'expired',
-          connected_at: a.connected_at,
+          connected_at: a.connected_at ? sanitizeExternalData(a.connected_at, 'salesforce:auth') : a.connected_at,
         };
       });
 
@@ -173,9 +196,10 @@ This MCP instance operates on a single Salesforce account. If no account is conn
     {
       description: `Disconnect a Salesforce account. Example: { "username": "user@company.com" }
 
+Accepts the account \`ref\` from salesforce_list_connected_accounts as well as the raw username.
 Permanently removes stored credentials. Use when switching accounts or troubleshooting.`,
       inputSchema: z.object({
-        username: z.string().min(1).describe('Username of the account to disconnect'),
+        username: z.string().min(1).describe('Username or account ref of the account to disconnect'),
       }),
       annotations: {
         readOnlyHint: false,
@@ -198,7 +222,21 @@ Permanently removes stored credentials. Use when switching accounts or troublesh
         });
       }
 
-      removeAccount(args.username);
+      // Resolve a connector-authored `ref` back to the storage id.
+      let usernameOrId = args.username;
+      if (ACCOUNT_REF_SHAPE.test(usernameOrId)) {
+        const match = listConnectedAccounts().find((a) => accountRef(a.id) === usernameOrId);
+        if (!match) {
+          return JSON.stringify({
+            ok: false,
+            error: `Account not found: ${usernameOrId}`,
+            resolution: 'Use salesforce_list_connected_accounts to see connected accounts.',
+          });
+        }
+        usernameOrId = match.id;
+      }
+
+      removeAccount(usernameOrId);
       return JSON.stringify({
         ok: true,
         message: `Disconnected Salesforce account: ${args.username}`,
