@@ -17,6 +17,8 @@ are maintained manually as part of the PR review checklist.
 - `list_models` now envelopes the API-authored `language_id` (display-only, same treatment as `list_history` `model_id`). `model_id` stays raw: it is a round-trip handle for `generate_speech`, whose own input schema gates it against a closed enum — the same raw-ID stance as `voice_id`/`dubbing_id`.
 - The new response schemas tolerate explicit `null` for spec-`Optional` fields (FastAPI serializes `None` as `null`, not omission) — a successful `get_dubbing` poll (`"error": null`) or a voice without a generated preview (`"preview_url": null`) no longer risks a false-positive `INVALID_RESPONSE` — and `design_voice` again rejects an empty `generated_voice_id`, matching the pre-schema truthiness guard.
 
+- Re-synced the vendored `<untrusted-content>` envelope helper with the canonical hardened reference: attribute-bearing close-tag variants (`</untrusted-content foo>`) and spoofed open tags inside wrapped content are now escaped, closing an envelope-breakout gap an LLM parser could read as an envelope boundary.
+
 ## [0.5.0] - 2026-08-07
 
 ### Changed

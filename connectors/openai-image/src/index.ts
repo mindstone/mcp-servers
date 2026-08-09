@@ -261,7 +261,10 @@ if (!KNOWN_MODELS.has(configuredModel())) {
 // fence errors deliberately keep the full supplied path so the caller can
 // self-correct.
 const envelopeEchoedValue = (value: string, source: string): string =>
-  wrapUntrusted(value, source) ?? value;
+  // Fail closed: if the helper ever declines to wrap (it returns `undefined`
+  // only for null/undefined input — unreachable for the string-typed call
+  // sites here), emit nothing rather than the raw un-enveloped value.
+  wrapUntrusted(value, source) ?? '';
 
 const envelopeToolInput = (value: string): string =>
   envelopeEchoedValue(value, 'openai-image:tool-input');
@@ -270,9 +273,12 @@ const envelopeConfiguredModel = (value: string): string =>
   envelopeEchoedValue(value, 'openai-image:config:model');
 
 // Splits on whole `<untrusted-content …>…</untrusted-content>` spans so the
-// path-collapsing below never mangles an envelope's own close tag.
+// path-collapsing below never mangles an envelope's own close tag. The close
+// side accepts attribute-bearing variants (`</untrusted-content foo>`) for the
+// same reason the canonical escaper does: an LLM parsing the markup plausibly
+// reads them as envelope boundaries.
 const UNTRUSTED_ENVELOPE_SPAN =
-  /(<untrusted-content source="[^"]*">[\s\S]*?<\/untrusted-content>)/u;
+  /(<untrusted-content source="[^"]*">[\s\S]*?<\/untrusted-content(?:\s[^>]*)?>)/u;
 
 const collapseAbsolutePaths = (text: string): string =>
   text.replace(
@@ -354,13 +360,6 @@ const getErrorCode = (error: unknown): string | undefined => {
     return typeof code === 'string' ? code : undefined;
   }
   return undefined;
-};
-
-const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-  return 'unknown error';
 };
 
 /**
@@ -595,7 +594,15 @@ const ensureBufferMatchesImageFormat = (
 ): void => {
   const signatures = IMAGE_FORMAT_SIGNATURES[extension];
   if (!signatures) {
-    return;
+    // Fail closed: an extension with no known signature must not skip
+    // validation silently (unreachable today — the extension comes from the
+    // fixed OUTPUT_FORMAT_EXTENSIONS map — but a silent skip here would turn
+    // any future map drift into an unvalidated write).
+    throw new OpenAIImageToolError(
+      'INVALID_IMAGE_DATA',
+      'Image data returned by the upstream image API uses an unrecognised format.',
+      'Try the request again with a simpler prompt.',
+    );
   }
 
   const matches = signatures.every(({ offset, bytes }) =>
@@ -700,7 +707,16 @@ export const saveImageToDisk = async (
         // through the swapped symlink, outside the fence.
         await ensureDirectoryUnchanged();
         await fs.promises.link(stagingFile, finalPath);
-        await ensureDirectoryUnchanged();
+        try {
+          await ensureDirectoryUnchanged();
+        } catch (postLinkError) {
+          // The post-link check detected a directory swap in the check→link
+          // instant, so the link landed outside the fence. Remove the escaped
+          // file we just created (best-effort) so the violation fails
+          // contained, not merely detected.
+          await fs.promises.unlink(finalPath).catch(() => undefined);
+          throw postLinkError;
+        }
       } catch (linkError) {
         if (
           linkError instanceof OpenAIImageToolError ||
@@ -716,7 +732,14 @@ export const saveImageToDisk = async (
         } finally {
           await destHandle.close().catch(() => undefined);
         }
-        await ensureDirectoryUnchanged();
+        try {
+          await ensureDirectoryUnchanged();
+        } catch (postWriteError) {
+          // Same containment as the post-link check above: the 'wx' create
+          // guarantees we own the file, so unlinking it is safe.
+          await fs.promises.unlink(finalPath).catch(() => undefined);
+          throw postWriteError;
+        }
       }
       return path.join(saveDir, filename);
     } finally {
@@ -776,7 +799,11 @@ const getWorkspacePathResolutionError = (
   if (code === 'ELOOP') {
     return `Workspace path contains a symbolic link loop: ${workspacePath}. Choose a working workspace path and try again.`;
   }
-  return `Failed to access workspace path: ${workspacePath} — ${getErrorMessage(error)}`;
+  // Never append the raw OS error message (same policy as
+  // getLocalImageReadError): Node's ErrnoException codes are safe uppercase
+  // identifiers, but the message text can embed un-enveloped path content.
+  const codeSuffix = code ? ` (error ${code})` : '';
+  return `Failed to access workspace path: ${workspacePath}${codeSuffix}`;
 };
 
 const getLocalImageReadError = (
@@ -1913,6 +1940,12 @@ export const isLoopbackHost = (host?: string): boolean => {
   );
 };
 
+// Request bodies are JSON-RPC envelopes carrying paths and prompts, never
+// image bytes — a few MB is generous. Without a cap, any loopback client
+// passing isLoopbackHost could OOM the process with a multi-gigabyte body
+// (the buffer accumulates before SDK validation runs).
+const MAX_HTTP_BODY_BYTES = 4 * 1024 * 1024;
+
 export const readJsonBody = async (
   req: http.IncomingMessage,
 ): Promise<unknown> => {
@@ -1921,8 +1954,19 @@ export const readJsonBody = async (
   }
 
   const chunks: Buffer[] = [];
+  let totalBytes = 0;
   for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buffer.length;
+    if (totalBytes > MAX_HTTP_BODY_BYTES) {
+      req.destroy();
+      throw new OpenAIImageToolError(
+        'INVALID_INPUT',
+        'Request body too large.',
+        'Send a smaller request body.',
+      );
+    }
+    chunks.push(buffer);
   }
 
   if (chunks.length === 0) {
@@ -2004,12 +2048,22 @@ const main = async (): Promise<void> => {
 
   const httpPort = process.env.MCP_HTTP_PORT;
   if (httpPort) {
-    const parsedPort = parseInt(httpPort, 10);
-    if (!Number.isFinite(parsedPort) || parsedPort <= 0) {
+    // Strict whole-string integer parsing (same pattern as
+    // OPENAI_IMAGE_REQUEST_TIMEOUT_MS): parseInt would silently truncate
+    // values like '8080abc', and a TCP port must fit 1..65535.
+    const trimmedPort = httpPort.trim();
+    const parsedPort = /^\d+$/u.test(trimmedPort)
+      ? Number(trimmedPort)
+      : Number.NaN;
+    if (
+      !Number.isSafeInteger(parsedPort) ||
+      parsedPort < 1 ||
+      parsedPort > 65535
+    ) {
       throw new OpenAIImageToolError(
         'NETWORK_ERROR',
         `Invalid MCP_HTTP_PORT: ${sanitizeUserFacingText(httpPort)}`,
-        'Set MCP_HTTP_PORT to a valid positive integer.',
+        'Set MCP_HTTP_PORT to a whole-number TCP port (1-65535).',
       );
     }
     await startHttpMode(parsedPort);

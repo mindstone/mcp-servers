@@ -11,6 +11,8 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - All 66 handler-level error returns across the tool set now set `isError: true` (previously only the factory catch path flagged errors), so clients can reliably distinguish error results from successful text.
 - `package.json` `author` now reads `Mindstone <support@mindstone.ai>`, matching the maintained-fork Provenance section in the README.
 
+- Re-synced the vendored `<untrusted-content>` envelope helper with the canonical hardened reference: attribute-bearing close-tag variants (`</untrusted-content foo>`) and spoofed open tags inside wrapped content are now escaped, closing an envelope-breakout gap an LLM parser could read as an envelope boundary.
+
 ## [0.1.0] - 2026-08-08
 
 ### Changed

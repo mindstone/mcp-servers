@@ -19,27 +19,49 @@
  * file (and the call sites that import from it) is what satisfies that gate.
  */
 
-const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content\s*>/gi;
+const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content(?:\s[^>]*)?>/gi;
 const ESCAPED_UNTRUSTED_CLOSE_TAG = '<\\/untrusted-content>';
+const UNTRUSTED_OPEN_TAG_VARIANT = /<untrusted-content(?:\s[^>]*)?>/gi;
+const ESCAPED_UNTRUSTED_OPEN_TAG = '<\\untrusted-content>';
 const UNTRUSTED_ENVELOPE = /^<untrusted-content source="[^"]*">([\s\S]*)<\/untrusted-content>$/;
 
 function escapeAttr(s: string): string {
   return s.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
-function escapeCloseTagSentinels(s: string): string {
-  return s.replace(UNTRUSTED_CLOSE_TAG_VARIANT, ESCAPED_UNTRUSTED_CLOSE_TAG);
+/**
+ * Rewrite every `</untrusted-content>` and `<untrusted-content …>` variant
+ * (case-insensitive, optional whitespace / attributes before `>`) inside `s`
+ * to a benign textual form, so an attacker who controls the wrapped content
+ * can neither terminate the envelope early nor spoof a nested open tag that a
+ * downstream parser could re-read as a fresh envelope. An LLM parsing the
+ * markup plausibly accepts attribute-bearing close forms such as
+ * `</untrusted-content foo>` — the matcher must cover them too.
+ */
+function escapeTagSentinels(s: string): string {
+  return s
+    .replace(UNTRUSTED_OPEN_TAG_VARIANT, ESCAPED_UNTRUSTED_OPEN_TAG)
+    .replace(UNTRUSTED_CLOSE_TAG_VARIANT, ESCAPED_UNTRUSTED_CLOSE_TAG);
 }
 
-function unescapeCloseTagSentinels(s: string): string {
-  return s.replaceAll(ESCAPED_UNTRUSTED_CLOSE_TAG, '</untrusted-content>');
+function unescapeTagSentinels(s: string): string {
+  return s
+    .replaceAll(ESCAPED_UNTRUSTED_OPEN_TAG, '<untrusted-content>')
+    .replaceAll(ESCAPED_UNTRUSTED_CLOSE_TAG, '</untrusted-content>');
 }
 
 /**
  * Wrap a single untrusted string in an `<untrusted-content source="…">`
- * envelope, escaping any embedded close-tag variant so the envelope cannot be
- * broken out of. `undefined` passes through untouched. Idempotent for the same
- * `source`.
+ * envelope, escaping any embedded open/close-tag variant so the envelope can
+ * neither be broken out of nor have a spoofed nested envelope planted inside.
+ *
+ * `undefined` and `null` are passed through untouched so callers can apply the wrapper
+ * uniformly to optional fields without branching.
+ *
+ * Idempotent: when `text` is already a properly-shaped envelope for the SAME
+ * `source` (starts with the matching OPEN tag, ends with CLOSE, and contains no
+ * internal open/close-tag variants), the original string is returned unchanged so
+ * `wrapUntrusted(wrapUntrusted(s, src), src) === wrapUntrusted(s, src)`.
  */
 export function wrapUntrusted(text: string | null | undefined, source: string): string | undefined {
   if (text === undefined || text === null) return undefined;
@@ -47,13 +69,15 @@ export function wrapUntrusted(text: string | null | undefined, source: string): 
   const close = '</untrusted-content>';
   if (text.startsWith(open) && text.endsWith(close) && text.length >= open.length + close.length) {
     const inner = text.slice(open.length, text.length - close.length);
-    if (!UNTRUSTED_CLOSE_TAG_VARIANT.test(inner)) {
-      UNTRUSTED_CLOSE_TAG_VARIANT.lastIndex = 0;
+    const hasVariant =
+      UNTRUSTED_CLOSE_TAG_VARIANT.test(inner) || UNTRUSTED_OPEN_TAG_VARIANT.test(inner);
+    UNTRUSTED_CLOSE_TAG_VARIANT.lastIndex = 0; // reset stateful /g regexes
+    UNTRUSTED_OPEN_TAG_VARIANT.lastIndex = 0;
+    if (!hasVariant) {
       return text;
     }
-    UNTRUSTED_CLOSE_TAG_VARIANT.lastIndex = 0;
   }
-  return `${open}${escapeCloseTagSentinels(text)}${close}`;
+  return `${open}${escapeTagSentinels(text)}${close}`;
 }
 
 /**
@@ -65,12 +89,16 @@ export function wrapUntrusted(text: string | null | undefined, source: string): 
 export function unwrapUntrusted(text: string): string {
   const match = UNTRUSTED_ENVELOPE.exec(text);
   if (!match) return text;
-  return unescapeCloseTagSentinels(match[1]);
+  return unescapeTagSentinels(match[1]);
 }
 
 /**
- * Recursively wrap every string key and value reachable inside `value`.
- * Non-string leaves pass through unchanged.
+ * Recursively wrap every string key and value reachable inside `value` (strings,
+ * arrays, plain-object property keys and values) in an `<untrusted-content>` envelope.
+ *
+ * Use this when a whole response blob is third-party data and you want to
+ * envelope it wholesale rather than enumerate fields. Non-string leaves (numbers,
+ * booleans, null) pass through unchanged.
  */
 export function wrapUntrustedJsonStrings<T>(value: T, source: string): T {
   if (typeof value === 'string') {

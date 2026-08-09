@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Fixed
 
 - `get_sites_delta` now validates the path of a caller-supplied `deltaLink`, not just the host: only the Graph `/sites/delta` endpoint (v1.0 or beta) is accepted. Previously any absolute Microsoft Graph URL passed the host check, which allowed arbitrary Graph GET requests within the token's scope set.
+- Re-synced the vendored `<untrusted-content>` envelope helper with the canonical hardened reference: attribute-bearing close-tag variants (`</untrusted-content foo>`) and spoofed open tags inside wrapped content are now escaped, closing an envelope-breakout gap an LLM parser could read as an envelope boundary.
 
 ## [0.2.0] - 2026-08-07
 

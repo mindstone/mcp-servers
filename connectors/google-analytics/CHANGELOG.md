@@ -15,6 +15,8 @@ are maintained manually as part of the PR review checklist.
 - Setup docs no longer recommend the over-broad `cloud-platform` scope when minting ADC — the connector only needs `analytics.readonly`, so the full-GCP scope is dropped from the `gcloud` command shown in the README and error resolutions.
 - Server stderr logging no longer dumps full error objects: unexpected API errors and fatal startup errors are logged as bounded `name: message` strings, so OAuth token-refresh failures can't write `refresh_token`/`client_secret` request config to logs.
 
+- Re-synced the vendored `<untrusted-content>` envelope helper with the canonical hardened reference: attribute-bearing close-tag variants (`</untrusted-content foo>`) and spoofed open tags inside wrapped content are now escaped, closing an envelope-breakout gap an LLM parser could read as an envelope boundary.
+
 ## [0.2.0] - 2026-08-08
 
 ### Changed

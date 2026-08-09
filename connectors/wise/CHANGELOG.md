@@ -7,6 +7,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- Re-synced the vendored `<untrusted-content>` envelope helper with the canonical hardened reference: attribute-bearing close-tag variants (`</untrusted-content foo>`) and spoofed open tags inside wrapped content are now escaped, closing an envelope-breakout gap an LLM parser could read as an envelope boundary.
+
 ### Changed
 - **Money-movement gate removed.** `create_wise_transfer`, `fund_wise_transfer`, and `cancel_wise_transfer` now run by default; the `WISE_ALLOW_MONEY_MOVEMENT` environment variable is gone. The tools still declare `destructiveHint: true`, so invocation gating is left to the host's tool-approval layer (capability-first product decision).
 

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Envelope helper hardened (F-3): re-synced the vendored `<untrusted-content>` helper with the canonical reference — attribute-bearing close-tag variants (`</untrusted-content foo>`) and spoofed open tags inside wrapped content are now escaped, and the envelope-span matcher used by the output sanitizer accepts the same attribute-bearing close forms.
+- Escaped-file remediation (F-4): when the post-link (or post-fallback-write) directory re-verification detects a swap that landed the generated file outside the workspace fence, the file is now unlinked best-effort before the fence violation is rethrown — the violation fails contained, not merely detected.
+- Workspace-path resolution errors no longer embed raw OS error text (F-5); the fallback reports the uppercase errno code only, matching the read-error policy.
+- The HTTP transport's request-body reader is bounded at 4 MB per request (F-6); over-limit bodies are rejected and the request destroyed instead of being buffered without limit.
+- Latent fail-opens closed (F-7): the envelope-echo helper fails closed (emits nothing) if wrapping ever declines, and the magic-byte validator throws `INVALID_IMAGE_DATA` for an unrecognised extension instead of silently skipping validation (both unreachable today).
+- `MCP_HTTP_PORT` parsing is strict (F-8): whole-string digits only, bounded to 1-65535, failing fast on values like `8080abc` that `parseInt` previously truncated.
+
 ## [0.3.1] - 2026-08-08
 
 ### Changed

@@ -304,6 +304,71 @@ describe('generated-image output write race', () => {
     }
   });
 
+  it('unlinks the escaped file when the link itself lands outside the fence', async () => {
+    const workspace = await makeTempDir('link-escape-ws');
+    const outside = await makeTempDir('link-escape-outside');
+    const outsideGenerated = path.join(outside, 'generated-images');
+    await fsp.mkdir(outsideGenerated, { recursive: true });
+
+    const connector = await importConnectorModule({
+      MCP_WORKSPACE_PATH: workspace,
+      OPENAI_API_KEY: 'sk-test-Acme-link-escape',
+    });
+    mockOpenAIImageResponses();
+
+    // The single-syscall variant of the race: link(2) resolves the staging
+    // source, the directory is swapped for a symlink before the destination
+    // resolves, and the link lands OUTSIDE the fence. The post-link identity
+    // re-check detects it — and must also remove the escaped file, not leave
+    // it behind (fails contained, not merely detected).
+    const chiefOfStaffDir = path.join(workspace, 'Chief-of-Staff');
+    const realLink = fs.promises.link.bind(fs.promises);
+    let swapped = false;
+    vi.spyOn(fs.promises, 'link').mockImplementation((async (
+      existingPath: fs.PathLike,
+      newPath: fs.PathLike,
+    ) => {
+      if (!swapped) {
+        swapped = true;
+        const stagingDirName = path.basename(path.dirname(existingPath.toString()));
+        const fileName = path.basename(existingPath.toString());
+        const realStagingFile = path.join(
+          `${chiefOfStaffDir}-original`,
+          'generated-images',
+          stagingDirName,
+          fileName,
+        );
+        await fsp.rename(chiefOfStaffDir, `${chiefOfStaffDir}-original`);
+        await fsp.symlink(outside, chiefOfStaffDir);
+        // Mirror the staging file through the swapped symlink so the link's
+        // source still resolves (as it would when the kernel resolved the
+        // source before the swap).
+        await fsp.mkdir(path.join(outsideGenerated, stagingDirName), { recursive: true });
+        await fsp.rename(realStagingFile, path.join(outsideGenerated, stagingDirName, fileName));
+      }
+      await realLink(existingPath, newPath);
+    }) as typeof fs.promises.link);
+
+    const pair = await createInMemoryClientPair(connector.createServer());
+    try {
+      const result = (await pair.client.callTool({
+        name: 'generate_image',
+        arguments: { prompt: 'Acme link escape probe', quality: 'medium' },
+      })) as CallToolResult;
+
+      expect(result.isError).toBe(true);
+      const payload = extractToolPayload(result);
+      expect(payload.code).toBe('WORKSPACE_FENCE_VIOLATION');
+      expect(payload.error).toContain('changed while the image was being saved');
+
+      // The escaped file must have been remediated — with the pre-fix code
+      // it survived at outsideGenerated/<filename>.
+      expect(await fsp.readdir(outsideGenerated)).toHaveLength(0);
+    } finally {
+      await pair.close();
+    }
+  });
+
   it('writes through the exclusive-create fallback when hard links are unsupported', async () => {
     const workspace = await makeTempDir('fallback-stable-ws');
     const connector = await importConnectorModule({

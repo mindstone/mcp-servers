@@ -16,6 +16,8 @@ are maintained manually as part of the PR review checklist.
 - A failed temp-input write no longer raises a spurious "input may be at rest" cleanup warning: the `finally` unlink treats ENOENT as benign only when the write never created the file (nothing is at rest). A temp file that vanishes after a successful write still warns, since it may have been moved rather than deleted.
 - `apple_shortcuts_run` and `apple_shortcuts_view` now insert a `--` end-of-options separator before the shortcut name on the `shortcuts` CLI argv (after all options, immediately before the name), so a name beginning with `-` can never be reinterpreted as a flag.
 
+- Re-synced the vendored `<untrusted-content>` envelope helper with the canonical hardened reference: attribute-bearing close-tag variants (`</untrusted-content foo>`) and spoofed open tags inside wrapped content are now escaped, closing an envelope-breakout gap an LLM parser could read as an envelope boundary.
+
 ## [0.2.0] - 2026-08-07
 
 ### Changed
