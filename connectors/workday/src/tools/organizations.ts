@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { ORG_LIST_FIELDS, LOCATION_FIELDS, NESTED_OBJECT_FIELDS, paginationLimitSchema, paginationOffsetSchema, pickFields, paginationHint } from '../types.js';
+import { ORG_LIST_FIELDS, LOCATION_FIELDS, NESTED_OBJECT_FIELDS, paginationLimitSchema, paginationOffsetSchema, pickFields, paginationHint, sanitizeVendorTotal } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
 import { workdayFetch } from '../client.js';
@@ -59,7 +59,7 @@ RELATED TOOLS:
       );
 
       const organizations = (result.data || []).map((o) => pickFields(o, ORG_LIST_FIELDS));
-      const total = result.total ?? organizations.length;
+      const total = sanitizeVendorTotal(result.total, organizations.length);
       const hint = paginationHint(total, offset, organizations.length);
 
       return JSON.stringify({ ok: true, organizations, count: organizations.length, total, pagination: hint });
@@ -109,7 +109,7 @@ RELATED TOOLS:
         }
         return filtered;
       });
-      const total = result.total ?? locations.length;
+      const total = sanitizeVendorTotal(result.total, locations.length);
       const hint = paginationHint(total, offset, locations.length);
 
       return JSON.stringify({ ok: true, locations, count: locations.length, total, pagination: hint });

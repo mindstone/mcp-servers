@@ -13,6 +13,7 @@ import {
   paginationOffsetSchema,
   pickFields,
   paginationHint,
+  sanitizeVendorTotal,
 } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
@@ -76,7 +77,7 @@ RELATED TOOLS:
         }
         return filtered;
       });
-      const total = result.total ?? entries.length;
+      const total = sanitizeVendorTotal(result.total, entries.length);
       const hint = paginationHint(total, offset, entries.length);
 
       return JSON.stringify({ ok: true, time_off: entries, count: entries.length, total, pagination: hint });

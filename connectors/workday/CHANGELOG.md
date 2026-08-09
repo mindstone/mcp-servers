@@ -11,6 +11,13 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+- **pagination**: vendor-reported `total` is now shape-validated (non-negative integer) before use — a malformed or out-of-range value falls back to the page length instead of being interpolated raw into the pagination hint or corrupting the search scan-exhaustion check.
+- **untrusted content**: `href` no longer stays raw in `pickFields` — no registered tool accepts an href/URL argument, so the round-trip rationale only covers `id`; hrefs are now enveloped like every other vendor-controlled string.
+- **rate limiting**: the `Retry-After` retry wait is now capped at the same 8s ceiling as the exponential-backoff branch, and garbage/negative values fall back to the ceiling — a hostile or buggy endpoint can no longer hold a tool call for hours or trigger an immediate retry storm.
+- **configuration**: the tenant name is now validated against the tenant-name charset (`letters, digits, "_", "-"`) both at `configure_workday_credentials` and when loading `WORKDAY_TENANT` from env — it is interpolated into URL paths, so URL metacharacters are refused instead of passed through.
+- **SSRF hardening**: the IPv6 non-public deny list now also refuses transition prefixes that embed an IPv4 address — NAT64 `64:ff9b::/96`, 6to4 `2002::/16`, IPv4-translated SIIT `::ffff:0:0/96`, Teredo `2001::/32`, discard-only `100::/64`, and IPv4-compatible `::/96` spellings — closing a bypass where a v4 literal in one of these forms fell through to "allowed".
+
 ## [0.3.0] - 2026-08-07
 
 ### Changed
@@ -31,7 +38,7 @@ are maintained manually as part of the PR review checklist.
 ### Security
 - **untrusted content**: object keys inside vendor-shaped response values are now enveloped too. The vendored `wrapUntrustedJsonStrings` matched the canonical helper for values but left keys raw, so a hostile tenant returning a normally-scalar field as an object (e.g. `{"descriptor": {"</untrusted-content>…": 1}}`) could smuggle unenveloped text — including a live close-tag breakout — through a key. Keys are now wrapped recursively, matching the shared reference helper.
 - **SSRF hardening**: host validation now also rejects an explicit scheme-default port (`host:443`) — WHATWG URL parsing normalizes it away, so the previous port check could not see it.
-- **bridge**: the host-bridge response body is now shape-validated (Zod) — a malformed or non-JSON bridge response fails closed with a connector-authored message — and bridge-authored `error`/`warning` strings are wrapped in `<untrusted-content source="workday-bridge">` envelopes before reaching model-visible output, closing the last non-connector-authored text surface in tool results.
+- **bridge**: the host-bridge response body is now shape-validated (Zod) — a malformed or non-JSON bridge response fails closed with a connector-authored message — and bridge-authored `error`/`warning` strings are wrapped in `<untrusted-content source="workday-bridge">` envelopes before reaching model-visible output.
 - **token handling**: OAuth token responses are now validated (Zod) before caching — a malformed body or an out-of-bounds `expires_in` (accepted range 60s-24h) is refused with a bounded error instead of pinning the cached token open or crashing on a missing `access_token`. Applies to both the token exchange and `configure_workday_credentials`.
 - **untrusted content**: the envelope decision in `pickFields` is now a deny-list instead of a field-name allowlist — every string in an allowlisted value (including structured strings like dates and values the vendor returns in an unexpected shape, e.g. an array or object where a scalar was expected) is wrapped in `<untrusted-content source="workday">`, recursively. Only the identity fields `id`/`href` stay raw, so adding a field to an allowlist can never silently create an unenveloped text surface.
 - **untrusted content**: Workday-authored text fields (descriptors, titles, emails, statuses, nested reference descriptors) and the echoed search query are now wrapped in `<untrusted-content source="workday">` envelopes with close-tag breakout escaping, so a Workday user who controls such a field cannot inject model instructions into tool output. Identity fields (`id`, `href`) stay raw so the model can round-trip them into later tool calls.

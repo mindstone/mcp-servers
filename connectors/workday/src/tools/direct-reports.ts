@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { WORKER_LIST_FIELDS, workerIdSchema, paginationLimitSchema, paginationOffsetSchema, pickFields, paginationHint } from '../types.js';
+import { WORKER_LIST_FIELDS, workerIdSchema, paginationLimitSchema, paginationOffsetSchema, pickFields, paginationHint, sanitizeVendorTotal } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured } from '../auth.js';
 import { workdayFetch } from '../client.js';
@@ -58,7 +58,7 @@ RELATED TOOLS:
       );
 
       const reports = (result.data || []).map((w) => pickFields(w, WORKER_LIST_FIELDS));
-      const total = result.total ?? reports.length;
+      const total = sanitizeVendorTotal(result.total, reports.length);
       const hint = paginationHint(total, offset, reports.length);
 
       return JSON.stringify({ ok: true, direct_reports: reports, count: reports.length, total, pagination: hint });

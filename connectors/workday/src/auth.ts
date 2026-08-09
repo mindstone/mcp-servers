@@ -42,6 +42,11 @@ export function setHost(h: string): void {
   workdayHost = h;
 }
 
+// The tenant is interpolated raw into URL paths (token URL, API base URLs),
+// so confine it to the tenant-name charset — anything else could smuggle path
+// segments or URL metacharacters into credential-bearing requests.
+export const TENANT_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
+
 export function getTenant(): string {
   return workdayTenant;
 }
@@ -197,6 +202,23 @@ const privateIPv6Reason = (raw: string): string | null => {
   if (/^f[cd][0-9a-f]{0,2}:/.test(lower)) return 'IPv6 unique-local (fc00::/7)';
   if (/^2001:0*db8(?::|$)/.test(lower)) return 'IPv6 documentation range (2001:db8::/32)';
 
+  // IPv6 transition prefixes embed an IPv4 address in the low bits — a v4
+  // literal smuggled through one of these forms would bypass the IPv4 checks.
+  if (/^64:0*ff9b(?::|$)/.test(lower)) return 'NAT64 well-known prefix (64:ff9b::/96)';
+  if (/^2002:/.test(lower)) return '6to4 transition prefix (2002::/16)';
+  if (/^100::/.test(lower)) return 'IPv6 discard-only prefix (100::/64)';
+  // IPv4-translated SIIT (::ffff:0:0/96, RFC 2765) — three groups after
+  // ::ffff:, so the mapped forms above don't see it. Teredo (2001::/32)
+  // embeds the server IPv4 raw; both mechanisms are defunct, so deny flatly.
+  if (/^::ffff:0(?::|$)/.test(lower)) return 'IPv4-translated IPv6 (::ffff:0:0/96)';
+  if (/^2001:0*:/.test(lower)) return 'Teredo tunneling prefix (2001::/32)';
+  // IPv4-compatible IPv6 (::/96, deprecated by RFC 4291) — `::`, `::1`, and
+  // the ::ffff: mapped forms are already handled above; deny the rest
+  // (dotted and hex spellings alike — WHATWG URL normalizes `::127.0.0.1`
+  // to `::7f00:1`).
+  if (/^::(?:[0-9a-f]{1,4}:)?[0-9a-f]{1,4}$/.test(lower)) return 'IPv4-compatible IPv6 (::/96)';
+  if (/^::\d{1,3}(?:\.\d{1,3}){3}$/.test(lower)) return 'IPv4-compatible IPv6 (::/96)';
+
   return null;
 };
 
@@ -335,6 +357,14 @@ export async function assertHostResolvesPublic(host: string): Promise<void> {
       );
     }
   }
+}
+
+// Validate WORKDAY_TENANT from env at startup — it is interpolated raw into
+// URL paths, so refuse anything outside the tenant-name charset (mirrors the
+// WORKDAY_HOST validation below).
+if (workdayTenant && !TENANT_NAME_PATTERN.test(workdayTenant)) {
+  console.error('[Workday] Ignoring invalid WORKDAY_TENANT from env (letters, digits, "_" and "-" only).');
+  workdayTenant = '';
 }
 
 // Validate WORKDAY_HOST from env at startup — reject private/localhost hosts.

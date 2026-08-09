@@ -98,10 +98,11 @@ export const paginationOffsetSchema = z.number().int().min(0).max(1_000_000);
 // leaked — adding a field to an allowlist can never silently create a raw
 // text surface.
 //
-// Identity fields (`id`, `href`) stay raw by design — the model round-trips
-// them back into subsequent tool calls as path parameters, so enveloping them
-// would corrupt tool chaining.
-const RAW_IDENTITY_FIELDS: ReadonlySet<string> = new Set(['id', 'href']);
+// The identity field (`id`) stays raw by design — the model round-trips it
+// back into subsequent tool calls as a path parameter, so enveloping it would
+// corrupt tool chaining. `href` is NOT raw: no registered tool accepts an
+// href/URL argument, so there is no round-trip rationale for exempting it.
+const RAW_IDENTITY_FIELDS: ReadonlySet<string> = new Set(['id']);
 
 export function pickFields<T extends readonly string[]>(
   obj: Record<string, unknown>,
@@ -120,6 +121,23 @@ export function pickFields<T extends readonly string[]>(
 }
 
 // ── Pagination helper ──
+
+// Vendor-reported `total` is vendor-controlled data like any other response
+// field: a non-numeric, fractional, or negative value would be interpolated
+// raw into `paginationHint` output (or corrupt the search scan-exhaustion
+// check). Validate the shape and fall back to the page length when it is
+// missing or malformed. The max keeps absurd integer-valued floats (1e21 is
+// an "integer" to Number.isInteger) out of the hint.
+const vendorTotalSchema = z.number().int().nonnegative().max(1_000_000_000);
+
+export function parseVendorTotal(rawTotal: unknown): number | null {
+  const parsed = vendorTotalSchema.safeParse(rawTotal);
+  return parsed.success ? parsed.data : null;
+}
+
+export function sanitizeVendorTotal(rawTotal: unknown, pageLength: number): number {
+  return parseVendorTotal(rawTotal) ?? pageLength;
+}
 
 export function paginationHint(total: number, offset: number, count: number): string {
   if (count >= total) return `Showing all ${total} results.`;

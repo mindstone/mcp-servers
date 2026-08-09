@@ -13,6 +13,7 @@ import {
   validateHost,
   assertHostResolvesPublic,
   parseTokenResponse,
+  TENANT_NAME_PATTERN,
   setHost,
   setTenant,
   setClientId,
@@ -64,6 +65,12 @@ COMMON MISTAKES:
 
       if (!rawHost || !tenant || !cid || !csecret) {
         return JSON.stringify({ ok: false, error: 'host, tenant, client_id, and client_secret are all required.' });
+      }
+
+      // The tenant is interpolated raw into URL paths below and in auth.ts —
+      // confine it to the tenant-name charset before any request is built.
+      if (!TENANT_NAME_PATTERN.test(tenant)) {
+        return JSON.stringify({ ok: false, error: 'tenant must contain only letters, digits, underscores, and hyphens.' });
       }
 
       // Normalize and validate host (SSRF prevention)

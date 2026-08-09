@@ -46,6 +46,16 @@ describe('non-canonical / disguised host rejection', () => {
     // Bare ::1 is not even a valid URL host — refused as a syntax error.
     { host: '::1', label: 'bare IPv6 loopback (::1)', message: null },
     { host: '[::ffff:127.0.0.1]', label: 'IPv4-mapped IPv6 loopback', message: 'localhost or a private IP' },
+    // IPv6 transition prefixes embedding an IPv4 address — these used to fall
+    // through to "allowed", bypassing the IPv4 checks entirely.
+    { host: '[64:ff9b::7f00:1]', label: 'NAT64 loopback (64:ff9b::7f00:1)', message: 'localhost or a private IP' },
+    { host: '[64:ff9b::a9fe:a9fe]', label: 'NAT64 IMDS (64:ff9b::a9fe:a9fe)', message: 'localhost or a private IP' },
+    { host: '[2002:a9fe:a9fe::]', label: '6to4 IMDS (2002:a9fe:a9fe::)', message: 'localhost or a private IP' },
+    { host: '[::ffff:0:7f00:1]', label: 'IPv4-translated SIIT loopback (::ffff:0:7f00:1)', message: 'localhost or a private IP' },
+    { host: '[2001:0:4136:e378:8000:63bf:3fff:fdd2]', label: 'Teredo tunneling (2001::/32)', message: 'localhost or a private IP' },
+    { host: '[2001::1]', label: 'Teredo compressed form (2001::1)', message: 'localhost or a private IP' },
+    { host: '[::127.0.0.1]', label: 'IPv4-compatible IPv6 loopback (::127.0.0.1)', message: 'localhost or a private IP' },
+    { host: '[100::1]', label: 'IPv6 discard-only (100::1)', message: 'localhost or a private IP' },
     { host: '0.0.0.0', label: 'unspecified (0.0.0.0)', message: 'localhost or a private IP' },
     { host: '100.64.0.1', label: 'CGNAT shared range (100.64.0.0/10)', message: 'localhost or a private IP' },
     { host: 'localhost.localdomain', label: 'localhost.localdomain', message: 'localhost or a private IP' },
@@ -185,6 +195,40 @@ describe('DNS re-resolution guard', () => {
     testClient = await createTestClient({ env: CONFIGURED_ENV });
     const { setDnsLookupForTesting } = await import('../../src/auth.js');
     setDnsLookupForTesting(async () => [{ address: '::1', family: 6 }]);
+
+    const result = await testClient.callTool('list_workday_workers', {});
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('HOST_NOT_PUBLIC');
+  });
+
+  it('refuses a hostname that resolves to a NAT64 address embedding a private IPv4', async () => {
+    let tokenRequestCount = 0;
+    mswServer.use(
+      http.post(TOKEN_URL, async () => {
+        tokenRequestCount++;
+        return HttpResponse.json(createTokenResponse());
+      }),
+    );
+
+    testClient = await createTestClient({ env: CONFIGURED_ENV });
+    const { setDnsLookupForTesting } = await import('../../src/auth.js');
+    setDnsLookupForTesting(async () => [{ address: '64:ff9b::7f00:1', family: 6 }]);
+
+    const result = await testClient.callTool('list_workday_workers', {});
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(false);
+    expect(json.code).toBe('HOST_NOT_PUBLIC');
+    expect(tokenRequestCount).toBe(0);
+    expect(result.text).not.toContain('64:ff9b::7f00:1');
+  });
+
+  it('refuses a hostname that resolves to a dotted IPv4-compatible IPv6 address (DNS-path spelling)', async () => {
+    testClient = await createTestClient({ env: CONFIGURED_ENV });
+    const { setDnsLookupForTesting } = await import('../../src/auth.js');
+    // inet_ntop prints v4-compatible addresses dotted; the URL-path tests only
+    // ever exercise the hex spelling after WHATWG normalization.
+    setDnsLookupForTesting(async () => [{ address: '::169.254.169.254', family: 6 }]);
 
     const result = await testClient.callTool('list_workday_workers', {});
     const json = result.json as Record<string, unknown>;

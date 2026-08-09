@@ -85,8 +85,13 @@ export async function workdayFetch<T>(
     // Handle 429 with exponential backoff (max 3 retries)
     if (response.status === 429 && retryCount < 3) {
       const retryAfter = response.headers.get('Retry-After');
+      // Retry-After is vendor/proxy-controlled: cap the wait at the same 8s
+      // ceiling as the backoff branch so a huge value cannot hold the tool
+      // call for hours, and treat garbage/negative values as the ceiling
+      // instead of firing immediately.
+      const retryAfterSecs = retryAfter ? parseInt(retryAfter, 10) : NaN;
       const waitMs = retryAfter
-        ? parseInt(retryAfter, 10) * 1000
+        ? Math.min(Number.isFinite(retryAfterSecs) && retryAfterSecs >= 0 ? retryAfterSecs * 1000 : 8000, 8000)
         : Math.min(1000 * Math.pow(2, retryCount), 8000);
       await new Promise((resolve) => setTimeout(resolve, waitMs));
       return workdayFetch<T>(resourcePath, options, retryCount + 1, serviceFamily);

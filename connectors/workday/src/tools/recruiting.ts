@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { JOB_REQUISITION_FIELDS, NESTED_OBJECT_FIELDS, paginationLimitSchema, paginationOffsetSchema, pickFields, paginationHint } from '../types.js';
+import { JOB_REQUISITION_FIELDS, NESTED_OBJECT_FIELDS, paginationLimitSchema, paginationOffsetSchema, pickFields, paginationHint, sanitizeVendorTotal } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 import { isConfigured, getRecruitingApiFamily } from '../auth.js';
 import { workdayFetch } from '../client.js';
@@ -75,7 +75,7 @@ RELATED TOOLS:
         }
         return filtered;
       });
-      const total = result.total ?? requisitions.length;
+      const total = sanitizeVendorTotal(result.total, requisitions.length);
       const hint = paginationHint(total, offset, requisitions.length);
 
       return JSON.stringify({ ok: true, job_requisitions: requisitions, count: requisitions.length, total, pagination: hint });

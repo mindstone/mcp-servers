@@ -130,6 +130,69 @@ describe('vendor error text sanitization', () => {
   });
 });
 
+describe('rate-limit retry handling', () => {
+  let testClient: McpTestClient;
+
+  afterEach(async () => {
+    if (testClient) await testClient.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('caps a vendor-controlled Retry-After at the 8s ceiling instead of holding the call', async () => {
+    let apiRequestCount = 0;
+    mswServer.use(
+      http.post(TOKEN_URL, async () => HttpResponse.json(createTokenResponse())),
+      http.get(`${API_BASE}/workers`, async () => {
+        apiRequestCount++;
+        if (apiRequestCount === 1) {
+          // ~27 hours uncapped — the retry must wait ~8s, not this.
+          return new HttpResponse(null, { status: 429, headers: { 'Retry-After': '100000' } });
+        }
+        return HttpResponse.json({ data: [], total: 0 });
+      }),
+    );
+
+    testClient = await createTestClient({ env: CONFIGURED_ENV });
+    const started = Date.now();
+    const result = await testClient.callTool('list_workday_workers', {});
+    const elapsed = Date.now() - started;
+
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(apiRequestCount).toBe(2);
+    // Bounded on both sides: capped near the 8s ceiling (not 100000s), but
+    // still a real wait (not an immediate retry storm).
+    expect(elapsed).toBeGreaterThan(7_500);
+    expect(elapsed).toBeLessThan(12_000);
+  });
+
+  it('treats a garbage Retry-After as the 8s ceiling instead of firing immediately', async () => {
+    let apiRequestCount = 0;
+    mswServer.use(
+      http.post(TOKEN_URL, async () => HttpResponse.json(createTokenResponse())),
+      http.get(`${API_BASE}/workers`, async () => {
+        apiRequestCount++;
+        if (apiRequestCount === 1) {
+          // parseInt('garbage') is NaN — uncapped, the wait collapsed to 0ms.
+          return new HttpResponse(null, { status: 429, headers: { 'Retry-After': 'garbage' } });
+        }
+        return HttpResponse.json({ data: [], total: 0 });
+      }),
+    );
+
+    testClient = await createTestClient({ env: CONFIGURED_ENV });
+    const started = Date.now();
+    const result = await testClient.callTool('list_workday_workers', {});
+    const elapsed = Date.now() - started;
+
+    const json = result.json as Record<string, unknown>;
+    expect(json.ok).toBe(true);
+    expect(apiRequestCount).toBe(2);
+    expect(elapsed).toBeGreaterThan(7_500);
+    expect(elapsed).toBeLessThan(12_000);
+  });
+});
+
 describe('redirect refusal', () => {
   let testClient: McpTestClient;
 

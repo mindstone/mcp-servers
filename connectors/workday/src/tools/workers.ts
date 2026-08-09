@@ -14,6 +14,8 @@ import {
   paginationOffsetSchema,
   pickFields,
   paginationHint,
+  parseVendorTotal,
+  sanitizeVendorTotal,
 } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { withErrorHandling } from '../utils.js';
@@ -66,7 +68,8 @@ async function searchWorkers(search: string, limit: number, offset: number): Pro
       if (workerMatchesSearch(worker, needle)) matched.push(worker);
     }
 
-    if (batch.length < SEARCH_PAGE_SIZE || (result.total != null && scanned >= result.total)) {
+    const reportedTotal = parseVendorTotal(result.total);
+    if (batch.length < SEARCH_PAGE_SIZE || (reportedTotal != null && scanned >= reportedTotal)) {
       exhausted = true;
       break;
     }
@@ -151,7 +154,7 @@ COMMON MISTAKES:
       );
 
       const workers = (result.data || []).map((w) => pickFields(w, WORKER_LIST_FIELDS));
-      const total = result.total ?? workers.length;
+      const total = sanitizeVendorTotal(result.total, workers.length);
       const hint = paginationHint(total, offset, workers.length);
 
       return JSON.stringify({ ok: true, workers, count: workers.length, total, pagination: hint });
