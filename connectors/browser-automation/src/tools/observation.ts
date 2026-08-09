@@ -129,7 +129,7 @@ Use this for reading and summarising page content — it returns clean text, unl
 The file is written inside the workspace directory (MCP_WORKSPACE_PATH, or the system temp directory when unset) — file_path must resolve inside that workspace. Existing files are refused unless overwrite is set to true.`,
       inputSchema: {
         file_path: z.string().min(1).describe('Target file path for the PDF. Relative paths resolve inside the workspace directory; absolute paths must be inside it (e.g., "reports/page.pdf").'),
-        overwrite: z.boolean().optional().default(false).describe('Replace an existing file at file_path. Default: false — existing files are refused.'),
+        overwrite: z.boolean().optional().default(false).describe('Replace an existing file at file_path. Default: false — existing files are refused. A directory at file_path is refused even with overwrite: true.'),
       },
       annotations: {
         readOnlyHint: false,

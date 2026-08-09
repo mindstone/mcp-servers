@@ -417,6 +417,29 @@ describe('browser_pdf', () => {
     expect(fs.readFileSync(dest, 'utf8')).toBe('pdf-bytes');
   });
 
+  it('refuses to overwrite a directory, surfacing DESTINATION_IS_DIRECTORY', async () => {
+    const destDir = path.join(workspace, 'page.pdf');
+    fs.mkdirSync(destDir);
+    fs.writeFileSync(path.join(destDir, 'keep.txt'), 'keep');
+
+    testClient = await createTestClient({
+      env: { AGENT_BROWSER_SHOW_WINDOW: 'false', MCP_WORKSPACE_PATH: workspace },
+    });
+
+    const result = await testClient.client.callTool({
+      name: 'browser_pdf',
+      arguments: { file_path: 'page.pdf', overwrite: true },
+    });
+    const parsed = parseResult(result);
+
+    // The overwrite delete must refuse a directory (raw ERR_FS_EISDIR
+    // mapped to a ConnectorError), not delete the tree or crash.
+    expect(parsed.ok).toBe(false);
+    expect(result.isError).toBe(true);
+    expect(parsed.code).toBe('DESTINATION_IS_DIRECTORY');
+    expect(fs.readFileSync(path.join(destDir, 'keep.txt'), 'utf8')).toBe('keep');
+  });
+
   it('refuses to install when the destination appears during the CLI call (race)', async () => {
     const dest = path.join(workspace, 'page.pdf');
 

@@ -196,18 +196,46 @@ function sanitiseBasename(p: string, fallback: string): string {
 }
 
 /**
+ * A post-validation swap raced the upload source. Distinct from
+ * PATH_OUTSIDE_WORKSPACE: the path WAS inside the workspace at validation
+ * time, so retrying can succeed.
+ */
+function uploadSourceChangedError(inputPath: string): ConnectorError {
+  return new ConnectorError(
+    `file_path changed while it was being validated: ${inputPath}`,
+    'UPLOAD_SOURCE_CHANGED',
+    'Retry the call, or pass a path to a regular file inside the workspace directory.',
+  );
+}
+
+/**
  * Stage one `browser_upload` source into `stagingDir` and return the path
  * the CLI should consume.
  *
  * The source is validated inside the workspace root, then opened EXACTLY
- * ONCE and fstat-verified through that fd to be a regular file —
- * directories, FIFOs, sockets, and devices pass realpathSync but must not
- * become upload payloads. The content is streamed through the same fd into
- * a private staging slot carrying over only the requested basename, so the
+ * ONCE with O_NOFOLLOW — a leaf swapped for a symlink between validation
+ * and open fails with ELOOP instead of being followed outside the
+ * workspace — and O_NONBLOCK, so a planted FIFO cannot wedge the connector
+ * by blocking the open until a writer appears. The fd is fstat-verified to
+ * be a regular file (directories, FIFOs, sockets, and devices pass
+ * realpathSync but must not become upload payloads), then bound to a fresh
+ * confined resolution of the path by dev+inode — an intermediate directory
+ * (or, on platforms without O_NOFOLLOW, the leaf itself) swapped for a
+ * symlink after validation redirects the resolution to a different inode
+ * and is refused. The content is streamed through the same fd into a
+ * private staging slot carrying over only the requested basename, so the
  * CLI never re-opens the validated pathname and a post-validation swap of
  * the original cannot redirect the upload.
+ *
+ * `openFile` is injectable for adversarial tests only; production callers
+ * use the default `fs.openSync`.
  */
-export function stageUploadSource(inputPath: string, stagingDir: string, index: number): string {
+export function stageUploadSource(
+  inputPath: string,
+  stagingDir: string,
+  index: number,
+  openFile: typeof fs.openSync = fs.openSync,
+): string {
   const resolved = resolveWorkspaceReadPath(inputPath);
   if (!resolved.ok) {
     throw new ConnectorError(
@@ -221,7 +249,42 @@ export function stageUploadSource(inputPath: string, stagingDir: string, index: 
   fs.mkdirSync(slot, { mode: STAGING_DIR_MODE });
   const stagingPath = path.join(slot, sanitiseBasename(resolved.path, `upload-${index}`));
 
-  const inFd = fs.openSync(resolved.path, 'r');
+  // O_NOFOLLOW: resolved.path is canonical (no symlinks at validation
+  // time), so a symlink at the leaf here can only be a post-validation
+  // swap — refuse instead of following it outside the workspace.
+  // O_NONBLOCK: opening a FIFO O_RDONLY would otherwise block until a
+  // writer appears, letting a planted pipe wedge the connector; for
+  // regular files O_NONBLOCK is a no-op. (Either flag is undefined on
+  // platforms without it, where the composition degrades to a plain
+  // O_RDONLY — the dev+inode re-resolution below still refuses a swap
+  // there.)
+  let inFd: number;
+  try {
+    inFd = openFile(
+      resolved.path,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
+    );
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      throw new ConnectorError(
+        `File not found: ${inputPath}`,
+        'PATH_OUTSIDE_WORKSPACE',
+        'Pass file paths inside the workspace directory (MCP_WORKSPACE_PATH, or the system temp directory when unset).',
+      );
+    }
+    if (
+      code === 'ELOOP' || code === 'EMLINK' || code === 'EFTYPE' ||
+      code === 'EISDIR' || code === 'EPERM' || code === 'EACCES'
+    ) {
+      // ELOOP/EMLINK/EFTYPE: the validated leaf was swapped for a symlink
+      // before we could open it (the O_NOFOLLOW errno varies by platform).
+      // EISDIR/EPERM/EACCES: swapped for a directory or an unreadable
+      // object. Either way, refuse rather than read.
+      throw uploadSourceChangedError(inputPath);
+    }
+    throw err;
+  }
   try {
     const stat = fs.fstatSync(inFd);
     if (!stat.isFile()) {
@@ -230,6 +293,24 @@ export function stageUploadSource(inputPath: string, stagingDir: string, index: 
         'NOT_A_REGULAR_FILE',
         'Pass a path to a regular file inside the workspace directory.',
       );
+    }
+    // An intermediate directory swapped for a symlink after validation
+    // could have redirected the open itself (O_NOFOLLOW constrains only
+    // the final component), so bind the descriptor to a fresh confined
+    // resolution: the path must still resolve inside the workspace to the
+    // SAME dev+inode we opened. Bytes are read through the fd below, so a
+    // swap landing after this check cannot change the uploaded content.
+    const recheck = resolveWorkspaceReadPath(inputPath);
+    let fresh: fs.Stats | undefined;
+    if (recheck.ok) {
+      try {
+        fresh = fs.statSync(recheck.path);
+      } catch {
+        fresh = undefined; // resolution failed — refuse below
+      }
+    }
+    if (!fresh || fresh.dev !== stat.dev || fresh.ino !== stat.ino) {
+      throw uploadSourceChangedError(inputPath);
     }
     const outFd = fs.openSync(stagingPath, 'wx', STAGING_FILE_MODE);
     try {
@@ -378,7 +459,29 @@ export function installStagedFile(target: PdfStagingTarget, overwrite: boolean):
   }
 
   if (overwrite) {
-    fs.rmSync(destPath, { force: true });
+    // unlinkSync, not rmSync: only a regular file or symlink may ever be
+    // removed here. unlink refuses directories atomically in the kernel
+    // (no lstat pre-check to race, as rmSync's ERR_FS_EISDIR path has) and
+    // can never recurse — deleting a directory tree as a PDF-overwrite
+    // side effect would be far worse than refusing.
+    try {
+      fs.unlinkSync(destPath);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'EISDIR' || code === 'EPERM') {
+        // EISDIR on Linux, EPERM on macOS: the destination is a directory.
+        throw new ConnectorError(
+          `Destination is a directory, not a file: ${destPath}`,
+          'DESTINATION_IS_DIRECTORY',
+          'Choose a file_path that does not collide with an existing directory.',
+        );
+      }
+      if (code !== 'ENOENT') {
+        throw err;
+      }
+      // ENOENT: nothing to overwrite — the exclusive-create below installs
+      // the staged file.
+    }
   }
   try {
     fs.copyFileSync(stagingPath, destPath, fs.constants.COPYFILE_EXCL);

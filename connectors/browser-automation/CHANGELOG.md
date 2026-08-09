@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+- `browser_upload` closes the swap window between path validation and open: the validated source is now opened once with `O_NOFOLLOW` (a post-validation leaf swap for a symlink fails instead of being followed outside the workspace) and `O_NONBLOCK` (a planted FIFO can no longer wedge the connector by blocking the open), and the opened descriptor is bound to a fresh confined resolution by device+inode, so an intermediate-directory or leaf swap after validation is refused with `UPLOAD_SOURCE_CHANGED` instead of staging a file outside the workspace.
+- `browser_pdf` with `overwrite: true` on a destination that is a directory now fails with `DESTINATION_IS_DIRECTORY` instead of a raw filesystem error; the overwrite delete is a bare `unlink`, which refuses directories atomically and can never recurse into a directory tree.
+
 ## [0.2.1] - 2026-08-08
 
 ### Changed
