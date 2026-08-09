@@ -10,7 +10,6 @@ import {
   getShared,
   listFiles,
   moveFile,
-  readTextFile,
   searchFiles,
   shareFile,
   uploadFile,
@@ -186,20 +185,35 @@ describe('Graph request signal propagation', () => {
     expect(builder.options).toHaveBeenCalledWith({ signal });
   });
 
-  it('readTextFile passes signal to GraphRequest.options on metadata and content fetches', async () => {
+  it('readTextFile passes signal to the metadata request and the bounded content download', async () => {
     const { client, builder } = createMockClient();
-    builder.get
-      .mockResolvedValueOnce({
-        id: 'text-1',
-        name: 'notes.txt',
-        size: 42,
-        file: { mimeType: 'text/plain' },
-      })
-      .mockResolvedValueOnce('hello world');
+    builder.get.mockResolvedValueOnce({
+      id: 'text-1',
+      name: 'notes.txt',
+      size: 42,
+      file: { mimeType: 'text/plain' },
+    });
     const signal = new AbortController().signal;
-    await readTextFile(client, { path: '/Documents/notes.txt' }, signal);
+
+    // The content download goes through the byte-capped raw-fetch helper
+    // (shared with read_document), not the Graph SDK client — stub the token
+    // provider and fetch, and assert the signal reaches both requests.
+    vi.doMock('../src/client.js', () => ({ getAccessToken: async () => 'mock-token' }));
+    vi.resetModules();
+    const fetchSpy = vi.fn(async () => new Response('hello world', { status: 200 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    try {
+      const { readTextFile: readTextFileWithMocks } = await import('../src/files.js');
+      await readTextFileWithMocks(client, { path: '/Documents/notes.txt' }, signal);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.doUnmock('../src/client.js');
+      vi.resetModules();
+    }
+
     expect(builder.options).toHaveBeenCalledWith({ signal });
-    expect(builder.options.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(fetchSpy.mock.calls[0][1]).toMatchObject({ signal });
   });
 });
 

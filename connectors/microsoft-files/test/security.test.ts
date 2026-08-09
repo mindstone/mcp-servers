@@ -482,6 +482,86 @@ describe('read_document download byte cap', () => {
   });
 });
 
+describe('read_text_file size guards', () => {
+  let client: McpTestClient;
+  let cfg: MicrosoftTestConfig;
+
+  beforeAll(async () => {
+    cfg = createMicrosoftConfigDir();
+    client = await createTestClient({
+      env: {
+        MS_CLIENT_ID: 'mock-client-id',
+        MS_CONFIG_DIR: cfg.configPath,
+      },
+    });
+  });
+
+  beforeEach(() => {
+    const mock = createMockApi();
+    mswServer.use(...mock.handlers);
+  });
+
+  afterAll(async () => {
+    if (client) await client.close();
+    if (cfg) cfg.cleanup();
+  });
+
+  const escapedBase = GRAPH_BASE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  it('fails closed when Graph omits the size from metadata', async () => {
+    mswServer.use(
+      http.get(new RegExp(`${escapedBase}/me/drive/items/item-nosize(\\?.*)?$`), () =>
+        HttpResponse.json({
+          id: 'item-nosize',
+          name: 'notes.txt',
+          file: { mimeType: 'text/plain' },
+        }),
+      ),
+    );
+    const result = await client.callTool('read_text_file', { path: 'item-nosize' });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('size is unknown');
+  });
+
+  it('rejects a body larger than maxSize even when metadata under-reports the size', async () => {
+    mswServer.use(
+      // Metadata claims a tiny 100-byte text file.
+      http.get(new RegExp(`${escapedBase}/me/drive/items/item-liar(\\?.*)?$`), () =>
+        HttpResponse.json({
+          id: 'item-liar',
+          name: 'notes.txt',
+          size: 100,
+          file: { mimeType: 'text/plain' },
+        }),
+      ),
+      // ...but the content endpoint streams 2MB (streamed body, no
+      // content-length — the streaming cap, not the header check, must trip).
+      http.get(new RegExp(`${escapedBase}/me/drive/items/item-liar/content(\\?.*)?$`), () =>
+        new HttpResponse(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new Uint8Array(1024 * 1024).fill(0x61));
+              controller.enqueue(new Uint8Array(1024 * 1024).fill(0x62));
+              controller.close();
+            },
+          }),
+          { headers: { 'Content-Type': 'text/plain' } },
+        ),
+      ),
+    );
+    const result = await client.callTool('read_text_file', {
+      path: 'item-liar',
+      maxSize: 1024 * 1024,
+    });
+    expect(result.isError).toBe(true);
+    const json = result.json as { ok: boolean; error: string };
+    expect(json.ok).toBe(false);
+    expect(json.error).toContain('exceeds the maximum size');
+  });
+});
+
 describe('list pagination', () => {
   let client: McpTestClient;
   let cfg: MicrosoftTestConfig;

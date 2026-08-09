@@ -798,9 +798,14 @@ export async function readTextFile(
     throw new FilesBusinessError('Cannot read folder contents as text', 'list_files');
   }
 
-  if (metadata.size > maxSize) {
+  // Graph can omit `size` on some items; an unknown size must fail CLOSED —
+  // the metadata check is advisory only and the bounded download below is the
+  // real ceiling, but silently accepting an unbounded fetch is not an option.
+  if (typeof metadata.size !== 'number' || metadata.size > maxSize) {
     throw new FilesBusinessError(
-      `File too large (${formatSize(metadata.size)}). Max size: ${formatSize(maxSize)}`,
+      typeof metadata.size === 'number'
+        ? `File too large (${formatSize(metadata.size)}). Max size: ${formatSize(maxSize)}`
+        : `File size is unknown. Max size: ${formatSize(maxSize)}`,
       'read_text_file',
     );
   }
@@ -820,17 +825,20 @@ export async function readTextFile(
     );
   }
 
-  const contentEndpoint = buildDriveItemEndpoint(args.path, '/content');
-  const content = await client.api(contentEndpoint).options({ signal }).get();
+  // Download through the same byte-capped helper read_document uses: the
+  // metadata pre-check above can be stale, so the body itself is bounded.
+  const bytes = await fetchDriveItemBytes(
+    buildDriveItemEndpoint(args.path, '/content'),
+    signal,
+    maxSize,
+    'download_file',
+  );
 
   return {
     name: wrapUntrusted(metadata.name, 'microsoft-files:read_text_file:name'),
     size: formatSize(metadata.size),
     mimeType,
-    content: wrapUntrusted(
-      typeof content === 'string' ? content : content.toString(),
-      'microsoft-files:read_text_file:content',
-    ),
+    content: wrapUntrusted(bytes.toString('utf8'), 'microsoft-files:read_text_file:content'),
   };
 }
 
@@ -1081,6 +1089,7 @@ async function fetchDriveItemBytes(
   endpoint: string,
   signal: AbortSignal,
   maxBytes: number,
+  nextStep = 'read_document',
 ): Promise<Buffer> {
   let url = `${GRAPH_BASE_URL}${endpoint}`;
   let token: string | undefined = await getAccessToken();
@@ -1099,13 +1108,13 @@ async function fetchDriveItemBytes(
       if (!location) {
         throw new FilesBusinessError(
           `Document download returned HTTP ${page.status} without a Location header.`,
-          'read_document',
+          nextStep,
         );
       }
       if (hops >= MAX_CONTENT_REDIRECT_HOPS) {
         throw new FilesBusinessError(
           'Document download exceeded the redirect limit.',
-          'read_document',
+          nextStep,
         );
       }
       // Resolve relative Locations, then revalidate against the vendor-host
@@ -1133,7 +1142,7 @@ async function fetchDriveItemBytes(
   if (declaredLength > maxBytes) {
     throw new FilesBusinessError(
       `File download exceeds the maximum size of ${formatSize(maxBytes)}.`,
-      'read_document',
+      nextStep,
     );
   }
   if (!response.body) {
@@ -1150,7 +1159,7 @@ async function fetchDriveItemBytes(
       await reader.cancel().catch(() => undefined);
       throw new FilesBusinessError(
         `File download exceeds the maximum size of ${formatSize(maxBytes)}.`,
-        'read_document',
+        nextStep,
       );
     }
     chunks.push(Buffer.from(value));
