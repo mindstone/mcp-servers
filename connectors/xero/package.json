@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-xero",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "mcpName": "io.github.mindstone/mcp-server-xero",
   "description": "Xero MCP server for invoices, contacts, payments, quotes, and financial reports",
   "license": "MIT",

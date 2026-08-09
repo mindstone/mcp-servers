@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-09
+
+### Changed
+
+- Flag all 66 handler error returns with isError across 61 tool files; align package author with the maintained-fork provenance.
+
 ### Fixed
 - All 66 handler-level error returns across the tool set now set `isError: true` (previously only the factory catch path flagged errors), so clients can reliably distinguish error results from successful text.
 - `package.json` `author` now reads `Mindstone <support@mindstone.ai>`, matching the maintained-fork Provenance section in the README.
