@@ -106,6 +106,7 @@ COMMON MISTAKES:
             text: `Error listing invoices: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

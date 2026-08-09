@@ -70,6 +70,7 @@ const UpdateContactTool = CreateXeroTool(
               text: `Error updating contact: ${response.error}`,
             },
           ],
+          isError: true,
         };
       }
 
@@ -100,6 +101,7 @@ const UpdateContactTool = CreateXeroTool(
             text: `Error updating contact: ${formatError(error)}`,
           },
         ],
+        isError: true,
       };
     }
   },

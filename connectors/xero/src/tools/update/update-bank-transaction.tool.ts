@@ -48,6 +48,7 @@ const UpdateBankTransactionTool = CreateXeroTool(
             text: `Error updating bank transaction: ${result.error}`,
           },
         ],
+        isError: true,
       };
     }
 

@@ -61,6 +61,7 @@ const UpdateItemTool = CreateXeroTool(
             text: `Error updating item: ${result.error}`,
           },
         ],
+        isError: true,
       };
     }
 

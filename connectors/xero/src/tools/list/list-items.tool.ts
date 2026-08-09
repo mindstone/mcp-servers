@@ -23,6 +23,7 @@ COMMON MISTAKES:
             text: `Error listing items: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

@@ -29,7 +29,8 @@ COMMON MISTAKES:
             type: "text" as const,
             text: `Error listing bank transactions: ${response.error}`
           }
-        ]
+        ],
+        isError: true,
       };
     }
 

@@ -70,6 +70,7 @@ PAGINATION: If results returned equals pageSize, there may be more pages. Call a
             text: `Error listing purchase orders: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

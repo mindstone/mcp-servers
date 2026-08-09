@@ -23,6 +23,7 @@ const RevertPayrollTimesheetTool = CreateXeroTool(
             text: `Error reverting timesheet: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

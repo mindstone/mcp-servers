@@ -15,6 +15,7 @@ const ListTaxRatesTool = CreateXeroTool(
             text: `Error listing tax rates: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

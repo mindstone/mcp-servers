@@ -44,6 +44,7 @@ COMMON MISTAKES:
             text: `Error listing manual journals: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

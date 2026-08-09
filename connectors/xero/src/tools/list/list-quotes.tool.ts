@@ -27,6 +27,7 @@ COMMON MISTAKES:
             text: `Error listing quotes: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

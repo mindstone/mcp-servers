@@ -20,7 +20,8 @@ const UpdateTrackingCategoryTool = CreateXeroTool(
             type: "text" as const,
             text: `Error while updating tracking category: ${response.error}`
           }
-        ]
+        ],
+        isError: true,
       };
     }
 

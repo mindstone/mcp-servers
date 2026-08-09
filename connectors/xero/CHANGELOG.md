@@ -7,6 +7,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+- All 66 handler-level error returns across the tool set now set `isError: true` (previously only the factory catch path flagged errors), so clients can reliably distinguish error results from successful text.
+- `package.json` `author` now reads `Mindstone <support@mindstone.ai>`, matching the maintained-fork Provenance section in the README.
+
 ## [0.1.0] - 2026-08-08
 
 ### Changed

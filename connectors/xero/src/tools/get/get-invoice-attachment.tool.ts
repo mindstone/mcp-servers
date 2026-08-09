@@ -33,6 +33,7 @@ Requires the accounting.attachments.read scope on the Xero Custom Connection.`,
             text: `Error downloading attachment: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

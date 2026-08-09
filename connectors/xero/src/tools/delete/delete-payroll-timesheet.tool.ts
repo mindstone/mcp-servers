@@ -23,6 +23,7 @@ const DeletePayrollTimesheetTool = CreateXeroTool(
             text: `Error deleting timesheet: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

@@ -32,6 +32,7 @@ const UpdatePayrollTimesheetLineTool = CreateXeroTool(
             text: `Error updating timesheet line: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

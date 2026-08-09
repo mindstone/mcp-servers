@@ -54,6 +54,7 @@ const CreateInvoiceTool = CreateXeroTool(
             text: `Error creating invoice: ${result.error}`,
           },
         ],
+        isError: true,
       };
     }
 

@@ -20,7 +20,8 @@ const ListTrackingCategoriesTool = CreateXeroTool(
             type: "text" as const,
             text: `Error listing tracking categories: ${response.error}`
           }
-        ]
+        ],
+        isError: true,
       };
     }
 

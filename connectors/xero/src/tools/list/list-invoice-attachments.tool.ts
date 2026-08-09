@@ -21,6 +21,7 @@ const ListInvoiceAttachmentsTool = CreateXeroTool(
             text: `Error listing invoice attachments: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

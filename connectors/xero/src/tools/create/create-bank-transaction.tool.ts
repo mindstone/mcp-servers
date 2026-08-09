@@ -37,7 +37,8 @@ const CreateBankTransactionTool = CreateXeroTool(
             type: "text" as const,
             text: `Error creating bank transaction: ${result.error}`
           }
-        ]
+        ],
+        isError: true,
       };
     }
 

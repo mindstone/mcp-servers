@@ -31,6 +31,7 @@ const ListProfitAndLossTool = CreateXeroTool(
             text: `Error listing profit and loss report: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

@@ -56,6 +56,7 @@ const CreateItemTool = CreateXeroTool(
             text: `Error creating item: ${result.error}`,
           },
         ],
+        isError: true,
       };
     }
 

@@ -19,6 +19,7 @@ const ListPayrollEmployeeLeaveBalancesTool = CreateXeroTool(
             text: `Error listing employee leave balances: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

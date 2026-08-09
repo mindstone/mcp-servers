@@ -11,7 +11,7 @@
     "directory": "connectors/xero"
   },
   "homepage": "https://github.com/mindstone/mcp-servers/tree/main/connectors/xero",
-  "author": "Xero (https://xero.com)",
+  "author": "Mindstone <support@mindstone.ai>",
   "type": "module",
   "bin": {
     "mcp-server-xero": "dist/index.js"

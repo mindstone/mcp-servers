@@ -24,6 +24,7 @@ This provides details such as the timesheet ID, employee ID, start and end dates
             text: `Error retrieving timesheet: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

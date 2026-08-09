@@ -21,6 +21,7 @@ This retrieves comprehensive timesheet details including timesheet IDs, employee
             text: `Error listing timesheets: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

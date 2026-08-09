@@ -52,6 +52,7 @@ const CreatePurchaseOrderTool = CreateXeroTool(
             text: `Error creating purchase order: ${result.error}`,
           },
         ],
+        isError: true,
       };
     }
 

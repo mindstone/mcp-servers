@@ -34,6 +34,7 @@ const ListBudgetSummaryTool = CreateXeroTool(
             text: `Error getting budget summary report: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

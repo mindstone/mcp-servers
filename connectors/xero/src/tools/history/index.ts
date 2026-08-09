@@ -94,6 +94,7 @@ function createGetHistoryTool(def: HistoryEntityDefinition) {
               text: `Error retrieving ${def.entity} history: ${response.error}`,
             },
           ],
+          isError: true,
         };
       }
 
@@ -149,6 +150,7 @@ function createAddNoteTool(def: HistoryEntityDefinition) {
               text: `Error adding note to ${def.entity}: ${response.error}`,
             },
           ],
+          isError: true,
         };
       }
 

@@ -37,6 +37,7 @@ This allows you to specify details such as the employee ID, payroll calendar ID,
             text: `Error creating timesheet: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

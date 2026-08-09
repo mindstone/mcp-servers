@@ -23,6 +23,7 @@ const ApprovePayrollTimesheetTool = CreateXeroTool(
             text: `Error approving timesheet: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

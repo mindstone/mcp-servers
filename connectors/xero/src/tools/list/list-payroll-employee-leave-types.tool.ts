@@ -21,6 +21,7 @@ const ListPayrollEmployeeLeaveTypesTool = CreateXeroTool(
             text: `Error listing employee leave types: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

@@ -73,6 +73,7 @@ COMMON MISTAKES:
             text: `Error listing payments: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

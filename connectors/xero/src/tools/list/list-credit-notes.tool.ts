@@ -29,6 +29,7 @@ COMMON MISTAKES:
             text: `Error listing credit notes: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

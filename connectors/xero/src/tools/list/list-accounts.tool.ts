@@ -15,6 +15,7 @@ const ListAccountsTool = CreateXeroTool(
             text: `Error listing accounts: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

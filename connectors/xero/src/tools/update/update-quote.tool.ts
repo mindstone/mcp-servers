@@ -68,6 +68,7 @@ const UpdateQuoteTool = CreateXeroTool(
             text: `Error updating quote: ${result.error}`,
           },
         ],
+        isError: true,
       };
     }
 

@@ -27,6 +27,7 @@ const ListAgedPayablesByContact = CreateXeroTool(
             text: `Error listing aged payables by contact: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

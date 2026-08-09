@@ -83,6 +83,7 @@ const CreateManualJournalTool = CreateXeroTool(
               text: `Error creating manual journal: ${response.error}`,
             },
           ],
+          isError: true,
         };
       }
 
@@ -140,6 +141,7 @@ const CreateManualJournalTool = CreateXeroTool(
             text: `Error creating manual journal: ${formatError(error)}`,
           },
         ],
+        isError: true,
       };
     }
   },

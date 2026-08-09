@@ -28,6 +28,7 @@ const ListBankSummaryTool = CreateXeroTool(
             text: `Error getting bank summary report: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

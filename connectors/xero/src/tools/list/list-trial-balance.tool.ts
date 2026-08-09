@@ -19,6 +19,7 @@ const ListTrialBalanceTool = CreateXeroTool(
             text: `Error listing trial balance: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

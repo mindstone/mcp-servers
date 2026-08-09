@@ -19,6 +19,7 @@ The response presents a complete overview of all staff currently registered in y
             text: `Error listing payroll employees: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

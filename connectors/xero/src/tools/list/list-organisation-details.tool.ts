@@ -16,6 +16,7 @@ const ListOrganisationDetailsTool = CreateXeroTool(
             text: `Error fetching organisation details: ${response.error || "Unknown error"}`,
           },
         ],
+        isError: true,
       };
     }
 

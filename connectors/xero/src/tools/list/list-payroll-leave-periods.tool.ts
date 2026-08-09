@@ -21,6 +21,7 @@ const ListPayrollLeavePeriodsToolTool = CreateXeroTool(
             text: `Error listing employee leave periods: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

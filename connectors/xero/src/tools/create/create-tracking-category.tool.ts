@@ -18,7 +18,8 @@ const CreateTrackingCategoryTool = CreateXeroTool(
             type: "text" as const,
             text: `Error while creating tracking category: ${response.error}`
           }
-        ]
+        ],
+        isError: true,
       };
     }
 

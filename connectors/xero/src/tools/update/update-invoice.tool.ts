@@ -89,6 +89,7 @@ const UpdateInvoiceTool = CreateXeroTool(
             text: `Error updating invoice: ${result.error}`,
           },
         ],
+        isError: true,
       };
     }
 

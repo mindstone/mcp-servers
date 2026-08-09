@@ -23,6 +23,7 @@ const ListExecutiveSummaryTool = CreateXeroTool(
             text: `Error getting executive summary report: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

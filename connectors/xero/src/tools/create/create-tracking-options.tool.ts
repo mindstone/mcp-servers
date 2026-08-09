@@ -20,7 +20,8 @@ const CreateTrackingOptionsTool = CreateXeroTool(
             type: "text" as const,
             text: `Error while creating tracking options: ${response.error}`
           }
-        ]
+        ],
+        isError: true,
       };
     }
 

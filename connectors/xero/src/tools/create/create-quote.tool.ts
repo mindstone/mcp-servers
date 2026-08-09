@@ -52,6 +52,7 @@ const CreateQuoteTool = CreateXeroTool(
             text: `Error creating quote: ${result.error}`,
           },
         ],
+        isError: true,
       };
     }
 

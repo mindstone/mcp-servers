@@ -48,6 +48,7 @@ const CreatePaymentTool = CreateXeroTool(
             text: `Error creating payment: ${result.error}`,
           },
         ],
+        isError: true,
       };
     }
 

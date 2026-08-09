@@ -21,6 +21,7 @@ const EmailInvoiceTool = CreateXeroTool(
             text: `Error emailing invoice: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

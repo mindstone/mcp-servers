@@ -31,6 +31,7 @@ const AddTimesheetLineTool = CreateXeroTool(
             text: `Error adding timesheet line: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

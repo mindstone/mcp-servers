@@ -15,6 +15,7 @@ const ListCurrenciesTool = CreateXeroTool(
             text: `Error listing currencies: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

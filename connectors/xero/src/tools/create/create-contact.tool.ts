@@ -26,6 +26,7 @@ const CreateContactTool = CreateXeroTool(
               text: `Error creating contact: ${response.error}`,
             },
           ],
+          isError: true,
         };
       }
 
@@ -56,6 +57,7 @@ const CreateContactTool = CreateXeroTool(
             text: `Error creating contact: ${formatError(error)}`,
           },
         ],
+        isError: true,
       };
     }
   },

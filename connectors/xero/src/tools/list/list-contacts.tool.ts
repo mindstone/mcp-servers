@@ -23,6 +23,7 @@ const ListContactsTool = CreateXeroTool(
             text: `Error listing contacts: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

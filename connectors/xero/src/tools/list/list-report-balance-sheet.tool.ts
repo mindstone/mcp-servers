@@ -27,6 +27,7 @@ const ListReportBalanceSheetTool = CreateXeroTool(
             text: `Error listing balance sheet report: ${response.error}`,
           },
         ],
+        isError: true,
       };
     }
 

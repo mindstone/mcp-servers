@@ -65,6 +65,7 @@ const UpdateCreditNoteTool = CreateXeroTool(
             text: `Error updating credit note: ${result.error}`,
           },
         ],
+        isError: true,
       };
     }
 
