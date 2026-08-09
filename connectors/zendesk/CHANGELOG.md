@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-08-09
+
+### Changed
+
+- Close a live credential-deletion path traversal, vendor-field fail-closed, and Retry-After/error-text sanitization.
+
 ## [0.4.0] - 2026-08-06
 
 ### Changed
