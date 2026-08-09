@@ -11,6 +11,11 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+- Cleanup-failure warnings now log the actual cause instead of `"{}"`: `logger.warn` serialized `Error` objects through `JSON.stringify`, which drops their message. The temp-file/dir cleanup warnings carry the errno (falling back to the message for non-fs errors) so the temporary input path never reaches log files.
+- A failed temp-input write no longer raises a spurious "input may be at rest" cleanup warning: the `finally` unlink treats ENOENT as benign only when the write never created the file (nothing is at rest). A temp file that vanishes after a successful write still warns, since it may have been moved rather than deleted.
+- `apple_shortcuts_run` and `apple_shortcuts_view` now insert a `--` end-of-options separator before the shortcut name on the `shortcuts` CLI argv (after all options, immediately before the name), so a name beginning with `-` can never be reinterpreted as a flag.
+
 ## [0.2.0] - 2026-08-07
 
 ### Changed

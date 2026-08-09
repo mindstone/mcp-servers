@@ -128,7 +128,7 @@ describe("apple-shortcuts smoke", () => {
     expect(result.isError).toBeFalsy();
     expect(result.text).toContain(ENVELOPE_OPEN + 'run">');
     expect(result.text).toContain("the weather is fine");
-    expect(calls[0]).toEqual(["run", "Weather"]);
+    expect(calls[0]).toEqual(["run", "--", "Weather"]);
   });
 
   it("apple_shortcuts_run reports CLI failure with enveloped stderr", async () => {
@@ -198,7 +198,7 @@ describe("apple-shortcuts smoke", () => {
     expect(result.text).toContain(
       'Opened shortcut "<untrusted-content source="apple-shortcuts:view">Weather</untrusted-content>" in the Shortcuts app editor.'
     );
-    expect(calls[0]).toEqual(["view", "Weather"]);
+    expect(calls[0]).toEqual(["view", "--", "Weather"]);
   });
 
   it("apple_shortcuts_view surfaces CLI failure as an enveloped error", async () => {

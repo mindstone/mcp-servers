@@ -38,6 +38,11 @@ function safeStringify(value: unknown): string {
   if (value === undefined) return 'undefined';
   if (value === null) return 'null';
   if (typeof value === 'string') return redact(value);
+  // Errors serialize to '{}' via JSON.stringify, dropping the message; log
+  // the redacted message instead (same treatment as `error()` gives Error).
+  // Note: fs error messages embed the file path — callers whose paths must
+  // not reach logs should pass a scrubbed summary instead of the raw Error.
+  if (value instanceof Error) return redact(value.message);
   try {
     return redact(JSON.stringify(value, null, 2));
   } catch {

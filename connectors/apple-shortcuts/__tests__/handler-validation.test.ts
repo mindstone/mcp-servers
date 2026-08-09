@@ -76,6 +76,6 @@ describe("exported handler factories validate input fail-closed", () => {
   it("valid input still reaches the runner", async () => {
     const { runner, calls } = recordingRunner();
     await createRunShortcutHandler(runner)({ name: "Weather" });
-    expect(calls).toEqual([["run", "Weather"]]);
+    expect(calls).toEqual([["run", "--", "Weather"]]);
   });
 });

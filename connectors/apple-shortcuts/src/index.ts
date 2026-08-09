@@ -326,6 +326,19 @@ export const RunShortcutInputSchema = z.object({
 export type RunShortcutInput = z.infer<typeof RunShortcutInputSchema>;
 
 /**
+ * Summarize a cleanup failure for the logs. The errno (or the message for
+ * non-fs errors) is enough to diagnose the failure, while the raw fs error
+ * message embeds the temporary input path — which must not reach log files
+ * (see the argv-logging note in runShortcuts).
+ */
+function cleanupCause(err: unknown): string {
+  if (err instanceof Error) {
+    return (err as NodeJS.ErrnoException).code ?? err.message;
+  }
+  return String(err);
+}
+
+/**
  * Build the handler for `apple_shortcuts_run`. Factored as a factory so tests
  * can inject a fake `runner` that records argv and reads the temporary input
  * file before resolving.
@@ -342,10 +355,11 @@ export function createRunShortcutHandler(runner: ShortcutsRunner = runShortcuts)
     // Parse at the boundary too: embedders calling this factory directly do
     // not get the MCP SDK's validation, and the handler must stay fail-closed.
     const parsed = RunShortcutInputSchema.parse(params);
-    const argv: string[] = ["run", parsed.name];
+    const argv: string[] = ["run"];
 
     let tempDir: string | undefined;
     let tempPath: string | undefined;
+    let inputWritten = false;
 
     try {
       if (parsed.input !== undefined) {
@@ -353,9 +367,16 @@ export function createRunShortcutHandler(runner: ShortcutsRunner = runShortcuts)
         tempPath = path.join(tempDir, "input.txt");
         // Create with mode 0o600 and re-chmod to defeat any umask interference.
         fs.writeFileSync(tempPath, parsed.input, { mode: 0o600 });
+        // From here the file exists with user input in it: a later ENOENT
+        // during cleanup means something moved it, which must still warn.
+        inputWritten = true;
         fs.chmodSync(tempPath, 0o600);
         argv.push("--input-path", tempPath);
       }
+      // `--` ends option parsing so a name that slips past validation cannot be
+      // reinterpreted as a flag by the `shortcuts` CLI; it must come after all
+      // options, immediately before the name (anything after it is positional).
+      argv.push("--", parsed.name);
 
       const result = await runner(argv);
 
@@ -412,15 +433,28 @@ export function createRunShortcutHandler(runner: ShortcutsRunner = runShortcuts)
         try {
           fs.unlinkSync(tempPath);
         } catch (err) {
-          // Best-effort, but observable: a failure leaves user input at rest.
-          logger.warn("Failed to remove temporary shortcut input file", err);
+          // ENOENT is only benign when the write never created the file —
+          // nothing is at rest, so a warning would be a false alarm. If the
+          // file existed and vanished mid-run it may have been moved rather
+          // than deleted (user input at rest elsewhere), and any other errno
+          // is a real cleanup failure: best-effort, but observable.
+          const code = (err as NodeJS.ErrnoException | undefined)?.code;
+          if (inputWritten || code !== "ENOENT") {
+            logger.warn(
+              "Failed to remove temporary shortcut input file",
+              cleanupCause(err)
+            );
+          }
         }
       }
       if (tempDir !== undefined) {
         try {
           fs.rmdirSync(tempDir);
         } catch (err) {
-          logger.warn("Failed to remove temporary shortcut input directory", err);
+          logger.warn(
+            "Failed to remove temporary shortcut input directory",
+            cleanupCause(err)
+          );
         }
       }
     }
@@ -445,7 +479,9 @@ export function createViewShortcutHandler(runner: ShortcutsRunner = runShortcuts
     // Parse at the boundary too: embedders calling this factory directly do
     // not get the MCP SDK's validation, and the handler must stay fail-closed.
     const parsed = ViewShortcutInputSchema.parse(params);
-    const result = await runner(["view", parsed.name]);
+    // `--` ends option parsing so a name that slips past validation cannot be
+    // reinterpreted as a flag by the `shortcuts` CLI.
+    const result = await runner(["view", "--", parsed.name]);
 
     if (result.timedOut) {
       return timedOutResult(
