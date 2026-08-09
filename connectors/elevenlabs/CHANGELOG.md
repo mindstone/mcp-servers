@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+- The remaining unchecked response casts are now Zod-validated fail-closed (`INVALID_RESPONSE` on shape drift), completing response-schema coverage for every tool: `get_dubbing` (a non-string `status`/`target_languages` entry previously crashed the envelope helper with a raw `TypeError`), `list_models` (a non-array payload previously degraded to `ok` with `count: 0`), `list_voices`, `get_voice`, `search_shared_voices` (and the `generate_speech` voice-lookup helpers), `create_music_plan` (a non-numeric `duration_ms` previously poisoned the total-duration arithmetic), `forced_alignment`, and `design_voice`.
+- `design_voice` preview `audio_base_64` is now grammar-gated as canonical base64 before the artifact write — `Buffer.from(x, 'base64')` silently discards invalid characters, so an unvalidated payload could write a truncated or empty file reported as success.
+- `list_models` now envelopes the API-authored `language_id` (display-only, same treatment as `list_history` `model_id`). `model_id` stays raw: it is a round-trip handle for `generate_speech`, whose own input schema gates it against a closed enum — the same raw-ID stance as `voice_id`/`dubbing_id`.
+- The new response schemas tolerate explicit `null` for spec-`Optional` fields (FastAPI serializes `None` as `null`, not omission) — a successful `get_dubbing` poll (`"error": null`) or a voice without a generated preview (`"preview_url": null`) no longer risks a false-positive `INVALID_RESPONSE` — and `design_voice` again rejects an empty `generated_voice_id`, matching the pre-schema truthiness guard.
+
 ## [0.5.0] - 2026-08-07
 
 ### Changed
@@ -18,9 +24,6 @@ are maintained manually as part of the PR review checklist.
 - ElevenLabs connector: canonical result envelopes, untrusted-content fencing, and hardening sync; expanded TTS/voice actions.
 
 ### Security
-- The remaining unchecked response casts are now Zod-validated fail-closed (`INVALID_RESPONSE` on shape drift), completing response-schema coverage for every tool: `get_dubbing` (a non-string `status`/`target_languages` entry previously crashed the envelope helper with a raw `TypeError`), `list_models` (a non-array payload previously degraded to `ok` with `count: 0`), `list_voices`, `get_voice`, `search_shared_voices` (and the `generate_speech` voice-lookup helpers), `create_music_plan` (a non-numeric `duration_ms` previously poisoned the total-duration arithmetic), `forced_alignment`, and `design_voice`.
-- `design_voice` preview `audio_base_64` is now grammar-gated as canonical base64 before the artifact write — `Buffer.from(x, 'base64')` silently discards invalid characters, so an unvalidated payload could write a truncated or empty file reported as success.
-- `list_models` now envelopes the API-authored `language_id` (display-only, same treatment as `list_history` `model_id`). `model_id` stays raw: it is a round-trip handle for `generate_speech`, whose own input schema gates it against a closed enum — the same raw-ID stance as `voice_id`/`dubbing_id`.
 - `clone_voice`, `create_voice_from_preview`, and `create_dubbing` responses are now Zod-validated fail-closed (`INVALID_RESPONSE` on shape drift) instead of unchecked casts, and their API-authored IDs (`voice_id` / `dubbing_id`) are no longer interpolated into the `message` / `poll_hint` prose — they are returned as structured fields only (the same stance `get_dubbing` already takes for `status`). A non-numeric `expected_duration_sec` no longer leaks into the poll-guidance prose either.
 - `get_dubbing` now envelopes the API-authored `status` and `target_languages` fields (enum-like but not validated against a closed grammar — the same stance as `list_history` `model_id`/`source`), and the unvalidated `status` is no longer interpolated into the `message` prose; the lifecycle classification is carried by `is_terminal` and `next_step` instead.
 - `check_subscription` responses are now Zod-validated fail-closed (`INVALID_RESPONSE` on shape drift) instead of an unchecked cast: character counts must be finite numbers, and `next_character_count_reset_unix` is bounded so the ISO-date conversion cannot throw on an extreme finite upstream value.

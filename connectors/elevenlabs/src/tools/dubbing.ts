@@ -28,7 +28,7 @@ function dubbingNextStep(status: string): string {
   return 'Poll get_dubbing again in ~10 seconds.';
 }
 
-function envelopDubbingStatusField(value: string | undefined, field: string): string | undefined {
+function envelopDubbingStatusField(value: string | null | undefined, field: string): string | undefined {
   if (!value) return undefined;
   return wrapUntrusted(value, `elevenlabs:get_dubbing:${field}`);
 }

@@ -557,4 +557,85 @@ describe('external response validation (fail-closed)', () => {
       voice_description: 'calm middle-aged narrator',
     });
   });
+
+  it('design_voice rejects an empty generated_voice_id', async () => {
+    // The pre-schema truthiness guard (!generatedVoiceId) rejected ""; the
+    // schema preserves that via min(1) so a drifted payload cannot report ok
+    // with an unusable ID.
+    mswServer.use(
+      http.post(`${BASE_V1}/text-to-voice/design`, () =>
+        HttpResponse.json({
+          previews: [
+            {
+              generated_voice_id: '',
+              audio_base_64: makeFakeAudioBuffer(64).toString('base64'),
+              media_type: 'audio/mpeg',
+            },
+          ],
+        }),
+      ),
+    );
+    await openClient();
+    await expectInvalidResponse('design_voice', {
+      voice_description: 'calm middle-aged narrator',
+    });
+  });
+
+  it('get_dubbing accepts a healthy status payload with explicit nulls', async () => {
+    // FastAPI serializes Optional fields as explicit null — a successful dub
+    // returns "error": null; rejecting null would fail every status poll.
+    mswServer.use(
+      http.get(`${BASE_V1}/dubbing/:dubbingId`, () =>
+        HttpResponse.json({
+          dubbing_id: 'd1',
+          name: null,
+          status: 'dubbing',
+          target_languages: ['es'],
+          error: null,
+        }),
+      ),
+    );
+    await openClient();
+    const result = await testClient.callTool('get_dubbing', { dubbing_id: 'd1' });
+    expect(JSON.parse(result.text).ok).toBe(true);
+  });
+
+  it('list_voices accepts entries with explicit null preview_url and labels', async () => {
+    mswServer.use(
+      http.get('https://api.elevenlabs.io/v2/voices', () =>
+        HttpResponse.json({
+          voices: [{ voice_id: 'v1', name: 'Fresh Clone', preview_url: null, labels: null }],
+          has_more: false,
+        }),
+      ),
+    );
+    await openClient();
+    const result = await testClient.callTool('list_voices', {});
+    expect(JSON.parse(result.text).ok).toBe(true);
+  });
+
+  it('search_shared_voices accepts entries with explicit null metadata', async () => {
+    mswServer.use(
+      http.get(`${BASE_V1}/shared-voices`, () =>
+        HttpResponse.json({
+          voices: [
+            {
+              voice_id: 'sv1',
+              name: 'Narrator',
+              gender: null,
+              age: null,
+              language: null,
+              locale: null,
+              preview_url: null,
+              labels: null,
+            },
+          ],
+          has_more: false,
+        }),
+      ),
+    );
+    await openClient();
+    const result = await testClient.callTool('search_shared_voices', {});
+    expect(JSON.parse(result.text).ok).toBe(true);
+  });
 });

@@ -261,15 +261,18 @@ export const dubbingCreateResponseSchema = z.object({
  * always echo it, and get_dubbing falls back to the caller-supplied ID.
  * `status` and `target_languages` must be strings — a drifted non-string
  * would otherwise crash the envelope helpers downstream with a raw TypeError
- * instead of a structured INVALID_RESPONSE.
+ * instead of a structured INVALID_RESPONSE. FastAPI serializes `Optional`
+ * fields as explicit `null` (not omitted), so spec-nullable fields are
+ * `.nullable().optional()` — rejecting `null` would fail closed on healthy
+ * live responses (e.g. a successful dub returns `"error": null`).
  */
 export const dubbingStatusResponseSchema = z.object({
   dubbing_id: z.string().optional(),
-  name: z.string().optional(),
+  name: z.string().nullable().optional(),
   status: z.string(),
   target_languages: z.array(z.string()).optional(),
-  error: z.string().optional(),
-  error_message: z.string().optional(),
+  error: z.string().nullable().optional(),
+  error_message: z.string().nullable().optional(),
 });
 
 export const voiceResultSchema = z.object({
@@ -277,8 +280,8 @@ export const voiceResultSchema = z.object({
   name: z.string(),
   category: z.string().optional(),
   description: z.string().nullable().optional(),
-  preview_url: z.string().optional(),
-  labels: z.record(z.string()).optional(),
+  preview_url: z.string().nullable().optional(),
+  labels: z.record(z.string()).nullable().optional(),
 });
 
 /** GET /v2/voices (list/search). */
@@ -292,15 +295,15 @@ export const sharedVoiceResultSchema = z.object({
   name: z.string(),
   description: z.string().nullable().optional(),
   category: z.string().optional(),
-  gender: z.string().optional(),
-  age: z.string().optional(),
+  gender: z.string().nullable().optional(),
+  age: z.string().nullable().optional(),
   accent: z.string().nullable().optional(),
-  language: z.string().optional(),
-  locale: z.string().optional(),
+  language: z.string().nullable().optional(),
+  locale: z.string().nullable().optional(),
   descriptive: z.string().nullable().optional(),
   use_case: z.string().nullable().optional(),
-  preview_url: z.string().optional(),
-  labels: z.record(z.string()).optional(),
+  preview_url: z.string().nullable().optional(),
+  labels: z.record(z.string()).nullable().optional(),
 });
 
 /** GET /v1/shared-voices. */
@@ -370,7 +373,7 @@ export const musicPlanResponseSchema = z.object({
 export const voiceDesignResponseSchema = z.object({
   previews: z.array(
     z.object({
-      generated_voice_id: z.string(),
+      generated_voice_id: z.string().min(1),
       audio_base_64: base64Schema.optional(),
       text: z.string().optional(),
       media_type: z.string().optional(),
