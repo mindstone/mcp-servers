@@ -346,7 +346,9 @@ const parseIPv4 = (value: string): [number, number, number, number] | null => {
 
 // Returns a reason string if the IPv6 literal is non-routable, else null.
 // Handles canonical IPv6, IPv4-mapped IPv6 (::ffff:a.b.c.d), unspecified ::, loopback ::1,
-// link-local fe80::/10, unique-local fc00::/7.
+// link-local fe80::/10, unique-local fc00::/7, the IPv6 transition prefixes
+// embedding an IPv4 address (NAT64 64:ff9b::/96, 6to4 2002::/16,
+// IPv4-compatible ::/96), and the discard-only 100::/64.
 const privateIPv6Reason = (raw: string): string | null => {
   const lower = raw.toLowerCase();
 
@@ -403,6 +405,31 @@ const privateIPv6Reason = (raw: string): string | null => {
 
   // Documentation-only prefix; denying it keeps this allowlist fail-closed.
   if (/^2001:0*db8(?::|$)/.test(lower)) return 'IPv6 documentation range (2001:db8::/32)';
+
+  // IPv4-compatible IPv6 (::/96, deprecated by RFC 4291) — dotted and hex
+  // forms not already caught by the :: / ::1 / ::ffff: handling above
+  // (::7f00:1 is 127.0.0.1). The whole range is reserved: deny outright.
+  if (/^::\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(lower)) {
+    return 'IPv4-compatible IPv6 (::/96)';
+  }
+  if (
+    /^::[0-9a-f]{1,4}:[0-9a-f]{1,4}$/.test(lower) ||
+    /^(?:0+:){6}[0-9a-f]{1,4}:[0-9a-f]{1,4}$/.test(lower)
+  ) {
+    return 'IPv4-compatible IPv6 (::/96)';
+  }
+
+  // IPv6 transition prefixes embedding an IPv4 address in the low bits:
+  // NAT64 well-known prefix 64:ff9b::/96 (RFC 6052 — 64:ff9b::7f00:1 is
+  // 127.0.0.1, 64:ff9b::a9fe:a9fe is the 169.254.169.254 IMDS) and 6to4
+  // 2002::/16 (RFC 3056, deprecated by RFC 7526).
+  if (/^0*64:0*ff9b(?::|$)/.test(lower)) return 'IPv6 NAT64 prefix (64:ff9b::/96, embeds IPv4)';
+  if (/^0*2002(?::|$)/.test(lower)) return 'IPv6 6to4 range (2002::/16, embeds IPv4)';
+
+  // Discard-only 100::/64 (RFC 6666).
+  if (/^0*100::/.test(lower) || /^0*100:(?:0+:){3}/.test(lower)) {
+    return 'IPv6 discard-only range (100::/64)';
+  }
 
   return null;
 };

@@ -192,6 +192,35 @@ describe('validateDocumentUrl — SSRF guard', () => {
     });
   });
 
+  describe('rejects IPv6 transition prefixes embedding IPv4 (NAT64 A2 fix)', () => {
+    it('rejects NAT64 64:ff9b::/96 embedding loopback', () => {
+      expect(() => validateDocumentUrl('https://[64:ff9b::7f00:1]/doc.pdf'))
+        .toThrowError(VantaApiError);
+    });
+
+    it('rejects NAT64 64:ff9b::/96 embedding IMDS (169.254.169.254)', () => {
+      expect(() => validateDocumentUrl('https://[64:ff9b::a9fe:a9fe]/doc.pdf'))
+        .toThrowError(VantaApiError);
+    });
+
+    it('rejects 6to4 2002::/16 embedding IMDS', () => {
+      expect(() => validateDocumentUrl('https://[2002:a9fe:a9fe::]/doc.pdf'))
+        .toThrowError(VantaApiError);
+    });
+
+    it('rejects IPv4-compatible ::/96 (::127.0.0.1, hex-normalised ::7f00:1)', () => {
+      expect(() => validateDocumentUrl('https://[::127.0.0.1]/doc.pdf'))
+        .toThrowError(VantaApiError);
+      expect(() => validateDocumentUrl('https://[::7f00:1]/doc.pdf'))
+        .toThrowError(VantaApiError);
+    });
+
+    it('rejects discard-only 100::/64', () => {
+      expect(() => validateDocumentUrl('https://[100::1]/doc.pdf'))
+        .toThrowError(VantaApiError);
+    });
+  });
+
   describe('rejects IPv4-mapped IPv6 (C6 fix)', () => {
     it('rejects [::ffff:127.0.0.1] (mapped loopback)', () => {
       expect(() => validateDocumentUrl('https://[::ffff:127.0.0.1]/doc.pdf'))
