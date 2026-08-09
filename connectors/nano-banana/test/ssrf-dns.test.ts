@@ -61,6 +61,12 @@ describe('validateRemoteImageUrl — literal non-public ranges', () => {
     ['IPv6 unspecified ::', 'https://[::]/pic.png'],
     ['IPv6 link-local fe80::1', 'https://[fe80::1]/pic.png'],
     ['IPv6 unique-local fd00::1', 'https://[fd00::1]/pic.png'],
+    ['NAT64 64:ff9b::/96 embedding loopback', 'https://[64:ff9b::7f00:1]/pic.png'],
+    ['NAT64 64:ff9b::/96 embedding IMDS', 'https://[64:ff9b::a9fe:a9fe]/pic.png'],
+    ['6to4 2002::/16 embedding IMDS', 'https://[2002:a9fe:a9fe::]/pic.png'],
+    ['IPv4-compatible ::/96 (dotted ::127.0.0.1)', 'https://[::127.0.0.1]/pic.png'],
+    ['IPv4-compatible ::/96 (hex ::7f00:1)', 'https://[::7f00:1]/pic.png'],
+    ['discard-only 100::/64', 'https://[100::1]/pic.png'],
   ])('refuses IPv4-mapped / non-public IPv6 literal: %s', (_label, url) => {
     expect(() => validateRemoteImageUrl(url)).toThrowError(NanoBananaError);
   });
