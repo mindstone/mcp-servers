@@ -11,6 +11,9 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+- `update_servicenow_incident`'s `close_code` is now a real enum of the standard ServiceNow close-code vocabulary (matching the earlier `state`/`urgency`/`impact` choice enums), and `close_code` is no longer treated as a structural literal on read-back — a prose value written to that field previously round-tripped literal, outside the untrusted-content envelope.
+
 ## [0.3.0] - 2026-08-07
 
 ### Changed

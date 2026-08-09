@@ -188,7 +188,15 @@ export function registerIncidentTools(server: McpServer): void {
         assigned_to: z.string().optional().describe('Assigned to user name or sys_id'),
         assignment_group: z.string().optional().describe('Assignment group name'),
         close_code: z
-          .string()
+          .enum([
+            'Solved (Work Around)',
+            'Solved (Permanently)',
+            'Solved Remotely (Work Around)',
+            'Solved Remotely (Permanently)',
+            'Not Solved (Not Reproducible)',
+            'Not Solved (Too Costly)',
+            'Closed/Resolved by Caller',
+          ])
           .optional()
           .describe('Close code (required when resolving)'),
         close_notes: z

@@ -190,6 +190,21 @@ describe('sanitizeRecord', () => {
     expect(out.sys_created_on).toBe('2026-03-01 10:00:00');
     expect(out.price).toBe('$1,200.00');
   });
+
+  it('envelopes close_code on read-back even when the value is well-formed', () => {
+    // close_code is a free-string write input, so a prose value can be
+    // persisted by anyone with write access; it must never read back literal.
+    const out = sanitizeRecord(
+      { close_code: 'Solved (Permanently)', close_notes: 'restarted the service' },
+      'servicenow:incident',
+    );
+    expect(out.close_code).toBe(
+      '<untrusted-content source="servicenow:incident:close_code">Solved (Permanently)</untrusted-content>',
+    );
+    expect(out.close_notes).toBe(
+      '<untrusted-content source="servicenow:incident:close_notes">restarted the service</untrusted-content>',
+    );
+  });
 });
 
 describe('sanitizeRecords', () => {

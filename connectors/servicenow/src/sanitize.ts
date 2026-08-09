@@ -44,7 +44,6 @@ const STRUCTURAL_LITERAL_KEYS = new Set([
   'contact_type',
   'escalation',
   'made_sla',
-  'close_code',
   // timestamps / durations
   'sys_created_on',
   'sys_updated_on',
