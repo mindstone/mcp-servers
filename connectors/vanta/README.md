@@ -39,7 +39,7 @@ After clicking the button, your host will prompt you to fill: `VANTA_CLIENT_ID`,
 
 ## Status
 
-- **Version:** [0.3.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-vanta)
+- **Version:** [0.3.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-vanta)
 - **Auth:** OAuth client-credentials grant (`VANTA_CLIENT_ID` + `VANTA_CLIENT_SECRET`)
 - **Tools:** 25 (19 read + 6 write across vulnerabilities, tests, controls, frameworks, policies, integrations, risk scenarios, event logs, people, vendors, documents, compliance summary)
 - **Surface:** cloud-api

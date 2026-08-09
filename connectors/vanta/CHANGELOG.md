@@ -6,6 +6,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-09
+
+### Changed
+
+- Deny IPv6 transition prefixes (NAT64, 6to4, IPv4-compatible, discard-only) in the document-URL SSRF guard.
+
 ### Fixed
 
 - The document-URL SSRF guard now also refuses IPv6 transition prefixes that embed an IPv4 address — NAT64 `64:ff9b::/96`, 6to4 `2002::/16`, and IPv4-compatible `::/96` — plus the discard-only `100::/64`, closing the gap where e.g. `64:ff9b::7f00:1` (127.0.0.1) or `64:ff9b::a9fe:a9fe` (the 169.254.169.254 cloud metadata endpoint) passed validation.
