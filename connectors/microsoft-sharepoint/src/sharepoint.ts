@@ -2256,9 +2256,20 @@ export async function getSitesDelta(
     // deltaLink is caller-supplied and is fetched WITH the user's auth header,
     // so only follow vendor-issued continuation URLs — anything else would
     // exfiltrate the access token to a third-party host.
-    if (!validateVendorUrl(args.deltaLink)) {
+    const deltaUrl = validateVendorUrl(args.deltaLink);
+    if (!deltaUrl) {
       return errorResult(
         'Invalid "deltaLink": provide the HTTPS deltaLink/nextLink URL returned by a previous get_sites_delta call (Microsoft Graph host).',
+      );
+    }
+    // Host validation alone still allows ANY absolute Graph URL — an
+    // arbitrary-Graph-GET primitive within the token's scope set. The path
+    // must be the sites delta endpoint itself: Graph issues continuation
+    // URLs paren-less (`/v1.0/sites/delta?$deltatoken=...`), while the
+    // bound-function form `/sites/delta()` is accepted for compatibility.
+    if (!/^\/(v1\.0|beta)\/sites\/delta(\(\))?$/.test(deltaUrl.pathname)) {
+      return errorResult(
+        'Invalid "deltaLink": provide the HTTPS deltaLink/nextLink URL returned by a previous get_sites_delta call (Graph /sites/delta endpoint).',
       );
     }
     endpoint = args.deltaLink;

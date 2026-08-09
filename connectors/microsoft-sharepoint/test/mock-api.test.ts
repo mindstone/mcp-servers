@@ -406,7 +406,7 @@ describe('microsoft-sharepoint mock-API integration', () => {
     const delta = await client.callTool('get_sites_delta', {});
     expect(delta.isError).not.toBe(true);
     const deltaJson = delta.json as { deltaLink: string };
-    expect(deltaJson.deltaLink).toContain('/sites/delta(');
+    expect(deltaJson.deltaLink).toContain('/sites/delta');
   });
 
   it('get_recent_files labels its personal-OneDrive scope', async () => {

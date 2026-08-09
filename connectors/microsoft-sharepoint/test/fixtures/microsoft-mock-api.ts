@@ -155,10 +155,11 @@ export function createMockApi(): { handlers: HttpHandler[]; state: MockApiState 
         return HttpResponse.json({ value: [site] });
       }
 
-      if (method === 'GET' && pathname === '/v1.0/sites/delta()') {
+      if (method === 'GET' && (pathname === '/v1.0/sites/delta()' || pathname === '/v1.0/sites/delta')) {
         return HttpResponse.json({
           value: [site],
-          '@odata.deltaLink': 'https://graph.microsoft.com/v1.0/sites/delta(token)',
+          // Real Graph issues paren-less deltaLinks with the token in the query.
+          '@odata.deltaLink': 'https://graph.microsoft.com/v1.0/sites/delta?$deltatoken=mock-delta-token',
         });
       }
 

@@ -337,13 +337,25 @@ describe('microsoft-sharepoint adversarial hardening', () => {
       expect(evilHit).toBe(false);
     });
 
+    it('rejects a Graph-host deltaLink whose path is not the sites delta endpoint', async () => {
+      const result = await client.callTool('get_sites_delta', {
+        deltaLink: 'https://graph.microsoft.com/v1.0/me/messages',
+      });
+      expect(result.isError).toBe(true);
+      const json = result.json as ErrorJson;
+      expect(json.error).toContain('deltaLink');
+      expect(state.requests.some((r) => r.pathname === '/v1.0/me/messages')).toBe(false);
+    });
+
     it('follows the vendor-issued deltaLink from a previous call', async () => {
       const first = await client.callTool('get_sites_delta', {});
       expect(first.isError).not.toBe(true);
       const firstJson = first.json as { deltaLink: string };
       const second = await client.callTool('get_sites_delta', { deltaLink: firstJson.deltaLink });
       expect(second.isError).not.toBe(true);
-      const followUp = state.requests.find((r) => r.pathname === '/v1.0/sites/delta(token)');
+      const followUp = state.requests.find(
+        (r) => r.pathname === '/v1.0/sites/delta' && r.url.includes('deltatoken=mock-delta-token'),
+      );
       expect(followUp).toBeDefined();
     });
   });

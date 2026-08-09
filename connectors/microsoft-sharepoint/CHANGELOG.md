@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- `get_sites_delta` now validates the path of a caller-supplied `deltaLink`, not just the host: only the Graph `/sites/delta` endpoint (v1.0 or beta) is accepted. Previously any absolute Microsoft Graph URL passed the host check, which allowed arbitrary Graph GET requests within the token's scope set.
+
 ## [0.2.0] - 2026-08-07
 
 ### Changed
