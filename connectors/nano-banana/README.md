@@ -7,7 +7,7 @@ Nano Banana MCP server — Google Gemini image generation and editing via Model 
 
 ## Status
 
-- **Version:** [0.4.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-nano-banana)
+- **Version:** [0.4.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-nano-banana)
 - **Auth:** API key ([`GEMINI_API_KEY`](./server.json))
 - **Tools:** [3](./src/tools/) (image-generation, image-editing)
 - **Surface:** cloud-api
