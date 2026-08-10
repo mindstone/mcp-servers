@@ -13,7 +13,7 @@ Napkin AI visual generation MCP server for Model Context Protocol hosts. Generat
 
 | Field | Value |
 |-------|-------|
-| Version | 0.4.0 |
+| Version | 0.4.1 |
 | Auth | API key (`NAPKIN_API_KEY`) |
 | Tools | 5 (visuals, downloads, styles) |
 | Surface | cloud API |

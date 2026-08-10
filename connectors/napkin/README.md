@@ -7,7 +7,7 @@ Napkin AI visual generation MCP server for Model Context Protocol hosts. Generat
 
 ## Status
 
-- **Version:** [0.4.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-napkin)
+- **Version:** [0.4.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-napkin)
 - **Auth:** API key ([`NAPKIN_API_KEY`](./server.json))
 - **Tools:** [5](./src/tools/) (visuals, downloads, styles)
 - **Surface:** cloud-api

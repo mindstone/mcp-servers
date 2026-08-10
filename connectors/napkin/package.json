@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-napkin",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "mcpName": "io.github.mindstone/mcp-server-napkin",
   "description": "Napkin AI visual generation MCP server for Model Context Protocol hosts",
   "license": "FSL-1.1-MIT",
