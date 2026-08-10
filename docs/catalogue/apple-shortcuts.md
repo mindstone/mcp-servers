@@ -13,7 +13,7 @@ An MCP server that exposes Apple Shortcuts functionality to Rebel via the macOS 
 
 | Field | Value |
 |-------|-------|
-| Version | 0.2.0 |
+| Version | 0.2.1 |
 | Auth | None (—) |
 | Tools | 3 (shortcuts) |
 | Surface | local CLI |

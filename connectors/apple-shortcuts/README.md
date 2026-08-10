@@ -36,7 +36,7 @@ After clicking the button, your host will prompt you to fill: `APPLE_SHORTCUTS_T
 
 ## Status
 
-- **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-apple-shortcuts)
+- **Version:** [0.2.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-apple-shortcuts)
 - **Auth:** None ([`server.json`](./server.json))
 - **Tools:** [3](./src/) (shortcuts)
 - **Surface:** local-cli
