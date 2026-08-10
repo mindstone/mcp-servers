@@ -7,7 +7,7 @@ Runway ML MCP server for Model Context Protocol hosts. Generate AI video, images
 
 ## Status
 
-- **Version:** [0.4.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-runway)
+- **Version:** [0.4.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-runway)
 - **Auth:** API key ([`RUNWAYML_API_SECRET`](./server.json))
 - **Tools:** [23](./src/tools/) (video, image, audio, voices, tasks)
 - **Surface:** cloud-api

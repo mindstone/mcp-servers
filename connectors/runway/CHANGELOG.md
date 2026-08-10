@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-08-10
+
+### Changed
+
+- Zod length limits on video and voice inputs, salvaged from the adversarial rounds.
+
 ## [0.4.0] - 2026-08-05
 
 ### Changed
