@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-10
+
+### Changed
+
+- Land the followup fixes: numeric-string port leniency and three hardening items from the adversarial rounds.
+
 ## [0.2.0] - 2026-08-08
 
 ### Changed

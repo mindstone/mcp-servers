@@ -13,7 +13,7 @@ Outreach sales engagement MCP server — prospects, sequences, accounts, tasks, 
 
 | Field | Value |
 |-------|-------|
-| Version | 0.2.0 |
+| Version | 0.2.1 |
 | Auth | OAuth (local 127.0.0.1 callback) (`OUTREACH_CLIENT_SECRET`, `OUTREACH_ACCESS_TOKEN`) |
 | Tools | 22 (prospects, sequences, accounts, tasks, calls, mailboxes) |
 | Surface | cloud API |
