@@ -4,6 +4,12 @@ All notable changes to this connector will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-10
+
+### Changed
+
+- Re-sync the vendored envelope helper with the hardened canonical: attribute-bearing close tags and spoofed open tags escaped.
+
 ### Fixed
 
 - Re-synced the vendored `<untrusted-content>` envelope helper with the canonical hardened reference: attribute-bearing close-tag variants (`</untrusted-content foo>`) and spoofed open tags inside wrapped content are now escaped, closing an envelope-breakout gap an LLM parser could read as an envelope boundary.
