@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-quickbooks",
   "title": "QuickBooks Online",
   "description": "QuickBooks Online MCP server: invoices, bills, customers, vendors, employees, and accounts",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-quickbooks",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
