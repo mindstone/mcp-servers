@@ -13,7 +13,7 @@ Kling AI video and image generation MCP server for Model Context Protocol hosts.
 
 | Field | Value |
 |-------|-------|
-| Version | 0.4.0 |
+| Version | 0.4.1 |
 | Auth | API key (`KLING_ACCESS_KEY`, `KLING_SECRET_KEY`) |
 | Tools | 10 (video-generation, image-generation, tasks, account, downloads) |
 | Surface | cloud API |
