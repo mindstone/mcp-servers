@@ -13,7 +13,7 @@ Wise &#40;formerly TransferWise&#41; MCP server for Model Context Protocol hosts
 
 | Field | Value |
 |-------|-------|
-| Version | 0.1.0 |
+| Version | 0.1.1 |
 | Auth | API key (`WISE_API_TOKEN`) |
 | Tools | 17 (accounts, balances, recipients, quotes, transfers, discovery) |
 | Surface | cloud API |

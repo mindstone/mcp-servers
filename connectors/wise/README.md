@@ -7,7 +7,7 @@ Wise (formerly TransferWise) MCP server for Model Context Protocol hosts. Check 
 
 ## Status
 
-- **Version:** [0.1.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-wise)
+- **Version:** [0.1.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-wise)
 - **Auth:** API token (env var, or on disk via [`WISE_CONFIG_PATH`](./server.json))
 - **Tools:** [17](./src/tools/) (accounts, balances, recipients, quotes, transfers, discovery)
 - **Surface:** cloud-api
