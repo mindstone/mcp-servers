@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-08-10
+
+### Changed
+
+- Close F-3 through F-8: canonical envelope hardening (attribute-bearing close tags, spoofed open tags), race cleanup, 4MB body cap, strict port parsing.
+
 ### Fixed
 
 - Envelope helper hardened (F-3): re-synced the vendored `<untrusted-content>` helper with the canonical reference — attribute-bearing close-tag variants (`</untrusted-content foo>`) and spoofed open tags inside wrapped content are now escaped, and the envelope-span matcher used by the output sanitizer accepts the same attribute-bearing close forms.
