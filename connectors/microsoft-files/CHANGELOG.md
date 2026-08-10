@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-10
+
+### Changed
+
+- Fail closed on unknown file size and bound read_text_file downloads through the shared byte-capped helper.
+
 ### Fixed
 
 - `read_text_file` no longer fails open when Graph omits the file size from metadata: an unknown size now fails closed instead of bypassing the `maxSize` guard. The content download also goes through the same byte-capped, redirect-validating fetch helper as `read_document`, so an over-limit body is rejected even when the metadata under-reports the size.

@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-microsoft-files",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "mcpName": "io.github.mindstone/mcp-server-microsoft-files",
   "description": "Microsoft 365 OneDrive files via Graph: list, search, get, upload, download, share, read text.",
   "license": "FSL-1.1-MIT",

@@ -9,7 +9,7 @@ Microsoft 365 OneDrive Files MCP server — list, search, get, download, upload,
 
 ## Status
 
-- **Version:** [0.2.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-files)
+- **Version:** [0.2.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-microsoft-files)
 - **Auth:** OAuth (host-orchestrated, shared with [`mcp-server-microsoft-mail`](../microsoft-mail/)) ([`MS_CLIENT_ID`](./server.json))
 - **Tools:** [20](./src/tools.ts) (files, folders, sharing, permissions, versions, activity)
 - **Surface:** cloud-api
