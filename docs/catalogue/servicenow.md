@@ -13,7 +13,7 @@ ServiceNow ITSM MCP server for Model Context Protocol hosts. Manage incidents, c
 
 | Field | Value |
 |-------|-------|
-| Version | 0.3.0 |
+| Version | 0.3.1 |
 | Auth | Hybrid (`SERVICENOW_PASSWORD`, `SERVICENOW_CLIENT_SECRET`) |
 | Tools | 13 (incidents, change-requests, users, knowledge, service-catalog) |
 | Surface | cloud API |

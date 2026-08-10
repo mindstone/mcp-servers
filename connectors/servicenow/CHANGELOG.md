@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-10
+
+### Changed
+
+- close_code constrained to the documented enum and enveloped on read-back, closing the injection-persistence primitive.
+
 ### Fixed
 - `update_servicenow_incident`'s `close_code` is now a real enum of the standard ServiceNow close-code vocabulary (matching the earlier `state`/`urgency`/`impact` choice enums), and `close_code` is no longer treated as a structural literal on read-back — a prose value written to that field previously round-tripped literal, outside the untrusted-content envelope.
 
