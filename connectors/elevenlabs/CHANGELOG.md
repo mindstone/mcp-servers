@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-08-10
+
+### Changed
+
+- Fail-closed response schemas for all unchecked-cast sites, spec-nullability hardening, and empty voice-design-id rejection.
+
 ### Fixed
 - The remaining unchecked response casts are now Zod-validated fail-closed (`INVALID_RESPONSE` on shape drift), completing response-schema coverage for every tool: `get_dubbing` (a non-string `status`/`target_languages` entry previously crashed the envelope helper with a raw `TypeError`), `list_models` (a non-array payload previously degraded to `ok` with `count: 0`), `list_voices`, `get_voice`, `search_shared_voices` (and the `generate_speech` voice-lookup helpers), `create_music_plan` (a non-numeric `duration_ms` previously poisoned the total-duration arithmetic), `forced_alignment`, and `design_voice`.
 - `design_voice` preview `audio_base_64` is now grammar-gated as canonical base64 before the artifact write — `Buffer.from(x, 'base64')` silently discards invalid characters, so an unvalidated payload could write a truncated or empty file reported as success.

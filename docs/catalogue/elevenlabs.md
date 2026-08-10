@@ -13,7 +13,7 @@ ElevenLabs MCP server for Model Context Protocol hosts. Generate speech, music, 
 
 | Field | Value |
 |-------|-------|
-| Version | 0.5.0 |
+| Version | 0.5.1 |
 | Auth | API key (`ELEVENLABS_API_KEY`) |
 | Tools | 32 (account, usage, voices, speech, music, transcription, voice conversion, isolation, alignment, cloning, dialogue, voice design, dubbing, history, pronunciation dictionaries) |
 | Surface | cloud API |
