@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-10
+
+### Changed
+
+- Republish the outage-cancelled 0.2.0 content plus the canonical envelope-helper sync (attribute-bearing close tags, spoofed open tags).
+
 ### Fixed
 
 - Re-synced the vendored `<untrusted-content>` envelope helper with the canonical hardened reference: attribute-bearing close-tag variants (`</untrusted-content foo>`) and spoofed open tags inside wrapped content are now escaped, closing an envelope-breakout gap an LLM parser could read as an envelope boundary.
