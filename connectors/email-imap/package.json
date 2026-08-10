@@ -1,6 +1,6 @@
 {
   "name": "@mindstone/mcp-server-email-imap",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "mcpName": "io.github.mindstone/mcp-server-email-imap",
   "description": "Email IMAP/SMTP MCP server for Model Context Protocol hosts — supports iCloud Mail, Yahoo Mail, and custom IMAP providers",
   "license": "FSL-1.1-MIT",

@@ -13,7 +13,7 @@ Email IMAP/SMTP MCP server for Model Context Protocol hosts. Read, search, send,
 
 | Field | Value |
 |-------|-------|
-| Version | 0.3.1 |
+| Version | 0.3.2 |
 | Auth | API key (`EMAIL_IMAP_PASSWORD`) |
 | Tools | 17 (mailbox, messages, drafts, send) |
 | Surface | local protocol |
