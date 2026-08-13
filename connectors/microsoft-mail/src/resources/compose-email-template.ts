@@ -194,6 +194,7 @@ export const COMPOSE_EMAIL_HTML = `
       justify-content: flex-end;
       gap: 10px;
       margin-top: 2px;
+      flex-wrap: wrap;
     }
 
     .button {
@@ -404,6 +405,10 @@ export const COMPOSE_EMAIL_HTML = `
 
       <div class="actions">
         <button id="cancelButton" type="button" class="button button-secondary">Cancel</button>
+        <button id="draftButton" type="button" class="button button-secondary">
+          <span id="draftSpinner" class="spinner hidden" aria-hidden="true"></span>
+          <span id="draftLabel">Save draft</span>
+        </button>
         <button id="sendButton" type="button" class="button button-primary">
           <span id="sendSpinner" class="spinner hidden" aria-hidden="true"></span>
           <span id="sendLabel">Send email</span>
@@ -470,6 +475,12 @@ export const COMPOSE_EMAIL_HTML = `
       var collapsed = false;
       var outcomeUnknown = false;
       var sent = false;
+      // Which action the in-flight request belongs to ('send' | 'draft').
+      // Captured before clearing on reply/timeout so the response handler can
+      // route error/success correctly. retryAction survives the reply so a
+      // later Retry click still knows which tool to re-invoke.
+      var pendingAction = null;
+      var retryAction = null;
       var sendTimeoutId = null;
       // Just beyond the host-side tool-call timeout (60s) so a legitimately slow
       // send resolves to its real result first; this only fires when the reply
@@ -508,6 +519,9 @@ export const COMPOSE_EMAIL_HTML = `
       var sendButton = document.getElementById('sendButton');
       var sendLabel = document.getElementById('sendLabel');
       var sendSpinner = document.getElementById('sendSpinner');
+      var draftButton = document.getElementById('draftButton');
+      var draftLabel = document.getElementById('draftLabel');
+      var draftSpinner = document.getElementById('draftSpinner');
       var cancelButton = document.getElementById('cancelButton');
       var retryButton = document.getElementById('retryButton');
 
@@ -630,6 +644,7 @@ export const COMPOSE_EMAIL_HTML = `
       function setSending(nextSending) {
         sending = nextSending;
         sendButton.disabled = nextSending;
+        draftButton.disabled = nextSending;
         cancelButton.disabled = nextSending;
         toInput.disabled = nextSending;
         ccInput.disabled = nextSending;
@@ -639,6 +654,30 @@ export const COMPOSE_EMAIL_HTML = `
         sendSpinner.classList.toggle('hidden', !nextSending);
         sendLabel.textContent = nextSending ? 'Sending…' : 'Send email';
         sendButton.setAttribute('aria-busy', nextSending ? 'true' : 'false');
+        postResize();
+      }
+
+      // Mirror of setSending for the Save-draft action. One request is in
+      // flight at a time (both paths share pendingRequestId and set the same
+      // \`sending\` flag), so the two busy states can never overlap; every
+      // control locks either way and only the active button shows a spinner
+      // and aria-busy.
+      function setSavingDraft(nextSaving) {
+        sending = nextSaving;
+        sendButton.disabled = nextSaving;
+        draftButton.disabled = nextSaving;
+        cancelButton.disabled = nextSaving;
+        toInput.disabled = nextSaving;
+        ccInput.disabled = nextSaving;
+        bccInput.disabled = nextSaving;
+        subjectInput.disabled = nextSaving;
+        bodyInput.disabled = nextSaving;
+        sendSpinner.classList.add('hidden');
+        sendLabel.textContent = 'Send email';
+        sendButton.setAttribute('aria-busy', 'false');
+        draftSpinner.classList.toggle('hidden', !nextSaving);
+        draftLabel.textContent = nextSaving ? 'Saving…' : 'Save draft';
+        draftButton.setAttribute('aria-busy', nextSaving ? 'true' : 'false');
         postResize();
       }
 
@@ -699,8 +738,29 @@ export const COMPOSE_EMAIL_HTML = `
           return;
         }
         pendingRequestId = null;
+        if (pendingAction === 'draft') {
+          pendingAction = null;
+          setSavingDraft(false);
+          showDraftSaveUnknown();
+          return;
+        }
+        pendingAction = null;
         setSending(false);
         showSendUnknown();
+      }
+
+      // Same lost-reply honesty as a send, lower stakes: a blind retry here
+      // could create a duplicate draft, so we say we're not sure and point at
+      // the Drafts folder instead of offering Retry.
+      function showDraftSaveUnknown() {
+        outcomeUnknown = true;
+        clearError();
+        clearSuccess();
+        unknownTitle.textContent = 'Not sure if the draft was saved.';
+        unknownText.textContent =
+          "Rebel didn't hear back in time. Check your Drafts folder before trying again, so you don't create a duplicate.";
+        unknownBox.classList.remove('hidden');
+        postResize();
       }
 
       function setCcVisible(visible) {
@@ -742,9 +802,27 @@ export const COMPOSE_EMAIL_HTML = `
         return null;
       }
 
+      // Same provider-compatible minimum as sending (the draft tools require
+      // To, Subject, and Body too) with save-specific copy. Draft is
+      // email-mode only, so this body is the email shape unconditionally.
+      function validateDraftPayload(payload) {
+        if (!payload.to || payload.to.length === 0) {
+          return 'Add at least one recipient in To.';
+        }
+        if (!trimString(payload.subject)) {
+          return 'Add a subject before saving.';
+        }
+        if (!trimString(payload.body)) {
+          return 'Add an email body before saving.';
+        }
+        return null;
+      }
+
       function sendPayload(payload) {
         pendingPayload = payload;
         pendingRequestId = 'send-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+        pendingAction = 'send';
+        retryAction = null;
         setSending(true);
         clearError();
         clearSuccess();
@@ -758,6 +836,32 @@ export const COMPOSE_EMAIL_HTML = `
             method: 'tools/call',
             params: {
               name: 'send_email',
+              arguments: payload
+            },
+            id: pendingRequestId
+          },
+          '*'
+        );
+      }
+
+      function saveDraftPayload(payload) {
+        pendingPayload = payload;
+        pendingRequestId = 'draft-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+        pendingAction = 'draft';
+        retryAction = null;
+        setSavingDraft(true);
+        clearError();
+        clearSuccess();
+        clearUnknown();
+        clearSendTimeout();
+        sendTimeoutId = setTimeout(handleSendTimeout, SEND_TIMEOUT_MS);
+
+        window.parent.postMessage(
+          {
+            jsonrpc: '2.0',
+            method: 'tools/call',
+            params: {
+              name: 'create_draft',
               arguments: payload
             },
             id: pendingRequestId
@@ -924,6 +1028,17 @@ export const COMPOSE_EMAIL_HTML = `
         handleSendRequest();
       });
 
+      draftButton.addEventListener('click', function () {
+        if (sending) return;
+        var payload = readFormPayload();
+        var validationError = validateDraftPayload(payload);
+        if (validationError) {
+          showError(validationError);
+          return;
+        }
+        saveDraftPayload(payload);
+      });
+
       composeForm.addEventListener('submit', function (event) {
         event.preventDefault();
         handleSendRequest();
@@ -932,6 +1047,16 @@ export const COMPOSE_EMAIL_HTML = `
       retryButton.addEventListener('click', function () {
         if (sending) return;
         var payload = readFormPayload();
+        if (retryAction === 'draft') {
+          var draftValidationError = validateDraftPayload(payload);
+          if (draftValidationError) {
+            showError(draftValidationError);
+            return;
+          }
+          retryAction = null;
+          saveDraftPayload(payload);
+          return;
+        }
         var validationError = validatePayload(payload);
         if (validationError) {
           showError(validationError);
@@ -1019,18 +1144,39 @@ export const COMPOSE_EMAIL_HTML = `
         pendingRequestId = null;
         clearSendTimeout();
         clearUnknown();
-        setSending(false);
+        var completedAction = pendingAction;
+        pendingAction = null;
+        if (completedAction === 'draft') {
+          setSavingDraft(false);
+        } else {
+          setSending(false);
+        }
 
         if (data.error) {
           var errorMessage = data.error && typeof data.error.message === 'string'
             ? data.error.message
-            : 'Failed to send email.';
+            : (completedAction === 'draft' ? 'Failed to save draft.' : 'Failed to send email.');
+          if (completedAction === 'draft') {
+            // Retry re-invokes the draft tool, not the send tool — pendingAction
+            // is already cleared, so this is what the Retry handler routes on.
+            retryAction = 'draft';
+          }
           showError(errorMessage);
           return;
         }
 
         clearError();
         clearSuccess();
+        if (completedAction === 'draft') {
+          // Terminal: the draft now lives in the mailbox's Drafts folder.
+          // Collapse to a stamped confirmation and retire the form — Reopen
+          // would resurrect an editable copy whose next Save/Send silently
+          // diverges from (or duplicates) the saved draft.
+          var draftStamp = formatSentTime();
+          setCollapsed(true, draftStamp ? 'Draft saved · ' + draftStamp : 'Draft saved.');
+          reopenButton.classList.add('hidden');
+          return;
+        }
         // Preserve what was sent instead of discarding the draft. pendingPayload
         // is the exact payload we posted. We default to the collapsed summary, but
         // Reopen now restores a read-only view of the sent message.

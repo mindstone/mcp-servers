@@ -179,7 +179,7 @@ Until the host has written `${MS_CONFIG_DIR}/credentials/<account>.token.json` a
 | `list_attachments` | List attachment metadata (ID, name, type, size) for a message. |
 | `download_attachment` | Save a file attachment into the workspace (or OS temp directory). |
 | `send_email` | Send a new email message (supports CC and BCC). |
-| `compose_email` | Open an editable draft in an interactive compose view; nothing is sent until the user clicks Send. |
+| `compose_email` | Open an editable draft in an interactive compose view; nothing is sent until the user clicks Send, and Save draft stores it in Drafts instead. |
 | `search_emails` | Search emails using Microsoft Search syntax. |
 | `get_conversation` | List messages in a thread, oldest first (see ordering note below). |
 | `reply_to_email` | Reply (or reply-all) to an existing email. |

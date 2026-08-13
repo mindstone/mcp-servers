@@ -45,6 +45,14 @@ function assertComposeAppConfig(config) {
   if (typeof config.sendToolName !== 'string' || !TOOL_NAME_PATTERN.test(config.sendToolName)) {
     throw new Error('[mcp-app-compose] sendToolName must match ' + String(TOOL_NAME_PATTERN));
   }
+  if (config.draftToolName !== undefined) {
+    if (typeof config.draftToolName !== 'string' || !TOOL_NAME_PATTERN.test(config.draftToolName)) {
+      throw new Error('[mcp-app-compose] draftToolName must match ' + String(TOOL_NAME_PATTERN));
+    }
+    if (isChat) {
+      throw new Error('[mcp-app-compose] chat modes (slack/teams) must not set draftToolName');
+    }
+  }
   if (isChat) {
     // From is email-only (chat has no sending account), so the helper copy is
     // optional here. If a chat config still supplies it, it must clear the same
@@ -350,6 +358,10 @@ export function buildComposeAppHtml(config) {
   const f = config.fields;
   const gmail = config.deepLink.kind === 'gmail';
   const blockedSend = !!(config.blockedSendFallback && config.blockedSendFallback.kind === 'gmail-compose');
+  // Save-draft subsystem: email-mode configs that name a draft tool grow a
+  // "Save draft" action. Every draft region below is gated on this flag, so
+  // configs without it stay byte-identical to the historical output.
+  const hasDraft = config.draftToolName !== undefined;
   const m = resolveMode(config);
   return `
 <!DOCTYPE html>
@@ -544,7 +556,7 @@ export function buildComposeAppHtml(config) {
       justify-content: flex-end;
       gap: 10px;
       margin-top: 2px;
-    }
+${hasDraft ? '      flex-wrap: wrap;\n' : ''}    }
 
     .button {
       border-radius: 8px;
@@ -756,7 +768,11 @@ ${blockedSend ? `      <div id="blockedBox" class="status warning hidden" role="
 
       <div class="actions">
         <button id="cancelButton" type="button" class="button button-secondary">Cancel</button>
-        <button id="sendButton" type="button" class="button button-primary">
+${hasDraft ? `        <button id="draftButton" type="button" class="button button-secondary">
+          <span id="draftSpinner" class="spinner hidden" aria-hidden="true"></span>
+          <span id="draftLabel">Save draft</span>
+        </button>
+` : ''}        <button id="sendButton" type="button" class="button button-primary">
           <span id="sendSpinner" class="spinner hidden" aria-hidden="true"></span>
           <span id="sendLabel">${m.sendLabelText}</span>
         </button>
@@ -813,7 +829,13 @@ ${gmail ? `        <button id="openGmailButton" type="button" class="button butt
       var collapsed = false;
       var outcomeUnknown = false;
       var sent = false;
-${m.extraStateVars}${blockedSend ? `      var sendBlocked = false;
+${m.extraStateVars}${hasDraft ? `      // Which action the in-flight request belongs to ('send' | 'draft').
+      // Captured before clearing on reply/timeout so the response handler can
+      // route error/success correctly. retryAction survives the reply so a
+      // later Retry click still knows which tool to re-invoke.
+      var pendingAction = null;
+      var retryAction = null;
+` : ''}${blockedSend ? `      var sendBlocked = false;
 ` : ''}${gmail ? `      var gmailUrl = null;
 ` : ''}      var sendTimeoutId = null;
       // Just beyond the host-side tool-call timeout (60s) so a legitimately slow
@@ -854,7 +876,10 @@ ${f.cc ? `      var ccRow = document.getElementById('ccRow');
       var sendButton = document.getElementById('sendButton');
       var sendLabel = document.getElementById('sendLabel');
       var sendSpinner = document.getElementById('sendSpinner');
-      var cancelButton = document.getElementById('cancelButton');
+${hasDraft ? `      var draftButton = document.getElementById('draftButton');
+      var draftLabel = document.getElementById('draftLabel');
+      var draftSpinner = document.getElementById('draftSpinner');
+` : ''}      var cancelButton = document.getElementById('cancelButton');
       var retryButton = document.getElementById('retryButton');
 
       var errorBox = document.getElementById('errorBox');
@@ -979,7 +1004,7 @@ ${blockedSend ? `      var blockedBox = document.getElementById('blockedBox');
       function setSending(nextSending) {
         sending = nextSending;
         sendButton.disabled = nextSending${blockedSend ? ' || sendBlocked' : ''};
-        cancelButton.disabled = nextSending;
+${hasDraft ? '        draftButton.disabled = nextSending;\n' : ''}        cancelButton.disabled = nextSending;
         toInput.disabled = nextSending;
 ${f.cc ? `        ccInput.disabled = nextSending;
 ` : ''}${f.bcc ? `        bccInput.disabled = nextSending;
@@ -990,7 +1015,29 @@ ${f.cc ? `        ccInput.disabled = nextSending;
         postResize();
       }
 
-      function clearError() {
+${hasDraft ? `      // Mirror of setSending for the Save-draft action. One request is in
+      // flight at a time (both paths share pendingRequestId and set the same
+      // \`sending\` flag), so the two busy states can never overlap; every
+      // control locks either way and only the active button shows a spinner
+      // and aria-busy.
+      function setSavingDraft(nextSaving) {
+        sending = nextSaving;
+        sendButton.disabled = nextSaving${blockedSend ? ' || sendBlocked' : ''};
+        draftButton.disabled = nextSaving;
+        cancelButton.disabled = nextSaving;
+        toInput.disabled = nextSaving;
+${f.cc ? `        ccInput.disabled = nextSaving;\n` : ''}${f.bcc ? `        bccInput.disabled = nextSaving;\n` : ''}        subjectInput.disabled = nextSaving;
+        bodyInput.disabled = nextSaving;
+        sendSpinner.classList.add('hidden');
+        sendLabel.textContent = ${quoteJsString(m.sendLabelText)};
+        sendButton.setAttribute('aria-busy', 'false');
+        draftSpinner.classList.toggle('hidden', !nextSaving);
+        draftLabel.textContent = nextSaving ? 'Saving…' : 'Save draft';
+        draftButton.setAttribute('aria-busy', nextSaving ? 'true' : 'false');
+        postResize();
+      }
+
+` : ''}      function clearError() {
         errorText.textContent = '';
         errorBox.classList.add('hidden');
       }
@@ -1047,11 +1094,32 @@ ${f.cc ? `        ccInput.disabled = nextSending;
           return;
         }
         pendingRequestId = null;
-        setSending(false);
+${hasDraft ? `        if (pendingAction === 'draft') {
+          pendingAction = null;
+          setSavingDraft(false);
+          showDraftSaveUnknown();
+          return;
+        }
+        pendingAction = null;
+` : ''}        setSending(false);
         showSendUnknown();
       }
 
-${f.cc ? `      function setCcVisible(visible) {
+${hasDraft ? `      // Same lost-reply honesty as a send, lower stakes: a blind retry here
+      // could create a duplicate draft, so we say we're not sure and point at
+      // the Drafts folder instead of offering Retry.
+      function showDraftSaveUnknown() {
+        outcomeUnknown = true;
+        clearError();
+        clearSuccess();
+        unknownTitle.textContent = 'Not sure if the draft was saved.';
+        unknownText.textContent =
+          "Rebel didn't hear back in time. Check your Drafts folder before trying again, so you don't create a duplicate.";
+        unknownBox.classList.remove('hidden');
+        postResize();
+      }
+
+` : ''}${f.cc ? `      function setCcVisible(visible) {
         ccRow.classList.toggle('hidden', !visible);
         toggleCcButton.textContent = visible ? 'Hide CC' : 'Add CC';
         toggleCcButton.setAttribute('aria-expanded', visible ? 'true' : 'false');
@@ -1069,10 +1137,28 @@ ${m.readFormPayloadBody}      }
       function validatePayload(payload) {
 ${m.validatePayloadBody}      }
 
-      function sendPayload(payload) {
+${hasDraft ? `      // Same provider-compatible minimum as sending (the draft tools require
+      // To, Subject, and Body too) with save-specific copy. Draft is
+      // email-mode only, so this body is the email shape unconditionally.
+      function validateDraftPayload(payload) {
+        if (!payload.to || payload.to.length === 0) {
+          return 'Add at least one recipient in To.';
+        }
+        if (!trimString(payload.subject)) {
+          return 'Add a subject before saving.';
+        }
+        if (!trimString(payload.body)) {
+          return 'Add an email body before saving.';
+        }
+        return null;
+      }
+
+` : ''}      function sendPayload(payload) {
         pendingPayload = payload;
         pendingRequestId = 'send-' + Date.now() + '-' + Math.random().toString(16).slice(2);
-        setSending(true);
+${hasDraft ? `        pendingAction = 'send';
+        retryAction = null;
+` : ''}        setSending(true);
         clearError();
         clearSuccess();
         clearUnknown();
@@ -1093,7 +1179,33 @@ ${m.validatePayloadBody}      }
         );
       }
 
-      function applyDraftData(rawDraft) {
+${hasDraft ? `      function saveDraftPayload(payload) {
+        pendingPayload = payload;
+        pendingRequestId = 'draft-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+        pendingAction = 'draft';
+        retryAction = null;
+        setSavingDraft(true);
+        clearError();
+        clearSuccess();
+        clearUnknown();
+        clearSendTimeout();
+        sendTimeoutId = setTimeout(handleSendTimeout, SEND_TIMEOUT_MS);
+
+        window.parent.postMessage(
+          {
+            jsonrpc: '2.0',
+            method: 'tools/call',
+            params: {
+              name: ${quoteJsString(config.draftToolName ?? '')},
+              arguments: payload
+            },
+            id: pendingRequestId
+          },
+          '*'
+        );
+      }
+
+` : ''}      function applyDraftData(rawDraft) {
 ${m.applyDraftDataBody}      }
 
       function getDraftFromToolResult(payload) {
@@ -1341,7 +1453,18 @@ ${blockedSend ? `        // Once the user's own send preference has blocked this
         handleSendRequest();
       });
 
-      composeForm.addEventListener('submit', function (event) {
+${hasDraft ? `      draftButton.addEventListener('click', function () {
+        if (sending) return;
+        var payload = readFormPayload();
+        var validationError = validateDraftPayload(payload);
+        if (validationError) {
+          showError(validationError);
+          return;
+        }
+        saveDraftPayload(payload);
+      });
+
+` : ''}      composeForm.addEventListener('submit', function (event) {
         event.preventDefault();
         handleSendRequest();
       });
@@ -1349,7 +1472,17 @@ ${blockedSend ? `        // Once the user's own send preference has blocked this
       retryButton.addEventListener('click', function () {
         if (sending) return;
         var payload = readFormPayload();
-        var validationError = validatePayload(payload);
+${hasDraft ? `        if (retryAction === 'draft') {
+          var draftValidationError = validateDraftPayload(payload);
+          if (draftValidationError) {
+            showError(draftValidationError);
+            return;
+          }
+          retryAction = null;
+          saveDraftPayload(payload);
+          return;
+        }
+` : ''}        var validationError = validatePayload(payload);
         if (validationError) {
           showError(validationError);
           return;
@@ -1448,20 +1581,33 @@ ${gmail ? `      // The iframe sandbox is "allow-scripts" only (no allow-popups 
         pendingRequestId = null;
         clearSendTimeout();
         clearUnknown();
-        setSending(false);
-
+${hasDraft ? `        var completedAction = pendingAction;
+        pendingAction = null;
+        if (completedAction === 'draft') {
+          setSavingDraft(false);
+        } else {
+          setSending(false);
+        }
+` : '        setSending(false);\n'}
         if (data.error) {
           var errorMessage = data.error && typeof data.error.message === 'string'
             ? data.error.message
-            : ${quoteJsString(m.sendFailedText)};
-${blockedSend ? `          // Prefer the host-vetted structured reason (a closed enum the host
+            : ${hasDraft ? `(completedAction === 'draft' ? 'Failed to save draft.' : ${quoteJsString(m.sendFailedText)})` : quoteJsString(m.sendFailedText)};
+${hasDraft ? `          if (completedAction === 'draft') {
+            // Retry re-invokes the draft tool, not the send tool — pendingAction
+            // is already cleared, so this is what the Retry handler routes on.
+            retryAction = 'draft';
+          }
+` : ''}${blockedSend ? `          // Prefer the host-vetted structured reason (a closed enum the host
           // derives from the tool-block error data) and fall back to
           // text-matching the flattened message for hosts that don't forward it
           // yet. Only 'user-disabled' opens the Gmail escape hatch —
           // admin-disabled and security-policy blocks stay ordinary errors (see
           // the detector comment above for why).
-          var blockedReason = data.error.data && data.error.data.reason;
-          if (blockedReason === 'user-disabled' || isUserDisabledSendError(errorMessage)) {
+${hasDraft ? `          // Send-failure only: a blocked DRAFT tool must never surface the
+          // "sending is turned off" copy or the Open-in-Gmail bypass.
+          ` : ''}var blockedReason = data.error.data && data.error.data.reason;
+          if (${hasDraft ? 'completedAction !== \'draft\' && ' : ''}(blockedReason === 'user-disabled' || isUserDisabledSendError(errorMessage))) {
             showBlockedSend();
             return;
           }
@@ -1471,7 +1617,17 @@ ${blockedSend ? `          // Prefer the host-vetted structured reason (a closed
 
         clearError();
         clearSuccess();
-${gmail ? `        // Preserve what was sent (and how to reach it) instead of discarding the
+${hasDraft ? `        if (completedAction === 'draft') {
+          // Terminal: the draft now lives in the mailbox's Drafts folder.
+          // Collapse to a stamped confirmation and retire the form — Reopen
+          // would resurrect an editable copy whose next Save/Send silently
+          // diverges from (or duplicates) the saved draft.
+          var draftStamp = formatSentTime();
+          setCollapsed(true, draftStamp ? 'Draft saved · ' + draftStamp : 'Draft saved.');
+          reopenButton.classList.add('hidden');
+          return;
+        }
+` : ''}${gmail ? `        // Preserve what was sent (and how to reach it) instead of discarding the
         // draft. pendingPayload is the exact payload we posted; the reply carries
         // the Gmail message/thread ids. We default to the collapsed summary, but
         // Reopen now restores a read-only view of the sent message.

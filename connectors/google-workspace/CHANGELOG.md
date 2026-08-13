@@ -7,6 +7,16 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- The inline compose form (`compose_workspace_email`) gains a "Save draft"
+  button (between Cancel and Send) that saves the edited email to Gmail Drafts
+  via the existing `create_workspace_draft` tool instead of sending it. The
+  saved-draft confirmation is terminal (no Reopen) so the form can't silently
+  diverge from or duplicate the mailbox draft. The compose template's golden
+  fixture was deliberately rebaselined for this behavioural delta (the byte
+  change adds the draft-save UI and its lifecycle).
+
 ## [0.4.0] - 2026-08-08
 
 ### Changed

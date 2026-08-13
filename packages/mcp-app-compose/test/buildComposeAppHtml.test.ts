@@ -34,6 +34,21 @@ const BLOCKED_CONFIG: ComposeAppConfig = {
   blockedSendFallback: { kind: 'gmail-compose' },
 };
 
+// Gmail plus a save-draft tool (the shipped Gmail/Outlook configs both carry
+// one). The form grows a Save-draft action between Cancel and Send that
+// persists the email to the mailbox's Drafts folder instead of sending.
+const DRAFT_CONFIG: ComposeAppConfig = {
+  ...GMAIL_CONFIG,
+  draftToolName: 'create_workspace_draft',
+};
+
+// Draft plus the blocked-send Gmail escape hatch: pins that a blocked DRAFT
+// tool can never open the send-only Gmail bypass.
+const BLOCKED_DRAFT_CONFIG: ComposeAppConfig = {
+  ...BLOCKED_CONFIG,
+  draftToolName: 'create_workspace_draft',
+};
+
 // Chat-shaped configs (Slack + Teams). Single To target + message body, no
 // subject/cc/bcc/From/deep-link. Slack carries a locked intended-recipient for
 // DM sends; Teams routes by chatId and has neither.
@@ -56,6 +71,8 @@ const TEAMS_CONFIG: ComposeAppConfig = {
 const gmailHtml = buildComposeAppHtml(GMAIL_CONFIG);
 const acmeHtml = buildComposeAppHtml(ACME_CONFIG);
 const blockedHtml = buildComposeAppHtml(BLOCKED_CONFIG);
+const draftHtml = buildComposeAppHtml(DRAFT_CONFIG);
+const blockedDraftHtml = buildComposeAppHtml(BLOCKED_DRAFT_CONFIG);
 const slackHtml = buildComposeAppHtml(SLACK_CONFIG);
 const teamsHtml = buildComposeAppHtml(TEAMS_CONFIG);
 
@@ -471,6 +488,209 @@ describe('buildComposeAppHtml — blocked-send detector and Gmail URL (happy-dom
     // The user is told the body was dropped, not silently truncated.
     const blockedText = window.document.getElementById('blockedText');
     expect((blockedText as unknown as HTMLElement).textContent).toContain('Copy the message text');
+  });
+});
+
+describe('buildComposeAppHtml — save-draft subsystem (gating and config)', () => {
+  it('inlines the draft machinery only when draftToolName is set', () => {
+    for (const marker of [
+      'id="draftButton"',
+      'id="draftSpinner"',
+      'id="draftLabel"',
+      'Save draft',
+      'function saveDraftPayload',
+      'function validateDraftPayload',
+      'function setSavingDraft',
+      'function showDraftSaveUnknown',
+      'pendingAction',
+      'retryAction',
+      "'draft-' + Date.now()",
+      'Not sure if the draft was saved.',
+      'completedAction',
+    ]) {
+      expect(draftHtml).toContain(marker);
+      // Absent from configs without the knob (byte-parity for them).
+      expect(gmailHtml).not.toContain(marker);
+      expect(slackHtml).not.toContain(marker);
+      expect(teamsHtml).not.toContain(marker);
+    }
+  });
+
+  it('renders Save draft between Cancel and Send as a secondary button', () => {
+    const actions = draftHtml.match(/<div class="actions">[\s\S]*?<\/div>/)?.[0] ?? '';
+    const cancelAt = actions.indexOf('id="cancelButton"');
+    const draftAt = actions.indexOf('id="draftButton"');
+    const sendAt = actions.indexOf('id="sendButton"');
+    expect(cancelAt).toBeGreaterThan(-1);
+    expect(draftAt).toBeGreaterThan(cancelAt);
+    expect(sendAt).toBeGreaterThan(draftAt);
+    expect(actions).toContain('class="button button-secondary"');
+  });
+
+  it('splices the configured draft tool name into the tools/call', () => {
+    expect(draftHtml).toContain("name: 'create_workspace_draft',");
+  });
+
+  it('rejects a malformed draftToolName', () => {
+    expect(() => buildComposeAppHtml({ ...GMAIL_CONFIG, draftToolName: "draft'; window.x = 1; '" })).toThrow(
+      /draftToolName/,
+    );
+    expect(() => buildComposeAppHtml({ ...GMAIL_CONFIG, draftToolName: '' })).toThrow(/draftToolName/);
+  });
+
+  it('rejects draftToolName in chat modes', () => {
+    expect(() => buildComposeAppHtml({ ...SLACK_CONFIG, draftToolName: 'save_draft' })).toThrow(/draftToolName/);
+    expect(() => buildComposeAppHtml({ ...TEAMS_CONFIG, draftToolName: 'save_draft' })).toThrow(/draftToolName/);
+  });
+});
+
+describe('buildComposeAppHtml — save-draft lifecycle (happy-dom)', () => {
+  // Fill the form and click Save draft; returns the window and the posted
+  // tools/call so the caller can reply from the "host".
+  function startDraftSave(
+    html: string,
+    fields?: { to?: string; cc?: string; bcc?: string; subject?: string; body?: string },
+  ): { window: Window; toolCall: Record<string, any> } {
+    const window = loadWindow(html);
+    setFieldValue(window, 'toInput', fields?.to ?? 'jane@example.com');
+    if (fields?.cc !== undefined) setFieldValue(window, 'ccInput', fields.cc);
+    if (fields?.bcc !== undefined) setFieldValue(window, 'bccInput', fields.bcc);
+    setFieldValue(window, 'subjectInput', fields?.subject ?? 'Quarterly update');
+    setFieldValue(window, 'bodyInput', fields?.body ?? 'Numbers attached.');
+    const draftButton = window.document.getElementById('draftButton') as unknown as HTMLButtonElement;
+    draftButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    const toolCall = postedMessages(window).find((msg) => msg.method === 'tools/call');
+    expect(toolCall).toBeTruthy();
+    return { window, toolCall: toolCall as Record<string, any> };
+  }
+
+  it('saves via the configured draft tool with the full address/subject/body payload', () => {
+    const { toolCall } = startDraftSave(draftHtml, {
+      to: 'jane@example.com, ben@example.com',
+      cc: 'boss@example.com',
+      bcc: 'archive@example.com',
+    });
+    expect(toolCall.id).toMatch(/^draft-/);
+    expect(toolCall.params?.name).toBe('create_workspace_draft');
+    expect(toolCall.params?.arguments?.to).toEqual(['jane@example.com', 'ben@example.com']);
+    expect(toolCall.params?.arguments?.cc).toEqual(['boss@example.com']);
+    expect(toolCall.params?.arguments?.bcc).toEqual(['archive@example.com']);
+    expect(toolCall.params?.arguments?.subject).toBe('Quarterly update');
+    expect(toolCall.params?.arguments?.body).toBe('Numbers attached.');
+  });
+
+  it('locks every control and shows the spinner only on Save draft while saving', () => {
+    const { window } = startDraftSave(draftHtml);
+    const draftButton = window.document.getElementById('draftButton') as unknown as HTMLButtonElement;
+    const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
+    const cancelButton = window.document.getElementById('cancelButton') as unknown as HTMLButtonElement;
+    expect(draftButton.disabled).toBe(true);
+    expect(sendButton.disabled).toBe(true);
+    expect(cancelButton.disabled).toBe(true);
+    expect(isHidden(window, 'draftSpinner')).toBe(false);
+    expect(isHidden(window, 'sendSpinner')).toBe(true);
+    expect(draftButton.getAttribute('aria-busy')).toBe('true');
+    expect(sendButton.getAttribute('aria-busy')).toBe('false');
+    expect((window.document.getElementById('draftLabel') as unknown as HTMLElement).textContent).toBe('Saving…');
+    // Send keeps its resting label — no spinner, no "Sending…".
+    expect((window.document.getElementById('sendLabel') as unknown as HTMLElement).textContent).toBe('Send email');
+  });
+
+  it('blocks the save with save-specific copy when a required field is empty', () => {
+    const window = loadWindow(draftHtml);
+    setFieldValue(window, 'toInput', 'jane@example.com');
+    setFieldValue(window, 'bodyInput', 'Numbers attached.');
+    // No subject.
+    const draftButton = window.document.getElementById('draftButton') as unknown as HTMLButtonElement;
+    draftButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    expect(postedMessages(window).some((msg) => msg.method === 'tools/call')).toBe(false);
+    expect(isHidden(window, 'errorBox')).toBe(false);
+    expect((window.document.getElementById('errorText') as unknown as HTMLElement).textContent).toBe(
+      'Add a subject before saving.',
+    );
+  });
+
+  it('collapses to a stamped confirmation and hides Reopen on success', () => {
+    const { window, toolCall } = startDraftSave(draftHtml);
+    window.dispatchEvent(
+      new window.MessageEvent('message', { data: { jsonrpc: '2.0', id: toolCall.id, result: {} } }),
+    );
+    expect(isHidden(window, 'collapsedState')).toBe(false);
+    expect(
+      (window.document.getElementById('collapsedMessage') as unknown as HTMLElement).textContent,
+    ).toMatch(/^Draft saved · /);
+    // The saved draft lives in the mailbox now; reopening the form would invite
+    // a silent duplicate/divergence, so the terminal state has no Reopen.
+    const reopenButton = window.document.getElementById('reopenButton') as unknown as HTMLButtonElement;
+    expect(reopenButton.classList.contains('hidden')).toBe(true);
+    expect(isHidden(window, 'composeForm')).toBe(true);
+    expect(isHidden(window, 'sentView')).toBe(true);
+    const draftButton = window.document.getElementById('draftButton') as unknown as HTMLButtonElement;
+    expect(draftButton.getAttribute('aria-busy')).toBe('false');
+  });
+
+  it('shows the draft error and routes Retry back to the draft tool', () => {
+    const { window, toolCall } = startDraftSave(draftHtml);
+    window.dispatchEvent(
+      new window.MessageEvent('message', {
+        data: { jsonrpc: '2.0', id: toolCall.id, error: { code: -32000, message: 'Mailbox is read-only.' } },
+      }),
+    );
+    expect(isHidden(window, 'errorBox')).toBe(false);
+    expect((window.document.getElementById('errorText') as unknown as HTMLElement).textContent).toBe(
+      'Mailbox is read-only.',
+    );
+    const draftButton = window.document.getElementById('draftButton') as unknown as HTMLButtonElement;
+    expect(draftButton.disabled).toBe(false);
+
+    const retryButton = window.document.getElementById('retryButton') as unknown as HTMLButtonElement;
+    retryButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    const calls = postedMessages(window).filter((msg) => msg.method === 'tools/call');
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.params?.name).toBe('create_workspace_draft');
+    expect(calls[1]?.id).not.toBe(toolCall.id);
+  });
+
+  it('never routes a draft failure into the blocked-send Gmail escape hatch', () => {
+    const { window, toolCall } = startDraftSave(blockedDraftHtml);
+    window.dispatchEvent(
+      new window.MessageEvent('message', {
+        data: {
+          jsonrpc: '2.0',
+          id: toolCall.id,
+          error: { code: -32000, message: USER_DISABLED_ERROR, data: { reason: 'user-disabled' } },
+        },
+      }),
+    );
+    expect(isHidden(window, 'blockedBox')).toBe(true);
+    expect(isHidden(window, 'errorBox')).toBe(false);
+    // Send stays available — the escape hatch copy about sending being turned
+    // off would be nonsense for a draft save.
+    const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
+    expect(sendButton.disabled).toBe(false);
+  });
+
+  it('keeps the send path intact alongside the draft action', () => {
+    const window = loadWindow(draftHtml);
+    setFieldValue(window, 'toInput', 'jane@example.com');
+    setFieldValue(window, 'subjectInput', 'Quarterly update');
+    setFieldValue(window, 'bodyInput', 'Numbers attached.');
+    const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
+    sendButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    const toolCall = postedMessages(window).find((msg) => msg.method === 'tools/call');
+    expect(toolCall?.id).toMatch(/^send-/);
+    expect(toolCall?.params?.name).toBe('send_workspace_email');
+    window.dispatchEvent(
+      new window.MessageEvent('message', { data: { jsonrpc: '2.0', id: toolCall?.id, result: {} } }),
+    );
+    expect(isHidden(window, 'collapsedState')).toBe(false);
+    expect(
+      (window.document.getElementById('collapsedMessage') as unknown as HTMLElement).textContent,
+    ).toMatch(/^Email sent · /);
+    const reopenButton = window.document.getElementById('reopenButton') as unknown as HTMLButtonElement;
+    expect(reopenButton.classList.contains('hidden')).toBe(false);
+    reopenButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    expect(isHidden(window, 'sentView')).toBe(false);
   });
 });
 

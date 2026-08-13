@@ -24,6 +24,12 @@ The config is deliberately tiny — only what genuinely differs between connecto
 
 - `resourceUri` — the `ui://` URI the connector serves the HTML under.
 - `sendToolName` — the tool the iframe calls (`tools/call`) when Send is clicked.
+- `draftToolName` — optional (email mode only): the tool the iframe calls when
+  Save draft is clicked. When set, the form grows a secondary Save-draft action
+  between Cancel and Send that persists the email to the mailbox's Drafts folder
+  instead of sending; the tool must accept the same payload shape as the send
+  tool. Omit it and the output stays byte-identical to the compose/send-only
+  template.
 - `fromMissingHelperText` — helper copy shown when the draft carries no sending account.
 - `fields.cc` / `fields.bcc` — whether to render the CC/BCC rows and their toggles.
 - `deepLink` — discriminator: `{ kind: 'gmail' }` inlines the Gmail "open the sent

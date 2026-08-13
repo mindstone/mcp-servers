@@ -58,6 +58,18 @@ export interface ComposeAppConfig {
   /** Tool the iframe invokes via `tools/call` when Send is clicked. */
   sendToolName: string;
   /**
+   * Optional. Tool the iframe invokes via `tools/call` when "Save draft" is
+   * clicked; when set, the form grows a Save-draft action (secondary button
+   * between Cancel and Send) that persists the composed email to the
+   * mailbox's Drafts folder instead of sending it. The tool must accept the
+   * same payload shape as the send tool (`to`/`cc`/`bcc`/`subject`/`body`,
+   * plus the account `email` when known) and must require To, Subject, and
+   * Body — the form validates those before calling it. Email mode only:
+   * chat modes must leave it unset. Omit to keep the historical output
+   * byte-for-byte (no draft markup or script machinery is emitted).
+   */
+  draftToolName?: string;
+  /**
    * Shape of the compose form. Defaults to `'email'` when absent. See
    * {@link ComposeMode}.
    */

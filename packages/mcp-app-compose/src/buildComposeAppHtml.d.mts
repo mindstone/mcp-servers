@@ -4,7 +4,7 @@
 import type { ComposeAppConfig } from './types.js';
 
 /**
- * Builds the full compose/send MCP-App iframe HTML document for one
- * connector's configuration. Throws on invalid config.
+ * Builds the full compose/save-draft/send MCP-App iframe HTML document for
+ * one connector's configuration. Throws on invalid config.
  */
 export declare function buildComposeAppHtml(config: ComposeAppConfig): string;

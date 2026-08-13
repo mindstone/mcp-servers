@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- The inline compose form (`compose_email`) gains a "Save draft" button
+  (between Cancel and Send) that saves the edited email to Outlook Drafts via
+  the existing `create_draft` tool instead of sending it. The saved-draft
+  confirmation is terminal (no Reopen) so the form can't silently diverge from
+  or duplicate the mailbox draft.
+
 ## [0.3.0] - 2026-08-06
 
 ### Changed

@@ -24,6 +24,9 @@ const previewPath = path.join(root, 'src/resources/compose-email.html');
 export const OUTLOOK_COMPOSE_APP_CONFIG = Object.freeze({
   resourceUri: 'ui://microsoft-mail/compose-email',
   sendToolName: 'send_email',
+  // Save-draft button: persists the composed email to Outlook Drafts via the
+  // connector's existing create_draft tool instead of sending.
+  draftToolName: 'create_draft',
   fromMissingHelperText:
     'Rebel could not confirm the sending account. Cancel and ask Rebel to recreate the draft before sending.',
   fields: Object.freeze({ cc: true, bcc: true }),
