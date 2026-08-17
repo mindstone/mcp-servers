@@ -5,7 +5,7 @@ title: mcp-servers catalogue
 
 # mcp-servers catalogue
 
-A machine-readable index of the [mindstone/mcp-servers](https://github.com/mindstone/mcp-servers) monorepo: 39 source-available MCP servers, audited weekly by the [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/mindstone/mcp-servers).
+A machine-readable index of the [mindstone/mcp-servers](https://github.com/mindstone/mcp-servers) monorepo: 40 source-available MCP servers, audited weekly by the [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/mindstone/mcp-servers).
 
 Each row links to a per-connector page generated from the connector's `STATUS.json`. The data on this site is derived from the source repository on every push to `main` — if it looks stale, the data isn't.
 
@@ -13,6 +13,7 @@ Each row links to a per-connector page generated from the connector's `STATUS.js
 |-----------|--------------|---------|------|-------|---------|
 | [apple-shortcuts](./catalogue/apple-shortcuts.html) | An MCP server that exposes Apple Shortcuts functionality to Rebel via the macOS &#96;shortcuts&#96; CLI. | 0.2.1 | None | 3 | local CLI |
 | [browser-automation](./catalogue/browser-automation.html) | Browser control you can watch: open pages, sign in, click around, fill forms, take screenshots, and keep a reusable browser session. | 0.2.2 | None | 21 | browser automation |
+| [browserbase](./catalogue/browserbase.html) | Cloud browser automation via the &#91;Browserbase&#93;&#40;https://www.browserbase.com/&#41; API: sessions with live-view debugging, AI web agents, persistent contexts, downloads, fetch/search, and serverless functions. | 0.1.1 | API key | 53 | cloud API |
 | [canary](./catalogue/canary.html) | Mindstone's internal release-pipeline test connector — not for use. It exists only to validate the rebel-oss release pipeline end-to-end. Single &#96;ping&#96; tool; no external dependencies, no auth, no bridge. | 0.0.4 | None | 1 | local protocol |
 | [elevenlabs](./catalogue/elevenlabs.html) | ElevenLabs MCP server for Model Context Protocol hosts. Generate speech, music, and sound effects, browse voices, and transcribe audio using the ElevenLabs API through a standardised MCP interface. | 0.5.1 | API key | 32 | cloud API |
 | [elevenlabs-agents](./catalogue/elevenlabs-agents.html) | ElevenLabs Conversational AI MCP server for Model Context Protocol hosts. Inspect and author voice agents, review conversation transcripts and recordings, manage phone-number assignments, place outbound calls, submit or monitor scheduled batch calls, and write to the knowledge base through the ElevenLabs ConvAI API. | 0.2.1 | API key | 31 | cloud API |

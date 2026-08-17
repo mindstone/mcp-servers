@@ -1,0 +1,51 @@
+{
+  "name": "@mindstone/mcp-server-browserbase",
+  "version": "0.1.1",
+  "mcpName": "io.github.mindstone/mcp-server-browserbase",
+  "description": "Browserbase MCP server — cloud browser sessions, agents, contexts, downloads, fetch, search, and functions via the Browserbase API",
+  "license": "FSL-1.1-MIT",
+  "type": "module",
+  "bin": {
+    "mcp-server-browserbase": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mindstone/mcp-servers.git",
+    "directory": "connectors/browserbase"
+  },
+  "homepage": "https://github.com/mindstone/mcp-servers/tree/main/connectors/browserbase",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc && shx chmod +x dist/index.js",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build && npm test && npm audit --omit=dev --audit-level=high",
+    "watch": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@mindstone/mcp-test-harness": "file:../../test-harness",
+    "@types/node": "^22",
+    "@vitest/coverage-v8": "^4.1.3",
+    "msw": "^2.13.2",
+    "shx": "^0.3.4",
+    "typescript": "^5.8.2",
+    "vitest": "^4.1.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "npm@11.10.0"
+}
