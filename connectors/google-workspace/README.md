@@ -8,7 +8,7 @@ Google Workspace MCP server — Gmail, Calendar, Drive, Docs, Sheets, Slides, Co
 
 ## Status
 
-- **Version:** [0.4.0](./CHANGELOG.md) · npm: not yet published
+- **Version:** [0.4.1](./CHANGELOG.md) · npm: not yet published
 - **Auth:** OAuth (host-orchestrated) ([`GOOGLE_CLIENT_SECRET`](./server.json))
 - **Tools:** [116](./src/tools/definitions/) (Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Chat, Meet, Tasks, Forms, Comments, Account)
 - **Surface:** cloud-api

@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-08-18
+
+### Changed
+
+- Make degraded Gmail reply-threading observable via a structured warning and preserve draft threadIds on body-only updates instead of silently unthreading
+
 ### Added
 
 - The inline compose form (`compose_workspace_email`) gains a "Save draft"
