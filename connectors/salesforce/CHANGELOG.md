@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-08-18
+
+### Changed
+
+- Wait out the interactive OAuth flow on the bridge configure call (5-min budget) instead of aborting at 30s with a spurious authentication failure
+
 ## [0.2.1] - 2026-08-09
 
 ### Changed

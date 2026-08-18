@@ -3,7 +3,7 @@
   "name": "io.github.mindstone/mcp-server-salesforce",
   "title": "Salesforce",
   "description": "Salesforce CRM MCP server: accounts, contacts, opportunities, leads, tasks, and custom objects",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mindstone/mcp-server-salesforce",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

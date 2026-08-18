@@ -13,7 +13,7 @@ Salesforce CRM MCP server — accounts, contacts, opportunities, leads, tasks, u
 
 | Field | Value |
 |-------|-------|
-| Version | 0.2.1 |
+| Version | 0.2.2 |
 | Auth | OAuth (local 127.0.0.1 callback) (`SALESFORCE_CLIENT_SECRET`, `SALESFORCE_ACCESS_TOKEN`) |
 | Tools | 37 (accounts, contacts, opportunities, leads, tasks, cases, events, search, notes, campaigns, reports, query) |
 | Surface | cloud API |
