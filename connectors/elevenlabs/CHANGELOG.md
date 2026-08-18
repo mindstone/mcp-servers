@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-08-18
+
+### Changed
+
+- Signpost the arbitrary auto-picked default voice via a voice_note and clearer param descriptions instead of silently choosing a language-blind default
+
 ## [0.5.1] - 2026-08-10
 
 ### Changed
