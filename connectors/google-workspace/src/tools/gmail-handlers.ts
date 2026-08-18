@@ -14,6 +14,7 @@ import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, rea
 import path from 'path';
 import { McpToolResponse } from './types.js';
 import { wrapUntrustedContent, wrapUntrustedJsonStrings } from '../utils/untrusted-content.js';
+import logger from '../utils/logger.js';
 
 // Singleton instances
 let gmailService: ReturnType<typeof getGmailService>;
@@ -51,12 +52,52 @@ interface ReplyThreadingHeaders {
   references?: string[];
 }
 
-async function resolveReplyThreading(email: string, replyToMessageId: string): Promise<ReplyThreadingHeaders> {
+interface ReplyThreadingResolution {
+  headers: ReplyThreadingHeaders;
+  /**
+   * Set when the original message could not be fetched — the reply still
+   * goes out, but unthreaded. Surfaced both as a structured warn (visible to
+   * the host/logs) and in the tool result, so the degraded outcome is
+   * observable rather than a console.warn that vanishes. The reply working
+   * is deliberate: a threading lookup failure should not block the send.
+   */
+  degradedReason?: string;
+}
+
+const NO_REPLY_THREADING: ReplyThreadingResolution = { headers: {} };
+
+const REPLY_THREADING_WARNING_CODE = 'reply_threading_degraded';
+
+function unthreadedReplyReason(replyToMessageId: string): string {
+  return (
+    `Could not fetch the original message ${replyToMessageId}, so the reply is NOT ` +
+    'threaded onto it — it will go out as a new, separate conversation.'
+  );
+}
+
+/**
+ * Attach the degraded-threading warning to a tool result (additive `warnings`
+ * array) so the agent — and through it the user — can see that a reply went
+ * out unthreaded. Connector-authored text only: no external content is
+ * embedded, so no untrusted-content envelope is needed.
+ */
+function withReplyThreadingWarning<T>(result: T, degradedReason?: string): T {
+  if (degradedReason === undefined) return result;
+  if (result === null || typeof result !== 'object') return result;
+  return {
+    ...(result as Record<string, unknown>),
+    warnings: [{ code: REPLY_THREADING_WARNING_CODE, message: degradedReason }],
+  } as T;
+}
+
+async function resolveReplyThreading(email: string, replyToMessageId: string): Promise<ReplyThreadingResolution> {
   try {
     const originalMessage = await gmailService.getMessage(email, replyToMessageId);
     if (!originalMessage) {
-      console.warn(`[gmail-handlers] Could not fetch message ${replyToMessageId} for threading — draft will be unthreaded`);
-      return {};
+      logger.warn(
+        `[gmail-handlers] Reply threading degraded: original message ${replyToMessageId} not found for account ${email}; sending unthreaded`,
+      );
+      return { headers: {}, degradedReason: unthreadedReplyReason(replyToMessageId) };
     }
 
     const result: ReplyThreadingHeaders = { threadId: originalMessage.threadId };
@@ -83,10 +124,13 @@ async function resolveReplyThreading(email: string, replyToMessageId: string): P
       result.references = existingRefs;
     }
 
-    return result;
+    return { headers: result };
   } catch (error) {
-    console.warn(`[gmail-handlers] Failed to resolve threading for ${replyToMessageId}:`, error instanceof Error ? error.message : error);
-    return {};
+    logger.warn(
+      `[gmail-handlers] Reply threading degraded: failed to fetch original message ${replyToMessageId} for account ${email}:`,
+      error instanceof Error ? error.message : error,
+    );
+    return { headers: {}, degradedReason: unthreadedReplyReason(replyToMessageId) };
   }
 }
 
@@ -829,9 +873,9 @@ export async function handleSendWorkspaceEmail(params: SendEmailRequestParams & 
 
   return accountManager.withTokenRenewal(email, async () => {
     try {
-      const threading = replyToMessageId
+      const threadingResolution = replyToMessageId
         ? await resolveReplyThreading(email, replyToMessageId)
-        : {};
+        : NO_REPLY_THREADING;
 
       const emailParams: SendEmailParams = {
         email,
@@ -841,20 +885,23 @@ export async function handleSendWorkspaceEmail(params: SendEmailRequestParams & 
         cc,
         bcc,
         isHtml,
-        threadId: threading.threadId,
-        inReplyTo: threading.inReplyTo,
-        references: threading.references,
+        threadId: threadingResolution.headers.threadId,
+        inReplyTo: threadingResolution.headers.inReplyTo,
+        references: threadingResolution.headers.references,
         attachments: processOutgoingAttachments(attachments)
       };
 
       const sendResult = await gmailService.sendEmail(emailParams);
+      // Degraded reply threading is observable in the result (additive
+      // `warnings`), not just in the logs — the send still succeeds.
+      const payload = withReplyThreadingWarning(sendResult, threadingResolution.degradedReason);
       // Return an McpToolResponse-shaped result so the identifiers survive as
       // structuredContent (hoisted by super-mcp) — the compose-email UI reads
       // { messageId, threadId } from it to build an "Open in Gmail" deep link.
       // The text block preserves the same JSON the model saw before this change.
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(sendResult) }],
-        structuredContent: sendResult,
+        content: [{ type: 'text' as const, text: JSON.stringify(payload) }],
+        structuredContent: payload,
       };
     } catch (error) {
       throw toMcpError(error, 'Failed to send email');
@@ -1014,108 +1061,115 @@ export async function handleManageWorkspaceDraft(params: ManageDraftParams) {
   return accountManager.withTokenRenewal(email, async () => {
     try {
       // Resolve reply threading headers if replyToMessageId is provided
-      const threading = data?.replyToMessageId
+      const threadingResolution = data?.replyToMessageId
         ? await resolveReplyThreading(email, data.replyToMessageId)
-        : {};
+        : NO_REPLY_THREADING;
+      const threading = threadingResolution.headers;
 
-      switch (action) {
-        case 'create':
-          if (!data) {
-            throw new McpError(
-              ErrorCode.InvalidParams,
-              'Draft data is required for create action'
-            );
-          }
-          assertRecipientsArray(data.to, 'to');
-          assertRecipientsArray(data.cc, 'cc');
-          assertRecipientsArray(data.bcc, 'bcc');
-          if (data.to) data.to.forEach(validateEmail);
-          if (data.cc) data.cc.forEach(validateEmail);
-          if (data.bcc) data.bcc.forEach(validateEmail);
-          {
-            // Destructure replyToMessageId out so it doesn't leak to the service
-            const { replyToMessageId: _, ...draftData } = data;
+      const managed = await (async () => {
+        switch (action) {
+          case 'create':
+            if (!data) {
+              throw new McpError(
+                ErrorCode.InvalidParams,
+                'Draft data is required for create action'
+              );
+            }
+            assertRecipientsArray(data.to, 'to');
+            assertRecipientsArray(data.cc, 'cc');
+            assertRecipientsArray(data.bcc, 'bcc');
+            if (data.to) data.to.forEach(validateEmail);
+            if (data.cc) data.cc.forEach(validateEmail);
+            if (data.bcc) data.bcc.forEach(validateEmail);
+            {
+              // Destructure replyToMessageId out so it doesn't leak to the service
+              const { replyToMessageId: _, ...draftData } = data;
+              return await gmailService.manageDraft({
+                email,
+                action: 'create',
+                data: {
+                  ...draftData,
+                  threadId: data.threadId ?? threading.threadId,
+                  inReplyTo: data.inReplyTo ?? threading.inReplyTo,
+                  references: data.references ?? threading.references,
+                  attachments: processOutgoingAttachments(data.attachments)
+                }
+              });
+            }
+
+          case 'read':
             return await gmailService.manageDraft({
               email,
-              action: 'create',
-              data: {
-                ...draftData,
-                threadId: data.threadId ?? threading.threadId,
-                inReplyTo: data.inReplyTo ?? threading.inReplyTo,
-                references: data.references ?? threading.references,
-                attachments: processOutgoingAttachments(data.attachments)
-              }
+              action: 'read',
+              draftId
             });
-          }
 
-        case 'read':
-          return await gmailService.manageDraft({
-            email,
-            action: 'read',
-            draftId
-          });
+          case 'update':
+            if (!draftId || !data) {
+              throw new McpError(
+                ErrorCode.InvalidParams,
+                'Draft ID and data are required for update action'
+              );
+            }
+            assertRecipientsArray(data.to, 'to');
+            assertRecipientsArray(data.cc, 'cc');
+            assertRecipientsArray(data.bcc, 'bcc');
+            if (data.to) data.to.forEach(validateEmail);
+            if (data.cc) data.cc.forEach(validateEmail);
+            if (data.bcc) data.bcc.forEach(validateEmail);
+            {
+              const { replyToMessageId: _, ...draftData } = data;
+              return await gmailService.manageDraft({
+                email,
+                action: 'update',
+                draftId,
+                data: {
+                  ...draftData,
+                  threadId: data.threadId ?? threading.threadId,
+                  inReplyTo: data.inReplyTo ?? threading.inReplyTo,
+                  references: data.references ?? threading.references,
+                  attachments: processOutgoingAttachments(data.attachments)
+                }
+              });
+            }
 
-        case 'update':
-          if (!draftId || !data) {
-            throw new McpError(
-              ErrorCode.InvalidParams,
-              'Draft ID and data are required for update action'
-            );
-          }
-          assertRecipientsArray(data.to, 'to');
-          assertRecipientsArray(data.cc, 'cc');
-          assertRecipientsArray(data.bcc, 'bcc');
-          if (data.to) data.to.forEach(validateEmail);
-          if (data.cc) data.cc.forEach(validateEmail);
-          if (data.bcc) data.bcc.forEach(validateEmail);
-          {
-            const { replyToMessageId: _, ...draftData } = data;
+          case 'delete':
+            if (!draftId) {
+              throw new McpError(
+                ErrorCode.InvalidParams,
+                'Draft ID is required for delete action'
+              );
+            }
             return await gmailService.manageDraft({
               email,
-              action: 'update',
-              draftId,
-              data: {
-                ...draftData,
-                threadId: data.threadId ?? threading.threadId,
-                inReplyTo: data.inReplyTo ?? threading.inReplyTo,
-                references: data.references ?? threading.references,
-                attachments: processOutgoingAttachments(data.attachments)
-              }
+              action: 'delete',
+              draftId
             });
-          }
 
-        case 'delete':
-          if (!draftId) {
+          case 'send':
+            if (!draftId) {
+              throw new McpError(
+                ErrorCode.InvalidParams,
+                'Draft ID is required for send action'
+              );
+            }
+            return await gmailService.manageDraft({
+              email,
+              action: 'send',
+              draftId
+            });
+
+          default:
             throw new McpError(
               ErrorCode.InvalidParams,
-              'Draft ID is required for delete action'
+              'Invalid action. Supported actions are: create, read, update, delete, send'
             );
-          }
-          return await gmailService.manageDraft({
-            email,
-            action: 'delete',
-            draftId
-          });
+        }
+      })();
 
-        case 'send':
-          if (!draftId) {
-            throw new McpError(
-              ErrorCode.InvalidParams,
-              'Draft ID is required for send action'
-            );
-          }
-          return await gmailService.manageDraft({
-            email,
-            action: 'send',
-            draftId
-          });
-
-        default:
-          throw new McpError(
-            ErrorCode.InvalidParams,
-            'Invalid action. Supported actions are: create, read, update, delete, send'
-          );
-      }
+      // A degraded reply-threading lookup still creates/updates the draft
+      // (unthreaded) — make that visible in the result, not just the logs.
+      return withReplyThreadingWarning(managed, threadingResolution.degradedReason);
     } catch (error) {
       throw toMcpError(error, 'Failed to manage draft');
     }

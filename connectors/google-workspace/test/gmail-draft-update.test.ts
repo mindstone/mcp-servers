@@ -5,6 +5,7 @@ import { DraftService } from '../src/modules/gmail/services/draft.js';
 import type { GmailAttachmentService } from '../src/modules/gmail/services/attachment.js';
 import { GmailError } from '../src/modules/gmail/types.js';
 import { handleManageWorkspaceDraft } from '../src/tools/gmail-handlers.js';
+import logger from '../src/utils/logger.js';
 
 const { manageDraftMock } = vi.hoisted(() => ({ manageDraftMock: vi.fn() }));
 
@@ -56,15 +57,17 @@ function makeDraftService(drafts: Record<string, unknown>): DraftService {
 }
 
 describe('DraftService update/create error details and threading', () => {
-  it('passes threadId to drafts.update when data.threadId is set', async () => {
+  it('passes threadId to drafts.update when data.threadId is set (no preservation fetch)', async () => {
+    const get = vi.fn();
     const update = vi.fn().mockResolvedValue({ data: apiDraft });
-    const service = makeDraftService({ update });
+    const service = makeDraftService({ get, update });
 
     await service.updateDraft('jane@example.com', 'draft-1', {
       ...draftData,
       threadId: 'thread-123',
     });
 
+    expect(get).not.toHaveBeenCalled();
     expect(update).toHaveBeenCalledTimes(1);
     expect(update.mock.calls[0][0]).toMatchObject({
       userId: 'me',
@@ -73,15 +76,41 @@ describe('DraftService update/create error details and threading', () => {
     });
   });
 
-  it('sends no threadId to drafts.update when data.threadId is absent', async () => {
+  it('preserves the existing draft threadId on body-only updates', async () => {
+    // Regression: Gmail's drafts.update REPLACES the draft message, and an
+    // omitted threadId detached the draft from its conversation — a body-only
+    // update silently unthreaded the draft.
+    const get = vi.fn().mockResolvedValue({ data: apiDraft });
     const update = vi.fn().mockResolvedValue({ data: apiDraft });
-    const service = makeDraftService({ update });
+    const service = makeDraftService({ get, update });
 
     await service.updateDraft('jane@example.com', 'draft-1', draftData);
 
+    expect(get).toHaveBeenCalledWith(expect.objectContaining({ id: 'draft-1' }));
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update.mock.calls[0][0]).toMatchObject({
+      requestBody: { message: { threadId: 'thread-1' } },
+    });
+    expect(vi.mocked(logger.warn)).not.toHaveBeenCalled();
+  });
+
+  it('proceeds unthreaded with a logged warning when the existing draft cannot be fetched', async () => {
+    // Observable degradation, not a new failure mode: the update still runs
+    // (as it did before thread preservation), but the drop is logged.
+    const get = vi.fn().mockRejectedValue(new Error('transient fetch failure'));
+    const update = vi.fn().mockResolvedValue({ data: apiDraft });
+    const service = makeDraftService({ get, update });
+
+    await service.updateDraft('jane@example.com', 'draft-1', draftData);
+
+    expect(update).toHaveBeenCalledTimes(1);
     const message = (update.mock.calls[0][0] as { requestBody: { message: { threadId?: string } } })
       .requestBody.message;
     expect(message.threadId).toBeUndefined();
+    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+      expect.stringContaining('thread preservation'),
+      expect.stringContaining('transient fetch failure'),
+    );
   });
 
   it('includes the underlying message and HTTP status in GmailError.details when update fails', async () => {

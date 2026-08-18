@@ -188,6 +188,32 @@ export class DraftService {
     try {
       const client = this.ensureClient();
 
+      // Preserve the existing draft's thread on body-only updates. Gmail's
+      // drafts.update REPLACES the draft message, and an omitted threadId
+      // detaches the draft from its conversation — so a body-only update
+      // (caller passed no thread_id and no reply_to_message_id) would
+      // silently unthread the draft. Fetch the existing draft first and keep
+      // its threadId; an explicit threadId (reply threading resolved at the
+      // handler layer) still wins.
+      let threadId = data.threadId;
+      if (threadId === undefined) {
+        try {
+          const existing = await this.getDraft(email, draftId);
+          threadId = existing.message.threadId;
+        } catch (error) {
+          // Observable degradation, not a new failure mode: the update still
+          // proceeds as before (unthreaded) rather than failing an operation
+          // that used to succeed — but the degradation is logged, not silent.
+          const cause = error instanceof Error ? error.message : error;
+          const detail =
+            error instanceof GmailError && error.details ? `${cause} (${error.details})` : cause;
+          logger.warn(
+            `Failed to fetch draft ${draftId} for thread preservation; updating without a threadId:`,
+            detail,
+          );
+        }
+      }
+
       // Validate and prepare attachments
       const processedAttachments = data.attachments?.map(attachment => {
         this.attachmentService.validateAttachment(attachment);
@@ -216,7 +242,7 @@ export class DraftService {
         requestBody: {
           message: {
             raw: encodedMessage,
-            threadId: data.threadId // Include threadId for replies
+            threadId // Preserved from the existing draft unless explicitly overridden
           }
         }
       });
