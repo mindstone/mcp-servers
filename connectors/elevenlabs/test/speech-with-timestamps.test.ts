@@ -70,6 +70,27 @@ describe('generate_speech_with_timestamps', () => {
     createdFiles.push(parsed.file_path, parsed.srt_path, parsed.alignment_path);
   });
 
+  it('signposts the arbitrary default voice when none is specified', async () => {
+    mswServer.use(...createElevenLabsHandlers());
+    testClient = await createTestClient({
+      env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    const result = await testClient.callTool('generate_speech_with_timestamps', {
+      text: 'Welcome home.',
+    });
+
+    expect(result.isError).toBeFalsy();
+    const parsed = JSON.parse(result.text);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.voice_note).toContain('arbitrary account default');
+    expect(parsed.voice_id).toBe('voice-rachel-001');
+
+    for (const key of ['file_path', 'srt_path', 'alignment_path'] as const) {
+      createdFiles.push(parsed[key]);
+    }
+  });
+
   it('returns AUTH_REQUIRED without an API key', async () => {
     testClient = await createTestClient({
       env: { ELEVENLABS_API_KEY: '', MCP_HOST_BRIDGE_STATE: '' },

@@ -99,6 +99,53 @@ describe('Speech tools', () => {
       }
     });
 
+    it('signposts the arbitrary default voice when none is specified', async () => {
+      // The default pick is language-blind by design (no language input
+      // exists to filter against), so the result must say so — the agent can
+      // then retry with an explicit voice when the language matters instead
+      // of shipping uncontrolled audio invisibly.
+      mswServer.use(...createElevenLabsHandlers());
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('generate_speech', {
+        text: 'Default voice test.',
+      });
+
+      expect(result.isError).toBeFalsy();
+      const parsed = JSON.parse(result.text);
+      expect(parsed.ok).toBe(true);
+      expect(parsed.voice_note).toContain('arbitrary account default');
+      expect(parsed.voice_note).toContain('voice_id');
+
+      if (fs.existsSync(parsed.file_path)) {
+        fs.unlinkSync(parsed.file_path);
+      }
+    });
+
+    it('adds no voice_note when an explicit voice_id is given', async () => {
+      mswServer.use(...createElevenLabsHandlers());
+      testClient = await createTestClient({
+        env: { ELEVENLABS_API_KEY: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool('generate_speech', {
+        text: 'Explicit voice test.',
+        voice_id: 'voice-adam-002',
+      });
+
+      expect(result.isError).toBeFalsy();
+      const parsed = JSON.parse(result.text);
+      expect(parsed.ok).toBe(true);
+      expect(parsed.voice_id).toBe('voice-adam-002');
+      expect(parsed.voice_note).toBeUndefined();
+
+      if (fs.existsSync(parsed.file_path)) {
+        fs.unlinkSync(parsed.file_path);
+      }
+    });
+
     it('returns isError:true when default voice lookup fails', async () => {
       mswServer.use(...createEmptyVoiceSearchHandlers());
       testClient = await createTestClient({

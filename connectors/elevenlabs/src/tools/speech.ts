@@ -58,6 +58,12 @@ async function lookupVoiceByName(apiKey: string, name: string) {
  *
  * If the account has zero voices we surface a clear VOICE_NOT_FOUND with a
  * resolution that tells the agent to call list_voices first.
+ *
+ * Language-blind by design, not by oversight: the speech tools take no
+ * language input, and the voices API exposes only free-form labels — there
+ * is nothing to filter against. The arbitrary pick is signposted in the
+ * result instead (AUTO_VOICE_NOTE) so callers can retry with an explicit
+ * voice when the language matters.
  */
 async function pickDefaultVoice(apiKey: string) {
   const params = new URLSearchParams({ page_size: '20' });
@@ -77,6 +83,22 @@ async function pickDefaultVoice(apiKey: string) {
   const premade = data.voices.find((v) => v.category === 'premade');
   return premade ?? data.voices[0];
 }
+
+/**
+ * Attached to results where the voice was auto-picked (no voice_id and no
+ * voice_name passed). Connector-authored constant text, so no
+ * untrusted-content envelope applies.
+ */
+const AUTO_VOICE_NOTE =
+  'No voice was specified, so an arbitrary account default was used — its language may not match the text. ' +
+  'Pass voice_id (from list_voices) or voice_name to control the voice.';
+
+const VOICE_ID_DESC =
+  'Direct voice ID (from list_voices). Takes priority over voice_name. ' +
+  'If both voice params are omitted, an arbitrary account default is used and its language may not match the text.';
+const VOICE_NAME_DESC =
+  'Voice name for fuzzy search (e.g., "Bella", "Sarah"). Use list_voices first to find a name that exists on the account. ' +
+  'If both voice params are omitted, an arbitrary account default is used and its language may not match the text.';
 
 // ── with-timestamps helpers ───────────────────────────────────────────────
 
@@ -167,8 +189,8 @@ RETURNS: file_path, size_bytes, voice_id, model, format. API-resolved voice name
 COST: ~1 credit per 100 characters.`,
       inputSchema: z.object({
         text: z.string().min(1).describe('Text to speak. Maximum ~5000 characters per request.'),
-        voice_id: z.string().optional().describe('Direct voice ID (from list_voices). Takes priority over voice_name.'),
-        voice_name: z.string().optional().describe('Voice name for fuzzy search (e.g., "Bella", "Sarah"). Use list_voices first to find a name that exists on the account.'),
+        voice_id: z.string().optional().describe(VOICE_ID_DESC),
+        voice_name: z.string().optional().describe(VOICE_NAME_DESC),
         model_id: z.enum([
           'eleven_v3',
           'eleven_multilingual_v2',
@@ -210,6 +232,7 @@ COST: ~1 credit per 100 characters.`,
       // is just the caller's own input echoed back — no envelope needed.
       let resolvedVoiceName = voiceName || 'default';
       let voiceNameFromApi = false;
+      let voiceAutoPicked = false;
       if (!voiceId) {
         if (voiceName) {
           const voice = await lookupVoiceByName(apiKey, voiceName);
@@ -217,9 +240,12 @@ COST: ~1 credit per 100 characters.`,
           resolvedVoiceName = voice.name;
         } else {
           // No voice specified — pick a sensible default from the account.
+          // The pick is language-blind (see pickDefaultVoice), so the result
+          // signposts it for the caller.
           const voice = await pickDefaultVoice(apiKey);
           voiceId = voice.voice_id;
           resolvedVoiceName = voice.name;
+          voiceAutoPicked = true;
         }
         voiceNameFromApi = true;
       }
@@ -255,6 +281,7 @@ COST: ~1 credit per 100 characters.`,
           ? wrapUntrusted(resolvedVoiceName, 'elevenlabs:generate_speech:voice_name')
           : resolvedVoiceName,
         voice_id: voiceId,
+        ...(voiceAutoPicked ? { voice_note: AUTO_VOICE_NOTE } : {}),
         model: modelId,
         format: outputFormat,
         message: `Speech generated and saved to ${result.filePath} (${(result.sizeBytes / 1024).toFixed(1)} KB).`,
@@ -284,8 +311,8 @@ RETURNS: file_path (audio), srt_path (SubRip subtitles built from word timing), 
 COST: ~1 credit per 100 characters.`,
       inputSchema: z.object({
         text: z.string().min(1).describe('Text to speak. Maximum ~5000 characters per request.'),
-        voice_id: z.string().optional().describe('Direct voice ID (from list_voices). Takes priority over voice_name.'),
-        voice_name: z.string().optional().describe('Voice name for fuzzy search (e.g., "Bella", "Sarah"). Use list_voices first to find a name that exists on the account.'),
+        voice_id: z.string().optional().describe(VOICE_ID_DESC),
+        voice_name: z.string().optional().describe(VOICE_NAME_DESC),
         model_id: z.enum([
           'eleven_v3',
           'eleven_multilingual_v2',
@@ -320,15 +347,20 @@ COST: ~1 credit per 100 characters.`,
 
       let resolvedVoiceName = voiceName || 'default';
       let voiceNameFromApi = false;
+      let voiceAutoPicked = false;
       if (!voiceId) {
         if (voiceName) {
           const voice = await lookupVoiceByName(apiKey, voiceName);
           voiceId = voice.voice_id;
           resolvedVoiceName = voice.name;
         } else {
+          // No voice specified — pick a sensible default from the account.
+          // The pick is language-blind (see pickDefaultVoice), so the result
+          // signposts it for the caller.
           const voice = await pickDefaultVoice(apiKey);
           voiceId = voice.voice_id;
           resolvedVoiceName = voice.name;
+          voiceAutoPicked = true;
         }
         voiceNameFromApi = true;
       }
@@ -403,6 +435,7 @@ COST: ~1 credit per 100 characters.`,
           ? wrapUntrusted(resolvedVoiceName, 'elevenlabs:generate_speech_with_timestamps:voice_name')
           : resolvedVoiceName,
         voice_id: voiceId,
+        ...(voiceAutoPicked ? { voice_note: AUTO_VOICE_NOTE } : {}),
         model: modelId,
         format: outputFormat,
         word_count: wordCount,
