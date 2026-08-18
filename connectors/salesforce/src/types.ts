@@ -4,6 +4,17 @@ const require = createRequire(import.meta.url);
 const pkg = require('../package.json') as { version: string };
 
 export const REQUEST_TIMEOUT_MS = 30_000;
+/**
+ * Bridge budget for the OAuth-initiating `/mcp/configure` call. The host
+ * holds that HTTP response open until the user finishes the interactive
+ * browser sign-in — both the host's own OAuth flow and this connector's
+ * standalone flow cap the wait at 5 minutes. The ordinary 30s
+ * REQUEST_TIMEOUT_MS therefore aborts mid-flow on any human-paced connect
+ * and reports a spurious failure. 5 minutes + 30s slack for the host's
+ * post-auth work (token exchange, config write, reload) — deliberately
+ * bounded so a genuinely dead bridge still fails instead of hanging forever.
+ */
+export const BRIDGE_OAUTH_TIMEOUT_MS = 5 * 60 * 1000 + REQUEST_TIMEOUT_MS;
 export const SERVER_NAME = 'salesforce-mcp-server';
 /**
  * Salesforce REST API version the connector pins every request to. Pinned

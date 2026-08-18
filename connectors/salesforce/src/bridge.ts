@@ -19,10 +19,16 @@ const loadBridgeState = (): BridgeState | null => {
 
 /**
  * Send a request to the host app bridge.
+ *
+ * `timeoutMs` defaults to the ordinary per-call budget (REQUEST_TIMEOUT_MS);
+ * callers that trigger long host-side flows (e.g. interactive OAuth) can opt
+ * into a longer one. The abort itself is never removed — only widened — so a
+ * dead bridge still fails within the chosen bound.
  */
 export const bridgeRequest = async (
   urlPath: string,
   body: Record<string, unknown> = {},
+  timeoutMs: number = REQUEST_TIMEOUT_MS,
 ): Promise<{ success: boolean; username?: string; warning?: string; error?: string }> => {
   const bridge = loadBridgeState();
   if (!bridge) {
@@ -30,7 +36,7 @@ export const bridgeRequest = async (
   }
   const response = await fetch(`http://127.0.0.1:${bridge.port}${urlPath}`, {
     method: 'POST',
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${bridge.token}`,

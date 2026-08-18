@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { withErrorHandling, sanitizeExternalData } from '../utils.js';
 import { getAuthMode, loadAccounts, loadToken, startStandaloneOAuth } from '../auth.js';
 import { bridgeRequest } from '../bridge.js';
+import { BRIDGE_OAUTH_TIMEOUT_MS } from '../types.js';
 import { listConnectedAccounts, removeAccount } from '../client.js';
 
 // Disconnect needs a raw handle the model can copy verbatim into
@@ -61,9 +62,14 @@ After connecting, verify with salesforce_list_connected_accounts.`,
       }
 
       if (mode === 'bridge') {
+        // The host holds this response open until the user completes the
+        // interactive OAuth flow in their browser (up to 5 minutes), so this
+        // call needs the long budget — the default 30s abort would kill the
+        // connect mid-flow while the human is still signing in.
         const result = await bridgeRequest(
           process.env.MCP_BRIDGE_CONFIGURE_ENDPOINT || '/mcp/configure',
           {},
+          BRIDGE_OAUTH_TIMEOUT_MS,
         );
         if (result.success) {
           // The bridge username is host/org-authored external text: envelope
