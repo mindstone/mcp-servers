@@ -60,7 +60,7 @@ jobs:
       registry_packages: ${{ steps.diff.outputs.registry_packages }}
       has_registry_changes: ${{ steps.diff.outputs.has_registry_changes }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history: the detect diff runs over the pushed range
           # (event.before..sha), not HEAD~1, and per-package attribution
@@ -304,7 +304,7 @@ jobs:
       matrix:
         package: ${{ fromJSON(needs.detect.outputs.packages) }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Resolve package dir
         id: resolve
@@ -551,7 +551,7 @@ jobs:
       run:
         working-directory: connectors/${{ matrix.package }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Verify server.json present
         run: |
