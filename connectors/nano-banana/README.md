@@ -130,6 +130,8 @@ node dist/index.js
 
 Both image tools accept an optional `save_path` inside the workspace. Saves never overwrite: if a file (or symlink) already exists at `save_path`, the tool returns a `SAVE_EXISTS` error (with the image still included inline) — choose a different path or delete the existing file. Saved files are written owner-only (`0600`).
 
+Generated and edited output is identified from its bytes before it is returned or saved. PNG, JPEG, and WebP are supported; other or unrecognised formats (including GIF) return a structured `UNSUPPORTED_IMAGE_FORMAT` error instead of being relabelled.
+
 ### Output resolution
 
 Both image tools accept an optional `image_size` parameter (`"1K"`, `"2K"`, or `"4K"`; default `"1K"` ≈ 1024px). Higher resolutions are only honoured by the Gemini 3 image models (`gemini-3.1-flash-image-preview`, `gemini-3-pro-image-preview`); the legacy `gemini-2.5-flash-image` always produces ~1K output and rejects an explicit `image_size`.

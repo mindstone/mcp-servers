@@ -344,19 +344,37 @@ export function registerEditTools(server: McpServer): void {
       // Extract edited image from response
       const parts = candidates[0]?.content?.parts || [];
       let imageData: string | null = null;
-      let imageMimeType = 'image/png';
+      let imageMimeType: string | null = null;
       let textResponse: string | null = null;
 
       for (const part of parts) {
         if (part.inlineData?.data) {
-          imageData = part.inlineData.data;
-          imageMimeType = normaliseImageMimeType(part.inlineData.mimeType);
+          try {
+            imageMimeType = normaliseImageMimeType(part.inlineData.mimeType, part.inlineData.data);
+            imageData = part.inlineData.data;
+          } catch (error) {
+            if (error instanceof NanoBananaError) {
+              return {
+                content: [{
+                  type: 'text',
+                  text: JSON.stringify({
+                    ok: false,
+                    error: error.message,
+                    code: error.code,
+                    resolution: error.resolution,
+                  }, null, 2),
+                }],
+                isError: true,
+              };
+            }
+            throw error;
+          }
         } else if (part.text) {
           textResponse = part.text;
         }
       }
 
-      if (!imageData) {
+      if (!imageData || !imageMimeType) {
         // The model's free-text part is external, model-authored content —
         // envelope it (invariant #6) rather than returning it raw.
         const responseText = textResponse

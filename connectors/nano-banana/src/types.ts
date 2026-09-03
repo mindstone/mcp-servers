@@ -168,19 +168,71 @@ export const SUPPORTED_IMAGE_EXTENSIONS: Record<string, string> = {
 /**
  * MIME types this connector will put into an MCP image content part or use
  * to pick a save extension. `inlineData.mimeType` is external,
- * vendor-controlled text — anything outside this allow-list is rejected in
- * favour of a safe default (with an observable stderr warning) rather than
- * forwarded verbatim into model-visible output.
+ * vendor-controlled text, so response bytes are sniffed before this declared
+ * subset is applied. Unsupported bytes are rejected rather than relabelled or
+ * forwarded into model-visible output.
  */
 const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
-export function normaliseImageMimeType(mimeType: string | undefined): string {
-  if (mimeType === undefined) return 'image/png';
-  if (ALLOWED_IMAGE_MIME_TYPES.has(mimeType)) return mimeType;
-  console.error(
-    `[NanoBanana] Refusing unsupported image MIME type from API response; treating as image/png`,
+function sniffImageMimeType(base64Data: string): string | null {
+  // Only the first 12 decoded bytes are needed for the supported signatures.
+  // Decode a bounded prefix so MIME validation does not duplicate the full
+  // image allocation before the caller returns or saves the original base64.
+  const header = Buffer.from(base64Data.slice(0, 24), 'base64');
+  if (
+    header.length >= 8
+    && header[0] === 0x89
+    && header[1] === 0x50
+    && header[2] === 0x4e
+    && header[3] === 0x47
+    && header[4] === 0x0d
+    && header[5] === 0x0a
+    && header[6] === 0x1a
+    && header[7] === 0x0a
+  ) {
+    return 'image/png';
+  }
+  if (header.length >= 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  if (
+    header.length >= 6
+    && header[0] === 0x47
+    && header[1] === 0x49
+    && header[2] === 0x46
+    && header[3] === 0x38
+    && (header[4] === 0x37 || header[4] === 0x39)
+    && header[5] === 0x61
+  ) {
+    return 'image/gif';
+  }
+  if (
+    header.length >= 12
+    && header.toString('ascii', 0, 4) === 'RIFF'
+    && header.toString('ascii', 8, 12) === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  return null;
+}
+
+export function normaliseImageMimeType(
+  mimeType: string | undefined,
+  base64Data: string,
+): string {
+  const sniffedMimeType = sniffImageMimeType(base64Data);
+  if (sniffedMimeType && ALLOWED_IMAGE_MIME_TYPES.has(sniffedMimeType)) {
+    if (mimeType !== sniffedMimeType) {
+      console.error('[NanoBanana] Ignoring untrusted response MIME; using byte-sniffed image format');
+    }
+    return sniffedMimeType;
+  }
+
+  throw new NanoBananaError(
+    'Gemini returned image bytes in an unsupported or unrecognised format.',
+    'UNSUPPORTED_IMAGE_FORMAT',
+    'Try generating the image again. This connector supports PNG, JPEG, and WebP output.',
   );
-  return 'image/png';
 }
 
 /**
