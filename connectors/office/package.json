@@ -53,9 +53,9 @@
   },
   "overrides": {
     "uuid": "^14.0.0",
-    "fast-uri": "^3.1.2",
+    "fast-uri": "^3.1.5",
     "hono": "^4.12.18",
-    "ip-address": "^10.2.0",
+    "ip-address": "^10.5.0",
     "@opentelemetry/exporter-prometheus": "^0.217.0",
     "@opentelemetry/sdk-node": "^0.217.0",
     "protobufjs": "^8.2.1",
