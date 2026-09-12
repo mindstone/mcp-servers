@@ -1,13 +1,21 @@
 /**
- * Search backend selection — Real-Time Search API with loud legacy fallback.
+ * Search backend selection — Real-Time Search API with SILENT legacy fallback.
  *
  * Slack's Real-Time Search API (`assistant.search.context`) superseded legacy
  * `search.messages`, but requires the granular `search:read.*` OAuth scopes
  * that a host-granted token may not have. The connector probes RTS first and,
- * on a scope/feature refusal, falls back to legacy `search.messages` — loudly:
- * every response carries `search_backend`, legacy responses add
- * `search_backend_note`, and the refusal is cached per workspace so the probe
- * cost is paid once per process.
+ * on a scope/feature refusal, falls back to legacy `search.messages` and caches
+ * the refusal per workspace so the probe cost is paid once per process.
+ *
+ * The fallback is SILENT to the user (changed 2026-09-12). Every response still
+ * carries the machine-readable `search_backend`, but legacy responses no longer
+ * carry a prose `search_backend_note`. The note used to end with "reconnect
+ * Slack with the granular search:read.public/private/im/mpim scopes", a model
+ * relayed it verbatim, and a user who was already connected was told to
+ * reconnect — which could not have helped, because whether those scopes are
+ * requested at all is fixed by the installing app's configuration rather than
+ * by anything they could do. The fallback's results are complete, so there is
+ * nothing to act on and nothing to say.
  */
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
@@ -101,7 +109,7 @@ describe('Slack MCP — search backend selection', () => {
     expect(seenChannelTypes).toBe('public_channel,private_channel,mpim,im');
   });
 
-  it('falls back loudly to legacy search.messages on missing_scope and caches the decision', async () => {
+  it('falls back SILENTLY to legacy search.messages on missing_scope and caches the decision', async () => {
     let rtsCalls = 0;
     mswServer.use(
       http.post(`${SLACK_API_BASE}/assistant.search.context`, () => {
@@ -114,8 +122,11 @@ describe('Slack MCP — search backend selection', () => {
       .json as SearchResponseJson;
     expect(first.ok).toBe(true);
     expect(first.search_backend).toBe('search.messages');
-    expect(first.search_backend_note).toContain('missing_scope');
-    expect(first.search_backend_note).toContain('search:read');
+    // The fallback is telemetry-only. `search_backend` records which backend ran;
+    // nothing in the response narrates the degradation to the model, because the
+    // model relayed the old prose note to users as a reconnect instruction they
+    // could not act on (the scopes are fixed by app configuration, not by them).
+    expect(first.search_backend_note).toBeUndefined();
     // Results come from the legacy mock (total/matches shape).
     expect(first.messages).toHaveLength(1);
     expect(first.messages![0].text).toBe(
@@ -125,9 +136,35 @@ describe('Slack MCP — search backend selection', () => {
     const second = (await client.callTool('search_slack_messages', { query: 'forecast' }))
       .json as SearchResponseJson;
     expect(second.search_backend).toBe('search.messages');
-    expect(second.search_backend_note).toBeTruthy();
+    expect(second.search_backend_note).toBeUndefined();
     // The scope refusal is cached — no second RTS probe this process.
     expect(rtsCalls).toBe(1);
+  });
+
+  // The regression this file exists to prevent from returning. A model can only
+  // relay what the response contains, so the guard is on the whole payload
+  // rather than on one field: no reconnect instruction, no scope names, no
+  // deprecation alarm anywhere a model might read and pass on.
+  it('never puts a reconnect instruction or scope names in a legacy-backend response', async () => {
+    mswServer.use(
+      http.post(`${SLACK_API_BASE}/assistant.search.context`, () =>
+        HttpResponse.json({ ok: false, error: 'missing_scope' }),
+      ),
+    );
+
+    for (const tool of ['search_slack_messages', 'get_slack_saved_messages']) {
+      const response = (await client.callTool(tool, { query: 'forecast' }))
+        .json as SearchResponseJson;
+      expect(response.search_backend).toBe('search.messages');
+
+      const serialized = JSON.stringify(response);
+      expect(serialized).not.toMatch(/reconnect/i);
+      expect(serialized).not.toMatch(/search:read/i);
+      expect(serialized).not.toMatch(/deprecated/i);
+      expect(serialized).not.toMatch(/missing_scope/i);
+      // The results themselves must still be there — silence is not degradation.
+      expect(response.ok).toBe(true);
+    }
   });
 
   it('does not fall back on transient RTS errors — the error surfaces and RTS is retried next call', async () => {
@@ -159,7 +196,7 @@ describe('Slack MCP — search backend selection', () => {
   ];
 
   for (const code of INSTALLATION_SCOPED_RTS_REFUSALS) {
-    it(`falls back loudly to legacy search.messages on ${code} and caches the decision`, async () => {
+    it(`falls back SILENTLY to legacy search.messages on ${code} and caches the decision`, async () => {
       let rtsCalls = 0;
       mswServer.use(
         http.post(`${SLACK_API_BASE}/assistant.search.context`, () => {
@@ -172,7 +209,7 @@ describe('Slack MCP — search backend selection', () => {
         .json as SearchResponseJson;
       expect(first.ok).toBe(true);
       expect(first.search_backend).toBe('search.messages');
-      expect(first.search_backend_note).toContain(code);
+      expect(first.search_backend_note).toBeUndefined();
 
       await client.callTool('search_slack_messages', { query: 'forecast' });
       expect(rtsCalls).toBe(1);

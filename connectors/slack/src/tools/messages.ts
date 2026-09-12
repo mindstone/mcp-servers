@@ -65,7 +65,7 @@ function unknownAuthedUserJson(channel: string): string {
 }
 
 // ---------------------------------------------------------------------
-// Search backend selection: Real-Time Search API with loud legacy fallback
+// Search backend selection: Real-Time Search API with silent legacy fallback
 // ---------------------------------------------------------------------
 // Slack's Real-Time Search API (`assistant.search.context`, launched Feb
 // 2026) superseded legacy `search.messages` — Slack's own usage guidelines
@@ -74,9 +74,26 @@ function unknownAuthedUserJson(channel: string): string {
 // Slack app may not have been granted yet (granting them is the host's OAuth
 // consent decision, not something this connector can force). So the backend
 // is probed per workspace: the first search call tries RTS; a scope/feature
-// refusal flips the process to the legacy endpoint — loudly. Every response
-// carries `search_backend`, and legacy responses add a `search_backend_note` naming the
-// refusal, so the degradation is never silent.
+// refusal flips the process to the legacy endpoint.
+//
+// THE FALLBACK IS SILENT TO THE USER, AND DELIBERATELY SO (2026-09-12).
+// It used to attach a prose `search_backend_note` to every legacy response —
+// "DEPRECATED BACKEND IN USE … reconnect Slack with the granular
+// search:read.public/private/im/mpim scopes." A model read that note and
+// relayed it as an instruction to a user who was already connected. The
+// instruction could not work: whether those scopes are requested at all is
+// fixed by the installing app's configuration, so re-running the connect flow
+// re-requests the same set and ends in the same state. Granting them is an
+// app-configuration change, not something the person asking can do.
+//
+// The fallback itself is CORRECT — given the scopes the token holds, legacy
+// `search.messages` is the right path and its results are complete. So the
+// degradation is an operator concern, not the user's: it stays in telemetry
+// (the stderr line below) and in the machine-readable `search_backend` field,
+// and nothing in the response prescribes an action to whoever reads it.
+//
+// The general rule this earns: before a message tells someone to redo an
+// action, check that the action can change the condition being reported.
 
 type SearchBackend = 'assistant.search.context' | 'search.messages';
 
@@ -257,10 +274,15 @@ export async function runMessageSearch(
       if (!code || !RTS_FALLBACK_ERROR_CODES.has(code)) throw err;
       searchBackendCache.set(cacheKey, 'search.messages');
       fallbackReason = code;
+      // Operator telemetry only — never surfaced to the user or the model.
+      // States the actual remedy: the scopes must be added to the Slack app's
+      // configuration AND to the host's OAuth request before any reconnect can
+      // acquire them. "Reconnect" alone is not the remedy and is not suggested.
       console.error(
         `[slack-mcp] Real-Time Search (assistant.search.context) unavailable for this workspace (${code}); ` +
-          'falling back to legacy search.messages for this process. Grant the granular search:read.* scopes ' +
-          '(search:read.public/private/im/mpim) and reconnect to enable the recommended search path.',
+          'falling back to legacy search.messages for this process. Results are complete; this is an ' +
+          'app-configuration matter. Enabling RTS requires the granular search:read.public/private/im/mpim ' +
+          'scopes in both the Slack app manifest and the host OAuth request, after which a reconnect can grant them.',
       );
     }
   }
@@ -268,18 +290,15 @@ export async function runMessageSearch(
   return { ...legacy, backend: 'search.messages', ...(fallbackReason ? { fallbackReason } : {}) };
 }
 
-/** Loud-fallback note attached to every legacy-backend search response. */
-export function searchBackendNote(result: MessageSearchResult): string | undefined {
-  if (result.backend !== 'search.messages') return undefined;
-  const reason = result.fallbackReason
-    ? `Slack returned "${result.fallbackReason}" for assistant.search.context.`
-    : 'assistant.search.context was previously refused for this workspace token.';
-  return (
-    `DEPRECATED BACKEND IN USE: results came from legacy search.messages, which Slack officially discourages. ` +
-    `${reason} To enable the recommended Real-Time Search API, reconnect Slack with the granular ` +
-    `search:read.public/private/im/mpim scopes.`
-  );
-}
+// `searchBackendNote()` was REMOVED on 2026-09-12. It returned the prose blob
+// a model relayed to the user as a reconnect instruction they could not act
+// on (see the header note above). There is no replacement: the backend choice
+// is reported by the machine-readable `search_backend` field and by the stderr
+// line in `runMessageSearch`, and neither prescribes an action.
+//
+// If RTS availability ever becomes something a user CAN change, surface it in
+// a settings surface addressed to the workspace admin — not in a tool result
+// narrated mid-answer to whoever happened to ask a question.
 
 
 export function registerMessageTools(server: McpServer): void {
@@ -293,8 +312,11 @@ export function registerMessageTools(server: McpServer): void {
 
 Requires user authorization. Uses Slack's Real-Time Search API
 (assistant.search.context) when the connected app has the granular
-search:read.* scopes; otherwise falls back to legacy search.messages and says
-so in the response (search_backend + search_backend_note). Supports Slack search modifiers:
+search:read.* scopes; otherwise falls back to legacy search.messages, whose
+results are equally complete. The search_backend field records which one ran;
+it is diagnostic only. Do not mention the backend, the fallback or Slack scopes
+to the user, and never suggest reconnecting Slack because of it — none of it is
+theirs to change. Supports Slack search modifiers:
 - from:@username   — Messages from a specific user
 - in:#channel      — Messages in a specific channel
 - before:YYYY-MM-DD / after:YYYY-MM-DD — Date filters
@@ -354,7 +376,6 @@ Set to_me=true to prepend "to:@<your_username>" automatically.`,
           ...(isConcise ? {} : { permalink: m.permalink }),
         }),
       );
-      const note = searchBackendNote(result);
       return JSON.stringify({
         ok: true,
         messages: matches,
@@ -371,7 +392,6 @@ Set to_me=true to prepend "to:@<your_username>" automatically.`,
               page_walk_note: `Real-Time Search is cursor-paginated; deep page walks are capped. Showing page ${result.page} of the requested page ${args.page}.`,
             }
           : {}),
-        ...(note ? { search_backend_note: note } : {}),
       });
     }),
   );
@@ -386,7 +406,9 @@ Set to_me=true to prepend "to:@<your_username>" automatically.`,
 
 Uses Slack search with the is:saved modifier (Real-Time Search API when the
 connected app has the granular search:read.* scopes, otherwise legacy
-search.messages — the response says which via search_backend).
+search.messages — the search_backend field records which one ran, and is
+diagnostic only; do not mention it or Slack scopes to the user, and never
+suggest reconnecting Slack because of it).
 Additional filters: in:#channel, from:@username, before:/after:DATE, has:link, has:reaction.`,
       inputSchema: z.object({
         query: z.string().optional(),
@@ -438,7 +460,6 @@ Additional filters: in:#channel, from:@username, before:/after:DATE, has:link, h
           ...(isConcise ? {} : { permalink: m.permalink }),
         }),
       );
-      const note = searchBackendNote(result);
       return JSON.stringify({
         ok: true,
         messages: matches,
@@ -458,7 +479,6 @@ Additional filters: in:#channel, from:@username, before:/after:DATE, has:link, h
         ...(result.total === 0
           ? { note: 'No saved messages found. Save messages in Slack using "Save for later".' }
           : {}),
-        ...(note ? { search_backend_note: note } : {}),
       });
     }),
   );

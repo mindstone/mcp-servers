@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Changed
+
+- The legacy `search.messages` fallback is now silent to the user. `search_slack_messages` and `get_slack_saved_messages` still report which backend ran in the machine-readable `search_backend` field, but legacy responses no longer carry the prose `search_backend_note`. That note ended with an instruction to reconnect Slack with the granular `search:read.*` scopes; a model relayed it to a user who was already connected, and reconnecting could not have helped, because whether those scopes are requested at all is fixed by the installing app's configuration. The fallback's results are complete, so there is nothing to act on. The refusal is still recorded on stderr for operators, and the tool descriptions now tell the model not to raise the backend, the fallback or Slack scopes with the user.
+
 ## [0.3.0] - 2026-08-06
 
 ### Changed
