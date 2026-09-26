@@ -1,8 +1,10 @@
 /**
  * Workday credential configuration tool.
  *
- * Validates host (SSRF prevention), attempts token exchange + API probe,
- * persists via bridge, and updates runtime credentials.
+ * Validates host (SSRF prevention), validates credentials with the
+ * connector's one token grant (auth.ts requestToken) + an API probe, persists
+ * the refresh token that grant left in force via the bridge, and updates
+ * runtime credentials.
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -11,15 +13,14 @@ import { WorkdayError, USER_AGENT, REQUEST_TIMEOUT_MS } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 import {
   validateHost,
-  assertHostResolvesPublic,
-  parseTokenResponse,
+  requestToken,
+  adoptTokenResponse,
   TENANT_NAME_PATTERN,
   setHost,
   setTenant,
   setClientId,
   setClientSecret,
   setRefreshToken,
-  clearTokenCache,
 } from '../auth.js';
 import { bridgeRequest } from '../bridge.js';
 import { wrapUntrusted } from '../untrusted-content.js';
@@ -80,89 +81,56 @@ COMMON MISTAKES:
       }
       const host = hostValidation.host!;
 
-      // Re-resolve the host and refuse non-public DNS records before the
-      // credential-bearing token exchange leaves the process.
-      try {
-        await assertHostResolvesPublic(host);
-      } catch (error) {
-        if (error instanceof WorkdayError) {
-          return JSON.stringify({ ok: false, error: error.message, resolution: error.resolution });
+      // Validate credentials with the connector's one grant (it re-resolves
+      // the host and refuses non-public records first). Workday may rotate the
+      // refresh token on it, so from here on the token in force is the one the
+      // grant returned, not the one typed in.
+      const grant = await requestToken({ host, tenant, clientId: cid, clientSecret: csecret, refreshToken: rtoken });
+      if (!grant.ok) {
+        const { failure } = grant;
+        switch (failure.kind) {
+          case 'host':
+          case 'malformed':
+            return JSON.stringify({ ok: false, error: failure.error.message, resolution: failure.error.resolution });
+          case 'timeout':
+            return JSON.stringify({
+              ok: false,
+              error: 'Token exchange request timed out.',
+              resolution: 'Verify the host domain is correct and accessible from your network.',
+            });
+          case 'network':
+            return JSON.stringify({
+              ok: false,
+              error: 'Could not reach the Workday token endpoint.',
+              resolution: 'Verify the host domain is correct and accessible from your network.',
+            });
+          // The OAuth error body is vendor/proxy-controlled and may reflect the
+          // credentials just sent — never propagated. Bounded, connector-
+          // authored messages keyed on the status code only.
+          case 'redirect':
+            return JSON.stringify({
+              ok: false,
+              error: `Token endpoint attempted a redirect (HTTP ${failure.status}), which was refused.`,
+              resolution: 'Verify the host domain is correct.',
+            });
+          case 'http':
+            return JSON.stringify({
+              ok: false,
+              error: `Token exchange failed (HTTP ${failure.status}).`,
+              resolution: failure.status === 401
+                ? 'Check your Client ID and Client Secret. Ensure the API Client is registered correctly in Workday.'
+                : failure.status === 400
+                  ? 'Check your tenant name and host domain. If using a refresh token, it may be expired or invalid.'
+                  : `Unexpected error (${failure.status}). Verify host, tenant, and credentials.`,
+            });
+          default: {
+            const unreachable: never = failure;
+            throw unreachable;
+          }
         }
-        throw error;
       }
-
-      // Validate credentials by attempting token exchange + API probe
-      const authHeader = 'Basic ' + Buffer.from(`${cid}:${csecret}`).toString('base64');
-      const bodyParams: Record<string, string> = rtoken
-        ? { grant_type: 'refresh_token', refresh_token: rtoken }
-        : { grant_type: 'client_credentials' };
-      const body = new URLSearchParams(bodyParams);
-
-      const tokenUrl = `https://${host}/ccx/oauth2/${tenant}/token`;
-      let tokenResponse: Response;
-      try {
-        tokenResponse = await fetch(tokenUrl, {
-          method: 'POST',
-          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-          headers: {
-            Authorization: authHeader,
-            'Content-Type': 'application/x-www-form-urlencoded',
-            Accept: 'application/json',
-            'User-Agent': USER_AGENT,
-          },
-          body: body.toString(),
-          // Never auto-follow redirects: the Basic-auth credential would be
-          // replayed to a vendor/proxy-controlled redirect target.
-          redirect: 'manual',
-        });
-      } catch (error) {
-        if (error instanceof Error && error.name === 'TimeoutError') {
-          return JSON.stringify({
-            ok: false,
-            error: 'Token exchange request timed out.',
-            resolution: 'Verify the host domain is correct and accessible from your network.',
-          });
-        }
-        return JSON.stringify({
-          ok: false,
-          error: 'Could not reach the Workday token endpoint.',
-          resolution: 'Verify the host domain is correct and accessible from your network.',
-        });
-      }
-
-      if (!tokenResponse.ok) {
-        // The OAuth error body is vendor/proxy-controlled and may reflect the
-        // credentials just sent — never propagate it. Bounded, connector-
-        // authored messages keyed on the status code only.
-        if (tokenResponse.status >= 300 && tokenResponse.status < 400) {
-          return JSON.stringify({
-            ok: false,
-            error: `Token endpoint attempted a redirect (HTTP ${tokenResponse.status}), which was refused.`,
-            resolution: 'Verify the host domain is correct.',
-          });
-        }
-        return JSON.stringify({
-          ok: false,
-          error: `Token exchange failed (HTTP ${tokenResponse.status}).`,
-          resolution: tokenResponse.status === 401
-            ? 'Check your Client ID and Client Secret. Ensure the API Client is registered correctly in Workday.'
-            : tokenResponse.status === 400
-              ? 'Check your tenant name and host domain. If using a refresh token, it may be expired or invalid.'
-              : `Unexpected error (${tokenResponse.status}). Verify host, tenant, and credentials.`,
-        });
-      }
-
-      // The token body is vendor/proxy-controlled — validate shape and bounds
-      // (bounded expires_in) before using it for the API probe.
-      let tokenData;
-      try {
-        tokenData = parseTokenResponse(await tokenResponse.json());
-      } catch (error) {
-        if (error instanceof WorkdayError) {
-          return JSON.stringify({ ok: false, error: error.message, resolution: error.resolution });
-        }
-        throw error;
-      }
+      const tokenData = grant.token;
+      const refreshTokenInForce = tokenData.refresh_token ?? rtoken;
 
       // API probe
       const testUrl = `https://${host}/ccx/api/v1/${tenant}/workers?limit=1`;
@@ -214,7 +182,7 @@ COMMON MISTAKES:
 
       // Persist via bridge
       const result = await bridgeRequest('/bundled/workday/configure', {
-        host, tenant, clientId: cid, clientSecret: csecret, refreshToken: rtoken,
+        host, tenant, clientId: cid, clientSecret: csecret, refreshToken: refreshTokenInForce,
       });
 
       if (!result.success) {
@@ -228,13 +196,14 @@ COMMON MISTAKES:
         );
       }
 
-      // Update runtime credentials
+      // Update runtime credentials, and keep the grant's access token so the
+      // first tool call does not spend another grant.
       setHost(host);
       setTenant(tenant);
       setClientId(cid);
       setClientSecret(csecret);
-      setRefreshToken(rtoken ?? '');
-      clearTokenCache();
+      setRefreshToken(refreshTokenInForce ?? '');
+      adoptTokenResponse(tokenData);
 
       const message = result.warning
         ? `Workday configured successfully. Note: ${wrapUntrusted(result.warning, 'workday-bridge')}`
