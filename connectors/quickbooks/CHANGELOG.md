@@ -13,7 +13,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 
-- `configure_quickbooks` now saves and uses the refresh token its validation grant returned. Intuit can rotate the refresh token on any grant, and setup kept the retired one, so the next grant failed and the user had to reconnect. Setup and the runtime token refresh now share one grant function, and a malformed token response is reported as `AUTH_FAILED` instead of being cached.
+- `configure_quickbooks` now saves and uses the refresh token its validation grant returned. Intuit can rotate the refresh token on any grant, and setup kept the retired one, so the next grant failed and the user had to reconnect. Setup and the runtime token refresh now share one grant function, and a malformed token response is reported as `AUTH_FAILED` instead of being cached. A failed grant now shows only its HTTP status and a standard OAuth error code (never `error_description` or the rest of the body, which can echo credentials), and the host bridge's setup error and warning text is enveloped.
 
 ## [0.4.2] - 2026-08-10
 
