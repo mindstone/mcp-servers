@@ -244,4 +244,24 @@ describe('configure_workday_credentials keeps a rotated refresh token', () => {
 
     expect(endpoint.grants).toHaveLength(1);
   });
+
+  it('setup re-checks DNS before the bearer-token probe', async () => {
+    const endpoint = rotatingTokenEndpoint('typed-refresh-token');
+    const bridge = recordingBridge();
+    mswServer.use(endpoint.handler, ...bridge.handlers, ...createWorkdayHandlers());
+    const client = await startClient();
+    // Public for the grant, private afterwards: a rebinding host.
+    const { setDnsLookupForTesting } = await import('../src/auth.js');
+    let lookups = 0;
+    setDnsLookupForTesting(async () => {
+      lookups += 1;
+      return [{ address: lookups === 1 ? '93.184.216.34' : '10.0.0.5', family: 4 }];
+    });
+
+    const result = await client.callTool('configure_workday_credentials', configureArgs);
+
+    expect((result.json as Record<string, unknown>).ok).toBe(false);
+    expect(result.text).toContain('non-public');
+    expect(bridge.configureBodies).toHaveLength(0);
+  });
 });

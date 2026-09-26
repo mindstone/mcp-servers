@@ -13,6 +13,7 @@ import { WorkdayError, USER_AGENT, REQUEST_TIMEOUT_MS } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 import {
   validateHost,
+  assertHostResolvesPublic,
   requestToken,
   adoptTokenResponse,
   TENANT_NAME_PATTERN,
@@ -132,7 +133,17 @@ COMMON MISTAKES:
       const tokenData = grant.token;
       const refreshTokenInForce = tokenData.refresh_token ?? rtoken;
 
-      // API probe
+      // API probe. It carries the new bearer token, so re-resolve the host
+      // and refuse non-public records again: DNS may have changed since the
+      // grant's check. (A lookup/connect race remains; see assertHostResolvesPublic.)
+      try {
+        await assertHostResolvesPublic(host);
+      } catch (error) {
+        if (error instanceof WorkdayError) {
+          return JSON.stringify({ ok: false, error: error.message, resolution: error.resolution });
+        }
+        throw error;
+      }
       const testUrl = `https://${host}/ccx/api/v1/${tenant}/workers?limit=1`;
       let testResponse: Response;
       try {
