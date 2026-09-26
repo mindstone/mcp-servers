@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+
+- `configure_quickbooks` now saves and uses the refresh token its validation grant returned. Intuit can rotate the refresh token on any grant, and setup kept the retired one, so the next grant failed and the user had to reconnect. Setup and the runtime token refresh now share one grant function, and a malformed token response is reported as `AUTH_FAILED` instead of being cached.
+
 ## [0.4.2] - 2026-08-10
 
 ### Changed
