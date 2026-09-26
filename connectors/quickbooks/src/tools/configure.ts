@@ -9,6 +9,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { withErrorHandling } from '../utils.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import {
   setClientId,
   setClientSecret,
@@ -88,7 +89,7 @@ COMMON MISTAKES:
           case 'http':
             return JSON.stringify({
               ok: false,
-              error: `Invalid credentials: ${failure.description ?? `HTTP ${failure.status}`}`,
+              error: `Invalid credentials: ${failure.code ? `${failure.code} (HTTP ${failure.status})` : `HTTP ${failure.status}`}`,
               resolution: 'Check your Client ID, Client Secret, and Refresh Token. Refresh tokens expire after 100 days of inactivity.',
             });
           case 'malformed':
@@ -111,7 +112,12 @@ COMMON MISTAKES:
       });
 
       if (!result.success) {
-        return JSON.stringify({ ok: false, error: result.error || 'Failed to configure QuickBooks via bridge.' });
+        // Bridge-authored text crosses a process boundary — envelope it
+        // (AGENTS.md #6), as the Workday connector does.
+        return JSON.stringify({
+          ok: false,
+          error: wrapUntrusted(result.error, 'quickbooks-bridge') ?? 'Failed to configure QuickBooks via bridge.',
+        });
       }
 
       // Update runtime credentials, and keep the grant's access token so the
@@ -124,7 +130,7 @@ COMMON MISTAKES:
       adoptTokenResponse(grant.token);
 
       const message = result.warning
-        ? `QuickBooks Online configured successfully. Note: ${result.warning}`
+        ? `QuickBooks Online configured successfully. Note: ${wrapUntrusted(result.warning, 'quickbooks-bridge')}`
         : 'QuickBooks Online configured successfully! Try list_quickbooks_invoices or list_quickbooks_customers.';
       return JSON.stringify({ ok: true, message });
     }),

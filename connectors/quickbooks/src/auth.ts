@@ -17,7 +17,6 @@ import { z } from 'zod';
 
 import { QuickBooksError, TOKEN_URL, USER_AGENT, REQUEST_TIMEOUT_MS } from './types.js';
 import { bridgeRequest } from './bridge.js';
-import { wrapUntrusted } from './untrusted-content.js';
 
 // ── Runtime credentials ──
 
@@ -131,41 +130,43 @@ export interface TokenGrantCredentials {
   refreshToken: string;
 }
 
-/** Why a grant failed. `description` is bounded Intuit text, already enveloped. */
+/** Why a grant failed. `code` is a standard OAuth error code, never other vendor text. */
 export type TokenGrantFailure =
   | { kind: 'timeout' }
   | { kind: 'network'; error: unknown }
-  | { kind: 'http'; status: number; description?: string }
+  | { kind: 'http'; status: number; code?: OAuthErrorCode }
   | { kind: 'malformed'; status: number };
 
 export type TokenGrantResult =
   | { ok: true; token: TokenResponse }
   | { ok: false; failure: TokenGrantFailure };
 
-/** An OAuth error code: short, lowercase, underscores (RFC 6749 §5.2). */
-const OAUTH_ERROR_CODE = /^[a-z_]{1,64}$/;
+/** The OAuth 2.0 error codes (RFC 6749 §5.2); the only vendor text a failed grant may show. */
+const OAUTH_ERROR_CODES = [
+  'invalid_request',
+  'invalid_client',
+  'invalid_grant',
+  'unauthorized_client',
+  'unsupported_grant_type',
+  'invalid_scope',
+] as const;
+
+export type OAuthErrorCode = (typeof OAUTH_ERROR_CODES)[number];
 
 /**
- * The part of a failed grant's body that may reach the model: Intuit's
- * `error_description`, else a well-formed OAuth `error` code, enveloped
- * (AGENTS.md #6). Never the rest of the body or non-JSON text: a diagnostic
- * body can reflect the credentials just sent.
+ * The failed grant's OAuth error code, when it is one of the standard codes.
+ * Nothing else from the body is used: `error_description` and diagnostic
+ * fields can echo the credentials just sent, and an envelope does not redact.
  */
-async function oauthErrorDescription(response: Response): Promise<string | undefined> {
+async function oauthErrorCode(response: Response): Promise<OAuthErrorCode | undefined> {
   let body: unknown;
   try {
     body = await response.json();
   } catch {
     return undefined;
   }
-  const { error, error_description: description } = (body ?? {}) as Record<string, unknown>;
-  if (typeof description === 'string' && description) {
-    return wrapUntrusted(description, 'quickbooks:oauth-error');
-  }
-  if (typeof error === 'string' && OAUTH_ERROR_CODE.test(error)) {
-    return wrapUntrusted(error, 'quickbooks:oauth-error');
-  }
-  return undefined;
+  const error = (body as { error?: unknown } | null)?.error;
+  return OAUTH_ERROR_CODES.find((code) => code === error);
 }
 
 /** One refresh-token grant. Sets no module state; callers adopt the result. */
@@ -197,7 +198,7 @@ export async function requestToken(creds: TokenGrantCredentials): Promise<TokenG
   }
 
   if (!response.ok) {
-    return { ok: false, failure: { kind: 'http', status: response.status, description: await oauthErrorDescription(response) } };
+    return { ok: false, failure: { kind: 'http', status: response.status, code: await oauthErrorCode(response) } };
   }
 
   // A parse error message embeds a snippet of the (Intuit-controlled) body, so
@@ -255,7 +256,7 @@ export async function getAccessToken(): Promise<string> {
         throw failure.error;
       case 'http':
         throw new QuickBooksError(
-          `OAuth token refresh failed (${failure.status}): ${failure.description ?? 'Unknown error'}`,
+          `OAuth token refresh failed (${failure.status})${failure.code ? `: ${failure.code}` : ''}.`,
           'AUTH_FAILED',
           'Re-configure with configure_quickbooks. Check Client ID, Secret, and Refresh Token. Tokens expire after 100 days of inactivity.',
         );
