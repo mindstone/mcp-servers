@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { slackTsToDatetime, withErrorHandling } from '../utils.js';
+import { errorJson, slackTsToDatetime, withErrorHandling } from '../utils.js';
 import { getSlackReaderClient } from '../client.js';
 import {
   enrichMessageWithUserInfo,
@@ -27,9 +27,14 @@ use download_slack_file with files[].id to download an attachment.`,
         ts: z
           .string()
           .min(1)
+          .optional()
           .describe(
-            'Parent message timestamp — input key is ts (not thread_ts or timestamp). Use ts_slack from get_slack_channel_history.',
+            'Parent message timestamp — use ts_slack from get_slack_channel_history. thread_ts is accepted as an alias; when both are given, ts wins.',
           ),
+        // Slack-API name models send. The MCP SDK cannot express
+        // "at least one of ts/thread_ts" in a plain Zod object, so the
+        // both-absent case is rejected in the handler below.
+        thread_ts: z.string().min(1).optional().describe('Alias for ts.'),
         limit: z.number().int().min(1).max(200).optional(),
         cursor: z.string().optional(),
       }),
@@ -43,10 +48,19 @@ use download_slack_file with files[].id to download an attachment.`,
     withErrorHandling(async (args) => {
       const reader = await getSlackReaderClient();
       if (!reader) return notConnectedJson();
+      const ts = args.ts ?? args.thread_ts;
+      if (!ts) {
+        return errorJson({
+          error: 'get_slack_thread_replies requires a parent message timestamp.',
+          action_required:
+            'Provide ts (or the thread_ts alias) — use the ts_slack value from get_slack_channel_history.',
+          next_step: 'get_slack_channel_history',
+        });
+      }
       const channelId = await resolveChannelId(args.channel);
       const result = await reader.conversations.replies({
         channel: channelId,
-        ts: args.ts,
+        ts,
         limit: args.limit || 20,
         cursor: args.cursor,
       });

@@ -326,6 +326,20 @@ Set to_me=true to prepend "to:@<your_username>" automatically.`,
       inputSchema: z.object({
         query: z.string().min(1).describe('Search query (supports Slack modifiers)'),
         count: z.number().int().min(1).max(100).optional(),
+        // Slack-API name models send; count wins when both are given.
+        max_results: z.number().int().min(1).max(100).optional().describe('Alias for count.'),
+        // Top-level date filters, translated to Slack's after:/before: query
+        // modifiers so they reach whichever search backend runs.
+        after: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional()
+          .describe('Only messages after this date (YYYY-MM-DD) — same as the after: modifier.'),
+        before: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional()
+          .describe('Only messages before this date (YYYY-MM-DD) — same as the before: modifier.'),
         sort: z.enum(['score', 'timestamp']).optional(),
         sort_dir: z.enum(['asc', 'desc']).optional(),
         page: z.number().int().min(1).optional(),
@@ -351,13 +365,15 @@ Set to_me=true to prepend "to:@<your_username>" automatically.`,
       }
 
       let query = args.query;
+      if (args.after) query = `${query} after:${args.after}`;
+      if (args.before) query = `${query} before:${args.before}`;
       if (args.to_me) {
         const authResult = await userClient.auth.test();
         if (authResult.user) query = `to:@${authResult.user} ${query}`;
       }
       const result = await runMessageSearch(userClient, {
         query,
-        count: args.count || 20,
+        count: args.count ?? args.max_results ?? 20,
         sort: args.sort || 'score',
         sort_dir: args.sort_dir,
         page: args.page || 1,

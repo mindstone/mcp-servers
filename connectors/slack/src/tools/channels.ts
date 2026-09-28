@@ -115,6 +115,18 @@ envelopes per AGENTS.md invariant #6 — do not strip them.`,
         channel: z.string().min(1).describe('Channel — channel ID or #channel-name'),
         limit: z.number().int().min(1).max(200).optional(),
         cursor: z.string().optional(),
+        // Native conversations.history time bounds (Slack API names, passed
+        // through unchanged) — e.g. oldest=<yesterday's ts> for "since yesterday".
+        oldest: z
+          .string()
+          .min(1)
+          .optional()
+          .describe('Only messages after this Slack timestamp (e.g. "1704067200.000000").'),
+        latest: z
+          .string()
+          .min(1)
+          .optional()
+          .describe('Only messages before this Slack timestamp.'),
         response_format: RESPONSE_FORMAT_ENUM,
       }),
       annotations: {
@@ -132,6 +144,8 @@ envelopes per AGENTS.md invariant #6 — do not strip them.`,
         channel: channelId,
         limit: args.limit || 20,
         cursor: args.cursor,
+        ...(args.oldest ? { oldest: args.oldest } : {}),
+        ...(args.latest ? { latest: args.latest } : {}),
       });
       const isConcise = args.response_format === 'concise';
       const rawMessages = result.messages || [];
