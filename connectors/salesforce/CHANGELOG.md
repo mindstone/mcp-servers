@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-09-29
+
+### Changed
+
+- Accept the argument names models send (query, soql, object, sobject, record_id, account_id, status, max_results) and strip a trailing ';' from raw SOQL.
+
 ### Added
 
 - Accept the argument spellings callers actually reach for, alongside the canonical ones: `query` for `salesforce_search`'s `search_term`, `soql` for `salesforce_query`'s `query`, `account_id`/`status` for `salesforce_get_opportunities`, `query`/`max_results` for `salesforce_get_accounts`, `object` for `salesforce_describe_object`, `sobject`/`record_id` for `salesforce_get_records`, and `record_id` for `salesforce_update_record`. The advertised schema is strict, so these were previously rejected before the handler ran. The canonical spelling wins when both are supplied (an empty string counts as not supplied); supplying neither now returns a `MISSING_ARGUMENT` error naming every accepted name. `salesforce_get_records` also accepts `fields` as a comma-separated string, and `salesforce_search` accepts (and ignores) `returnJson` — output is always JSON.
