@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeSOSL, sanitizeRecords } from '../utils.js';
+import { withErrorHandling, escapeSOSL, sanitizeRecords, requireArg } from '../utils.js';
 import { withConnection } from '../client.js';
 
 // Allowlisted object names + fixed RETURNING field lists: the only caller
@@ -24,9 +24,11 @@ export function registerSearchTools(server: McpServer): void {
   server.registerTool(
     'salesforce_search',
     {
-      description: `Cross-object full-text search (SOSL). Use for "find anything mentioning X" requests — searches names, emails, and other indexed text fields at once. Defaults to Account, Contact, Lead, Opportunity; pass objects to widen or narrow. Max 200 results; the response's "truncated" flag is true when more matches exist beyond the limit.`,
+      description: `Cross-object full-text search (SOSL). Use for "find anything mentioning X" requests — searches names, emails, and other indexed text fields at once. Requires search_term (or its alias query). Defaults to Account, Contact, Lead, Opportunity; pass objects to widen or narrow. Max 200 results; the response's "truncated" flag is true when more matches exist beyond the limit.`,
       inputSchema: z.object({
-        search_term: z.string().min(2).describe('Text to search for (min 2 characters); reserved SOSL characters are escaped automatically'),
+        search_term: z.string().min(2).optional().describe('Text to search for (min 2 characters); reserved SOSL characters are escaped automatically'),
+        query: z.string().min(2).optional().describe('Alias of search_term.'),
+        returnJson: z.boolean().optional().describe('Accepted and ignored — output is always JSON.'),
         objects: z
           .array(z.enum(['Account', 'Contact', 'Lead', 'Opportunity', 'Case', 'Task', 'Event']))
           .optional()
@@ -36,13 +38,14 @@ export function registerSearchTools(server: McpServer): void {
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
+      const searchTerm = requireArg({ search_term: args.search_term, query: args.query });
       return withConnection(undefined, async (conn) => {
         const objects = (args.objects && args.objects.length > 0 ? args.objects : DEFAULT_OBJECTS) as SearchableObject[];
         const returning = objects.map((o) => SEARCHABLE_OBJECTS[o]).join(', ');
         const limit = Math.min(Math.max(1, args.limit ?? 200), 200);
         // Probe with one extra record so the caller can tell a complete result
         // apart from one clipped at the limit — SOSL returns no total count.
-        const sosl = `FIND {${escapeSOSL(args.search_term)}} IN ALL FIELDS RETURNING ${returning} LIMIT ${limit + 1}`;
+        const sosl = `FIND {${escapeSOSL(searchTerm)}} IN ALL FIELDS RETURNING ${returning} LIMIT ${limit + 1}`;
         const result = await conn.search(sosl);
         const allRecords = result.searchRecords ?? [];
         const truncated = allRecords.length > limit;

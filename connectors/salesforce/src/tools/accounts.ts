@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, checkSaveResult, formatVendorErrors, sanitizeRecords } from '../utils.js';
+import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, checkSaveResult, formatVendorErrors, sanitizeRecords, pickArg } from '../utils.js';
 import { withConnection } from '../client.js';
 import { type SaveResult } from '../types.js';
 
@@ -11,7 +11,9 @@ export function registerAccountTools(server: McpServer): void {
       description: `Get CRM accounts. Filters: name_contains, industry, account_type. Returns: Id, Name, Industry, Type, Phone, Website, Description. Max 200 records (default: 50).`,
       inputSchema: z.object({
         limit: z.number().int().min(1).max(200).optional().describe('Max results 1-200 (default: 50)'),
+        max_results: z.number().int().min(1).max(200).optional().describe('Alias of limit.'),
         name_contains: z.string().optional().describe('Filter by name (case-insensitive)'),
+        query: z.string().optional().describe('Alias of name_contains.'),
         industry: z.string().optional().describe('Filter by industry'),
         account_type: z.string().optional().describe('Filter by type (Customer, Partner, Competitor)'),
         fields: z.array(z.string()).optional().describe('Custom fields (must be valid API names)'),
@@ -24,11 +26,12 @@ export function registerAccountTools(server: McpServer): void {
         const fields = validateFields(args.fields || [], defaultFields);
         let query = `SELECT ${fields.join(', ')} FROM Account`;
         const conditions: string[] = [];
-        if (args.name_contains) conditions.push(`Name LIKE '%${escapeSOQLLike(args.name_contains)}%'`);
+        const nameContains = pickArg({ name_contains: args.name_contains, query: args.query });
+        if (nameContains) conditions.push(`Name LIKE '%${escapeSOQLLike(nameContains)}%'`);
         if (args.industry) conditions.push(`Industry = '${escapeSOQL(args.industry)}'`);
         if (args.account_type) conditions.push(`Type = '${escapeSOQL(args.account_type)}'`);
         if (conditions.length > 0) query += ` WHERE ${conditions.join(' AND ')}`;
-        const limit = Math.min(Math.max(1, args.limit ?? 50), 200);
+        const limit = Math.min(Math.max(1, pickArg({ limit: args.limit, max_results: args.max_results }) ?? 50), 200);
         query += ` LIMIT ${limit}`;
         const result = await conn.query(query);
         return JSON.stringify({ ok: true, records: sanitizeRecords(result.records, 'salesforce:get_accounts:records'), totalSize: result.totalSize, done: result.done });

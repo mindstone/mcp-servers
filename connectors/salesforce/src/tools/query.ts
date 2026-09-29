@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, validateObjectName, validateFields, isValidQueryFieldName, isValidFieldName, escapeSOQL, ALLOWED_FILTER_OPERATORS, validateAndMergeCustomFields, checkSaveResult, formatVendorErrors, sanitizeRecords } from '../utils.js';
+import { withErrorHandling, validateObjectName, validateFields, isValidQueryFieldName, isValidFieldName, escapeSOQL, ALLOWED_FILTER_OPERATORS, validateAndMergeCustomFields, checkSaveResult, formatVendorErrors, sanitizeRecords, requireArg } from '../utils.js';
 import { withConnection } from '../client.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { ConnectorError, type SaveResult } from '../types.js';
@@ -20,9 +20,14 @@ import { ConnectorError, type SaveResult } from '../types.js';
 // corrupted to `WHERE Website = 'https:` (unterminated literal), since
 // the naive global regex would treat the `//` inside the quoted span as
 // a line comment.
-function stripSoqlComments(query: string): string {
+//
+// The walker also reports whether the input ended INSIDE an unterminated
+// string literal, which the caller needs to decide whether a trailing `;` is
+// a statement terminator or data the user typed.
+function stripSoqlComments(query: string): { text: string; endedInLiteral: boolean } {
   let out = '';
   let i = 0;
+  let endedInLiteral = false;
   const n = query.length;
   while (i < n) {
     const ch = query[i];
@@ -33,6 +38,7 @@ function stripSoqlComments(query: string): string {
     if (ch === "'") {
       out += ch;
       i++;
+      let closed = false;
       while (i < n) {
         const c = query[i];
         if (c === '\\' && i + 1 < n) {
@@ -51,11 +57,13 @@ function stripSoqlComments(query: string): string {
           // Closing quote.
           out += "'";
           i++;
+          closed = true;
           break;
         }
         out += c;
         i++;
       }
+      if (!closed) endedInLiteral = true;
       continue;
     }
 
@@ -84,7 +92,7 @@ function stripSoqlComments(query: string): string {
     out += ch;
     i++;
   }
-  return out;
+  return { text: out, endedInLiteral };
 }
 
 /**
@@ -101,8 +109,14 @@ function stripSoqlComments(query: string): string {
  * `OFFSET <n>` clause.
  */
 export function applyQueryLimitCap(rawQuery: string, maxLimit: number): string {
-  const cleaned = stripSoqlComments(rawQuery).trim();
-  let base = cleaned;
+  const { text, endedInLiteral } = stripSoqlComments(rawQuery);
+  const cleaned = text.trim();
+  // Callers routinely paste a SQL-style statement terminator. SOQL has none,
+  // and a trailing `;` would otherwise defeat the LIMIT/OFFSET matchers below
+  // and reach Salesforce as a syntax error. A `;` inside a string literal is
+  // data, so only strip when the query did not end inside an unterminated one
+  // (a closed literal can never be the trailing run the pattern matches).
+  let base = endedInLiteral ? cleaned : cleaned.replace(/[;\s]*;[;\s]*$/, '').trimEnd();
   let offsetClause = '';
   const offsetMatch = base.match(/^([\s\S]*?)\s+OFFSET\s+(\d+)\s*$/i);
   if (offsetMatch) {
@@ -129,14 +143,16 @@ export function registerQueryTools(server: McpServer): void {
     {
       description: `Execute a raw SOQL query. For advanced queries only — prefer dedicated tools for standard operations. Max 200 records enforced.`,
       inputSchema: z.object({
-        query: z.string().min(1).describe('SOQL query string'),
+        query: z.string().min(1).optional().describe('SOQL query string'),
+        soql: z.string().min(1).optional().describe('Alias of query.'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
+      const rawQuery = requireArg({ query: args.query, soql: args.soql });
       return withConnection(undefined, async (conn) => {
         const MAX_LIMIT = 200;
-        const query = applyQueryLimitCap(args.query, MAX_LIMIT);
+        const query = applyQueryLimitCap(rawQuery, MAX_LIMIT);
         const result = await conn.query(query);
         return JSON.stringify({ ok: true, records: sanitizeRecords(result.records, 'salesforce:query:records'), totalSize: result.totalSize, done: result.done });
       });
@@ -148,13 +164,16 @@ export function registerQueryTools(server: McpServer): void {
     {
       description: `Get object metadata and field definitions. Returns field names, types, and required flags. Common objects: Account, Contact, Opportunity, Lead, Case, Task.`,
       inputSchema: z.object({
-        object_name: z.string().min(1).describe('Object API name (Account, Contact, Opportunity, Lead, CustomObject__c)'),
+        object_name: z.string().min(1).optional().describe('Object API name (Account, Contact, Opportunity, Lead, CustomObject__c)'),
+        object: z.string().min(1).optional().describe('Alias of object_name.'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
+      const objectName = requireArg({ object_name: args.object_name, object: args.object });
+      validateObjectName(objectName);
       return withConnection(undefined, async (conn) => {
-        const metadata = await conn.sobject(args.object_name).describe();
+        const metadata = await conn.sobject(objectName).describe();
         // Labels and record-type names are org-authored text — envelope them;
         // field API names stay raw (they are identifiers, reused in queries).
         return JSON.stringify({
@@ -231,20 +250,22 @@ export function registerQueryTools(server: McpServer): void {
       description: `Generic record update for any Salesforce object. For standard objects, prefer dedicated tools.`,
       inputSchema: z.object({
         object_name: z.string().min(1).describe('sObject API name'),
-        id: z.string().min(1).describe('Salesforce record ID to update'),
+        id: z.string().min(1).optional().describe('Salesforce record ID to update'),
+        record_id: z.string().min(1).optional().describe('Alias of id.'),
         fields: z.record(z.unknown()).describe('Field-value pairs to update'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
       validateObjectName(args.object_name);
+      const recordId = requireArg({ id: args.id, record_id: args.record_id });
       return withConnection(undefined, async (conn) => {
-        const updateData: Record<string, unknown> = { Id: args.id };
+        const updateData: Record<string, unknown> = { Id: recordId };
         validateAndMergeCustomFields(updateData, args.fields);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const result = await conn.sobject(args.object_name).update(updateData as any) as unknown as SaveResult;
         checkSaveResult(result, `Failed to update ${args.object_name} record`);
-        return JSON.stringify({ ok: true, status: 'success', object: args.object_name, id: args.id });
+        return JSON.stringify({ ok: true, status: 'success', object: args.object_name, id: recordId });
       });
     }),
   );
@@ -254,8 +275,10 @@ export function registerQueryTools(server: McpServer): void {
     {
       description: `Generic record query for any Salesforce object. For standard objects, prefer dedicated get tools.`,
       inputSchema: z.object({
-        object_name: z.string().min(1).describe('sObject API name'),
-        fields: z.array(z.string()).optional().describe('Fields to SELECT (defaults to Id)'),
+        object_name: z.string().min(1).optional().describe('sObject API name'),
+        sobject: z.string().min(1).optional().describe('Alias of object_name.'),
+        fields: z.union([z.array(z.string()), z.string()]).optional().describe('Fields to SELECT (defaults to Id); array or comma-separated string'),
+        record_id: z.string().min(1).optional().describe('Fetch one record by ID (adds an Id = ... condition)'),
         filters: z.array(z.object({
           field: z.string().describe('Field API name'),
           operator: z.enum(['=', '!=', '<', '>', '<=', '>=', 'LIKE']).describe('Comparison operator'),
@@ -266,12 +289,19 @@ export function registerQueryTools(server: McpServer): void {
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     withErrorHandling(async (args) => {
-      validateObjectName(args.object_name);
+      const objectName = requireArg({ object_name: args.object_name, sobject: args.sobject });
+      validateObjectName(objectName);
       return withConnection(undefined, async (conn) => {
-        const fields = validateFields(args.fields || [], ['Id'], isValidQueryFieldName);
-        let soql = `SELECT ${fields.join(', ')} FROM ${args.object_name}`;
+        // Callers pass either a list or the comma-separated string they would
+        // type into a SELECT; both land in the same field-name validator.
+        const requestedFields = typeof args.fields === 'string'
+          ? args.fields.split(',').map((f) => f.trim()).filter((f) => f.length > 0)
+          : args.fields;
+        const fields = validateFields(requestedFields || [], ['Id'], isValidQueryFieldName);
+        let soql = `SELECT ${fields.join(', ')} FROM ${objectName}`;
+        const conditions: string[] = [];
+        if (args.record_id) conditions.push(`Id = '${escapeSOQL(args.record_id)}'`);
         if (args.filters && args.filters.length > 0) {
-          const conditions: string[] = [];
           for (const filter of args.filters) {
             if (!isValidFieldName(filter.field)) {
               throw new ConnectorError(`Invalid filter field name: "${filter.field}"`, 'INVALID_FIELD_NAMES', 'Field names must be valid API names');
@@ -287,8 +317,8 @@ export function registerQueryTools(server: McpServer): void {
             }
             conditions.push(`${filter.field} ${filter.operator} ${formattedValue}`);
           }
-          soql += ` WHERE ${conditions.join(' AND ')}`;
         }
+        if (conditions.length > 0) soql += ` WHERE ${conditions.join(' AND ')}`;
         const limit = Math.min(Math.max(1, args.limit ?? 50), 200);
         soql += ` LIMIT ${limit}`;
         const result = await conn.query(soql);

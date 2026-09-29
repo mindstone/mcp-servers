@@ -92,6 +92,12 @@ describe('Security audit — Salesforce MCP server', () => {
     expect(errorText).not.toContain('mindstone');
   });
 
+  // Compatibility no-op parameters: camelCase names models demonstrably send
+  // that we accept and ignore rather than reject. Adding to this set is a
+  // deliberate compatibility decision, not a relaxation of the convention —
+  // every other parameter must still be snake_case.
+  const COMPAT_NOOP_PARAMS = new Set(['returnJson']);
+
   it('all tool parameters use snake_case', () => {
     const srcFiles = getAllFiles(SRC_DIR);
     const toolFiles = srcFiles.filter((f) => f.includes('/tools/'));
@@ -107,6 +113,7 @@ describe('Security audit — Salesforce MCP server', () => {
         if (paramNames) {
           for (const param of paramNames) {
             const name = param.replace(':', '').trim();
+            if (COMPAT_NOOP_PARAMS.has(name)) continue;
             // All param names should be snake_case or single-word lowercase
             expect(
               /^[a-z][a-z0-9_]*$/.test(name),

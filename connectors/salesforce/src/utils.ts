@@ -123,6 +123,41 @@ export function escapeSOQLLike(value: string): string {
 }
 
 /**
+ * Resolve a tool argument that accepts more than one spelling.
+ *
+ * Callers reach for plausible synonyms of an argument name — `soql` for
+ * `query`, `sobject` for `object_name` — and the advertised JSON schema is
+ * strict (`additionalProperties: false`), so an undeclared key is rejected
+ * before the handler ever runs. Aliases are therefore declared in the schema
+ * and collapsed here. List the canonical spelling first: the first defined
+ * value wins, so the canonical name beats an alias when both are supplied.
+ */
+export function pickArg<T>(candidates: Record<string, T | undefined>): T | undefined {
+  for (const value of Object.values(candidates)) {
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
+/**
+ * `pickArg` for an argument that is required but has no single schema-required
+ * spelling. Throws a MISSING_ARGUMENT error naming every accepted spelling, so
+ * a caller that guessed wrong learns what would have worked.
+ */
+export function requireArg<T>(candidates: Record<string, T | undefined>): T {
+  const value = pickArg(candidates);
+  if (value === undefined) {
+    const names = Object.keys(candidates);
+    throw new ConnectorError(
+      `Missing required argument: provide ${names.join(' or ')}`,
+      'MISSING_ARGUMENT',
+      `Accepted argument names: ${names.join(', ')}`,
+    );
+  }
+  return value;
+}
+
+/**
  * Validate that a field name is safe (alphanumeric + underscore only).
  */
 export function isValidFieldName(field: string): boolean {

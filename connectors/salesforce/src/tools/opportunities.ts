@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, formatSOQLDate, checkSaveResult, formatVendorErrors, sanitizeRecords } from '../utils.js';
+import { withErrorHandling, escapeSOQL, escapeSOQLLike, validateFields, validateAndMergeCustomFields, formatSOQLDate, checkSaveResult, formatVendorErrors, sanitizeRecords, pickArg } from '../utils.js';
 import { withConnection } from '../client.js';
 import { ConnectorError, type SaveResult } from '../types.js';
 
@@ -13,7 +13,9 @@ export function registerOpportunityTools(server: McpServer): void {
         limit: z.number().int().min(1).max(200).optional().describe('Max results 1-200 (default: 50)'),
         name_contains: z.string().optional().describe('Filter by name'),
         stage: z.string().optional().describe('Filter by stage'),
+        status: z.string().optional().describe('Alias of stage.'),
         related_account_id: z.string().optional().describe('Filter by Account ID'),
+        account_id: z.string().optional().describe('Alias of related_account_id.'),
         close_date_from: z.string().optional().describe('Closing on/after date (YYYY-MM-DD)'),
         close_date_to: z.string().optional().describe('Closing on/before date (YYYY-MM-DD)'),
         fields: z.array(z.string()).optional().describe('Custom fields'),
@@ -27,8 +29,10 @@ export function registerOpportunityTools(server: McpServer): void {
         let query = `SELECT ${fields.join(', ')} FROM Opportunity`;
         const conditions: string[] = [];
         if (args.name_contains) conditions.push(`Name LIKE '%${escapeSOQLLike(args.name_contains)}%'`);
-        if (args.stage) conditions.push(`StageName = '${escapeSOQL(args.stage)}'`);
-        if (args.related_account_id) conditions.push(`AccountId = '${escapeSOQL(args.related_account_id)}'`);
+        const stage = pickArg({ stage: args.stage, status: args.status });
+        const relatedAccountId = pickArg({ related_account_id: args.related_account_id, account_id: args.account_id });
+        if (stage) conditions.push(`StageName = '${escapeSOQL(stage)}'`);
+        if (relatedAccountId) conditions.push(`AccountId = '${escapeSOQL(relatedAccountId)}'`);
         if (args.close_date_from) conditions.push(`CloseDate >= ${formatSOQLDate(args.close_date_from, 'close_date_from')}`);
         if (args.close_date_to) conditions.push(`CloseDate <= ${formatSOQLDate(args.close_date_to, 'close_date_to')}`);
         if (conditions.length > 0) query += ` WHERE ${conditions.join(' AND ')}`;

@@ -11,6 +11,14 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+
+- Accept the argument spellings callers actually reach for, alongside the canonical ones: `query` for `salesforce_search`'s `search_term`, `soql` for `salesforce_query`'s `query`, `account_id`/`status` for `salesforce_get_opportunities`, `query`/`max_results` for `salesforce_get_accounts`, `object` for `salesforce_describe_object`, `sobject`/`record_id` for `salesforce_get_records`, and `record_id` for `salesforce_update_record`. The advertised schema is strict, so these were previously rejected before the handler ran. The canonical spelling wins when both are supplied; supplying neither now returns a `MISSING_ARGUMENT` error naming every accepted name. `salesforce_get_records` also accepts `fields` as a comma-separated string, and `salesforce_search` accepts (and ignores) `returnJson` — output is always JSON.
+
+### Fixed
+
+- Strip a pasted trailing `;` from a `salesforce_query` SOQL statement before applying the 200-record cap. SOQL has no statement terminator, so the query previously reached Salesforce as a syntax error. A `;` inside a string literal is left alone.
+
 ## [0.2.2] - 2026-08-18
 
 ### Changed
