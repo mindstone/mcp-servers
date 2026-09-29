@@ -141,7 +141,7 @@ export function registerQueryTools(server: McpServer): void {
   server.registerTool(
     'salesforce_query',
     {
-      description: `Execute a raw SOQL query. For advanced queries only — prefer dedicated tools for standard operations. Max 200 records enforced.`,
+      description: `Execute a raw SOQL query. For advanced queries only — prefer dedicated tools for standard operations. Requires query (or its alias soql). Max 200 records enforced.`,
       inputSchema: z.object({
         query: z.string().min(1).optional().describe('SOQL query string'),
         soql: z.string().min(1).optional().describe('Alias of query.'),
@@ -162,7 +162,7 @@ export function registerQueryTools(server: McpServer): void {
   server.registerTool(
     'salesforce_describe_object',
     {
-      description: `Get object metadata and field definitions. Returns field names, types, and required flags. Common objects: Account, Contact, Opportunity, Lead, Case, Task.`,
+      description: `Get object metadata and field definitions. Returns field names, types, and required flags. Requires object_name (or its alias object). Common objects: Account, Contact, Opportunity, Lead, Case, Task.`,
       inputSchema: z.object({
         object_name: z.string().min(1).optional().describe('Object API name (Account, Contact, Opportunity, Lead, CustomObject__c)'),
         object: z.string().min(1).optional().describe('Alias of object_name.'),
@@ -247,7 +247,7 @@ export function registerQueryTools(server: McpServer): void {
   server.registerTool(
     'salesforce_update_record',
     {
-      description: `Generic record update for any Salesforce object. For standard objects, prefer dedicated tools.`,
+      description: `Generic record update for any Salesforce object. For standard objects, prefer dedicated tools. Requires id (or its alias record_id).`,
       inputSchema: z.object({
         object_name: z.string().min(1).describe('sObject API name'),
         id: z.string().min(1).optional().describe('Salesforce record ID to update'),
@@ -273,7 +273,7 @@ export function registerQueryTools(server: McpServer): void {
   server.registerTool(
     'salesforce_get_records',
     {
-      description: `Generic record query for any Salesforce object. For standard objects, prefer dedicated get tools.`,
+      description: `Generic record query for any Salesforce object. Requires object_name (or its alias sobject). For standard objects, prefer dedicated get tools.`,
       inputSchema: z.object({
         object_name: z.string().min(1).optional().describe('sObject API name'),
         sobject: z.string().min(1).optional().describe('Alias of object_name.'),

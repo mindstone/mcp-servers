@@ -131,10 +131,14 @@ export function escapeSOQLLike(value: string): string {
  * before the handler ever runs. Aliases are therefore declared in the schema
  * and collapsed here. List the canonical spelling first: the first defined
  * value wins, so the canonical name beats an alias when both are supplied.
+ * An empty string counts as undefined and is skipped, so an empty canonical
+ * spelling never silently swallows a non-empty alias value.
  */
 export function pickArg<T>(candidates: Record<string, T | undefined>): T | undefined {
   for (const value of Object.values(candidates)) {
-    if (value !== undefined) return value;
+    if (value === undefined) continue;
+    if (typeof value === 'string' && value === '') continue;
+    return value;
   }
   return undefined;
 }

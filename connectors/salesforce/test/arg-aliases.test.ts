@@ -28,7 +28,13 @@ interface JsonSchemaShape {
   additionalProperties?: unknown;
 }
 
-const captured = { soql: '', sosl: '', patchUrl: '', patchBody: {} as Record<string, unknown> };
+const captured = {
+  soql: '',
+  sosl: '',
+  patchUrl: '',
+  patchBody: {} as Record<string, unknown>,
+  describeUrl: '',
+};
 
 function captureHandlers() {
   return [
@@ -43,6 +49,16 @@ function captureHandlers() {
     http.get('*/services/data/*/search*', ({ request }) => {
       captured.sosl = new URL(request.url).searchParams.get('q') || '';
       return HttpResponse.json({ searchRecords: [] });
+    }),
+    http.get('*/services/data/*/sobjects/:name/describe*', ({ request, params }) => {
+      captured.describeUrl = request.url;
+      return HttpResponse.json({
+        name: params.name,
+        label: params.name,
+        labelPlural: params.name,
+        fields: [],
+        recordTypeInfos: [],
+      });
     }),
     http.patch('*/services/data/*/sobjects/:objectName/:id', async ({ request }) => {
       captured.patchUrl = request.url;
@@ -90,6 +106,7 @@ describe('argument-name aliases', () => {
     captured.sosl = '';
     captured.patchUrl = '';
     captured.patchBody = {};
+    captured.describeUrl = '';
   });
 
   afterAll(async () => {
@@ -112,13 +129,22 @@ describe('argument-name aliases', () => {
     expect(missing, `${toolName}: schema-required keys absent from the payload`).toEqual([]);
   }
 
-  it('the advertised schema really is a strict gate', () => {
-    // If this ever becomes permissive the rest of this file proves less than
-    // it claims: an undeclared key would sail through instead of being
-    // rejected, and the aliases would not need declaring at all.
-    for (const toolName of ['salesforce_query', 'salesforce_search', 'salesforce_get_records']) {
-      expect(schemas.get(toolName)?.additionalProperties, `${toolName} must reject undeclared keys`).toBe(false);
-    }
+  // If this ever becomes permissive the rest of this file proves less than
+  // it claims: an undeclared key would sail through instead of being
+  // rejected, and the aliases would not need declaring at all.
+  const STRICT_GATE_TOOLS = [
+    'salesforce_search',
+    'salesforce_query',
+    'salesforce_get_opportunities',
+    'salesforce_get_accounts',
+    'salesforce_get_users',
+    'salesforce_describe_object',
+    'salesforce_get_records',
+    'salesforce_update_record',
+  ];
+
+  it.each(STRICT_GATE_TOOLS)('the advertised schema for %s really is a strict gate', (toolName) => {
+    expect(schemas.get(toolName)?.additionalProperties, `${toolName} must reject undeclared keys`).toBe(false);
   });
 
   // --- Sighted payloads: gate admits them, canonical value reaches Salesforce.
@@ -227,7 +253,7 @@ describe('argument-name aliases', () => {
   it('salesforce_get_accounts prefers limit over max_results', async () => {
     const result = await testClient.callTool('salesforce_get_accounts', { limit: 5, max_results: 99 });
     expect(result.json).toHaveProperty('ok', true);
-    expect(captured.soql).toContain('LIMIT 5');
+    expect(captured.soql).toMatch(/LIMIT 5$/);
   });
 
   it('salesforce_update_record prefers id over record_id', async () => {
@@ -239,6 +265,54 @@ describe('argument-name aliases', () => {
     });
     expect(result.json).toHaveProperty('ok', true);
     expect(captured.patchUrl).toContain('/sobjects/Account/001000000000001');
+  });
+
+  it('salesforce_get_opportunities prefers stage over status', async () => {
+    const result = await testClient.callTool('salesforce_get_opportunities', {
+      stage: 'Closed Won',
+      status: 'Prospecting',
+    });
+    expect(result.json).toHaveProperty('ok', true);
+    expect(captured.soql).toContain("StageName = 'Closed Won'");
+    expect(captured.soql).not.toContain('Prospecting');
+  });
+
+  it('salesforce_get_opportunities prefers related_account_id over account_id', async () => {
+    const result = await testClient.callTool('salesforce_get_opportunities', {
+      related_account_id: '001000000000001',
+      account_id: '001000000000002',
+    });
+    expect(result.json).toHaveProperty('ok', true);
+    expect(captured.soql).toContain("AccountId = '001000000000001'");
+    expect(captured.soql).not.toContain('001000000000002');
+  });
+
+  it('salesforce_get_accounts prefers name_contains over query', async () => {
+    const result = await testClient.callTool('salesforce_get_accounts', {
+      name_contains: 'Acme',
+      query: 'Globex',
+    });
+    expect(result.json).toHaveProperty('ok', true);
+    expect(captured.soql).toContain("Name LIKE '%Acme%'");
+    expect(captured.soql).not.toContain('Globex');
+  });
+
+  it('salesforce_get_accounts skips an empty canonical value and falls through to the alias', async () => {
+    const payload = { name_contains: '', query: 'Acme' };
+    assertGateAdmits('salesforce_get_accounts', payload);
+    const result = await testClient.callTool('salesforce_get_accounts', payload);
+    expect(result.json).toHaveProperty('ok', true);
+    expect(captured.soql).toContain("Name LIKE '%Acme%'");
+  });
+
+  it('salesforce_describe_object prefers object_name over object (observed on the wire)', async () => {
+    const result = await testClient.callTool('salesforce_describe_object', {
+      object_name: 'Account',
+      object: 'Contact',
+    });
+    expect(result.json).toHaveProperty('ok', true);
+    expect(captured.describeUrl).toContain('/sobjects/Account/describe');
+    expect(captured.describeUrl).not.toContain('/sobjects/Contact');
   });
 
   // --- Neither spelling supplied: a clear error naming both.
@@ -267,6 +341,13 @@ describe('argument-name aliases', () => {
     });
   }
 
+  it('salesforce_query rejects an empty query (empty counts as not supplied)', async () => {
+    const accepted = await testClient
+      .callTool('salesforce_query', { query: '' })
+      .then((r) => r.json?.ok === true, () => false);
+    expect(accepted, 'an empty query string must be rejected like a missing one').toBe(false);
+  });
+
   // --- Deliberately NOT aliased: these stay rejected.
 
   it('salesforce_get_users does not admit filters or object_name', () => {
@@ -287,6 +368,15 @@ describe('argument-name aliases', () => {
       .then((r) => r.json?.ok === true, () => false);
     expect(accepted, 'FeedItem must not be searchable').toBe(false);
   });
+
+  it('salesforce_search rejects an alias value that violates the shared constraint (query under min(2))', async () => {
+    // search_term and query share a min(2); the alias must be gated by the
+    // same constraint the canonical spelling would face, not waved through.
+    const accepted = await testClient
+      .callTool('salesforce_search', { query: 'A' })
+      .then((r) => r.json?.ok === true, () => false);
+    expect(accepted, 'a one-character alias value must be rejected like a one-character search_term').toBe(false);
+  });
 });
 
 /**
@@ -306,6 +396,7 @@ describe('applyQueryLimitCap — trailing statement terminator', () => {
     ["SELECT Id FROM Account WHERE Name = 'a;b'", "SELECT Id FROM Account WHERE Name = 'a;b' LIMIT 200"],
     ["SELECT Id FROM Account WHERE Name = 'x;'", "SELECT Id FROM Account WHERE Name = 'x;' LIMIT 200"],
     ["SELECT Id FROM Account WHERE Name = 'a;b';", "SELECT Id FROM Account WHERE Name = 'a;b' LIMIT 200"],
+    ['SELECT Id FROM Lead LIMIT 5000; // bypass', 'SELECT Id FROM Lead LIMIT 200'],
   ];
 
   for (const [input, expected] of CASES) {
