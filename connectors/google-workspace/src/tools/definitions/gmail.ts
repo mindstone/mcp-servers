@@ -126,7 +126,7 @@ export const gmailTools: ToolMetadata[] = [
 
 Gmail query syntax: from:, to:, subject:, has:attachment, is:unread, after:YYYY-MM-DD, before:YYYY-MM-DD, label:
 
-Use get_workspace_email_thread with a thread_id from results to get full conversation.`,
+Each result shows its id (message id) and thread_id. Use get_workspace_email_thread with that thread_id (or the message id) to get the full conversation.`,
     aliases: ['search_emails', 'find_emails', 'query_emails'],
     annotations: { readOnlyHint: true },
     inputSchema: {
@@ -146,6 +146,14 @@ Use get_workspace_email_thread with a thread_id from results to get full convers
         max_results: {
           type: 'number',
           description: 'Maximum emails to return (default: 10, max: 100)'
+        },
+        limit: {
+          type: 'number',
+          description: 'Alias of max_results.'
+        },
+        max_messages: {
+          type: 'number',
+          description: 'Alias of max_results.'
         },
         
         // COMMON FILTERS: Flat for ease of use
@@ -340,7 +348,23 @@ Use get_workspace_email_thread with a thread_id from results to get full convers
         },
         thread_id: {
           type: 'string',
-          description: 'Thread ID (from search results or message)'
+          description: 'Thread ID (the thread_id shown in search results). Give this OR message_id.'
+        },
+        threadId: {
+          type: 'string',
+          description: 'Alias of thread_id.'
+        },
+        message_id: {
+          type: 'string',
+          description: 'ID of any message in the thread (the id shown in search results). The thread is looked up from it. Ignored when thread_id is given.'
+        },
+        messageId: {
+          type: 'string',
+          description: 'Alias of message_id.'
+        },
+        id: {
+          type: 'string',
+          description: 'Alias of message_id.'
         },
         max_messages: {
           type: 'number',
@@ -363,7 +387,10 @@ Use get_workspace_email_thread with a thread_id from results to get full convers
           description: 'Return structured JSON instead of formatted text (default: false)'
         }
       },
-      required: ['thread_id']
+      // One of thread_id / message_id is required; the handler enforces it so
+      // the aliases stay valid alone (no oneOf, which would disable strict
+      // unknown-field rejection in the SuperMCP gate).
+      required: []
     }
   },
   {

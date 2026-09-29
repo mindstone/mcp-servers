@@ -386,7 +386,7 @@ export function formatEmailsAsText(result: { emails: Array<{ id: string; threadI
       const attachmentList = email.attachments.map(a => a.name).join(', ');
       lines.push(`   Attachments: ${attachmentList}`);
     }
-    lines.push(`   [id: ${email.id}, thread: ${email.threadId}${labels ? `, labels: ${labels}` : ''}]`);
+    lines.push(`   [id: ${email.id}, thread_id: ${email.threadId}${labels ? `, labels: ${labels}` : ''}]`);
     lines.push('');
   });
 
@@ -626,6 +626,9 @@ export async function handleSearchWorkspaceEmails(params: SearchEmailsParams & R
   if ('limit' in unknownParams && mergedOptions.maxResults === undefined) {
     mergedOptions.maxResults = unknownParams.limit as number;
   }
+  if (typeof unknownParams.max_messages === 'number' && mergedOptions.maxResults === undefined) {
+    mergedOptions.maxResults = unknownParams.max_messages;
+  }
   
   const search = mergedSearch;
   const options = mergedOptions;
@@ -669,6 +672,9 @@ interface GetThreadParams {
   email?: string;
   thread_id?: string;
   threadId?: string;
+  message_id?: string;
+  messageId?: string;
+  id?: string;
   max_messages?: number;
   maxMessages?: number;
   offset?: number;
@@ -748,7 +754,7 @@ export function formatThreadAsText(result: { threadId: string; messagesCount: nu
 export async function handleGetWorkspaceEmailThread(params: GetThreadParams) {
   await initializeServices();
   const rawParams = params as unknown as Record<string, unknown>;
-  const threadId = readAliasedString(rawParams, 'thread_id', 'threadId');
+  const requestedThreadId = readAliasedString(rawParams, 'thread_id', 'threadId');
   const maxMessages = readAliasedNumber(rawParams, 'max_messages', 'maxMessages') ?? 50;
   const offset = typeof params.offset === 'number' ? params.offset : 0;
   const includeBody = readAliasedBoolean(rawParams, 'include_body', 'includeBody') ?? true;
@@ -758,16 +764,31 @@ export async function handleGetWorkspaceEmailThread(params: GetThreadParams) {
   // Resolve email - uses instance account if not provided, validates if provided
   const email = await resolveEmail(params);
 
-  if (!threadId) {
+  const messageId = readAliasedString(rawParams, 'message_id', 'messageId') ?? readAliasedString(rawParams, 'message_id', 'id');
+
+  if (!requestedThreadId && !messageId) {
     throw new McpError(
       ErrorCode.InvalidParams,
-      'Missing required parameter: "thread_id" (from search results or a message). ' +
+      'Missing required parameter: "thread_id" (the thread_id shown in search results) or "message_id" (any message id in the thread). ' +
       'Example: { "email": "user@example.com", "thread_id": "thread123" }'
     );
   }
 
   return accountManager.withTokenRenewal(email, async () => {
     try {
+      let threadId = requestedThreadId;
+      if (!threadId) {
+        // A message id was given instead: one extra lookup finds its thread.
+        const message = await gmailService.getMessage(email, messageId as string);
+        if (!message) {
+          throw new McpError(
+            ErrorCode.InvalidRequest,
+            `Message not found: "${messageId}" does not exist in the ${email} mailbox. ` +
+            'Use search_workspace_emails to find the email and pass its thread_id or id.'
+          );
+        }
+        threadId = message.threadId;
+      }
       const result = await gmailService.getThread(email, threadId, { maxMessages, offset, includeBody });
 
       if (returnJson) {
