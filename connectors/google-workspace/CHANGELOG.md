@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-09-29
+
+### Changed
+
+- Read an email thread from a search result's message id: get_workspace_email_thread accepts message_id/messageId/id and threadId; search accepts limit/max_messages.
+
 ### Fixed
 
 - `get_workspace_email_thread` now accepts a message id (`message_id`, `messageId` or `id`) and resolves its thread with one extra lookup, accepts `threadId` as an alias of `thread_id`, and reports a missing message as not found. `search_workspace_emails` accepts `limit` and `max_messages` as aliases of `max_results` and labels each hit's `thread_id`. The aliases are declared in the tool schemas instead of being rewritten silently.
