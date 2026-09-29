@@ -1,5 +1,5 @@
 /**
- * Gmail thread/search argument-name acceptance (W-rebel-209).
+ * Gmail thread/search argument-name acceptance.
  *
  * Models hold a *message* id from search results and ask for "the thread", or
  * use camelCase / synonym names. SuperMCP's strict schema gate rejects any key
