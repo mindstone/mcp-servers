@@ -447,7 +447,7 @@ export class GSuiteServer {
             break;
           case 'get_workspace_email_thread':
             assertBaseToolArguments(args);
-            result = await handleGetWorkspaceEmailThread(args as { email: string; threadId: string; maxMessages?: number; offset?: number; includeBody?: boolean });
+            result = await handleGetWorkspaceEmailThread(args);
             break;
           case 'compose_workspace_email':
             assertSendEmailArgs(args);

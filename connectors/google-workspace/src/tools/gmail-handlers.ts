@@ -391,7 +391,7 @@ export function formatEmailsAsText(result: { emails: Array<{ id: string; threadI
   });
 
   if (result.nextPageToken) {
-    lines.push(`More results available. Use pageToken: "${result.nextPageToken}" to continue.`);
+    lines.push(`More results available. Use page_token: "${result.nextPageToken}" to continue.`);
   }
 
   return wrapUntrustedContent(lines.join('\n'), 'google-workspace:gmail:search');
