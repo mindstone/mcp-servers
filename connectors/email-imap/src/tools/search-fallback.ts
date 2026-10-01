@@ -112,8 +112,14 @@ export async function searchByLocalFilter(
   client: ImapFlow,
   request: LocalFilterRequest,
 ): Promise<LocalFilterResult> {
+  // The default window ends where the caller's own search does. Anchoring it
+  // to `now` instead would, for a `before` older than the window, start the
+  // window AFTER it ends — an inverted range that matches nothing however much
+  // mail sits in it, which is the silent empty this fallback exists to remove.
+  const windowEnd = request.before ?? new Date();
   const searchedSince =
-    request.since ?? new Date(Date.now() - FALLBACK_DEFAULT_WINDOW_DAYS * MS_PER_DAY);
+    request.since ??
+    new Date(windowEnd.getTime() - FALLBACK_DEFAULT_WINDOW_DAYS * MS_PER_DAY);
 
   const criteria: SearchObject = { all: true, since: searchedSince };
   if (request.before) {
