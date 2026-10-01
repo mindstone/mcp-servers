@@ -275,6 +275,21 @@ describe('email_search_messages — text-search fallback', () => {
       expect(note).toContain('`since`');
     });
 
+    it('anchors the default window to `before`, not to now', async () => {
+      await setupClient();
+      behavior.rejectTextSearch = true;
+
+      const before = daysAgo(150).toISOString();
+      const json = await search({ mailbox: 'INBOX', subject: 'quarterly', before });
+
+      // 201 is 200 days old — inside the 90 days before `before`, and the only
+      // subject match that old. A window anchored to now would start 90 days
+      // ago, AFTER `before`, and return nothing.
+      expect(uidsOf(json)).toEqual([201]);
+      expect(json.searchedSince).toBe(new Date(NOW - 240 * MS_PER_DAY).toISOString());
+      expect(json.note as string).toContain((json.searchedSince as string).slice(0, 10));
+    });
+
     it("honours the caller's since and reaches older messages", async () => {
       await setupClient();
       behavior.rejectTextSearch = true;
