@@ -57,6 +57,14 @@ export interface ImapMockOptions {
   copyError?: string;
   /** If true, messageCopy() returns a uidMap missing the first requested UID */
   copyPartialUidMap?: boolean;
+  /**
+   * If true, search() returns `false` whenever the criteria include a `from`
+   * or `subject` key — how imapflow surfaces the `BAD invalid command or
+   * parameters` reply that servers without text SEARCH support send.
+   */
+  rejectTextSearch?: boolean;
+  /** If true, search() returns `false` for every query. */
+  rejectAllSearch?: boolean;
 }
 
 /**
@@ -76,14 +84,22 @@ export function createImapMock(options: ImapMockOptions = {}) {
     moveError,
     copyError,
     copyPartialUidMap,
+    rejectTextSearch,
+    rejectAllSearch,
   } = options;
 
   const constructorCalls: unknown[][] = [];
   /**
-   * Live move/copy behavior — tests may flip these between tool calls to
-   * exercise fallback paths within a single test file.
+   * Live move/copy/search behavior — tests may flip these between tool calls
+   * to exercise fallback paths within a single test file.
    */
-  const behavior = { moveError, copyError, copyPartialUidMap };
+  const behavior = {
+    moveError,
+    copyError,
+    copyPartialUidMap,
+    rejectTextSearch,
+    rejectAllSearch,
+  };
   /** Invocation counters shared across all mock instances of this factory. */
   const calls = {
     messageMove: 0,
@@ -98,6 +114,8 @@ export function createImapMock(options: ImapMockOptions = {}) {
   const flagsCalls: string[][] = [];
   /** Mailbox paths seen by getMailboxLock, in order. */
   const mailboxLocks: string[] = [];
+  /** Criteria objects seen by search(), in order. */
+  const searchCalls: unknown[] = [];
 
   class MockImapFlow {
     usable = true;
@@ -153,6 +171,7 @@ export function createImapMock(options: ImapMockOptions = {}) {
     }
 
     async search(criteria: unknown, _opts?: unknown) {
+      searchCalls.push(criteria);
       const baseUids = searchUids ?? messages.map((m) => m.uid);
       const filter = (criteria ?? {}) as {
         seen?: boolean;
@@ -161,6 +180,15 @@ export function createImapMock(options: ImapMockOptions = {}) {
         since?: Date;
         before?: Date;
       };
+      // Servers that reject a SEARCH answer BAD, which imapflow reports as a
+      // `false` return value rather than a thrown error.
+      if (
+        behavior.rejectAllSearch ||
+        (behavior.rejectTextSearch &&
+          (filter.from !== undefined || filter.subject !== undefined))
+      ) {
+        return false as const;
+      }
       const hasFilters =
         filter.seen !== undefined ||
         filter.from !== undefined ||
@@ -307,5 +335,13 @@ export function createImapMock(options: ImapMockOptions = {}) {
     }
   }
 
-  return { MockImapFlow, constructorCalls, calls, flagsCalls, mailboxLocks, behavior };
+  return {
+    MockImapFlow,
+    constructorCalls,
+    calls,
+    flagsCalls,
+    mailboxLocks,
+    searchCalls,
+    behavior,
+  };
 }

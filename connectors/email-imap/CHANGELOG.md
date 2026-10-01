@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+
+- **email-imap**: `email_search_messages` no longer reports "no messages" when the mail server cannot search by sender or subject. Some IMAP servers (Alibaba Mail among them) answer `SEARCH FROM` / `SEARCH SUBJECT` with `BAD invalid command or parameters` while supporting `ALL`/`SINCE`/`UNSEEN`; the underlying client signals that by returning `false` rather than throwing, and the connector was mapping it to an empty UID list — a silent empty result indistinguishable from an empty mailbox. Such a search now falls back to a date-bounded candidate search the server does support (the caller's `since`, or the last 90 days) and filters sender/subject locally, case-insensitively, over at most 1000 of the newest candidates per page. The response keeps the same shape and `hasMore`/`nextBeforeUid` cursor contract — resumable even when a page matches nothing — and adds `searchMode: "local-filter"`, `searchedSince`, and a `note` explaining the window and how to widen it. A rejected search with no sender or subject filter to apply locally, and a rejected fallback search, now both fail with an actionable error instead of an empty success.
+
 ## [0.3.2] - 2026-08-10
 
 ### Changed
