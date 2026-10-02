@@ -139,7 +139,7 @@ function selectCalendars(all: CalDavCalendar[], selector?: string): CalendarSele
   }
 
   // Ids are returned enveloped; accept them back either way (one layer).
-  const wanted = selector === undefined ? undefined : unwrapUntrusted(selector).trim();
+  const wanted = selector === undefined ? undefined : unwrapUntrusted(selector.trim()).trim();
   if (!wanted) return limitToCeiling(all);
 
   const needle = wanted.toLowerCase();
@@ -300,6 +300,9 @@ export function registerCalendarTools(server: McpServer): void {
       const { start, end } = resolveWindow(args.start, args.end);
       const limit = args.limit ?? DEFAULT_LIMIT;
 
+      // Wall-clock budget for the whole call, discovery included: per-request
+      // timeouts alone would allow minutes against a slow server.
+      const deadline = Date.now() + CALL_TIME_BUDGET_MS;
       const base = requireCalDavUrl();
       const credentials = requireCalDavCredentials();
       const discovery = await discoverCalendars(base, credentials);
@@ -318,8 +321,6 @@ export function registerCalendarTools(server: McpServer): void {
       let queried = 0;
       /** True when the byte budget stopped the loop with calendars still to go. */
       let budgetExceeded = false;
-      /** Wall-clock budget across all calendars: per-request timeouts alone allow minutes. */
-      const deadline = Date.now() + CALL_TIME_BUDGET_MS;
       let timeBudgetExceeded = false;
 
       for (const calendar of targets) {
