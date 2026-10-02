@@ -13,7 +13,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 
-- A visible browser window no longer jumps in front of other apps every 30 seconds. The connector now turns off `agent-browser`'s periodic session autosave by default (`AGENT_BROWSER_AUTOSAVE_INTERVAL_MS=0`); the session is still saved when the browser closes. Set the variable to restore periodic saves.
+- The connector now turns off `agent-browser`'s periodic session autosave by default (`AGENT_BROWSER_AUTOSAVE_INTERVAL_MS=0`; requires `agent-browser` 0.31.2 or later), because each periodic save could bring a visible browser window in front of other apps every 30 seconds. The session is still saved when the browser closes. Takes effect when a new, compatible `agent-browser` daemon starts under the updated connector; an already-running daemon keeps its previous autosave setting until it exits. Set the variable to restore periodic saves.
 
 ## [0.2.2] - 2026-08-10
 

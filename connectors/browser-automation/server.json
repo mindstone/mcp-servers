@@ -36,7 +36,7 @@
         },
         {
           "name": "AGENT_BROWSER_AUTOSAVE_INTERVAL_MS",
-          "description": "Periodic session autosave interval in ms. Default 0 (off); the session is still saved on close.",
+          "description": "Periodic session autosave interval in ms (agent-browser >=0.31.2). Default 0 (off).",
           "isRequired": false,
           "format": "string"
         },

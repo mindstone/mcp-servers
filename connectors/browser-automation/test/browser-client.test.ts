@@ -256,6 +256,11 @@ describe('execAgentBrowser — session autosave', () => {
     expect((await capturedEnv())?.AGENT_BROWSER_AUTOSAVE_INTERVAL_MS).toBe('0');
   });
 
+  it('passes an empty host value through untouched (the CLI then uses its own default)', async () => {
+    process.env.AGENT_BROWSER_AUTOSAVE_INTERVAL_MS = '';
+    expect((await capturedEnv())?.AGENT_BROWSER_AUTOSAVE_INTERVAL_MS).toBe('');
+  });
+
   it('keeps an interval the host set explicitly', async () => {
     process.env.AGENT_BROWSER_AUTOSAVE_INTERVAL_MS = '60000';
     expect((await capturedEnv())?.AGENT_BROWSER_AUTOSAVE_INTERVAL_MS).toBe('60000');
