@@ -7,7 +7,9 @@ import {
   registerAttachmentTools,
   registerSendTools,
   registerDraftTools,
+  registerCalendarTools,
 } from './tools/index.js';
+import { isCalendarEnabled } from './caldav/config.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json') as { version: string };
@@ -24,6 +26,14 @@ export function createServer(): McpServer {
   registerAttachmentTools(server);
   registerSendTools(server);
   registerDraftTools(server);
+
+  // Calendar is opt-in: without EMAIL_IMAP_CALDAV_URL there is no endpoint to
+  // talk to, and two tools that can only answer "not configured" are worse than
+  // no tools at all. Read once here, at startup, so the advertised tool list is
+  // stable for the life of the process.
+  if (isCalendarEnabled()) {
+    registerCalendarTools(server);
+  }
 
   return server;
 }

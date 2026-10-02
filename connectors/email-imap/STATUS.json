@@ -10,12 +10,13 @@
     ]
   },
   "tools": {
-    "count": 17,
+    "count": 19,
     "domains": [
       "mailbox",
       "messages",
       "drafts",
-      "send"
+      "send",
+      "calendar"
     ]
   },
   "surface": "local-protocol",

@@ -9,8 +9,13 @@ import { vi } from 'vitest';
 export type { McpTestClient, CallToolResult };
 
 export interface TestClientOptions {
-  /** Environment variable overrides. Applied via vi.stubEnv before importing the connector. */
-  env?: Record<string, string>;
+  /**
+   * Environment variable overrides. Applied via vi.stubEnv before importing the
+   * connector. A value of `undefined` DELETES the variable for the test (and
+   * `vi.unstubAllEnvs()` restores it), which is how a test asserts on a genuinely
+   * unset variable rather than on an empty string.
+   */
+  env?: Record<string, string | undefined>;
 }
 
 /**

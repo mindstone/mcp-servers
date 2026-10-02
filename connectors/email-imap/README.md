@@ -9,7 +9,7 @@ Email IMAP/SMTP MCP server for Model Context Protocol hosts. Read, search, send,
 
 - **Version:** [0.3.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-email-imap)
 - **Auth:** App password ([`EMAIL_IMAP_PASSWORD`](./server.json))
-- **Tools:** [17](./src/tools/) (mailbox, messages, drafts, send)
+- **Tools:** [19](./src/tools/) (mailbox, messages, drafts, send, calendar)
 - **Surface:** local-protocol
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -106,6 +106,17 @@ node dist/index.js
   the returned file); accumulated `email-imap-attachment-*` directories are
   safe to delete once the files are no longer needed. Defaults to the system
   temp directory when unset.
+- `EMAIL_IMAP_CALDAV_URL` — optional HTTPS URL of the provider's CalDAV endpoint
+  (usually its principal-discovery path, e.g.
+  `https://caldav.example.com/principals/users/`). When set, the connector also
+  registers the two read-only calendar tools and signs in to the calendar with
+  the **same** email address and password as mail — there is no second
+  credential. When unset, no calendar tools are registered at all. HTTP URLs are
+  refused: a Basic-auth password cannot be sent over cleartext. Alibaba Mail
+  publishes one host per region — `caldav.mxhichina.com`, `caldav.sg.aliyun.com`,
+  `caldav.hk.aliyun.com`, `caldav.de.alibabacloud.com`,
+  `caldav.us.alibabacloud.com` — and an account only authenticates against its
+  own region's host (others answer `401`).
 - `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
 - `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
 
@@ -221,7 +232,7 @@ marks messages for permanent expunge on mailbox close), `email_delete_draft`
 messages inside it). Hosts should gate these behind the same explicit user
 confirmation as `email_send`.
 
-## Tools (17)
+## Tools (19)
 
 ### Configuration
 - `configure_email_imap` — Configure email account credentials and provider
@@ -249,6 +260,10 @@ confirmation as `email_send`.
 
 ### Send
 - `email_send` — Send an email or reply (supports attachments)
+
+### Calendar (only when `EMAIL_IMAP_CALDAV_URL` is set)
+- `calendar_list_calendars` — List the calendars on the account (read-only)
+- `calendar_list_events` — List events in a date range (read-only; defaults to the next 7 days across all calendars). Recurring events come back as their individual occurrences: the connector expands common rules itself when the server does not (Alibaba Mail does not)
 
 ## Licence
 
