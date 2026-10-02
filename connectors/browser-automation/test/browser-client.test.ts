@@ -221,3 +221,43 @@ describe('execAgentBrowser — visibility resolution', () => {
     expect(args).toEqual(['open', '--headed', 'https://example.com']);
   });
 });
+
+describe('execAgentBrowser — session autosave', () => {
+  const originalInterval = process.env.AGENT_BROWSER_AUTOSAVE_INTERVAL_MS;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (originalInterval === undefined) delete process.env.AGENT_BROWSER_AUTOSAVE_INTERVAL_MS;
+    else process.env.AGENT_BROWSER_AUTOSAVE_INTERVAL_MS = originalInterval;
+  });
+
+  async function capturedEnv(): Promise<Record<string, string> | undefined> {
+    vi.resetModules();
+    const childProcess = await import('node:child_process');
+    const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
+    let env: Record<string, string> | undefined;
+    mockExecFile.mockImplementation(
+      (_cmd: string, _args: string[], opts: { env?: Record<string, string> }, callback: Function) => {
+        env = opts.env;
+        callback(null, '', '');
+      },
+    );
+    const { execAgentBrowser } = await import('../src/browser-client.js');
+    await execAgentBrowser(['snapshot']);
+    return env;
+  }
+
+  // The CLI's periodic autosave opens a temporary tab that brings a headed
+  // browser to the foreground every interval (30s by default). Save-on-close
+  // still persists the session, so the periodic save is off unless the host
+  // asks for it.
+  it('disables periodic autosave by default', async () => {
+    delete process.env.AGENT_BROWSER_AUTOSAVE_INTERVAL_MS;
+    expect((await capturedEnv())?.AGENT_BROWSER_AUTOSAVE_INTERVAL_MS).toBe('0');
+  });
+
+  it('keeps an interval the host set explicitly', async () => {
+    process.env.AGENT_BROWSER_AUTOSAVE_INTERVAL_MS = '60000';
+    expect((await capturedEnv())?.AGENT_BROWSER_AUTOSAVE_INTERVAL_MS).toBe('60000');
+  });
+});

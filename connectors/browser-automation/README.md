@@ -117,6 +117,7 @@ No API keys or credentials are required. The server communicates with the browse
 |---|---|---|
 | `AGENT_BROWSER_SESSION_NAME` | No | Session name for browser persistence (default: `mcp`) |
 | `AGENT_BROWSER_SHOW_WINDOW` | No | Set to `false` to run without a visible browser window. Default is visible (`true`). |
+| `AGENT_BROWSER_AUTOSAVE_INTERVAL_MS` | No | Periodic session autosave interval in milliseconds. Default `0` (off), because each periodic save briefly opens a tab that brings a visible browser window in front of other apps. The session is still saved when the browser closes. |
 | `MCP_WORKSPACE_PATH` | No | Workspace directory that `browser_pdf` writes into and `browser_upload` reads from. Defaults to the system temp directory. See [Security notes](#security-notes). |
 
 ### MCP Host Configuration

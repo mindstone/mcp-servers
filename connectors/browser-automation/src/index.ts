@@ -11,6 +11,7 @@
  *
  * Environment variables:
  * - AGENT_BROWSER_SESSION_NAME: Session name for persistence (default: "mcp")
+ * - AGENT_BROWSER_AUTOSAVE_INTERVAL_MS: Periodic session autosave interval (default: "0", off; the session is still saved on close)
  * - MCP_DISABLE_GRACEFUL_FS=1: Disable the graceful-fs EMFILE mitigation patch
  */
 

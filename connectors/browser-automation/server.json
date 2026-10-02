@@ -35,6 +35,12 @@
           "format": "string"
         },
         {
+          "name": "AGENT_BROWSER_AUTOSAVE_INTERVAL_MS",
+          "description": "Periodic session autosave interval in ms. Default 0 (off); the session is still saved on close.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
           "name": "MCP_WORKSPACE_PATH",
           "description": "Workspace directory for browser_pdf outputs and browser_upload sources. Defaults to os.tmpdir() when unset.",
           "isRequired": false,
