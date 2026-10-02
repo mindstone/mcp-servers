@@ -23,6 +23,8 @@
  */
 
 import { EmailImapError } from '../types.js';
+import { wrapUntrusted } from '../untrusted-content.js';
+import { UNTRUSTED_CALENDAR_SOURCE } from './types.js';
 
 /** Hard ceilings: the HTTP layer already caps the body, these cap the shape. */
 const MAX_DEPTH = 100;
@@ -39,8 +41,11 @@ export interface XmlElement {
 }
 
 function badXml(detail: string): EmailImapError {
+  // The detail can quote tag and attribute names from the server's document,
+  // so it is enveloped like any other server-authored text.
   return new EmailImapError(
-    `The calendar server returned a response this connector could not parse as XML (${detail}).`,
+    `The calendar server returned a response this connector could not parse as XML ` +
+      `(${wrapUntrusted(detail, UNTRUSTED_CALENDAR_SOURCE)}).`,
     'CALDAV_BAD_RESPONSE',
     'Confirm EMAIL_IMAP_CALDAV_URL points at a CalDAV endpoint (not a webmail page or a proxy login screen).',
   );

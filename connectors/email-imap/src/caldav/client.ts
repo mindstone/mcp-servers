@@ -38,7 +38,8 @@ import {
   parseXml,
   type XmlElement,
 } from './xml.js';
-import type { CalDavCalendar, CalDavEventResource } from './types.js';
+import { UNTRUSTED_CALENDAR_SOURCE, type CalDavCalendar, type CalDavEventResource } from './types.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 
 /**
  * Most calendars queried in one `calendar_list_events` call. Each calendar is
@@ -154,10 +155,11 @@ function resolveSameOriginHref(base: URL, href: string): URL {
   resolved.password = '';
   if (resolved.protocol !== 'https:' || resolved.origin !== base.origin) {
     throw new EmailImapError(
-      `The calendar server at ${base.host} pointed at a different host (${resolved.host}). ` +
+      `The calendar server at ${base.host} pointed at a different host ` +
+        `(${wrapUntrusted(resolved.host, UNTRUSTED_CALENDAR_SOURCE)}). ` +
         'The connector refused to follow it, because that would send the calendar password to another server.',
       'CALDAV_CROSS_ORIGIN_HREF',
-      `If calendars really live on ${resolved.host}, set EMAIL_IMAP_CALDAV_URL to that host directly.`,
+      'If calendars really live on that host, set EMAIL_IMAP_CALDAV_URL to it directly.',
     );
   }
   return resolved;

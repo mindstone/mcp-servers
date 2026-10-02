@@ -105,10 +105,11 @@ function resolveRedirectTarget(current: URL, location: string): URL {
   next.password = '';
   if (next.protocol !== 'https:' || next.origin !== current.origin) {
     throw new EmailImapError(
-      `The calendar server at ${current.host} redirected to a different host (${next.host}). ` +
+      `The calendar server at ${current.host} redirected to a different host ` +
+        `(${wrapUntrusted(next.host, UNTRUSTED_CALENDAR_SOURCE)}). ` +
         'The connector refused to follow it, because that would send the calendar password to another server.',
       'CALDAV_CROSS_ORIGIN_REDIRECT',
-      `Set EMAIL_IMAP_CALDAV_URL to the server you actually want to talk to (${next.protocol}//${next.host}) ` +
+      'Set EMAIL_IMAP_CALDAV_URL to the server you actually want to talk to (the host named above) ' +
         'if that redirect is expected.',
     );
   }
