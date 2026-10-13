@@ -595,6 +595,30 @@ jobs:
           rm -f "${tarball}"
           mcp-publisher --version
 
+      # The registry checks that the npm version exists, and npm can take a few
+      # minutes to serve a version it has just accepted. Publishing straight
+      # after the npm job raced that and failed with a 404 (quickbooks 0.4.3,
+      # run 38478865300), so wait until npm serves the version first.
+      - name: Wait for npm to serve the new version
+        run: |
+          set -euo pipefail
+          if [ ! -f server.json ]; then
+            echo "Skipping (no server.json)"
+            exit 0
+          fi
+          name="$(jq -r '.name' package.json)"
+          version="$(jq -r '.version' package.json)"
+          for attempt in $(seq 1 30); do
+            if [ "$(npm view "${name}@${version}" version --prefer-online 2>/dev/null || true)" = "${version}" ]; then
+              echo "npm serves ${name}@${version} (attempt ${attempt})"
+              exit 0
+            fi
+            echo "npm does not serve ${name}@${version} yet (attempt ${attempt}/30); waiting 10s"
+            sleep 10
+          done
+          echo "::error::npm still does not serve ${name}@${version} after 5 minutes; not publishing to the MCP registry. Re-run this job once it does."
+          exit 1
+
       - name: Publish to MCP registry (github-oidc)
         run: |
           set -e
