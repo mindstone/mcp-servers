@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep a rotated refresh token. With refresh-token rotation turned on for the org, each refresh returns a new refresh token and retires the old one; the connector kept presenting and saving the old one, so the next refresh failed and the user had to reconnect. The refresh handler now takes up the new token in the live connection and in the saved token file, and a failed save is logged rather than left as an unhandled rejection.
+
 ## [0.2.3] - 2026-09-29
 
 ### Changed

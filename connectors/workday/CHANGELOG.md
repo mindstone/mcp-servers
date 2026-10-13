@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+
+- `configure_workday_credentials` now saves and uses the refresh token its validation grant returned (including one issued to a client-credentials setup). Workday can rotate the refresh token on any grant, and setup kept the retired one, so the next grant failed and the user had to reconnect. Setup and the runtime token refresh now share one grant function, which also runs the host DNS guard, and a non-JSON token response is reported as `AUTH_FAILED`. Setup also re-checks the host's DNS before its API probe.
+
 ## [0.3.1] - 2026-08-09
 
 ### Changed

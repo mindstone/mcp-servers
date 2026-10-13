@@ -13,9 +13,10 @@
  * - QUICKBOOKS_ENVIRONMENT: "sandbox" or "production" (default: "production")
  */
 
+import { z } from 'zod';
+
 import { QuickBooksError, TOKEN_URL, USER_AGENT, REQUEST_TIMEOUT_MS } from './types.js';
 import { bridgeRequest } from './bridge.js';
-import { wrapUntrusted } from './untrusted-content.js';
 
 // ── Runtime credentials ──
 
@@ -108,24 +109,72 @@ export function validateEnvironment(env: string): boolean {
 }
 
 // ── Token exchange ──
+//
+// requestToken is the only refresh-token grant in this connector: both
+// getAccessToken and configure_quickbooks go through it, and both apply its
+// result with adoptTokenResponse. Intuit can rotate the refresh token on any
+// grant (the old one then stops working), so a grant whose response is not
+// adopted leaves a dead token behind — which is how setup used to lose it.
 
-export async function getAccessToken(): Promise<string> {
-  if (!clientId || !clientSecret || !refreshToken) {
-    throw new QuickBooksError(
-      'QuickBooks not configured. Call configure_quickbooks first.',
-      'NOT_CONFIGURED',
-      'Configure QuickBooks with your Intuit Developer app credentials first.',
-    );
+const tokenResponseSchema = z.object({
+  access_token: z.string().min(1),
+  expires_in: z.number().positive(),
+  refresh_token: z.string().min(1).optional(),
+});
+
+export type TokenResponse = z.infer<typeof tokenResponseSchema>;
+
+export interface TokenGrantCredentials {
+  clientId: string;
+  clientSecret: string;
+  refreshToken: string;
+}
+
+/** Why a grant failed. `code` is a standard OAuth error code, never other vendor text. */
+export type TokenGrantFailure =
+  | { kind: 'timeout' }
+  | { kind: 'network'; error: unknown }
+  | { kind: 'http'; status: number; code?: OAuthErrorCode }
+  | { kind: 'malformed'; status: number };
+
+export type TokenGrantResult =
+  | { ok: true; token: TokenResponse }
+  | { ok: false; failure: TokenGrantFailure };
+
+/** The OAuth 2.0 error codes (RFC 6749 §5.2); the only vendor text a failed grant may show. */
+const OAUTH_ERROR_CODES = [
+  'invalid_request',
+  'invalid_client',
+  'invalid_grant',
+  'unauthorized_client',
+  'unsupported_grant_type',
+  'invalid_scope',
+] as const;
+
+export type OAuthErrorCode = (typeof OAUTH_ERROR_CODES)[number];
+
+/**
+ * The failed grant's OAuth error code, when it is one of the standard codes.
+ * Nothing else from the body is used: `error_description` and diagnostic
+ * fields can echo the credentials just sent, and an envelope does not redact.
+ */
+async function oauthErrorCode(response: Response): Promise<OAuthErrorCode | undefined> {
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return undefined;
   }
+  const error = (body as { error?: unknown } | null)?.error;
+  return OAUTH_ERROR_CODES.find((code) => code === error);
+}
 
-  if (cachedAccessToken && Date.now() < tokenExpiresAt) {
-    return cachedAccessToken;
-  }
-
-  const authHeader = 'Basic ' + Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+/** One refresh-token grant. Sets no module state; callers adopt the result. */
+export async function requestToken(creds: TokenGrantCredentials): Promise<TokenGrantResult> {
+  const authHeader = 'Basic ' + Buffer.from(`${creds.clientId}:${creds.clientSecret}`).toString('base64');
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
-    refresh_token: refreshToken,
+    refresh_token: creds.refreshToken,
   });
 
   let response: Response;
@@ -143,63 +192,95 @@ export async function getAccessToken(): Promise<string> {
     });
   } catch (error) {
     if (error instanceof Error && error.name === 'TimeoutError') {
-      throw new QuickBooksError(
-        'OAuth token request timed out',
-        'TIMEOUT',
-        'The request took too long. Check your network connectivity.',
-      );
+      return { ok: false, failure: { kind: 'timeout' } };
     }
-    throw error;
+    return { ok: false, failure: { kind: 'network', error } };
   }
 
   if (!response.ok) {
-    let errorText: string;
-    try {
-      const errorBody = await response.json() as { error?: string; error_description?: string };
-      errorText = errorBody?.error_description || errorBody?.error || JSON.stringify(errorBody);
-    } catch {
-      errorText = await response.text().catch(() => 'Unknown error');
-    }
-    // Intuit-controlled text heading to the model — envelope it (AGENTS.md #6).
-    errorText = wrapUntrusted(errorText, 'quickbooks:oauth-error') ?? 'Unknown error';
-    throw new QuickBooksError(
-      `OAuth token refresh failed (${response.status}): ${errorText}`,
-      'AUTH_FAILED',
-      'Re-configure with configure_quickbooks. Check Client ID, Secret, and Refresh Token. Tokens expire after 100 days of inactivity.',
-    );
+    return { ok: false, failure: { kind: 'http', status: response.status, code: await oauthErrorCode(response) } };
   }
 
-  let tokenData: {
-    access_token: string;
-    refresh_token?: string;
-    expires_in: number;
-  };
+  // A parse error message embeds a snippet of the (Intuit-controlled) body, so
+  // a non-JSON or malformed 2xx is reported by status only.
+  let data: unknown;
   try {
-    tokenData = await response.json() as typeof tokenData;
+    data = await response.json();
   } catch {
-    // Same non-JSON-2xx guard as the API client: the parse error message
-    // embeds a snippet of the (Intuit-controlled) body, so surface a static
-    // error instead of letting it reach model output.
+    return { ok: false, failure: { kind: 'malformed', status: response.status } };
+  }
+  const parsed = tokenResponseSchema.safeParse(data);
+  if (!parsed.success) {
+    return { ok: false, failure: { kind: 'malformed', status: response.status } };
+  }
+  return { ok: true, token: parsed.data };
+}
+
+/**
+ * Apply a successful grant to the runtime state: cache the access token and
+ * take up a rotated refresh token. Returns the refresh token now in force.
+ */
+export function adoptTokenResponse(token: TokenResponse): { refreshToken: string; rotated: boolean } {
+  cachedAccessToken = token.access_token;
+  // Expire 60 seconds early to avoid edge cases
+  tokenExpiresAt = Date.now() + (token.expires_in - 60) * 1000;
+  const rotated = !!token.refresh_token && token.refresh_token !== refreshToken;
+  if (token.refresh_token) refreshToken = token.refresh_token;
+  return { refreshToken, rotated };
+}
+
+export async function getAccessToken(): Promise<string> {
+  if (!clientId || !clientSecret || !refreshToken) {
     throw new QuickBooksError(
-      `OAuth token endpoint returned a non-JSON response (${response.status}).`,
-      'AUTH_FAILED',
-      'Try again; if it persists, re-configure with configure_quickbooks.',
+      'QuickBooks not configured. Call configure_quickbooks first.',
+      'NOT_CONFIGURED',
+      'Configure QuickBooks with your Intuit Developer app credentials first.',
     );
   }
 
-  cachedAccessToken = tokenData.access_token;
-  // Expire 60 seconds early to avoid edge cases
-  tokenExpiresAt = Date.now() + (tokenData.expires_in - 60) * 1000;
+  if (cachedAccessToken && Date.now() < tokenExpiresAt) {
+    return cachedAccessToken;
+  }
 
-  // Handle refresh token rotation — Intuit may return a new refresh token
-  if (tokenData.refresh_token && tokenData.refresh_token !== refreshToken) {
-    refreshToken = tokenData.refresh_token;
+  const result = await requestToken({ clientId, clientSecret, refreshToken });
+  if (!result.ok) {
+    const { failure } = result;
+    switch (failure.kind) {
+      case 'timeout':
+        throw new QuickBooksError(
+          'OAuth token request timed out',
+          'TIMEOUT',
+          'The request took too long. Check your network connectivity.',
+        );
+      case 'network':
+        throw failure.error;
+      case 'http':
+        throw new QuickBooksError(
+          `OAuth token refresh failed (${failure.status})${failure.code ? `: ${failure.code}` : ''}.`,
+          'AUTH_FAILED',
+          'Re-configure with configure_quickbooks. Check Client ID, Secret, and Refresh Token. Tokens expire after 100 days of inactivity.',
+        );
+      case 'malformed':
+        throw new QuickBooksError(
+          `OAuth token endpoint returned a non-JSON or malformed response (${failure.status}).`,
+          'AUTH_FAILED',
+          'Try again; if it persists, re-configure with configure_quickbooks.',
+        );
+      default: {
+        const unreachable: never = failure;
+        throw unreachable;
+      }
+    }
+  }
+
+  const adopted = adoptTokenResponse(result.token);
+  if (adopted.rotated) {
     bridgeRequest('/bundled/quickbooks/update-refresh-token', {
-      refreshToken: tokenData.refresh_token,
+      refreshToken: adopted.refreshToken,
     }).catch((err) => {
       console.error('Failed to persist rotated refresh token:', err instanceof Error ? err.message : String(err));
     });
   }
 
-  return cachedAccessToken;
+  return result.token.access_token;
 }

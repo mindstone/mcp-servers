@@ -409,6 +409,112 @@ export function parseTokenResponse(data: unknown): TokenResponse {
   return parsed.data;
 }
 
+export interface TokenGrantCredentials {
+  host: string;
+  tenant: string;
+  clientId: string;
+  clientSecret: string;
+  /** Empty or absent means a client-credentials grant. */
+  refreshToken?: string;
+}
+
+/**
+ * Why a grant failed. Carries no vendor text: the OAuth error body is
+ * vendor/proxy-controlled and may reflect the credentials just sent.
+ */
+export type TokenGrantFailure =
+  | { kind: 'host'; error: WorkdayError }
+  | { kind: 'timeout' }
+  | { kind: 'network'; error: unknown }
+  | { kind: 'redirect'; status: number }
+  | { kind: 'http'; status: number }
+  | { kind: 'malformed'; error: WorkdayError };
+
+export type TokenGrantResult =
+  | { ok: true; token: TokenResponse }
+  | { ok: false; failure: TokenGrantFailure };
+
+/**
+ * The only token grant in this connector: getAccessToken and
+ * configure_workday_credentials both go through it, and both apply its result
+ * with adoptTokenResponse. Workday can rotate the refresh token on any grant
+ * (the old one then stops working), so a grant whose response is not adopted
+ * leaves a dead token behind — which is how setup used to lose it.
+ *
+ * Re-resolves the host first and refuses non-public records, so no
+ * credential-bearing request leaves the process without that check. Sets no
+ * module state.
+ */
+export async function requestToken(creds: TokenGrantCredentials): Promise<TokenGrantResult> {
+  try {
+    await assertHostResolvesPublic(creds.host);
+  } catch (error) {
+    if (error instanceof WorkdayError) return { ok: false, failure: { kind: 'host', error } };
+    throw error;
+  }
+
+  const authHeader = 'Basic ' + Buffer.from(`${creds.clientId}:${creds.clientSecret}`).toString('base64');
+  const bodyParams: Record<string, string> = creds.refreshToken
+    ? { grant_type: 'refresh_token', refresh_token: creds.refreshToken }
+    : { grant_type: 'client_credentials' };
+
+  let response: Response;
+  try {
+    response = await fetch(`https://${creds.host}/ccx/oauth2/${creds.tenant}/token`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      headers: {
+        Authorization: authHeader,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+        'User-Agent': USER_AGENT,
+      },
+      body: new URLSearchParams(bodyParams).toString(),
+      // Never auto-follow redirects: a vendor/proxy-controlled Location header
+      // would replay the Basic-auth credential to an arbitrary host.
+      redirect: 'manual',
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      return { ok: false, failure: { kind: 'timeout' } };
+    }
+    return { ok: false, failure: { kind: 'network', error } };
+  }
+
+  if (!response.ok) {
+    console.error(`[Workday] OAuth token exchange failed (HTTP ${response.status})`);
+    if (response.status >= 300 && response.status < 400) {
+      return { ok: false, failure: { kind: 'redirect', status: response.status } };
+    }
+    return { ok: false, failure: { kind: 'http', status: response.status } };
+  }
+
+  let data: unknown;
+  try {
+    data = await response.json();
+  } catch {
+    data = undefined;
+  }
+  try {
+    return { ok: true, token: parseTokenResponse(data) };
+  } catch (error) {
+    if (error instanceof WorkdayError) return { ok: false, failure: { kind: 'malformed', error } };
+    throw error;
+  }
+}
+
+/**
+ * Apply a successful grant to the runtime state: cache the access token and
+ * take up a returned refresh token. Returns the refresh token now in force.
+ */
+export function adoptTokenResponse(token: TokenResponse): { refreshToken: string; rotated: boolean } {
+  cachedAccessToken = token.access_token;
+  tokenExpiresAt = Date.now() + (token.expires_in - 60) * 1000;
+  const rotated = !!token.refresh_token && token.refresh_token !== refreshToken;
+  if (token.refresh_token) refreshToken = token.refresh_token;
+  return { refreshToken, rotated };
+}
+
 export async function getAccessToken(): Promise<string> {
   if (!clientId || !clientSecret) {
     throw new WorkdayError(
@@ -422,75 +528,50 @@ export async function getAccessToken(): Promise<string> {
     return cachedAccessToken;
   }
 
-  // Re-resolve the host and refuse non-public records before any
-  // credential-bearing request leaves the process.
-  await assertHostResolvesPublic(workdayHost);
-
-  const authHeader = 'Basic ' + Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-
-  const bodyParams: Record<string, string> = refreshToken
-    ? { grant_type: 'refresh_token', refresh_token: refreshToken }
-    : { grant_type: 'client_credentials' };
-
-  const body = new URLSearchParams(bodyParams);
-
-  let response: Response;
-  try {
-    response = await fetch(getTokenUrl(), {
-      method: 'POST',
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      headers: {
-        Authorization: authHeader,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Accept: 'application/json',
-        'User-Agent': USER_AGENT,
-      },
-      body: body.toString(),
-      // Never auto-follow redirects: a vendor/proxy-controlled Location header
-      // would replay the Basic-auth credential to an arbitrary host.
-      redirect: 'manual',
-    });
-  } catch (error) {
-    if (error instanceof Error && error.name === 'TimeoutError') {
-      throw new WorkdayError(
-        'OAuth token request timed out',
-        'TIMEOUT',
-        'The request took too long. Check your Workday host and network connectivity.',
-      );
+  const result = await requestToken({
+    host: workdayHost,
+    tenant: workdayTenant,
+    clientId,
+    clientSecret,
+    refreshToken,
+  });
+  if (!result.ok) {
+    const { failure } = result;
+    switch (failure.kind) {
+      case 'host':
+      case 'malformed':
+        throw failure.error;
+      case 'timeout':
+        throw new WorkdayError(
+          'OAuth token request timed out',
+          'TIMEOUT',
+          'The request took too long. Check your Workday host and network connectivity.',
+        );
+      case 'network':
+        throw failure.error;
+      case 'redirect':
+        throw new WorkdayError(
+          `OAuth token endpoint attempted a redirect (HTTP ${failure.status}), which was refused.`,
+          'AUTH_FAILED',
+          'The token endpoint returned an unexpected redirect. Verify the configured host is correct.',
+        );
+      case 'http':
+        throw new WorkdayError(
+          `OAuth token exchange failed (${failure.status}).`,
+          'AUTH_FAILED',
+          'Re-configure with configure_workday_credentials. Check client ID, secret, and tenant.',
+        );
+      default: {
+        const unreachable: never = failure;
+        throw unreachable;
+      }
     }
-    throw error;
   }
 
-  if (!response.ok) {
-    // The OAuth error body (error / error_description / raw text) is
-    // vendor/proxy-controlled and may reflect request data, including the
-    // credentials just sent — never propagate it. Bounded, connector-authored
-    // messages only.
-    console.error(`[Workday] OAuth token exchange failed (HTTP ${response.status})`);
-    if (response.status >= 300 && response.status < 400) {
-      throw new WorkdayError(
-        `OAuth token endpoint attempted a redirect (HTTP ${response.status}), which was refused.`,
-        'AUTH_FAILED',
-        'The token endpoint returned an unexpected redirect. Verify the configured host is correct.',
-      );
-    }
-    throw new WorkdayError(
-      `OAuth token exchange failed (${response.status}).`,
-      'AUTH_FAILED',
-      'Re-configure with configure_workday_credentials. Check client ID, secret, and tenant.',
-    );
-  }
-
-  const tokenData = parseTokenResponse(await response.json());
-
-  cachedAccessToken = tokenData.access_token;
-  tokenExpiresAt = Date.now() + (tokenData.expires_in - 60) * 1000;
-
-  // Handle refresh token rotation
-  if (tokenData.refresh_token && tokenData.refresh_token !== refreshToken) {
-    refreshToken = tokenData.refresh_token;
+  const adopted = adoptTokenResponse(result.token);
+  if (adopted.rotated) {
     bridgeRequest('/bundled/workday/update-refresh-token', {
-      refreshToken: tokenData.refresh_token,
+      refreshToken: adopted.refreshToken,
     }).catch(() => {
       // The rotated token stays in memory and is used for this process'
       // lifetime; only cross-restart persistence failed. Log a bounded,
@@ -499,5 +580,5 @@ export async function getAccessToken(): Promise<string> {
     });
   }
 
-  return cachedAccessToken;
+  return result.token.access_token;
 }
