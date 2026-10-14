@@ -727,7 +727,7 @@ export const docsTools: ToolMetadata[] = [
     styles), page breaks and smart chips. A smart chip linking to a file you can't open becomes a
     titled link, and people and date chips become their text; the result lists both. Does NOT copy
     headers and footers, sub-tabs, images (inline or floating) or other special elements: those
-    become a visible "[placeholder]" and are listed under "Not copied".
+    are listed under "Not copied" (inline ones also leave a visible "[placeholder]").
 
     Pass exactly one of target_tab_id or new_tab_title. new_tab_parent_id and new_tab_position only
     apply with new_tab_title.
