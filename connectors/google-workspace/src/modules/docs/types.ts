@@ -100,6 +100,7 @@ export interface UpdateTabOptions {
 export interface DeleteTabOptions {
   documentId: string;
   tabId: string; // "default" refused
+  deleteSubTabs?: boolean; // required to delete a tab that has sub-tabs
 }
 
 export type InsertTextPosition = 'after' | 'before' | 'next_paragraph_start';
@@ -111,7 +112,7 @@ export interface InsertTextOptions {
   position: InsertTextPosition;
   text: string;
   matchCase: boolean;
-  expectEmptyParagraph?: boolean;
+  expectEmptyParagraph?: boolean; // default: true for next_paragraph_start, false otherwise
 }
 
 export interface TabRef {
@@ -146,7 +147,10 @@ export interface InsertTextResponse {
   tab: TabRef;
   position: InsertTextPosition;
   index: number;
+  /** Characters inserted, as Docs stores them (after normalisation). */
   insertedChars: number;
+  /** Control or private-use characters left out because Docs would strip them. */
+  removedChars: number;
   newParagraphs: number;
   /** The paragraph the text landed in, as read before the write. */
   targetParagraph: { wasEmpty: boolean; namedStyleType: string; bulleted: boolean };

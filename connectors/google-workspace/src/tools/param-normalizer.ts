@@ -40,6 +40,7 @@ const LEGACY_ALIASES: Record<string, string> = {
   moveToTopLevel: 'move_to_top_level',
   anchorText: 'anchor_text',
   expectEmptyParagraph: 'expect_empty_paragraph',
+  deleteSubTabs: 'delete_sub_tabs',
   writeControl: 'write_control',
   spreadsheetId: 'spreadsheet_id',
   maxRows: 'max_rows',

@@ -797,6 +797,7 @@ interface DeleteDocumentTabArgs {
   email?: string;
   documentId: string;
   tabId: string;
+  deleteSubTabs?: boolean;
 }
 
 interface InsertDocumentTextArgs {
@@ -859,14 +860,16 @@ export function isDeleteDocumentTabArgs(args: unknown): args is DeleteDocumentTa
   const rawParams = args as Record<string, unknown>;
   const documentId = readAliasedArg<string>(rawParams, 'document_id', 'documentId');
   const tabId = readAliasedArg<string>(rawParams, 'tab_id', 'tabId');
+  const deleteSubTabs = readAliasedArg<boolean>(rawParams, 'delete_sub_tabs', 'deleteSubTabs');
   return isOptional(rawParams.email, 'string') &&
     typeof documentId === 'string' &&
-    typeof tabId === 'string';
+    typeof tabId === 'string' &&
+    isOptional(deleteSubTabs, 'boolean');
 }
 
 export function assertDeleteDocumentTabArgs(args: unknown): asserts args is DeleteDocumentTabArgs {
   if (!isDeleteDocumentTabArgs(args)) {
-    throw new Error('Invalid delete document tab parameters. Required: document_id, tab_id');
+    throw new Error('Invalid delete document tab parameters. Required: document_id, tab_id. Optional: delete_sub_tabs (boolean)');
   }
 }
 

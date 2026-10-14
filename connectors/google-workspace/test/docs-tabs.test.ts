@@ -25,6 +25,8 @@ import {
   paragraphSearchText,
   findAnchor,
   nextParagraphInContainer,
+  normalizeInsertText,
+  TAB_READ_TEXT_OPTIONS,
 } from '../src/modules/docs/tabs.js';
 import { computeMoveApiIndex } from '../src/utils/tabPosition.js';
 import { normalizeArgs } from '../src/tools/param-normalizer.js';
@@ -481,18 +483,67 @@ describe('anchored-insert helpers', () => {
   });
 });
 
+describe('structure markers on tab reads', () => {
+  const body: docs_v1.Schema$Body = {
+    content: [
+      { startIndex: 0, endIndex: 1, sectionBreak: {} },
+      textParagraph(1, 'Weekly sync\n', { paragraphStyle: { namedStyleType: 'TITLE' } }),
+      textParagraph(13, 'Out of office\n', { paragraphStyle: { namedStyleType: 'HEADING_2' } }),
+      textParagraph(27, 'List anyone away next week:\n', { paragraphStyle: { namedStyleType: 'NORMAL_TEXT' } }),
+      textParagraph(55, '\n', { bullet: { listId: 'kix.a' } }),
+      textParagraph(56, 'Jane\n', { bullet: { listId: 'kix.a', nestingLevel: 1 } }),
+      {
+        startIndex: 61,
+        endIndex: 72,
+        table: {
+          tableRows: [{ tableCells: [{ content: [textParagraph(63, 'Cell item\n', { bullet: { listId: 'kix.b' } })] }] }],
+        },
+      },
+    ],
+  };
+
+  it('prefixes headings with [H1]-style markers and list items with an indented bullet', () => {
+    expect(extractBodyText(body, TAB_READ_TEXT_OPTIONS)).toBe(
+      '[Title] Weekly sync\n[H2] Out of office\nList anyone away next week:\n• \n  • Jane\n• Cell item\n\n'
+    );
+  });
+
+  it('adds no markers without markStructure (the no-tab read)', () => {
+    expect(extractBodyText(body)).toBe('Weekly sync\nOut of office\nList anyone away next week:\n\nJane\nCell item\n\n');
+    expect(extractBodyText(body, { renderInline: true })).toBe(extractBodyText(body));
+  });
+});
+
+describe('normalizeInsertText', () => {
+  it('turns CRLF and lone CR into newlines without counting them as removed', () => {
+    expect(normalizeInsertText('a\r\nb\rc\n')).toEqual({ text: 'a\nb\nc\n', removedChars: 0 });
+  });
+
+  it('removes the control and private-use characters Docs strips, keeping tab, newline and U+000B', () => {
+    expect(normalizeInsertText('\u0000\u0008\t\n\u000B\u000C\u001F\uE000\uF8FF\uF900x')).toEqual({
+      text: '\t\n\u000B\uF900x',
+      removedChars: 6,
+    });
+  });
+
+  it('leaves ordinary text, including non-BMP characters, unchanged', () => {
+    expect(normalizeInsertText('Jane: Oct 20-24 \u{1F389}')).toEqual({ text: 'Jane: Oct 20-24 \u{1F389}', removedChars: 0 });
+  });
+});
+
 describe('server argument path for the tab-management and insert tools', () => {
   const base = { document_id: 'nested-doc' };
 
   it('maps camelCase aliases to canonical keys', () => {
-    expect(normalizeArgs({ ...base, parentTabId: 't.0', moveToTopLevel: true, anchorText: 'x', expectEmptyParagraph: true }))
-      .toMatchObject({ parent_tab_id: 't.0', move_to_top_level: true, anchor_text: 'x', expect_empty_paragraph: true });
+    expect(normalizeArgs({ ...base, parentTabId: 't.0', moveToTopLevel: true, anchorText: 'x', expectEmptyParagraph: true, deleteSubTabs: true }))
+      .toMatchObject({ parent_tab_id: 't.0', move_to_top_level: true, anchor_text: 'x', expect_empty_paragraph: true, delete_sub_tabs: true });
   });
 
   it('accepts well-typed arguments in canonical and camelCase form', () => {
     expect(isAddDocumentTabArgs(normalizeArgs({ ...base, title: 'Q4', parentTabId: 't.0', position: 0 }))).toBe(true);
     expect(isUpdateDocumentTabArgs(normalizeArgs({ ...base, tabId: 't.b', title: 'New', moveToTopLevel: true, position: 1 }))).toBe(true);
     expect(isDeleteDocumentTabArgs(normalizeArgs({ ...base, tab_id: 't.b' }))).toBe(true);
+    expect(isDeleteDocumentTabArgs(normalizeArgs({ ...base, tab_id: 't.b', deleteSubTabs: true }))).toBe(true);
     expect(isInsertDocumentTextArgs(normalizeArgs({ ...base, anchorText: 'Out of office', text: 'x', position: 'next_paragraph_start', expectEmptyParagraph: true }))).toBe(true);
   });
 
@@ -502,6 +553,7 @@ describe('server argument path for the tab-management and insert tools', () => {
     expect(isUpdateDocumentTabArgs(normalizeArgs({ ...base, title: 'x' }))).toBe(false);
     expect(isUpdateDocumentTabArgs(normalizeArgs({ ...base, tab_id: 't.b', move_to_top_level: 'yes' }))).toBe(false);
     expect(isDeleteDocumentTabArgs(normalizeArgs({ ...base }))).toBe(false);
+    expect(isDeleteDocumentTabArgs(normalizeArgs({ ...base, tab_id: 't.b', delete_sub_tabs: 'yes' }))).toBe(false);
     expect(isInsertDocumentTextArgs(normalizeArgs({ ...base, text: 'x' }))).toBe(false);
     expect(isInsertDocumentTextArgs(normalizeArgs({ ...base, anchor_text: 'a', text: 'x', position: 2 }))).toBe(false);
     expect(isInsertDocumentTextArgs(normalizeArgs({ ...base, anchor_text: 'a', text: 'x', expect_empty_paragraph: 1 }))).toBe(false);

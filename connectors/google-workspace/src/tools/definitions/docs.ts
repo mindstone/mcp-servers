@@ -16,7 +16,10 @@ export const docsTools: ToolMetadata[] = [
     (sub-tabs are separate tabs), or all_tabs: true to read every tab in order under
     "## Tab: <path> [tabId: …]" headings; all tabs share one max_chars budget, and tabs past the
     budget are listed by id so you can read them with tab_id. On tab_id / all_tabs reads, smart
-    chips, people and dates appear as their text. ${TAB_LINK_NOTE}
+    chips, people and dates appear as their text, each list item (bulleted or numbered) starts
+    with "• " (indented two spaces per nesting level, so an empty list item shows as a bare "•"),
+    and headings start with [H1]…[H6], [Title] or [Subtitle]. These markers are not document
+    text: leave them out of anchor_text and find_text. ${TAB_LINK_NOTE}
 
     Usage examples:
     
@@ -488,8 +491,8 @@ export const docsTools: ToolMetadata[] = [
     description: `Add a new, empty tab to a Google Docs document, at the top level or as a sub-tab.
 
     Tab titles must be unique across the whole document, including sub-tabs; a title that is
-    already used is refused before anything changes. Without position the tab goes after its
-    future siblings. Returns the new tab's id and where it ended up. ${TAB_LINK_NOTE}
+    already used is refused before anything changes. Without position the tab goes last among
+    its siblings. Returns the new tab's id and where it ended up. ${TAB_LINK_NOTE}
 
     position is 0-based among the new tab's siblings: 0 = first; the numbers in list outputs
     start at 1.
@@ -599,10 +602,18 @@ export const docsTools: ToolMetadata[] = [
 
     This cannot be undone through the API (the document's version history in Google Docs can
     restore it). Read the tab, or copy what you need, first. Needs a real tab id: "default" is
-    refused. The result lists every sub-tab that was deleted with it. ${TAB_LINK_NOTE}
+    refused. A tab that has sub-tabs is refused, before anything is deleted, unless you pass
+    delete_sub_tabs: true; the refusal says how many sub-tabs it has. Check the id against
+    list_workspace_document_tabs first: deleting a parent tab by mistake deletes everything
+    under it. The result lists every sub-tab that was deleted with it. ${TAB_LINK_NOTE}
 
-    Usage example:
-       { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123" }`,
+    Usage examples:
+
+    1. Delete a tab with no sub-tabs:
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.old789" }
+
+    2. Delete a tab together with its sub-tabs:
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.drafts42", "delete_sub_tabs": true }`,
     aliases: ['delete_doc_tab', 'remove_document_tab'],
     annotations: { readOnlyHint: false, destructiveHint: true },
     inputSchema: {
@@ -619,6 +630,10 @@ export const docsTools: ToolMetadata[] = [
         tab_id: {
           type: 'string',
           description: 'Tab id from list_workspace_document_tabs ("default" is not accepted)'
+        },
+        delete_sub_tabs: {
+          type: 'boolean',
+          description: 'Also delete every sub-tab below this tab (default: false). Required when the tab has sub-tabs.'
         }
       },
       required: ['document_id', 'tab_id']
@@ -630,26 +645,32 @@ export const docsTools: ToolMetadata[] = [
     description: `Insert plain text next to a unique piece of text in one tab, without rewriting the tab.
 
     anchor_text must appear exactly once in the tab and sit inside one paragraph (smart chips,
-    people and dates can't be part of it); copy it exactly from a tab_id read. position:
+    people and dates can't be part of it); copy it exactly from a tab_id read, without the "• "
+    and [H1]-style markers. position:
     - "after" (default): right after the anchor text.
     - "before": right before the anchor text.
     - "next_paragraph_start": at the start of the paragraph that follows the anchor's paragraph.
-      Use this to fill the (often empty) list item under a heading. Anchor on the line
-      immediately before the slot you want to fill (for an empty bullet under a heading, that is
-      the heading line), not on text further up.
+      Use this to fill the (often empty) list item under a heading. Anchor on the line directly
+      above the slot you want to fill: if an instruction line sits between the heading and the
+      empty bullet, anchor on the instruction line, not on the heading. Here the paragraph must
+      be empty or the call is refused (expect_empty_paragraph defaults to true); pass
+      expect_empty_paragraph: false to insert at the start of a non-empty paragraph.
 
     Newlines in text start new paragraphs that take the formatting (heading, bullet, numbering)
     of the paragraph the text lands in. The inserted text is plain: it does not pick up bold,
     links or other character styles from its neighbours, and people or date chips you include
-    arrive as plain text. End text with a newline when inserting whole lines ahead of a
-    non-empty paragraph. Pass expect_empty_paragraph: true to refuse unless the paragraph the
-    text lands in is empty (a safety check when filling a slot). Without tab_id this acts on the
-    first tab. To change existing text use find_and_replace_workspace_document. ${TAB_LINK_NOTE}
+    arrive as plain text. Line endings become \\n; control and private-use characters, which
+    Google Docs can't store, are left out (the result says how many). End text with a newline
+    when inserting whole lines ahead of a non-empty paragraph. expect_empty_paragraph: true
+    also works with "after" and "before". Without tab_id this acts on the first tab. To change
+    existing text use find_and_replace_workspace_document. ${TAB_LINK_NOTE}
 
     Usage examples:
 
-    1. Fill the empty bullet under an "Out of office" heading with two lines (two bullets):
-       { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123", "anchor_text": "Out of office", "position": "next_paragraph_start", "text": "Jane: Oct 20-24\\nSam: Oct 27", "expect_empty_paragraph": true }
+    1. Fill the empty bullet under an "Out of office" heading with two lines (two bullets). The
+       tab reads "[H2] Out of office", then "List anyone away next week:", then an empty "•",
+       so the anchor is the instruction line directly above the bullet:
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123", "anchor_text": "List anyone away next week:", "position": "next_paragraph_start", "text": "Jane: Oct 20-24\\nSam: Oct 27" }
 
     2. Insert a sentence after a phrase:
        { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123", "anchor_text": "Budget approved.", "text": " Next review in November." }`,
@@ -689,7 +710,7 @@ export const docsTools: ToolMetadata[] = [
         },
         expect_empty_paragraph: {
           type: 'boolean',
-          description: 'Refuse unless the paragraph the text lands in is empty (default: false)'
+          description: 'Refuse unless the paragraph the text lands in is empty (default: true for "next_paragraph_start", false otherwise)'
         }
       },
       required: ['document_id', 'anchor_text', 'text']

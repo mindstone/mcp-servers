@@ -32,6 +32,7 @@ import {
   DocsInputError,
   FlatParagraph,
   FlatTab,
+  TAB_READ_TEXT_OPTIONS,
   TAB_TREE_FIELDS,
   TRUNCATION_MARKER,
   assertUniqueTitle,
@@ -44,6 +45,7 @@ import {
   flatParagraphs,
   flattenTabs,
   nextParagraphInContainer,
+  normalizeInsertText,
   paragraphSearchText,
   requireTabs,
   resolveTab,
@@ -295,7 +297,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
       return { success: true, data: payload };
     }
 
-    let textContent = extractBodyText(tab.tab.documentTab?.body, { renderInline: true });
+    let textContent = extractBodyText(tab.tab.documentTab?.body, TAB_READ_TEXT_OPTIONS);
     let truncated = false;
     if (textContent.length > maxChars) {
       textContent = textContent.substring(0, maxChars) + TRUNCATION_MARKER;
@@ -974,7 +976,8 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
   }
 
   /**
-   * Delete a tab and, with it, every sub-tab below it.
+   * Delete a tab and, with it, every sub-tab below it. A tab that has sub-tabs
+   * is refused before any write unless the caller passes `deleteSubTabs`.
    */
   async deleteTab(email: string, options: DeleteTabOptions): Promise<DocsOperationResult> {
     try {
@@ -983,6 +986,13 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
 
       const target = resolveTab(flat, options.tabId, { allowDefault: false });
       const descendants = descendantsOf(flat, target.tabId);
+      if (descendants.length > 0 && options.deleteSubTabs !== true) {
+        const count = descendants.length;
+        throw new DocsInputError(
+          `Tab "${target.tabId}" has ${count} sub-tab${count !== 1 ? 's' : ''}, which would be deleted with it. Nothing was deleted. ` +
+            'Check with list_workspace_document_tabs that this is the tab you mean, then pass delete_sub_tabs: true to delete it and all its sub-tabs.'
+        );
+      }
 
       await client.documents.batchUpdate({
         documentId: options.documentId,
@@ -1011,7 +1021,9 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
    * Insert plain text into one tab next to a unique anchor: right after it,
    * right before it, or at the start of the paragraph that follows it (in the
    * same container). The inserted text takes the paragraph formatting of where
-   * it lands (heading, bullet) but its character style is cleared.
+   * it lands (heading, bullet) but its character style is cleared. The text is
+   * first normalised to what Docs stores, so the style-clear range never
+   * reaches past it into existing text.
    */
   async insertText(email: string, options: InsertTextOptions): Promise<DocsOperationResult> {
     try {
@@ -1021,6 +1033,15 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
       if (options.text.length === 0) {
         throw new DocsInputError('text must not be empty.');
       }
+      const { text, removedChars } = normalizeInsertText(options.text);
+      if (text.length === 0) {
+        throw new DocsInputError(
+          'text has nothing Google Docs can store: it holds only control or private-use characters, which Docs removes.'
+        );
+      }
+      // Filling a slot is the usual reason for next_paragraph_start, so the guard is on there by default.
+      const expectEmptyParagraph =
+        options.expectEmptyParagraph ?? options.position === 'next_paragraph_start';
 
       const client = await this.getWriteClient(email);
       const { flat } = await this.readAllTabs(client, options.documentId);
@@ -1033,7 +1054,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
 
       if (matches.length === 0) {
         throw new DocsInputError(
-          `Anchor text not found in tab "${tab.tabId}". It must be plain text inside one paragraph (smart chips, people and dates can't be part of it); read the tab with tab_id to copy it exactly.`
+          `Anchor text not found in tab "${tab.tabId}". It must be plain text inside one paragraph (smart chips, people and dates can't be part of it); read the tab with tab_id to copy it exactly, leaving out the "• " and "[H1]"-style markers, which are not document text.`
         );
       }
       if (matches.length > 1) {
@@ -1065,11 +1086,15 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
       const wasEmpty = targetText === '' || targetText === '\n';
       const bulleted = target.paragraph.bullet != null;
       const namedStyleType = target.paragraph.paragraphStyle?.namedStyleType ?? 'NORMAL_TEXT';
-      if (options.expectEmptyParagraph && !wasEmpty) {
+      if (expectEmptyParagraph && !wasEmpty) {
         const visibleChars = targetText.endsWith('\n') ? targetText.length - 1 : targetText.length;
+        const guardSource = options.expectEmptyParagraph === true
+          ? 'expect_empty_paragraph is set'
+          : 'expect_empty_paragraph is on (the default for "next_paragraph_start")';
         throw new DocsInputError(
-          `expect_empty_paragraph is set, but the paragraph the text would land in is not empty: it holds ${visibleChars} character(s), ${bulleted ? 'bulleted' : 'not bulleted'}, style ${namedStyleType}. ` +
-            'Anchor on the line immediately before the empty slot and use position "next_paragraph_start", or drop expect_empty_paragraph.'
+          `${guardSource}, but the paragraph the text would land in is not empty: it holds ${visibleChars} character(s), ${bulleted ? 'bulleted' : 'not bulleted'}, style ${namedStyleType}. Nothing was inserted. ` +
+            'Anchor on the line directly above the empty slot (if an instruction line sits between the heading and the slot, anchor on that line), ' +
+            'or pass expect_empty_paragraph: false to insert at the start of this paragraph anyway.'
         );
       }
 
@@ -1077,11 +1102,11 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
         documentId: options.documentId,
         requestBody: {
           requests: [
-            { insertText: { location: { index, tabId: tab.tabId }, text: options.text } },
+            { insertText: { location: { index, tabId: tab.tabId }, text } },
             {
               // Plain text: keep the paragraph's formatting, drop neighbouring run styles.
               updateTextStyle: {
-                range: { startIndex: index, endIndex: index + options.text.length, tabId: tab.tabId },
+                range: { startIndex: index, endIndex: index + text.length, tabId: tab.tabId },
                 textStyle: {},
                 fields: ALL_TEXT_KEYS,
               },
@@ -1095,8 +1120,9 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
         tab: this.toTabRef(tab),
         position: options.position,
         index,
-        insertedChars: options.text.length,
-        newParagraphs: options.text.split('\n').length - 1,
+        insertedChars: text.length,
+        removedChars,
+        newParagraphs: text.split('\n').length - 1,
         targetParagraph: { wasEmpty, namedStyleType, bulleted },
       };
       return { success: true, data };

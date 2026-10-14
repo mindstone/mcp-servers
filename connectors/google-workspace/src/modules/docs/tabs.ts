@@ -134,23 +134,55 @@ function inlineElementText(
   return undefined;
 }
 
+const HEADING_MARKERS: Record<string, string> = {
+  TITLE: '[Title] ',
+  SUBTITLE: '[Subtitle] ',
+  HEADING_1: '[H1] ',
+  HEADING_2: '[H2] ',
+  HEADING_3: '[H3] ',
+  HEADING_4: '[H4] ',
+  HEADING_5: '[H5] ',
+  HEADING_6: '[H6] ',
+};
+
+/**
+ * Read-only marker in front of a paragraph: a list item gets "• " (two spaces
+ * of indent per nesting level), a heading gets "[H1] "…"[H6] ", "[Title] " or
+ * "[Subtitle] ". Not `#`, so a heading can't be mistaken for an all_tabs
+ * "## Tab:" line. The markers are not document text.
+ */
+function structureMarker(paragraph: docs_v1.Schema$Paragraph): string {
+  const heading = HEADING_MARKERS[paragraph.paragraphStyle?.namedStyleType ?? ''] ?? '';
+  if (!paragraph.bullet) {
+    return heading;
+  }
+  return `${'  '.repeat(paragraph.bullet.nestingLevel ?? 0)}• ${heading}`;
+}
+
 /**
  * Plain text of a body (paragraphs and one level of table cells; a newline after
  * every table row). With no options the output matches the connector's original
  * first-tab extraction exactly. `renderInline` also emits smart chips in place:
  * rich-link title (or URI), person name and email, date display text.
+ * `markStructure` prefixes list items and headings with a read-only marker
+ * (see structureMarker).
  */
 export function extractBodyText(
   body: docs_v1.Schema$Body | undefined,
-  opts: { renderInline?: boolean } = {}
+  opts: { renderInline?: boolean; markStructure?: boolean } = {}
 ): string {
   if (!body?.content) {
     return '';
   }
 
   const renderInline = opts.renderInline === true;
+  const markStructure = opts.markStructure === true;
   const textParts: string[] = [];
   const pushParagraph = (paragraph: docs_v1.Schema$Paragraph | undefined): void => {
+    if (markStructure && paragraph?.elements?.length) {
+      const marker = structureMarker(paragraph);
+      if (marker) textParts.push(marker);
+    }
     for (const paragraphElement of paragraph?.elements ?? []) {
       const text = inlineElementText(paragraphElement, renderInline);
       if (text) {
@@ -178,6 +210,29 @@ export function extractBodyText(
   }
 
   return textParts.join('');
+}
+
+/** Text options of `tab_id` / `all_tabs` reads (the no-tab read passes none). */
+export const TAB_READ_TEXT_OPTIONS = { renderInline: true, markStructure: true } as const;
+
+/**
+ * Characters the Docs API strips from `insertText`: control characters
+ * U+0000–U+0008 and U+000C–U+001F, and the BMP private-use area U+E000–U+F8FF.
+ * Tab (U+0009), newline (U+000A) and U+000B (a line break inside a paragraph)
+ * are kept. Carriage returns are handled before this, as line endings.
+ */
+const DOCS_STRIPPED_CHARS = /[\u0000-\u0008\u000C-\u001F-]/g;
+
+/**
+ * The text exactly as Docs will store it, so offsets computed from its length
+ * (the style-clear range, the reported count) cover only the inserted text.
+ * "\r\n" and a lone "\r" become "\n"; characters Docs would strip are removed
+ * and counted.
+ */
+export function normalizeInsertText(text: string): { text: string; removedChars: number } {
+  const lineEndings = text.replace(/\r\n?/g, '\n');
+  const normalized = lineEndings.replace(DOCS_STRIPPED_CHARS, '');
+  return { text: normalized, removedChars: lineEndings.length - normalized.length };
 }
 
 export function countWords(text: string): number {
@@ -434,7 +489,7 @@ export function buildAllTabsText(
     }
     const tab = flat[next];
     const heading = `## Tab: ${tab.path} [tabId: ${tab.tabId}]`;
-    const text = extractBodyText(tab.tab.documentTab?.body, { renderInline: true });
+    const text = extractBodyText(tab.tab.documentTab?.body, TAB_READ_TEXT_OPTIONS);
     if (text.length > remaining) {
       blocks.push(`${heading}\n${text.substring(0, remaining)}${TAB_TRUNCATION_MARKER}\n`);
       cut = tab;

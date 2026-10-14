@@ -139,6 +139,8 @@ interface DeleteDocumentTabArgs {
   documentId?: string;
   tab_id?: string;
   tabId?: string;
+  delete_sub_tabs?: boolean;
+  deleteSubTabs?: boolean;
 }
 
 interface InsertDocumentTextArgs {
@@ -553,8 +555,8 @@ function placementPhrase(parent: TabWriteResponse['parent']): string {
 }
 
 /**
- * A sentence naming any difference between where the caller asked the tab to
- * go and where the document reports it after the write (no silent mismatch).
+ * A WARNING line naming any difference between where the caller asked the tab
+ * to go and where the document reports it after the write (no silent mismatch).
  */
 function placementMismatch(data: TabWriteResponse): string | undefined {
   const notes: string[] = [];
@@ -568,7 +570,7 @@ function placementMismatch(data: TabWriteResponse): string | undefined {
   if (data.tab.index !== data.requestedPosition) {
     notes.push(`the requested position was ${data.requestedPosition}, but the document reports position ${data.tab.index}`);
   }
-  return notes.length > 0 ? `Note: ${notes.join('; ')}.` : undefined;
+  return notes.length > 0 ? `WARNING: ${notes.join('; ')}. Check the tab list before going on.` : undefined;
 }
 
 /**
@@ -631,7 +633,10 @@ export function formatInsertTextAsText(data: InsertTextResponse): string {
   const text =
     `Inserted ${data.insertedChars} characters (${data.newParagraphs} new paragraph${data.newParagraphs !== 1 ? 's' : ''}) ` +
     `${INSERT_POSITION_PHRASES[data.position]} in tab "${data.tab.path}" [tabId: ${data.tab.tabId}]. ` +
-    `The paragraph there was ${target.wasEmpty ? 'empty' : 'not empty'}, ${target.bulleted ? 'bulleted' : 'not bulleted'}, style ${target.namedStyleType}.`;
+    `The paragraph there was ${target.wasEmpty ? 'empty' : 'not empty'}, ${target.bulleted ? 'bulleted' : 'not bulleted'}, style ${target.namedStyleType}.` +
+    (data.removedChars > 0
+      ? ` ${data.removedChars} control or private-use character${data.removedChars !== 1 ? 's' : ''} that Google Docs can't store ${data.removedChars !== 1 ? 'were' : 'was'} left out.`
+      : '');
   return wrapUntrustedContent(text, `google-workspace:docs:document/${data.documentId}`);
 }
 
@@ -708,6 +713,7 @@ export async function handleDeleteDocumentTab(args: DeleteDocumentTabArgs): Prom
   const rawArgs = args as unknown as Record<string, unknown>;
   const documentId = readAliasedString(rawArgs, 'document_id', 'documentId');
   const tabId = readAliasedString(rawArgs, 'tab_id', 'tabId');
+  const deleteSubTabs = readAliasedBoolean(rawArgs, 'delete_sub_tabs', 'deleteSubTabs');
 
   const email = await resolveEmail(args);
 
@@ -715,6 +721,7 @@ export async function handleDeleteDocumentTab(args: DeleteDocumentTabArgs): Prom
     const result = await getDocsService().deleteTab(email, {
       documentId: documentId as string,
       tabId: tabId as string,
+      ...(deleteSubTabs === true ? { deleteSubTabs } : {}),
     });
 
     if (!result.success || !result.data) {
@@ -747,7 +754,8 @@ export async function handleInsertDocumentText(args: InsertDocumentTextArgs): Pr
       position,
       text: args.text,
       matchCase: matchCase ?? true,
-      ...(expectEmptyParagraph === true ? { expectEmptyParagraph } : {}),
+      // Unset → the service's default (on for next_paragraph_start); an explicit false is kept.
+      ...(expectEmptyParagraph !== undefined ? { expectEmptyParagraph } : {}),
     });
 
     if (!result.success || !result.data) {
