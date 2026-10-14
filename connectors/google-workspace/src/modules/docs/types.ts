@@ -12,10 +12,6 @@ export type DocsParagraphElement = docs_v1.Schema$ParagraphElement;
 export type DocsTextRun = docs_v1.Schema$TextRun;
 export type DocsWriteControl = docs_v1.Schema$WriteControl;
 
-// Note: Tabs API (Schema$Tab) not available in googleapis@129.
-// Tab support will be deferred to a future version upgrade.
-// Tools accepting tabId will ignore it and operate on the main document body.
-
 export interface BatchUpdateDocumentOptions {
   requests: DocsRequest[];
   writeControl?: DocsWriteControl;
@@ -23,7 +19,8 @@ export interface BatchUpdateDocumentOptions {
 }
 
 export interface ReadDocumentOptions {
-  tabId?: string; // Ignored until googleapis upgrade supports tabs
+  tabId?: string; // Read one tab ("default" = the first tab)
+  allTabs?: boolean; // Read every tab under one shared maxChars budget
   maxChars?: number;
   includeMetadata?: boolean;
   returnJson?: boolean; // Default: false (human-readable text)
@@ -57,8 +54,18 @@ export interface FindReplaceOptions {
 export interface TabInfo {
   tabId: string;
   title: string;
-  index: number;
+  index: number; // 0-based position among siblings
   wordCount?: number;
+  parentTabId: string | null;
+  nestingLevel: number; // 0 = top-level tab
+  path: string; // "Parent > Child"
+  childCount: number;
+}
+
+export interface TabListResponse {
+  documentId: string;
+  title: string;
+  tabs: TabInfo[];
 }
 
 export interface DocumentResponse {
@@ -67,14 +74,16 @@ export interface DocumentResponse {
   documentUrl: string;
   content?: string;
   truncated?: boolean;
-  tabCount?: number;
+  tabCount?: number; // every tab, all nesting levels
   tabs?: TabInfo[];
   revisionId?: string;
+  shownTab?: { tabId: string; title: string }; // no-tab read: the first tab shown
+  requestedTab?: { tabId: string; title: string; path: string }; // tab_id read/edit target
 }
 
 export interface DocsOperationResult {
   success: boolean;
-  data?: DocumentResponse | DocsDocument | TabInfo[] | DocsBatchUpdateResponse;
+  data?: DocumentResponse | DocsDocument | TabListResponse | TabJsonResponse | DocsBatchUpdateResponse;
   error?: string;
   occurrencesChanged?: number;
 }
@@ -84,9 +93,16 @@ export interface ListTabsOptions {
   includeWordCount?: boolean;
 }
 
-// Note: Since Tabs API is not available in googleapis@129,
-// list_workspace_document_tabs will return a placeholder until
-// the library is upgraded. The types are defined here for future use.
+export interface TabJsonResponse {
+  documentId: string;
+  title: string;
+  revisionId?: string;
+  tab: {
+    tabProperties?: docs_v1.Schema$TabProperties;
+    documentTab?: docs_v1.Schema$DocumentTab;
+  };
+  childTabs: Array<{ tabId: string; title: string }>; // listed only; read them by tab_id
+}
 
 export interface ExtractIdResult {
   success: boolean;

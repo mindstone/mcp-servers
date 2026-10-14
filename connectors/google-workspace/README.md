@@ -161,7 +161,7 @@ The full list lives under [`src/tools/definitions/`](./src/tools/definitions/) a
 | Gmail | 23 | Email search/thread/send/compose, drafts, labels, label filters, attachments, archive/trash/read-state helpers, settings, vacation responder, and send-as aliases/signatures. |
 | Calendar | 9 | Current time, free-slot lookup, calendar/event listing, event creation, updates, responses, and deletion. |
 | Drive | 15 | List/search/upload/download/copy/move/trash/untrash files, folders, permissions, revisions, shared-drive discovery, and activity queries (what changed, when, by whom). |
-| Docs | 8 | Read, create, append, replace, find/replace, tab listing, and batch updates. |
+| Docs | 8 | Read, create, append, replace, find/replace, tab listing, and batch updates. Read, append, replace and find/replace can target one tab (`tab_id`); reads can also cover every tab (`all_tabs`). |
 | Sheets | 14 | Read/write ranges, create spreadsheets, sheet management, batch operations, find/replace, and formatting. |
 | Slides | 7 | Read, create, list/get slides, batch update, thumbnails, and ID extraction. |
 | Labels | 12 | Gmail label CRUD and filter rules. |

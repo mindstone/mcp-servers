@@ -34,6 +34,8 @@ const LEGACY_ALIASES: Record<string, string> = {
   replaceText: 'replace_text',
   matchCase: 'match_case',
   includeWordCount: 'include_word_count',
+  tabId: 'tab_id',
+  allTabs: 'all_tabs',
   writeControl: 'write_control',
   spreadsheetId: 'spreadsheet_id',
   maxRows: 'max_rows',

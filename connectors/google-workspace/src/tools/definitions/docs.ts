@@ -1,5 +1,7 @@
 import { ToolMetadata } from "../../modules/tools/registry.js";
 
+const TAB_LINK_NOTE = 'A Docs link containing ?tab=t.xxxx points at one tab; "t.xxxx" is its tab_id.';
+
 // Google Docs Tools
 export const docsTools: ToolMetadata[] = [
   {
@@ -8,6 +10,13 @@ export const docsTools: ToolMetadata[] = [
     description: `Read content from a Google Docs document.
 
     Returns human-readable text by default. Use return_json: true for the raw Google Docs API response.
+
+    Tabs: without tab_id or all_tabs this reads the first tab only. On a document with several
+    tabs the result says how many there are and which one is shown. Pass tab_id to read one tab
+    (sub-tabs are separate tabs), or all_tabs: true to read every tab in order under
+    "## Tab: <path> [tabId: …]" headings; all tabs share one max_chars budget, and tabs past the
+    budget are listed by id so you can read them with tab_id. On tab_id / all_tabs reads, smart
+    chips, people and dates appear as their text. ${TAB_LINK_NOTE}
 
     Usage examples:
     
@@ -19,13 +28,21 @@ export const docsTools: ToolMetadata[] = [
     
     3. Get raw JSON structure:
        { "email": "user@example.com", "document_id": "1ABC123xyz", "return_json": true }
+
+    4. Read one tab:
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123" }
+
+    5. Read every tab:
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "all_tabs": true }
     
     Response includes:
     - Document title and URL
     - Text content (default: up to 50,000 characters)
     - Truncation indicator if content exceeds limit
     
-    Note: For very large documents, consider using max_chars to limit response size.`,
+    Note: For very large documents, consider using max_chars to limit response size.
+    all_tabs cannot be combined with return_json; tab_id with return_json returns that one tab
+    (up to 100,000 characters of JSON; sub-tabs listed by id).`,
     aliases: ['read_doc', 'get_document', 'view_document'],
     annotations: { readOnlyHint: true },
     inputSchema: {
@@ -41,11 +58,19 @@ export const docsTools: ToolMetadata[] = [
         },
         max_chars: {
           type: 'number',
-          description: 'Maximum characters to return (default: 50000)'
+          description: 'Maximum characters to return (default: 50000). With all_tabs, one budget shared by all tabs.'
         },
         return_json: {
           type: 'boolean',
           description: 'Return raw Google Docs API JSON instead of formatted text (default: false)'
+        },
+        tab_id: {
+          type: 'string',
+          description: 'Tab id from list_workspace_document_tabs. "default" means the first tab.'
+        },
+        all_tabs: {
+          type: 'boolean',
+          description: 'Read every tab, in tree order (default: false). Not with tab_id or return_json.'
         }
       },
       required: ['document_id']
@@ -91,12 +116,18 @@ export const docsTools: ToolMetadata[] = [
     category: 'Docs/Documents',
     description: `Append text to the end of a Google Docs document.
 
+    Without tab_id this acts on the first tab. Pass tab_id to append to the end of one tab.
+    ${TAB_LINK_NOTE}
+
     Usage examples:
     
     1. Simple append:
        { "email": "user@example.com", "document_id": "1ABC123xyz", "text": "\\n\\n## New Section\\n\\nAdditional content here." }
+
+    2. Append to one tab:
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123", "text": "\\nAction items reviewed." }
     
-    The text is inserted at the end of the document body.
+    The text is inserted at the end of the document body (or of the tab).
     Use \\n for line breaks in the appended text.`,
     aliases: ['append_doc', 'add_to_document', 'document_append'],
     annotations: { readOnlyHint: false, destructiveHint: false },
@@ -114,6 +145,10 @@ export const docsTools: ToolMetadata[] = [
         text: {
           type: 'string',
           description: 'Text to append to the document'
+        },
+        tab_id: {
+          type: 'string',
+          description: 'Tab id from list_workspace_document_tabs. "default" means the first tab.'
         }
       },
       required: ['document_id', 'text']
@@ -126,10 +161,16 @@ export const docsTools: ToolMetadata[] = [
 
     WARNING: This completely replaces all existing content. Use with caution.
 
+    Without tab_id this acts on the first tab. Pass tab_id to replace the content of one tab only
+    (its sub-tabs are separate tabs and are not touched). ${TAB_LINK_NOTE}
+
     Usage examples:
     
     1. Complete rewrite:
        { "email": "user@example.com", "document_id": "1ABC123xyz", "content": "# New Document Content\\n\\nThis replaces everything." }
+
+    2. Rewrite one tab:
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123", "content": "Agenda\\n\\n- Updates" }
     
     For partial edits, consider using find_and_replace_workspace_document instead.`,
     aliases: ['replace_doc', 'overwrite_document', 'rewrite_document'],
@@ -148,6 +189,10 @@ export const docsTools: ToolMetadata[] = [
         content: {
           type: 'string',
           description: 'New content to replace entire document'
+        },
+        tab_id: {
+          type: 'string',
+          description: 'Tab id from list_workspace_document_tabs. "default" means the first tab.'
         }
       },
       required: ['document_id', 'content']
@@ -158,6 +203,9 @@ export const docsTools: ToolMetadata[] = [
     category: 'Docs/Documents',
     description: `Find and replace text throughout a Google Docs document.
 
+    Without tab_id this replaces in every tab; pass tab_id to limit it to one tab (sub-tabs are
+    separate tabs and are not included). ${TAB_LINK_NOTE}
+
     Usage examples:
     
     1. Simple replacement:
@@ -165,9 +213,13 @@ export const docsTools: ToolMetadata[] = [
     
     2. Case-sensitive replacement:
        { "email": "user@example.com", "document_id": "1ABC123xyz", "find_text": "TODO", "replace_text": "DONE", "match_case": true }
+
+    3. Replace a date placeholder in one tab only:
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123", "find_text": "{{date}}", "replace_text": "2031-10-13" }
+       Without tab_id a placeholder that also sits in a Template tab is replaced there too.
     
     Returns the number of occurrences replaced.
-    Note: This replaces ALL occurrences of the text in the document.`,
+    Note: This replaces ALL occurrences of the text in every tab it covers.`,
     aliases: ['find_replace_doc', 'search_replace_document', 'document_find_replace'],
     annotations: { readOnlyHint: false, destructiveHint: false },
     inputSchema: {
@@ -192,6 +244,10 @@ export const docsTools: ToolMetadata[] = [
         match_case: {
           type: 'boolean',
           description: 'Case-sensitive matching (default: false)'
+        },
+        tab_id: {
+          type: 'string',
+          description: 'Tab id from list_workspace_document_tabs. "default" means the first tab.'
         }
       },
       required: ['document_id', 'find_text', 'replace_text']
@@ -235,10 +291,12 @@ export const docsTools: ToolMetadata[] = [
   {
     name: 'list_workspace_document_tabs',
     category: 'Docs/Documents',
-    description: `List tabs in a Google Docs document.
+    description: `List every tab in a Google Docs document, including nested sub-tabs.
 
-    Note: Full tab support requires a googleapis library upgrade.
-    Currently returns the main document body as a single "default" tab.
+    Returns the tab tree: one line per tab, indented by nesting level and numbered by position
+    (1., 1.1., 1.1.1.), with its tab id and number of sub-tabs. Use a tab id as tab_id in
+    read_workspace_document, append_to_workspace_document, replace_workspace_document and
+    find_and_replace_workspace_document. ${TAB_LINK_NOTE}
 
     Usage examples:
     
@@ -247,8 +305,12 @@ export const docsTools: ToolMetadata[] = [
     
     2. Include word count:
        { "email": "user@example.com", "document_id": "1ABC123xyz", "include_word_count": true }
+
+    3. As JSON (flat list in tree order with tabId, title, parentTabId, index, nestingLevel, path, childCount):
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "return_json": true }
     
-    Returns tab information including title and optional word count.`,
+    Returns tab information including title and optional word count. include_word_count reads
+    every tab's content, so it is slower on large documents.`,
     aliases: ['list_doc_tabs', 'get_document_tabs', 'document_tabs'],
     annotations: { readOnlyHint: true },
     inputSchema: {
@@ -265,6 +327,10 @@ export const docsTools: ToolMetadata[] = [
         include_word_count: {
           type: 'boolean',
           description: 'Include word count for each tab (default: false)'
+        },
+        return_json: {
+          type: 'boolean',
+          description: 'Return the tab list as JSON instead of formatted text (default: false)'
         }
       },
       required: ['document_id']

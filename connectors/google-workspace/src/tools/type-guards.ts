@@ -604,6 +604,8 @@ interface ReadDocumentArgs {
   documentId: string;
   maxChars?: number;
   returnJson?: boolean;
+  tabId?: string;
+  allTabs?: boolean;
 }
 
 interface CreateDocumentArgs {
@@ -616,12 +618,14 @@ interface AppendDocumentArgs {
   email: string;
   documentId: string;
   text: string;
+  tabId?: string;
 }
 
 interface ReplaceDocumentArgs {
   email: string;
   documentId: string;
   content: string;
+  tabId?: string;
 }
 
 interface FindReplaceArgs {
@@ -630,6 +634,7 @@ interface FindReplaceArgs {
   findText: string;
   replaceText: string;
   matchCase?: boolean;
+  tabId?: string;
 }
 
 interface ExtractIdArgs {
@@ -640,6 +645,7 @@ interface ListTabsArgs {
   email: string;
   documentId: string;
   includeWordCount?: boolean;
+  returnJson?: boolean;
 }
 
 export function isReadDocumentArgs(args: unknown): args is ReadDocumentArgs {
@@ -649,10 +655,14 @@ export function isReadDocumentArgs(args: unknown): args is ReadDocumentArgs {
   const documentId = readAliasedArg<string>(rawParams, 'document_id', 'documentId');
   const maxChars = readAliasedArg<number>(rawParams, 'max_chars', 'maxChars');
   const returnJson = readAliasedArg<boolean>(rawParams, 'return_json', 'returnJson');
+  const tabId = readAliasedArg<string>(rawParams, 'tab_id', 'tabId');
+  const allTabs = readAliasedArg<boolean>(rawParams, 'all_tabs', 'allTabs');
   return (params.email === undefined || typeof params.email === 'string') &&
     typeof documentId === 'string' &&
     (maxChars === undefined || typeof maxChars === 'number') &&
-    (returnJson === undefined || typeof returnJson === 'boolean');
+    (returnJson === undefined || typeof returnJson === 'boolean') &&
+    (tabId === undefined || typeof tabId === 'string') &&
+    (allTabs === undefined || typeof allTabs === 'boolean');
 }
 
 export function assertReadDocumentArgs(args: unknown): asserts args is ReadDocumentArgs {
@@ -679,9 +689,11 @@ export function isAppendDocumentArgs(args: unknown): args is AppendDocumentArgs 
   if (typeof args !== 'object' || args === null) return false;
   const params = args as Partial<AppendDocumentArgs>;
   const documentId = readAliasedArg<string>(args as Record<string, unknown>, 'document_id', 'documentId');
+  const tabId = readAliasedArg<string>(args as Record<string, unknown>, 'tab_id', 'tabId');
   return (params.email === undefined || typeof params.email === 'string') &&
     typeof documentId === 'string' &&
-    typeof params.text === 'string';
+    typeof params.text === 'string' &&
+    (tabId === undefined || typeof tabId === 'string');
 }
 
 export function assertAppendDocumentArgs(args: unknown): asserts args is AppendDocumentArgs {
@@ -694,9 +706,11 @@ export function isReplaceDocumentArgs(args: unknown): args is ReplaceDocumentArg
   if (typeof args !== 'object' || args === null) return false;
   const params = args as Partial<ReplaceDocumentArgs>;
   const documentId = readAliasedArg<string>(args as Record<string, unknown>, 'document_id', 'documentId');
+  const tabId = readAliasedArg<string>(args as Record<string, unknown>, 'tab_id', 'tabId');
   return (params.email === undefined || typeof params.email === 'string') &&
     typeof documentId === 'string' &&
-    typeof params.content === 'string';
+    typeof params.content === 'string' &&
+    (tabId === undefined || typeof tabId === 'string');
 }
 
 export function assertReplaceDocumentArgs(args: unknown): asserts args is ReplaceDocumentArgs {
@@ -713,11 +727,13 @@ export function isFindReplaceArgs(args: unknown): args is FindReplaceArgs {
   const findText = readAliasedArg<string>(rawParams, 'find_text', 'findText');
   const replaceText = readAliasedArg<string>(rawParams, 'replace_text', 'replaceText');
   const matchCase = readAliasedArg<boolean>(rawParams, 'match_case', 'matchCase');
+  const tabId = readAliasedArg<string>(rawParams, 'tab_id', 'tabId');
   return (params.email === undefined || typeof params.email === 'string') &&
     typeof documentId === 'string' &&
     typeof findText === 'string' &&
     typeof replaceText === 'string' &&
-    (matchCase === undefined || typeof matchCase === 'boolean');
+    (matchCase === undefined || typeof matchCase === 'boolean') &&
+    (tabId === undefined || typeof tabId === 'string');
 }
 
 export function assertFindReplaceArgs(args: unknown): asserts args is FindReplaceArgs {
@@ -744,9 +760,11 @@ export function isListTabsArgs(args: unknown): args is ListTabsArgs {
   const rawParams = args as Record<string, unknown>;
   const documentId = readAliasedArg<string>(rawParams, 'document_id', 'documentId');
   const includeWordCount = readAliasedArg<boolean>(rawParams, 'include_word_count', 'includeWordCount');
+  const returnJson = readAliasedArg<boolean>(rawParams, 'return_json', 'returnJson');
   return (params.email === undefined || typeof params.email === 'string') &&
     typeof documentId === 'string' &&
-    (includeWordCount === undefined || typeof includeWordCount === 'boolean');
+    (includeWordCount === undefined || typeof includeWordCount === 'boolean') &&
+    (returnJson === undefined || typeof returnJson === 'boolean');
 }
 
 export function assertListTabsArgs(args: unknown): asserts args is ListTabsArgs {

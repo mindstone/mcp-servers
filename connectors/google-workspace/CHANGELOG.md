@@ -7,6 +7,21 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- `list_workspace_document_tabs` returns the document's real tab tree: every tab and nested sub-tab with its id, parent, position and sub-tab count (optional word counts, and `return_json` for a flat JSON list). The synthetic `default` tab is no longer listed.
+- `read_workspace_document` accepts `tab_id` (read one tab) or `all_tabs: true` (read every tab under `## Tab:` headings, sharing one `max_chars` budget and listing the tabs that did not fit). On these reads smart chips, people and dates appear as their text.
+- `append_to_workspace_document`, `replace_workspace_document` and `find_and_replace_workspace_document` accept `tab_id` to act on one tab only. `tab_id: "default"` means the first tab.
+
+### Changed
+
+- Reading a document with several tabs without `tab_id` still returns the first tab, and now adds one header line saying how many tabs there are and how to read the others.
+- `find_and_replace_workspace_document` without `tab_id` still replaces in every tab; on a document with several tabs the result now says so.
+
+### Security
+
+- Document titles in the results of `append_to_workspace_document`, `replace_workspace_document` and `find_and_replace_workspace_document` are now wrapped as untrusted content.
+
 ## [0.4.2] - 2026-09-29
 
 ### Changed
