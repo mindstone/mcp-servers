@@ -827,20 +827,23 @@ export function formatTabCopyAsText(data: TabCopyResponse): string {
     }
     lines.push(line);
   } else {
-    const first = v.mismatches[0];
-    const where = first
-      ? first.tableIndex !== undefined
-        ? `table ${first.tableIndex + 1} ${first.kind}`
-        : first.paragraphIndex !== undefined
-          ? `paragraph ${first.paragraphIndex + 1} ${first.kind}`
-          : first.kind
-      : 'unknown';
+    const places = v.mismatches.map((mismatch) =>
+      mismatch.tableIndex !== undefined
+        ? `table ${mismatch.tableIndex + 1} ${mismatch.kind}`
+        : mismatch.paragraphIndex !== undefined
+          ? `paragraph ${mismatch.paragraphIndex + 1} ${mismatch.kind}`
+          : mismatch.kind
+    );
+    // Verification keeps only the first few mismatches; say so when there are more.
+    const where = places.length === 0
+      ? 'first: unknown'
+      : `${places.length < v.mismatchCount ? 'first: ' : ''}${places.join(', ')}`;
     const kept =
       data.mode === 'new'
-        ? ` The new tab "${data.target.path}" [${data.target.tabId}] was kept so it can be checked; apart from the differences listed it is a full copy. If it isn't usable, delete it with delete_workspace_document_tab before copying again with the same title.`
-        : ` Tab "${data.target.path}" [${data.target.tabId}] now holds this copy apart from the differences listed; its earlier content can be restored from the document's version history.`;
+        ? ` The new tab "${data.target.path}" [${data.target.tabId}] was kept so it can be checked. If it isn't usable, delete it with delete_workspace_document_tab before copying again with the same title.`
+        : ` Tab "${data.target.path}" [${data.target.tabId}] was kept as copied so it can be checked; its earlier content can be restored from the document's version history.`;
     lines.push(
-      `Verification: FAILED — ${plural(v.mismatchCount, 'difference')} (first: ${where}).${kept} Do not delete or reset the source until the copy is confirmed.`
+      `Verification: FAILED — ${plural(v.mismatchCount, 'difference')} (${where}).${kept} Do not delete or reset the source until the copy is confirmed.`
     );
   }
 
@@ -866,7 +869,10 @@ export function formatTabCopyAsText(data: TabCopyResponse): string {
   for (const [kind, count] of Object.entries(data.notCopied)) {
     notCopied.push(`${NOT_COPIED_LABELS[kind] ?? kind} (${count})`);
   }
-  lines.push(`Not copied: ${notCopied.join(', ')}.`);
+  const lost = Object.keys(data.notCopied).length > 0
+    ? ' Check these can be lost before deleting or resetting the source.'
+    : '';
+  lines.push(`Not copied: ${notCopied.join(', ')}.${lost}`);
   if (data.notes.length > 0) {
     lines.push(`Notes: ${data.notes.join('; ')}.`);
   }

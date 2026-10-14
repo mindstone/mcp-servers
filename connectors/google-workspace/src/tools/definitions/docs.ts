@@ -298,11 +298,14 @@ export const docsTools: ToolMetadata[] = [
     description: `List every tab in a Google Docs document, including nested sub-tabs.
 
     Returns the tab tree: one line per tab, indented by nesting level and numbered by position
-    (1., 1.1., 1.1.1.), with its tab id and number of sub-tabs. Use a tab id as tab_id in
-    read_workspace_document, append_to_workspace_document, replace_workspace_document,
-    find_and_replace_workspace_document and insert_workspace_document_text, and to rename, move
-    or delete a tab (update_workspace_document_tab, delete_workspace_document_tab). The list
-    numbers start at 1; the position arguments of the tab tools start at 0. ${TAB_LINK_NOTE}
+    (1., 1.1., 1.1.1.), with its tab id and number of sub-tabs. Use a tab id as:
+    - tab_id in read_workspace_document, append_to_workspace_document, replace_workspace_document,
+      find_and_replace_workspace_document and insert_workspace_document_text;
+    - parent_tab_id in add_workspace_document_tab and update_workspace_document_tab (nest a tab);
+    - tab_id in update_workspace_document_tab and delete_workspace_document_tab (rename, move or
+      delete a tab);
+    - source_tab_id, target_tab_id or new_tab_parent_id in copy_workspace_document_tab.
+    The list numbers start at 1; the position arguments of the tab tools start at 0. ${TAB_LINK_NOTE}
 
     Usage examples:
     
@@ -721,7 +724,10 @@ export const docsTools: ToolMetadata[] = [
     styles), page breaks and smart chips. A smart chip linking to a file you can't open becomes a
     titled link, and people and date chips become their text; the result lists both. Does NOT copy
     headers and footers, sub-tabs, images (inline or floating) or other special elements: those
-    are listed under "Not copied" (inline ones also leave a visible "[placeholder]").
+    are listed under "Not copied" (inline ones also leave a visible "[placeholder]"). Merged table
+    cells are copied unmerged, and a table whose merged cells can't be copied is refused before
+    anything is written. Links to headings inside the copied tab still point at the source tab's
+    headings, so after the source is reset they no longer lead anywhere.
 
     Pass exactly one of target_tab_id or new_tab_title. new_tab_parent_id and new_tab_position only
     apply with new_tab_title.
@@ -733,13 +739,15 @@ export const docsTools: ToolMetadata[] = [
     source_tab_id and new_tab_parent_id accept "default" for the first tab.
 
     The copy is not atomic. The result starts with a "Verification:" line that compares text,
-    heading types, paragraph formatting, bullets, list grouping and table shapes with the source;
-    check that it says "passed" before deleting or resetting the source (a failed verification
-    comes back as an error, with the full report). If the copy stops part-way, a new tab is
-    deleted again, and an existing tab may be left cleared or partly written (the document's
-    version history can restore it). If the copy completes but verification finds differences,
-    the tab is kept so it can be checked, and the result is an error listing where it differs.
-    Long tabs can take 10-60 seconds.
+    heading types, paragraph formatting, bullets, list grouping and table shapes with the source.
+    Before deleting or resetting the source, check both that it says "passed" and that what the
+    "Not copied" line lists (floating images, for example) is acceptable to lose: verification
+    can pass while those are missing. A failed verification comes back as an error, with the full
+    report. If the copy stops part-way, the connector tries to delete a new tab again and the
+    result says whether that worked (if not, it names the tab to delete); an existing tab may be
+    left cleared or partly written (the document's version history can restore it). If the copy
+    completes but verification finds differences, the tab is kept so it can be checked, and the
+    result is an error listing the first few places it differs. Long tabs can take 10-60 seconds.
     ${TAB_LINK_NOTE}
 
     new_tab_position is 0-based among the new tab's siblings: 0 = first; the numbers in list

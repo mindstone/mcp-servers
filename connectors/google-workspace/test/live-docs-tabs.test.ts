@@ -173,6 +173,23 @@ async function step<T>(label: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/** Synchronous {@link step}, for filesystem setup and teardown (their messages name credential paths). */
+function stepSync<T>(label: string, fn: () => T): T {
+  try {
+    return fn();
+  } catch (error) {
+    throw new ProbeError(`${label} failed — ${safeError(error)}`);
+  }
+}
+
+/** Remove the temp credential copy; a failure is recorded and thrown as an allowlisted summary. */
+function removeTempRoot(): void {
+  if (!tempRoot) return;
+  const root = tempRoot;
+  tempRoot = undefined;
+  stepSync('remove the temp credential copy', () => fs.rmSync(root, { recursive: true, force: true }));
+}
+
 /** Call a tool handler; returns its text and whether it is an error result. */
 async function tool(name: string, args: Record<string, unknown>): Promise<{ text: string; isError: boolean }> {
   const handler = handlers[name];
@@ -557,7 +574,7 @@ liveDescribe('live: Docs tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
       ({ clientId, clientSecret } = readEmbeddedGoogleOAuthCredentials(hostRoot));
     }
 
-    tempRoot = copyInstance(env.instanceRoot);
+    tempRoot = stepSync('copy the instance to a temp directory', () => copyInstance(env.instanceRoot));
     vi.stubEnv('ACCOUNTS_PATH', path.join(tempRoot, 'accounts.json'));
     vi.stubEnv('CREDENTIALS_PATH', path.join(tempRoot, 'credentials'));
     vi.stubEnv('GOOGLE_CLIENT_ID', clientId);
@@ -601,9 +618,16 @@ liveDescribe('live: Docs tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
         }
       }
     } finally {
-      if (tempRoot) fs.rmSync(tempRoot, { recursive: true, force: true });
+      let cleanupFailure: ProbeError | undefined;
+      try {
+        removeTempRoot();
+      } catch (error) {
+        cleanupFailure = error as ProbeError;
+        notes.tempRootCleanupError = cleanupFailure.message;
+      }
       vi.unstubAllEnvs();
       console.log(`[live-docs-tabs] ${JSON.stringify(notes)}`);
+      if (cleanupFailure) throw cleanupFailure;
     }
   }, PROBE_TIMEOUT_MS);
 

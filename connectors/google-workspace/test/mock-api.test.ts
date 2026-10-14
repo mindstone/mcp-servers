@@ -1868,7 +1868,7 @@ describe('Docs tab copy', () => {
     expect(lines[1]).toBe(
       'Verification: passed — 4 paragraphs, 0 tables, 1 list checked: text, heading types, paragraph formatting, bullets, list grouping and table shapes match the source (bold/links and table cell styles are not checked).'
     );
-    expect(text).toContain('Not copied: headers and footers, sub-tabs.');
+    expect(text).toContain('Not copied: headers and footers, sub-tabs.\n');
     expect(text).toMatch(/Requests: \d+ in \d+ rounds; took [\d.]+s\./);
   });
 
@@ -1888,14 +1888,14 @@ describe('Docs tab copy', () => {
 
     expect(result.isError).toBe(true);
     const text = unwrap(result.content[0].text, COPY_ENVELOPE_OPEN);
-    expect(text).toMatch(/^Copied tab "Live notes" \[t\.live\] into new tab "Archive 2031-10-13" \[t\.new1\]\.\nVerification: FAILED — \d+ differences \(first: paragraph \d+ text\)\. The new tab "Archive 2031-10-13" \[t\.new1\] was kept so it can be checked; apart from the differences listed it is a full copy\. If it isn't usable, delete it with delete_workspace_document_tab before copying again with the same title\. Do not delete or reset the source until the copy is confirmed\./);
+    expect(text).toMatch(/^Copied tab "Live notes" \[t\.live\] into new tab "Archive 2031-10-13" \[t\.new1\]\.\nVerification: FAILED — 4 differences \(paragraph 10 text, paragraph 11 text, paragraph 12 text, paragraph 14 text\)\. The new tab "Archive 2031-10-13" \[t\.new1\] was kept so it can be checked\. If it isn't usable, delete it with delete_workspace_document_tab before copying again with the same title\. Do not delete or reset the source until the copy is confirmed\./);
     // A copy that completed but failed verification is kept, not deleted.
     expect(batches.some((batch) => batch.requests.some((req) => req.deleteTab))).toBe(false);
     expect(doc.tabs.map((tab: TabNode) => tab.tabProperties.tabId)).toContain('t.new1');
     expect(text).toContain('1 smart chip copied; 1 replaced by titled links because you can\'t open these files: "Budget sheet".');
     expect(text).toContain('1 people and 1 dates copied as text.');
     expect(text).not.toContain('Named styles copied');
-    expect(text).toContain('Not copied: headers and footers, sub-tabs, images (1), tables of contents (1).');
+    expect(text).toContain('Not copied: headers and footers, sub-tabs, images (1), tables of contents (1). Check these can be lost before deleting or resetting the source.');
     expect(driveGets.map((get) => get.fileId).sort()).toEqual([COPY_OK_FILE, COPY_NO_FILE].sort());
     for (const get of driveGets) {
       expect(get).toMatchObject({ fields: 'id', supportsAllDrives: 'true', authorization: 'Bearer mock-access-token' });
@@ -1989,7 +1989,8 @@ describe('Docs tab copy', () => {
     const text = unwrap(result, COPY_ENVELOPE_OPEN);
     expect(text.split('\n')[1]).toMatch(/^Verification: passed — 4 paragraphs/);
     expect(text).toContain('1 smart chip copied.');
-    expect(text).toContain('Not copied: headers and footers, sub-tabs, floating images (1).');
+    // Verification passes while the floating image is missing, so the result says to check the Not copied list.
+    expect(text).toContain('Not copied: headers and footers, sub-tabs, floating images (1). Check these can be lost before deleting or resetting the source.');
   });
 
   it('formats a kept overwrite copy after a failed verification, and names at most 10 fallback titles', async () => {
@@ -2024,7 +2025,7 @@ describe('Docs tab copy', () => {
     }), COPY_ENVELOPE_OPEN);
 
     expect(text.split('\n')[1]).toBe(
-      'Verification: FAILED — 2 differences (first: paragraph 3 paragraphStyle.indentStart). Tab "Old archive" [t.old] now holds this copy apart from the differences listed; its earlier content can be restored from the document\'s version history. Do not delete or reset the source until the copy is confirmed.'
+      'Verification: FAILED — 2 differences (first: paragraph 3 paragraphStyle.indentStart). Tab "Old archive" [t.old] was kept as copied so it can be checked; its earlier content can be restored from the document\'s version history. Do not delete or reset the source until the copy is confirmed.'
     );
     const titles = chipFallbacks.slice(0, 10).map((chip) => `"${chip.title}"`).join(', ');
     expect(text).toContain(`0 smart chips copied; 12 replaced by titled links because you can't open these files: ${titles}, and 2 more.`);
@@ -2195,5 +2196,37 @@ describe('Drive checkFileAccess', () => {
     const drive = await getDriveService();
 
     await expect(drive.checkFileAccess(TEST_EMAIL, 'scoped2')).rejects.toThrow(/The caller does not have permission/);
+  });
+
+  const rateLimited = (status: number, reason?: string) => ({
+    status,
+    body: {
+      error: {
+        code: status,
+        message: status === 429 ? 'Too Many Requests' : 'Quota exceeded for this request.',
+        ...(reason ? { errors: [{ reason, domain: 'usageLimits' }] } : {}),
+      },
+    },
+  });
+
+  it.each([
+    ['userRateLimitExceeded', rateLimited(403, 'userRateLimitExceeded'), /\(userRateLimitExceeded\).*\(status 403\)/],
+    ['rateLimitExceeded', rateLimited(403, 'rateLimitExceeded'), /\(rateLimitExceeded\).*\(status 403\)/],
+    ['dailyLimitExceeded', rateLimited(403, 'dailyLimitExceeded'), /\(dailyLimitExceeded\).*\(status 403\)/],
+    ['HTTP 429', rateLimited(429), /\(too many requests\).*\(status 429\)/],
+  ])('stops the copy before any write on a Drive rate limit (%s) instead of treating the chip as unopenable', async (_label, answer, detail) => {
+    const { batches, driveGets } = installCopyDocMocks({ driveStatus: { [COPY_NO_FILE]: answer } });
+    const handlers = await loadHandlers();
+
+    const failure = handlers.handleCopyDocumentTab({ document_id: 'copy-doc', source_tab_id: 't.live', new_tab_title: 'Archive 2031-10-13' });
+    await expect(failure).rejects.toMatchObject({
+      code: ErrorCode.InternalError,
+      message: expect.stringMatching(
+        /^.*Copy failed during "check smart chips": Google rate limit reached while checking access to a linked file .*try again shortly.* Nothing was written to the document\.$/
+      ),
+    });
+    await expect(failure).rejects.toMatchObject({ message: expect.stringMatching(detail) });
+    expect(batches).toHaveLength(0);
+    expect(driveGets.map((get) => get.fileId)).toContain(COPY_NO_FILE);
   });
 });
