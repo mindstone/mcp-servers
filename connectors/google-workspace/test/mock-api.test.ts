@@ -2623,6 +2623,41 @@ describe('Sheets tab management', () => {
     expect(detectFormulaOverwrite("'O''Brien Q1'!B2", [['x']], [formulaCell("O'Brien Q1")]).map((ref) => ref.a1))
       .toEqual(["'O''Brien Q1'!B2"]);
   });
+
+  it('normalises a range without changing which sheet it names', async () => {
+    const { normaliseA1Range } = await import('../src/modules/sheets/a1Utils.js');
+    // Ordinary names come out as before.
+    expect(normaliseA1Range(' Sheet1!A1 ')).toBe('Sheet1!A1');
+    expect(normaliseA1Range("'Sheet1'!A1")).toBe('Sheet1!A1');
+    expect(normaliseA1Range('My Sheet!A1:B2')).toBe("'My Sheet'!A1:B2");
+    expect(normaliseA1Range("'My Sheet'!A1")).toBe("'My Sheet'!A1");
+    expect(normaliseA1Range('A1:B2')).toBe('A1:B2');
+    expect(normaliseA1Range('Summary')).toBe('Summary');
+    expect(normaliseA1Range("'My Sheet'")).toBe("'My Sheet'");
+    // An apostrophe inside the name is doubled, whether or not the input quoted it.
+    expect(normaliseA1Range("O'Brien Q1!A1")).toBe("'O''Brien Q1'!A1");
+    expect(normaliseA1Range("'O''Brien Q1'!A1")).toBe("'O''Brien Q1'!A1");
+    expect(normaliseA1Range("'O''Brien Q1'")).toBe("'O''Brien Q1'");
+    // A name that starts and ends with an apostrophe keeps them.
+    expect(normaliseA1Range("'''Archive'''!A1:C3")).toBe("'''Archive'''!A1:C3");
+    expect(normaliseA1Range("'''Archive'''")).toBe("'''Archive'''");
+  });
+
+  it('reads a user range on a sheet whose title starts and ends with an apostrophe', async () => {
+    installTrackerSheetMocks({ titles: ["'Archive'", "O'Brien Q1", 'Summary'] });
+    // Only the correctly quoted ranges are served; "Archive!A1:C3" would get a 400.
+    installTrackerValuesMocks({
+      "'''Archive'''!A1:C3": { range: "'''Archive'''!A1:C3", values: PLATFORM_ROWS },
+      "'O''Brien Q1'!A1:C3": { range: "'O''Brien Q1'!A1:C3", values: PLATFORM_ROWS },
+    });
+    const handlers = await loadHandlers();
+
+    const archive = await handlers.handleReadSpreadsheetValues({ spreadsheet_id: TRACKER_ID, range: "'''Archive'''!A1:C3" });
+    expect(String(archive)).toContain('Instagram');
+
+    const named = await handlers.handleReadSpreadsheetValues({ spreadsheet_id: TRACKER_ID, range: "'O''Brien Q1'!A1:C3" });
+    expect(String(named)).toContain('Instagram');
+  });
 });
 
 // ---------------------------------------------------------------------------

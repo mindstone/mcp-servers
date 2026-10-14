@@ -300,7 +300,10 @@ export function normaliseA1Range(range: string): string {
       return trimmed;
     }
 
-    const normalisedSheet = quoteSheetNameIfNeeded(sheetName);
+    // sheetName is already unquoted, so quote the literal title: running it
+    // through quoteSheetNameIfNeeded would unquote it again and turn
+    // '''Archive'''!A1 into Archive!A1.
+    const normalisedSheet = quoteSheetTitle(sheetName);
     const normalisedRangePart = split.rangePart.trim();
     if (!normalisedRangePart) {
       return `${normalisedSheet}!`;
@@ -319,7 +322,7 @@ export function normaliseA1Range(range: string): string {
     return trimmed;
   }
 
-  return quoteSheetNameIfNeeded(sheetName);
+  return quoteSheetTitle(sheetName);
 }
 
 export function isLikelyUnbounded(range: string, maxBoundedRows = 1000): boolean {
