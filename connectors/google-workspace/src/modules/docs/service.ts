@@ -13,22 +13,41 @@ import {
   TabInfo,
   TabJsonResponse,
   TabListResponse,
+  AddTabOptions,
+  UpdateTabOptions,
+  DeleteTabOptions,
+  InsertTextOptions,
+  InsertTextPosition,
+  InsertTextResponse,
+  TabDeleteResponse,
+  TabRef,
+  TabWriteResponse,
 } from './types.js';
+import { computeMoveApiIndex } from '../../utils/tabPosition.js';
 import { DOCS_SCOPES } from './scopes.js';
 import { describeApiError, isAuthHandoffError } from '../../utils/apiError.js';
 import { wrapUntrustedJsonStrings } from '../../utils/untrusted-content.js';
 import {
+  ALL_TEXT_KEYS,
   DocsInputError,
+  FlatParagraph,
   FlatTab,
   TAB_TREE_FIELDS,
   TRUNCATION_MARKER,
+  assertUniqueTitle,
   buildAllTabsText,
   bodyEndIndex,
   countWords,
+  descendantsOf,
   extractBodyText,
+  findAnchor,
+  flatParagraphs,
   flattenTabs,
+  nextParagraphInContainer,
+  paragraphSearchText,
   requireTabs,
   resolveTab,
+  siblingsOf,
 } from './tabs.js';
 
 const DEFAULT_MAX_CHARS = 50000;
@@ -736,5 +755,372 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
         error: describeApiError(error),
       };
     }
+  }
+
+  /**
+   * Initialised, scope-checked Docs client for a write.
+   */
+  private async getWriteClient(email: string): Promise<docs_v1.Docs> {
+    await this.ensureInitialized();
+    this.checkInitialized();
+    await this.validateScopes(email, [DOCS_SCOPES.FULL]);
+    return this.getAuthenticatedClient(email, (auth) => google.docs({ version: 'v1', auth }));
+  }
+
+  /**
+   * Shared catch for the tab-management and insert methods: auth handoffs and
+   * input errors propagate; API failures become `{ success: false }`.
+   */
+  private toFailure(error: unknown): DocsOperationResult {
+    // An expired/revoked grant must keep its reconnect signal — folding it
+    // into a plain error string would skip the host's auth_required handoff.
+    if (isAuthHandoffError(error)) throw error;
+    if (error instanceof DocsInputError) throw error;
+    return {
+      success: false,
+      error: describeApiError(error),
+    };
+  }
+
+  private toTabRef(tab: FlatTab): TabRef {
+    return { tabId: tab.tabId, title: tab.title, path: tab.path };
+  }
+
+  private parentRef(flat: FlatTab[], tab: FlatTab): TabRef | null {
+    const parent = tab.parentTabId !== null ? flat.find((t) => t.tabId === tab.parentTabId) : undefined;
+    return parent ? this.toTabRef(parent) : null;
+  }
+
+  /**
+   * Add a tab (optionally under a parent, at a 0-based position among its new
+   * siblings). Reports the tab as the document shows it after the write.
+   */
+  async addTab(email: string, options: AddTabOptions): Promise<DocsOperationResult> {
+    try {
+      const title = requireTabTitle(options.title);
+      const client = await this.getWriteClient(email);
+      const { flat } = await this.readTabTree(client, options.documentId);
+
+      assertUniqueTitle(flat, title);
+      const parent =
+        options.parentTabId !== undefined
+          ? resolveTab(flat, options.parentTabId, { allowDefault: true })
+          : null;
+      const siblingCount = siblingsOf(flat, parent?.tabId ?? null).length;
+      assertTabPosition(options.position, siblingCount);
+
+      const response = await client.documents.batchUpdate({
+        documentId: options.documentId,
+        requestBody: {
+          requests: [
+            {
+              addDocumentTab: {
+                tabProperties: {
+                  title,
+                  ...(parent ? { parentTabId: parent.tabId } : {}),
+                  // No index → the API's default placement (expected: end).
+                  ...(options.position !== undefined ? { index: options.position } : {}),
+                },
+              },
+            },
+          ],
+        },
+      });
+
+      const newTabId = response.data.replies?.[0]?.addDocumentTab?.tabProperties?.tabId;
+      if (!newTabId) {
+        throw new Error('Docs API did not return the id of the added tab');
+      }
+
+      const after = await this.readTabTree(client, options.documentId);
+      const created = after.flat.find((tab) => tab.tabId === newTabId);
+      if (!created) {
+        throw new Error(`Added tab ${newTabId} is missing from the document's tab list`);
+      }
+
+      const data: TabWriteResponse = {
+        documentId: options.documentId,
+        tab: this.toTabInfo(created),
+        parent: this.parentRef(after.flat, created),
+        changed: true,
+        requestedPosition: options.position ?? siblingCount,
+        requestedParentTabId: parent?.tabId ?? null,
+      };
+      return { success: true, data };
+    } catch (error) {
+      return this.toFailure(error);
+    }
+  }
+
+  /**
+   * Rename and/or move a tab. `position` is the 0-based position the tab should
+   * end up at among its destination siblings; the API's before-removal index is
+   * computed here. Reports the actual title, parent and position after the write.
+   */
+  async updateTab(email: string, options: UpdateTabOptions): Promise<DocsOperationResult> {
+    try {
+      if (
+        options.title === undefined &&
+        options.parentTabId === undefined &&
+        !options.moveToTopLevel &&
+        options.position === undefined
+      ) {
+        throw new DocsInputError('Pass at least one of title, parent_tab_id, move_to_top_level or position.');
+      }
+      if (options.parentTabId !== undefined && options.moveToTopLevel) {
+        throw new DocsInputError('Pass either parent_tab_id or move_to_top_level, not both.');
+      }
+      const newTitle = options.title !== undefined ? requireTabTitle(options.title) : undefined;
+
+      const client = await this.getWriteClient(email);
+      const { flat } = await this.readTabTree(client, options.documentId);
+
+      const current = resolveTab(flat, options.tabId, { allowDefault: false });
+      const titleChanged = newTitle !== undefined && newTitle !== current.title;
+      if (titleChanged) {
+        assertUniqueTitle(flat, newTitle, current.tabId);
+      }
+
+      // Destination parent first; "same parent" is decided by identity, so
+      // move_to_top_level on a top-level tab (or parent_tab_id equal to the
+      // current parent) is a reorder, not a re-parent.
+      const destParent: string | null = options.moveToTopLevel
+        ? null
+        : options.parentTabId !== undefined
+          ? resolveTab(flat, options.parentTabId, { allowDefault: false }).tabId
+          : current.parentTabId;
+      if (
+        destParent !== null &&
+        (destParent === current.tabId ||
+          descendantsOf(flat, current.tabId).some((tab) => tab.tabId === destParent))
+      ) {
+        throw new DocsInputError('A tab cannot be moved under itself or one of its own sub-tabs.');
+      }
+      const sameParent = destParent === current.parentTabId;
+
+      const destSiblingCount = siblingsOf(flat, destParent).filter(
+        (tab) => tab.tabId !== current.tabId
+      ).length;
+      assertTabPosition(options.position, destSiblingCount);
+      const targetPosition = options.position ?? (sameParent ? current.index : destSiblingCount);
+      const positionChanged = !sameParent || targetPosition !== current.index;
+
+      if (!titleChanged && !positionChanged) {
+        const data: TabWriteResponse = {
+          documentId: options.documentId,
+          tab: this.toTabInfo(current),
+          parent: this.parentRef(flat, current),
+          changed: false,
+          requestedPosition: targetPosition,
+          requestedParentTabId: destParent,
+        };
+        return { success: true, data };
+      }
+
+      const tabProperties: docs_v1.Schema$TabProperties = { tabId: current.tabId };
+      const fields: string[] = [];
+      if (titleChanged) {
+        tabProperties.title = newTitle;
+        fields.push('title');
+      }
+      if (!sameParent) {
+        // Moving to the top level: parentTabId listed in fields with no value.
+        if (destParent !== null) {
+          tabProperties.parentTabId = destParent;
+        }
+        fields.push('parentTabId');
+      }
+      if (positionChanged) {
+        tabProperties.index = computeMoveApiIndex({
+          sameParent,
+          currentIndex: current.index,
+          targetPosition,
+        });
+        fields.push('index');
+      }
+
+      await client.documents.batchUpdate({
+        documentId: options.documentId,
+        requestBody: {
+          requests: [
+            {
+              updateDocumentTabProperties: {
+                tabProperties,
+                fields: fields.join(','),
+              },
+            },
+          ],
+        },
+      });
+
+      const after = await this.readTabTree(client, options.documentId);
+      const updated = after.flat.find((tab) => tab.tabId === current.tabId);
+      if (!updated) {
+        throw new Error(`Updated tab ${current.tabId} is missing from the document's tab list`);
+      }
+
+      const data: TabWriteResponse = {
+        documentId: options.documentId,
+        tab: this.toTabInfo(updated),
+        parent: this.parentRef(after.flat, updated),
+        changed: true,
+        requestedPosition: targetPosition,
+        requestedParentTabId: destParent,
+      };
+      return { success: true, data };
+    } catch (error) {
+      return this.toFailure(error);
+    }
+  }
+
+  /**
+   * Delete a tab and, with it, every sub-tab below it.
+   */
+  async deleteTab(email: string, options: DeleteTabOptions): Promise<DocsOperationResult> {
+    try {
+      const client = await this.getWriteClient(email);
+      const { flat } = await this.readTabTree(client, options.documentId);
+
+      const target = resolveTab(flat, options.tabId, { allowDefault: false });
+      const descendants = descendantsOf(flat, target.tabId);
+
+      await client.documents.batchUpdate({
+        documentId: options.documentId,
+        requestBody: {
+          requests: [{ deleteTab: { tabId: target.tabId } }],
+        },
+      });
+
+      const after = await this.readTabTree(client, options.documentId);
+      if (after.flat.some((tab) => tab.tabId === target.tabId)) {
+        throw new Error(`Docs API accepted the delete, but tab ${target.tabId} is still in the document`);
+      }
+
+      const data: TabDeleteResponse = {
+        documentId: options.documentId,
+        deleted: this.toTabRef(target),
+        descendants: descendants.map((tab) => this.toTabRef(tab)),
+      };
+      return { success: true, data };
+    } catch (error) {
+      return this.toFailure(error);
+    }
+  }
+
+  /**
+   * Insert plain text into one tab next to a unique anchor: right after it,
+   * right before it, or at the start of the paragraph that follows it (in the
+   * same container). The inserted text takes the paragraph formatting of where
+   * it lands (heading, bullet) but its character style is cleared.
+   */
+  async insertText(email: string, options: InsertTextOptions): Promise<DocsOperationResult> {
+    try {
+      if (!INSERT_POSITIONS.includes(options.position)) {
+        throw new DocsInputError('position must be "after", "before" or "next_paragraph_start".');
+      }
+      if (options.text.length === 0) {
+        throw new DocsInputError('text must not be empty.');
+      }
+
+      const client = await this.getWriteClient(email);
+      const { flat } = await this.readAllTabs(client, options.documentId);
+
+      // No tab_id = the first tab, like append.
+      const tab = resolveTab(flat, options.tabId ?? 'default', { allowDefault: true });
+      const body = tab.tab.documentTab?.body;
+      const paragraphs = flatParagraphs(body);
+      const matches = findAnchor(paragraphs, options.anchorText, options.matchCase);
+
+      if (matches.length === 0) {
+        throw new DocsInputError(
+          `Anchor text not found in tab "${tab.tabId}". It must be plain text inside one paragraph (smart chips, people and dates can't be part of it); read the tab with tab_id to copy it exactly.`
+        );
+      }
+      if (matches.length > 1) {
+        throw new DocsInputError(
+          `Anchor text found ${matches.length} times in this tab; use a longer anchor that appears once.`
+        );
+      }
+
+      const match = matches[0];
+      const anchorParagraph = paragraphs[match.paragraphIdx];
+      let index: number;
+      let target: FlatParagraph;
+      switch (options.position) {
+        case 'after':
+          index = anchorParagraph.startIndex + match.offset + options.anchorText.length;
+          target = anchorParagraph;
+          break;
+        case 'before':
+          index = anchorParagraph.startIndex + match.offset;
+          target = anchorParagraph;
+          break;
+        case 'next_paragraph_start':
+          target = nextParagraphInContainer(body, paragraphs, match.paragraphIdx);
+          index = target.startIndex;
+          break;
+      }
+
+      const targetText = paragraphSearchText(target.paragraph);
+      const wasEmpty = targetText === '' || targetText === '\n';
+      const bulleted = target.paragraph.bullet != null;
+      const namedStyleType = target.paragraph.paragraphStyle?.namedStyleType ?? 'NORMAL_TEXT';
+      if (options.expectEmptyParagraph && !wasEmpty) {
+        const visibleChars = targetText.endsWith('\n') ? targetText.length - 1 : targetText.length;
+        throw new DocsInputError(
+          `expect_empty_paragraph is set, but the paragraph the text would land in is not empty: it holds ${visibleChars} character(s), ${bulleted ? 'bulleted' : 'not bulleted'}, style ${namedStyleType}. ` +
+            'Anchor on the line immediately before the empty slot and use position "next_paragraph_start", or drop expect_empty_paragraph.'
+        );
+      }
+
+      await client.documents.batchUpdate({
+        documentId: options.documentId,
+        requestBody: {
+          requests: [
+            { insertText: { location: { index, tabId: tab.tabId }, text: options.text } },
+            {
+              // Plain text: keep the paragraph's formatting, drop neighbouring run styles.
+              updateTextStyle: {
+                range: { startIndex: index, endIndex: index + options.text.length, tabId: tab.tabId },
+                textStyle: {},
+                fields: ALL_TEXT_KEYS,
+              },
+            },
+          ],
+        },
+      });
+
+      const data: InsertTextResponse = {
+        documentId: options.documentId,
+        tab: this.toTabRef(tab),
+        position: options.position,
+        index,
+        insertedChars: options.text.length,
+        newParagraphs: options.text.split('\n').length - 1,
+        targetParagraph: { wasEmpty, namedStyleType, bulleted },
+      };
+      return { success: true, data };
+    } catch (error) {
+      return this.toFailure(error);
+    }
+  }
+}
+
+const INSERT_POSITIONS: readonly InsertTextPosition[] = ['after', 'before', 'next_paragraph_start'];
+
+function requireTabTitle(title: string): string {
+  const trimmed = title.trim();
+  if (trimmed.length === 0) {
+    throw new DocsInputError('title must not be empty.');
+  }
+  return trimmed;
+}
+
+function assertTabPosition(position: number | undefined, max: number): void {
+  if (position === undefined) return;
+  if (!Number.isInteger(position) || position < 0 || position > max) {
+    throw new DocsInputError(
+      `position must be a whole number from 0 to ${max} (0 = first; the numbers in list outputs start at 1).`
+    );
   }
 }

@@ -12,6 +12,8 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - `list_workspace_document_tabs` returns the document's real tab tree: every tab and nested sub-tab with its id, parent, position and sub-tab count (optional word counts, and `return_json` for a flat JSON list). The synthetic `default` tab is no longer listed.
 - `read_workspace_document` accepts `tab_id` (read one tab) or `all_tabs: true` (read every tab under `## Tab:` headings, sharing one `max_chars` budget and listing the tabs that did not fit). On these reads smart chips, people and dates appear as their text.
 - `append_to_workspace_document`, `replace_workspace_document` and `find_and_replace_workspace_document` accept `tab_id` to act on one tab only. `tab_id: "default"` means the first tab.
+- New Docs tab tools: `add_workspace_document_tab` (optionally as a sub-tab, at a position), `update_workspace_document_tab` (rename, reorder, nest under another tab or move to the top level; `position` is the 0-based final position) and `delete_workspace_document_tab` (deletes the tab and all its sub-tabs). Tab titles are checked for uniqueness before any change, and these tools refuse the `default` tab id.
+- `insert_workspace_document_text` inserts plain text in one tab right after or before a unique anchor text, or at the start of the paragraph that follows it (for example to fill the empty bullet under a heading), with an optional `expect_empty_paragraph` check.
 
 ### Changed
 

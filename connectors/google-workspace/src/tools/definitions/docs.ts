@@ -295,8 +295,10 @@ export const docsTools: ToolMetadata[] = [
 
     Returns the tab tree: one line per tab, indented by nesting level and numbered by position
     (1., 1.1., 1.1.1.), with its tab id and number of sub-tabs. Use a tab id as tab_id in
-    read_workspace_document, append_to_workspace_document, replace_workspace_document and
-    find_and_replace_workspace_document. ${TAB_LINK_NOTE}
+    read_workspace_document, append_to_workspace_document, replace_workspace_document,
+    find_and_replace_workspace_document and insert_workspace_document_text, and to rename, move
+    or delete a tab (update_workspace_document_tab, delete_workspace_document_tab). The list
+    numbers start at 1; the position arguments of the tab tools start at 0. ${TAB_LINK_NOTE}
 
     Usage examples:
     
@@ -478,6 +480,219 @@ export const docsTools: ToolMetadata[] = [
         }
       },
       required: ['document_id', 'requests']
+    }
+  },
+  {
+    name: 'add_workspace_document_tab',
+    category: 'Docs/Documents',
+    description: `Add a new, empty tab to a Google Docs document, at the top level or as a sub-tab.
+
+    Tab titles must be unique across the whole document, including sub-tabs; a title that is
+    already used is refused before anything changes. Without position the tab goes after its
+    future siblings. Returns the new tab's id and where it ended up. ${TAB_LINK_NOTE}
+
+    position is 0-based among the new tab's siblings: 0 = first; the numbers in list outputs
+    start at 1.
+
+    Usage examples:
+
+    1. Add a top-level tab at the end:
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "title": "Q4 planning" }
+
+    2. Add a sub-tab as the first child of another tab:
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "title": "Archive 2031-10-06", "parent_tab_id": "t.abc123", "position": 0 }`,
+    aliases: ['add_doc_tab', 'create_document_tab', 'new_document_tab'],
+    annotations: { readOnlyHint: false, destructiveHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email: {
+          type: 'string',
+          description: 'Email address of the Google account'
+        },
+        document_id: {
+          type: 'string',
+          description: 'Google Docs document ID'
+        },
+        title: {
+          type: 'string',
+          description: 'Title of the new tab (unique in the document, sub-tabs included)'
+        },
+        parent_tab_id: {
+          type: 'string',
+          description: 'Tab id to nest the new tab under (from list_workspace_document_tabs; "default" means the first tab). Omit for a top-level tab.'
+        },
+        position: {
+          type: 'number',
+          description: 'Where the tab goes among its siblings: 0 = first; the numbers in list outputs start at 1. Default: last.'
+        }
+      },
+      required: ['document_id', 'title']
+    }
+  },
+  {
+    name: 'update_workspace_document_tab',
+    category: 'Docs/Documents',
+    description: `Rename a tab and/or move it in a Google Docs document: reorder it among its siblings,
+    nest it under another tab, or move it to the top level. A moved tab takes its sub-tabs with it.
+
+    position is where the tab should end up (0 = first) among its siblings after the move; the
+    numbers in list outputs start at 1. When nesting under another tab without position, the tab
+    goes last. Titles must stay unique across the document. Needs a real tab id: "default" is
+    refused. The result reports the tab's actual parent and position after the change.
+    ${TAB_LINK_NOTE}
+
+    Usage examples:
+
+    1. Rename:
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123", "title": "Archive 2031-10-06" }
+
+    2. Reorder (make it the first of its siblings):
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123", "position": 0 }
+
+    3. Nest under another tab, as its first sub-tab:
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123", "parent_tab_id": "t.def456", "position": 0 }
+
+    4. Move a sub-tab to the top level, as the second tab:
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123", "move_to_top_level": true, "position": 1 }`,
+    aliases: ['rename_doc_tab', 'move_doc_tab', 'reorder_document_tab'],
+    annotations: { readOnlyHint: false, destructiveHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email: {
+          type: 'string',
+          description: 'Email address of the Google account'
+        },
+        document_id: {
+          type: 'string',
+          description: 'Google Docs document ID'
+        },
+        tab_id: {
+          type: 'string',
+          description: 'Tab id from list_workspace_document_tabs ("default" is not accepted)'
+        },
+        title: {
+          type: 'string',
+          description: 'New title (unique in the document, sub-tabs included)'
+        },
+        parent_tab_id: {
+          type: 'string',
+          description: 'Tab id to nest this tab under ("default" is not accepted). Not with move_to_top_level.'
+        },
+        move_to_top_level: {
+          type: 'boolean',
+          description: 'Move the tab out of its parent to the top level (default: false). Not with parent_tab_id.'
+        },
+        position: {
+          type: 'number',
+          description: 'Final position among the siblings after the move: 0 = first; the numbers in list outputs start at 1.'
+        }
+      },
+      required: ['document_id', 'tab_id']
+    }
+  },
+  {
+    name: 'delete_workspace_document_tab',
+    category: 'Docs/Documents',
+    description: `WARNING: Deletes the tab AND ALL ITS SUB-TABS, with their content.
+
+    This cannot be undone through the API (the document's version history in Google Docs can
+    restore it). Read the tab, or copy what you need, first. Needs a real tab id: "default" is
+    refused. The result lists every sub-tab that was deleted with it. ${TAB_LINK_NOTE}
+
+    Usage example:
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123" }`,
+    aliases: ['delete_doc_tab', 'remove_document_tab'],
+    annotations: { readOnlyHint: false, destructiveHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email: {
+          type: 'string',
+          description: 'Email address of the Google account'
+        },
+        document_id: {
+          type: 'string',
+          description: 'Google Docs document ID'
+        },
+        tab_id: {
+          type: 'string',
+          description: 'Tab id from list_workspace_document_tabs ("default" is not accepted)'
+        }
+      },
+      required: ['document_id', 'tab_id']
+    }
+  },
+  {
+    name: 'insert_workspace_document_text',
+    category: 'Docs/Documents',
+    description: `Insert plain text next to a unique piece of text in one tab, without rewriting the tab.
+
+    anchor_text must appear exactly once in the tab and sit inside one paragraph (smart chips,
+    people and dates can't be part of it); copy it exactly from a tab_id read. position:
+    - "after" (default): right after the anchor text.
+    - "before": right before the anchor text.
+    - "next_paragraph_start": at the start of the paragraph that follows the anchor's paragraph.
+      Use this to fill the (often empty) list item under a heading. Anchor on the line
+      immediately before the slot you want to fill (for an empty bullet under a heading, that is
+      the heading line), not on text further up.
+
+    Newlines in text start new paragraphs that take the formatting (heading, bullet, numbering)
+    of the paragraph the text lands in. The inserted text is plain: it does not pick up bold,
+    links or other character styles from its neighbours, and people or date chips you include
+    arrive as plain text. End text with a newline when inserting whole lines ahead of a
+    non-empty paragraph. Pass expect_empty_paragraph: true to refuse unless the paragraph the
+    text lands in is empty (a safety check when filling a slot). Without tab_id this acts on the
+    first tab. To change existing text use find_and_replace_workspace_document. ${TAB_LINK_NOTE}
+
+    Usage examples:
+
+    1. Fill the empty bullet under an "Out of office" heading with two lines (two bullets):
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123", "anchor_text": "Out of office", "position": "next_paragraph_start", "text": "Jane: Oct 20-24\\nSam: Oct 27", "expect_empty_paragraph": true }
+
+    2. Insert a sentence after a phrase:
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123", "anchor_text": "Budget approved.", "text": " Next review in November." }`,
+    aliases: ['insert_doc_text', 'insert_text_at_anchor'],
+    annotations: { readOnlyHint: false, destructiveHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email: {
+          type: 'string',
+          description: 'Email address of the Google account'
+        },
+        document_id: {
+          type: 'string',
+          description: 'Google Docs document ID'
+        },
+        tab_id: {
+          type: 'string',
+          description: 'Tab id from list_workspace_document_tabs. "default" means the first tab.'
+        },
+        anchor_text: {
+          type: 'string',
+          description: 'Text that appears exactly once in the tab, inside one paragraph (one line)'
+        },
+        position: {
+          type: 'string',
+          enum: ['after', 'before', 'next_paragraph_start'],
+          description: 'Where to insert relative to the anchor (default: "after")'
+        },
+        text: {
+          type: 'string',
+          description: 'Plain text to insert; \\n starts a new paragraph'
+        },
+        match_case: {
+          type: 'boolean',
+          description: 'Case-sensitive anchor matching (default: true)'
+        },
+        expect_empty_paragraph: {
+          type: 'boolean',
+          description: 'Refuse unless the paragraph the text lands in is empty (default: false)'
+        }
+      },
+      required: ['document_id', 'anchor_text', 'text']
     }
   }
 ];

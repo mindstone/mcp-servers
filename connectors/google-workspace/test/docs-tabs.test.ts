@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import type { docs_v1 } from 'googleapis';
 import {
+  ALL_TEXT_KEYS,
   DocsInputError,
   TAB_TREE_FIELDS,
   TAB_TRUNCATION_MARKER,
@@ -17,9 +18,21 @@ import {
   flattenTabs,
   requireTabs,
   resolveTab,
+  assertUniqueTitle,
+  descendantsOf,
+  siblingsOf,
+  flatParagraphs,
+  paragraphSearchText,
+  findAnchor,
+  nextParagraphInContainer,
 } from '../src/modules/docs/tabs.js';
+import { computeMoveApiIndex } from '../src/utils/tabPosition.js';
 import { normalizeArgs } from '../src/tools/param-normalizer.js';
 import {
+  isAddDocumentTabArgs,
+  isDeleteDocumentTabArgs,
+  isInsertDocumentTextArgs,
+  isUpdateDocumentTabArgs,
   isAppendDocumentArgs,
   isFindReplaceArgs,
   isListTabsArgs,
@@ -296,5 +309,201 @@ describe('server argument path for tab arguments (normalizeArgs + type guards)',
     expect(isReplaceDocumentArgs(normalizeArgs({ ...base, content: 'x', tabId: {} }))).toBe(false);
     expect(isFindReplaceArgs(normalizeArgs({ ...base, find_text: 'a', replace_text: 'b', tab_id: true }))).toBe(false);
     expect(isListTabsArgs(normalizeArgs({ ...base, return_json: 'true' }))).toBe(false);
+  });
+});
+
+describe('computeMoveApiIndex', () => {
+  // Siblings [A, B, C]; the API counts the target index before the moved tab is removed.
+  it.each([
+    ['A → 1 (forward)', { currentIndex: 0, targetPosition: 1 }, 2],
+    ['A → 2 (forward to the end)', { currentIndex: 0, targetPosition: 2 }, 3],
+    ['C → 0 (backward)', { currentIndex: 2, targetPosition: 0 }, 0],
+    ['B → 0 (backward)', { currentIndex: 1, targetPosition: 0 }, 0],
+    ['B → 2 (forward)', { currentIndex: 1, targetPosition: 2 }, 3],
+    ['B → 1 (same place)', { currentIndex: 1, targetPosition: 1 }, 1],
+  ])('same parent, %s', (_label, move, expected) => {
+    expect(computeMoveApiIndex({ sameParent: true, ...move })).toBe(expected);
+  });
+
+  it('leaves the position unchanged for a move to a different parent (re-parent or to the top level)', () => {
+    expect(computeMoveApiIndex({ sameParent: false, currentIndex: 0, targetPosition: 2 })).toBe(2);
+    expect(computeMoveApiIndex({ sameParent: false, currentIndex: 3, targetPosition: 0 })).toBe(0);
+    expect(computeMoveApiIndex({ sameParent: false, currentIndex: 0, targetPosition: 0 })).toBe(0);
+  });
+});
+
+describe('tab tree helpers for tab management', () => {
+  const flat = flattenTabs(loadNestedDoc().tabs);
+
+  it('assertUniqueTitle refuses a title used anywhere in the document, sub-tabs included, after trimming', () => {
+    expect(() => assertUniqueTitle(flat, 'Notes')).toThrowError(
+      'A tab titled "Notes" already exists. Tab titles must be unique across the whole document, including sub-tabs.'
+    );
+    expect(() => assertUniqueTitle(flat, '  Template ')).toThrowError(DocsInputError);
+    expect(() => assertUniqueTitle(flat, 'Archive 2031-10-13')).not.toThrow();
+    // Exact match: a case variant is left to the API.
+    expect(() => assertUniqueTitle(flat, 'template')).not.toThrow();
+    // The tab being renamed may keep its own title.
+    expect(() => assertUniqueTitle(flat, 'Template', 't.b')).not.toThrow();
+  });
+
+  it('descendantsOf returns every tab below a tab in tree order', () => {
+    expect(descendantsOf(flat, 't.0').map((tab) => tab.tabId)).toEqual(['t.a1', 't.a1x', 't.a2']);
+    expect(descendantsOf(flat, 't.a1').map((tab) => tab.tabId)).toEqual(['t.a1x']);
+    expect(descendantsOf(flat, 't.b')).toEqual([]);
+    expect(descendantsOf(flat, 't.missing')).toEqual([]);
+  });
+
+  it('siblingsOf returns the direct children of a parent (null = top level)', () => {
+    expect(siblingsOf(flat, null).map((tab) => tab.tabId)).toEqual(['t.0', 't.b', 't.c']);
+    expect(siblingsOf(flat, 't.0').map((tab) => tab.tabId)).toEqual(['t.a1', 't.a2']);
+    expect(siblingsOf(flat, 't.a2')).toEqual([]);
+  });
+
+  it('exports the full text-style field list used to clear run styles', () => {
+    expect(ALL_TEXT_KEYS).toBe(
+      'bold,italic,underline,strikethrough,smallCaps,fontSize,foregroundColor,backgroundColor,weightedFontFamily,baselineOffset,link'
+    );
+  });
+});
+
+function textParagraph(startIndex: number, content: string, extra: Partial<docs_v1.Schema$Paragraph> = {}): docs_v1.Schema$StructuralElement {
+  return {
+    startIndex,
+    endIndex: startIndex + content.length,
+    paragraph: { elements: [{ startIndex, endIndex: startIndex + content.length, textRun: { content } }], ...extra },
+  };
+}
+
+/** Fictional body: heading, empty bullet, a chip + emoji paragraph, a 1×2 table, a final paragraph. */
+function anchorBody(): docs_v1.Schema$Body {
+  return {
+    content: [
+      { startIndex: 0, endIndex: 1, sectionBreak: {} },
+      textParagraph(1, 'Out of office\n', { paragraphStyle: { namedStyleType: 'HEADING_2' } }), // 1..15
+      textParagraph(15, '\n', { bullet: { listId: 'kix.list1' } }), // 15..16
+      {
+        startIndex: 16,
+        endIndex: 33,
+        paragraph: {
+          elements: [
+            { startIndex: 16, endIndex: 20, textRun: { content: 'See ' } },
+            { startIndex: 20, endIndex: 21, richLink: { richLinkProperties: { title: 'Plan', uri: 'https://example.com/plan' } } },
+            // "🎉" is 2 UTF-16 units, so 2 document indices.
+            { startIndex: 21, endIndex: 33, textRun: { content: ' 🎉 Approved\n' } },
+          ],
+        },
+      },
+      {
+        startIndex: 33,
+        endIndex: 55,
+        table: {
+          rows: 1,
+          columns: 2,
+          tableRows: [{
+            startIndex: 34,
+            endIndex: 54,
+            tableCells: [
+              { startIndex: 34, endIndex: 47, content: [textParagraph(35, 'Search\n'), textParagraph(42, 'Ads\n')] }, // 35..42, 42..46
+              { startIndex: 47, endIndex: 54, content: [textParagraph(48, 'Spend\n')] }, // 48..54
+            ],
+          }],
+        },
+      },
+      textParagraph(55, 'End of office notes\n'),
+    ],
+  };
+}
+
+describe('anchored-insert helpers', () => {
+  const body = anchorBody();
+  const paragraphs = flatParagraphs(body);
+
+  it('flatParagraphs lists body and table-cell paragraphs in document order with their container', () => {
+    expect(paragraphs.map((entry) => [entry.startIndex, entry.container])).toEqual([
+      [1, 'body'],
+      [15, 'body'],
+      [16, 'body'],
+      [35, { table: 0, row: 0, col: 0 }],
+      [42, { table: 0, row: 0, col: 0 }],
+      [48, { table: 0, row: 0, col: 1 }],
+      [55, 'body'],
+    ]);
+  });
+
+  it('paragraphSearchText keeps document-index offsets across a chip and a non-BMP character', () => {
+    const text = paragraphSearchText(paragraphs[2].paragraph);
+    expect(text).toBe('See ￼ 🎉 Approved\n');
+    const [match] = findAnchor(paragraphs, 'Approved', true);
+    // "Approved" starts at document index 25: 16 + "See " (4) + chip (1) + " 🎉 " (4 units).
+    expect(paragraphs[match.paragraphIdx].startIndex + match.offset).toBe(25);
+  });
+
+  it('findAnchor finds 0, 1 or several matches, each inside one paragraph', () => {
+    expect(findAnchor(paragraphs, 'Holiday', true)).toEqual([]);
+    expect(findAnchor(paragraphs, 'Out of office', true)).toEqual([{ paragraphIdx: 0, offset: 0 }]);
+    expect(findAnchor(paragraphs, 'office', true)).toEqual([
+      { paragraphIdx: 0, offset: 7 },
+      { paragraphIdx: 6, offset: 7 },
+    ]);
+    // Never through a smart chip (its title is not searchable text).
+    expect(findAnchor(paragraphs, 'See Plan', true)).toEqual([]);
+  });
+
+  it('findAnchor matches case-insensitively one character at a time when matchCase is off', () => {
+    expect(findAnchor(paragraphs, 'OUT OF OFFICE', false)).toEqual([{ paragraphIdx: 0, offset: 0 }]);
+    expect(findAnchor(paragraphs, 'OUT OF OFFICE', true)).toEqual([]);
+    // "İ" lower-cases to two UTF-16 units; per-character folding keeps the offset exact.
+    const turkish = flatParagraphs({ content: [textParagraph(1, 'xİstanbul plan\n')] });
+    expect(findAnchor(turkish, 'plan', false)).toEqual([{ paragraphIdx: 0, offset: 10 }]);
+    expect(findAnchor(turkish, 'İSTANBUL', false)).toEqual([{ paragraphIdx: 0, offset: 1 }]);
+  });
+
+  it('findAnchor finds an anchor inside a table cell', () => {
+    const [match] = findAnchor(paragraphs, 'Spend', true);
+    expect(paragraphs[match.paragraphIdx].container).toEqual({ table: 0, row: 0, col: 1 });
+  });
+
+  it('findAnchor refuses an empty or multi-line anchor', () => {
+    expect(() => findAnchor(paragraphs, 'Out of\noffice', true)).toThrowError('anchor_text must be on one line.');
+    expect(() => findAnchor(paragraphs, '', true)).toThrowError(DocsInputError);
+  });
+
+  it('nextParagraphInContainer stays in the same container', () => {
+    expect(nextParagraphInContainer(body, paragraphs, 0).startIndex).toBe(15);
+    expect(nextParagraphInContainer(body, paragraphs, 3).startIndex).toBe(42);
+    const followedByTable = 'The anchor paragraph is followed by a table (or nothing); use position "after" instead.';
+    // Body paragraph followed by a table, last paragraph of a cell, last paragraph of the body.
+    expect(() => nextParagraphInContainer(body, paragraphs, 2)).toThrowError(followedByTable);
+    expect(() => nextParagraphInContainer(body, paragraphs, 4)).toThrowError(followedByTable);
+    expect(() => nextParagraphInContainer(body, paragraphs, 5)).toThrowError(followedByTable);
+    expect(() => nextParagraphInContainer(body, paragraphs, 6)).toThrowError(followedByTable);
+  });
+});
+
+describe('server argument path for the tab-management and insert tools', () => {
+  const base = { document_id: 'nested-doc' };
+
+  it('maps camelCase aliases to canonical keys', () => {
+    expect(normalizeArgs({ ...base, parentTabId: 't.0', moveToTopLevel: true, anchorText: 'x', expectEmptyParagraph: true }))
+      .toMatchObject({ parent_tab_id: 't.0', move_to_top_level: true, anchor_text: 'x', expect_empty_paragraph: true });
+  });
+
+  it('accepts well-typed arguments in canonical and camelCase form', () => {
+    expect(isAddDocumentTabArgs(normalizeArgs({ ...base, title: 'Q4', parentTabId: 't.0', position: 0 }))).toBe(true);
+    expect(isUpdateDocumentTabArgs(normalizeArgs({ ...base, tabId: 't.b', title: 'New', moveToTopLevel: true, position: 1 }))).toBe(true);
+    expect(isDeleteDocumentTabArgs(normalizeArgs({ ...base, tab_id: 't.b' }))).toBe(true);
+    expect(isInsertDocumentTextArgs(normalizeArgs({ ...base, anchorText: 'Out of office', text: 'x', position: 'next_paragraph_start', expectEmptyParagraph: true }))).toBe(true);
+  });
+
+  it('rejects missing or wrong-typed arguments', () => {
+    expect(isAddDocumentTabArgs(normalizeArgs({ ...base }))).toBe(false);
+    expect(isAddDocumentTabArgs(normalizeArgs({ ...base, title: 'Q4', position: '0' }))).toBe(false);
+    expect(isUpdateDocumentTabArgs(normalizeArgs({ ...base, title: 'x' }))).toBe(false);
+    expect(isUpdateDocumentTabArgs(normalizeArgs({ ...base, tab_id: 't.b', move_to_top_level: 'yes' }))).toBe(false);
+    expect(isDeleteDocumentTabArgs(normalizeArgs({ ...base }))).toBe(false);
+    expect(isInsertDocumentTextArgs(normalizeArgs({ ...base, text: 'x' }))).toBe(false);
+    expect(isInsertDocumentTextArgs(normalizeArgs({ ...base, anchor_text: 'a', text: 'x', position: 2 }))).toBe(false);
+    expect(isInsertDocumentTextArgs(normalizeArgs({ ...base, anchor_text: 'a', text: 'x', expect_empty_paragraph: 1 }))).toBe(false);
   });
 });

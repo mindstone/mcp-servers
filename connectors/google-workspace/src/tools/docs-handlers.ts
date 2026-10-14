@@ -13,6 +13,10 @@ import {
   DocumentResponse,
   DocsBatchUpdateResponse,
   TabListResponse,
+  TabWriteResponse,
+  TabDeleteResponse,
+  InsertTextPosition,
+  InsertTextResponse,
 } from '../modules/docs/types.js';
 import { McpToolResponse } from './types.js';
 import {
@@ -103,6 +107,54 @@ interface BatchUpdateDocumentArgs {
   };
   return_json?: boolean;
   returnJson?: boolean;
+}
+
+interface AddDocumentTabArgs {
+  email?: string;
+  document_id?: string;
+  documentId?: string;
+  title: string;
+  parent_tab_id?: string;
+  parentTabId?: string;
+  position?: number;
+}
+
+interface UpdateDocumentTabArgs {
+  email?: string;
+  document_id?: string;
+  documentId?: string;
+  tab_id?: string;
+  tabId?: string;
+  title?: string;
+  parent_tab_id?: string;
+  parentTabId?: string;
+  move_to_top_level?: boolean;
+  moveToTopLevel?: boolean;
+  position?: number;
+}
+
+interface DeleteDocumentTabArgs {
+  email?: string;
+  document_id?: string;
+  documentId?: string;
+  tab_id?: string;
+  tabId?: string;
+}
+
+interface InsertDocumentTextArgs {
+  email?: string;
+  document_id?: string;
+  documentId?: string;
+  tab_id?: string;
+  tabId?: string;
+  anchor_text?: string;
+  anchorText?: string;
+  position?: string;
+  text: string;
+  match_case?: boolean;
+  matchCase?: boolean;
+  expect_empty_paragraph?: boolean;
+  expectEmptyParagraph?: boolean;
 }
 
 /**
@@ -490,5 +542,217 @@ export async function handleBatchUpdateDocument(args: BatchUpdateDocumentArgs): 
     }
     
     return lines.join('\n');
+  });
+}
+
+/**
+ * `under "<parent path>"` / `at the top level` for a tab's placement.
+ */
+function placementPhrase(parent: TabWriteResponse['parent']): string {
+  return parent ? `under "${parent.path}"` : 'at the top level';
+}
+
+/**
+ * A sentence naming any difference between where the caller asked the tab to
+ * go and where the document reports it after the write (no silent mismatch).
+ */
+function placementMismatch(data: TabWriteResponse): string | undefined {
+  const notes: string[] = [];
+  const actualParent = data.parent?.tabId ?? null;
+  if (actualParent !== data.requestedParentTabId) {
+    const wanted = data.requestedParentTabId !== null
+      ? `under tab ${data.requestedParentTabId}`
+      : 'at the top level';
+    notes.push(`it was meant to go ${wanted}, but the document shows it ${placementPhrase(data.parent)}`);
+  }
+  if (data.tab.index !== data.requestedPosition) {
+    notes.push(`the requested position was ${data.requestedPosition}, but the document reports position ${data.tab.index}`);
+  }
+  return notes.length > 0 ? `Note: ${notes.join('; ')}.` : undefined;
+}
+
+/**
+ * Result of add_workspace_document_tab (titles enveloped).
+ */
+export function formatTabAddedAsText(data: TabWriteResponse): string {
+  const where = data.parent
+    ? `under "${data.parent.path}" at position ${data.tab.index}`
+    : `at the top level, position ${data.tab.index}`;
+  const lines = [`Tab added: "${data.tab.title}" [tabId: ${data.tab.tabId}] ${where} (0 = first).`];
+  const mismatch = placementMismatch(data);
+  if (mismatch) lines.push(mismatch);
+  return wrapUntrustedContent(lines.join('\n'), `google-workspace:docs:tabs/${data.documentId}`);
+}
+
+/**
+ * Result of update_workspace_document_tab (titles enveloped).
+ */
+export function formatTabUpdatedAsText(data: TabWriteResponse): string {
+  if (!data.changed) {
+    return wrapUntrustedContent(
+      `No change: tab "${data.tab.path}" [tabId: ${data.tab.tabId}] already has that title, parent and position.`,
+      `google-workspace:docs:tabs/${data.documentId}`
+    );
+  }
+  const lines = [
+    `Tab updated: "${data.tab.title}" [tabId: ${data.tab.tabId}] — now ${placementPhrase(data.parent)}, position ${data.tab.index} (0 = first).`,
+  ];
+  const mismatch = placementMismatch(data);
+  if (mismatch) lines.push(mismatch);
+  return wrapUntrustedContent(lines.join('\n'), `google-workspace:docs:tabs/${data.documentId}`);
+}
+
+/**
+ * Result of delete_workspace_document_tab: the tab and every sub-tab deleted with it.
+ */
+export function formatTabDeletedAsText(data: TabDeleteResponse): string {
+  const head = `Deleted tab "${data.deleted.path}" [tabId: ${data.deleted.tabId}]`;
+  const count = data.descendants.length;
+  const text = count === 0
+    ? `${head}. It had no sub-tabs.`
+    : [
+        `${head} and ${count} sub-tab${count !== 1 ? 's' : ''}:`,
+        ...data.descendants.map((tab) => `- "${tab.path}" [tabId: ${tab.tabId}]`),
+      ].join('\n');
+  return wrapUntrustedContent(text, `google-workspace:docs:tabs/${data.documentId}`);
+}
+
+const INSERT_POSITION_PHRASES: Record<InsertTextPosition, string> = {
+  after: 'after the anchor',
+  before: 'before the anchor',
+  next_paragraph_start: 'at the start of the paragraph after the anchor',
+};
+
+/**
+ * Result of insert_workspace_document_text (tab title enveloped).
+ */
+export function formatInsertTextAsText(data: InsertTextResponse): string {
+  const target = data.targetParagraph;
+  const text =
+    `Inserted ${data.insertedChars} characters (${data.newParagraphs} new paragraph${data.newParagraphs !== 1 ? 's' : ''}) ` +
+    `${INSERT_POSITION_PHRASES[data.position]} in tab "${data.tab.path}" [tabId: ${data.tab.tabId}]. ` +
+    `The paragraph there was ${target.wasEmpty ? 'empty' : 'not empty'}, ${target.bulleted ? 'bulleted' : 'not bulleted'}, style ${target.namedStyleType}.`;
+  return wrapUntrustedContent(text, `google-workspace:docs:document/${data.documentId}`);
+}
+
+/**
+ * `position` as a number, or undefined (the type guard has already checked it).
+ */
+function readPosition(rawArgs: Record<string, unknown>): number | undefined {
+  return typeof rawArgs.position === 'number' ? rawArgs.position : undefined;
+}
+
+/**
+ * Add a tab to a Google Docs document
+ */
+export async function handleAddDocumentTab(args: AddDocumentTabArgs): Promise<McpToolResponse | string | object> {
+  const accountManager = getAccountManager();
+  const rawArgs = args as unknown as Record<string, unknown>;
+  const documentId = readAliasedString(rawArgs, 'document_id', 'documentId');
+  const parentTabId = readAliasedString(rawArgs, 'parent_tab_id', 'parentTabId');
+  const position = readPosition(rawArgs);
+
+  const email = await resolveEmail(args);
+
+  return await accountManager.withTokenRenewal(email, async () => {
+    const result = await getDocsService().addTab(email, {
+      documentId: documentId as string,
+      title: args.title,
+      ...(parentTabId !== undefined ? { parentTabId } : {}),
+      ...(position !== undefined ? { position } : {}),
+    });
+
+    if (!result.success || !result.data) {
+      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to add document tab');
+    }
+    return formatTabAddedAsText(result.data as TabWriteResponse);
+  });
+}
+
+/**
+ * Rename and/or move a tab in a Google Docs document
+ */
+export async function handleUpdateDocumentTab(args: UpdateDocumentTabArgs): Promise<McpToolResponse | string | object> {
+  const accountManager = getAccountManager();
+  const rawArgs = args as unknown as Record<string, unknown>;
+  const documentId = readAliasedString(rawArgs, 'document_id', 'documentId');
+  const tabId = readAliasedString(rawArgs, 'tab_id', 'tabId');
+  const parentTabId = readAliasedString(rawArgs, 'parent_tab_id', 'parentTabId');
+  const moveToTopLevel = readAliasedBoolean(rawArgs, 'move_to_top_level', 'moveToTopLevel');
+  const position = readPosition(rawArgs);
+
+  const email = await resolveEmail(args);
+
+  return await accountManager.withTokenRenewal(email, async () => {
+    const result = await getDocsService().updateTab(email, {
+      documentId: documentId as string,
+      tabId: tabId as string,
+      ...(args.title !== undefined ? { title: args.title } : {}),
+      ...(parentTabId !== undefined ? { parentTabId } : {}),
+      ...(moveToTopLevel === true ? { moveToTopLevel } : {}),
+      ...(position !== undefined ? { position } : {}),
+    });
+
+    if (!result.success || !result.data) {
+      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to update document tab');
+    }
+    return formatTabUpdatedAsText(result.data as TabWriteResponse);
+  });
+}
+
+/**
+ * Delete a tab (and all its sub-tabs) from a Google Docs document
+ */
+export async function handleDeleteDocumentTab(args: DeleteDocumentTabArgs): Promise<McpToolResponse | string | object> {
+  const accountManager = getAccountManager();
+  const rawArgs = args as unknown as Record<string, unknown>;
+  const documentId = readAliasedString(rawArgs, 'document_id', 'documentId');
+  const tabId = readAliasedString(rawArgs, 'tab_id', 'tabId');
+
+  const email = await resolveEmail(args);
+
+  return await accountManager.withTokenRenewal(email, async () => {
+    const result = await getDocsService().deleteTab(email, {
+      documentId: documentId as string,
+      tabId: tabId as string,
+    });
+
+    if (!result.success || !result.data) {
+      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to delete document tab');
+    }
+    return formatTabDeletedAsText(result.data as TabDeleteResponse);
+  });
+}
+
+/**
+ * Insert plain text into one tab next to a unique anchor
+ */
+export async function handleInsertDocumentText(args: InsertDocumentTextArgs): Promise<McpToolResponse | string | object> {
+  const accountManager = getAccountManager();
+  const rawArgs = args as unknown as Record<string, unknown>;
+  const documentId = readAliasedString(rawArgs, 'document_id', 'documentId');
+  const tabId = readAliasedString(rawArgs, 'tab_id', 'tabId');
+  const anchorText = readAliasedString(rawArgs, 'anchor_text', 'anchorText');
+  const matchCase = readAliasedBoolean(rawArgs, 'match_case', 'matchCase');
+  const expectEmptyParagraph = readAliasedBoolean(rawArgs, 'expect_empty_paragraph', 'expectEmptyParagraph');
+  const position = (typeof rawArgs.position === 'string' ? rawArgs.position : 'after') as InsertTextPosition;
+
+  const email = await resolveEmail(args);
+
+  return await accountManager.withTokenRenewal(email, async () => {
+    const result = await getDocsService().insertText(email, {
+      documentId: documentId as string,
+      ...(tabId !== undefined ? { tabId } : {}),
+      anchorText: anchorText as string,
+      position,
+      text: args.text,
+      matchCase: matchCase ?? true,
+      ...(expectEmptyParagraph === true ? { expectEmptyParagraph } : {}),
+    });
+
+    if (!result.success || !result.data) {
+      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to insert text');
+    }
+    return formatInsertTextAsText(result.data as InsertTextResponse);
   });
 }

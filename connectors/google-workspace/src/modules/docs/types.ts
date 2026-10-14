@@ -81,9 +81,88 @@ export interface DocumentResponse {
   requestedTab?: { tabId: string; title: string; path: string; childCount?: number }; // tab_id read/edit target (childCount set on reads)
 }
 
+export interface AddTabOptions {
+  documentId: string;
+  title: string;
+  parentTabId?: string; // "default" = the first top-level tab
+  position?: number; // 0-based among the new siblings; default: end
+}
+
+export interface UpdateTabOptions {
+  documentId: string;
+  tabId: string; // "default" refused
+  title?: string;
+  parentTabId?: string; // "default" refused
+  moveToTopLevel?: boolean;
+  position?: number; // 0-based final position among the destination siblings
+}
+
+export interface DeleteTabOptions {
+  documentId: string;
+  tabId: string; // "default" refused
+}
+
+export type InsertTextPosition = 'after' | 'before' | 'next_paragraph_start';
+
+export interface InsertTextOptions {
+  documentId: string;
+  tabId?: string; // default: the first tab
+  anchorText: string;
+  position: InsertTextPosition;
+  text: string;
+  matchCase: boolean;
+  expectEmptyParagraph?: boolean;
+}
+
+export interface TabRef {
+  tabId: string;
+  title: string;
+  path: string;
+}
+
+/** Result of add / update: the tab as the document reports it after the write. */
+export interface TabWriteResponse {
+  documentId: string;
+  tab: TabInfo;
+  /** The tab's parent after the write; null = top level. */
+  parent: TabRef | null;
+  /** Update only: false when nothing would change, so no write was sent. */
+  changed: boolean;
+  /** The position the caller asked for, or the default that was applied. */
+  requestedPosition: number;
+  /** The parent the caller asked for (null = top level). */
+  requestedParentTabId: string | null;
+}
+
+export interface TabDeleteResponse {
+  documentId: string;
+  deleted: TabRef;
+  /** Sub-tabs deleted with it, in tree order. */
+  descendants: TabRef[];
+}
+
+export interface InsertTextResponse {
+  documentId: string;
+  tab: TabRef;
+  position: InsertTextPosition;
+  index: number;
+  insertedChars: number;
+  newParagraphs: number;
+  /** The paragraph the text landed in, as read before the write. */
+  targetParagraph: { wasEmpty: boolean; namedStyleType: string; bulleted: boolean };
+}
+
 export interface DocsOperationResult {
   success: boolean;
-  data?: DocumentResponse | DocsDocument | TabListResponse | TabJsonResponse | DocsBatchUpdateResponse;
+  data?:
+    | DocumentResponse
+    | DocsDocument
+    | TabListResponse
+    | TabJsonResponse
+    | DocsBatchUpdateResponse
+    | TabWriteResponse
+    | TabDeleteResponse
+    | InsertTextResponse;
   error?: string;
   occurrencesChanged?: number;
 }

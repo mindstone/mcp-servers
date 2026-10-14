@@ -773,6 +773,128 @@ export function assertListTabsArgs(args: unknown): asserts args is ListTabsArgs 
   }
 }
 
+// Docs Tab Management + Anchored Insert Type Guards
+
+interface AddDocumentTabArgs {
+  email?: string;
+  documentId: string;
+  title: string;
+  parentTabId?: string;
+  position?: number;
+}
+
+interface UpdateDocumentTabArgs {
+  email?: string;
+  documentId: string;
+  tabId: string;
+  title?: string;
+  parentTabId?: string;
+  moveToTopLevel?: boolean;
+  position?: number;
+}
+
+interface DeleteDocumentTabArgs {
+  email?: string;
+  documentId: string;
+  tabId: string;
+}
+
+interface InsertDocumentTextArgs {
+  email?: string;
+  documentId: string;
+  tabId?: string;
+  anchorText: string;
+  position?: string;
+  text: string;
+  matchCase?: boolean;
+  expectEmptyParagraph?: boolean;
+}
+
+function isOptional(value: unknown, type: 'string' | 'number' | 'boolean'): boolean {
+  return value === undefined || typeof value === type;
+}
+
+export function isAddDocumentTabArgs(args: unknown): args is AddDocumentTabArgs {
+  if (typeof args !== 'object' || args === null) return false;
+  const rawParams = args as Record<string, unknown>;
+  const documentId = readAliasedArg<string>(rawParams, 'document_id', 'documentId');
+  const parentTabId = readAliasedArg<string>(rawParams, 'parent_tab_id', 'parentTabId');
+  return isOptional(rawParams.email, 'string') &&
+    typeof documentId === 'string' &&
+    typeof rawParams.title === 'string' &&
+    isOptional(parentTabId, 'string') &&
+    isOptional(rawParams.position, 'number');
+}
+
+export function assertAddDocumentTabArgs(args: unknown): asserts args is AddDocumentTabArgs {
+  if (!isAddDocumentTabArgs(args)) {
+    throw new Error('Invalid add document tab parameters. Required: document_id, title. Optional: parent_tab_id (string), position (number)');
+  }
+}
+
+export function isUpdateDocumentTabArgs(args: unknown): args is UpdateDocumentTabArgs {
+  if (typeof args !== 'object' || args === null) return false;
+  const rawParams = args as Record<string, unknown>;
+  const documentId = readAliasedArg<string>(rawParams, 'document_id', 'documentId');
+  const tabId = readAliasedArg<string>(rawParams, 'tab_id', 'tabId');
+  const parentTabId = readAliasedArg<string>(rawParams, 'parent_tab_id', 'parentTabId');
+  const moveToTopLevel = readAliasedArg<boolean>(rawParams, 'move_to_top_level', 'moveToTopLevel');
+  return isOptional(rawParams.email, 'string') &&
+    typeof documentId === 'string' &&
+    typeof tabId === 'string' &&
+    isOptional(rawParams.title, 'string') &&
+    isOptional(parentTabId, 'string') &&
+    isOptional(moveToTopLevel, 'boolean') &&
+    isOptional(rawParams.position, 'number');
+}
+
+export function assertUpdateDocumentTabArgs(args: unknown): asserts args is UpdateDocumentTabArgs {
+  if (!isUpdateDocumentTabArgs(args)) {
+    throw new Error('Invalid update document tab parameters. Required: document_id, tab_id. Optional: title (string), parent_tab_id (string), move_to_top_level (boolean), position (number)');
+  }
+}
+
+export function isDeleteDocumentTabArgs(args: unknown): args is DeleteDocumentTabArgs {
+  if (typeof args !== 'object' || args === null) return false;
+  const rawParams = args as Record<string, unknown>;
+  const documentId = readAliasedArg<string>(rawParams, 'document_id', 'documentId');
+  const tabId = readAliasedArg<string>(rawParams, 'tab_id', 'tabId');
+  return isOptional(rawParams.email, 'string') &&
+    typeof documentId === 'string' &&
+    typeof tabId === 'string';
+}
+
+export function assertDeleteDocumentTabArgs(args: unknown): asserts args is DeleteDocumentTabArgs {
+  if (!isDeleteDocumentTabArgs(args)) {
+    throw new Error('Invalid delete document tab parameters. Required: document_id, tab_id');
+  }
+}
+
+export function isInsertDocumentTextArgs(args: unknown): args is InsertDocumentTextArgs {
+  if (typeof args !== 'object' || args === null) return false;
+  const rawParams = args as Record<string, unknown>;
+  const documentId = readAliasedArg<string>(rawParams, 'document_id', 'documentId');
+  const tabId = readAliasedArg<string>(rawParams, 'tab_id', 'tabId');
+  const anchorText = readAliasedArg<string>(rawParams, 'anchor_text', 'anchorText');
+  const matchCase = readAliasedArg<boolean>(rawParams, 'match_case', 'matchCase');
+  const expectEmptyParagraph = readAliasedArg<boolean>(rawParams, 'expect_empty_paragraph', 'expectEmptyParagraph');
+  return isOptional(rawParams.email, 'string') &&
+    typeof documentId === 'string' &&
+    isOptional(tabId, 'string') &&
+    typeof anchorText === 'string' &&
+    // Allowed values are checked by the service, which names them in its error.
+    isOptional(rawParams.position, 'string') &&
+    typeof rawParams.text === 'string' &&
+    isOptional(matchCase, 'boolean') &&
+    isOptional(expectEmptyParagraph, 'boolean');
+}
+
+export function assertInsertDocumentTextArgs(args: unknown): asserts args is InsertDocumentTextArgs {
+  if (!isInsertDocumentTextArgs(args)) {
+    throw new Error('Invalid insert document text parameters. Required: document_id, anchor_text, text. Optional: tab_id (string), position ("after" | "before" | "next_paragraph_start"), match_case (boolean), expect_empty_paragraph (boolean)');
+  }
+}
+
 // Docs Batch Update Type Guards
 
 interface BatchUpdateDocumentArgs {

@@ -208,6 +208,206 @@ export function requireTabs(doc: docs_v1.Schema$Document): docs_v1.Schema$Tab[] 
   return doc.tabs;
 }
 
+/**
+ * Refuse a tab title that another tab already uses. Docs requires tab titles
+ * to be unique across the whole document, sub-tabs included. Comparison is
+ * exact after trimming both sides. Echoing the caller's own title is fine; no
+ * document title is echoed.
+ */
+export function assertUniqueTitle(flat: FlatTab[], title: string, exceptTabId?: string): void {
+  const wanted = title.trim();
+  const clash = flat.find((tab) => tab.tabId !== exceptTabId && tab.title.trim() === wanted);
+  if (clash) {
+    throw new DocsInputError(
+      `A tab titled "${wanted}" already exists. Tab titles must be unique across the whole document, including sub-tabs.`
+    );
+  }
+}
+
+/**
+ * Every tab below `tabId` (children, grandchildren, …) in tree order.
+ */
+export function descendantsOf(flat: FlatTab[], tabId: string): FlatTab[] {
+  const start = flat.findIndex((tab) => tab.tabId === tabId);
+  if (start < 0) return [];
+  const depth = flat[start].nestingLevel;
+  const out: FlatTab[] = [];
+  // Pre-order: descendants follow the tab until the walk climbs back to its depth.
+  for (let i = start + 1; i < flat.length && flat[i].nestingLevel > depth; i++) {
+    out.push(flat[i]);
+  }
+  return out;
+}
+
+/**
+ * The tabs directly under `parentTabId` (`null` = top level), in position order.
+ */
+export function siblingsOf(flat: FlatTab[], parentTabId: string | null): FlatTab[] {
+  return flat
+    .filter((tab) => tab.parentTabId === parentTabId)
+    .sort((a, b) => a.index - b.index);
+}
+
+/** Every character-style field, for clearing a range's text style with `updateTextStyle`. */
+export const ALL_TEXT_KEYS =
+  'bold,italic,underline,strikethrough,smallCaps,fontSize,foregroundColor,backgroundColor,weightedFontFamily,baselineOffset,link';
+
+/** Where a paragraph lives: the tab body, or one table cell (table = n-th table in the body). */
+export type ParagraphContainer = 'body' | { table: number; row: number; col: number };
+
+export type FlatParagraph = {
+  paragraph: docs_v1.Schema$Paragraph;
+  container: ParagraphContainer;
+  startIndex: number;
+  /** Position of the paragraph's structural element in `body.content` (body paragraphs only). */
+  bodyElementIndex?: number;
+};
+
+/**
+ * Body paragraphs and table-cell paragraphs, in document order (one level of
+ * tables, like the text extraction).
+ */
+export function flatParagraphs(body: docs_v1.Schema$Body | undefined): FlatParagraph[] {
+  const out: FlatParagraph[] = [];
+  let tableNumber = 0;
+  (body?.content ?? []).forEach((element, bodyElementIndex) => {
+    if (element.paragraph) {
+      out.push({
+        paragraph: element.paragraph,
+        container: 'body',
+        startIndex: element.startIndex ?? 0,
+        bodyElementIndex,
+      });
+    } else if (element.table) {
+      (element.table.tableRows ?? []).forEach((row, rowIndex) => {
+        (row.tableCells ?? []).forEach((cell, colIndex) => {
+          for (const cellElement of cell.content ?? []) {
+            if (cellElement.paragraph) {
+              out.push({
+                paragraph: cellElement.paragraph,
+                container: { table: tableNumber, row: rowIndex, col: colIndex },
+                startIndex: cellElement.startIndex ?? 0,
+              });
+            }
+          }
+        });
+      });
+      tableNumber++;
+    }
+  });
+  return out;
+}
+
+/** Object-replacement character standing in for one index of a non-text element. */
+const NON_TEXT_PLACEHOLDER = '￼';
+
+/**
+ * Searchable text of a paragraph whose string offsets equal document-index
+ * offsets: text runs as they are (JS strings count UTF-16 units, like the Docs
+ * API), every other element (smart chip, person, date, image, …) as one
+ * placeholder character per index it occupies, so it can never match an anchor.
+ */
+export function paragraphSearchText(paragraph: docs_v1.Schema$Paragraph): string {
+  return (paragraph.elements ?? [])
+    .map((element) => {
+      if (element.textRun) {
+        return element.textRun.content ?? '';
+      }
+      const span =
+        element.startIndex != null && element.endIndex != null
+          ? element.endIndex - element.startIndex
+          : 1;
+      return NON_TEXT_PLACEHOLDER.repeat(Math.max(0, span));
+    })
+    .join('');
+}
+
+/**
+ * Case-insensitive comparison one UTF-16 unit at a time, so case folding that
+ * changes a string's length (e.g. "İ" lower-cases to two units) can never shift
+ * the match offset.
+ */
+function sameCharIgnoringCase(a: string, b: string): boolean {
+  return a === b || a.toLowerCase() === b.toLowerCase() || a.toUpperCase() === b.toUpperCase();
+}
+
+export type AnchorMatch = { paragraphIdx: number; offset: number };
+
+/**
+ * Every place `anchor` occurs inside a single paragraph. Anchors never span
+ * paragraphs; an anchor containing a newline is refused.
+ */
+export function findAnchor(
+  paragraphs: FlatParagraph[],
+  anchor: string,
+  matchCase: boolean
+): AnchorMatch[] {
+  if (anchor.length === 0) {
+    throw new DocsInputError('anchor_text must not be empty.');
+  }
+  if (anchor.includes('\n') || anchor.includes('\r')) {
+    throw new DocsInputError('anchor_text must be on one line.');
+  }
+  const matches: AnchorMatch[] = [];
+  paragraphs.forEach((entry, paragraphIdx) => {
+    const text = paragraphSearchText(entry.paragraph);
+    for (let offset = 0; offset + anchor.length <= text.length; offset++) {
+      let hit = true;
+      for (let i = 0; i < anchor.length; i++) {
+        const a = text[offset + i];
+        const b = anchor[i];
+        if (matchCase ? a !== b : !sameCharIgnoringCase(a, b)) {
+          hit = false;
+          break;
+        }
+      }
+      if (hit) {
+        matches.push({ paragraphIdx, offset });
+      }
+    }
+  });
+  return matches;
+}
+
+const NEXT_PARAGRAPH_MISSING_MESSAGE =
+  'The anchor paragraph is followed by a table (or nothing); use position "after" instead.';
+
+/**
+ * Index of the start of the paragraph after `paragraphs[paragraphIdx]` in the
+ * same container: in the body, the next body element must be a paragraph; in a
+ * table cell, the next paragraph of the same cell.
+ */
+export function nextParagraphInContainer(
+  body: docs_v1.Schema$Body | undefined,
+  paragraphs: FlatParagraph[],
+  paragraphIdx: number
+): FlatParagraph {
+  const current = paragraphs[paragraphIdx];
+  if (current.container === 'body') {
+    const nextElementIndex = (current.bodyElementIndex ?? -1) + 1;
+    const nextElement = body?.content?.[nextElementIndex];
+    const next = nextElement?.paragraph
+      ? paragraphs.find((entry) => entry.bodyElementIndex === nextElementIndex)
+      : undefined;
+    if (!next) {
+      throw new DocsInputError(NEXT_PARAGRAPH_MISSING_MESSAGE);
+    }
+    return next;
+  }
+  const cell = current.container;
+  const next = paragraphs[paragraphIdx + 1];
+  if (
+    !next ||
+    next.container === 'body' ||
+    next.container.table !== cell.table ||
+    next.container.row !== cell.row ||
+    next.container.col !== cell.col
+  ) {
+    throw new DocsInputError(NEXT_PARAGRAPH_MISSING_MESSAGE);
+  }
+  return next;
+}
+
 /** Marker for the one tab an `all_tabs` read cuts at the shared budget. */
 export const TAB_TRUNCATION_MARKER = '\n\n[TRUNCATED - this tab continues past the max_chars budget]';
 
