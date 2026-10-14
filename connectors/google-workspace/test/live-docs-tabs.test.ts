@@ -22,8 +22,9 @@
  * first). Tabs that existed before the run must keep a byte-identical
  * documentTab. Nothing the probe prints or asserts on contains tokens, document
  * text or titles: assertions compare booleans and counts with messages that name
- * tab ids, paragraph indices and kinds only, and errors are rethrown without
- * their cause, with known titles scrubbed.
+ * tab ids, paragraph indices and kinds only. An error the probe did not write
+ * (from the API or the connector) is reported only as its class, HTTP status and
+ * error code, never its message, since that can quote document text.
  */
 import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
@@ -108,8 +109,6 @@ let tabTreeFields = '';
 
 /** contentHash of each pre-existing tab's documentTab, keyed by tab id. */
 const beforeSnapshot = new Map<string, string>();
-/** Titles seen before the run (document + tabs), scrubbed from any rethrown error. */
-const knownTitles: string[] = [];
 /** Ids of tabs created by the probe, by role. */
 const ids: Record<string, string> = {};
 /** Safe findings (ids, counts, booleans) printed once at the end. */
@@ -126,38 +125,60 @@ function check(condition: boolean, message: string): void {
 
 function need(role: string): string {
   const id = ids[role];
-  if (!id) throw new Error(`needs the "${role}" sandbox tab from an earlier step, which did not complete`);
+  if (!id) throw new ProbeError(`needs the "${role}" sandbox tab from an earlier step, which did not complete`);
   return id;
 }
 
-function scrub(message: string): string {
-  let out = message;
-  for (const title of knownTitles) {
-    if (title.trim().length >= 3) out = out.split(title).join('[title]');
+/** An error the probe wrote itself: its message names ids, counts, roles and kinds only. */
+class ProbeError extends Error {}
+
+function httpStatus(error: unknown): number | undefined {
+  const e = error as { status?: unknown; code?: unknown; response?: { status?: unknown } } | null;
+  for (const value of [e?.response?.status, e?.status, e?.code]) {
+    const status = typeof value === 'string' && /^\d{3}$/.test(value) ? Number(value) : value;
+    if (typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599) return status;
   }
-  return out.length > 400 ? `${out.slice(0, 400)}…` : out;
+  return undefined;
 }
 
+function statusCategory(status: number): string {
+  if (status === 401 || status === 403) return 'auth or permission';
+  if (status === 404) return 'not found';
+  if (status === 429) return 'rate limited';
+  if (status >= 500) return 'server error';
+  return status >= 400 ? 'request rejected' : 'unexpected';
+}
+
+/**
+ * A failure summary built only from allowlisted fields: the error class, the
+ * numeric HTTP status with its category, and a numeric (MCP) or Node system
+ * error code. A message the probe did not write is never included.
+ */
 function safeError(error: unknown): string {
-  const name = error instanceof Error ? error.constructor.name : typeof error;
+  if (error instanceof ProbeError) return error.message;
+  const className = error instanceof Error ? error.constructor.name : typeof error;
+  const parts = [/^[A-Za-z_$][\w$]{0,60}$/.test(className) ? className : 'Error'];
+  const status = httpStatus(error);
+  if (status !== undefined) parts.push(`HTTP ${status} (${statusCategory(status)})`);
   const code = (error as { code?: unknown } | null)?.code;
-  const message = error instanceof Error ? error.message : String(error);
-  return `${name}${code !== undefined ? ` (code ${String(code)})` : ''}: ${scrub(message)}`;
+  if (typeof code === 'number' && code !== status) parts.push(`code ${code}`);
+  else if (typeof code === 'string' && /^E[A-Z0-9_]{1,40}$/.test(code)) parts.push(`code ${code}`);
+  return parts.join(', ');
 }
 
-/** Run one step; on failure rethrow a new error (no cause) with a scrubbed message. */
+/** Run one step; on failure rethrow a new error (no cause) with an allowlisted summary. */
 async function step<T>(label: string, fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (error) {
-    throw new Error(`${label} failed — ${safeError(error)}`);
+    throw new ProbeError(`${label} failed — ${safeError(error)}`);
   }
 }
 
 /** Call a tool handler; returns its text and whether it is an error result. */
 async function tool(name: string, args: Record<string, unknown>): Promise<{ text: string; isError: boolean }> {
   const handler = handlers[name];
-  if (!handler) throw new Error(`handler ${name} not loaded`);
+  if (!handler) throw new ProbeError(`handler ${name} not loaded`);
   const result = await step(name, () => handler({ email: env.email, document_id: env.documentId, ...args }));
   if (typeof result === 'string') return { text: result, isError: false };
   const response = result as { content?: Array<{ type: string; text?: string }>; isError?: boolean };
@@ -170,7 +191,7 @@ async function tool(name: string, args: Record<string, unknown>): Promise<{ text
 /** True when the handler refuses the call with InvalidParams. */
 async function refused(name: string, args: Record<string, unknown>): Promise<boolean> {
   const handler = handlers[name];
-  if (!handler) throw new Error(`handler ${name} not loaded`);
+  if (!handler) throw new ProbeError(`handler ${name} not loaded`);
   try {
     await handler({ email: env.email, document_id: env.documentId, ...args });
     return false;
@@ -180,7 +201,7 @@ async function refused(name: string, args: Record<string, unknown>): Promise<boo
 }
 
 async function client(): Promise<docs_v1.Docs> {
-  if (!docsClient) throw new Error('Docs client not loaded');
+  if (!docsClient) throw new ProbeError('Docs client not loaded');
   return docsClient();
 }
 
@@ -205,7 +226,7 @@ async function readTree(): Promise<FlatTabView[]> {
 }
 
 function flatten(tabs: Tab[] | undefined): FlatTabView[] {
-  if (!flattenTabsFn) throw new Error('tabs module not loaded');
+  if (!flattenTabsFn) throw new ProbeError('tabs module not loaded');
   return flattenTabsFn(tabs);
 }
 
@@ -215,7 +236,7 @@ function findTab(flat: FlatTabView[], tabId: string): FlatTabView | undefined {
 
 async function fullTab(tabId: string, suggestionsViewMode?: string): Promise<Tab> {
   const tab = findTab(flatten((await readFull(suggestionsViewMode)).tabs), tabId)?.tab;
-  if (!tab) throw new Error(`tab ${tabId} not found`);
+  if (!tab) throw new ProbeError(`tab ${tabId} not found`);
   return tab;
 }
 
@@ -234,7 +255,7 @@ async function addSandboxTab(role: string, args: Record<string, unknown> = {}): 
   const title = `${PREFIX} ${role}`;
   await tool('handleAddDocumentTab', { title, ...args });
   const created = (await readTree()).find((tab) => tab.title === title);
-  if (!created) throw new Error(`sandbox tab "${role}" not found after add`);
+  if (!created) throw new ProbeError(`sandbox tab "${role}" not found after add`);
   ids[role] = created.tabId;
   return created.tabId;
 }
@@ -270,7 +291,7 @@ function paragraphText(paragraph: docs_v1.Schema$Paragraph): string {
 }
 
 function tabParagraphs(tab: Tab): docs_v1.Schema$Paragraph[] {
-  if (!flatParagraphsFn) throw new Error('tabs module not loaded');
+  if (!flatParagraphsFn) throw new ProbeError('tabs module not loaded');
   return flatParagraphsFn(tab.documentTab?.body).map((entry) => entry.paragraph);
 }
 
@@ -478,14 +499,14 @@ function readEmbeddedGoogleOAuthCredentials(hostRoot: string): { clientId: strin
   const googleBlock = source.match(/google:\s*{([\s\S]*?)}/)?.[1] ?? '';
   const clientId = googleBlock.match(/clientId:\s*'([^']+)'/)?.[1];
   const clientSecret = googleBlock.match(/clientSecret:\s*'([^']+)'/)?.[1];
-  if (!clientId || !clientSecret) throw new Error('Unable to locate embedded Google OAuth credentials in MCP_GW_LIVE_HOST_ROOT');
+  if (!clientId || !clientSecret) throw new ProbeError('Unable to locate embedded Google OAuth credentials in MCP_GW_LIVE_HOST_ROOT');
   return { clientId, clientSecret };
 }
 
 /** Copy one regular file, keeping its permission bits (0600 token files stay 0600). */
 function copyFilePreservingMode(from: string, to: string): void {
   const stats = fs.lstatSync(from);
-  if (!stats.isFile()) throw new Error('instance directory entries must be regular files');
+  if (!stats.isFile()) throw new ProbeError('instance directory entries must be regular files');
   fs.copyFileSync(from, to);
   fs.chmodSync(to, stats.mode & 0o777);
 }
@@ -493,19 +514,25 @@ function copyFilePreservingMode(from: string, to: string): void {
 /** Temp copy of accounts.json + credentials/, so the probe never writes the real credential files. */
 function copyInstance(sourceRoot: string): string {
   const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'gw-live-docs-tabs-'));
-  fs.chmodSync(root, 0o700);
-  copyFilePreservingMode(path.join(sourceRoot, 'accounts.json'), path.join(root, 'accounts.json'));
-  const credentialsSource = path.join(sourceRoot, 'credentials');
-  const credentialsCopy = path.join(root, 'credentials');
-  fs.mkdirSync(credentialsCopy, { mode: 0o700 });
-  for (const name of fs.readdirSync(credentialsSource)) {
-    const from = path.join(credentialsSource, name);
-    if (!fs.lstatSync(from).isFile()) continue;
-    const stats = fs.statSync(from);
-    originalCredentialStats.push({ file: from, mtimeMs: stats.mtimeMs, size: stats.size });
-    copyFilePreservingMode(from, path.join(credentialsCopy, name));
+  try {
+    fs.chmodSync(root, 0o700);
+    copyFilePreservingMode(path.join(sourceRoot, 'accounts.json'), path.join(root, 'accounts.json'));
+    const credentialsSource = path.join(sourceRoot, 'credentials');
+    const credentialsCopy = path.join(root, 'credentials');
+    fs.mkdirSync(credentialsCopy, { mode: 0o700 });
+    for (const name of fs.readdirSync(credentialsSource)) {
+      const from = path.join(credentialsSource, name);
+      if (!fs.lstatSync(from).isFile()) continue;
+      const stats = fs.statSync(from);
+      originalCredentialStats.push({ file: from, mtimeMs: stats.mtimeMs, size: stats.size });
+      copyFilePreservingMode(from, path.join(credentialsCopy, name));
+    }
+    return root;
+  } catch (error) {
+    // The caller never receives the path, so remove any credential files copied so far here.
+    fs.rmSync(root, { recursive: true, force: true });
+    throw error;
   }
-  return root;
 }
 
 // ---------------------------------------------------------------------------
@@ -522,13 +549,13 @@ liveDescribe('live: Docs tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
     })
       .filter(([, value]) => !value)
       .map(([name]) => name);
-    if (missing.length > 0) throw new Error(`Set ${missing.join(', ')} to run the live Docs tabs probe`);
+    if (missing.length > 0) throw new ProbeError(`Set ${missing.join(', ')} to run the live Docs tabs probe`);
 
     let clientId = process.env.GOOGLE_CLIENT_ID;
     let clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     if (!clientId || !clientSecret) {
       const hostRoot = process.env.MCP_GW_LIVE_HOST_ROOT;
-      if (!hostRoot) throw new Error('Set GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET or MCP_GW_LIVE_HOST_ROOT');
+      if (!hostRoot) throw new ProbeError('Set GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET or MCP_GW_LIVE_HOST_ROOT');
       ({ clientId, clientSecret } = readEmbeddedGoogleOAuthCredentials(hostRoot));
     }
 
@@ -555,16 +582,13 @@ liveDescribe('live: Docs tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
     docsClient = () => service.getWriteClient(env.email);
 
     const doc = await readFull();
-    knownTitles.push(doc.title ?? '');
     for (const tab of flatten(doc.tabs)) {
-      knownTitles.push(tab.title);
       beforeSnapshot.set(tab.tabId, contentHash(tab.tab.documentTab));
     }
-    knownTitles.sort((a, b) => b.length - a.length);
     if (flatten(doc.tabs).some((tab) => isSandboxTitle(tab.title))) {
-      throw new Error('a tab with this run id already exists; refusing to run');
+      throw new ProbeError('a tab with this run id already exists; refusing to run');
     }
-    if (!beforeSnapshot.has(env.sourceTabId)) throw new Error('MCP_GW_LIVE_SOURCE_TAB_ID is not a tab of MCP_GW_LIVE_DOC_ID');
+    if (!beforeSnapshot.has(env.sourceTabId)) throw new ProbeError('MCP_GW_LIVE_SOURCE_TAB_ID is not a tab of MCP_GW_LIVE_DOC_ID');
     notes.tabsBefore = beforeSnapshot.size;
   }, PROBE_TIMEOUT_MS);
 
@@ -888,7 +912,7 @@ liveDescribe('live: Docs tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
     } catch (error) {
       notes.A16_updateNamedStyleAccepted = false;
       // Decision rule A16 applies: drop updateNamedStyle from the copy and report named styles as not copied.
-      throw new Error(`A16: the API rejected updateNamedStyle — ${(error as Error).message}`);
+      throw new ProbeError(`A16: the API rejected updateNamedStyle — ${safeError(error)}`);
     }
     const appliedSize = namedStyle(await fullTab(tabA), 'HEADING_1')?.textStyle?.fontSize?.magnitude;
     notes.A16_updateNamedStyleTookEffect = appliedSize === size + 7;
@@ -1023,7 +1047,7 @@ sheetsDescribe('live: Sheets tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
   const sheetNotes: Record<string, unknown> = { runId: RUN_ID };
 
   async function api(): Promise<sheets_v4.Sheets> {
-    if (!sheetsClient) throw new Error('Sheets client not loaded');
+    if (!sheetsClient) throw new ProbeError('Sheets client not loaded');
     return sheetsClient();
   }
 
@@ -1049,28 +1073,28 @@ sheetsDescribe('live: Sheets tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
 
   function needSheet(role: string): number {
     const id = sheetIds[role];
-    if (id === undefined) throw new Error(`needs the "${role}" probe sheet from an earlier step, which did not complete`);
+    if (id === undefined) throw new ProbeError(`needs the "${role}" probe sheet from an earlier step, which did not complete`);
     return id;
   }
 
   /** Refuse to write unless the target is a probe sheet created by this run. */
   async function assertProbeSheet(sheetId: number): Promise<SheetView> {
     const sheet = await sheetById(sheetId);
-    if (!sheet || !isSandboxTitle(sheet.title)) throw new Error(`sheet ${sheetId} is not a probe sheet; refusing to write`);
+    if (!sheet || !isSandboxTitle(sheet.title)) throw new ProbeError(`sheet ${sheetId} is not a probe sheet; refusing to write`);
     return sheet;
   }
 
   async function sheetTool(name: string, args: Record<string, unknown>): Promise<string> {
     const handler = sheetHandlers[name];
-    if (!handler) throw new Error(`handler ${name} not loaded`);
+    if (!handler) throw new ProbeError(`handler ${name} not loaded`);
     const result = await step(name, () => handler({ email: env.email, spreadsheet_id: spreadsheetId, ...args }));
-    if (typeof result !== 'string') throw new Error(`${name} did not return text`);
+    if (typeof result !== 'string') throw new ProbeError(`${name} did not return text`);
     return result;
   }
 
   async function sheetRefused(name: string, args: Record<string, unknown>): Promise<boolean> {
     const handler = sheetHandlers[name];
-    if (!handler) throw new Error(`handler ${name} not loaded`);
+    if (!handler) throw new ProbeError(`handler ${name} not loaded`);
     try {
       await handler({ email: env.email, spreadsheet_id: spreadsheetId, ...args });
       return false;
@@ -1091,7 +1115,7 @@ sheetsDescribe('live: Sheets tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
       })
     );
     const found = response.data.sheets?.find((s) => s.properties?.sheetId === sheet.sheetId);
-    if (!found) throw new Error(`grid read did not return sheet ${sheet.sheetId}`);
+    if (!found) throw new ProbeError(`grid read did not return sheet ${sheet.sheetId}`);
     return hash({ data: found.data ?? null, merges: found.merges ?? null });
   }
 
@@ -1149,13 +1173,13 @@ sheetsDescribe('live: Sheets tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
     })
       .filter(([, value]) => !value)
       .map(([name]) => name);
-    if (missing.length > 0) throw new Error(`Set ${missing.join(', ')} to run the live Sheets tabs probe`);
+    if (missing.length > 0) throw new ProbeError(`Set ${missing.join(', ')} to run the live Sheets tabs probe`);
 
     let clientId = process.env.GOOGLE_CLIENT_ID;
     let clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     if (!clientId || !clientSecret) {
       const hostRoot = process.env.MCP_GW_LIVE_HOST_ROOT;
-      if (!hostRoot) throw new Error('Set GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET or MCP_GW_LIVE_HOST_ROOT');
+      if (!hostRoot) throw new ProbeError('Set GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET or MCP_GW_LIVE_HOST_ROOT');
       ({ clientId, clientSecret } = readEmbeddedGoogleOAuthCredentials(hostRoot));
     }
 
@@ -1181,15 +1205,13 @@ sheetsDescribe('live: Sheets tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
     const sheets = await listSheets();
     for (const sheet of sheets) {
       sheetsBefore.set(sheet.sheetId, sheet.title);
-      knownTitles.push(sheet.title);
     }
-    knownTitles.sort((a, b) => b.length - a.length);
-    if (sheets.some((sheet) => isSandboxTitle(sheet.title))) throw new Error('a sheet with this run id already exists; refusing to run');
+    if (sheets.some((sheet) => isSandboxTitle(sheet.title))) throw new ProbeError('a sheet with this run id already exists; refusing to run');
 
     template = templateOverride !== undefined
       ? sheets.find((sheet) => String(sheet.sheetId) === templateOverride)
       : sheets.find((sheet) => /template/i.test(sheet.title)) ?? sheets[0];
-    if (!template) throw new Error('template sheet not found (check MCP_GW_LIVE_TEMPLATE_SHEET_ID)');
+    if (!template) throw new ProbeError('template sheet not found (check MCP_GW_LIVE_TEMPLATE_SHEET_ID)');
     templateDigest = await sheetDigest(template);
     sheetNotes.sheetsBefore = sheets.length;
     sheetNotes.templateSheetId = template.sheetId;
@@ -1212,7 +1234,7 @@ sheetsDescribe('live: Sheets tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
   }, PROBE_TIMEOUT_MS);
 
   it('(7) duplicate: the template copy lands right after it by default, under the given title', async () => {
-    if (!template) throw new Error('template not loaded');
+    if (!template) throw new ProbeError('template not loaded');
     const title = `${PREFIX} copy`;
     const text = await sheetTool('handleDuplicateSheet', { sheet_id: template.sheetId, title });
     const created = (await listSheets()).find((sheet) => sheet.title === title);
@@ -1225,7 +1247,7 @@ sheetsDescribe('live: Sheets tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
   });
 
   it('(7) duplicate: an explicit position 0 and the new_title alias', async () => {
-    if (!template) throw new Error('template not loaded');
+    if (!template) throw new ProbeError('template not loaded');
     const title = `${PREFIX} front`;
     await sheetTool('handleDuplicateSheet', { sheet_id: template.sheetId, new_title: title, position: 0 });
     const created = (await listSheets()).find((sheet) => sheet.title === title);
@@ -1306,7 +1328,7 @@ sheetsDescribe('live: Sheets tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
   });
 
   it('(7) cleanup: probe sheets deleted; other sheets unchanged; template grid data and merges byte-identical', async () => {
-    if (!template) throw new Error('template not loaded');
+    if (!template) throw new ProbeError('template not loaded');
     sheetNotes.probeSheetsDeleted = await deleteProbeSheets();
     sheetsCleaned = true;
 

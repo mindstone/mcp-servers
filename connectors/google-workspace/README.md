@@ -193,7 +193,7 @@ A Google Doc can hold many tabs, nested up to a few levels deep. Every tab has a
 **Without `tab_id`:**
 
 - `read_workspace_document` returns the first tab and, on a document with several tabs, adds a line saying how many there are. Pass `tab_id` to read one tab, or `all_tabs: true` to read every tab under `## Tab:` headings with one shared `max_chars` budget (tabs that don't fit are listed by id).
-- `append_to_workspace_document` and `replace_workspace_document` act on the first tab.
+- `append_to_workspace_document`, `replace_workspace_document` and `insert_workspace_document_text` act on the first tab. A tool call never inherits the tab an earlier call used, so pass `tab_id` on every call that should act on another tab.
 - `find_and_replace_workspace_document` replaces in **every** tab. Pass `tab_id` to limit it to one tab (its sub-tabs are separate tabs and are not included).
 
 `tab_id: "default"` means the first top-level tab for reads, edits, the anchored insert, `parent_tab_id` when adding a tab, and the copy source. Tools that delete, rename, move or overwrite a tab need a real tab id and refuse `"default"`.
@@ -213,16 +213,16 @@ A Google Doc can hold many tabs, nested up to a few levels deep. Every tab has a
 - Not copied faithfully: links to headings inside the copied tab still point at the original tab's headings, so after a reset they no longer resolve.
 - Which target: to archive or duplicate a tab, use `new_tab_title`. To reset a tab in place from a template tab (keeping its id, position and sub-tabs), use `target_tab_id` with `overwrite_existing: true`, which clears that tab first. Never delete a tab in order to replace it: deleting also deletes its sub-tabs.
 - The result starts with a `Verification:` line comparing text, heading types, paragraph formatting, bullets, list grouping and table shapes with the source. Check that it says `passed` before deleting or resetting the source; a failed verification comes back as an error result.
-- The copy is not atomic. If it stops part-way, a new tab is deleted again, and an existing target may be left cleared or partly written (the document's version history can restore it). If it completes but verification finds differences, the tab is kept so it can be checked. Long tabs can take 10-60 seconds.
+- The copy is not atomic. If it stops part-way, the connector tries to delete a new tab again and the result says whether that worked (if not, it names the tab to delete); an existing target may be left cleared or partly written (the document's version history can restore it). If it completes but verification finds differences, the tab is kept so it can be checked. Long tabs can take 10-60 seconds.
 
 **Example: a weekly archive-and-reset** of a fictional "Acme weekly sync" doc that has a live tab and a Template tab. The business rules (the next meeting date, which lines to keep) are the caller's:
 
-1. `list_workspace_document_tabs`, then read the live tab with `tab_id`. Note the date line and the out-of-office lines to keep **before** anything changes.
-2. `copy_workspace_document_tab` from the live tab with `new_tab_title: "2031-10-13"`, `new_tab_parent_id: <live tab id>` and `new_tab_position: 0`, archiving it as its first sub-tab.
+1. `list_workspace_document_tabs` to get the live and Template tab ids, then read the live tab with `tab_id: <live tab id>`. Note the date line and the out-of-office lines to keep **before** anything changes.
+2. `copy_workspace_document_tab` with `source_tab_id: <live tab id>`, `new_tab_title: "2031-10-13"`, `new_tab_parent_id: <live tab id>` and `new_tab_position: 0`, archiving it as its first sub-tab.
 3. Stop unless the result says `Verification: passed`.
-4. `copy_workspace_document_tab` from the Template tab with `target_tab_id: <live tab id>` and `overwrite_existing: true`, resetting the live tab in place.
+4. `copy_workspace_document_tab` with `source_tab_id: <Template tab id>`, `target_tab_id: <live tab id>` and `overwrite_existing: true`, resetting the live tab in place.
 5. `find_and_replace_workspace_document` the date placeholder **with `tab_id: <live tab id>`** (without it the Template's placeholder changes too), and check the result says `Replaced 1`.
-6. `insert_workspace_document_text` the kept out-of-office lines with `position: "next_paragraph_start"`, anchored on the line directly above the empty bullet.
+6. `insert_workspace_document_text` the kept out-of-office lines **with `tab_id: <live tab id>`** (without it the text goes into the first tab, which may be the Template) and `position: "next_paragraph_start"`, anchored on the line directly above the empty bullet.
 
 ### Vacation responder
 
