@@ -2421,6 +2421,21 @@ describe('Sheets tab management', () => {
     expect(unwrapSheet(backward)).toBe('Sheet updated: "Overview" [sheetId: 103] at position 0 (0 = first).');
   });
 
+  it('takes new_title as the new name, as duplicate does, alongside a move', async () => {
+    const { batches } = installTrackerSheetMocks();
+    const handlers = await loadHandlers();
+
+    // [Template, Week 1, Summary]: move Summary to the front and rename it via new_title.
+    const result = await handlers.handleUpdateSheet({ spreadsheet_id: TRACKER_ID, sheet_id: 103, new_title: 'Overview', position: 0 });
+    expect(batches[0].requests[0]).toEqual({
+      updateSheetProperties: { properties: { sheetId: 103, title: 'Overview', index: 0 }, fields: 'title,index' },
+    });
+    expect(unwrapSheet(result)).toBe('Sheet updated: "Overview" [sheetId: 103] at position 0 (0 = first).');
+    const { isUpdateSpreadsheetSheetArgs } = await import('../src/tools/type-guards.js');
+    expect(isUpdateSpreadsheetSheetArgs({ spreadsheet_id: TRACKER_ID, sheet_id: 103, new_title: 'Overview' })).toBe(true);
+    expect(isUpdateSpreadsheetSheetArgs({ spreadsheet_id: TRACKER_ID, sheet_id: 103, new_title: 7 })).toBe(false);
+  });
+
   it('makes no write when the title and position are already as asked', async () => {
     const { batches } = installTrackerSheetMocks();
     const handlers = await loadHandlers();

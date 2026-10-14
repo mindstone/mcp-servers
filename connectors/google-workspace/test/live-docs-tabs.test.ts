@@ -1,7 +1,17 @@
 /**
- * Live probe for Docs tabs: tab tree, tab-scoped reads and edits, tab
- * management, tab copy and the anchored insert, run in-process against a real
- * test Doc. Skipped unless MCP_GW_LIVE_DOCS_TABS=1.
+ * Live probes for Docs tabs and Sheets tabs, run in-process against real test
+ * files. This file holds both:
+ * - "live: Docs tabs": tab tree, tab-scoped reads and edits, tab management,
+ *   tab copy and the anchored insert on a test Doc. Needs the enable flag plus
+ *   MCP_GW_LIVE_INSTANCE_ROOT, MCP_GW_LIVE_ACCOUNT_EMAIL, MCP_GW_LIVE_DOC_ID and
+ *   MCP_GW_LIVE_SOURCE_TAB_ID.
+ * - "live: Sheets tabs": duplicate, update and insert on a test Sheet. Needs the
+ *   enable flag plus MCP_GW_LIVE_INSTANCE_ROOT, MCP_GW_LIVE_ACCOUNT_EMAIL and
+ *   MCP_GW_LIVE_SHEET_ID (no Doc variables). Run it alone with
+ *   `-t "live: Sheets tabs"`.
+ * Both need the OAuth client (below). Everything is skipped unless the enable
+ * flag is set: MCP_GW_LIVE_TABS=1, or its older name MCP_GW_LIVE_DOCS_TABS=1
+ * (which enables the Sheets probe too).
  *
  * Environment (values are never committed):
  * - MCP_GW_LIVE_INSTANCE_ROOT   directory with accounts.json and credentials/<account>.token.json.
@@ -39,7 +49,8 @@ vi.mock('../src/utils/logger.js', () => ({
   default: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
 }));
 
-const LIVE_ENABLED = process.env.MCP_GW_LIVE_DOCS_TABS === '1';
+// MCP_GW_LIVE_TABS names what it enables (Docs and Sheets); MCP_GW_LIVE_DOCS_TABS is its older name.
+const LIVE_ENABLED = process.env.MCP_GW_LIVE_TABS === '1' || process.env.MCP_GW_LIVE_DOCS_TABS === '1';
 const liveDescribe = LIVE_ENABLED ? describe : describe.skip;
 const PROBE_TIMEOUT_MS = 300_000;
 
@@ -184,12 +195,20 @@ function stepSync<T>(label: string, fn: () => T): T {
   }
 }
 
-/** Remove the temp credential copy; a failure is recorded and thrown as an allowlisted summary. */
-function removeTempRoot(): void {
-  if (!tempRoot) return;
-  const root = tempRoot;
-  tempRoot = undefined;
-  stepSync('remove the temp credential copy', () => fs.rmSync(root, { recursive: true, force: true }));
+/**
+ * Remove a temp credential copy. A failure is recorded in `into` as an allowlisted
+ * summary and returned, for the caller to throw once it has logged its notes.
+ */
+function removeTempCopy(root: string | undefined, into: Record<string, unknown>): ProbeError | undefined {
+  if (!root) return undefined;
+  try {
+    stepSync('remove the temp credential copy', () => fs.rmSync(root, { recursive: true, force: true }));
+    return undefined;
+  } catch (error) {
+    const failure = error as ProbeError;
+    into.tempRootCleanupError = failure.message;
+    return failure;
+  }
 }
 
 /** Call a tool handler; returns its text and whether it is an error result. */
@@ -620,13 +639,8 @@ liveDescribe('live: Docs tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
         }
       }
     } finally {
-      let cleanupFailure: ProbeError | undefined;
-      try {
-        removeTempRoot();
-      } catch (error) {
-        cleanupFailure = error as ProbeError;
-        notes.tempRootCleanupError = cleanupFailure.message;
-      }
+      const cleanupFailure = removeTempCopy(tempRoot, notes);
+      tempRoot = undefined;
       vi.unstubAllEnvs();
       console.log(`[live-docs-tabs] ${JSON.stringify(notes)}`);
       if (cleanupFailure) throw cleanupFailure;
@@ -1043,7 +1057,8 @@ liveDescribe('live: Docs tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
 });
 
 // ---------------------------------------------------------------------------
-// (7) Sheets probe — gated on MCP_GW_LIVE_DOCS_TABS=1 and MCP_GW_LIVE_SHEET_ID.
+// (7) Sheets probe — gated on the enable flag (MCP_GW_LIVE_TABS=1 or MCP_GW_LIVE_DOCS_TABS=1)
+// and MCP_GW_LIVE_SHEET_ID.
 // Run it alone with `-t "live: Sheets tabs"` (the Docs suite then skips,
 // hooks included). It makes its own temp instance copy, writes only to the
 // "ZZ probe <run-id> …" sheets it creates, and deletes them again.
@@ -1211,7 +1226,7 @@ sheetsDescribe('live: Sheets tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
     // Fresh module graph: the Docs suite (if it ran) initialised the services
     // against its own temp copy, which its afterAll removed.
     vi.resetModules();
-    sheetsTempRoot = copyInstance(env.instanceRoot);
+    sheetsTempRoot = stepSync('copy the instance to a temp directory', () => copyInstance(env.instanceRoot));
     vi.stubEnv('ACCOUNTS_PATH', path.join(sheetsTempRoot, 'accounts.json'));
     vi.stubEnv('CREDENTIALS_PATH', path.join(sheetsTempRoot, 'credentials'));
     vi.stubEnv('GOOGLE_CLIENT_ID', clientId);
@@ -1252,9 +1267,11 @@ sheetsDescribe('live: Sheets tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
         }
       }
     } finally {
-      if (sheetsTempRoot) fs.rmSync(sheetsTempRoot, { recursive: true, force: true });
+      const cleanupFailure = removeTempCopy(sheetsTempRoot, sheetNotes);
+      sheetsTempRoot = undefined;
       vi.unstubAllEnvs();
       console.log(`[live-sheets-tabs] ${JSON.stringify(sheetNotes)}`);
+      if (cleanupFailure) throw cleanupFailure;
     }
   }, PROBE_TIMEOUT_MS);
 

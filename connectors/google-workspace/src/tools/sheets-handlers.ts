@@ -179,6 +179,8 @@ interface UpdateSheetArgs {
   sheet_title?: string;
   sheetTitle?: string;
   title?: string;
+  new_title?: string;
+  newTitle?: string;
   position?: number;
 }
 
@@ -810,7 +812,9 @@ export async function handleUpdateSheet(args: UpdateSheetArgs): Promise<McpToolR
   const rawArgs = args as unknown as Record<string, unknown>;
   const spreadsheetId = readAliasedString(rawArgs, 'spreadsheet_id', 'spreadsheetId');
   const sheetRef = readSheetRef(rawArgs);
-  const title = typeof rawArgs.title === 'string' ? rawArgs.title : undefined;
+  // `new_title` (and `newTitle`, rewritten to it by the normalizer) rename the sheet too, as on
+  // duplicate, so a model carrying that key over gets the rename instead of only the move.
+  const title = readAliasedString(rawArgs, 'title', 'new_title');
   const position = typeof rawArgs.position === 'number' ? rawArgs.position : undefined;
 
   const email = await resolveEmail(args);

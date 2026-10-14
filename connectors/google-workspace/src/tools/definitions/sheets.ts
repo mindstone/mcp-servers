@@ -548,7 +548,7 @@ export const sheetsTools: ToolMetadata[] = [
         },
         title: {
           type: 'string',
-          description: 'New name (unique in the spreadsheet)'
+          description: 'New name (unique in the spreadsheet). new_title is also accepted.'
         },
         position: {
           type: 'number',

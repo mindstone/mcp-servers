@@ -1423,6 +1423,7 @@ export function isUpdateSpreadsheetSheetArgs(args: unknown): args is UpdateSprea
     isOptional(sheetTitle, 'string') &&
     (sheetId !== undefined || sheetTitle !== undefined) &&
     isOptional(rawParams.title, 'string') &&
+    isOptional(rawParams.new_title, 'string') &&
     isOptional(rawParams.position, 'number');
 }
 
