@@ -1027,7 +1027,8 @@ liveDescribe('live: Docs tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
 
 const SHEETS_LIVE_ENABLED = LIVE_ENABLED && Boolean(process.env.MCP_GW_LIVE_SHEET_ID);
 const sheetsDescribe = SHEETS_LIVE_ENABLED ? describe : describe.skip;
-const DATE_HEADER = /^(\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2})$/;
+// A date header cell: a real date, or a template placeholder such as `#/#/2026`.
+const DATE_HEADER = /^((\d{1,2}|#)\/(\d{1,2}|#)\/\d{4}|\d{1,2}\/\d{1,2}\/\d{2}|\d{4}-\d{2}-\d{2})$/;
 
 type SheetView = { sheetId: number; title: string; index: number; rowCount: number; columnCount: number };
 type GridCell = sheets_v4.Schema$CellData;
@@ -1287,18 +1288,18 @@ sheetsDescribe('live: Sheets tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
     const probe = await assertProbeSheet(id);
     const before = await readCells(probe.title);
 
-    // Header row = the first row with date-like headers; last date column = the rightmost one in it.
+    // Header row = the first row with date-like or `#/#/YYYY` placeholder headers; last date column = the rightmost one in it.
     let headerRow = -1;
     let lastDateCol = -1;
     for (const [r, row] of before.slice(0, 20).entries()) {
-      const dateCols = row.map((cell, c) => (DATE_HEADER.test(cell.formattedValue ?? '') ? c : -1)).filter((c) => c >= 0);
+      const dateCols = row.map((cell, c) => (DATE_HEADER.test((cell.formattedValue ?? '').trim()) ? c : -1)).filter((c) => c >= 0);
       if (dateCols.length > 0) {
         headerRow = r;
         lastDateCol = Math.max(...dateCols);
         break;
       }
     }
-    check(headerRow >= 0, 'no date header row found in the first 20 rows of the probe copy');
+    check(headerRow >= 0, 'no date header row (dates or #/#/YYYY placeholders) found in the first 20 rows of the probe copy');
     const currencyRows = before
       .map((row, r) => (numberFormatType(row[lastDateCol]) === 'CURRENCY' ? r : -1))
       .filter((r) => r >= 0);
