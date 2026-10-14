@@ -1,4 +1,4 @@
-import { parseA1Range, quoteSheetNameIfNeeded } from './a1Utils.js';
+import { parseA1Range, quoteSheetTitle } from './a1Utils.js';
 import type { CellTriad } from './types.js';
 
 export interface FormulaCellRef {
@@ -104,7 +104,7 @@ function formatCellA1(
   if (!sheetName) {
     return cell;
   }
-  return `${quoteSheetNameIfNeeded(sheetName)}!${cell}`;
+  return `${quoteSheetTitle(sheetName)}!${cell}`;
 }
 
 function toNumeric(value: unknown): number | null {

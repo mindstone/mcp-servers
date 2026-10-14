@@ -2603,6 +2603,26 @@ describe('Sheets tab management', () => {
     expect(a1.quoteSheetNameIfNeeded("'Archive'")).toBe('Archive');
     expect(a1.quoteSheetNameIfNeeded("'O''Brien Q1'")).toBe("'O''Brien Q1'");
   });
+
+  it('reads the first sheet by its Google title when that title starts and ends with an apostrophe', async () => {
+    installTrackerSheetMocks({ titles: ["'Archive'", "O'Brien Q1", 'Summary'] });
+    // Only the correctly quoted range is served; "Archive!A1:C3" would get a 400.
+    installTrackerValuesMocks({ "'''Archive'''!A1:C3": { range: "'''Archive'''!A1:C3", values: PLATFORM_ROWS } });
+    const handlers = await loadHandlers();
+
+    const output = await handlers.handleReadSpreadsheetValues({ spreadsheet_id: TRACKER_ID, range: 'A1:C3', anchor_mode: 'always' });
+    expect(String(output)).toContain('Instagram');
+  });
+
+  it('names formula cells it would overwrite with the Google sheet title quoted for A1', async () => {
+    const { detectFormulaOverwrite } = await import('../src/modules/sheets/writeGuards.js');
+    const formulaCell = (sheetTitle: string) => ({ sheetTitle, rowIndex: 1, columnIndex: 1, formula: '=SUM(A1:A2)' });
+
+    expect(detectFormulaOverwrite('B2', [['x']], [formulaCell("'Archive'")]).map((ref) => ref.a1))
+      .toEqual(["'''Archive'''!B2"]);
+    expect(detectFormulaOverwrite("'O''Brien Q1'!B2", [['x']], [formulaCell("O'Brien Q1")]).map((ref) => ref.a1))
+      .toEqual(["'O''Brien Q1'!B2"]);
+  });
 });
 
 // ---------------------------------------------------------------------------

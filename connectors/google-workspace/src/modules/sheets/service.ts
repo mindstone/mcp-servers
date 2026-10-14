@@ -53,7 +53,7 @@ import {
   parseContinuationToken,
 } from './cellShape.js';
 import { rewriteSheetsApiError } from './errorRewriter.js';
-import { parseA1Range, quoteSheetNameIfNeeded, quoteSheetTitle, rowCountFromA1 } from './a1Utils.js';
+import { parseA1Range, quoteSheetTitle, rowCountFromA1 } from './a1Utils.js';
 import {
   detectFormulaOverwrite,
   detectRawFormulaLiterals,
@@ -302,7 +302,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
     startRow: number,
     endRow: number,
   ): WindowRange {
-    const normalizedSheetName = quoteSheetNameIfNeeded(sheetTitle);
+    const normalizedSheetName = quoteSheetTitle(sheetTitle);
     return {
       a1: `${normalizedSheetName}!${startCol}${startRow}:${endCol}${endRow}`,
       startRow,
@@ -508,7 +508,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
   private continuationPayloadToRange(payload: ContinuationTokenPayload): string {
     const startCol = payload.startCol ?? 'A';
     const endCol = payload.endCol ?? startCol;
-    const sheet = payload.sheet ? quoteSheetNameIfNeeded(payload.sheet) : undefined;
+    const sheet = payload.sheet ? quoteSheetTitle(payload.sheet) : undefined;
     const rowRange = `${startCol}${payload.startRow}:${endCol}${payload.endRow}`;
     return sheet ? `${sheet}!${rowRange}` : rowRange;
   }
@@ -558,7 +558,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
 
     const sheetTitle = targetSheet?.properties?.title ?? payload.sheet;
     const continuationRange = sheetTitle
-      ? `${quoteSheetNameIfNeeded(sheetTitle)}!${payload.startCol ?? 'A'}${payload.startRow}:${payload.endCol ?? (payload.startCol ?? 'A')}${payload.endRow}`
+      ? `${quoteSheetTitle(sheetTitle)}!${payload.startCol ?? 'A'}${payload.startRow}:${payload.endCol ?? (payload.startCol ?? 'A')}${payload.endRow}`
       : this.continuationPayloadToRange(payload);
 
     if (options.valueView === 'shaped') {
@@ -1085,7 +1085,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
 
     const endRow = parsed.startRow - 1;
     const startRow = Math.max(1, endRow - 199);
-    const sheetPrefix = parsed.sheetName ? `${quoteSheetNameIfNeeded(parsed.sheetName)}!` : '';
+    const sheetPrefix = parsed.sheetName ? `${quoteSheetTitle(parsed.sheetName)}!` : '';
     const contextRange = `${sheetPrefix}${parsed.startCol}${startRow}:${parsed.startCol}${endRow}`;
 
     try {
@@ -1158,7 +1158,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
         column: columnLetter,
         rows: Array.from({ length: values.length }, (_, index) => appendedStartRow + index),
         suggestedFormula: formula,
-        detail: `Possible formula opportunity: column ${columnLetter} appears to use a fill-down formula in ${quoteSheetNameIfNeeded(sheetTitle)}!${columnLetter}${lastFormulaRowIndex + 1}. New row(s) ${appendedStartRow}-${endRow} will break the pattern. Consider extending the formula range or copying the formula.`,
+        detail: `Possible formula opportunity: column ${columnLetter} appears to use a fill-down formula in ${quoteSheetTitle(sheetTitle)}!${columnLetter}${lastFormulaRowIndex + 1}. New row(s) ${appendedStartRow}-${endRow} will break the pattern. Consider extending the formula range or copying the formula.`,
       });
     }
 
@@ -1203,7 +1203,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
     const endColLetter = this.columnIndexToLetter(endColIndex + 1);
 
     const readStartRow = Math.max(1, rowCount - 4);
-    const sheetName = quoteSheetNameIfNeeded(targetSheet.properties.title);
+    const sheetName = quoteSheetTitle(targetSheet.properties.title);
     const formulaReadRange = `${sheetName}!${startColLetter}${readStartRow}:${endColLetter}${rowCount}`;
     const formulaRead = await client.spreadsheets.get({
       spreadsheetId,

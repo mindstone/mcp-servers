@@ -567,8 +567,8 @@ export const sheetsTools: ToolMetadata[] = [
     This shifts cells: everything at and after start_index moves down (rows) or right (columns), and
     Google adjusts formulas that refer to the moved cells. Cell addresses noted before the insert point
     to different cells afterwards, so re-read before writing values. Nothing is deleted.
-    Merged cells, conditional formatting and data validation extend to the new rows/columns only when
-    the insert lands inside them; inserted at their edge, the new rows/columns stay outside them.
+    Merged cells and other range-based formatting extend to the new rows/columns only when the insert
+    lands inside them; inserted at their edge, the new rows/columns stay outside them.
 
     start_index is 0-based (row 1 = 0, column A = 0) and is the index the first new row/column gets:
     to add a column after column E (index 4), use start_index 5. count is 1 to 100 (default 1).
