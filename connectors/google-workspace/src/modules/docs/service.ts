@@ -867,13 +867,9 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
       if (
         options.title === undefined &&
         options.parentTabId === undefined &&
-        !options.moveToTopLevel &&
         options.position === undefined
       ) {
-        throw new DocsInputError('Pass at least one of title, parent_tab_id, move_to_top_level or position.');
-      }
-      if (options.parentTabId !== undefined && options.moveToTopLevel) {
-        throw new DocsInputError('Pass either parent_tab_id or move_to_top_level, not both.');
+        throw new DocsInputError('Pass at least one of title, parent_tab_id or position.');
       }
       const newTitle = options.title !== undefined ? requireTabTitle(options.title) : undefined;
 
@@ -887,11 +883,11 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
       }
 
       // Destination parent first; "same parent" is decided by identity, so
-      // move_to_top_level on a top-level tab (or parent_tab_id equal to the
-      // current parent) is a reorder, not a re-parent.
-      const destParent: string | null = options.moveToTopLevel
-        ? null
-        : options.parentTabId !== undefined
+      // parent_tab_id equal to the current parent is a reorder, not a re-parent.
+      // There is no move to the top level: Google returns 500 when an update
+      // clears parentTabId.
+      const destParent: string | null =
+        options.parentTabId !== undefined
           ? resolveTab(flat, options.parentTabId, { allowDefault: false }).tabId
           : current.parentTabId;
       if (
@@ -928,11 +924,8 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
         tabProperties.title = newTitle;
         fields.push('title');
       }
-      if (!sameParent) {
-        // Moving to the top level: parentTabId listed in fields with no value.
-        if (destParent !== null) {
-          tabProperties.parentTabId = destParent;
-        }
+      if (!sameParent && destParent !== null) {
+        tabProperties.parentTabId = destParent;
         fields.push('parentTabId');
       }
       if (positionChanged) {

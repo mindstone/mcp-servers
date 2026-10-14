@@ -131,8 +131,6 @@ interface UpdateDocumentTabArgs {
   title?: string;
   parent_tab_id?: string;
   parentTabId?: string;
-  move_to_top_level?: boolean;
-  moveToTopLevel?: boolean;
   position?: number;
 }
 
@@ -704,7 +702,6 @@ export async function handleUpdateDocumentTab(args: UpdateDocumentTabArgs): Prom
   const documentId = readAliasedString(rawArgs, 'document_id', 'documentId');
   const tabId = readAliasedString(rawArgs, 'tab_id', 'tabId');
   const parentTabId = readAliasedString(rawArgs, 'parent_tab_id', 'parentTabId');
-  const moveToTopLevel = readAliasedBoolean(rawArgs, 'move_to_top_level', 'moveToTopLevel');
   const position = readPosition(rawArgs);
 
   const email = await resolveEmail(args);
@@ -715,7 +712,6 @@ export async function handleUpdateDocumentTab(args: UpdateDocumentTabArgs): Prom
       tabId: tabId as string,
       ...(args.title !== undefined ? { title: args.title } : {}),
       ...(parentTabId !== undefined ? { parentTabId } : {}),
-      ...(moveToTopLevel === true ? { moveToTopLevel } : {}),
       ...(position !== undefined ? { position } : {}),
     });
 

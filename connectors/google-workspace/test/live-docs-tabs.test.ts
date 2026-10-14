@@ -104,7 +104,7 @@ let extractBodyTextFn: ((body: docs_v1.Schema$Body | undefined, opts?: object) =
 let tabReadTextOptions: object = {};
 let tabTreeFields = '';
 
-/** Hash of each pre-existing tab's documentTab, keyed by tab id. */
+/** contentHash of each pre-existing tab's documentTab, keyed by tab id. */
 const beforeSnapshot = new Map<string, string>();
 /** Titles seen before the run (document + tabs), scrubbed from any rethrown error. */
 const knownTitles: string[] = [];
@@ -239,6 +239,20 @@ async function addSandboxTab(role: string, args: Record<string, unknown> = {}): 
 
 function hash(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value ?? null)).digest('hex');
+}
+
+/** Copy of `value` with every `contentUri` key removed, at any depth. */
+function withoutContentUris(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutContentUris);
+  if (value === null || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value).filter(([key]) => key !== 'contentUri').map(([key, child]) => [key, withoutContentUris(child)])
+  );
+}
+
+/** Hash for the pre-existing-tab equality check. Ignores contentUri: image URLs are signed and Google rotates them on every read. */
+function contentHash(documentTab: unknown): string {
+  return hash(withoutContentUris(documentTab));
 }
 
 function tabIdsIn(text: string): string[] {
@@ -542,7 +556,7 @@ liveDescribe('live: Docs tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
     knownTitles.push(doc.title ?? '');
     for (const tab of flatten(doc.tabs)) {
       knownTitles.push(tab.title);
-      beforeSnapshot.set(tab.tabId, hash(tab.tab.documentTab));
+      beforeSnapshot.set(tab.tabId, contentHash(tab.tab.documentTab));
     }
     knownTitles.sort((a, b) => b.length - a.length);
     if (flatten(doc.tabs).some((tab) => isSandboxTitle(tab.title))) {
@@ -736,32 +750,6 @@ liveDescribe('live: Docs tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
     check(childrenOf(flat, need('parent')).join() === [ids.c0, ids.c2].join(), 'old parent keeps the wrong children');
   });
 
-  it('(4) update: move_to_top_level moves a sub-tab to the top level (A6)', async () => {
-    const c3 = need('c3');
-    let moved = false;
-    try {
-      await tool('handleUpdateDocumentTab', { tab_id: c3, move_to_top_level: true });
-      const flat = await readTree();
-      const tab = findTab(flat, c3);
-      const topLevel = childrenOf(flat, null);
-      moved = tab?.parentTabId === null && topLevel[topLevel.length - 1] === c3;
-    } finally {
-      notes.A6_moveToTopLevelWorks = moved;
-    }
-    check(moved, `tab ${c3} is not the last top-level tab after move_to_top_level`);
-  });
-
-  it('(4) update: move_to_top_level with a position on a tab already at the top level', async () => {
-    const other = need('other');
-    const before = childrenOf(await readTree(), null);
-    const at = before.indexOf(other);
-    check(at > 0, `tab ${other} is not a top-level tab with a sibling before it`);
-    await tool('handleUpdateDocumentTab', { tab_id: other, move_to_top_level: true, position: at - 1 });
-    const after = childrenOf(await readTree(), null);
-    check(after.indexOf(other) === at - 1, `tab ${other} is at ${after.indexOf(other)}, expected ${at - 1}`);
-    check(after.length === before.length, 'top-level tab count changed');
-  });
-
   it('(4) add: a title differing only in case (A8, recorded either way)', async () => {
     const title = `${PREFIX} parent`.toUpperCase();
     let accepted = false;
@@ -825,28 +813,34 @@ liveDescribe('live: Docs tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
   it('(5) copy into an existing tab (cleared first) reports Verification: passed', async () => {
     const target = await addSandboxTab('overwrite target');
     // A leftover candidate: the target's last paragraph is a nested, centred bullet.
+    // createParagraphBullets takes each paragraph's nesting from its leading tabs (and
+    // removes them), so the tab is in the text before the bullets; both lines are
+    // bulleted so the nested item sits under a level-0 item. Alignment goes on after;
+    // 12..21 lies inside "last line" whether or not the tab has been removed.
     await batchUpdate('prepare overwrite target', [
       { insertText: { location: { index: 1, tabId: target }, text: 'first line\n\tlast line' } },
       {
-        updateParagraphStyle: {
-          range: { startIndex: 12, endIndex: 22, tabId: target },
-          paragraphStyle: { alignment: 'CENTER' },
-          fields: 'alignment',
+        createParagraphBullets: {
+          range: { startIndex: 1, endIndex: 22, tabId: target },
+          bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
         },
       },
       {
-        createParagraphBullets: {
-          range: { startIndex: 12, endIndex: 22, tabId: target },
-          bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
+        updateParagraphStyle: {
+          range: { startIndex: 12, endIndex: 21, tabId: target },
+          paragraphStyle: { alignment: 'CENTER' },
+          fields: 'alignment',
         },
       },
     ]);
     const prepared = tabParagraphs(await fullTab(target));
     const last = prepared[prepared.length - 1];
-    notes.overwriteTargetPrepared = {
-      lastIsNestedBullet: (last?.bullet?.nestingLevel ?? 0) >= 1,
-      lastIsCentred: last?.paragraphStyle?.alignment === 'CENTER',
-    };
+    const lastIsNestedBullet = (last?.bullet?.nestingLevel ?? 0) >= 1;
+    const lastIsCentred = last?.paragraphStyle?.alignment === 'CENTER';
+    notes.overwriteTargetPrepared = { lastIsNestedBullet, lastIsCentred };
+    // A setup that silently didn't take would make the A4 leftover check vacuous.
+    check(lastIsNestedBullet === true, 'setup: the overwrite target\'s last paragraph is not a nested bullet');
+    check(lastIsCentred === true, 'setup: the overwrite target\'s last paragraph is not centred');
 
     check(await refused('handleCopyDocumentTab', { source_tab_id: env.sourceTabId, target_tab_id: target }), 'copy into an existing tab without overwrite_existing was not refused');
     const result = await tool('handleCopyDocumentTab', {
@@ -984,7 +978,7 @@ liveDescribe('live: Docs tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
     for (const [tabId, digest] of beforeSnapshot) {
       const tab = findTab(after, tabId);
       if (!tab) missing.push(tabId);
-      else if (hash(tab.tab.documentTab) !== digest) changed.push(tabId);
+      else if (contentHash(tab.tab.documentTab) !== digest) changed.push(tabId);
     }
     notes.preExistingTabsChanged = changed.length;
     check(missing.length === 0, `pre-existing tabs missing: ${missing.join(', ')}`);

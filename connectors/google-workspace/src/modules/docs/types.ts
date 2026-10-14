@@ -94,7 +94,6 @@ export interface UpdateTabOptions {
   tabId: string; // "default" refused
   title?: string;
   parentTabId?: string; // "default" refused
-  moveToTopLevel?: boolean;
   position?: number; // 0-based final position among the destination siblings
 }
 

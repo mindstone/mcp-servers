@@ -198,7 +198,7 @@ A Google Doc can hold many tabs, nested up to a few levels deep. Every tab has a
 
 `tab_id: "default"` means the first top-level tab for reads, edits, the anchored insert, `parent_tab_id` when adding a tab, and the copy source. Tools that delete, rename, move or overwrite a tab need a real tab id and refuse `"default"`.
 
-**Managing tabs:** `add_workspace_document_tab`, `update_workspace_document_tab` (rename, reorder, nest under another tab, or `move_to_top_level`) and `delete_workspace_document_tab`.
+**Managing tabs:** `add_workspace_document_tab`, `update_workspace_document_tab` (rename, reorder, or nest under another tab; the API can't move a sub-tab back to the top level) and `delete_workspace_document_tab`.
 
 - Tab titles must be unique across the whole document, sub-tabs included; a clash is refused before anything changes.
 - `position` is 0-based among the tab's siblings (0 = first) and means where the tab ends up after the move. The numbers in list outputs start at 1. Results report the position the document actually shows.

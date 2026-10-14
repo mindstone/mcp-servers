@@ -37,7 +37,6 @@ const LEGACY_ALIASES: Record<string, string> = {
   tabId: 'tab_id',
   allTabs: 'all_tabs',
   parentTabId: 'parent_tab_id',
-  moveToTopLevel: 'move_to_top_level',
   anchorText: 'anchor_text',
   expectEmptyParagraph: 'expect_empty_paragraph',
   deleteSubTabs: 'delete_sub_tabs',

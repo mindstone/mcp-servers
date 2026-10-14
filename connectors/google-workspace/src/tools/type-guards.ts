@@ -789,7 +789,6 @@ interface UpdateDocumentTabArgs {
   tabId: string;
   title?: string;
   parentTabId?: string;
-  moveToTopLevel?: boolean;
   position?: number;
 }
 
@@ -839,19 +838,17 @@ export function isUpdateDocumentTabArgs(args: unknown): args is UpdateDocumentTa
   const documentId = readAliasedArg<string>(rawParams, 'document_id', 'documentId');
   const tabId = readAliasedArg<string>(rawParams, 'tab_id', 'tabId');
   const parentTabId = readAliasedArg<string>(rawParams, 'parent_tab_id', 'parentTabId');
-  const moveToTopLevel = readAliasedArg<boolean>(rawParams, 'move_to_top_level', 'moveToTopLevel');
   return isOptional(rawParams.email, 'string') &&
     typeof documentId === 'string' &&
     typeof tabId === 'string' &&
     isOptional(rawParams.title, 'string') &&
     isOptional(parentTabId, 'string') &&
-    isOptional(moveToTopLevel, 'boolean') &&
     isOptional(rawParams.position, 'number');
 }
 
 export function assertUpdateDocumentTabArgs(args: unknown): asserts args is UpdateDocumentTabArgs {
   if (!isUpdateDocumentTabArgs(args)) {
-    throw new Error('Invalid update document tab parameters. Required: document_id, tab_id. Optional: title (string), parent_tab_id (string), move_to_top_level (boolean), position (number)');
+    throw new Error('Invalid update document tab parameters. Required: document_id, tab_id. Optional: title (string), parent_tab_id (string), position (number)');
   }
 }
 

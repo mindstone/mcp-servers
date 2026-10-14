@@ -1149,11 +1149,11 @@ type TabNode = { tabProperties: Record<string, any>; documentTab?: unknown; chil
  * `ignoreIndex` makes the fake API drop the index (to show the mismatch note).
  */
 /**
- * Simulated tab tree. `ignoreIndex`, `ignoreTopLevelMove` and `defaultAddFirst`
- * stand in for the API not behaving as assumed (a position ignored, a move to
- * the top level ignored, an add with no index landing first).
+ * Simulated tab tree. `ignoreIndex`, `ignoreReparent` and `defaultAddFirst`
+ * stand in for the API not behaving as assumed (a position ignored, a move
+ * under another tab ignored, an add with no index landing first).
  */
-function installTabTreeMocks(options: { ignoreIndex?: boolean; ignoreTopLevelMove?: boolean; defaultAddFirst?: boolean } = {}) {
+function installTabTreeMocks(options: { ignoreIndex?: boolean; ignoreReparent?: boolean; defaultAddFirst?: boolean } = {}) {
   const gets: DocsGetCapture[] = [];
   const batches: DocsBatchCapture[] = [];
   const doc = loadNestedDocFixture();
@@ -1207,7 +1207,7 @@ function installTabTreeMocks(options: { ignoreIndex?: boolean; ignoreTopLevelMov
           const { node, list } = find(props.tabId)!;
           if (fieldList.includes('title')) node.tabProperties.title = props.title;
           const reparent = fieldList.includes('parentTabId');
-          if (reparent && !props.parentTabId && options.ignoreTopLevelMove) {
+          if (reparent && options.ignoreReparent) {
             // Accepted but not applied: the tab stays where it was.
           } else if (reparent || fieldList.includes('index')) {
             const from = list.indexOf(node);
@@ -1337,27 +1337,12 @@ describe('Docs tab management', () => {
     expect(batches).toHaveLength(1);
   });
 
-  it('moves a sub-tab to the top level with parentTabId in fields and no value', async () => {
+  it('treats parent_tab_id equal to the current parent as a reorder (no parentTabId in fields)', async () => {
     const { batches } = installTabTreeMocks();
     const handlers = await loadHandlers();
 
-    const result = await handlers.handleUpdateDocumentTab({ document_id: 'nested-doc', tab_id: 't.a1', move_to_top_level: true });
-    const request = batches[0].requests[0].updateDocumentTabProperties;
-    expect(request.fields).toBe('parentTabId,index');
-    expect(request.tabProperties).toEqual({ tabId: 't.a1', index: 3 });
-    expect(unwrap(result)).toBe('Tab updated: "Archive 2031-10-06" [tabId: t.a1] — now at the top level, position 3 (0 = first).');
-  });
-
-  it('treats move_to_top_level on a top-level tab as a reorder (no parentTabId in fields)', async () => {
-    const { batches } = installTabTreeMocks();
-    const handlers = await loadHandlers();
-
-    await handlers.handleUpdateDocumentTab({ document_id: 'nested-doc', tab_id: 't.0', moveToTopLevel: true, position: 1 });
-    expect(batches[0].requests[0].updateDocumentTabProperties).toEqual({ tabProperties: { tabId: 't.0', index: 2 }, fields: 'index' });
-
-    // parent_tab_id equal to the current parent is the same parent too.
     await handlers.handleUpdateDocumentTab({ document_id: 'nested-doc', tab_id: 't.a2', parent_tab_id: 't.0', position: 0 });
-    expect(batches[1].requests[0].updateDocumentTabProperties).toEqual({ tabProperties: { tabId: 't.a2', index: 0 }, fields: 'index' });
+    expect(batches[0].requests[0].updateDocumentTabProperties).toEqual({ tabProperties: { tabId: 't.a2', index: 0 }, fields: 'index' });
   });
 
   it('makes no write for a no-op update', async () => {
@@ -1366,7 +1351,7 @@ describe('Docs tab management', () => {
 
     const same = await handlers.handleUpdateDocumentTab({ document_id: 'nested-doc', tab_id: 't.b', title: 'Template', position: 1 });
     expect(unwrap(same)).toBe('No change: tab "Template" [tabId: t.b] already has that title, parent and position.');
-    await handlers.handleUpdateDocumentTab({ document_id: 'nested-doc', tab_id: 't.0', move_to_top_level: true });
+    await handlers.handleUpdateDocumentTab({ document_id: 'nested-doc', tab_id: 't.a1', parent_tab_id: 't.0' });
     expect(batches).toHaveLength(0);
   });
 
@@ -1381,15 +1366,15 @@ describe('Docs tab management', () => {
     );
   });
 
-  it('warns when a move to the top level is accepted but the tab stays nested', async () => {
-    installTabTreeMocks({ ignoreTopLevelMove: true });
+  it('warns when a move under another tab is accepted but the tab stays where it was', async () => {
+    installTabTreeMocks({ ignoreReparent: true });
     const handlers = await loadHandlers();
 
-    const result = unwrap(await handlers.handleUpdateDocumentTab({ document_id: 'nested-doc', tab_id: 't.a1', move_to_top_level: true }));
+    const result = unwrap(await handlers.handleUpdateDocumentTab({ document_id: 'nested-doc', tab_id: 't.c', parent_tab_id: 't.0', position: 0 }));
     expect(result).toBe(
-      'Tab updated: "Archive 2031-10-06" [tabId: t.a1] — now under "Team sync", position 0 (0 = first).\n' +
-        'WARNING: it was meant to go at the top level, but the document shows it under "Team sync"; ' +
-        'the requested position was 3, but the document reports position 0. Check the tab list before going on.'
+      'Tab updated: "Campaign notes" [tabId: t.c] — now at the top level, position 2 (0 = first).\n' +
+        'WARNING: it was meant to go under tab t.0, but the document shows it at the top level; ' +
+        'the requested position was 0, but the document reports position 2. Check the tab list before going on.'
     );
   });
 
@@ -1404,7 +1389,7 @@ describe('Docs tab management', () => {
     );
   });
 
-  it('refuses "default", conflicting or missing changes and unknown tabs before any write', async () => {
+  it('refuses "default", missing changes and unknown tabs before any write', async () => {
     const { batches } = installTabTreeMocks();
     const handlers = await loadHandlers();
     const invalidParams = { code: ErrorCode.InvalidParams };
@@ -1414,8 +1399,9 @@ describe('Docs tab management', () => {
       .rejects.toMatchObject({ ...invalidParams, message: expect.stringContaining(defaultRefused) });
     await expect(handlers.handleUpdateDocumentTab({ document_id: 'nested-doc', tab_id: 't.c', parent_tab_id: 'default' }))
       .rejects.toMatchObject({ ...invalidParams, message: expect.stringContaining(defaultRefused) });
-    await expect(handlers.handleUpdateDocumentTab({ document_id: 'nested-doc', tab_id: 't.c', parent_tab_id: 't.0', move_to_top_level: true }))
-      .rejects.toMatchObject({ ...invalidParams, message: expect.stringContaining('not both') });
+    // move_to_top_level is no longer a parameter (the API rejects clearing parentTabId): ignored like any unknown key.
+    await expect(handlers.handleUpdateDocumentTab({ document_id: 'nested-doc', tab_id: 't.a1', move_to_top_level: true } as Parameters<typeof handlers.handleUpdateDocumentTab>[0]))
+      .rejects.toMatchObject({ ...invalidParams, message: expect.stringContaining('Pass at least one of title, parent_tab_id or position.') });
     await expect(handlers.handleUpdateDocumentTab({ document_id: 'nested-doc', tab_id: 't.c' }))
       .rejects.toMatchObject({ ...invalidParams, message: expect.stringContaining('Pass at least one of') });
     await expect(handlers.handleUpdateDocumentTab({ document_id: 'nested-doc', tab_id: 't.c', position: 3 }))

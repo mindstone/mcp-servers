@@ -535,13 +535,15 @@ describe('server argument path for the tab-management and insert tools', () => {
   const base = { document_id: 'nested-doc' };
 
   it('maps camelCase aliases to canonical keys', () => {
-    expect(normalizeArgs({ ...base, parentTabId: 't.0', moveToTopLevel: true, anchorText: 'x', expectEmptyParagraph: true, deleteSubTabs: true }))
-      .toMatchObject({ parent_tab_id: 't.0', move_to_top_level: true, anchor_text: 'x', expect_empty_paragraph: true, delete_sub_tabs: true });
+    expect(normalizeArgs({ ...base, parentTabId: 't.0', anchorText: 'x', expectEmptyParagraph: true, deleteSubTabs: true }))
+      .toMatchObject({ parent_tab_id: 't.0', anchor_text: 'x', expect_empty_paragraph: true, delete_sub_tabs: true });
+    // move_to_top_level was dropped (the API rejects clearing parentTabId): no alias for it.
+    expect(normalizeArgs({ ...base, moveToTopLevel: true })).not.toHaveProperty('move_to_top_level');
   });
 
   it('accepts well-typed arguments in canonical and camelCase form', () => {
     expect(isAddDocumentTabArgs(normalizeArgs({ ...base, title: 'Q4', parentTabId: 't.0', position: 0 }))).toBe(true);
-    expect(isUpdateDocumentTabArgs(normalizeArgs({ ...base, tabId: 't.b', title: 'New', moveToTopLevel: true, position: 1 }))).toBe(true);
+    expect(isUpdateDocumentTabArgs(normalizeArgs({ ...base, tabId: 't.b', title: 'New', parentTabId: 't.0', position: 1 }))).toBe(true);
     expect(isDeleteDocumentTabArgs(normalizeArgs({ ...base, tab_id: 't.b' }))).toBe(true);
     expect(isDeleteDocumentTabArgs(normalizeArgs({ ...base, tab_id: 't.b', deleteSubTabs: true }))).toBe(true);
     expect(isInsertDocumentTextArgs(normalizeArgs({ ...base, anchorText: 'Out of office', text: 'x', position: 'next_paragraph_start', expectEmptyParagraph: true }))).toBe(true);
@@ -551,7 +553,7 @@ describe('server argument path for the tab-management and insert tools', () => {
     expect(isAddDocumentTabArgs(normalizeArgs({ ...base }))).toBe(false);
     expect(isAddDocumentTabArgs(normalizeArgs({ ...base, title: 'Q4', position: '0' }))).toBe(false);
     expect(isUpdateDocumentTabArgs(normalizeArgs({ ...base, title: 'x' }))).toBe(false);
-    expect(isUpdateDocumentTabArgs(normalizeArgs({ ...base, tab_id: 't.b', move_to_top_level: 'yes' }))).toBe(false);
+    expect(isUpdateDocumentTabArgs(normalizeArgs({ ...base, tab_id: 't.b', parent_tab_id: 3 }))).toBe(false);
     expect(isDeleteDocumentTabArgs(normalizeArgs({ ...base }))).toBe(false);
     expect(isDeleteDocumentTabArgs(normalizeArgs({ ...base, tab_id: 't.b', delete_sub_tabs: 'yes' }))).toBe(false);
     expect(isInsertDocumentTextArgs(normalizeArgs({ ...base, text: 'x' }))).toBe(false);

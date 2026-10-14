@@ -537,8 +537,9 @@ export const docsTools: ToolMetadata[] = [
   {
     name: 'update_workspace_document_tab',
     category: 'Docs/Documents',
-    description: `Rename a tab and/or move it in a Google Docs document: reorder it among its siblings,
-    nest it under another tab, or move it to the top level. A moved tab takes its sub-tabs with it.
+    description: `Rename a tab and/or move it in a Google Docs document: reorder it among its siblings
+    or nest it under another tab. A moved tab takes its sub-tabs with it. The API can't move a
+    sub-tab back to the top level; re-create it there instead if needed.
 
     position is where the tab should end up (0 = first) among its siblings after the move; the
     numbers in list outputs start at 1. When nesting under another tab without position, the tab
@@ -555,10 +556,7 @@ export const docsTools: ToolMetadata[] = [
        { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123", "position": 0 }
 
     3. Nest under another tab, as its first sub-tab:
-       { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123", "parent_tab_id": "t.def456", "position": 0 }
-
-    4. Move a sub-tab to the top level, as the second tab:
-       { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123", "move_to_top_level": true, "position": 1 }`,
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123", "parent_tab_id": "t.def456", "position": 0 }`,
     aliases: ['rename_doc_tab', 'move_doc_tab', 'reorder_document_tab'],
     annotations: { readOnlyHint: false, destructiveHint: true },
     inputSchema: {
@@ -582,11 +580,7 @@ export const docsTools: ToolMetadata[] = [
         },
         parent_tab_id: {
           type: 'string',
-          description: 'Tab id to nest this tab under ("default" is not accepted). Not with move_to_top_level.'
-        },
-        move_to_top_level: {
-          type: 'boolean',
-          description: 'Move the tab out of its parent to the top level (default: false). Not with parent_tab_id.'
+          description: 'Tab id to nest this tab under ("default" is not accepted)'
         },
         position: {
           type: 'number',
