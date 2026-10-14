@@ -78,7 +78,7 @@ export interface DocumentResponse {
   tabs?: TabInfo[];
   revisionId?: string;
   shownTab?: { tabId: string; title: string }; // no-tab read: the first tab shown
-  requestedTab?: { tabId: string; title: string; path: string }; // tab_id read/edit target
+  requestedTab?: { tabId: string; title: string; path: string; childCount?: number }; // tab_id read/edit target (childCount set on reads)
 }
 
 export interface DocsOperationResult {

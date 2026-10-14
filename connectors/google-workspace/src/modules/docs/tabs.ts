@@ -208,19 +208,23 @@ export function requireTabs(doc: docs_v1.Schema$Document): docs_v1.Schema$Tab[] 
   return doc.tabs;
 }
 
+/** Marker for the one tab an `all_tabs` read cuts at the shared budget. */
+export const TAB_TRUNCATION_MARKER = '\n\n[TRUNCATED - this tab continues past the max_chars budget]';
+
 /**
  * Text of every tab, in tree order, under `## Tab:` headings. `maxChars` is one
  * budget for tab text shared across all tabs; headings and the final
- * "not shown" list sit outside it. The tab that crosses the budget is cut with
- * the truncation marker and later tabs are listed by path and id only.
+ * "not shown in full" list sit outside it. The tab that crosses the budget is
+ * cut with the tab truncation marker; it heads the final list (marked
+ * "cut short"), followed by every later tab by path and id.
  */
 export function buildAllTabsText(
   flat: FlatTab[],
   maxChars: number
 ): { content: string; truncated: boolean; shownCount: number } {
-  const parts: string[] = [];
+  const blocks: string[] = [];
   let used = 0;
-  let truncated = false;
+  let cut: FlatTab | undefined;
   let next = 0;
 
   for (; next < flat.length; next++) {
@@ -232,28 +236,24 @@ export function buildAllTabsText(
     const heading = `## Tab: ${tab.path} [tabId: ${tab.tabId}]`;
     const text = extractBodyText(tab.tab.documentTab?.body, { renderInline: true });
     if (text.length > remaining) {
-      parts.push(`${heading}\n${text.substring(0, remaining)}${TRUNCATION_MARKER}\n`);
-      used = maxChars;
-      truncated = true;
+      blocks.push(`${heading}\n${text.substring(0, remaining)}${TAB_TRUNCATION_MARKER}\n`);
+      cut = tab;
       next++;
       break;
     }
-    parts.push(`${heading}\n${text}\n`);
+    blocks.push(`${heading}\n${text}\n`);
     used += text.length;
   }
 
-  const shownCount = next;
-  const notShown = flat.slice(next);
-  if (notShown.length > 0) {
-    truncated = true;
-    parts.push('\n[Not shown — over the max_chars budget; read them with tab_id]:');
-    for (const tab of notShown) {
-      parts.push(`- ${tab.path} [tabId: ${tab.tabId}]`);
-    }
-  }
+  const listed = [
+    ...(cut ? [`- ${cut.path} [tabId: ${cut.tabId}] (cut short)`] : []),
+    ...flat.slice(next).map((tab) => `- ${tab.path} [tabId: ${tab.tabId}]`),
+  ];
 
-  // Tab blocks end with their own newline; the not-shown list is newline-joined.
-  const blocks = parts.slice(0, shownCount).join('');
-  const tail = parts.slice(shownCount).join('\n');
-  return { content: blocks + tail, truncated, shownCount };
+  // Tab blocks end with their own newline; the final list is newline-joined.
+  let content = blocks.join('');
+  if (listed.length > 0) {
+    content += ['\n[Not shown in full — over the max_chars budget; read them with tab_id]:', ...listed].join('\n');
+  }
+  return { content, truncated: listed.length > 0, shownCount: next };
 }

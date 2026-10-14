@@ -7,6 +7,7 @@ import type { docs_v1 } from 'googleapis';
 import {
   DocsInputError,
   TAB_TREE_FIELDS,
+  TAB_TRUNCATION_MARKER,
   TRUNCATION_MARKER,
   bodyEndIndex,
   buildAllTabsText,
@@ -17,6 +18,14 @@ import {
   requireTabs,
   resolveTab,
 } from '../src/modules/docs/tabs.js';
+import { normalizeArgs } from '../src/tools/param-normalizer.js';
+import {
+  isAppendDocumentArgs,
+  isFindReplaceArgs,
+  isListTabsArgs,
+  isReadDocumentArgs,
+  isReplaceDocumentArgs,
+} from '../src/tools/type-guards.js';
 
 const FIXTURE_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures/docs-tabs/nested-doc.json');
 
@@ -212,15 +221,17 @@ describe('buildAllTabsText', () => {
     expect(result.content).not.toContain('[Not shown');
   });
 
-  it('shares one budget across tabs, cuts the crossing tab and lists the rest by id', () => {
+  it('shares one budget across tabs, cuts the crossing tab and lists it and the rest by id', () => {
     // t.0 = 25 chars, t.a1 = 22 chars: a 30-char budget cuts t.a1 after 5 chars.
     const result = buildAllTabsText(flat, 30);
     expect(result.truncated).toBe(true);
     expect(result.shownCount).toBe(2);
     expect(result.content).toBe(
       '## Tab: Team sync [tabId: t.0]\nWeekly notes\nOwner: Jane\n\n' +
-        `## Tab: Team sync > Archive 2031-10-06 [tabId: t.a1]\nArchi${TRUNCATION_MARKER}\n` +
-        '\n[Not shown — over the max_chars budget; read them with tab_id]:\n' +
+        '## Tab: Team sync > Archive 2031-10-06 [tabId: t.a1]\nArchi' +
+        '\n\n[TRUNCATED - this tab continues past the max_chars budget]\n' +
+        '\n[Not shown in full — over the max_chars budget; read them with tab_id]:\n' +
+        '- Team sync > Archive 2031-10-06 [tabId: t.a1] (cut short)\n' +
         '- Team sync > Archive 2031-10-06 > Notes [tabId: t.a1x]\n' +
         '- Team sync > Archive 2031-09-29 [tabId: t.a2]\n' +
         '- Template [tabId: t.b]\n' +
@@ -232,7 +243,58 @@ describe('buildAllTabsText', () => {
     const result = buildAllTabsText(flat, 25);
     expect(result.shownCount).toBe(1);
     expect(result.truncated).toBe(true);
+    expect(result.content).not.toContain(TAB_TRUNCATION_MARKER);
     expect(result.content).not.toContain(TRUNCATION_MARKER);
-    expect(result.content).toContain('- Team sync > Archive 2031-10-06 [tabId: t.a1]');
+    expect(result.content).not.toContain('(cut short)');
+    expect(result.content).toContain('- Team sync > Archive 2031-10-06 [tabId: t.a1]\n');
+  });
+
+  it('names the cut tab in the final list even when no tab follows it', () => {
+    // Campaign notes is the last tab: a budget that ends inside it lists only it.
+    const lastOnly = flat.filter((tab) => tab.tabId === 't.c');
+    const result = buildAllTabsText(lastOnly, 5);
+    expect(result.truncated).toBe(true);
+    expect(result.shownCount).toBe(1);
+    expect(result.content.endsWith(
+      `${TAB_TRUNCATION_MARKER}\n` +
+        '\n[Not shown in full — over the max_chars budget; read them with tab_id]:\n' +
+        '- Campaign notes [tabId: t.c] (cut short)'
+    )).toBe(true);
+  });
+});
+
+describe('server argument path for tab arguments (normalizeArgs + type guards)', () => {
+  // The server normalizes camelCase aliases to canonical keys, then runs the
+  // guard before the handler; the handler-level tests above skip both steps.
+  const base = { document_id: 'nested-doc' };
+
+  it('maps tabId / allTabs to tab_id / all_tabs and keeps an explicit canonical key', () => {
+    expect(normalizeArgs({ ...base, tabId: 't.b', allTabs: true })).toMatchObject({ tab_id: 't.b', all_tabs: true });
+    expect(normalizeArgs({ ...base, tab_id: 't.c', tabId: 't.b' })).toMatchObject({ tab_id: 't.c' });
+  });
+
+  it('accepts tab arguments in canonical and camelCase form on every Docs tool that takes them', () => {
+    for (const tab of [{ tab_id: 't.b' }, { tabId: 't.b' }]) {
+      const viaServer = (args: Record<string, unknown>) => normalizeArgs({ ...args, ...tab });
+      expect(isReadDocumentArgs(viaServer(base))).toBe(true);
+      expect(isAppendDocumentArgs(viaServer({ ...base, text: 'x' }))).toBe(true);
+      expect(isReplaceDocumentArgs(viaServer({ ...base, content: 'x' }))).toBe(true);
+      expect(isFindReplaceArgs(viaServer({ ...base, find_text: 'a', replace_text: 'b' }))).toBe(true);
+    }
+    expect(isReadDocumentArgs(normalizeArgs({ ...base, all_tabs: true }))).toBe(true);
+    expect(isReadDocumentArgs(normalizeArgs({ ...base, allTabs: false }))).toBe(true);
+    expect(isListTabsArgs(normalizeArgs({ ...base, return_json: true }))).toBe(true);
+    expect(isListTabsArgs(normalizeArgs({ ...base, returnJson: true }))).toBe(true);
+  });
+
+  it('rejects wrong-typed tab arguments', () => {
+    expect(isReadDocumentArgs(normalizeArgs({ ...base, tab_id: 3 }))).toBe(false);
+    expect(isReadDocumentArgs(normalizeArgs({ ...base, tabId: ['t.b'] }))).toBe(false);
+    expect(isReadDocumentArgs(normalizeArgs({ ...base, all_tabs: 'yes' }))).toBe(false);
+    expect(isReadDocumentArgs(normalizeArgs({ ...base, allTabs: 1 }))).toBe(false);
+    expect(isAppendDocumentArgs(normalizeArgs({ ...base, text: 'x', tab_id: 3 }))).toBe(false);
+    expect(isReplaceDocumentArgs(normalizeArgs({ ...base, content: 'x', tabId: {} }))).toBe(false);
+    expect(isFindReplaceArgs(normalizeArgs({ ...base, find_text: 'a', replace_text: 'b', tab_id: true }))).toBe(false);
+    expect(isListTabsArgs(normalizeArgs({ ...base, return_json: 'true' }))).toBe(false);
   });
 });

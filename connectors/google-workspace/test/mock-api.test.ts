@@ -861,11 +861,15 @@ describe('Docs tabs', () => {
     expect(text).not.toContain('Weekly notes');
 
     const nested = String(await handlers.handleReadDocument({ document_id: 'nested-doc', tabId: 't.a1x' }));
-    expect(nested).toContain('Tab: Team sync > Archive 2031-10-06 > Notes [tabId: t.a1x]');
+    expect(nested).toContain('Tab: Team sync > Archive 2031-10-06 > Notes [tabId: t.a1x]\n---\n');
     expect(nested).toContain('Nested note');
 
     const first = String(await handlers.handleReadDocument({ document_id: 'nested-doc', tab_id: 'default' }));
-    expect(first).toContain('Tab: Team sync [tabId: t.0]');
+    expect(first).toContain('Tab: Team sync [tabId: t.0] (2 sub-tabs, not included — read them by tab_id)\n---\n');
+    expect(first).not.toContain('Nested note');
+
+    const parent = String(await handlers.handleReadDocument({ document_id: 'nested-doc', tab_id: 't.a1' }));
+    expect(parent).toContain('Tab: Team sync > Archive 2031-10-06 [tabId: t.a1] (1 sub-tab, not included — read them by tab_id)\n---\n');
   });
 
   it('reads all tabs under headings with one shared max_chars budget', async () => {
@@ -880,7 +884,11 @@ describe('Docs tabs', () => {
 
     const cut = String(await handlers.handleReadDocument({ document_id: 'nested-doc', all_tabs: true, max_chars: 30 }));
     expect(cut).toContain('Status: TRUNCATED (content exceeded limit)');
-    expect(cut).toContain('[Not shown — over the max_chars budget; read them with tab_id]:');
+    expect(cut).toContain('[TRUNCATED - this tab continues past the max_chars budget]');
+    expect(cut).toContain(
+      '[Not shown in full — over the max_chars budget; read them with tab_id]:\n' +
+        '- Team sync > Archive 2031-10-06 [tabId: t.a1] (cut short)\n'
+    );
     expect(cut).toContain('- Template [tabId: t.b]');
   });
 
@@ -931,6 +939,55 @@ describe('Docs tabs', () => {
     // Text mode still reads it (bounded by max_chars).
     await expect(handlers.handleReadDocument({ document_id: 'big-doc', tab_id: 't.big', max_chars: 100 }))
       .resolves.toContain('[TRUNCATED');
+  });
+
+  it('measures the 100k tab JSON cap on the enveloped output, not the raw JSON', async () => {
+    // Many short strings: raw JSON fits under the cap, the per-string envelopes push it over.
+    const content = Array.from({ length: 1000 }, () => ({ paragraph: { elements: [{ textRun: { content: 'x\n' } }] } }));
+    const capTab = { tabProperties: { tabId: 't.many', title: 'Many lines', index: 0 }, documentTab: { body: { content } } };
+    mswServer.use(
+      http.get('https://docs.googleapis.com/v1/documents/cap-doc', () => HttpResponse.json({
+        documentId: 'cap-doc',
+        title: 'Acme line items',
+        tabs: [capTab],
+      })),
+    );
+    const handlers = await loadHandlers();
+    const { wrapUntrustedJsonStrings } = await import('../src/utils/untrusted-content.js');
+    // The payload the service builds for this tab (see getDocumentTabs).
+    const payload = { documentId: 'cap-doc', title: 'Acme line items', tab: capTab, childTabs: [] };
+    expect(JSON.stringify(payload).length).toBeLessThan(100_000);
+    expect(JSON.stringify(wrapUntrustedJsonStrings(payload, 'google-workspace:docs:document/cap-doc')).length).toBeGreaterThan(100_000);
+
+    await expect(handlers.handleReadDocument({ document_id: 'cap-doc', tab_id: 't.many', return_json: true }))
+      .rejects.toMatchObject({ code: ErrorCode.InvalidParams, message: expect.stringMatching(/JSON is \d+ characters, over the 100000 limit/) });
+  });
+
+  it('excludes sub-tab content from the tab JSON cap', async () => {
+    const hugeText = 'y'.repeat(150_000) + '\n';
+    mswServer.use(
+      http.get('https://docs.googleapis.com/v1/documents/parent-doc', () => HttpResponse.json({
+        documentId: 'parent-doc',
+        title: 'Acme handbook',
+        tabs: [{
+          tabProperties: { tabId: 't.small', title: 'Overview', index: 0 },
+          documentTab: { body: { content: [{ paragraph: { elements: [{ textRun: { content: 'Short overview\n' } }] } }] } },
+          childTabs: [{
+            tabProperties: { tabId: 't.huge', title: 'Appendix', index: 0, parentTabId: 't.small', nestingLevel: 1 },
+            documentTab: { body: { content: [{ paragraph: { elements: [{ textRun: { content: hugeText } }] } }] } },
+          }],
+        }],
+      })),
+    );
+    const handlers = await loadHandlers();
+
+    const json = JSON.stringify(await handlers.handleReadDocument({ document_id: 'parent-doc', tab_id: 't.small', return_json: true }));
+    expect(json).toContain('Short overview');
+    expect(json).toContain('t.huge');
+    expect(json).not.toContain('yyyy');
+    // The child itself is over the cap when requested directly.
+    await expect(handlers.handleReadDocument({ document_id: 'parent-doc', tab_id: 't.huge', return_json: true }))
+      .rejects.toMatchObject({ code: ErrorCode.InvalidParams });
   });
 
   it('I3: append without tab_id sends today\'s request; with tab_id it targets that tab', async () => {
@@ -1004,10 +1061,8 @@ describe('Docs tabs', () => {
 
     const result = String(await handlers.handleFindAndReplace({ document_id: 'nested-doc', tab_id: 't.b', find_text: '{{date}}', replace_text: '2031-10-13' }));
     expect(batches[0].requests[0].replaceAllText.tabsCriteria).toEqual({ tabIds: ['t.b'] });
-    expect(gets).toEqual([
-      { includeTabsContent: 'true', fields: TAB_TREE_FIELDS },
-      { includeTabsContent: 'true', fields: TAB_TREE_FIELDS },
-    ]);
+    // One tree read: resolves the tab and supplies the title (no read after the replace).
+    expect(gets).toEqual([{ includeTabsContent: 'true', fields: TAB_TREE_FIELDS }]);
     expect(result.startsWith('Find and replace completed! (tab t.b)\n\nReplaced 1 occurrence of')).toBe(true);
     expect(result).not.toContain('Searched all');
 
@@ -1039,6 +1094,12 @@ describe('Docs tabs', () => {
     const miss = String(await handlers.handleFindAndReplace({ document_id: 'nested-doc', find_text: 'absent', replace_text: 'b' }));
     expect(miss.startsWith('No occurrences of "absent" found in the document.\n\nDocument: <untrusted-content')).toBe(true);
     expectSingleEnvelopeClose(miss);
+
+    // A tab-scoped miss names the one tab searched, not the whole document.
+    const scopedMiss = String(await handlers.handleFindAndReplace({ document_id: 'nested-doc', tab_id: 't.b', find_text: 'absent', replace_text: 'b' }));
+    expect(scopedMiss.startsWith('No occurrences of "absent" found in tab t.b.\n\nDocument: <untrusted-content')).toBe(true);
+    expect(scopedMiss).not.toContain('found in the document');
+    expectSingleEnvelopeClose(scopedMiss);
   });
 
   it('lists the real tab tree (tree-only read), with word counts and as JSON', async () => {

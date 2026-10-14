@@ -115,7 +115,11 @@ export function formatDocumentResponseAsText(doc: DocumentResponse): string {
   lines.push(`ID: ${doc.documentId}`);
 
   if (doc.requestedTab) {
-    lines.push(`Tab: ${doc.requestedTab.path} [tabId: ${doc.requestedTab.tabId}]`);
+    const subTabs = doc.requestedTab.childCount ?? 0;
+    const subTabNote = subTabs > 0
+      ? ` (${subTabs} sub-tab${subTabs !== 1 ? 's' : ''}, not included — read them by tab_id)`
+      : '';
+    lines.push(`Tab: ${doc.requestedTab.path} [tabId: ${doc.requestedTab.tabId}]${subTabNote}`);
   } else if (doc.shownTab && doc.tabCount !== undefined && doc.tabCount > 1) {
     lines.push(
       `Tabs: ${doc.tabCount} — showing the first tab "${doc.shownTab.title}" [tabId: ${doc.shownTab.tabId}]. ` +
@@ -360,7 +364,9 @@ export async function handleFindAndReplace(args: FindReplaceArgs): Promise<McpTo
       : '';
     
     if (occurrences === 0) {
-      return `No occurrences of "${findText}" found in the document.${tabSuffix(docResponse)}\n\n${documentLine}\nURL: ${docResponse.documentUrl}${scopeNote}`;
+      // A tab-scoped miss names the tab searched, not the whole document.
+      const searched = docResponse.requestedTab ? `tab ${docResponse.requestedTab.tabId}` : 'the document';
+      return `No occurrences of "${findText}" found in ${searched}.\n\n${documentLine}\nURL: ${docResponse.documentUrl}${scopeNote}`;
     }
     
     return `Find and replace completed!${tabSuffix(docResponse)}\n\nReplaced ${occurrences} occurrence${occurrences !== 1 ? 's' : ''} of "${findText}" with "${replaceText}"\n\n${documentLine}\nURL: ${docResponse.documentUrl}${scopeNote}`;

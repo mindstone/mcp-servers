@@ -309,14 +309,14 @@
             },
             {
               "startIndex": 19,
-              "endIndex": 49,
+              "endIndex": 53,
               "table": {
                 "rows": 2,
                 "columns": 2,
                 "tableRows": [
                   {
                     "startIndex": 20,
-                    "endIndex": 36,
+                    "endIndex": 38,
                     "tableCells": [
                       {
                         "startIndex": 21,
@@ -363,21 +363,21 @@
                     ]
                   },
                   {
-                    "startIndex": 36,
-                    "endIndex": 48,
+                    "startIndex": 38,
+                    "endIndex": 52,
                     "tableCells": [
                       {
-                        "startIndex": 37,
-                        "endIndex": 45,
+                        "startIndex": 39,
+                        "endIndex": 47,
                         "content": [
                           {
-                            "startIndex": 38,
-                            "endIndex": 45,
+                            "startIndex": 40,
+                            "endIndex": 47,
                             "paragraph": {
                               "elements": [
                                 {
-                                  "startIndex": 38,
-                                  "endIndex": 45,
+                                  "startIndex": 40,
+                                  "endIndex": 47,
                                   "textRun": {
                                     "content": "Search\n"
                                   }
@@ -388,17 +388,17 @@
                         ]
                       },
                       {
-                        "startIndex": 45,
-                        "endIndex": 50,
+                        "startIndex": 47,
+                        "endIndex": 52,
                         "content": [
                           {
-                            "startIndex": 46,
-                            "endIndex": 50,
+                            "startIndex": 48,
+                            "endIndex": 52,
                             "paragraph": {
                               "elements": [
                                 {
-                                  "startIndex": 46,
-                                  "endIndex": 50,
+                                  "startIndex": 48,
+                                  "endIndex": 52,
                                   "textRun": {
                                     "content": "120\n"
                                   }
@@ -414,13 +414,13 @@
               }
             },
             {
-              "startIndex": 49,
-              "endIndex": 53,
+              "startIndex": 53,
+              "endIndex": 57,
               "paragraph": {
                 "elements": [
                   {
-                    "startIndex": 49,
-                    "endIndex": 53,
+                    "startIndex": 53,
+                    "endIndex": 57,
                     "textRun": {
                       "content": "End\n"
                     }

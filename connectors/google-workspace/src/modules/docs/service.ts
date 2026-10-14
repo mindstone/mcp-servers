@@ -291,7 +291,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
       truncated,
       revisionId: doc.revisionId || undefined,
       tabCount: flat.length,
-      requestedTab: { tabId: tab.tabId, title: tab.title, path: tab.path },
+      requestedTab: { tabId: tab.tabId, title: tab.title, path: tab.path, childCount: tab.childCount },
     };
     return { success: true, data: result };
   }
@@ -576,9 +576,10 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
       );
 
       let target: FlatTab | undefined;
+      let preRead: { doc: docs_v1.Schema$Document; flat: FlatTab[] } | undefined;
       if (options.tabId !== undefined) {
-        const { flat } = await this.readTabTree(client, options.documentId);
-        target = resolveTab(flat, options.tabId, { allowDefault: true });
+        preRead = await this.readTabTree(client, options.documentId);
+        target = resolveTab(preRead.flat, options.tabId, { allowDefault: true });
       }
 
       const response = await client.documents.batchUpdate({
@@ -606,8 +607,9 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
         occurrencesChanged = replies[0].replaceAllText.occurrencesChanged;
       }
 
-      // Get updated document info (title + tab tree, no content)
-      const tree = await this.readTabTree(client, options.documentId);
+      // Title + tab tree (no content): reuse the pre-read when tab_id was set;
+      // otherwise read it now for the "Searched all <n> tabs" note.
+      const tree = preRead ?? (await this.readTabTree(client, options.documentId));
 
       const data: DocumentResponse = {
         title: tree.doc.title || 'Untitled',
