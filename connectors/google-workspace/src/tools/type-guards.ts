@@ -164,7 +164,7 @@ export function isDriveFileListArgs(args: unknown): args is DriveFileListArgs {
       return (opts.folderId === undefined || typeof opts.folderId === 'string') &&
         (opts.query === undefined || typeof opts.query === 'string') &&
         (opts.pageSize === undefined || typeof opts.pageSize === 'number') &&
-        (opts.orderBy === undefined || (Array.isArray(opts.orderBy) && opts.orderBy.every((o: unknown) => typeof o === 'string'))) &&
+        (opts.orderBy === undefined || typeof opts.orderBy === 'string' || (Array.isArray(opts.orderBy) && opts.orderBy.every((o: unknown) => typeof o === 'string'))) &&
         (opts.fields === undefined || (Array.isArray(opts.fields) && opts.fields.every((f: unknown) => typeof f === 'string'))) &&
         (opts.driveId === undefined || typeof opts.driveId === 'string') &&
         isValidCorpora(opts.corpora);

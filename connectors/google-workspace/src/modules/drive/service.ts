@@ -42,6 +42,17 @@ function escapeDriveQueryValue(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
+/**
+ * Drive's own `orderBy` is a comma-separated string; callers may pass that
+ * string or an array of keys. Returns undefined when nothing usable is left.
+ */
+export function normalizeOrderBy(value: string | string[] | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const joined = Array.isArray(value) ? value.join(',') : value;
+  const trimmed = joined.trim();
+  return trimmed === '' ? undefined : trimmed;
+}
+
 export class DriveService extends BaseGoogleService<ReturnType<typeof google.drive>> {
   private initialized = false;
 
@@ -108,7 +119,7 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
         q: query.join(' and ') || undefined,
         pageSize: options.pageSize,
         pageToken: options.pageToken,
-        orderBy: options.orderBy?.join(','),
+        orderBy: normalizeOrderBy(options.orderBy),
         fields: options.fields?.join(',') || 'files(id, name, mimeType, modifiedTime, size)',
         // Google rejects driveId unless corpora is 'drive', so force the pairing.
         driveId: options.driveId || undefined,
@@ -339,7 +350,7 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
         q: query.join(' and ') || undefined,
         pageSize: options.pageSize,
         pageToken: options.pageToken,
-        orderBy: options.orderBy?.join(','),
+        orderBy: normalizeOrderBy(options.orderBy),
         fields: options.fields?.join(',') || 'files(id, name, mimeType, modifiedTime, size)',
         // Google rejects driveId unless corpora is 'drive', so force the pairing.
         driveId: options.driveId || undefined,

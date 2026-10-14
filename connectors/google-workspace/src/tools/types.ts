@@ -148,7 +148,7 @@ export interface DriveFileListArgs extends BaseToolArguments {
     folderId?: string;
     query?: string;
     pageSize?: number;
-    orderBy?: string[];
+    orderBy?: string | string[];
     fields?: string[];
     driveId?: string;
     corpora?: 'user' | 'drive' | 'allDrives';

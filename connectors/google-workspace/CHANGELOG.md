@@ -7,6 +7,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- `list_drive_files` accepts `options.orderBy` as a string (`"modifiedTime desc"`) as well as an array.
+
 ## [0.4.2] - 2026-09-29
 
 ### Changed
