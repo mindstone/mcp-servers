@@ -10,6 +10,7 @@ export const sheetsTools: ToolMetadata[] = [
     Returns human-readable text by default. Use return_json: true for the raw Google Sheets API response.
     If you intend to write back to this range, call with value_view: 'shaped' first to see formulas — overwriting formulas with computed values is silently destructive.
     For large or unbounded reads, returns an anchor envelope (first 50 + last 10 rows + summary). Pass anchor_mode: 'never' for legacy first-N truncation. Use continuation_token to page through the middle.
+    Rows in the text output are numbered with their sheet row numbers. Merged cells show their value only in the first cell of the merge and the other cells read as empty, so when finding a row by its labels, carry a merged label down to the rows below it.
 
     Usage examples:
     
@@ -85,6 +86,7 @@ export const sheetsTools: ToolMetadata[] = [
     Use this for focused data extraction. For spreadsheet metadata, use read_workspace_spreadsheet.
     If you intend to write back to this range, call with value_view: 'shaped' first to see formulas — overwriting formulas with computed values is silently destructive.
     For large or unbounded reads, returns an anchor envelope (first 50 + last 10 rows + summary). Pass anchor_mode: 'never' for legacy first-N truncation. Use continuation_token to page through the middle.
+    Rows in the text output are numbered with their sheet row numbers. Merged cells show their value only in the first cell of the merge and the other cells read as empty, so when finding a row by its labels, carry a merged label down to the rows below it.
 
     Usage examples:
     
@@ -257,6 +259,7 @@ export const sheetsTools: ToolMetadata[] = [
 
     Overwrites existing data in the specified range. Use append_to_workspace_spreadsheet to add data without overwriting.
     Prefer formulas over computed values. By default this tool refuses to overwrite cells that currently contain formulas; pass overwrite_formulas: true to force, or write to non-formula cells. Best-effort: protects against formula overwrite absent concurrent edits to the same range during the call. Sheets has no transactional write API; under concurrent edits the guard cannot guarantee zero overwrites. value_input_option defaults to USER_ENTERED so '=SUM(...)' is parsed as a formula; use RAW only when literally storing '=' as text.
+    To add a new column or row formatted like its neighbours (for example a new date column in a tracker), insert it first with insert_workspace_spreadsheet_dimension, then write to it. Write numbers as plain numbers (1234.56), not locale-formatted text such as "€1.234,56": the cell's own format displays them, and formatted text can be stored as text that totals ignore.
 
     Usage examples:
     
@@ -461,17 +464,17 @@ export const sheetsTools: ToolMetadata[] = [
     Google copies the values, formulas, formatting, merged cells and data validation, and gives the copy
     a new numeric sheetId (returned in the result). Without title Google names it "Copy of <name>";
     titles must be unique in the spreadsheet. Without position the copy goes right after the source.
-    To empty the input cells of the copy, overwrite them with new values — clearing a range also deletes any formulas in it.
+    To reuse the copy, write the new values over the old ones instead of clearing the range first — clearing also deletes any formulas in it.
 
     Usage examples:
 
     1. Copy a template tab under a new name (placed right after it):
        { "email": "user@example.com", "spreadsheet_id": "1ABC123xyz", "sheet_id": 123456789, "title": "Acme Launch – Week 1" }
 
-    2. Copy it to the front:
-       { "email": "user@example.com", "spreadsheet_id": "1ABC123xyz", "sheet_id": 123456789, "title": "Acme Launch – Week 1", "position": 0 }
+    2. Copy a tab found by its name to the front:
+       { "email": "user@example.com", "spreadsheet_id": "1ABC123xyz", "sheet_title": "Acme Launch – Template", "title": "Acme Launch – Week 1", "position": 0 }
 
-    Get the numeric sheetId from list_workspace_spreadsheet_sheets.`,
+    Name the sheet to copy by sheet_id (from list_workspace_spreadsheet_sheets) or by its exact name in sheet_title.`,
     aliases: ['duplicate_sheet', 'copy_sheet_tab'],
     annotations: { readOnlyHint: false, destructiveHint: true },
     inputSchema: {
@@ -487,7 +490,11 @@ export const sheetsTools: ToolMetadata[] = [
         },
         sheet_id: {
           type: 'number',
-          description: 'Numeric sheetId of the sheet to copy (from list_workspace_spreadsheet_sheets, NOT the sheet name)'
+          description: 'Numeric sheetId of the sheet to copy (from list_workspace_spreadsheet_sheets). Pass this or sheet_title, not both.'
+        },
+        sheet_title: {
+          type: 'string',
+          description: 'Exact name of the sheet to copy. Pass this or sheet_id, not both.'
         },
         title: {
           type: 'string',
@@ -498,7 +505,7 @@ export const sheetsTools: ToolMetadata[] = [
           description: 'Position of the copy: 0 = first; list_workspace_spreadsheet_sheets numbers sheets from 1. Default: right after the source.'
         }
       },
-      required: ['spreadsheet_id', 'sheet_id']
+      required: ['spreadsheet_id']
     }
   },
   {
@@ -514,10 +521,10 @@ export const sheetsTools: ToolMetadata[] = [
     1. Rename:
        { "email": "user@example.com", "spreadsheet_id": "1ABC123xyz", "sheet_id": 123456789, "title": "Acme Launch – Archive" }
 
-    2. Move to the front:
-       { "email": "user@example.com", "spreadsheet_id": "1ABC123xyz", "sheet_id": 123456789, "position": 0 }
+    2. Move a tab found by its name to the front:
+       { "email": "user@example.com", "spreadsheet_id": "1ABC123xyz", "sheet_title": "Acme Launch – Archive", "position": 0 }
 
-    Get the numeric sheetId from list_workspace_spreadsheet_sheets.`,
+    Name the sheet by sheet_id (from list_workspace_spreadsheet_sheets) or by its current exact name in sheet_title; title is the new name.`,
     aliases: ['rename_sheet', 'move_sheet', 'reorder_sheet'],
     annotations: { readOnlyHint: false, destructiveHint: true },
     inputSchema: {
@@ -533,7 +540,11 @@ export const sheetsTools: ToolMetadata[] = [
         },
         sheet_id: {
           type: 'number',
-          description: 'Numeric sheetId (from list_workspace_spreadsheet_sheets, NOT the sheet name)'
+          description: 'Numeric sheetId (from list_workspace_spreadsheet_sheets). Pass this or sheet_title, not both.'
+        },
+        sheet_title: {
+          type: 'string',
+          description: 'Current exact name of the sheet. Pass this or sheet_id, not both. Put a new name in title.'
         },
         title: {
           type: 'string',
@@ -544,7 +555,7 @@ export const sheetsTools: ToolMetadata[] = [
           description: 'Final position of the sheet: 0 = first; list_workspace_spreadsheet_sheets numbers sheets from 1.'
         }
       },
-      required: ['spreadsheet_id', 'sheet_id']
+      required: ['spreadsheet_id']
     }
   },
   {
@@ -556,6 +567,8 @@ export const sheetsTools: ToolMetadata[] = [
     This shifts cells: everything at and after start_index moves down (rows) or right (columns), and
     Google adjusts formulas that refer to the moved cells. Cell addresses noted before the insert point
     to different cells afterwards, so re-read before writing values. Nothing is deleted.
+    Merged cells, conditional formatting and data validation extend to the new rows/columns only when
+    the insert lands inside them; inserted at their edge, the new rows/columns stay outside them.
 
     start_index is 0-based (row 1 = 0, column A = 0) and is the index the first new row/column gets:
     to add a column after column E (index 4), use start_index 5. count is 1 to 100 (default 1).
@@ -657,6 +670,7 @@ export const sheetsTools: ToolMetadata[] = [
     Ideal for reading from multiple sheets or non-contiguous ranges.
     If you intend to write back to these ranges, call with value_view: 'shaped' first to see formulas — overwriting formulas with computed values is silently destructive.
     For large or unbounded reads, returns an anchor envelope (first 50 + last 10 rows + summary). Pass anchor_mode: 'never' for legacy first-N truncation. Use continuation_token to page through the middle.
+    Rows in the text output are numbered with their sheet row numbers. Merged cells show their value only in the first cell of the merge and the other cells read as empty, so when finding a row by its labels, carry a merged label down to the rows below it.
 
     Usage examples:
     

@@ -1363,7 +1363,8 @@ export function assertDeleteSpreadsheetSheetArgs(args: unknown): asserts args is
 interface DuplicateSpreadsheetSheetArgs {
   email?: string;
   spreadsheetId: string;
-  sheetId: number;
+  sheetId?: number;
+  sheetTitle?: string;
   title?: string;
   position?: number;
 }
@@ -1371,7 +1372,8 @@ interface DuplicateSpreadsheetSheetArgs {
 interface UpdateSpreadsheetSheetArgs {
   email?: string;
   spreadsheetId: string;
-  sheetId: number;
+  sheetId?: number;
+  sheetTitle?: string;
   title?: string;
   position?: number;
 }
@@ -1392,9 +1394,12 @@ export function isDuplicateSpreadsheetSheetArgs(args: unknown): args is Duplicat
   const rawParams = args as Record<string, unknown>;
   const spreadsheetId = readAliasedArg<string>(rawParams, 'spreadsheet_id', 'spreadsheetId');
   const sheetId = readAliasedArg<number>(rawParams, 'sheet_id', 'sheetId');
+  const sheetTitle = readAliasedArg<string>(rawParams, 'sheet_title', 'sheetTitle');
   return isOptional(rawParams.email, 'string') &&
     typeof spreadsheetId === 'string' &&
-    typeof sheetId === 'number' &&
+    isOptional(sheetId, 'number') &&
+    isOptional(sheetTitle, 'string') &&
+    (sheetId !== undefined || sheetTitle !== undefined) &&
     isOptional(rawParams.title, 'string') &&
     isOptional(rawParams.new_title, 'string') &&
     isOptional(rawParams.position, 'number');
@@ -1402,7 +1407,7 @@ export function isDuplicateSpreadsheetSheetArgs(args: unknown): args is Duplicat
 
 export function assertDuplicateSpreadsheetSheetArgs(args: unknown): asserts args is DuplicateSpreadsheetSheetArgs {
   if (!isDuplicateSpreadsheetSheetArgs(args)) {
-    throw new Error('Invalid duplicate spreadsheet sheet parameters. Required: spreadsheet_id, sheet_id (number). Optional: title (string), position (number)');
+    throw new Error('Invalid duplicate spreadsheet sheet parameters. Required: spreadsheet_id, sheet_id (number) or sheet_title (string). Optional: title (string), position (number)');
   }
 }
 
@@ -1411,16 +1416,19 @@ export function isUpdateSpreadsheetSheetArgs(args: unknown): args is UpdateSprea
   const rawParams = args as Record<string, unknown>;
   const spreadsheetId = readAliasedArg<string>(rawParams, 'spreadsheet_id', 'spreadsheetId');
   const sheetId = readAliasedArg<number>(rawParams, 'sheet_id', 'sheetId');
+  const sheetTitle = readAliasedArg<string>(rawParams, 'sheet_title', 'sheetTitle');
   return isOptional(rawParams.email, 'string') &&
     typeof spreadsheetId === 'string' &&
-    typeof sheetId === 'number' &&
+    isOptional(sheetId, 'number') &&
+    isOptional(sheetTitle, 'string') &&
+    (sheetId !== undefined || sheetTitle !== undefined) &&
     isOptional(rawParams.title, 'string') &&
     isOptional(rawParams.position, 'number');
 }
 
 export function assertUpdateSpreadsheetSheetArgs(args: unknown): asserts args is UpdateSpreadsheetSheetArgs {
   if (!isUpdateSpreadsheetSheetArgs(args)) {
-    throw new Error('Invalid update spreadsheet sheet parameters. Required: spreadsheet_id, sheet_id (number). Optional: title (string), position (number)');
+    throw new Error('Invalid update spreadsheet sheet parameters. Required: spreadsheet_id, sheet_id (number) or sheet_title (string). Optional: title (string), position (number)');
   }
 }
 

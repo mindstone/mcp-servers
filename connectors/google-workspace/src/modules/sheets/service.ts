@@ -53,7 +53,7 @@ import {
   parseContinuationToken,
 } from './cellShape.js';
 import { rewriteSheetsApiError } from './errorRewriter.js';
-import { parseA1Range, quoteSheetNameIfNeeded, rowCountFromA1 } from './a1Utils.js';
+import { parseA1Range, quoteSheetNameIfNeeded, quoteSheetTitle, rowCountFromA1 } from './a1Utils.js';
 import {
   detectFormulaOverwrite,
   detectRawFormulaLiterals,
@@ -627,6 +627,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
         spreadsheetId,
         spreadsheetUrl: this.constructSpreadsheetUrl(spreadsheetId),
         values: this.toCellMatrix(response.data.values),
+        valuesRange: response.data.range || continuationRange,
       } as SpreadsheetResponse,
     };
   }
@@ -661,6 +662,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       let values: CellValue[][] | undefined;
       let shapedValues: ShapedReadResponse | undefined;
       let anchorValues: AnchorReadResponse | undefined;
+      let valuesRange: string | undefined;
       let truncated = false;
 
       if (options.range) {
@@ -702,6 +704,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
             } else {
               const valueRange = valuesResult.data as sheets_v4.Schema$ValueRange;
               values = this.toCellMatrix(valueRange.values);
+              valuesRange = valueRange.range || options.range;
 
               // Apply truncation if needed
               const maxRows = options.maxRows ?? DEFAULT_MAX_ROWS;
@@ -734,6 +737,8 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
         truncated,
         shapedValues,
         anchorValues,
+        // Text output only: the JSON shape stays as it was.
+        ...(valuesRange !== undefined && !options.returnJson ? { valuesRange } : {}),
       };
 
       const preserveLegacySpreadsheetJsonShape =
@@ -813,6 +818,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
         spreadsheetId,
         spreadsheetUrl: this.constructSpreadsheetUrl(spreadsheetId),
         values,
+        valuesRange: response.data.range || options.range,
       };
 
       return {
@@ -1699,7 +1705,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       const newTitle = options.title !== undefined ? requireSheetTitle(options.title) : undefined;
       const client = await this.getWriteClient(email);
       const sheets = await this.readSheetList(client, options.spreadsheetId);
-      const source = findSheet(sheets, { sheetId: options.sheetId });
+      const source = findSheet(sheets, { sheetId: options.sheetId, sheetTitle: options.sheetTitle });
 
       // Inserting a new sheet: no before-removal adjustment, any index 0..count.
       assertSheetPosition(options.position, sheets.length);
@@ -1751,7 +1757,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       const newTitle = options.title !== undefined ? requireSheetTitle(options.title) : undefined;
       const client = await this.getWriteClient(email);
       const sheets = await this.readSheetList(client, options.spreadsheetId);
-      const current = findSheet(sheets, { sheetId: options.sheetId });
+      const current = findSheet(sheets, { sheetId: options.sheetId, sheetTitle: options.sheetTitle });
 
       // Final position among all sheets, the moved sheet included.
       assertSheetPosition(options.position, sheets.length - 1);
@@ -1888,7 +1894,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
           startIndex: options.startIndex,
           count,
           inheritFromBefore,
-          a1Range: `${quoteSheetNameIfNeeded(sheet.title)}!${a1Bounds}`,
+          a1Range: `${quoteSheetTitle(sheet.title)}!${a1Bounds}`,
         },
       };
     } catch (error) {

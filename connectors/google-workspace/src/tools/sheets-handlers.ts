@@ -5,6 +5,7 @@ import { ActionableA1Error, normaliseA1Range } from '../modules/sheets/a1Utils.j
 import { rewriteSheetsApiError } from '../modules/sheets/errorRewriter.js';
 import {
   extractSpreadsheetIdFromUrl,
+  firstSheetRowNumber,
   formatAnchorReadResponse,
   formatSpreadsheetAsText,
   formatOperationResult,
@@ -161,6 +162,8 @@ interface DuplicateSheetArgs {
   spreadsheetId?: string;
   sheet_id?: number;
   sheetId?: number;
+  sheet_title?: string;
+  sheetTitle?: string;
   title?: string;
   new_title?: string;
   newTitle?: string;
@@ -173,6 +176,8 @@ interface UpdateSheetArgs {
   spreadsheetId?: string;
   sheet_id?: number;
   sheetId?: number;
+  sheet_title?: string;
+  sheetTitle?: string;
   title?: string;
   position?: number;
 }
@@ -466,13 +471,15 @@ export async function handleReadSpreadsheetValues(args: ReadValuesArgs): Promise
     }
 
     if (valueView === 'shaped') {
-      return formatShapedReadResponse(result.data as ShapedReadResponse);
+      return formatShapedReadResponse(result.data as ShapedReadResponse, { majorDimension });
     }
     
     // Format as human-readable text
     const response = result.data as SpreadsheetResponse;
     const header = `Range: ${args.range}\nSpreadsheet: ${response.spreadsheetUrl}\n---\n`;
-    const table = formatValuesAsTable(response.values);
+    const table = formatValuesAsTable(response.values, {
+      firstRowNumber: firstSheetRowNumber(response.valuesRange, majorDimension),
+    });
     return header + table;
   });
 }
@@ -751,13 +758,25 @@ export async function handleDeleteSheet(args: DeleteSheetArgs): Promise<McpToolR
 }
 
 /**
+ * The sheet a tab tool acts on: exactly one of sheet_id or sheet_title.
+ */
+function readSheetRef(rawArgs: Record<string, unknown>): { sheetId: number } | { sheetTitle: string } {
+  const sheetId = readAliasedNumber(rawArgs, 'sheet_id', 'sheetId');
+  const sheetTitle = readAliasedString(rawArgs, 'sheet_title', 'sheetTitle');
+  if ((sheetId === undefined) === (sheetTitle === undefined)) {
+    throw new McpError(ErrorCode.InvalidParams, 'Pass exactly one of sheet_id or sheet_title.');
+  }
+  return sheetId !== undefined ? { sheetId } : { sheetTitle: sheetTitle as string };
+}
+
+/**
  * Duplicate a sheet (tab) within its spreadsheet
  */
 export async function handleDuplicateSheet(args: DuplicateSheetArgs): Promise<McpToolResponse | string | object> {
   const accountManager = getAccountManager();
   const rawArgs = args as unknown as Record<string, unknown>;
   const spreadsheetId = readAliasedString(rawArgs, 'spreadsheet_id', 'spreadsheetId');
-  const sheetId = readAliasedNumber(rawArgs, 'sheet_id', 'sheetId');
+  const sheetRef = readSheetRef(rawArgs);
   // `new_title` (and `newTitle`, rewritten to it by the normalizer) name the copy too,
   // so a model using either key gets its title instead of a silent "Copy of …".
   const title = readAliasedString(rawArgs, 'title', 'new_title');
@@ -768,7 +787,7 @@ export async function handleDuplicateSheet(args: DuplicateSheetArgs): Promise<Mc
   return await accountManager.withTokenRenewal(email, async () => {
     const result = await getSheetsService().duplicateSheet(email, {
       spreadsheetId: spreadsheetId as string,
-      sheetId: sheetId as number,
+      ...sheetRef,
       ...(title !== undefined ? { title } : {}),
       ...(position !== undefined ? { position } : {}),
     });
@@ -790,7 +809,7 @@ export async function handleUpdateSheet(args: UpdateSheetArgs): Promise<McpToolR
   const accountManager = getAccountManager();
   const rawArgs = args as unknown as Record<string, unknown>;
   const spreadsheetId = readAliasedString(rawArgs, 'spreadsheet_id', 'spreadsheetId');
-  const sheetId = readAliasedNumber(rawArgs, 'sheet_id', 'sheetId');
+  const sheetRef = readSheetRef(rawArgs);
   const title = typeof rawArgs.title === 'string' ? rawArgs.title : undefined;
   const position = typeof rawArgs.position === 'number' ? rawArgs.position : undefined;
 
@@ -799,7 +818,7 @@ export async function handleUpdateSheet(args: UpdateSheetArgs): Promise<McpToolR
   return await accountManager.withTokenRenewal(email, async () => {
     const result = await getSheetsService().updateSheet(email, {
       spreadsheetId: spreadsheetId as string,
-      sheetId: sheetId as number,
+      ...sheetRef,
       ...(title !== undefined ? { title } : {}),
       ...(position !== undefined ? { position } : {}),
     });
@@ -821,22 +840,17 @@ export async function handleInsertDimension(args: InsertDimensionArgs): Promise<
   const accountManager = getAccountManager();
   const rawArgs = args as unknown as Record<string, unknown>;
   const spreadsheetId = readAliasedString(rawArgs, 'spreadsheet_id', 'spreadsheetId');
-  const sheetId = readAliasedNumber(rawArgs, 'sheet_id', 'sheetId');
-  const sheetTitle = readAliasedString(rawArgs, 'sheet_title', 'sheetTitle');
+  const sheetRef = readSheetRef(rawArgs);
   const startIndex = readAliasedNumber(rawArgs, 'start_index', 'startIndex');
   const count = typeof rawArgs.count === 'number' ? rawArgs.count : undefined;
   const inheritFrom = readAliasedValue<'before' | 'after'>(rawArgs, 'inherit_from', 'inheritFrom');
-
-  if ((sheetId === undefined) === (sheetTitle === undefined)) {
-    throw new McpError(ErrorCode.InvalidParams, 'Pass exactly one of sheet_id or sheet_title.');
-  }
 
   const email = await resolveEmail(args);
 
   return await accountManager.withTokenRenewal(email, async () => {
     const result = await getSheetsService().insertDimension(email, {
       spreadsheetId: spreadsheetId as string,
-      ...(sheetId !== undefined ? { sheetId } : { sheetTitle }),
+      ...sheetRef,
       dimension: args.dimension,
       startIndex: startIndex as number,
       ...(count !== undefined ? { count } : {}),
@@ -929,7 +943,7 @@ export async function handleBatchGetValues(args: BatchGetValuesArgs): Promise<Mc
         if (isBatchAnchorValuesResult(rangeData)) {
           output += formatAnchorReadResponse(rangeData.anchor);
         } else {
-          output += formatShapedReadResponse(rangeData.shaped);
+          output += formatShapedReadResponse(rangeData.shaped, { majorDimension });
         }
       }
       return output;
@@ -944,7 +958,9 @@ export async function handleBatchGetValues(args: BatchGetValuesArgs): Promise<Mc
       if (isBatchAnchorValuesResult(rangeData)) {
         output += formatAnchorReadResponse(rangeData.anchor);
       } else {
-        output += formatValuesAsTable(rangeData.values);
+        output += formatValuesAsTable(rangeData.values, {
+          firstRowNumber: firstSheetRowNumber(rangeData.range, majorDimension),
+        });
       }
     }
     

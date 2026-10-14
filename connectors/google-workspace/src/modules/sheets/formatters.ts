@@ -14,6 +14,7 @@ import type {
   SuspiciousWriteWarning,
 } from './types.js';
 import { wrapUntrustedContent } from '../../utils/untrusted-content.js';
+import { firstRowOfA1 } from './a1Utils.js';
 
 /**
  * Construct a Google Sheets URL from spreadsheet ID
@@ -105,6 +106,8 @@ export function formatValuesAsTable(
   options?: {
     maxColWidth?: number;
     includeRowNumbers?: boolean;
+    /** Number shown for the first row: the sheet row the values start at (default 1). */
+    firstRowNumber?: number;
   }
 ): string {
   if (!values || values.length === 0) {
@@ -113,6 +116,7 @@ export function formatValuesAsTable(
 
   const maxColWidth = options?.maxColWidth ?? 30;
   const includeRowNumbers = options?.includeRowNumbers ?? true;
+  const firstRowNumber = options?.firstRowNumber ?? 1;
 
   // Find the maximum width for each column
   const colWidths: number[] = [];
@@ -129,7 +133,7 @@ export function formatValuesAsTable(
   }
 
   // Calculate row number width
-  const rowNumWidth = includeRowNumbers ? String(values.length).length + 1 : 0;
+  const rowNumWidth = includeRowNumbers ? String(firstRowNumber + values.length - 1).length + 1 : 0;
 
   // Build the table
   const lines: string[] = [];
@@ -139,7 +143,7 @@ export function formatValuesAsTable(
     const cells: string[] = [];
 
     if (includeRowNumbers) {
-      cells.push(String(rowIdx + 1).padStart(rowNumWidth - 1) + '|');
+      cells.push(String(firstRowNumber + rowIdx).padStart(rowNumWidth - 1) + '|');
     }
 
     for (let col = 0; col < numCols; col++) {
@@ -180,7 +184,21 @@ function formatAnchorRows(rows: CellTriad[][], startRow: number): string {
   return formatValuesAsTable(tableRows, { includeRowNumbers: false });
 }
 
-export function formatShapedReadResponse(response: ShapedReadResponse): string {
+/**
+ * Sheet row number to show for the first row of values read from `range`.
+ * Values grouped by COLUMNS, or a range that can't be parsed, are numbered from 1.
+ */
+export function firstSheetRowNumber(range: string | undefined, majorDimension?: 'ROWS' | 'COLUMNS'): number {
+  if (majorDimension === 'COLUMNS') {
+    return 1;
+  }
+  return firstRowOfA1(range) ?? 1;
+}
+
+export function formatShapedReadResponse(
+  response: ShapedReadResponse,
+  options?: { majorDimension?: 'ROWS' | 'COLUMNS' },
+): string {
   const lines: string[] = [
     `Range: ${response.range}`,
     `Rows: ${response.rowCount}, Columns: ${response.columnCount}`,
@@ -200,7 +218,9 @@ export function formatShapedReadResponse(response: ShapedReadResponse): string {
   lines.push('---');
 
   const tableRows = response.cells.map((row) => row.map((cell) => formatShapedCell(cell)));
-  lines.push(formatValuesAsTable(tableRows));
+  lines.push(formatValuesAsTable(tableRows, {
+    firstRowNumber: firstSheetRowNumber(response.range, options?.majorDimension),
+  }));
 
   if (response.warnings && response.warnings.length > 0) {
     lines.push('');
@@ -314,7 +334,7 @@ export function formatSpreadsheetAsText(response: SpreadsheetResponse): string {
       parts.push(''); // Add blank line separator
       parts.push('Data:');
     }
-    parts.push(formatValuesAsTable(response.values));
+    parts.push(formatValuesAsTable(response.values, { firstRowNumber: firstSheetRowNumber(response.valuesRange) }));
   }
 
   return wrapUntrustedContent(parts.join('\n'), `google-workspace:sheets:spreadsheet/${response.spreadsheetId}`);

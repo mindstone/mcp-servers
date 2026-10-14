@@ -246,6 +246,21 @@ export function parseA1Range(range: string): ParsedA1 | null {
   };
 }
 
+/**
+ * Sheet name part of an A1 reference for a sheet title exactly as Google
+ * reports it: quoted when needed, with any apostrophe doubled. Unlike
+ * quoteSheetNameIfNeeded, it does not trim the title or read surrounding
+ * apostrophes as quotes, so a title such as `'Archive'` stays that title.
+ */
+export function quoteSheetTitle(title: string): string {
+  const needsQuotes =
+    !SIMPLE_SHEET_NAME_REGEX.test(title) ||
+    isBareA1LikeReference(title) ||
+    looksLikeR1C1Reference(title);
+
+  return needsQuotes ? `'${title.replace(/'/g, '\'\'')}'` : title;
+}
+
 export function quoteSheetNameIfNeeded(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) {
@@ -253,13 +268,23 @@ export function quoteSheetNameIfNeeded(name: string): string {
   }
 
   const unquoted = tryUnquoteSheetName(trimmed) ?? trimmed;
-  const escaped = unquoted.replace(/'/g, '\'\'');
-  const needsQuotes =
-    !SIMPLE_SHEET_NAME_REGEX.test(unquoted) ||
-    isBareA1LikeReference(unquoted) ||
-    looksLikeR1C1Reference(unquoted);
+  return quoteSheetTitle(unquoted);
+}
 
-  return needsQuotes ? `'${escaped}'` : unquoted;
+/**
+ * Sheet row number of the first row in an A1 range ("Sheet1!B20:F35" → 20;
+ * a column or whole-sheet range starts at row 1). Undefined when the range
+ * can't be parsed, for example a named range.
+ */
+export function firstRowOfA1(range: string | undefined): number | undefined {
+  if (range === undefined) {
+    return undefined;
+  }
+  const parsed = parseA1Range(range);
+  if (!parsed) {
+    return undefined;
+  }
+  return parsed.startRow ?? 1;
 }
 
 export function normaliseA1Range(range: string): string {

@@ -168,7 +168,9 @@ export class SheetsInputError extends McpError {
 
 export interface DuplicateSheetOptions {
   spreadsheetId: string;
-  sheetId: number;
+  /** Exactly one of sheetId / sheetTitle (the sheet to copy). */
+  sheetId?: number;
+  sheetTitle?: string;
   /** Name for the copy; Google names it "Copy of …" when omitted. */
   title?: string;
   /** 0-based position for the copy; defaults to right after the source. */
@@ -177,7 +179,9 @@ export interface DuplicateSheetOptions {
 
 export interface UpdateSheetOptions {
   spreadsheetId: string;
-  sheetId: number;
+  /** Exactly one of sheetId / sheetTitle (the sheet's current title). */
+  sheetId?: number;
+  sheetTitle?: string;
   title?: string;
   /** 0-based final position among all sheets. */
   position?: number;
@@ -236,6 +240,8 @@ export interface SpreadsheetResponse {
   spreadsheetUrl: string;
   sheets?: SheetInfo[];
   values?: CellValue[][];
+  /** A1 range `values` came from, used to number rows in text output (not set in JSON results). */
+  valuesRange?: string;
   truncated?: boolean;
   shapedValues?: ShapedReadResponse;
   anchorValues?: AnchorReadResponse;
