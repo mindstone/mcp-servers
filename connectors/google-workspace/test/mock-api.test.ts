@@ -613,6 +613,38 @@ describe('Google Workspace mock API Drive orderBy', () => {
     expect(capturedOrderBy).toEqual(['modifiedTime desc', 'folder,name', 'name']);
   });
 
+  it('trims padded values, passes multi-key strings through and drops empty orderBy', async () => {
+    const capturedOrderBy: Array<string | null> = [];
+    mswServer.use(
+      http.get('https://www.googleapis.com/drive/v3/files', ({ request }) => {
+        capturedOrderBy.push(new URL(request.url).searchParams.get('orderBy'));
+        return HttpResponse.json({
+          files: [{ id: 'drive-file-1', name: 'Mock Doc', mimeType: 'text/plain' }],
+        });
+      }),
+    );
+    const handlers = await loadHandlers();
+
+    await handlers.handleListDriveFiles({ options: { orderBy: '  modifiedTime desc  ' } });
+    await handlers.handleListDriveFiles({ options: { orderBy: 'folder,modifiedTime desc,name' } });
+    await handlers.handleListDriveFiles({ options: { orderBy: '' } });
+    await handlers.handleListDriveFiles({ options: { orderBy: '   ' } });
+    await handlers.handleListDriveFiles({ options: { orderBy: [] } });
+    await handlers.handleListDriveFiles({ options: {} });
+    await handlers.handleSearchDriveFiles({ options: { fullText: 'mock', orderBy: ['folder', 'name'] } });
+
+    // null means the orderBy query parameter was absent from the request.
+    expect(capturedOrderBy).toEqual([
+      'modifiedTime desc',
+      'folder,modifiedTime desc,name',
+      null,
+      null,
+      null,
+      null,
+      'folder,name',
+    ]);
+  });
+
   it('still rejects an orderBy that is neither a string nor an array of strings', () => {
     expect(isDriveFileListArgs({ options: { orderBy: 'modifiedTime desc' } })).toBe(true);
     expect(isDriveFileListArgs({ options: { orderBy: ['folder', 'name'] } })).toBe(true);
