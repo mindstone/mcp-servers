@@ -359,7 +359,8 @@ export const sheetsTools: ToolMetadata[] = [
     Usage example:
        { "email": "user@example.com", "spreadsheet_id": "1ABC123xyz" }
     
-    Use the returned sheetId (numeric) when calling delete_workspace_spreadsheet_sheet with the snake_case parameter sheet_id.`,
+    Sheets are numbered from 1 in this list; the position parameters of duplicate_workspace_spreadsheet_sheet and update_workspace_spreadsheet_sheet count from 0.
+    Use the returned sheetId (numeric) as sheet_id when calling duplicate_workspace_spreadsheet_sheet (copy a tab), update_workspace_spreadsheet_sheet (rename or reorder a tab), insert_workspace_spreadsheet_dimension or delete_workspace_spreadsheet_sheet.`,
     aliases: ['list_sheets', 'get_sheets', 'show_sheets'],
     annotations: { readOnlyHint: true },
     inputSchema: {
@@ -449,6 +450,167 @@ export const sheetsTools: ToolMetadata[] = [
         }
       },
       required: ['spreadsheet_id', 'sheet_id']
+    }
+  },
+  {
+    name: 'duplicate_workspace_spreadsheet_sheet',
+    category: 'Sheets/Spreadsheets',
+    description: `Duplicate a sheet (tab) inside the same Google Sheets spreadsheet, for example to start a new
+    campaign or month from a template tab.
+
+    Google copies the values, formulas, formatting, merged cells and data validation, and gives the copy
+    a new numeric sheetId (returned in the result). Without title Google names it "Copy of <name>";
+    titles must be unique in the spreadsheet. Without position the copy goes right after the source.
+    To empty the input cells of the copy, overwrite them with new values — clearing a range also deletes any formulas in it.
+
+    Usage examples:
+
+    1. Copy a template tab under a new name (placed right after it):
+       { "email": "user@example.com", "spreadsheet_id": "1ABC123xyz", "sheet_id": 123456789, "title": "Acme Launch – Week 1" }
+
+    2. Copy it to the front:
+       { "email": "user@example.com", "spreadsheet_id": "1ABC123xyz", "sheet_id": 123456789, "title": "Acme Launch – Week 1", "position": 0 }
+
+    Get the numeric sheetId from list_workspace_spreadsheet_sheets.`,
+    aliases: ['duplicate_sheet', 'copy_sheet_tab'],
+    annotations: { readOnlyHint: false, destructiveHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email: {
+          type: 'string',
+          description: 'Email address of the Google account'
+        },
+        spreadsheet_id: {
+          type: 'string',
+          description: 'Google Sheets spreadsheet ID'
+        },
+        sheet_id: {
+          type: 'number',
+          description: 'Numeric sheetId of the sheet to copy (from list_workspace_spreadsheet_sheets, NOT the sheet name)'
+        },
+        title: {
+          type: 'string',
+          description: 'Name for the copy (unique in the spreadsheet). new_title is also accepted.'
+        },
+        position: {
+          type: 'number',
+          description: 'Position of the copy: 0 = first; list_workspace_spreadsheet_sheets numbers sheets from 1. Default: right after the source.'
+        }
+      },
+      required: ['spreadsheet_id', 'sheet_id']
+    }
+  },
+  {
+    name: 'update_workspace_spreadsheet_sheet',
+    category: 'Sheets/Spreadsheets',
+    description: `Rename a sheet (tab) and/or move it to another position in a Google Sheets spreadsheet.
+
+    position is where the sheet should end up (0 = first). Titles must be unique in the spreadsheet.
+    If the sheet already has that title and position, nothing is written. The result reports the sheet's actual position after the change.
+
+    Usage examples:
+
+    1. Rename:
+       { "email": "user@example.com", "spreadsheet_id": "1ABC123xyz", "sheet_id": 123456789, "title": "Acme Launch – Archive" }
+
+    2. Move to the front:
+       { "email": "user@example.com", "spreadsheet_id": "1ABC123xyz", "sheet_id": 123456789, "position": 0 }
+
+    Get the numeric sheetId from list_workspace_spreadsheet_sheets.`,
+    aliases: ['rename_sheet', 'move_sheet', 'reorder_sheet'],
+    annotations: { readOnlyHint: false, destructiveHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email: {
+          type: 'string',
+          description: 'Email address of the Google account'
+        },
+        spreadsheet_id: {
+          type: 'string',
+          description: 'Google Sheets spreadsheet ID'
+        },
+        sheet_id: {
+          type: 'number',
+          description: 'Numeric sheetId (from list_workspace_spreadsheet_sheets, NOT the sheet name)'
+        },
+        title: {
+          type: 'string',
+          description: 'New name (unique in the spreadsheet)'
+        },
+        position: {
+          type: 'number',
+          description: 'Final position of the sheet: 0 = first; list_workspace_spreadsheet_sheets numbers sheets from 1.'
+        }
+      },
+      required: ['spreadsheet_id', 'sheet_id']
+    }
+  },
+  {
+    name: 'insert_workspace_spreadsheet_dimension',
+    category: 'Sheets/Spreadsheets',
+    description: `Insert empty rows or columns into a sheet, formatted like their neighbours — for example a new
+    date column at the end of a tracker that keeps the currency format and bold header of the column before it.
+
+    This shifts cells: everything at and after start_index moves down (rows) or right (columns), and
+    Google adjusts formulas that refer to the moved cells. Cell addresses noted before the insert point
+    to different cells afterwards, so re-read before writing values. Nothing is deleted.
+
+    start_index is 0-based (row 1 = 0, column A = 0) and is the index the first new row/column gets:
+    to add a column after column E (index 4), use start_index 5. count is 1 to 100 (default 1).
+    inherit_from "before" (default) copies the formatting of the row/column before the insert; "after"
+    copies the one after it (the default at start_index 0, where there is nothing before).
+    The result names the inserted range in A1 notation.
+
+    Usage examples:
+
+    1. Add one column after column E, formatted like column E:
+       { "email": "user@example.com", "spreadsheet_id": "1ABC123xyz", "sheet_id": 123456789, "dimension": "COLUMNS", "start_index": 5 }
+
+    2. Insert 3 rows above row 10 of a sheet found by its name, formatted like row 10:
+       { "email": "user@example.com", "spreadsheet_id": "1ABC123xyz", "sheet_title": "Acme Launch – Week 1", "dimension": "ROWS", "start_index": 9, "count": 3, "inherit_from": "after" }`,
+    aliases: ['insert_sheet_rows', 'insert_sheet_columns', 'insert_rows_or_columns'],
+    annotations: { readOnlyHint: false, destructiveHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email: {
+          type: 'string',
+          description: 'Email address of the Google account'
+        },
+        spreadsheet_id: {
+          type: 'string',
+          description: 'Google Sheets spreadsheet ID'
+        },
+        sheet_id: {
+          type: 'number',
+          description: 'Numeric sheetId (from list_workspace_spreadsheet_sheets). Pass this or sheet_title, not both.'
+        },
+        sheet_title: {
+          type: 'string',
+          description: 'Exact sheet name. Pass this or sheet_id, not both.'
+        },
+        dimension: {
+          type: 'string',
+          enum: ['ROWS', 'COLUMNS'],
+          description: 'Insert rows or columns'
+        },
+        start_index: {
+          type: 'number',
+          description: '0-based index the first new row/column gets (row 1 = 0, column A = 0); existing cells from here on move down or right'
+        },
+        count: {
+          type: 'number',
+          description: 'How many rows/columns to insert, 1 to 100 (default 1)'
+        },
+        inherit_from: {
+          type: 'string',
+          enum: ['before', 'after'],
+          description: 'Copy formatting from the row/column before the insert (default) or after it'
+        }
+      },
+      required: ['spreadsheet_id', 'dimension', 'start_index']
     }
   },
   {

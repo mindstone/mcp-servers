@@ -29,13 +29,16 @@ describe('tool annotations', () => {
     expect(byName.get('authenticate_workspace_account')?.annotations?.openWorldHint).toBe(false);
   });
 
-  it('marks every new Docs tab write tool destructive and open-world, in source and in the built inventory', () => {
+  it('marks every new Docs tab and Sheets tab write tool destructive and open-world, in source and in the built inventory', () => {
     const newWriteTools = [
       'add_workspace_document_tab',
       'update_workspace_document_tab',
       'delete_workspace_document_tab',
       'insert_workspace_document_text',
       'copy_workspace_document_tab',
+      'duplicate_workspace_spreadsheet_sheet',
+      'update_workspace_spreadsheet_sheet',
+      'insert_workspace_spreadsheet_dimension',
     ];
     const byName = new Map(allTools.map(tool => [tool.name, tool]));
     const inventoryPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '../tools-inventory.json');

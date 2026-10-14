@@ -5,7 +5,10 @@
 import type {
   AnchorReadResponse,
   CellTriad,
+  DimensionInsertResponse,
+  SheetDuplicateResponse,
   SheetInfo,
+  SheetUpdateResponse,
   ShapedReadResponse,
   SpreadsheetResponse,
   SuspiciousWriteWarning,
@@ -358,4 +361,77 @@ export function formatOperationResult(
   }
 
   return lines.join('\n');
+}
+
+function spreadsheetSource(spreadsheetId: string): string {
+  return `google-workspace:sheets:spreadsheet/${spreadsheetId}`;
+}
+
+/**
+ * Result of list_workspace_spreadsheet_sheets: header + one line per sheet,
+ * enveloped (spreadsheet and sheet titles are authored in Google).
+ */
+export function formatSheetListResultAsText(response: SpreadsheetResponse): string {
+  const header = `Spreadsheet: ${response.title}\nURL: ${response.spreadsheetUrl}\n---\n`;
+  return wrapUntrustedContent(header + formatSheetsListAsText(response.sheets || []), spreadsheetSource(response.spreadsheetId));
+}
+
+/**
+ * Result of add_workspace_spreadsheet_sheet (title enveloped).
+ */
+export function formatSheetAddedAsText(spreadsheetId: string, sheet: SheetInfo): string {
+  const text = formatOperationResult('Add sheet', spreadsheetId, { sheetTitle: sheet.title }) + `\nSheet ID: ${sheet.sheetId}`;
+  return wrapUntrustedContent(text, spreadsheetSource(spreadsheetId));
+}
+
+function sheetPositionMismatch(actual: number, requested: number): string | undefined {
+  return actual !== requested
+    ? `WARNING: the requested position was ${requested}, but the spreadsheet reports position ${actual}. Check list_workspace_spreadsheet_sheets before going on.`
+    : undefined;
+}
+
+/**
+ * Result of duplicate_workspace_spreadsheet_sheet (title enveloped).
+ */
+export function formatSheetDuplicatedAsText(data: SheetDuplicateResponse): string {
+  const lines = [
+    `Duplicated sheet ${data.sourceSheetId} as "${data.sheet.title}" [sheetId: ${data.sheet.sheetId}] at position ${data.sheet.index} (0 = first).`,
+  ];
+  const mismatch = sheetPositionMismatch(data.sheet.index, data.requestedPosition);
+  if (mismatch) lines.push(mismatch);
+  return wrapUntrustedContent(lines.join('\n'), spreadsheetSource(data.spreadsheetId));
+}
+
+/**
+ * Result of update_workspace_spreadsheet_sheet (title enveloped).
+ */
+export function formatSheetUpdatedAsText(data: SheetUpdateResponse): string {
+  if (!data.changed) {
+    return wrapUntrustedContent(
+      `No change: sheet "${data.sheet.title}" [sheetId: ${data.sheet.sheetId}] already has that title and position (${data.sheet.index}, 0 = first).`,
+      spreadsheetSource(data.spreadsheetId)
+    );
+  }
+  const lines = [
+    `Sheet updated: "${data.sheet.title}" [sheetId: ${data.sheet.sheetId}] at position ${data.sheet.index} (0 = first).`,
+  ];
+  const mismatch = sheetPositionMismatch(data.sheet.index, data.requestedPosition);
+  if (mismatch) lines.push(mismatch);
+  return wrapUntrustedContent(lines.join('\n'), spreadsheetSource(data.spreadsheetId));
+}
+
+/**
+ * Result of insert_workspace_spreadsheet_dimension: the inserted range in A1
+ * notation and what moved (sheet title enveloped).
+ */
+export function formatDimensionInsertedAsText(data: DimensionInsertResponse): string {
+  const isRows = data.dimension === 'ROWS';
+  const unit = isRows ? 'row' : 'column';
+  const units = `${data.count} ${unit}${data.count !== 1 ? 's' : ''}`;
+  const side = data.inheritFromBefore ? 'before' : 'after';
+  const lines = [
+    `Inserted ${units} in "${data.sheet.title}" [sheetId: ${data.sheet.sheetId}]: ${data.a1Range}, formatted like the ${unit} ${side} them.`,
+    `Cells that were at ${unit} index ${data.startIndex} (0-based) and beyond moved ${isRows ? 'down' : 'right'} by ${data.count}; formulas that refer to them were adjusted by Google. Re-read before writing to cell addresses noted earlier.`,
+  ];
+  return wrapUntrustedContent(lines.join('\n'), spreadsheetSource(data.spreadsheetId));
 }
