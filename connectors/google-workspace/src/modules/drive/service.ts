@@ -11,10 +11,34 @@ const MAX_INLINE_BINARY_BYTES = 500 * 1024; // 500KB
 /** A 403 caused by a missing OAuth scope (not by the file's sharing settings). */
 const INSUFFICIENT_SCOPE = /insufficient.*scope|insufficientPermissions|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i;
 
-function isInsufficientScopeError(error: unknown): boolean {
+/** The error's message plus its response body, where Google puts the structured reason. */
+function errorText(error: unknown): string {
   const message = error instanceof Error ? error.message : '';
   const data = (error as { response?: { data?: unknown } } | null)?.response?.data;
-  return INSUFFICIENT_SCOPE.test(message) || INSUFFICIENT_SCOPE.test(typeof data === 'string' ? data : JSON.stringify(data ?? ''));
+  return `${message}\n${typeof data === 'string' ? data : JSON.stringify(data ?? '')}`;
+}
+
+function isInsufficientScopeError(error: unknown): boolean {
+  return INSUFFICIENT_SCOPE.test(errorText(error));
+}
+
+/** Drive's quota reasons; Google sends these with a 403, so they look like a permission denial. */
+const RATE_LIMIT_REASON = /\b(?:userRateLimitExceeded|rateLimitExceeded|dailyLimitExceeded)\b/;
+
+/** The rate-limit reason of a 429, or of a 403 whose structured reason is a quota limit; undefined otherwise. */
+function rateLimitReason(error: unknown, status: number | undefined): string | undefined {
+  if (status !== 403 && status !== 429) return undefined;
+  const reason = RATE_LIMIT_REASON.exec(errorText(error))?.[0];
+  if (reason) return reason;
+  return status === 429 ? 'too many requests' : undefined;
+}
+
+/** A Drive rate limit hit while checking file access. Carries the HTTP status so error descriptions keep it. */
+class DriveRateLimitError extends Error {
+  constructor(readonly status: number, reason: string, options: { cause: unknown }) {
+    super(`Google rate limit reached while checking access to a linked file (${reason}); try again shortly`, options);
+    this.name = 'DriveRateLimitError';
+  }
 }
 
 const TEXT_APPLICATION_TYPES = new Set([
@@ -141,7 +165,9 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
    * the Docs API fails a whole batch for a chip the caller can't open. A 404
    * or a plain permission 403 means "no"; a 403 for a missing OAuth scope, an
    * auth handoff or any other failure is rethrown, so a scope or sign-in
-   * problem is never mistaken for "can't open this file".
+   * problem is never mistaken for "can't open this file". A rate limit (a 429,
+   * or a 403 with a quota reason) throws a DriveRateLimitError: the copy stops
+   * before writing anything instead of turning an openable chip into a link.
    */
   async checkFileAccess(email: string, fileId: string): Promise<boolean> {
     await this.ensureInitialized();
@@ -156,6 +182,8 @@ export class DriveService extends BaseGoogleService<ReturnType<typeof google.dri
       return true;
     } catch (error) {
       const status = extractHttpStatus(error);
+      const limited = rateLimitReason(error, status);
+      if (limited && status !== undefined) throw new DriveRateLimitError(status, limited, { cause: error });
       if (status === 404) return false;
       if (status === 403 && !isInsufficientScopeError(error)) return false;
       // Rethrown as is: the copy reports the Google message and status, and
