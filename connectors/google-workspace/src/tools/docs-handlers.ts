@@ -789,6 +789,7 @@ export async function handleInsertDocumentText(args: InsertDocumentTextArgs): Pr
 /** Plain-language names for element kinds a copy can't reproduce. */
 const NOT_COPIED_LABELS: Record<string, string> = {
   inlineObjectElement: 'images',
+  positionedObject: 'floating images',
   footnoteReference: 'footnotes',
   equation: 'equations',
   horizontalRule: 'horizontal lines',
@@ -799,6 +800,9 @@ const NOT_COPIED_LABELS: Record<string, string> = {
   dateElement: 'date chips without display text',
   richLink: 'smart chips without a link',
 };
+
+/** Chip-fallback titles listed by name in a copy result; the rest are counted. */
+const MAX_FALLBACK_TITLES = 10;
 
 function plural(n: number, word: string): string {
   return `${n} ${word}${n !== 1 ? 's' : ''}`;
@@ -835,8 +839,12 @@ export function formatTabCopyAsText(data: TabCopyResponse): string {
           ? `paragraph ${first.paragraphIndex + 1} ${first.kind}`
           : first.kind
       : 'unknown';
+    const kept =
+      data.mode === 'new'
+        ? ` The new tab "${data.target.path}" [${data.target.tabId}] was kept so it can be checked; apart from the differences listed it is a full copy. If it isn't usable, delete it with delete_workspace_document_tab before copying again with the same title.`
+        : ` Tab "${data.target.path}" [${data.target.tabId}] now holds this copy apart from the differences listed; its earlier content can be restored from the document's version history.`;
     lines.push(
-      `Verification: FAILED — ${plural(v.mismatchCount, 'difference')} (first: ${where}). Do not delete or reset the source until this is resolved.`
+      `Verification: FAILED — ${plural(v.mismatchCount, 'difference')} (first: ${where}).${kept} Do not delete or reset the source until the copy is confirmed.`
     );
   }
 
@@ -844,8 +852,9 @@ export function formatTabCopyAsText(data: TabCopyResponse): string {
   if (data.chipsCopied > 0 || fallbacks > 0) {
     let line = `${plural(data.chipsCopied, 'smart chip')} copied`;
     if (fallbacks > 0) {
-      line += `; ${fallbacks} replaced by titled links because you can't open these files: ` +
-        data.chipFallbacks.map((chip) => `"${chip.title}"`).join(', ');
+      const shown = data.chipFallbacks.slice(0, MAX_FALLBACK_TITLES).map((chip) => `"${chip.title}"`).join(', ');
+      const more = fallbacks > MAX_FALLBACK_TITLES ? `, and ${fallbacks - MAX_FALLBACK_TITLES} more` : '';
+      line += `; ${fallbacks} replaced by titled links because you can't open these files: ${shown}${more}`;
     }
     lines.push(`${line}.`);
   }

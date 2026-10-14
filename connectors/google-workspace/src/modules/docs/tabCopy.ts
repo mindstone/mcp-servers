@@ -29,7 +29,7 @@
  *   file, so every chip is checked first and falls back to a titled link.
  */
 import { docs_v1 } from 'googleapis';
-import { ALL_TEXT_KEYS, ParagraphContainer, flatParagraphs } from './tabs.js';
+import { ALL_TEXT_KEYS, DocsInputError, ParagraphContainer, flatParagraphs } from './tabs.js';
 
 type Tab = docs_v1.Schema$Tab;
 type Paragraph = docs_v1.Schema$Paragraph;
@@ -152,7 +152,7 @@ export interface TabCopyResult {
 }
 
 export interface TabCopyDeps {
-  /** The source tab, read with suggestions previewed as accepted-free (the accepted state). */
+  /** Committed content only: pending suggestions are left out (PREVIEW_WITHOUT_SUGGESTIONS). */
   getSourceTab(): Promise<Tab>;
   /** A fresh read of a tab (default view, so indices are valid for writes). */
   getTab(tabId: string): Promise<Tab>;
@@ -168,13 +168,15 @@ export interface TabCopyDeps {
 }
 
 /**
- * A failure inside the copy, naming the phase and whether any content had
- * already been written to the target.
+ * A failure inside the copy, naming the phase, whether a content write was
+ * confirmed (`wroteContent`) and whether one had been sent at all
+ * (`attemptedWrite`: a write whose reply was lost may still have applied).
  */
 export class TabCopyError extends Error {
   constructor(
     readonly phase: string,
     readonly wroteContent: boolean,
+    readonly attemptedWrite: boolean,
     readonly cause: unknown
   ) {
     super(`Copy failed during "${phase}": ${cause instanceof Error ? cause.message : String(cause)}`);
@@ -338,6 +340,9 @@ export function buildSourcePlan(sourceTab: Tab, chipAccess: ReadonlyMap<string, 
   };
 
   const piecesFor = (paragraph: Paragraph): Piece[] => {
+    // Floating images sit outside paragraph.elements: counted, never copied, no placeholder.
+    const floating = paragraph.positionedObjectIds?.length ?? 0;
+    if (floating > 0) plan.notCopied['positionedObject'] = (plan.notCopied['positionedObject'] ?? 0) + floating;
     const pieces: Piece[] = [];
     const nest = paragraph.bullet ? paragraph.bullet.nestingLevel ?? 0 : 0;
     if (nest) pieces.push({ kind: 'text', text: '\t'.repeat(nest), length: nest, nesting: true });
@@ -402,6 +407,16 @@ export function buildSourcePlan(sourceTab: Tab, chipAccess: ReadonlyMap<string, 
       tokensForParagraph(pieces, plan.bodyTokens);
     } else if (element.table) {
       const table = element.table;
+      // insertTable always builds a full rows x columns grid, so a ragged table could never match.
+      const tableRows = table.tableRows ?? [];
+      if (
+        tableRows.length !== (table.rows ?? 0) ||
+        tableRows.some((row) => (row.tableCells ?? []).length !== (table.columns ?? 0))
+      ) {
+        throw new DocsInputError(
+          "This tab has a table with merged cells in a shape that can't be copied. Nothing was written."
+        );
+      }
       const tableNumber = plan.tables.length;
       plan.tables.push(table);
       if (!stripTrailingNewline(plan.bodyTokens)) plan.notes.push('table without preceding newline');
@@ -590,6 +605,8 @@ export function planStyles(plan: SourcePlan, targetTab: Tab, targetTabId: string
       while (
         j + 1 < source.length &&
         sameContainer(source[j + 1].container, head.container) &&
+        // A paragraph without a bullet never joins (an absent listId must not match one).
+        Boolean(source[j + 1].paragraph.bullet) &&
         source[j + 1].paragraph.bullet?.listId === listId
       ) {
         j++;
@@ -861,6 +878,7 @@ export function verifyCopy(plan: SourcePlan, sourceTab: Tab, targetTab: Tab): Co
 export async function copyTabContent(deps: TabCopyDeps): Promise<TabCopyResult> {
   let phase = 'read source';
   let wroteContent = false;
+  let attemptedWrite = false;
   let requests = 0;
   let rounds = 0;
 
@@ -868,6 +886,7 @@ export async function copyTabContent(deps: TabCopyDeps): Promise<TabCopyResult> 
     phase = label;
     if (batch.length === 0) return;
     for (let i = 0; i < batch.length; i += CHUNK) {
+      attemptedWrite = true;
       await deps.batchUpdate(batch.slice(i, i + CHUNK));
       wroteContent = true;
     }
@@ -883,6 +902,7 @@ export async function copyTabContent(deps: TabCopyDeps): Promise<TabCopyResult> 
     for (const uri of collectChipUris(source)) {
       chipAccess.set(uri, idFromUri(uri) ? await deps.checkChip(uri) : false);
     }
+    phase = 'plan source';
     const plan = buildSourcePlan(source, chipAccess);
 
     phase = 'prepare target';
@@ -934,6 +954,6 @@ export async function copyTabContent(deps: TabCopyDeps): Promise<TabCopyResult> 
       verification,
     };
   } catch (error) {
-    throw new TabCopyError(phase, wroteContent, error);
+    throw new TabCopyError(phase, wroteContent, attemptedWrite, error);
   }
 }

@@ -726,8 +726,8 @@ export const docsTools: ToolMetadata[] = [
     numbering (mapped to Google Docs' preset list styles), tables (cell text, column widths, cell
     styles), page breaks and smart chips. A smart chip linking to a file you can't open becomes a
     titled link, and people and date chips become their text; the result lists both. Does NOT copy
-    headers and footers, sub-tabs, images or other special elements: those become a visible
-    "[placeholder]" and are listed under "Not copied".
+    headers and footers, sub-tabs, images (inline or floating) or other special elements: those
+    become a visible "[placeholder]" and are listed under "Not copied".
 
     Pass exactly one of target_tab_id or new_tab_title. new_tab_parent_id and new_tab_position only
     apply with new_tab_title.
@@ -741,9 +741,11 @@ export const docsTools: ToolMetadata[] = [
     The copy is not atomic. The result starts with a "Verification:" line that compares text,
     heading types, paragraph formatting, bullets, list grouping and table shapes with the source;
     check that it says "passed" before deleting or resetting the source (a failed verification
-    comes back as an error, with the full report). If a copy into a new tab fails, that tab is
-    deleted again; if a copy into an existing tab fails, the tab may be left cleared or partly
-    written, and the document's version history can restore it. Long tabs can take 10-60 seconds.
+    comes back as an error, with the full report). If the copy stops part-way, a new tab is
+    deleted again, and an existing tab may be left cleared or partly written (the document's
+    version history can restore it). If the copy completes but verification finds differences,
+    the tab is kept so it can be checked, and the result is an error listing where it differs.
+    Long tabs can take 10-60 seconds.
     ${TAB_LINK_NOTE}
 
     new_tab_position is 0-based among the new tab's siblings: 0 = first; the numbers in list

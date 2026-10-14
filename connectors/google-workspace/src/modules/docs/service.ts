@@ -1140,7 +1140,9 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
    * (`targetTabId` + `overwriteExisting`). Every input check, the source read
    * and the per-chip access checks happen before the first write. On a failure
    * after that, a tab this call created is deleted again (best effort); an
-   * existing target is left as it is and the error says so.
+   * existing target is left as it is and the error says so. A copy that
+   * completes but fails verification is kept, in either mode, and returned
+   * with its report (the handler marks it as an error).
    */
   async copyTab(
     email: string,
@@ -1150,6 +1152,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
     const started = Date.now();
     let client: docs_v1.Docs | undefined;
     let createdTabId: string | undefined;
+    let addTabAttempted = false;
     let destination: CopyDestination | undefined;
     try {
       const hasTarget = options.targetTabId !== undefined;
@@ -1216,7 +1219,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
 
       const result = await copyTabContent({
         getSourceTab: async () => {
-          // The accepted state: pending suggestions are not copied as text.
+          // Committed content only: pending suggestions are left out (PREVIEW_WITHOUT_SUGGESTIONS).
           const response = await docsClient.documents.get({
             documentId: options.documentId,
             includeTabsContent: true,
@@ -1237,6 +1240,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
         checkChip,
         prepareTarget: async () => {
           if (dest.kind === 'overwrite') return dest.tabId;
+          addTabAttempted = true;
           const response = await docsClient.documents.batchUpdate({
             documentId: options.documentId,
             requestBody: {
@@ -1291,8 +1295,13 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
         outcome = cleaned
           ? ` The new tab ${createdTabId} was deleted again, so nothing changed.`
           : ` The new tab ${createdTabId} could not be deleted and may be partly written; delete it with delete_workspace_document_tab before trying again.`;
+      } else if (destination?.kind === 'new' && addTabAttempted && !hadHttpErrorResponse(cause)) {
+        outcome =
+          ' A new tab may have been created before the error; check list_workspace_document_tabs and delete it if it is there.';
       } else if (destination?.kind === 'overwrite' && error.wroteContent) {
         outcome = ` Target tab ${destination.tabId} was cleared and may be partly written; restore it from the document's version history.`;
+      } else if (destination?.kind === 'overwrite' && error.attemptedWrite && !hadHttpErrorResponse(cause)) {
+        outcome = ` Target tab ${destination.tabId} may have been cleared or partly written; check it and restore it from the document's version history if needed.`;
       } else {
         outcome = ' Nothing was written to the document.';
       }
@@ -1324,6 +1333,19 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
 type CopyDestination =
   | { kind: 'new'; title: string; parentTabId: string | null; position: number | undefined }
   | { kind: 'overwrite'; tabId: string };
+
+/**
+ * True when the error carries an HTTP error status (>= 400). A batchUpdate
+ * rejected with one applied nothing (batches are all-or-nothing); without one
+ * (timeout, dropped connection, missing reply field) the write may have landed.
+ */
+function hadHttpErrorResponse(cause: unknown): boolean {
+  if (typeof cause !== 'object' || cause === null) return false;
+  const candidate = cause as { response?: { status?: unknown }; status?: unknown; code?: unknown };
+  return [candidate.response?.status, candidate.status, candidate.code].some(
+    (value) => typeof value === 'number' && value >= 400
+  );
+}
 
 const INSERT_POSITIONS: readonly InsertTextPosition[] = ['after', 'before', 'next_paragraph_start'];
 

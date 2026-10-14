@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { docs_v1 } from 'googleapis';
-import { ALL_TEXT_KEYS } from '../src/modules/docs/tabs.js';
+import { ALL_TEXT_KEYS, DocsInputError } from '../src/modules/docs/tabs.js';
 import {
   CHUNK,
   TabCopyError,
@@ -175,6 +175,34 @@ describe('source plan', () => {
     expect(plan.notes).toEqual(['table without preceding newline']);
     expect(plan.notCopied).toEqual({ 'merged table cells': 1 });
   });
+
+  it('counts a floating image as not copied without a placeholder, and the copy still verifies', () => {
+    const source = live();
+    bodyParagraph(source, 1).positionedObjectIds = ['kix.float1'];
+    const plan = buildSourcePlan(source, ACCESS);
+    expect(plan.notCopied).toEqual({ inlineObjectElement: 1, tableOfContents: 1, positionedObject: 1 });
+    expect(plan.placeholders).toBe(1);
+    expect(verifyCopy(plan, source, copiedLike(source)).passed).toBe(true);
+  });
+
+  it('refuses a table whose rows have fewer cells than its columns (a spanning cell)', () => {
+    const source: Tab = {
+      documentTab: {
+        body: {
+          content: [
+            { paragraph: { elements: [{ textRun: { content: '\n' } }] } },
+            { table: { rows: 1, columns: 2, tableRows: [{ tableCells: [
+              { content: [{ paragraph: { elements: [{ textRun: { content: 'a\n' } }] } }], tableCellStyle: { columnSpan: 2 } },
+            ] }] } },
+          ],
+        },
+      },
+    };
+    expect(() => buildSourcePlan(source, new Map())).toThrow(DocsInputError);
+    expect(() => buildSourcePlan(source, new Map())).toThrow(
+      "This tab has a table with merged cells in a shape that can't be copied. Nothing was written."
+    );
+  });
 });
 
 describe('planners', () => {
@@ -229,6 +257,48 @@ describe('planners', () => {
       { insertText: { ...eos, text: ' and Budget sheet on Oct 20, 2031\n' } },
       { insertPageBreak: eos },
       { insertText: { ...eos, text: '[inlineObjectElement]\nEnd' } },
+    ]);
+  });
+
+  it('planSkeleton sends no insertText for an empty text token', () => {
+    const plan = {
+      ...buildSourcePlan(live(), ACCESS),
+      bodyTokens: [{ kind: 'text' as const, text: '' }, { kind: 'pagebreak' as const }, { kind: 'text' as const, text: 'End' }],
+    };
+    expect(planSkeleton(plan, 't.dst')).toEqual([
+      { insertPageBreak: { endOfSegmentLocation: dst } },
+      { insertText: { endOfSegmentLocation: dst, text: 'End' } },
+    ]);
+  });
+
+  it('planTableCells fills the last table first and a text-chip-text cell in reverse token order', () => {
+    const cell = (content: docs_v1.Schema$ParagraphElement[]) => ({ content: [{ paragraph: { elements: content } }] });
+    const source: Tab = { documentTab: { body: { content: [
+      { paragraph: { elements: [{ textRun: { content: 'Intro\n' } }] } },
+      { table: { rows: 1, columns: 1, tableRows: [{ tableCells: [cell([{ textRun: { content: 'A\n' } }])] }] } },
+      { paragraph: { elements: [{ textRun: { content: 'Mid\n' } }] } },
+      { table: { rows: 1, columns: 2, tableRows: [{ tableCells: [
+        cell([{ textRun: { content: 'x\n' } }]),
+        cell([
+          { textRun: { content: 'Due ' } },
+          { richLink: { richLinkProperties: { uri: OK_URI, title: 'Acme plan' } } },
+          { textRun: { content: ' now\n' } },
+        ]),
+      ] }] } },
+      { paragraph: { elements: [{ textRun: { content: 'End\n' } }] } },
+    ] } } };
+    const emptyCell = (startIndex: number) => ({ content: [{ startIndex, paragraph: {} }] });
+    const target: Tab = { documentTab: { body: { content: [
+      { table: { tableRows: [{ tableCells: [emptyCell(10)] }] } },
+      { table: { tableRows: [{ tableCells: [emptyCell(20), emptyCell(22)] }] } },
+    ] } } };
+    const location = (index: number) => ({ index, tabId: 't.dst' });
+    expect(planTableCells(buildSourcePlan(source, ACCESS), target, 't.dst')).toEqual([
+      { insertText: { location: location(22), text: ' now' } },
+      { insertRichLink: { location: location(22), richLinkProperties: { uri: OK_URI } } },
+      { insertText: { location: location(22), text: 'Due ' } },
+      { insertText: { location: location(20), text: 'x' } },
+      { insertText: { location: location(10), text: 'A' } },
     ]);
   });
 
@@ -291,6 +361,19 @@ describe('planners', () => {
     // Bullet paragraphs leave out their indents in Phase 3.
     const stepTwo = requests.find((request) => request.updateParagraphStyle?.range?.startIndex === 65);
     expect(stepTwo?.updateParagraphStyle?.paragraphStyle).toEqual({ namedStyleType: 'NORMAL_TEXT' });
+  });
+
+  it('planStyles never joins a paragraph without a bullet to a bullet unit whose list id is missing', () => {
+    const para = (startIndex: number, content: string, bullet?: docs_v1.Schema$Bullet): docs_v1.Schema$StructuralElement => ({
+      startIndex,
+      endIndex: startIndex + content.length,
+      paragraph: { elements: [{ startIndex, endIndex: startIndex + content.length, textRun: { content } }], ...(bullet ? { bullet } : {}) },
+    });
+    const source: Tab = { documentTab: { body: { content: [para(1, 'One\n', {}), para(5, 'Two\n')] } } };
+    const requests = planStyles(buildSourcePlan(source, new Map()), structuredClone(source), 't.dst');
+    expect(requests.filter((request) => request.createParagraphBullets)).toEqual([
+      { createParagraphBullets: { range: { startIndex: 1, endIndex: 5, tabId: 't.dst' }, bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE' } },
+    ]);
   });
 
   it('planStyles throws when the target paragraph count differs', () => {
@@ -476,13 +559,34 @@ describe('copyTabContent', () => {
     const { deps } = fakeDeps(live(), { failOnBatch: 2 });
     const error = await copyTabContent(deps).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(TabCopyError);
-    expect(error).toMatchObject({ phase: 'skeleton', wroteContent: true });
+    expect(error).toMatchObject({ phase: 'skeleton', wroteContent: true, attemptedWrite: true });
+  });
+
+  it('marks a write as attempted but not confirmed when the first batch fails', async () => {
+    const { deps } = fakeDeps(live(), { failOnBatch: 1 });
+    const error = await copyTabContent(deps).catch((e: unknown) => e);
+    expect(error).toMatchObject({ phase: 'clear + document styles', wroteContent: false, attemptedWrite: true });
+  });
+
+  it('refuses a ragged table before preparing the target or writing anything', async () => {
+    const source: Tab = { documentTab: { body: { content: [
+      { paragraph: { elements: [{ textRun: { content: '\n' } }] } },
+      { table: { rows: 1, columns: 2, tableRows: [{ tableCells: [
+        { content: [{ paragraph: { elements: [{ textRun: { content: 'a\n' } }] } }], tableCellStyle: { columnSpan: 2 } },
+      ] }] } },
+    ] } } };
+    const { deps, log, batches } = fakeDeps(source);
+    const error = await copyTabContent(deps).catch((e: unknown) => e);
+    expect(error).toMatchObject({ phase: 'plan source', wroteContent: false, attemptedWrite: false });
+    expect((error as TabCopyError).cause).toBeInstanceOf(DocsInputError);
+    expect(log).not.toContain('prepareTarget');
+    expect(batches).toHaveLength(0);
   });
 
   it('fails before preparing the target when a chip check throws', async () => {
     const { deps, log, batches } = fakeDeps(live(), { chipError: new Error('Request had insufficient authentication scopes.') });
     const error = await copyTabContent(deps).catch((e: unknown) => e);
-    expect(error).toMatchObject({ phase: 'check smart chips', wroteContent: false });
+    expect(error).toMatchObject({ phase: 'check smart chips', wroteContent: false, attemptedWrite: false });
     expect(log).not.toContain('prepareTarget');
     expect(batches).toHaveLength(0);
   });
