@@ -10,7 +10,7 @@ Google Workspace MCP server — Gmail, Calendar, Drive, Docs, Sheets, Slides, Co
 
 - **Version:** [0.4.2](./CHANGELOG.md) · npm: not yet published
 - **Auth:** OAuth (host-orchestrated) ([`GOOGLE_CLIENT_SECRET`](./server.json))
-- **Tools:** [120](./src/tools/definitions/) (Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Chat, Meet, Tasks, Forms, Comments, Account)
+- **Tools:** [121](./src/tools/definitions/) (Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Chat, Meet, Tasks, Forms, Comments, Account)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -152,7 +152,7 @@ Until the host has written `${ACCOUNTS_PATH}` and the matching per-account token
 }
 ```
 
-## Tools (120)
+## Tools (121)
 
 The full list lives under [`src/tools/definitions/`](./src/tools/definitions/) and is also surfaced in [`tools-inventory.json`](./tools-inventory.json). Grouped by domain:
 
@@ -161,7 +161,7 @@ The full list lives under [`src/tools/definitions/`](./src/tools/definitions/) a
 | Gmail | 23 | Email search/thread/send/compose, drafts, labels, label filters, attachments, archive/trash/read-state helpers, settings, vacation responder, and send-as aliases/signatures. |
 | Calendar | 9 | Current time, free-slot lookup, calendar/event listing, event creation, updates, responses, and deletion. |
 | Drive | 15 | List/search/upload/download/copy/move/trash/untrash files, folders, permissions, revisions, shared-drive discovery, and activity queries (what changed, when, by whom). |
-| Docs | 12 | Read, create, append, replace, find/replace (whole doc or one tab), insert text at an anchor, tab tree, add/rename/move/delete tabs, and batch updates. Read, append, replace and find/replace can target one tab (`tab_id`); reads can also cover every tab (`all_tabs`). |
+| Docs | 13 | Read, create, append, replace, find/replace (whole doc or one tab), insert text at an anchor, tab tree, add/rename/move/delete tabs, copy a tab's content into another tab, and batch updates. Read, append, replace and find/replace can target one tab (`tab_id`); reads can also cover every tab (`all_tabs`). |
 | Sheets | 14 | Read/write ranges, create spreadsheets, sheet management, batch operations, find/replace, and formatting. |
 | Slides | 7 | Read, create, list/get slides, batch update, thumbnails, and ID extraction. |
 | Labels | 12 | Gmail label CRUD and filter rules. |

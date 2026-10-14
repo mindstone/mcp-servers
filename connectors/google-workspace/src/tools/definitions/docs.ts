@@ -175,7 +175,8 @@ export const docsTools: ToolMetadata[] = [
     2. Rewrite one tab:
        { "email": "user@example.com", "document_id": "1ABC123xyz", "tab_id": "t.abc123", "content": "Agenda\\n\\n- Updates" }
     
-    For partial edits, consider using find_and_replace_workspace_document instead.`,
+    For partial edits, consider using find_and_replace_workspace_document instead. To reset a tab
+    from a template tab while keeping formatting, use copy_workspace_document_tab instead.`,
     aliases: ['replace_doc', 'overwrite_document', 'rewrite_document'],
     annotations: { readOnlyHint: false, destructiveHint: false },
     inputSchema: {
@@ -714,6 +715,86 @@ export const docsTools: ToolMetadata[] = [
         }
       },
       required: ['document_id', 'anchor_text', 'text']
+    }
+  },
+  {
+    name: 'copy_workspace_document_tab',
+    category: 'Docs/Documents',
+    description: `Copy one tab's content, with its formatting, into another tab of the same Google Docs document.
+
+    Copies text, heading and paragraph styles, character styles including links, bullets and
+    numbering (mapped to Google Docs' preset list styles), tables (cell text, column widths, cell
+    styles), page breaks and smart chips. A smart chip linking to a file you can't open becomes a
+    titled link, and people and date chips become their text; the result lists both. Does NOT copy
+    headers and footers, sub-tabs, images or other special elements: those become a visible
+    "[placeholder]" and are listed under "Not copied".
+
+    Pass exactly one of target_tab_id or new_tab_title. new_tab_parent_id and new_tab_position only
+    apply with new_tab_title.
+
+    Which target: to archive or duplicate a tab, use new_tab_title. To reset a tab in place from a
+    template (keeping its id, position and sub-tabs), use target_tab_id with overwrite_existing:
+    true, which clears the tab first. Never delete a tab in order to replace it: deleting also
+    deletes its sub-tabs. target_tab_id needs a real tab id ("default" is refused);
+    source_tab_id and new_tab_parent_id accept "default" for the first tab.
+
+    The copy is not atomic. The result starts with a "Verification:" line that compares text,
+    heading types, paragraph formatting, bullets, list grouping and table shapes with the source;
+    check that it says "passed" before deleting or resetting the source (a failed verification
+    comes back as an error, with the full report). If a copy into a new tab fails, that tab is
+    deleted again; if a copy into an existing tab fails, the tab may be left cleared or partly
+    written, and the document's version history can restore it. Long tabs can take 10-60 seconds.
+    ${TAB_LINK_NOTE}
+
+    new_tab_position is 0-based among the new tab's siblings: 0 = first; the numbers in list
+    outputs start at 1.
+
+    Usage examples:
+
+    1. Archive the live tab into a new first sub-tab titled with this week's date:
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "source_tab_id": "t.live01", "new_tab_title": "2031-10-13", "new_tab_parent_id": "t.live01", "new_tab_position": 0 }
+
+    2. Reset the live tab from the Template tab (clears it first):
+       { "email": "user@example.com", "document_id": "1ABC123xyz", "source_tab_id": "t.tmpl02", "target_tab_id": "t.live01", "overwrite_existing": true }`,
+    aliases: ['copy_doc_tab', 'duplicate_document_tab', 'clone_document_tab'],
+    annotations: { readOnlyHint: false, destructiveHint: true },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        email: {
+          type: 'string',
+          description: 'Email address of the Google account'
+        },
+        document_id: {
+          type: 'string',
+          description: 'Google Docs document ID'
+        },
+        source_tab_id: {
+          type: 'string',
+          description: 'Tab to copy from (list_workspace_document_tabs). "default" means the first tab. Its sub-tabs are not copied.'
+        },
+        target_tab_id: {
+          type: 'string',
+          description: 'Existing tab to copy into; it is cleared first and needs overwrite_existing: true ("default" is not accepted). Not with new_tab_title.'
+        },
+        overwrite_existing: {
+          type: 'boolean',
+          description: 'Confirms that target_tab_id will be cleared and overwritten (required with target_tab_id).'
+        },
+        new_tab_title: {
+          type: 'string',
+          description: 'Title for a new tab to copy into (unique in the document, sub-tabs included). Not with target_tab_id.'
+        },
+        new_tab_parent_id: {
+          type: 'string',
+          description: 'With new_tab_title: tab to nest the new tab under ("default" means the first tab). Omit for a top-level tab.'
+        },
+        new_tab_position: {
+          type: 'number',
+          description: 'With new_tab_title: where the new tab goes among its siblings: 0 = first; the numbers in list outputs start at 1. Default: last.'
+        }
+      },
+      required: ['document_id', 'source_tab_id']
     }
   }
 ];

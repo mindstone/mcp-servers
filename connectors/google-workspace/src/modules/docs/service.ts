@@ -22,7 +22,10 @@ import {
   TabDeleteResponse,
   TabRef,
   TabWriteResponse,
+  CopyTabOptions,
+  TabCopyResponse,
 } from './types.js';
+import { TabCopyError, TabCopyRequest, copyTabContent } from './tabCopy.js';
 import { computeMoveApiIndex } from '../../utils/tabPosition.js';
 import { DOCS_SCOPES } from './scopes.js';
 import { describeApiError, isAuthHandoffError } from '../../utils/apiError.js';
@@ -1130,7 +1133,197 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
       return this.toFailure(error);
     }
   }
+
+  /**
+   * Copy one tab's content into another tab of the same document: into a new
+   * tab (`newTabTitle`) or into an existing tab, which is cleared first
+   * (`targetTabId` + `overwriteExisting`). Every input check, the source read
+   * and the per-chip access checks happen before the first write. On a failure
+   * after that, a tab this call created is deleted again (best effort); an
+   * existing target is left as it is and the error says so.
+   */
+  async copyTab(
+    email: string,
+    options: CopyTabOptions,
+    checkChip: (uri: string) => Promise<boolean>
+  ): Promise<DocsOperationResult> {
+    const started = Date.now();
+    let client: docs_v1.Docs | undefined;
+    let createdTabId: string | undefined;
+    let destination: CopyDestination | undefined;
+    try {
+      const hasTarget = options.targetTabId !== undefined;
+      const hasNewTitle = options.newTabTitle !== undefined;
+      if (hasTarget === hasNewTitle) {
+        throw new DocsInputError(
+          'Pass exactly one of target_tab_id (copy into an existing tab) or new_tab_title (copy into a new tab).'
+        );
+      }
+      if (hasTarget && (options.newTabParentId !== undefined || options.newTabPosition !== undefined)) {
+        throw new DocsInputError('new_tab_parent_id and new_tab_position only apply with new_tab_title.');
+      }
+      if (hasTarget && options.overwriteExisting !== true) {
+        throw new DocsInputError(
+          'Copying into an existing tab clears it first. Pass overwrite_existing: true to confirm, or use new_tab_title to copy into a new tab.'
+        );
+      }
+      const newTitle = hasNewTitle ? requireTabTitle(options.newTabTitle as string) : undefined;
+
+      client = await this.getWriteClient(email);
+      const docsClient = client;
+      const { flat } = await this.readTabTree(docsClient, options.documentId);
+      const source = resolveTab(flat, options.sourceTabId, { allowDefault: true });
+
+      if (options.targetTabId !== undefined) {
+        const target = resolveTab(flat, options.targetTabId, { allowDefault: false });
+        if (target.tabId === source.tabId) {
+          throw new DocsInputError('source_tab_id and target_tab_id are the same tab; pick a different target.');
+        }
+        destination = { kind: 'overwrite', tabId: target.tabId };
+      } else {
+        try {
+          assertUniqueTitle(flat, newTitle as string);
+        } catch (error) {
+          if (error instanceof DocsInputError) {
+            throw new DocsInputError(
+              `${error.message} If an earlier copy attempt failed, a half-written tab with this title may remain — check list_workspace_document_tabs.`
+            );
+          }
+          throw error;
+        }
+        const parent =
+          options.newTabParentId !== undefined
+            ? resolveTab(flat, options.newTabParentId, { allowDefault: true })
+            : null;
+        assertTabPosition(options.newTabPosition, siblingsOf(flat, parent?.tabId ?? null).length);
+        destination = {
+          kind: 'new',
+          title: newTitle as string,
+          parentTabId: parent?.tabId ?? null,
+          position: options.newTabPosition,
+        };
+      }
+      const dest = destination;
+
+      let lastFlat: FlatTab[] = flat;
+      const getTab = async (tabId: string): Promise<docs_v1.Schema$Tab> => {
+        const read = await this.readAllTabs(docsClient, options.documentId);
+        lastFlat = read.flat;
+        const found = read.flat.find((tab) => tab.tabId === tabId);
+        if (!found) throw new Error(`Tab ${tabId} is missing from the document`);
+        return found.tab;
+      };
+
+      const result = await copyTabContent({
+        getSourceTab: async () => {
+          // The accepted state: pending suggestions are not copied as text.
+          const response = await docsClient.documents.get({
+            documentId: options.documentId,
+            includeTabsContent: true,
+            suggestionsViewMode: 'PREVIEW_WITHOUT_SUGGESTIONS',
+          });
+          const found = flattenTabs(requireTabs(response.data)).find((tab) => tab.tabId === source.tabId);
+          if (!found) throw new Error(`Tab ${source.tabId} is missing from the document`);
+          return found.tab;
+        },
+        getTab,
+        batchUpdate: async (requests: TabCopyRequest[]) => {
+          // insertRichLink / updateNamedStyle are missing from the typings, not from the API.
+          await docsClient.documents.batchUpdate({
+            documentId: options.documentId,
+            requestBody: { requests: requests as docs_v1.Schema$Request[] },
+          });
+        },
+        checkChip,
+        prepareTarget: async () => {
+          if (dest.kind === 'overwrite') return dest.tabId;
+          const response = await docsClient.documents.batchUpdate({
+            documentId: options.documentId,
+            requestBody: {
+              requests: [
+                {
+                  addDocumentTab: {
+                    tabProperties: {
+                      title: dest.title,
+                      ...(dest.parentTabId !== null ? { parentTabId: dest.parentTabId } : {}),
+                      ...(dest.position !== undefined ? { index: dest.position } : {}),
+                    },
+                  },
+                },
+              ],
+            },
+          });
+          const tabId = response.data.replies?.[0]?.addDocumentTab?.tabProperties?.tabId;
+          if (!tabId) throw new Error('Docs API did not return the id of the added tab');
+          createdTabId = tabId;
+          return tabId;
+        },
+      });
+
+      const target = lastFlat.find((tab) => tab.tabId === result.targetTabId);
+      const data: TabCopyResponse = {
+        documentId: options.documentId,
+        mode: dest.kind,
+        source: this.toTabRef(source),
+        target: target
+          ? this.toTabRef(target)
+          : { tabId: result.targetTabId, title: '', path: result.targetTabId },
+        requests: result.requests,
+        rounds: result.rounds,
+        durationMs: Date.now() - started,
+        chipsCopied: result.chipsCopied,
+        chipFallbacks: result.chipFallbacks,
+        convertedToText: result.convertedToText,
+        namedStylesCopied: result.namedStylesCopied,
+        notCopied: result.notCopied,
+        notes: result.notes,
+        verification: result.verification,
+      };
+      return { success: true, data };
+    } catch (error) {
+      if (!(error instanceof TabCopyError)) {
+        return this.toFailure(error);
+      }
+      const cause = error.cause;
+      let outcome = '';
+      if (createdTabId && client) {
+        const cleaned = await this.deleteHalfWrittenTab(client, options.documentId, createdTabId);
+        outcome = cleaned
+          ? ` The new tab ${createdTabId} was deleted again, so nothing changed.`
+          : ` The new tab ${createdTabId} could not be deleted and may be partly written; delete it with delete_workspace_document_tab before trying again.`;
+      } else if (destination?.kind === 'overwrite' && error.wroteContent) {
+        outcome = ` Target tab ${destination.tabId} was cleared and may be partly written; restore it from the document's version history.`;
+      } else {
+        outcome = ' Nothing was written to the document.';
+      }
+      // Auth handoffs keep their reconnect signal (after the cleanup attempt).
+      if (isAuthHandoffError(cause)) throw cause;
+      if (cause instanceof DocsInputError) throw cause;
+      return {
+        success: false,
+        error: `Copy failed during "${error.phase}": ${describeApiError(cause)}.${outcome}`,
+      };
+    }
+  }
+
+  /** Best-effort removal of a tab a failed copy created. True when it is gone. */
+  private async deleteHalfWrittenTab(client: docs_v1.Docs, documentId: string, tabId: string): Promise<boolean> {
+    try {
+      await client.documents.batchUpdate({
+        documentId,
+        requestBody: { requests: [{ deleteTab: { tabId } }] },
+      });
+      return true;
+    } catch {
+      // Reported to the caller in the copy's error message (the tab may remain).
+      return false;
+    }
+  }
 }
+
+type CopyDestination =
+  | { kind: 'new'; title: string; parentTabId: string | null; position: number | undefined }
+  | { kind: 'overwrite'; tabId: string };
 
 const INSERT_POSITIONS: readonly InsertTextPosition[] = ['after', 'before', 'next_paragraph_start'];
 

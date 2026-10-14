@@ -35,6 +35,7 @@ describe('tool annotations', () => {
       'update_workspace_document_tab',
       'delete_workspace_document_tab',
       'insert_workspace_document_text',
+      'copy_workspace_document_tab',
     ];
     const byName = new Map(allTools.map(tool => [tool.name, tool]));
     const inventoryPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '../tools-inventory.json');

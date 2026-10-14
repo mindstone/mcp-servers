@@ -5,6 +5,7 @@ import { formatContactsAsText } from '../src/tools/contacts-handlers.js';
 import {
   formatDocumentResponseAsText,
   formatInsertTextAsText,
+  formatTabCopyAsText,
   formatTabAddedAsText,
   formatTabDeletedAsText,
   formatTabUpdatedAsText,
@@ -208,6 +209,31 @@ describe('untrusted-content envelopes', () => {
     const tab = { tabId: 't.a1', title: breakout, index: 0, parentTabId: 't.0', nestingLevel: 1, path: `Team sync > ${breakout}`, childCount: 0 };
     const parent = { tabId: 't.0', title: `Team ${breakout}`, path: `Team ${breakout}` };
     const write = { documentId: 'doc-tabs-1', tab, parent, changed: true, requestedPosition: 0, requestedParentTabId: 't.0' };
+    const copyResult = (passed: boolean) => ({
+      documentId: 'doc-tabs-1',
+      mode: 'new' as const,
+      source: parent,
+      target: { tabId: 't.a1', title: breakout, path: `Team sync > ${breakout}` },
+      requests: 12,
+      rounds: 6,
+      durationMs: 1500,
+      chipsCopied: 0,
+      // A chip title is document content too.
+      chipFallbacks: [{ uri: 'https://docs.google.com/document/d/AcmeFictionalDoc000000000000/edit', title: breakout }],
+      convertedToText: { people: 1, dates: 0 },
+      namedStylesCopied: 0,
+      notCopied: {},
+      notes: [],
+      verification: {
+        passed,
+        checkedParagraphs: 3,
+        tables: 0,
+        lists: 0,
+        placeholders: 0,
+        mismatchCount: passed ? 0 : 1,
+        mismatches: passed ? [] : [{ paragraphIndex: 1, kind: 'text' }],
+      },
+    });
 
     it.each([
       ['add', () => formatTabAddedAsText(write), 'google-workspace:docs:tabs/doc-tabs-1'],
@@ -227,6 +253,8 @@ describe('untrusted-content envelopes', () => {
         newParagraphs: 0,
         targetParagraph: { wasEmpty: false, namedStyleType: 'NORMAL_TEXT', bulleted: false },
       }), 'google-workspace:docs:document/doc-tabs-1'],
+      ['copy (passed)', () => formatTabCopyAsText(copyResult(true)), 'google-workspace:docs:tab-copy/doc-tabs-1'],
+      ['copy (failed)', () => formatTabCopyAsText(copyResult(false)), 'google-workspace:docs:tab-copy/doc-tabs-1'],
     ])('wraps the %s result and escapes breakout tab titles', (_label, format, source) => {
       const output = format();
       expect(output.startsWith(`<untrusted-content source="${source}">`)).toBe(true);

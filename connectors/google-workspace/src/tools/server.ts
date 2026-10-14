@@ -118,7 +118,8 @@ import {
   handleAddDocumentTab,
   handleUpdateDocumentTab,
   handleDeleteDocumentTab,
-  handleInsertDocumentText
+  handleInsertDocumentText,
+  handleCopyDocumentTab
 } from './docs-handlers.js';
 
 // Import comments handlers
@@ -253,6 +254,7 @@ import {
   assertUpdateDocumentTabArgs,
   assertDeleteDocumentTabArgs,
   assertInsertDocumentTextArgs,
+  assertCopyDocumentTabArgs,
   assertReadPresentationArgs,
   assertCreatePresentationArgs,
   assertListSlidesArgs,
@@ -772,6 +774,10 @@ export class GSuiteServer {
           case 'insert_workspace_document_text':
             assertInsertDocumentTextArgs(args);
             result = await handleInsertDocumentText(args);
+            break;
+          case 'copy_workspace_document_tab':
+            assertCopyDocumentTabArgs(args);
+            result = await handleCopyDocumentTab(args);
             break;
 
           // Google Slides Operations

@@ -314,6 +314,7 @@ export type FlatParagraph = {
   paragraph: docs_v1.Schema$Paragraph;
   container: ParagraphContainer;
   startIndex: number;
+  endIndex: number;
   /** Position of the paragraph's structural element in `body.content` (body paragraphs only). */
   bodyElementIndex?: number;
 };
@@ -331,6 +332,7 @@ export function flatParagraphs(body: docs_v1.Schema$Body | undefined): FlatParag
         paragraph: element.paragraph,
         container: 'body',
         startIndex: element.startIndex ?? 0,
+        endIndex: element.endIndex ?? 0,
         bodyElementIndex,
       });
     } else if (element.table) {
@@ -342,6 +344,7 @@ export function flatParagraphs(body: docs_v1.Schema$Body | undefined): FlatParag
                 paragraph: cellElement.paragraph,
                 container: { table: tableNumber, row: rowIndex, col: colIndex },
                 startIndex: cellElement.startIndex ?? 0,
+                endIndex: cellElement.endIndex ?? 0,
               });
             }
           }

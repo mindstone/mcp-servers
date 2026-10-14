@@ -633,6 +633,14 @@
       }
     },
     {
+      "name": "copy_workspace_document_tab",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
       "name": "read_workspace_presentation",
       "annotations": {
         "readOnlyHint": true,

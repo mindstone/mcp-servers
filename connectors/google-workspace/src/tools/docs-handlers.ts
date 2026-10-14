@@ -1,6 +1,8 @@
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { getAccountManager, resolveEmail } from '../modules/accounts/index.js';
 import { getDocsService } from '../modules/docs/index.js';
+import { getDriveService } from '../modules/drive/index.js';
+import { idFromUri } from '../modules/docs/tabCopy.js';
 import { extractDocumentIdFromUrl } from '../modules/docs/formatters.js';
 import {
   ReadDocumentOptions,
@@ -17,6 +19,7 @@ import {
   TabDeleteResponse,
   InsertTextPosition,
   InsertTextResponse,
+  TabCopyResponse,
 } from '../modules/docs/types.js';
 import { McpToolResponse } from './types.js';
 import {
@@ -157,6 +160,24 @@ interface InsertDocumentTextArgs {
   matchCase?: boolean;
   expect_empty_paragraph?: boolean;
   expectEmptyParagraph?: boolean;
+}
+
+interface CopyDocumentTabArgs {
+  email?: string;
+  document_id?: string;
+  documentId?: string;
+  source_tab_id?: string;
+  sourceTabId?: string;
+  target_tab_id?: string;
+  targetTabId?: string;
+  overwrite_existing?: boolean;
+  overwriteExisting?: boolean;
+  new_tab_title?: string;
+  newTabTitle?: string;
+  new_tab_parent_id?: string;
+  newTabParentId?: string;
+  new_tab_position?: number;
+  newTabPosition?: number;
 }
 
 /**
@@ -762,5 +783,141 @@ export async function handleInsertDocumentText(args: InsertDocumentTextArgs): Pr
       throw new McpError(ErrorCode.InternalError, result.error || 'Failed to insert text');
     }
     return formatInsertTextAsText(result.data as InsertTextResponse);
+  });
+}
+
+/** Plain-language names for element kinds a copy can't reproduce. */
+const NOT_COPIED_LABELS: Record<string, string> = {
+  inlineObjectElement: 'images',
+  footnoteReference: 'footnotes',
+  equation: 'equations',
+  horizontalRule: 'horizontal lines',
+  columnBreak: 'column breaks',
+  autoText: 'page numbers and other auto text',
+  tableOfContents: 'tables of contents',
+  person: 'people chips without a name or email',
+  dateElement: 'date chips without display text',
+  richLink: 'smart chips without a link',
+};
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n !== 1 ? 's' : ''}`;
+}
+
+/**
+ * Result of copy_workspace_document_tab: what was copied, the verification
+ * outcome, what fell back or was left out, and the cost. Titles, paths and
+ * chip titles are document content, so the whole result is enveloped.
+ */
+export function formatTabCopyAsText(data: TabCopyResponse): string {
+  const lines: string[] = [];
+  const into = data.mode === 'new' ? 'new' : 'existing (cleared first)';
+  lines.push(
+    `Copied tab "${data.source.path}" [${data.source.tabId}] into ${into} tab "${data.target.path}" [${data.target.tabId}].`
+  );
+
+  const v = data.verification;
+  if (v.passed) {
+    let line =
+      `Verification: passed — ${plural(v.checkedParagraphs, 'paragraph')}, ${plural(v.tables, 'table')}, ${plural(v.lists, 'list')} checked: ` +
+      'text, heading types, paragraph formatting, bullets, list grouping and table shapes match the source ' +
+      '(bold/links and table cell styles are not checked).';
+    if (v.placeholders > 0) {
+      line += ` ${v.placeholders} placeholder(s) stand in for elements that could not be copied (see Not copied).`;
+    }
+    lines.push(line);
+  } else {
+    const first = v.mismatches[0];
+    const where = first
+      ? first.tableIndex !== undefined
+        ? `table ${first.tableIndex + 1} ${first.kind}`
+        : first.paragraphIndex !== undefined
+          ? `paragraph ${first.paragraphIndex + 1} ${first.kind}`
+          : first.kind
+      : 'unknown';
+    lines.push(
+      `Verification: FAILED — ${plural(v.mismatchCount, 'difference')} (first: ${where}). Do not delete or reset the source until this is resolved.`
+    );
+  }
+
+  const fallbacks = data.chipFallbacks.length;
+  if (data.chipsCopied > 0 || fallbacks > 0) {
+    let line = `${plural(data.chipsCopied, 'smart chip')} copied`;
+    if (fallbacks > 0) {
+      line += `; ${fallbacks} replaced by titled links because you can't open these files: ` +
+        data.chipFallbacks.map((chip) => `"${chip.title}"`).join(', ');
+    }
+    lines.push(`${line}.`);
+  }
+  const { people, dates } = data.convertedToText;
+  if (people > 0 || dates > 0) {
+    lines.push(`${people} people and ${dates} dates copied as text.`);
+  }
+  if (data.namedStylesCopied > 0) {
+    lines.push(`Named styles copied: ${data.namedStylesCopied}.`);
+  }
+
+  const notCopied = ['headers and footers', 'sub-tabs'];
+  for (const [kind, count] of Object.entries(data.notCopied)) {
+    notCopied.push(`${NOT_COPIED_LABELS[kind] ?? kind} (${count})`);
+  }
+  lines.push(`Not copied: ${notCopied.join(', ')}.`);
+  if (data.notes.length > 0) {
+    lines.push(`Notes: ${data.notes.join('; ')}.`);
+  }
+  lines.push(`Requests: ${data.requests} in ${data.rounds} rounds; took ${(data.durationMs / 1000).toFixed(1)}s.`);
+
+  return wrapUntrustedContent(lines.join('\n'), `google-workspace:docs:tab-copy/${data.documentId}`);
+}
+
+/**
+ * Copy one tab's content into a new tab or into an existing tab (cleared first)
+ */
+export async function handleCopyDocumentTab(args: CopyDocumentTabArgs): Promise<McpToolResponse | string | object> {
+  const accountManager = getAccountManager();
+  const rawArgs = args as unknown as Record<string, unknown>;
+  const documentId = readAliasedString(rawArgs, 'document_id', 'documentId');
+  const sourceTabId = readAliasedString(rawArgs, 'source_tab_id', 'sourceTabId');
+  const targetTabId = readAliasedString(rawArgs, 'target_tab_id', 'targetTabId');
+  const overwriteExisting = readAliasedBoolean(rawArgs, 'overwrite_existing', 'overwriteExisting');
+  const newTabTitle = readAliasedString(rawArgs, 'new_tab_title', 'newTabTitle');
+  const newTabParentId = readAliasedString(rawArgs, 'new_tab_parent_id', 'newTabParentId');
+  const newTabPosition = readAliasedNumber(rawArgs, 'new_tab_position', 'newTabPosition');
+
+  const email = await resolveEmail(args);
+
+  return await accountManager.withTokenRenewal(email, async () => {
+    const driveService = await getDriveService();
+    // Same account as the copy; a link that isn't a Drive file can't be checked, so it becomes a titled link.
+    const checkChip = (uri: string): Promise<boolean> => {
+      const fileId = idFromUri(uri);
+      return fileId ? driveService.checkFileAccess(email, fileId) : Promise.resolve(false);
+    };
+
+    const result = await getDocsService().copyTab(
+      email,
+      {
+        documentId: documentId as string,
+        sourceTabId: sourceTabId as string,
+        ...(targetTabId !== undefined ? { targetTabId } : {}),
+        ...(overwriteExisting !== undefined ? { overwriteExisting } : {}),
+        ...(newTabTitle !== undefined ? { newTabTitle } : {}),
+        ...(newTabParentId !== undefined ? { newTabParentId } : {}),
+        ...(newTabPosition !== undefined ? { newTabPosition } : {}),
+      },
+      checkChip
+    );
+
+    if (!result.success || !result.data) {
+      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to copy document tab');
+    }
+    const data = result.data as TabCopyResponse;
+    const text = formatTabCopyAsText(data);
+    if (!data.verification.passed) {
+      // An error result keeps the full report while telling the host and model the copy is not good.
+      const response: McpToolResponse = { content: [{ type: 'text', text }], isError: true, _meta: {} };
+      return response;
+    }
+    return text;
   });
 }

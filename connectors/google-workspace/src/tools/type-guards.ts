@@ -898,6 +898,44 @@ export function assertInsertDocumentTextArgs(args: unknown): asserts args is Ins
   }
 }
 
+interface CopyDocumentTabArgs {
+  email?: string;
+  documentId: string;
+  sourceTabId: string;
+  targetTabId?: string;
+  overwriteExisting?: boolean;
+  newTabTitle?: string;
+  newTabParentId?: string;
+  newTabPosition?: number;
+}
+
+export function isCopyDocumentTabArgs(args: unknown): args is CopyDocumentTabArgs {
+  if (typeof args !== 'object' || args === null) return false;
+  const rawParams = args as Record<string, unknown>;
+  const documentId = readAliasedArg<string>(rawParams, 'document_id', 'documentId');
+  const sourceTabId = readAliasedArg<string>(rawParams, 'source_tab_id', 'sourceTabId');
+  const targetTabId = readAliasedArg<string>(rawParams, 'target_tab_id', 'targetTabId');
+  const overwriteExisting = readAliasedArg<boolean>(rawParams, 'overwrite_existing', 'overwriteExisting');
+  const newTabTitle = readAliasedArg<string>(rawParams, 'new_tab_title', 'newTabTitle');
+  const newTabParentId = readAliasedArg<string>(rawParams, 'new_tab_parent_id', 'newTabParentId');
+  const newTabPosition = readAliasedArg<number>(rawParams, 'new_tab_position', 'newTabPosition');
+  // Which target arguments may be combined is checked by the service, which explains it.
+  return isOptional(rawParams.email, 'string') &&
+    typeof documentId === 'string' &&
+    typeof sourceTabId === 'string' &&
+    isOptional(targetTabId, 'string') &&
+    isOptional(overwriteExisting, 'boolean') &&
+    isOptional(newTabTitle, 'string') &&
+    isOptional(newTabParentId, 'string') &&
+    isOptional(newTabPosition, 'number');
+}
+
+export function assertCopyDocumentTabArgs(args: unknown): asserts args is CopyDocumentTabArgs {
+  if (!isCopyDocumentTabArgs(args)) {
+    throw new Error('Invalid copy document tab parameters. Required: document_id, source_tab_id, and either target_tab_id (with overwrite_existing: true) or new_tab_title. Optional with new_tab_title: new_tab_parent_id (string), new_tab_position (number)');
+  }
+}
+
 // Docs Batch Update Type Guards
 
 interface BatchUpdateDocumentArgs {

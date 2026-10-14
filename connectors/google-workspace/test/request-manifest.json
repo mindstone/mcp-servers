@@ -112,6 +112,14 @@
     "handlerModule": "src/tools/drive-handlers.ts"
   },
   {
+    "tool": "copy_workspace_document_tab",
+    "service": "docs",
+    "method": "POST",
+    "path": "https://docs.googleapis.com/v1/documents/{documentId}:batchUpdate",
+    "handlerId": "handleCopyDocumentTab",
+    "handlerModule": "src/tools/docs-handlers.ts"
+  },
+  {
     "tool": "create_drive_folder",
     "service": "drive",
     "method": "POST",

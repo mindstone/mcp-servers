@@ -1,4 +1,5 @@
 import { docs_v1 } from 'googleapis';
+import type { ChipFallback, CopyVerification } from './tabCopy.js';
 
 // Re-export Google API types for convenience
 export type DocsDocument = docs_v1.Schema$Document;
@@ -156,6 +157,34 @@ export interface InsertTextResponse {
   targetParagraph: { wasEmpty: boolean; namedStyleType: string; bulleted: boolean };
 }
 
+export interface CopyTabOptions {
+  documentId: string;
+  sourceTabId: string; // "default" = the first top-level tab
+  targetTabId?: string; // existing tab, cleared first; "default" refused
+  overwriteExisting?: boolean; // required with targetTabId
+  newTabTitle?: string;
+  newTabParentId?: string; // "default" = the first top-level tab
+  newTabPosition?: number; // 0-based among the new tab's siblings; default: end
+}
+
+/** Result of copy_workspace_document_tab. */
+export interface TabCopyResponse {
+  documentId: string;
+  mode: 'new' | 'overwrite';
+  source: TabRef;
+  target: TabRef;
+  requests: number;
+  rounds: number;
+  durationMs: number;
+  chipsCopied: number;
+  chipFallbacks: ChipFallback[];
+  convertedToText: { people: number; dates: number };
+  namedStylesCopied: number;
+  notCopied: Record<string, number>;
+  notes: string[];
+  verification: CopyVerification;
+}
+
 export interface DocsOperationResult {
   success: boolean;
   data?:
@@ -166,7 +195,8 @@ export interface DocsOperationResult {
     | DocsBatchUpdateResponse
     | TabWriteResponse
     | TabDeleteResponse
-    | InsertTextResponse;
+    | InsertTextResponse
+    | TabCopyResponse;
   error?: string;
   occurrencesChanged?: number;
 }

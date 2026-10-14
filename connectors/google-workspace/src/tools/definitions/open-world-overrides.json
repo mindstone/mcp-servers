@@ -13,6 +13,7 @@
   "complete_task": true,
   "compose_workspace_email": true,
   "copy_drive_file": true,
+  "copy_workspace_document_tab": true,
   "create_drive_folder": true,
   "create_task": true,
   "create_workspace_calendar_event": true,
