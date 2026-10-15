@@ -21,6 +21,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Reading a document with several tabs without `tab_id` still returns the first tab, and now adds one header line saying how many tabs there are and how to read the others.
 - `find_and_replace_workspace_document` without `tab_id` still replaces in every tab; on a document with several tabs the result now says so.
 
+### Fixed
+
+- `list_drive_files` accepts `options.orderBy` as a string (`"modifiedTime desc"`) as well as an array.
+
 ### Security
 
 - Document titles in the results of `append_to_workspace_document`, `replace_workspace_document` and `find_and_replace_workspace_document` are now wrapped as untrusted content.
