@@ -94,6 +94,8 @@ const env = {
 };
 
 let tempRoot: string | undefined;
+/** The account's email as stored in accounts.json (see accountEmailFrom). */
+let accountEmail = '';
 let originalCredentialStats: Array<{ file: string; mtimeMs: number; size: number }> = [];
 let handlers: Record<string, Handler> = {};
 let docsClient: (() => Promise<docs_v1.Docs>) | undefined;
@@ -194,7 +196,7 @@ function removeTempRoot(): void {
 async function tool(name: string, args: Record<string, unknown>): Promise<{ text: string; isError: boolean }> {
   const handler = handlers[name];
   if (!handler) throw new ProbeError(`handler ${name} not loaded`);
-  const result = await step(name, () => handler({ email: env.email, document_id: env.documentId, ...args }));
+  const result = await step(name, () => handler({ email: accountEmail, document_id: env.documentId, ...args }));
   if (typeof result === 'string') return { text: result, isError: false };
   const response = result as { content?: Array<{ type: string; text?: string }>; isError?: boolean };
   return {
@@ -208,7 +210,7 @@ async function refused(name: string, args: Record<string, unknown>): Promise<boo
   const handler = handlers[name];
   if (!handler) throw new ProbeError(`handler ${name} not loaded`);
   try {
-    await handler({ email: env.email, document_id: env.documentId, ...args });
+    await handler({ email: accountEmail, document_id: env.documentId, ...args });
     return false;
   } catch (error) {
     return (error as { code?: unknown } | null)?.code === INVALID_PARAMS;
@@ -387,7 +389,8 @@ function compareCopy(source: Tab, target: Tab): { paragraphs: number; mismatches
     } else {
       let cursor = 0;
       for (const element of sp.elements ?? []) {
-        const segment = (element.textRun?.content ?? '').replace(/\n$/, '').replace(bulleted ? /^\t+/ : /^$/, '');
+        const content = (element.textRun?.content ?? '').replace(/\n$/, '');
+        const segment = bulleted ? content.replace(/^\t+/, '') : content;
         if (!segment) continue;
         const found = targetText.indexOf(segment, cursor);
         if (found < 0) {
@@ -526,6 +529,26 @@ function copyFilePreservingMode(from: string, to: string): void {
   fs.chmodSync(to, stats.mode & 0o777);
 }
 
+/**
+ * The account in accounts.json matching MCP_GW_LIVE_ACCOUNT_EMAIL (ignoring
+ * case). The probe passes the stored value on, so the email it sends to the
+ * connector comes from the instance's own accounts file.
+ */
+function accountEmailFrom(root: string, requested: string): string {
+  const file = JSON.parse(fs.readFileSync(path.join(root, 'accounts.json'), 'utf-8')) as { accounts?: Array<{ email?: unknown }> };
+  const wanted = requested.toLowerCase();
+  const stored = (file.accounts ?? [])
+    .map((account) => account.email)
+    .find((email): email is string => typeof email === 'string' && email.toLowerCase() === wanted);
+  if (!stored) throw new ProbeError('MCP_GW_LIVE_ACCOUNT_EMAIL is not an account in accounts.json');
+  return stored;
+}
+
+/** Escapes text for use inside a regular expression. */
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /** Temp copy of accounts.json + credentials/, so the probe never writes the real credential files. */
 function copyInstance(sourceRoot: string): string {
   const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'gw-live-docs-tabs-'));
@@ -575,6 +598,8 @@ liveDescribe('live: Docs tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
     }
 
     tempRoot = stepSync('copy the instance to a temp directory', () => copyInstance(env.instanceRoot));
+    const root = tempRoot;
+    accountEmail = stepSync('find the account in accounts.json', () => accountEmailFrom(root, env.email));
     vi.stubEnv('ACCOUNTS_PATH', path.join(tempRoot, 'accounts.json'));
     vi.stubEnv('CREDENTIALS_PATH', path.join(tempRoot, 'credentials'));
     vi.stubEnv('GOOGLE_CLIENT_ID', clientId);
@@ -594,7 +619,7 @@ liveDescribe('live: Docs tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
     tabTreeFields = tabs.TAB_TREE_FIELDS;
     // The service's own scope-checked client, so raw reads share the connector's auth.
     const service = docsModule.getDocsService() as unknown as { getWriteClient(email: string): Promise<docs_v1.Docs> };
-    docsClient = () => service.getWriteClient(env.email);
+    docsClient = () => service.getWriteClient(accountEmail);
 
     const doc = await readFull();
     for (const tab of flatten(doc.tabs)) {
@@ -688,7 +713,7 @@ liveDescribe('live: Docs tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
 
   it('(2) read: tab_id returns that tab', async () => {
     const { text } = await tool('handleReadDocument', { tab_id: env.sourceTabId });
-    check(new RegExp(`\\nTab: .*\\[tabId: ${env.sourceTabId.replace(/\./g, '\\.')}\\]`).test(text), 'no "Tab:" line naming the source tab id');
+    check(new RegExp(`\\nTab: .*\\[tabId: ${escapeRegExp(env.sourceTabId)}\\]`).test(text), 'no "Tab:" line naming the source tab id');
     const source = await fullTab(env.sourceTabId);
     const expected = extractBodyTextFn!(source.documentTab?.body, tabReadTextOptions);
     const prefix = expected.slice(0, 500);
