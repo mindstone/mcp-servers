@@ -797,7 +797,8 @@ export async function handleDuplicateSheet(args: DuplicateSheetArgs): Promise<Mc
     if (!result.success || !result.data) {
       throw new McpError(
         ErrorCode.InternalError,
-        rewriteSheetsHandlerError(result.error, 'Failed to duplicate sheet', 'duplicate_workspace_spreadsheet_sheet', rawArgs),
+        // Already enveloped by the service; the range-error rewriter would unwrap it.
+        result.error || 'Failed to duplicate sheet',
       );
     }
     return formatSheetDuplicatedAsText(result.data);
@@ -830,7 +831,8 @@ export async function handleUpdateSheet(args: UpdateSheetArgs): Promise<McpToolR
     if (!result.success || !result.data) {
       throw new McpError(
         ErrorCode.InternalError,
-        rewriteSheetsHandlerError(result.error, 'Failed to update sheet', 'update_workspace_spreadsheet_sheet', rawArgs),
+        // Already enveloped by the service; the range-error rewriter would unwrap it.
+        result.error || 'Failed to update sheet',
       );
     }
     return formatSheetUpdatedAsText(result.data);
@@ -864,7 +866,8 @@ export async function handleInsertDimension(args: InsertDimensionArgs): Promise<
     if (!result.success || !result.data) {
       throw new McpError(
         ErrorCode.InternalError,
-        rewriteSheetsHandlerError(result.error, 'Failed to insert rows or columns', 'insert_workspace_spreadsheet_dimension', rawArgs),
+        // Already enveloped by the service; the range-error rewriter would unwrap it.
+        result.error || 'Failed to insert rows or columns',
       );
     }
     return formatDimensionInsertedAsText(result.data);

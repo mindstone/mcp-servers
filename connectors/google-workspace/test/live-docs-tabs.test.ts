@@ -1245,7 +1245,7 @@ sheetsDescribe('live: Sheets tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
     if (!clientId || !clientSecret) {
       const hostRoot = process.env.MCP_GW_LIVE_HOST_ROOT;
       if (!hostRoot) throw new ProbeError('Set GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET or MCP_GW_LIVE_HOST_ROOT');
-      ({ clientId, clientSecret } = readEmbeddedGoogleOAuthCredentials(hostRoot));
+      ({ clientId, clientSecret } = stepSync('read the OAuth client from the host repo', () => readEmbeddedGoogleOAuthCredentials(hostRoot)));
     }
 
     // Fresh module graph: the Docs suite (if it ran) initialised the services
