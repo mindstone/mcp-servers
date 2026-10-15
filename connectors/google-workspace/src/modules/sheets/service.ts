@@ -1,6 +1,6 @@
 import { google, sheets_v4 } from 'googleapis';
 import { BaseGoogleService } from '../../services/base/BaseGoogleService.js';
-import { describeApiError, isAuthHandoffError } from '../../utils/apiError.js';
+import { describeApiError, describeApiErrorUntrusted, isAuthHandoffError } from '../../utils/apiError.js';
 import { computeMoveApiIndex } from '../../utils/tabPosition.js';
 import {
   AnchorMode,
@@ -2497,7 +2497,7 @@ function toSheetTabFailure<T>(error: unknown): SheetTabOperationResult<T> {
   // An expired/revoked grant must keep its reconnect signal.
   if (isAuthHandoffError(error)) throw error;
   if (error instanceof SheetsInputError) throw error;
-  return { success: false, error: describeApiError(error) };
+  return { success: false, error: describeApiErrorUntrusted(error, 'google-workspace:sheets:api-error') };
 }
 
 function requireSheetTitle(title: string): string {

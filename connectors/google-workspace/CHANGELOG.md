@@ -28,6 +28,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 - Document titles in the results of `append_to_workspace_document`, `replace_workspace_document` and `find_and_replace_workspace_document` are now wrapped as untrusted content.
 - Spreadsheet and sheet titles in the results of `list_workspace_spreadsheet_sheets` and `add_workspace_spreadsheet_sheet` are now wrapped as untrusted content.
+- Google's error text in failed tab changes, anchored inserts and tab copies (Docs) and in failed sheet duplicates, updates and row or column inserts (Sheets) is wrapped as untrusted content. A one-tab JSON read returns the tab's named ranges as a list rather than a map keyed by range name, so range names are wrapped too.
 
 ## [0.4.2] - 2026-09-29
 

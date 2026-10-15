@@ -1,4 +1,5 @@
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import { wrapUntrustedContent } from './untrusted-content.js';
 
 /**
  * Extracts the HTTP status from a googleapis (GaxiosError-shaped) failure,
@@ -26,6 +27,18 @@ export function describeApiError(error: unknown): string {
   const message = error instanceof Error ? error.message : 'Unknown error';
   const status = extractHttpStatus(error);
   return status !== undefined ? `${message} (status ${status})` : message;
+}
+
+/**
+ * describeApiError with the error message wrapped as untrusted content (the
+ * HTTP status stays outside). Google's error text can quote request or
+ * document content, so results that reach the model carry it enveloped.
+ */
+export function describeApiErrorUntrusted(error: unknown, source: string): string {
+  const message = error instanceof Error ? error.message : 'Unknown error';
+  const status = extractHttpStatus(error);
+  const wrapped = wrapUntrustedContent(message, source);
+  return status !== undefined ? `${wrapped} (status ${status})` : wrapped;
 }
 
 /**
