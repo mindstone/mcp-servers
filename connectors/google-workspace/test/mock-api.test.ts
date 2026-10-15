@@ -2540,13 +2540,15 @@ describe('Sheets tab management', () => {
     );
     const handlers = await loadHandlers();
 
+    // Start each call only when it is awaited: started together, a later call
+    // can reject before its handler is attached (an unhandled rejection).
     const calls = [
-      handlers.handleDuplicateSheet({ spreadsheet_id: TRACKER_ID, sheet_id: 101, title: 'Week 2' }),
-      handlers.handleUpdateSheet({ spreadsheet_id: TRACKER_ID, sheet_id: 101, title: 'Week 2' }),
-      handlers.handleInsertDimension({ spreadsheet_id: TRACKER_ID, sheet_id: 101, dimension: 'COLUMNS', start_index: 1 }),
+      () => handlers.handleDuplicateSheet({ spreadsheet_id: TRACKER_ID, sheet_id: 101, title: 'Week 2' }),
+      () => handlers.handleUpdateSheet({ spreadsheet_id: TRACKER_ID, sheet_id: 101, title: 'Week 2' }),
+      () => handlers.handleInsertDimension({ spreadsheet_id: TRACKER_ID, sheet_id: 101, dimension: 'COLUMNS', start_index: 1 }),
     ];
     for (const call of calls) {
-      const message = String(await call.then(() => 'resolved', (error: Error) => error.message));
+      const message = String(await call().then(() => 'resolved', (error: Error) => error.message));
       expect(message).toMatch(/^MCP error -32603: <untrusted-content source="google-workspace:sheets:api-error">Unable to parse range: MARKER /);
       expect(message.indexOf('MARKER')).toBeGreaterThan(message.indexOf('<untrusted-content'));
       expect(message.match(/<\/untrusted-content\s*>/gi)).toHaveLength(1);
