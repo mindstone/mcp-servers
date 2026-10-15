@@ -105,6 +105,11 @@ const endpointOverrides = new Map(Object.entries({
   extract_workspace_document_id: ['local', 'LOCAL', 'local://document-id-extractor'],
   list_workspace_document_tabs: ['docs', 'GET', 'https://docs.googleapis.com/v1/documents/{documentId}'],
   batch_update_workspace_document: ['docs', 'POST', 'https://docs.googleapis.com/v1/documents/{documentId}:batchUpdate'],
+  add_workspace_document_tab: ['docs', 'POST', 'https://docs.googleapis.com/v1/documents/{documentId}:batchUpdate'],
+  update_workspace_document_tab: ['docs', 'POST', 'https://docs.googleapis.com/v1/documents/{documentId}:batchUpdate'],
+  delete_workspace_document_tab: ['docs', 'POST', 'https://docs.googleapis.com/v1/documents/{documentId}:batchUpdate'],
+  insert_workspace_document_text: ['docs', 'POST', 'https://docs.googleapis.com/v1/documents/{documentId}:batchUpdate'],
+  copy_workspace_document_tab: ['docs', 'POST', 'https://docs.googleapis.com/v1/documents/{documentId}:batchUpdate'],
 
   read_workspace_presentation: ['slides', 'GET', 'https://slides.googleapis.com/v1/presentations/{presentationId}'],
   create_workspace_presentation: ['slides', 'POST', 'https://slides.googleapis.com/v1/presentations'],

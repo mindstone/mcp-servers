@@ -114,7 +114,12 @@ import {
   handleFindAndReplace,
   handleExtractDocumentId,
   handleListDocumentTabs,
-  handleBatchUpdateDocument
+  handleBatchUpdateDocument,
+  handleAddDocumentTab,
+  handleUpdateDocumentTab,
+  handleDeleteDocumentTab,
+  handleInsertDocumentText,
+  handleCopyDocumentTab
 } from './docs-handlers.js';
 
 // Import comments handlers
@@ -245,6 +250,11 @@ import {
   assertExtractIdArgs,
   assertListTabsArgs,
   assertBatchUpdateDocumentArgs,
+  assertAddDocumentTabArgs,
+  assertUpdateDocumentTabArgs,
+  assertDeleteDocumentTabArgs,
+  assertInsertDocumentTextArgs,
+  assertCopyDocumentTabArgs,
   assertReadPresentationArgs,
   assertCreatePresentationArgs,
   assertListSlidesArgs,
@@ -748,6 +758,26 @@ export class GSuiteServer {
           case 'batch_update_workspace_document':
             assertBatchUpdateDocumentArgs(args);
             result = await handleBatchUpdateDocument(args);
+            break;
+          case 'add_workspace_document_tab':
+            assertAddDocumentTabArgs(args);
+            result = await handleAddDocumentTab(args);
+            break;
+          case 'update_workspace_document_tab':
+            assertUpdateDocumentTabArgs(args);
+            result = await handleUpdateDocumentTab(args);
+            break;
+          case 'delete_workspace_document_tab':
+            assertDeleteDocumentTabArgs(args);
+            result = await handleDeleteDocumentTab(args);
+            break;
+          case 'insert_workspace_document_text':
+            assertInsertDocumentTextArgs(args);
+            result = await handleInsertDocumentText(args);
+            break;
+          case 'copy_workspace_document_tab':
+            assertCopyDocumentTabArgs(args);
+            result = await handleCopyDocumentTab(args);
             break;
 
           // Google Slides Operations
