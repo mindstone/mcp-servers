@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-15
+
+### Changed
+
+- Read, edit, add, reorder, delete and copy Google Docs tabs; duplicate, rename and reorder Sheets tabs and insert rows or columns; list_drive_files accepts a text orderBy.
+
 ### Added
 
 - `list_workspace_document_tabs` returns the document's real tab tree: every tab and nested sub-tab with its id, parent, position and sub-tab count (optional word counts, and `return_json` for a flat JSON list). The synthetic `default` tab is no longer listed.
