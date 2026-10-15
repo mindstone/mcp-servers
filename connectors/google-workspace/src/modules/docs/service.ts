@@ -11,6 +11,7 @@ import {
   BatchUpdateDocumentOptions,
   DocumentResponse,
   TabInfo,
+  TabJsonDocumentTab,
   TabJsonResponse,
   TabListResponse,
   AddTabOptions,
@@ -28,7 +29,7 @@ import {
 import { TabCopyError, TabCopyRequest, copyTabContent } from './tabCopy.js';
 import { computeMoveApiIndex } from '../../utils/tabPosition.js';
 import { DOCS_SCOPES } from './scopes.js';
-import { describeApiError, isAuthHandoffError } from '../../utils/apiError.js';
+import { describeApiError, describeApiErrorUntrusted, isAuthHandoffError } from '../../utils/apiError.js';
 import { wrapUntrustedJsonStrings } from '../../utils/untrusted-content.js';
 import {
   ALL_TEXT_KEYS,
@@ -280,7 +281,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
         ...(doc.revisionId ? { revisionId: doc.revisionId } : {}),
         tab: {
           tabProperties: tab.tab.tabProperties,
-          documentTab: tab.tab.documentTab,
+          documentTab: tab.tab.documentTab ? withNamedRangeList(tab.tab.documentTab) : undefined,
         },
         childTabs: (tab.tab.childTabs ?? []).map((child) => ({
           tabId: child.tabProperties?.tabId ?? '',
@@ -783,7 +784,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
     if (error instanceof DocsInputError) throw error;
     return {
       success: false,
-      error: describeApiError(error),
+      error: describeApiErrorUntrusted(error, DOCS_API_ERROR_SOURCE),
     };
   }
 
@@ -1303,7 +1304,7 @@ export class DocsService extends BaseGoogleService<docs_v1.Docs> {
       if (cause instanceof DocsInputError) throw cause;
       return {
         success: false,
-        error: `Copy failed during "${error.phase}": ${describeApiError(cause)}.${outcome}`,
+        error: `Copy failed during "${error.phase}": ${describeApiErrorUntrusted(cause, DOCS_API_ERROR_SOURCE)}.${outcome}`,
       };
     }
   }
@@ -1327,17 +1328,27 @@ type CopyDestination =
   | { kind: 'new'; title: string; parentTabId: string | null; position: number | undefined }
   | { kind: 'overwrite'; tabId: string };
 
+/** Source label for Google error text in tab-operation and copy failures. */
+const DOCS_API_ERROR_SOURCE = 'google-workspace:docs:api-error';
+
 /**
- * True when the error carries an HTTP error status (>= 400). A batchUpdate
- * rejected with one applied nothing (batches are all-or-nothing); without one
- * (timeout, dropped connection, missing reply field) the write may have landed.
+ * True when the error carries an HTTP client-error status (4xx). A batchUpdate
+ * rejected with one applied nothing (batches are all-or-nothing). Without one
+ * (a 5xx, timeout, dropped connection or missing reply field) the write may
+ * have landed.
  */
 function hadHttpErrorResponse(cause: unknown): boolean {
   if (typeof cause !== 'object' || cause === null) return false;
   const candidate = cause as { response?: { status?: unknown }; status?: unknown; code?: unknown };
   return [candidate.response?.status, candidate.status, candidate.code].some(
-    (value) => typeof value === 'number' && value >= 400
+    (value) => typeof value === 'number' && value >= 400 && value < 500
   );
+}
+
+/** The tab's documentTab with `namedRanges` turned from a name-keyed map into a list (see TabJsonDocumentTab). */
+function withNamedRangeList(documentTab: docs_v1.Schema$DocumentTab): TabJsonDocumentTab {
+  const { namedRanges, ...rest } = documentTab;
+  return namedRanges ? { ...rest, namedRanges: Object.values(namedRanges) } : rest;
 }
 
 const INSERT_POSITIONS: readonly InsertTextPosition[] = ['after', 'before', 'next_paragraph_start'];

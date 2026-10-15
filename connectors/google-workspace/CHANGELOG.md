@@ -24,6 +24,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ### Security
 
 - Document titles in the results of `append_to_workspace_document`, `replace_workspace_document` and `find_and_replace_workspace_document` are now wrapped as untrusted content.
+- Google's error text in failed tab changes, anchored inserts and tab copies is wrapped as untrusted content. A one-tab JSON read returns the tab's named ranges as a list rather than a map keyed by range name, so range names are wrapped too.
 
 ## [0.4.2] - 2026-09-29
 

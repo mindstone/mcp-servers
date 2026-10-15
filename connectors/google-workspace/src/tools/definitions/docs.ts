@@ -45,7 +45,7 @@ export const docsTools: ToolMetadata[] = [
     
     Note: For very large documents, consider using max_chars to limit response size.
     all_tabs cannot be combined with return_json; tab_id with return_json returns that one tab
-    (up to 100,000 characters of JSON; sub-tabs listed by id).`,
+    (up to 100,000 characters of JSON; sub-tabs listed by id; named ranges as a list, not keyed by name).`,
     aliases: ['read_doc', 'get_document', 'view_document'],
     annotations: { readOnlyHint: true },
     inputSchema: {

@@ -594,7 +594,7 @@ liveDescribe('live: Docs tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
     if (!clientId || !clientSecret) {
       const hostRoot = process.env.MCP_GW_LIVE_HOST_ROOT;
       if (!hostRoot) throw new ProbeError('Set GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET or MCP_GW_LIVE_HOST_ROOT');
-      ({ clientId, clientSecret } = readEmbeddedGoogleOAuthCredentials(hostRoot));
+      ({ clientId, clientSecret } = stepSync('read the OAuth client from the host repo', () => readEmbeddedGoogleOAuthCredentials(hostRoot)));
     }
 
     tempRoot = stepSync('copy the instance to a temp directory', () => copyInstance(env.instanceRoot));

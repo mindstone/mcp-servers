@@ -205,13 +205,22 @@ export interface ListTabsOptions {
   includeWordCount?: boolean;
 }
 
+/**
+ * A documentTab as Google returns it, except `namedRanges`: Google keys that
+ * map by the author-chosen range name, and JSON keys are not enveloped, so it
+ * is returned as a list (each entry still carries its `name`).
+ */
+export type TabJsonDocumentTab = Omit<docs_v1.Schema$DocumentTab, 'namedRanges'> & {
+  namedRanges?: docs_v1.Schema$NamedRanges[];
+};
+
 export interface TabJsonResponse {
   documentId: string;
   title: string;
   revisionId?: string;
   tab: {
     tabProperties?: docs_v1.Schema$TabProperties;
-    documentTab?: docs_v1.Schema$DocumentTab;
+    documentTab?: TabJsonDocumentTab;
   };
   childTabs: Array<{ tabId: string; title: string }>; // listed only; read them by tab_id
 }
