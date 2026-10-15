@@ -153,6 +153,9 @@ import {
   handleListSheets,
   handleAddSheet,
   handleDeleteSheet,
+  handleDuplicateSheet,
+  handleUpdateSheet,
+  handleInsertDimension,
   handleExtractSpreadsheetId,
   handleBatchGetValues,
   handleBatchUpdateValues,
@@ -268,6 +271,9 @@ import {
   assertClearSpreadsheetValuesArgs,
   assertListSpreadsheetSheetsArgs,
   assertAddSpreadsheetSheetArgs,
+  assertDuplicateSpreadsheetSheetArgs,
+  assertUpdateSpreadsheetSheetArgs,
+  assertInsertSpreadsheetDimensionArgs,
   assertDeleteSpreadsheetSheetArgs,
   assertExtractSpreadsheetIdArgs,
   assertBatchGetSpreadsheetValuesArgs,
@@ -920,6 +926,18 @@ export class GSuiteServer {
           case 'delete_workspace_spreadsheet_sheet':
             assertDeleteSpreadsheetSheetArgs(args);
             result = await handleDeleteSheet(args);
+            break;
+          case 'duplicate_workspace_spreadsheet_sheet':
+            assertDuplicateSpreadsheetSheetArgs(args);
+            result = await handleDuplicateSheet(args);
+            break;
+          case 'update_workspace_spreadsheet_sheet':
+            assertUpdateSpreadsheetSheetArgs(args);
+            result = await handleUpdateSheet(args);
+            break;
+          case 'insert_workspace_spreadsheet_dimension':
+            assertInsertSpreadsheetDimensionArgs(args);
+            result = await handleInsertDimension(args);
             break;
           case 'extract_workspace_spreadsheet_id':
             assertExtractSpreadsheetIdArgs(args);

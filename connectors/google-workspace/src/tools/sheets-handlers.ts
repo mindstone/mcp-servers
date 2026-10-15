@@ -5,12 +5,17 @@ import { ActionableA1Error, normaliseA1Range } from '../modules/sheets/a1Utils.j
 import { rewriteSheetsApiError } from '../modules/sheets/errorRewriter.js';
 import {
   extractSpreadsheetIdFromUrl,
+  firstSheetRowNumber,
   formatAnchorReadResponse,
   formatSpreadsheetAsText,
   formatOperationResult,
   formatShapedReadResponse,
   formatValuesAsTable,
-  formatSheetsListAsText,
+  formatSheetListResultAsText,
+  formatSheetAddedAsText,
+  formatSheetDuplicatedAsText,
+  formatSheetUpdatedAsText,
+  formatDimensionInsertedAsText,
 } from '../modules/sheets/formatters.js';
 import {
   AnchorMode,
@@ -40,6 +45,7 @@ import {
   BorderStyle,
   ShapedReadResponse,
   WriteResponse,
+  SheetDimension,
 } from '../modules/sheets/types.js';
 import { McpToolResponse } from './types.js';
 import {
@@ -148,6 +154,50 @@ interface DeleteSheetArgs {
   spreadsheetId?: string;
   sheet_id?: number;
   sheetId?: number;
+}
+
+interface DuplicateSheetArgs {
+  email?: string;
+  spreadsheet_id?: string;
+  spreadsheetId?: string;
+  sheet_id?: number;
+  sheetId?: number;
+  sheet_title?: string;
+  sheetTitle?: string;
+  title?: string;
+  new_title?: string;
+  newTitle?: string;
+  position?: number;
+}
+
+interface UpdateSheetArgs {
+  email?: string;
+  spreadsheet_id?: string;
+  spreadsheetId?: string;
+  sheet_id?: number;
+  sheetId?: number;
+  sheet_title?: string;
+  sheetTitle?: string;
+  title?: string;
+  new_title?: string;
+  newTitle?: string;
+  position?: number;
+}
+
+interface InsertDimensionArgs {
+  email?: string;
+  spreadsheet_id?: string;
+  spreadsheetId?: string;
+  sheet_id?: number;
+  sheetId?: number;
+  sheet_title?: string;
+  sheetTitle?: string;
+  dimension: SheetDimension;
+  start_index?: number;
+  startIndex?: number;
+  count?: number;
+  inherit_from?: 'before' | 'after';
+  inheritFrom?: 'before' | 'after';
 }
 
 interface ExtractIdArgs {
@@ -423,13 +473,15 @@ export async function handleReadSpreadsheetValues(args: ReadValuesArgs): Promise
     }
 
     if (valueView === 'shaped') {
-      return formatShapedReadResponse(result.data as ShapedReadResponse);
+      return formatShapedReadResponse(result.data as ShapedReadResponse, { majorDimension });
     }
     
     // Format as human-readable text
     const response = result.data as SpreadsheetResponse;
     const header = `Range: ${args.range}\nSpreadsheet: ${response.spreadsheetUrl}\n---\n`;
-    const table = formatValuesAsTable(response.values);
+    const table = formatValuesAsTable(response.values, {
+      firstRowNumber: firstSheetRowNumber(response.valuesRange, majorDimension),
+    });
     return header + table;
   });
 }
@@ -634,10 +686,7 @@ export async function handleListSheets(args: ListSheetsArgs): Promise<McpToolRes
       );
     }
     
-    const response = result.data as SpreadsheetResponse;
-    const header = `Spreadsheet: ${response.title}\nURL: ${response.spreadsheetUrl}\n---\n`;
-    const sheetsList = formatSheetsListAsText(response.sheets || []);
-    return header + sheetsList;
+    return formatSheetListResultAsText(result.data as SpreadsheetResponse);
   });
 }
 
@@ -673,10 +722,7 @@ export async function handleAddSheet(args: AddSheetArgs): Promise<McpToolRespons
       );
     }
     
-    const sheetInfo = result.data as SheetInfo;
-    return formatOperationResult('Add sheet', spreadsheetId as string, {
-      sheetTitle: sheetInfo.title,
-    }) + `\nSheet ID: ${sheetInfo.sheetId}`;
+    return formatSheetAddedAsText(spreadsheetId as string, result.data as SheetInfo);
   });
 }
 
@@ -710,6 +756,121 @@ export async function handleDeleteSheet(args: DeleteSheetArgs): Promise<McpToolR
     }
     
     return `Sheet deleted successfully!\n\nSpreadsheet URL: https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit\nDeleted sheet ID: ${sheetId}`;
+  });
+}
+
+/**
+ * The sheet a tab tool acts on: exactly one of sheet_id or sheet_title.
+ */
+function readSheetRef(rawArgs: Record<string, unknown>): { sheetId: number } | { sheetTitle: string } {
+  const sheetId = readAliasedNumber(rawArgs, 'sheet_id', 'sheetId');
+  const sheetTitle = readAliasedString(rawArgs, 'sheet_title', 'sheetTitle');
+  if ((sheetId === undefined) === (sheetTitle === undefined)) {
+    throw new McpError(ErrorCode.InvalidParams, 'Pass exactly one of sheet_id or sheet_title.');
+  }
+  return sheetId !== undefined ? { sheetId } : { sheetTitle: sheetTitle as string };
+}
+
+/**
+ * Duplicate a sheet (tab) within its spreadsheet
+ */
+export async function handleDuplicateSheet(args: DuplicateSheetArgs): Promise<McpToolResponse | string | object> {
+  const accountManager = getAccountManager();
+  const rawArgs = args as unknown as Record<string, unknown>;
+  const spreadsheetId = readAliasedString(rawArgs, 'spreadsheet_id', 'spreadsheetId');
+  const sheetRef = readSheetRef(rawArgs);
+  // `new_title` (and `newTitle`, rewritten to it by the normalizer) name the copy too,
+  // so a model using either key gets its title instead of a silent "Copy of …".
+  const title = readAliasedString(rawArgs, 'title', 'new_title');
+  const position = typeof rawArgs.position === 'number' ? rawArgs.position : undefined;
+
+  const email = await resolveEmail(args);
+
+  return await accountManager.withTokenRenewal(email, async () => {
+    const result = await getSheetsService().duplicateSheet(email, {
+      spreadsheetId: spreadsheetId as string,
+      ...sheetRef,
+      ...(title !== undefined ? { title } : {}),
+      ...(position !== undefined ? { position } : {}),
+    });
+
+    if (!result.success || !result.data) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        // Already enveloped by the service; the range-error rewriter would unwrap it.
+        result.error || 'Failed to duplicate sheet',
+      );
+    }
+    return formatSheetDuplicatedAsText(result.data);
+  });
+}
+
+/**
+ * Rename and/or reorder a sheet (tab)
+ */
+export async function handleUpdateSheet(args: UpdateSheetArgs): Promise<McpToolResponse | string | object> {
+  const accountManager = getAccountManager();
+  const rawArgs = args as unknown as Record<string, unknown>;
+  const spreadsheetId = readAliasedString(rawArgs, 'spreadsheet_id', 'spreadsheetId');
+  const sheetRef = readSheetRef(rawArgs);
+  // `new_title` (and `newTitle`, rewritten to it by the normalizer) rename the sheet too, as on
+  // duplicate, so a model carrying that key over gets the rename instead of only the move.
+  const title = readAliasedString(rawArgs, 'title', 'new_title');
+  const position = typeof rawArgs.position === 'number' ? rawArgs.position : undefined;
+
+  const email = await resolveEmail(args);
+
+  return await accountManager.withTokenRenewal(email, async () => {
+    const result = await getSheetsService().updateSheet(email, {
+      spreadsheetId: spreadsheetId as string,
+      ...sheetRef,
+      ...(title !== undefined ? { title } : {}),
+      ...(position !== undefined ? { position } : {}),
+    });
+
+    if (!result.success || !result.data) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        // Already enveloped by the service; the range-error rewriter would unwrap it.
+        result.error || 'Failed to update sheet',
+      );
+    }
+    return formatSheetUpdatedAsText(result.data);
+  });
+}
+
+/**
+ * Insert empty rows or columns into a sheet
+ */
+export async function handleInsertDimension(args: InsertDimensionArgs): Promise<McpToolResponse | string | object> {
+  const accountManager = getAccountManager();
+  const rawArgs = args as unknown as Record<string, unknown>;
+  const spreadsheetId = readAliasedString(rawArgs, 'spreadsheet_id', 'spreadsheetId');
+  const sheetRef = readSheetRef(rawArgs);
+  const startIndex = readAliasedNumber(rawArgs, 'start_index', 'startIndex');
+  const count = typeof rawArgs.count === 'number' ? rawArgs.count : undefined;
+  const inheritFrom = readAliasedValue<'before' | 'after'>(rawArgs, 'inherit_from', 'inheritFrom');
+
+  const email = await resolveEmail(args);
+
+  return await accountManager.withTokenRenewal(email, async () => {
+    const result = await getSheetsService().insertDimension(email, {
+      spreadsheetId: spreadsheetId as string,
+      ...sheetRef,
+      dimension: args.dimension,
+      startIndex: startIndex as number,
+      ...(count !== undefined ? { count } : {}),
+      ...(inheritFrom !== undefined ? { inheritFrom } : {}),
+    });
+
+    if (!result.success || !result.data) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        // Already enveloped by the service; the range-error rewriter would unwrap it.
+        result.error || 'Failed to insert rows or columns',
+      );
+    }
+    return formatDimensionInsertedAsText(result.data);
   });
 }
 
@@ -789,7 +950,7 @@ export async function handleBatchGetValues(args: BatchGetValuesArgs): Promise<Mc
         if (isBatchAnchorValuesResult(rangeData)) {
           output += formatAnchorReadResponse(rangeData.anchor);
         } else {
-          output += formatShapedReadResponse(rangeData.shaped);
+          output += formatShapedReadResponse(rangeData.shaped, { majorDimension });
         }
       }
       return output;
@@ -804,7 +965,9 @@ export async function handleBatchGetValues(args: BatchGetValuesArgs): Promise<Mc
       if (isBatchAnchorValuesResult(rangeData)) {
         output += formatAnchorReadResponse(rangeData.anchor);
       } else {
-        output += formatValuesAsTable(rangeData.values);
+        output += formatValuesAsTable(rangeData.values, {
+          firstRowNumber: firstSheetRowNumber(rangeData.range, majorDimension),
+        });
       }
     }
     

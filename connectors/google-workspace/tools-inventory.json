@@ -770,6 +770,30 @@
       }
     },
     {
+      "name": "duplicate_workspace_spreadsheet_sheet",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "update_workspace_spreadsheet_sheet",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "insert_workspace_spreadsheet_dimension",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true
+      }
+    },
+    {
       "name": "extract_workspace_spreadsheet_id",
       "annotations": {
         "readOnlyHint": true,

@@ -1360,6 +1360,104 @@ export function assertDeleteSpreadsheetSheetArgs(args: unknown): asserts args is
   }
 }
 
+interface DuplicateSpreadsheetSheetArgs {
+  email?: string;
+  spreadsheetId: string;
+  sheetId?: number;
+  sheetTitle?: string;
+  title?: string;
+  position?: number;
+}
+
+interface UpdateSpreadsheetSheetArgs {
+  email?: string;
+  spreadsheetId: string;
+  sheetId?: number;
+  sheetTitle?: string;
+  title?: string;
+  position?: number;
+}
+
+interface InsertSpreadsheetDimensionArgs {
+  email?: string;
+  spreadsheetId: string;
+  sheetId?: number;
+  sheetTitle?: string;
+  dimension: 'ROWS' | 'COLUMNS';
+  startIndex: number;
+  count?: number;
+  inheritFrom?: 'before' | 'after';
+}
+
+export function isDuplicateSpreadsheetSheetArgs(args: unknown): args is DuplicateSpreadsheetSheetArgs {
+  if (typeof args !== 'object' || args === null) return false;
+  const rawParams = args as Record<string, unknown>;
+  const spreadsheetId = readAliasedArg<string>(rawParams, 'spreadsheet_id', 'spreadsheetId');
+  const sheetId = readAliasedArg<number>(rawParams, 'sheet_id', 'sheetId');
+  const sheetTitle = readAliasedArg<string>(rawParams, 'sheet_title', 'sheetTitle');
+  return isOptional(rawParams.email, 'string') &&
+    typeof spreadsheetId === 'string' &&
+    isOptional(sheetId, 'number') &&
+    isOptional(sheetTitle, 'string') &&
+    (sheetId !== undefined || sheetTitle !== undefined) &&
+    isOptional(rawParams.title, 'string') &&
+    isOptional(rawParams.new_title, 'string') &&
+    isOptional(rawParams.position, 'number');
+}
+
+export function assertDuplicateSpreadsheetSheetArgs(args: unknown): asserts args is DuplicateSpreadsheetSheetArgs {
+  if (!isDuplicateSpreadsheetSheetArgs(args)) {
+    throw new Error('Invalid duplicate spreadsheet sheet parameters. Required: spreadsheet_id, sheet_id (number) or sheet_title (string). Optional: title (string), position (number)');
+  }
+}
+
+export function isUpdateSpreadsheetSheetArgs(args: unknown): args is UpdateSpreadsheetSheetArgs {
+  if (typeof args !== 'object' || args === null) return false;
+  const rawParams = args as Record<string, unknown>;
+  const spreadsheetId = readAliasedArg<string>(rawParams, 'spreadsheet_id', 'spreadsheetId');
+  const sheetId = readAliasedArg<number>(rawParams, 'sheet_id', 'sheetId');
+  const sheetTitle = readAliasedArg<string>(rawParams, 'sheet_title', 'sheetTitle');
+  return isOptional(rawParams.email, 'string') &&
+    typeof spreadsheetId === 'string' &&
+    isOptional(sheetId, 'number') &&
+    isOptional(sheetTitle, 'string') &&
+    (sheetId !== undefined || sheetTitle !== undefined) &&
+    isOptional(rawParams.title, 'string') &&
+    isOptional(rawParams.new_title, 'string') &&
+    isOptional(rawParams.position, 'number');
+}
+
+export function assertUpdateSpreadsheetSheetArgs(args: unknown): asserts args is UpdateSpreadsheetSheetArgs {
+  if (!isUpdateSpreadsheetSheetArgs(args)) {
+    throw new Error('Invalid update spreadsheet sheet parameters. Required: spreadsheet_id, sheet_id (number) or sheet_title (string). Optional: title (string), position (number)');
+  }
+}
+
+export function isInsertSpreadsheetDimensionArgs(args: unknown): args is InsertSpreadsheetDimensionArgs {
+  if (typeof args !== 'object' || args === null) return false;
+  const rawParams = args as Record<string, unknown>;
+  const spreadsheetId = readAliasedArg<string>(rawParams, 'spreadsheet_id', 'spreadsheetId');
+  const sheetId = readAliasedArg<number>(rawParams, 'sheet_id', 'sheetId');
+  const sheetTitle = readAliasedArg<string>(rawParams, 'sheet_title', 'sheetTitle');
+  const startIndex = readAliasedArg<number>(rawParams, 'start_index', 'startIndex');
+  const inheritFrom = readAliasedArg<string>(rawParams, 'inherit_from', 'inheritFrom');
+  return isOptional(rawParams.email, 'string') &&
+    typeof spreadsheetId === 'string' &&
+    isOptional(sheetId, 'number') &&
+    isOptional(sheetTitle, 'string') &&
+    (sheetId !== undefined || sheetTitle !== undefined) &&
+    (rawParams.dimension === 'ROWS' || rawParams.dimension === 'COLUMNS') &&
+    typeof startIndex === 'number' &&
+    isOptional(rawParams.count, 'number') &&
+    (inheritFrom === undefined || inheritFrom === 'before' || inheritFrom === 'after');
+}
+
+export function assertInsertSpreadsheetDimensionArgs(args: unknown): asserts args is InsertSpreadsheetDimensionArgs {
+  if (!isInsertSpreadsheetDimensionArgs(args)) {
+    throw new Error('Invalid insert dimension parameters. Required: spreadsheet_id, sheet_id (number) or sheet_title (string), dimension ("ROWS" or "COLUMNS"), start_index (number). Optional: count (number), inherit_from ("before" or "after")');
+  }
+}
+
 export function isExtractSpreadsheetIdArgs(args: unknown): args is ExtractSpreadsheetIdArgs {
   if (typeof args !== 'object' || args === null) return false;
   const params = args as Partial<ExtractSpreadsheetIdArgs>;

@@ -1,6 +1,7 @@
 import { google, sheets_v4 } from 'googleapis';
 import { BaseGoogleService } from '../../services/base/BaseGoogleService.js';
-import { isAuthHandoffError } from '../../utils/apiError.js';
+import { describeApiError, describeApiErrorUntrusted, isAuthHandoffError } from '../../utils/apiError.js';
+import { computeMoveApiIndex } from '../../utils/tabPosition.js';
 import {
   AnchorMode,
   AnchorReadResponse,
@@ -34,6 +35,14 @@ import {
   ShapedReadResponse,
   ShapedWarning,
   WriteResponse,
+  DuplicateSheetOptions,
+  UpdateSheetOptions,
+  InsertDimensionOptions,
+  SheetDuplicateResponse,
+  SheetUpdateResponse,
+  DimensionInsertResponse,
+  SheetTabOperationResult,
+  SheetsInputError,
 } from './types.js';
 import { SHEETS_SCOPES } from './scopes.js';
 import {
@@ -44,7 +53,7 @@ import {
   parseContinuationToken,
 } from './cellShape.js';
 import { rewriteSheetsApiError } from './errorRewriter.js';
-import { parseA1Range, quoteSheetNameIfNeeded, rowCountFromA1 } from './a1Utils.js';
+import { parseA1Range, quoteSheetTitle, rowCountFromA1 } from './a1Utils.js';
 import {
   detectFormulaOverwrite,
   detectRawFormulaLiterals,
@@ -58,6 +67,8 @@ const DEFAULT_MAX_ROWS = 1000;
 const DEFAULT_MAX_COLS = 26; // A-Z
 const ANCHOR_FIRST_ROWS = 50;
 const ANCHOR_LAST_ROWS = 10;
+/** Most rows/columns insert_workspace_spreadsheet_dimension adds in one call. */
+export const MAX_INSERT_DIMENSION_COUNT = 100;
 
 interface SheetGridContext {
   sheetId?: number;
@@ -291,7 +302,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
     startRow: number,
     endRow: number,
   ): WindowRange {
-    const normalizedSheetName = quoteSheetNameIfNeeded(sheetTitle);
+    const normalizedSheetName = quoteSheetTitle(sheetTitle);
     return {
       a1: `${normalizedSheetName}!${startCol}${startRow}:${endCol}${endRow}`,
       startRow,
@@ -497,7 +508,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
   private continuationPayloadToRange(payload: ContinuationTokenPayload): string {
     const startCol = payload.startCol ?? 'A';
     const endCol = payload.endCol ?? startCol;
-    const sheet = payload.sheet ? quoteSheetNameIfNeeded(payload.sheet) : undefined;
+    const sheet = payload.sheet ? quoteSheetTitle(payload.sheet) : undefined;
     const rowRange = `${startCol}${payload.startRow}:${endCol}${payload.endRow}`;
     return sheet ? `${sheet}!${rowRange}` : rowRange;
   }
@@ -547,7 +558,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
 
     const sheetTitle = targetSheet?.properties?.title ?? payload.sheet;
     const continuationRange = sheetTitle
-      ? `${quoteSheetNameIfNeeded(sheetTitle)}!${payload.startCol ?? 'A'}${payload.startRow}:${payload.endCol ?? (payload.startCol ?? 'A')}${payload.endRow}`
+      ? `${quoteSheetTitle(sheetTitle)}!${payload.startCol ?? 'A'}${payload.startRow}:${payload.endCol ?? (payload.startCol ?? 'A')}${payload.endRow}`
       : this.continuationPayloadToRange(payload);
 
     if (options.valueView === 'shaped') {
@@ -616,6 +627,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
         spreadsheetId,
         spreadsheetUrl: this.constructSpreadsheetUrl(spreadsheetId),
         values: this.toCellMatrix(response.data.values),
+        valuesRange: response.data.range || continuationRange,
       } as SpreadsheetResponse,
     };
   }
@@ -650,6 +662,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       let values: CellValue[][] | undefined;
       let shapedValues: ShapedReadResponse | undefined;
       let anchorValues: AnchorReadResponse | undefined;
+      let valuesRange: string | undefined;
       let truncated = false;
 
       if (options.range) {
@@ -691,6 +704,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
             } else {
               const valueRange = valuesResult.data as sheets_v4.Schema$ValueRange;
               values = this.toCellMatrix(valueRange.values);
+              valuesRange = valueRange.range || options.range;
 
               // Apply truncation if needed
               const maxRows = options.maxRows ?? DEFAULT_MAX_ROWS;
@@ -723,6 +737,8 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
         truncated,
         shapedValues,
         anchorValues,
+        // Text output only: the JSON shape stays as it was.
+        ...(valuesRange !== undefined && !options.returnJson ? { valuesRange } : {}),
       };
 
       const preserveLegacySpreadsheetJsonShape =
@@ -802,6 +818,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
         spreadsheetId,
         spreadsheetUrl: this.constructSpreadsheetUrl(spreadsheetId),
         values,
+        valuesRange: response.data.range || options.range,
       };
 
       return {
@@ -1068,7 +1085,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
 
     const endRow = parsed.startRow - 1;
     const startRow = Math.max(1, endRow - 199);
-    const sheetPrefix = parsed.sheetName ? `${quoteSheetNameIfNeeded(parsed.sheetName)}!` : '';
+    const sheetPrefix = parsed.sheetName ? `${quoteSheetTitle(parsed.sheetName)}!` : '';
     const contextRange = `${sheetPrefix}${parsed.startCol}${startRow}:${parsed.startCol}${endRow}`;
 
     try {
@@ -1141,7 +1158,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
         column: columnLetter,
         rows: Array.from({ length: values.length }, (_, index) => appendedStartRow + index),
         suggestedFormula: formula,
-        detail: `Possible formula opportunity: column ${columnLetter} appears to use a fill-down formula in ${quoteSheetNameIfNeeded(sheetTitle)}!${columnLetter}${lastFormulaRowIndex + 1}. New row(s) ${appendedStartRow}-${endRow} will break the pattern. Consider extending the formula range or copying the formula.`,
+        detail: `Possible formula opportunity: column ${columnLetter} appears to use a fill-down formula in ${quoteSheetTitle(sheetTitle)}!${columnLetter}${lastFormulaRowIndex + 1}. New row(s) ${appendedStartRow}-${endRow} will break the pattern. Consider extending the formula range or copying the formula.`,
       });
     }
 
@@ -1186,7 +1203,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
     const endColLetter = this.columnIndexToLetter(endColIndex + 1);
 
     const readStartRow = Math.max(1, rowCount - 4);
-    const sheetName = quoteSheetNameIfNeeded(targetSheet.properties.title);
+    const sheetName = quoteSheetTitle(targetSheet.properties.title);
     const formulaReadRange = `${sheetName}!${startColLetter}${readStartRow}:${endColLetter}${rowCount}`;
     const formulaRead = await client.spreadsheets.get({
       spreadsheetId,
@@ -1673,6 +1690,234 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
         error: error instanceof Error ? error.message : 'Unknown error occurred',
       };
     }
+  }
+
+  /**
+   * Duplicate a sheet (tab) inside the same spreadsheet. Google copies values,
+   * formulas, formatting, merges and validation. `position` is the 0-based
+   * position of the copy; it defaults to right after the source.
+   */
+  async duplicateSheet(
+    email: string,
+    options: DuplicateSheetOptions
+  ): Promise<SheetTabOperationResult<SheetDuplicateResponse>> {
+    try {
+      const newTitle = options.title !== undefined ? requireSheetTitle(options.title) : undefined;
+      const client = await this.getWriteClient(email);
+      const sheets = await this.readSheetList(client, options.spreadsheetId);
+      const source = findSheet(sheets, { sheetId: options.sheetId, sheetTitle: options.sheetTitle });
+
+      // Inserting a new sheet: no before-removal adjustment, any index 0..count.
+      assertSheetPosition(options.position, sheets.length);
+      const position = options.position ?? source.index + 1;
+
+      const duplicateSheet: sheets_v4.Schema$DuplicateSheetRequest = {
+        sourceSheetId: source.sheetId,
+        insertSheetIndex: position,
+      };
+      if (newTitle !== undefined) duplicateSheet.newSheetName = newTitle;
+
+      const response = await client.spreadsheets.batchUpdate({
+        spreadsheetId: options.spreadsheetId,
+        requestBody: { requests: [{ duplicateSheet }] },
+      });
+
+      const properties = response.data.replies?.[0]?.duplicateSheet?.properties;
+      if (!properties || typeof properties.sheetId !== 'number') {
+        throw new Error('Duplicate sheet returned no sheet properties; check list_workspace_spreadsheet_sheets before retrying');
+      }
+      return {
+        success: true,
+        data: {
+          spreadsheetId: options.spreadsheetId,
+          sourceSheetId: source.sheetId,
+          sheet: this.extractSheetInfo({ properties }),
+          requestedPosition: position,
+        },
+      };
+    } catch (error) {
+      return toSheetTabFailure(error);
+    }
+  }
+
+  /**
+   * Rename and/or reorder a sheet. `position` is the 0-based position the sheet
+   * should end up at; the API's before-removal index is computed here. A call
+   * that changes nothing makes no write. Reports the actual title and position
+   * after the write.
+   */
+  async updateSheet(
+    email: string,
+    options: UpdateSheetOptions
+  ): Promise<SheetTabOperationResult<SheetUpdateResponse>> {
+    try {
+      if (options.title === undefined && options.position === undefined) {
+        throw new SheetsInputError('Pass at least one of title or position.');
+      }
+      const newTitle = options.title !== undefined ? requireSheetTitle(options.title) : undefined;
+      const client = await this.getWriteClient(email);
+      const sheets = await this.readSheetList(client, options.spreadsheetId);
+      const current = findSheet(sheets, { sheetId: options.sheetId, sheetTitle: options.sheetTitle });
+
+      // Final position among all sheets, the moved sheet included.
+      assertSheetPosition(options.position, sheets.length - 1);
+      const targetPosition = options.position ?? current.index;
+      const titleChanged = newTitle !== undefined && newTitle !== current.title;
+      const positionChanged = targetPosition !== current.index;
+
+      if (!titleChanged && !positionChanged) {
+        return {
+          success: true,
+          data: {
+            spreadsheetId: options.spreadsheetId,
+            sheet: current,
+            changed: false,
+            requestedPosition: targetPosition,
+          },
+        };
+      }
+
+      const properties: sheets_v4.Schema$SheetProperties = { sheetId: current.sheetId };
+      const fields: string[] = [];
+      if (titleChanged) {
+        properties.title = newTitle;
+        fields.push('title');
+      }
+      if (positionChanged) {
+        properties.index = computeMoveApiIndex({
+          sameParent: true,
+          currentIndex: current.index,
+          targetPosition,
+        });
+        fields.push('index');
+      }
+
+      await client.spreadsheets.batchUpdate({
+        spreadsheetId: options.spreadsheetId,
+        requestBody: {
+          requests: [{ updateSheetProperties: { properties, fields: fields.join(',') } }],
+        },
+      });
+
+      const after = await this.readSheetList(client, options.spreadsheetId);
+      const updated = after.find((sheet) => sheet.sheetId === current.sheetId);
+      if (!updated) {
+        throw new Error(`Updated sheet ${current.sheetId} is missing from the spreadsheet's sheet list`);
+      }
+      return {
+        success: true,
+        data: {
+          spreadsheetId: options.spreadsheetId,
+          sheet: updated,
+          changed: true,
+          requestedPosition: targetPosition,
+        },
+      };
+    } catch (error) {
+      return toSheetTabFailure(error);
+    }
+  }
+
+  /**
+   * Insert empty rows or columns into a sheet. Cells at and after `startIndex`
+   * move down (rows) or right (columns); Google adjusts formulas that refer to
+   * them. The new rows/columns copy the formatting of the row/column before
+   * them (default) or after them.
+   */
+  async insertDimension(
+    email: string,
+    options: InsertDimensionOptions
+  ): Promise<SheetTabOperationResult<DimensionInsertResponse>> {
+    try {
+      const count = options.count ?? 1;
+      if (!Number.isInteger(count) || count < 1 || count > MAX_INSERT_DIMENSION_COUNT) {
+        throw new SheetsInputError(`count must be a whole number from 1 to ${MAX_INSERT_DIMENSION_COUNT}.`);
+      }
+      if (!Number.isInteger(options.startIndex) || options.startIndex < 0) {
+        throw new SheetsInputError('start_index must be a whole number, 0 or more (0 = first row or column).');
+      }
+
+      const client = await this.getWriteClient(email);
+      const sheets = await this.readSheetList(client, options.spreadsheetId);
+      const sheet = findSheet(sheets, { sheetId: options.sheetId, sheetTitle: options.sheetTitle });
+
+      const isRows = options.dimension === 'ROWS';
+      const unit = isRows ? 'row' : 'column';
+      const size = isRows ? sheet.rowCount : sheet.columnCount;
+      if (size !== undefined && options.startIndex > size) {
+        throw new SheetsInputError(
+          `start_index ${options.startIndex} is past the end of the sheet, which has ${size} ${unit}s; use ${size} to add after the last ${unit}.`
+        );
+      }
+
+      // There is nothing to copy formatting from before the first row/column,
+      // or after the last one; the default picks the side that exists.
+      const atStart = options.startIndex === 0;
+      const atEnd = size !== undefined && options.startIndex === size;
+      if (options.inheritFrom === 'before' && atStart) {
+        throw new SheetsInputError(`inherit_from "before" needs start_index 1 or more: there is no ${unit} before ${unit} 0. Use inherit_from "after".`);
+      }
+      if (options.inheritFrom === 'after' && atEnd) {
+        throw new SheetsInputError(`inherit_from "after" can't be used at the end of the sheet: there is no ${unit} after it. Use inherit_from "before".`);
+      }
+      const inheritFromBefore = options.inheritFrom !== undefined ? options.inheritFrom === 'before' : !atStart;
+
+      const endIndex = options.startIndex + count;
+      await client.spreadsheets.batchUpdate({
+        spreadsheetId: options.spreadsheetId,
+        requestBody: {
+          requests: [
+            {
+              insertDimension: {
+                range: {
+                  sheetId: sheet.sheetId,
+                  dimension: options.dimension,
+                  startIndex: options.startIndex,
+                  endIndex,
+                },
+                inheritFromBefore,
+              },
+            },
+          ],
+        },
+      });
+
+      const a1Bounds = isRows
+        ? `${options.startIndex + 1}:${endIndex}`
+        : `${this.columnIndexToLetter(options.startIndex + 1)}:${this.columnIndexToLetter(endIndex)}`;
+      return {
+        success: true,
+        data: {
+          spreadsheetId: options.spreadsheetId,
+          sheet,
+          dimension: options.dimension,
+          startIndex: options.startIndex,
+          count,
+          inheritFromBefore,
+          a1Range: `${quoteSheetTitle(sheet.title)}!${a1Bounds}`,
+        },
+      };
+    } catch (error) {
+      return toSheetTabFailure(error);
+    }
+  }
+
+  private async getWriteClient(email: string): Promise<sheets_v4.Sheets> {
+    await this.ensureInitialized();
+    this.checkInitialized();
+    await this.validateScopes(email, [SHEETS_SCOPES.FULL]);
+    return this.getAuthenticatedClient(email, (auth) => google.sheets({ version: 'v4', auth }));
+  }
+
+  /** Every sheet's properties, in tab order. */
+  private async readSheetList(client: sheets_v4.Sheets, spreadsheetId: string): Promise<SheetInfo[]> {
+    const response = await client.spreadsheets.get({
+      spreadsheetId,
+      fields: 'sheets.properties',
+    });
+    return (response.data.sheets ?? [])
+      .map((sheet) => this.extractSheetInfo(sheet))
+      .sort((a, b) => a.index - b.index);
   }
 
   /**
@@ -2241,4 +2486,53 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       };
     }
   }
+}
+
+/**
+ * Shared catch for the sheet-management methods: auth handoffs and input
+ * errors propagate; API failures become `{ success: false }` with the HTTP
+ * status kept.
+ */
+function toSheetTabFailure<T>(error: unknown): SheetTabOperationResult<T> {
+  // An expired/revoked grant must keep its reconnect signal.
+  if (isAuthHandoffError(error)) throw error;
+  if (error instanceof SheetsInputError) throw error;
+  return { success: false, error: describeApiErrorUntrusted(error, 'google-workspace:sheets:api-error') };
+}
+
+function requireSheetTitle(title: string): string {
+  const trimmed = title.trim();
+  if (trimmed.length === 0) {
+    throw new SheetsInputError('title must not be empty.');
+  }
+  return trimmed;
+}
+
+/** `max` is the largest allowed 0-based position. */
+function assertSheetPosition(position: number | undefined, max: number): void {
+  if (position === undefined) return;
+  if (!Number.isInteger(position) || position < 0 || position > max) {
+    throw new SheetsInputError(
+      `position must be a whole number from 0 to ${max} (0 = first; list_workspace_spreadsheet_sheets numbers sheets from 1).`
+    );
+  }
+}
+
+/** Find a sheet by numeric id or by exact title. */
+function findSheet(sheets: SheetInfo[], ref: { sheetId?: number; sheetTitle?: string }): SheetInfo {
+  if (ref.sheetId !== undefined) {
+    const found = sheets.find((sheet) => sheet.sheetId === ref.sheetId);
+    if (found) return found;
+    throw new SheetsInputError(
+      `No sheet with sheetId ${ref.sheetId} in this spreadsheet. Call list_workspace_spreadsheet_sheets to see each sheet's sheetId.`
+    );
+  }
+  if (ref.sheetTitle !== undefined) {
+    const found = sheets.find((sheet) => sheet.title === ref.sheetTitle);
+    if (found) return found;
+    throw new SheetsInputError(
+      `No sheet titled "${ref.sheetTitle}" in this spreadsheet (titles must match exactly). Call list_workspace_spreadsheet_sheets to see the sheets.`
+    );
+  }
+  throw new SheetsInputError('Pass sheet_id or sheet_title.');
 }

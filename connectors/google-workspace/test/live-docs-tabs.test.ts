@@ -1,7 +1,17 @@
 /**
- * Live probe for Docs tabs: tab tree, tab-scoped reads and edits, tab
- * management, tab copy and the anchored insert, run in-process against a real
- * test Doc. Skipped unless MCP_GW_LIVE_DOCS_TABS=1.
+ * Live probes for Docs tabs and Sheets tabs, run in-process against real test
+ * files. This file holds both:
+ * - "live: Docs tabs": tab tree, tab-scoped reads and edits, tab management,
+ *   tab copy and the anchored insert on a test Doc. Needs the enable flag plus
+ *   MCP_GW_LIVE_INSTANCE_ROOT, MCP_GW_LIVE_ACCOUNT_EMAIL, MCP_GW_LIVE_DOC_ID and
+ *   MCP_GW_LIVE_SOURCE_TAB_ID.
+ * - "live: Sheets tabs": duplicate, update and insert on a test Sheet. Needs the
+ *   enable flag plus MCP_GW_LIVE_INSTANCE_ROOT, MCP_GW_LIVE_ACCOUNT_EMAIL and
+ *   MCP_GW_LIVE_SHEET_ID (no Doc variables). Run it alone with
+ *   `-t "live: Sheets tabs"`.
+ * Both need the OAuth client (below). Everything is skipped unless the enable
+ * flag is set: MCP_GW_LIVE_TABS=1, or its older name MCP_GW_LIVE_DOCS_TABS=1
+ * (which enables the Sheets probe too).
  *
  * Environment (values are never committed):
  * - MCP_GW_LIVE_INSTANCE_ROOT   directory with accounts.json and credentials/<account>.token.json.
@@ -13,7 +23,9 @@
  * - MCP_GW_LIVE_DOC_ID          a dedicated test Doc (many tabs, some nested).
  * - MCP_GW_LIVE_SOURCE_TAB_ID   a filled tab in that Doc to copy (only ever read).
  * - MCP_GW_LIVE_MIN_TABS        optional; minimum tab count expected (default 41).
- * - MCP_GW_LIVE_SHEET_ID        optional test Sheet for the Sheets section.
+ * - MCP_GW_LIVE_SHEET_ID        optional test Sheet for the Sheets section (skipped when unset).
+ * - MCP_GW_LIVE_TEMPLATE_SHEET_ID  optional numeric sheetId of the tab to duplicate; default: the
+ *                               first sheet whose title contains "template", else the first sheet.
  *
  * Rules: every tab the probe creates is titled "ZZ probe <run-id> …" and the whole
  * sandbox is deleted again (in the last test, and in afterAll if a test failed
@@ -28,7 +40,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { docs_v1 } from 'googleapis';
+import type { docs_v1, sheets_v4 } from 'googleapis';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 // The connector's logger would print the account email and progress lines; the
@@ -37,7 +49,8 @@ vi.mock('../src/utils/logger.js', () => ({
   default: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
 }));
 
-const LIVE_ENABLED = process.env.MCP_GW_LIVE_DOCS_TABS === '1';
+// MCP_GW_LIVE_TABS names what it enables (Docs and Sheets); MCP_GW_LIVE_DOCS_TABS is its older name.
+const LIVE_ENABLED = process.env.MCP_GW_LIVE_TABS === '1' || process.env.MCP_GW_LIVE_DOCS_TABS === '1';
 const liveDescribe = LIVE_ENABLED ? describe : describe.skip;
 const PROBE_TIMEOUT_MS = 300_000;
 
@@ -184,12 +197,20 @@ function stepSync<T>(label: string, fn: () => T): T {
   }
 }
 
-/** Remove the temp credential copy; a failure is recorded and thrown as an allowlisted summary. */
-function removeTempRoot(): void {
-  if (!tempRoot) return;
-  const root = tempRoot;
-  tempRoot = undefined;
-  stepSync('remove the temp credential copy', () => fs.rmSync(root, { recursive: true, force: true }));
+/**
+ * Remove a temp credential copy. A failure is recorded in `into` as an allowlisted
+ * summary and returned, for the caller to throw once it has logged its notes.
+ */
+function removeTempCopy(root: string | undefined, into: Record<string, unknown>): ProbeError | undefined {
+  if (!root) return undefined;
+  try {
+    stepSync('remove the temp credential copy', () => fs.rmSync(root, { recursive: true, force: true }));
+    return undefined;
+  } catch (error) {
+    const failure = error as ProbeError;
+    into.tempRootCleanupError = failure.message;
+    return failure;
+  }
 }
 
 /** Call a tool handler; returns its text and whether it is an error result. */
@@ -643,13 +664,8 @@ liveDescribe('live: Docs tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
         }
       }
     } finally {
-      let cleanupFailure: ProbeError | undefined;
-      try {
-        removeTempRoot();
-      } catch (error) {
-        cleanupFailure = error as ProbeError;
-        notes.tempRootCleanupError = cleanupFailure.message;
-      }
+      const cleanupFailure = removeTempCopy(tempRoot, notes);
+      tempRoot = undefined;
       vi.unstubAllEnvs();
       console.log(`[live-docs-tabs] ${JSON.stringify(notes)}`);
       if (cleanupFailure) throw cleanupFailure;
@@ -1066,15 +1082,339 @@ liveDescribe('live: Docs tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
 });
 
 // ---------------------------------------------------------------------------
-// (7) Sheets — placeholder until the Sheets tab tools land. Then gate it on
-// MCP_GW_LIVE_DOCS_TABS=1 and MCP_GW_LIVE_SHEET_ID, reuse the temp instance
-// copy, and delete every "ZZ probe <run-id> …" sheet in afterAll.
+// (7) Sheets probe — gated on the enable flag (MCP_GW_LIVE_TABS=1 or MCP_GW_LIVE_DOCS_TABS=1)
+// and MCP_GW_LIVE_SHEET_ID.
+// Run it alone with `-t "live: Sheets tabs"` (the Docs suite then skips,
+// hooks included). It makes its own temp instance copy, writes only to the
+// "ZZ probe <run-id> …" sheets it creates, and deletes them again.
 // ---------------------------------------------------------------------------
 
-describe.skip('live: Sheets tabs (needs MCP_GW_LIVE_SHEET_ID)', () => {
-  it.todo('duplicate the template sheet into a ZZ probe sheet at the default position (source + 1)');
-  it.todo('rename the probe sheet');
-  it.todo('reorder the probe sheet forward and backward, checking the actual index');
-  it.todo('insert a column after the last date column inheriting from before: currency and bold header carried over');
-  it.todo('template sheet grid data and merges are byte-identical before and after');
+const SHEETS_LIVE_ENABLED = LIVE_ENABLED && Boolean(process.env.MCP_GW_LIVE_SHEET_ID);
+const sheetsDescribe = SHEETS_LIVE_ENABLED ? describe : describe.skip;
+// A date header cell: a real date, or a template placeholder such as `#/#/2026`.
+const DATE_HEADER = /^((\d{1,2}|#)\/(\d{1,2}|#)\/\d{4}|\d{1,2}\/\d{1,2}\/\d{2}|\d{4}-\d{2}-\d{2})$/;
+
+type SheetView = { sheetId: number; title: string; index: number; rowCount: number; columnCount: number };
+type GridCell = sheets_v4.Schema$CellData;
+
+sheetsDescribe('live: Sheets tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
+  const spreadsheetId = process.env.MCP_GW_LIVE_SHEET_ID ?? '';
+  const templateOverride = process.env.MCP_GW_LIVE_TEMPLATE_SHEET_ID;
+  let sheetHandlers: Record<string, Handler> = {};
+  let sheetsClient: (() => Promise<sheets_v4.Sheets>) | undefined;
+  let quoteSheetName: (name: string) => string = (name) => name;
+  let sheetsTempRoot: string | undefined;
+  let sheetsCleaned = false;
+  let template: SheetView | undefined;
+  let templateDigest = '';
+  const sheetsBefore = new Map<number, string>();
+  const sheetIds: Record<string, number> = {};
+  const sheetNotes: Record<string, unknown> = { runId: RUN_ID };
+
+  async function api(): Promise<sheets_v4.Sheets> {
+    if (!sheetsClient) throw new ProbeError('Sheets client not loaded');
+    return sheetsClient();
+  }
+
+  async function listSheets(): Promise<SheetView[]> {
+    const client = await api();
+    const response = await step('spreadsheets.get (properties)', () =>
+      client.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties' })
+    );
+    return (response.data.sheets ?? [])
+      .map(({ properties: p }) => ({
+        sheetId: p?.sheetId ?? -1,
+        title: p?.title ?? '',
+        index: p?.index ?? -1,
+        rowCount: p?.gridProperties?.rowCount ?? 0,
+        columnCount: p?.gridProperties?.columnCount ?? 0,
+      }))
+      .sort((a, b) => a.index - b.index);
+  }
+
+  async function sheetById(sheetId: number): Promise<SheetView | undefined> {
+    return (await listSheets()).find((sheet) => sheet.sheetId === sheetId);
+  }
+
+  function needSheet(role: string): number {
+    const id = sheetIds[role];
+    if (id === undefined) throw new ProbeError(`needs the "${role}" probe sheet from an earlier step, which did not complete`);
+    return id;
+  }
+
+  /** Refuse to write unless the target is a probe sheet created by this run. */
+  async function assertProbeSheet(sheetId: number): Promise<SheetView> {
+    const sheet = await sheetById(sheetId);
+    if (!sheet || !isSandboxTitle(sheet.title)) throw new ProbeError(`sheet ${sheetId} is not a probe sheet; refusing to write`);
+    return sheet;
+  }
+
+  async function sheetTool(name: string, args: Record<string, unknown>): Promise<string> {
+    const handler = sheetHandlers[name];
+    if (!handler) throw new ProbeError(`handler ${name} not loaded`);
+    const result = await step(name, () => handler({ email: accountEmail, spreadsheet_id: spreadsheetId, ...args }));
+    if (typeof result !== 'string') throw new ProbeError(`${name} did not return text`);
+    return result;
+  }
+
+  async function sheetRefused(name: string, args: Record<string, unknown>): Promise<boolean> {
+    const handler = sheetHandlers[name];
+    if (!handler) throw new ProbeError(`handler ${name} not loaded`);
+    try {
+      await handler({ email: accountEmail, spreadsheet_id: spreadsheetId, ...args });
+      return false;
+    } catch (error) {
+      return (error as { code?: unknown } | null)?.code === INVALID_PARAMS;
+    }
+  }
+
+  /** Full grid data and merges of one sheet, for the before/after equality check. */
+  async function sheetDigest(sheet: SheetView): Promise<string> {
+    const client = await api();
+    const response = await step('spreadsheets.get (grid)', () =>
+      client.spreadsheets.get({
+        spreadsheetId,
+        ranges: [quoteSheetName(sheet.title)],
+        includeGridData: true,
+        fields: 'sheets(properties(sheetId),data,merges)',
+      })
+    );
+    const found = response.data.sheets?.find((s) => s.properties?.sheetId === sheet.sheetId);
+    if (!found) throw new ProbeError(`grid read did not return sheet ${sheet.sheetId}`);
+    return hash({ data: found.data ?? null, merges: found.merges ?? null });
+  }
+
+  /** Rows of cells (values + formats) from the top-left of a sheet. */
+  async function readCells(title: string): Promise<GridCell[][]> {
+    const client = await api();
+    const response = await step('spreadsheets.get (cells)', () =>
+      client.spreadsheets.get({
+        spreadsheetId,
+        ranges: [`${quoteSheetName(title)}!A1:Z80`],
+        includeGridData: true,
+        fields: 'sheets(data(rowData(values(userEnteredValue,formattedValue,userEnteredFormat(numberFormat,textFormat),effectiveFormat(numberFormat,textFormat)))))',
+      })
+    );
+    return (response.data.sheets?.[0]?.data?.[0]?.rowData ?? []).map((row) => row.values ?? []);
+  }
+
+  function numberFormatType(cell: GridCell | undefined): string | undefined {
+    return cell?.userEnteredFormat?.numberFormat?.type ?? cell?.effectiveFormat?.numberFormat?.type ?? undefined;
+  }
+
+  function isBold(cell: GridCell | undefined): boolean {
+    return (cell?.userEnteredFormat?.textFormat?.bold ?? cell?.effectiveFormat?.textFormat?.bold) === true;
+  }
+
+  function columnLetter(oneBased: number): string {
+    let n = oneBased;
+    let out = '';
+    while (n > 0) {
+      out = String.fromCharCode(65 + ((n - 1) % 26)) + out;
+      n = Math.floor((n - 1) / 26);
+    }
+    return out;
+  }
+
+  async function deleteProbeSheets(): Promise<number> {
+    const probes = (await listSheets()).filter((sheet) => isSandboxTitle(sheet.title));
+    const client = await api();
+    for (const probe of probes) {
+      await step(`delete probe sheet ${probe.sheetId}`, () =>
+        client.spreadsheets.batchUpdate({
+          spreadsheetId,
+          requestBody: { requests: [{ deleteSheet: { sheetId: probe.sheetId } }] },
+        })
+      );
+    }
+    return probes.length;
+  }
+
+  beforeAll(async () => {
+    const missing = Object.entries({
+      MCP_GW_LIVE_INSTANCE_ROOT: env.instanceRoot,
+      MCP_GW_LIVE_ACCOUNT_EMAIL: env.email,
+      MCP_GW_LIVE_SHEET_ID: spreadsheetId,
+    })
+      .filter(([, value]) => !value)
+      .map(([name]) => name);
+    if (missing.length > 0) throw new ProbeError(`Set ${missing.join(', ')} to run the live Sheets tabs probe`);
+
+    let clientId = process.env.GOOGLE_CLIENT_ID;
+    let clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+      const hostRoot = process.env.MCP_GW_LIVE_HOST_ROOT;
+      if (!hostRoot) throw new ProbeError('Set GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET or MCP_GW_LIVE_HOST_ROOT');
+      ({ clientId, clientSecret } = stepSync('read the OAuth client from the host repo', () => readEmbeddedGoogleOAuthCredentials(hostRoot)));
+    }
+
+    // Fresh module graph: the Docs suite (if it ran) initialised the services
+    // against its own temp copy, which its afterAll removed.
+    vi.resetModules();
+    sheetsTempRoot = stepSync('copy the instance to a temp directory', () => copyInstance(env.instanceRoot));
+    const root = sheetsTempRoot;
+    accountEmail = stepSync('find the account in accounts.json', () => accountEmailFrom(root, env.email));
+    vi.stubEnv('ACCOUNTS_PATH', path.join(sheetsTempRoot, 'accounts.json'));
+    vi.stubEnv('CREDENTIALS_PATH', path.join(sheetsTempRoot, 'credentials'));
+    vi.stubEnv('GOOGLE_CLIENT_ID', clientId);
+    vi.stubEnv('GOOGLE_CLIENT_SECRET', clientSecret);
+    vi.stubEnv('MCP_WORKSPACE_PATH', sheetsTempRoot);
+
+    const { initializeAllServices } = await import('../src/utils/service-initializer.js');
+    await step('initialise services', () => initializeAllServices());
+    sheetHandlers = (await import('../src/tools/sheets-handlers.js')) as unknown as Record<string, Handler>;
+    quoteSheetName = (await import('../src/modules/sheets/a1Utils.js')).quoteSheetNameIfNeeded;
+    const sheetsModule = await import('../src/modules/sheets/index.js');
+    // The service's own scope-checked client, so raw reads share the connector's auth.
+    const service = sheetsModule.getSheetsService() as unknown as { getWriteClient(email: string): Promise<sheets_v4.Sheets> };
+    sheetsClient = () => service.getWriteClient(accountEmail);
+
+    const sheets = await listSheets();
+    for (const sheet of sheets) {
+      sheetsBefore.set(sheet.sheetId, sheet.title);
+    }
+    if (sheets.some((sheet) => isSandboxTitle(sheet.title))) throw new ProbeError('a sheet with this run id already exists; refusing to run');
+
+    template = templateOverride !== undefined
+      ? sheets.find((sheet) => String(sheet.sheetId) === templateOverride)
+      : sheets.find((sheet) => /template/i.test(sheet.title)) ?? sheets[0];
+    if (!template) throw new ProbeError('template sheet not found (check MCP_GW_LIVE_TEMPLATE_SHEET_ID)');
+    templateDigest = await sheetDigest(template);
+    sheetNotes.sheetsBefore = sheets.length;
+    sheetNotes.templateSheetId = template.sheetId;
+  }, PROBE_TIMEOUT_MS);
+
+  afterAll(async () => {
+    try {
+      if (sheetsClient && !sheetsCleaned) {
+        try {
+          sheetNotes.afterAllCleanup = await deleteProbeSheets();
+        } catch (error) {
+          sheetNotes.afterAllCleanupError = safeError(error);
+        }
+      }
+    } finally {
+      const cleanupFailure = removeTempCopy(sheetsTempRoot, sheetNotes);
+      sheetsTempRoot = undefined;
+      vi.unstubAllEnvs();
+      console.log(`[live-sheets-tabs] ${JSON.stringify(sheetNotes)}`);
+      if (cleanupFailure) throw cleanupFailure;
+    }
+  }, PROBE_TIMEOUT_MS);
+
+  it('(7) duplicate: the template copy lands right after it by default, under the given title', async () => {
+    if (!template) throw new ProbeError('template not loaded');
+    const title = `${PREFIX} copy`;
+    const text = await sheetTool('handleDuplicateSheet', { sheet_id: template.sheetId, title });
+    const created = (await listSheets()).find((sheet) => sheet.title === title);
+    check(created !== undefined, 'duplicated probe sheet not found by its title');
+    sheetIds.copy = created!.sheetId;
+    check(created!.index === template.index + 1, `copy is at position ${created!.index}, expected ${template.index + 1}`);
+    check(text.includes(`[sheetId: ${created!.sheetId}] at position ${template.index + 1} (0 = first).`), 'result does not report the copy\'s id and position');
+    check(!text.includes('WARNING'), 'result carries a position warning');
+    check(created!.rowCount === template.rowCount && created!.columnCount === template.columnCount, 'copy grid size differs from the template');
+  });
+
+  it('(7) duplicate: an explicit position 0 and the new_title alias', async () => {
+    if (!template) throw new ProbeError('template not loaded');
+    const title = `${PREFIX} front`;
+    await sheetTool('handleDuplicateSheet', { sheet_id: template.sheetId, new_title: title, position: 0 });
+    const created = (await listSheets()).find((sheet) => sheet.title === title);
+    check(created !== undefined, 'front probe sheet not found by its title (new_title ignored?)');
+    sheetIds.front = created!.sheetId;
+    check(created!.index === 0, `front copy is at position ${created!.index}, expected 0`);
+  });
+
+  it('(7) update: rename the probe copy', async () => {
+    const id = needSheet('copy');
+    await assertProbeSheet(id);
+    const title = `${PREFIX} renamed`;
+    const text = await sheetTool('handleUpdateSheet', { sheet_id: id, title });
+    check(text.includes('Sheet updated:'), 'rename result has no "Sheet updated" line');
+    check((await sheetById(id))?.title === title, 'probe sheet title not changed');
+  });
+
+  it('(7) update: reorder backward and forward, checking the actual position; refuse out of range', async () => {
+    const id = needSheet('copy');
+    await assertProbeSheet(id);
+    const back = await sheetTool('handleUpdateSheet', { sheet_id: id, position: 0 });
+    check((await sheetById(id))?.index === 0, 'backward move did not land at position 0');
+    check(!back.includes('WARNING'), 'backward move reported a position warning');
+
+    const count = (await listSheets()).length;
+    const forward = await sheetTool('handleUpdateSheet', { sheet_id: id, position: count - 1 });
+    check((await sheetById(id))?.index === count - 1, `forward move did not land at position ${count - 1}`);
+    check(!forward.includes('WARNING'), 'forward move reported a position warning');
+
+    check(await sheetRefused('handleUpdateSheet', { sheet_id: id, position: count }), 'out-of-range position was not refused with InvalidParams');
+    check((await sheetById(id))?.index === count - 1, 'a refused move changed the position');
+    sheetNotes.reorder = { sheets: count };
+  });
+
+  it('(7) insert: a column after the last date column inherits currency and the bold header', async () => {
+    const id = needSheet('copy');
+    const probe = await assertProbeSheet(id);
+    const before = await readCells(probe.title);
+
+    // Header row = the first row with date-like or `#/#/YYYY` placeholder headers; last date column = the rightmost one in it.
+    let headerRow = -1;
+    let lastDateCol = -1;
+    for (const [r, row] of before.slice(0, 20).entries()) {
+      const dateCols = row.map((cell, c) => (DATE_HEADER.test((cell.formattedValue ?? '').trim()) ? c : -1)).filter((c) => c >= 0);
+      if (dateCols.length > 0) {
+        headerRow = r;
+        lastDateCol = Math.max(...dateCols);
+        break;
+      }
+    }
+    check(headerRow >= 0, 'no date header row (dates or #/#/YYYY placeholders) found in the first 20 rows of the probe copy');
+    const currencyRows = before
+      .map((row, r) => (numberFormatType(row[lastDateCol]) === 'CURRENCY' ? r : -1))
+      .filter((r) => r >= 0);
+    check(currencyRows.length > 0, 'no CURRENCY-formatted cell in the last date column');
+    check(isBold(before[headerRow][lastDateCol]), 'the last date header is not bold in the probe copy');
+
+    const startIndex = lastDateCol + 1;
+    const letter = columnLetter(startIndex + 1);
+    // Look the sheet up by title (the id path is covered by the mock tests and the rename/reorder steps).
+    const text = await sheetTool('handleInsertDimension', {
+      sheet_title: probe.title,
+      dimension: 'COLUMNS',
+      start_index: startIndex,
+    });
+    check(text.includes(`!${letter}:${letter}, formatted like the column before them.`), 'result does not name the inserted column in A1 notation');
+    check(((await sheetById(id))?.columnCount ?? 0) === probe.columnCount + 1, 'column count did not grow by 1');
+
+    const after = await readCells(probe.title);
+    const newCol = startIndex;
+    for (const r of currencyRows) {
+      check(numberFormatType(after[r]?.[newCol]) === 'CURRENCY', `row ${r + 1}: new column cell is not CURRENCY-formatted`);
+    }
+    check(isBold(after[headerRow]?.[newCol]), 'new column header cell is not bold');
+    check(after.every((row) => row[newCol]?.userEnteredValue === undefined || row[newCol]?.userEnteredValue === null), 'new column is not empty');
+    check(after[headerRow]?.[lastDateCol]?.formattedValue === before[headerRow][lastDateCol].formattedValue, 'the last date header moved');
+    sheetNotes.insert = { headerRow: headerRow + 1, column: letter, currencyRows: currencyRows.length };
+  });
+
+  it('(7) cleanup: probe sheets deleted; other sheets unchanged; template grid data and merges byte-identical', async () => {
+    if (!template) throw new ProbeError('template not loaded');
+    sheetNotes.probeSheetsDeleted = await deleteProbeSheets();
+    sheetsCleaned = true;
+
+    const after = await listSheets();
+    check(!after.some((sheet) => isSandboxTitle(sheet.title)), 'probe sheets remain after cleanup');
+    check(after.length === sheetsBefore.size, `sheet count ${after.length} differs from ${sheetsBefore.size} before the run`);
+    const changed = after.filter((sheet) => sheetsBefore.get(sheet.sheetId) !== sheet.title).map((sheet) => sheet.sheetId);
+    check(changed.length === 0, `sheets missing, added or renamed: ${changed.join(', ')}`);
+
+    const templateNow = after.find((sheet) => sheet.sheetId === template!.sheetId);
+    check(templateNow !== undefined, 'template sheet missing');
+    check(templateNow!.index === template.index, 'template position changed');
+    check((await sheetDigest(templateNow!)) === templateDigest, 'template grid data or merges changed');
+
+    for (const original of originalCredentialStats) {
+      const now = fs.statSync(original.file);
+      check(now.mtimeMs === original.mtimeMs && now.size === original.size, 'an original credential file was modified');
+    }
+  });
 });

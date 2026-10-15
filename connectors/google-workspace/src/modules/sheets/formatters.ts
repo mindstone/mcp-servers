@@ -5,12 +5,16 @@
 import type {
   AnchorReadResponse,
   CellTriad,
+  DimensionInsertResponse,
+  SheetDuplicateResponse,
   SheetInfo,
+  SheetUpdateResponse,
   ShapedReadResponse,
   SpreadsheetResponse,
   SuspiciousWriteWarning,
 } from './types.js';
 import { wrapUntrustedContent } from '../../utils/untrusted-content.js';
+import { firstRowOfA1 } from './a1Utils.js';
 
 /**
  * Construct a Google Sheets URL from spreadsheet ID
@@ -102,6 +106,8 @@ export function formatValuesAsTable(
   options?: {
     maxColWidth?: number;
     includeRowNumbers?: boolean;
+    /** Number shown for the first row: the sheet row the values start at (default 1). */
+    firstRowNumber?: number;
   }
 ): string {
   if (!values || values.length === 0) {
@@ -110,6 +116,7 @@ export function formatValuesAsTable(
 
   const maxColWidth = options?.maxColWidth ?? 30;
   const includeRowNumbers = options?.includeRowNumbers ?? true;
+  const firstRowNumber = options?.firstRowNumber ?? 1;
 
   // Find the maximum width for each column
   const colWidths: number[] = [];
@@ -126,7 +133,7 @@ export function formatValuesAsTable(
   }
 
   // Calculate row number width
-  const rowNumWidth = includeRowNumbers ? String(values.length).length + 1 : 0;
+  const rowNumWidth = includeRowNumbers ? String(firstRowNumber + values.length - 1).length + 1 : 0;
 
   // Build the table
   const lines: string[] = [];
@@ -136,7 +143,7 @@ export function formatValuesAsTable(
     const cells: string[] = [];
 
     if (includeRowNumbers) {
-      cells.push(String(rowIdx + 1).padStart(rowNumWidth - 1) + '|');
+      cells.push(String(firstRowNumber + rowIdx).padStart(rowNumWidth - 1) + '|');
     }
 
     for (let col = 0; col < numCols; col++) {
@@ -177,7 +184,21 @@ function formatAnchorRows(rows: CellTriad[][], startRow: number): string {
   return formatValuesAsTable(tableRows, { includeRowNumbers: false });
 }
 
-export function formatShapedReadResponse(response: ShapedReadResponse): string {
+/**
+ * Sheet row number to show for the first row of values read from `range`.
+ * Values grouped by COLUMNS, or a range that can't be parsed, are numbered from 1.
+ */
+export function firstSheetRowNumber(range: string | undefined, majorDimension?: 'ROWS' | 'COLUMNS'): number {
+  if (majorDimension === 'COLUMNS') {
+    return 1;
+  }
+  return firstRowOfA1(range) ?? 1;
+}
+
+export function formatShapedReadResponse(
+  response: ShapedReadResponse,
+  options?: { majorDimension?: 'ROWS' | 'COLUMNS' },
+): string {
   const lines: string[] = [
     `Range: ${response.range}`,
     `Rows: ${response.rowCount}, Columns: ${response.columnCount}`,
@@ -197,7 +218,9 @@ export function formatShapedReadResponse(response: ShapedReadResponse): string {
   lines.push('---');
 
   const tableRows = response.cells.map((row) => row.map((cell) => formatShapedCell(cell)));
-  lines.push(formatValuesAsTable(tableRows));
+  lines.push(formatValuesAsTable(tableRows, {
+    firstRowNumber: firstSheetRowNumber(response.range, options?.majorDimension),
+  }));
 
   if (response.warnings && response.warnings.length > 0) {
     lines.push('');
@@ -311,7 +334,7 @@ export function formatSpreadsheetAsText(response: SpreadsheetResponse): string {
       parts.push(''); // Add blank line separator
       parts.push('Data:');
     }
-    parts.push(formatValuesAsTable(response.values));
+    parts.push(formatValuesAsTable(response.values, { firstRowNumber: firstSheetRowNumber(response.valuesRange) }));
   }
 
   return wrapUntrustedContent(parts.join('\n'), `google-workspace:sheets:spreadsheet/${response.spreadsheetId}`);
@@ -358,4 +381,77 @@ export function formatOperationResult(
   }
 
   return lines.join('\n');
+}
+
+function spreadsheetSource(spreadsheetId: string): string {
+  return `google-workspace:sheets:spreadsheet/${spreadsheetId}`;
+}
+
+/**
+ * Result of list_workspace_spreadsheet_sheets: header + one line per sheet,
+ * enveloped (spreadsheet and sheet titles are authored in Google).
+ */
+export function formatSheetListResultAsText(response: SpreadsheetResponse): string {
+  const header = `Spreadsheet: ${response.title}\nURL: ${response.spreadsheetUrl}\n---\n`;
+  return wrapUntrustedContent(header + formatSheetsListAsText(response.sheets || []), spreadsheetSource(response.spreadsheetId));
+}
+
+/**
+ * Result of add_workspace_spreadsheet_sheet (title enveloped).
+ */
+export function formatSheetAddedAsText(spreadsheetId: string, sheet: SheetInfo): string {
+  const text = formatOperationResult('Add sheet', spreadsheetId, { sheetTitle: sheet.title }) + `\nSheet ID: ${sheet.sheetId}`;
+  return wrapUntrustedContent(text, spreadsheetSource(spreadsheetId));
+}
+
+function sheetPositionMismatch(actual: number, requested: number): string | undefined {
+  return actual !== requested
+    ? `WARNING: the requested position was ${requested}, but the spreadsheet reports position ${actual}. Check list_workspace_spreadsheet_sheets before going on.`
+    : undefined;
+}
+
+/**
+ * Result of duplicate_workspace_spreadsheet_sheet (title enveloped).
+ */
+export function formatSheetDuplicatedAsText(data: SheetDuplicateResponse): string {
+  const lines = [
+    `Duplicated sheet ${data.sourceSheetId} as "${data.sheet.title}" [sheetId: ${data.sheet.sheetId}] at position ${data.sheet.index} (0 = first).`,
+  ];
+  const mismatch = sheetPositionMismatch(data.sheet.index, data.requestedPosition);
+  if (mismatch) lines.push(mismatch);
+  return wrapUntrustedContent(lines.join('\n'), spreadsheetSource(data.spreadsheetId));
+}
+
+/**
+ * Result of update_workspace_spreadsheet_sheet (title enveloped).
+ */
+export function formatSheetUpdatedAsText(data: SheetUpdateResponse): string {
+  if (!data.changed) {
+    return wrapUntrustedContent(
+      `No change: sheet "${data.sheet.title}" [sheetId: ${data.sheet.sheetId}] already has that title and position (${data.sheet.index}, 0 = first).`,
+      spreadsheetSource(data.spreadsheetId)
+    );
+  }
+  const lines = [
+    `Sheet updated: "${data.sheet.title}" [sheetId: ${data.sheet.sheetId}] at position ${data.sheet.index} (0 = first).`,
+  ];
+  const mismatch = sheetPositionMismatch(data.sheet.index, data.requestedPosition);
+  if (mismatch) lines.push(mismatch);
+  return wrapUntrustedContent(lines.join('\n'), spreadsheetSource(data.spreadsheetId));
+}
+
+/**
+ * Result of insert_workspace_spreadsheet_dimension: the inserted range in A1
+ * notation and what moved (sheet title enveloped).
+ */
+export function formatDimensionInsertedAsText(data: DimensionInsertResponse): string {
+  const isRows = data.dimension === 'ROWS';
+  const unit = isRows ? 'row' : 'column';
+  const units = `${data.count} ${unit}${data.count !== 1 ? 's' : ''}`;
+  const side = data.inheritFromBefore ? 'before' : 'after';
+  const lines = [
+    `Inserted ${units} in "${data.sheet.title}" [sheetId: ${data.sheet.sheetId}]: ${data.a1Range}, formatted like the ${unit} ${side} them.`,
+    `Cells that were at ${unit} index ${data.startIndex} (0-based) and beyond moved ${isRows ? 'down' : 'right'} by ${data.count}; formulas that refer to them were adjusted by Google. Re-read before writing to cell addresses noted earlier.`,
+  ];
+  return wrapUntrustedContent(lines.join('\n'), spreadsheetSource(data.spreadsheetId));
 }
