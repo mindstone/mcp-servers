@@ -1152,7 +1152,7 @@ sheetsDescribe('live: Sheets tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
   async function sheetTool(name: string, args: Record<string, unknown>): Promise<string> {
     const handler = sheetHandlers[name];
     if (!handler) throw new ProbeError(`handler ${name} not loaded`);
-    const result = await step(name, () => handler({ email: env.email, spreadsheet_id: spreadsheetId, ...args }));
+    const result = await step(name, () => handler({ email: accountEmail, spreadsheet_id: spreadsheetId, ...args }));
     if (typeof result !== 'string') throw new ProbeError(`${name} did not return text`);
     return result;
   }
@@ -1161,7 +1161,7 @@ sheetsDescribe('live: Sheets tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
     const handler = sheetHandlers[name];
     if (!handler) throw new ProbeError(`handler ${name} not loaded`);
     try {
-      await handler({ email: env.email, spreadsheet_id: spreadsheetId, ...args });
+      await handler({ email: accountEmail, spreadsheet_id: spreadsheetId, ...args });
       return false;
     } catch (error) {
       return (error as { code?: unknown } | null)?.code === INVALID_PARAMS;
@@ -1252,6 +1252,8 @@ sheetsDescribe('live: Sheets tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
     // against its own temp copy, which its afterAll removed.
     vi.resetModules();
     sheetsTempRoot = stepSync('copy the instance to a temp directory', () => copyInstance(env.instanceRoot));
+    const root = sheetsTempRoot;
+    accountEmail = stepSync('find the account in accounts.json', () => accountEmailFrom(root, env.email));
     vi.stubEnv('ACCOUNTS_PATH', path.join(sheetsTempRoot, 'accounts.json'));
     vi.stubEnv('CREDENTIALS_PATH', path.join(sheetsTempRoot, 'credentials'));
     vi.stubEnv('GOOGLE_CLIENT_ID', clientId);
@@ -1265,7 +1267,7 @@ sheetsDescribe('live: Sheets tabs', { timeout: PROBE_TIMEOUT_MS }, () => {
     const sheetsModule = await import('../src/modules/sheets/index.js');
     // The service's own scope-checked client, so raw reads share the connector's auth.
     const service = sheetsModule.getSheetsService() as unknown as { getWriteClient(email: string): Promise<sheets_v4.Sheets> };
-    sheetsClient = () => service.getWriteClient(env.email);
+    sheetsClient = () => service.getWriteClient(accountEmail);
 
     const sheets = await listSheets();
     for (const sheet of sheets) {
