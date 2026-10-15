@@ -24,6 +24,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - `find_and_replace_workspace_document` without `tab_id` still replaces in every tab; on a document with several tabs the result now says so.
 - The text results of `read_workspace_spreadsheet`, `read_workspace_spreadsheet_values` and `batch_read_workspace_spreadsheet_values` (including `value_view: "shaped"`) number rows with their sheet row numbers, so a read of `A20:C22` starts at row 20 instead of 1, as anchor reads already did. Values read with `major_dimension: "COLUMNS"` are still numbered from 1.
 
+### Fixed
+
+- `list_drive_files` accepts `options.orderBy` as a string (`"modifiedTime desc"`) as well as an array.
+
 ### Security
 
 - Document titles in the results of `append_to_workspace_document`, `replace_workspace_document` and `find_and_replace_workspace_document` are now wrapped as untrusted content.
