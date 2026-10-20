@@ -13,6 +13,7 @@ import {
   resolveChannelId,
   resolveDmRecipient,
   resolveUserIdsToCache,
+  SLACK_USER_PROFILE_SOURCE,
 } from '../helpers.js';
 import { notConnectedJson } from './auth.js';
 import { wrapUntrusted } from '../untrusted-content.js';
@@ -924,8 +925,8 @@ Posted as the user — messages are editable in Slack.`,
               intended_recipient: intendedRecipient,
               actual_recipient: {
                 user_id: dmRecipient.user_id,
-                real_name: dmRecipient.real_name,
-                display_name: dmRecipient.display_name,
+                real_name: wrapUntrusted(dmRecipient.real_name, SLACK_USER_PROFILE_SOURCE),
+                display_name: wrapUntrusted(dmRecipient.display_name, SLACK_USER_PROFILE_SOURCE),
                 ...(dmRecipient.email ? { email: dmRecipient.email } : {}),
               },
               channel: channelId,
@@ -953,14 +954,14 @@ Posted as the user — messages are editable in Slack.`,
           ? {
               recipient: {
                 user_id: dmRecipient.user_id,
-                real_name: dmRecipient.real_name,
-                display_name: dmRecipient.display_name,
+                real_name: wrapUntrusted(dmRecipient.real_name, SLACK_USER_PROFILE_SOURCE),
+                display_name: wrapUntrusted(dmRecipient.display_name, SLACK_USER_PROFILE_SOURCE),
                 ...(dmRecipient.email ? { email: dmRecipient.email } : {}),
               },
             }
           : {}),
         note: isDmChannel
-          ? `Message sent to ${dmRecipient?.display_name || dmRecipient?.real_name || 'DM recipient'}. Posted as you.`
+          ? `Message sent to ${wrapUntrusted(dmRecipient?.display_name || dmRecipient?.real_name, SLACK_USER_PROFILE_SOURCE) ?? 'DM recipient'}. Posted as you.`
           : 'Posted as you — you can edit this message in Slack.',
       });
     }),

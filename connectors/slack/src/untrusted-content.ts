@@ -25,6 +25,8 @@
  *   - file `title` / `name` / `pretty_type` returned by files.info
  *   - bookmark titles and reminder text returned by bookmarks.add /
  *     reminders.add (and their list counterparts)
+ *   - user profile text (display name, real name, title, status text) in the
+ *     users tools, DM recipient results and message author enrichment
  */
 
 const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content\s*>/gi;

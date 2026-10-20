@@ -42,6 +42,13 @@ export function mapSlackFiles(msg: {
   );
 }
 
+/**
+ * Envelope source for text a Slack user writes into their own profile
+ * (display name, real name, title, status text). Handles, ids, emails and
+ * emoji codes stay raw: the model passes them back to tools.
+ */
+export const SLACK_USER_PROFILE_SOURCE = 'slack:user-profile';
+
 interface CachedUser {
   name: string;
   displayName: string;
@@ -156,14 +163,24 @@ export function extractUserIdsFromMessages(
   return Array.from(ids);
 }
 
-/** Add `user_name` / `user_display_name` fields when known. */
+/**
+ * Add `user_name` / `user_display_name` fields when known. The display name is
+ * authored by the Slack user, so it is enveloped here (AGENTS.md invariant #6);
+ * the cache stays raw. `user_name` is the handle and stays raw so it can be
+ * passed back to tools.
+ */
 export function enrichMessageWithUserInfo<T extends { user?: string }>(
   msg: T,
 ): T & { user_name?: string; user_display_name?: string } {
   const cached = msg.user ? userCache.get(msg.user.toUpperCase()) : undefined;
   return {
     ...msg,
-    ...(cached ? { user_name: cached.name, user_display_name: cached.displayName } : {}),
+    ...(cached
+      ? {
+          user_name: cached.name,
+          user_display_name: wrapUntrusted(cached.displayName, SLACK_USER_PROFILE_SOURCE),
+        }
+      : {}),
   };
 }
 
@@ -285,7 +302,12 @@ export async function resolveUserId(client: WebClient, input: string): Promise<s
     );
   }
   if (matches.length > 1) {
-    const matchList = matches.map((m) => `${m.name} (${m.matchType})`).join(', ');
+    const matchList = matches
+      .map((m) => {
+        const label = m.matchType === 'username' ? m.name : wrapUntrusted(m.name, SLACK_USER_PROFILE_SOURCE);
+        return `${label} (${m.matchType})`;
+      })
+      .join(', ');
     throw new ConnectorError(
       `Ambiguous user: "${input}" matches multiple users: ${matchList}.`,
       'AMBIGUOUS_USER',

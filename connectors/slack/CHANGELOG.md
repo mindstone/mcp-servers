@@ -15,6 +15,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 - The legacy `search.messages` fallback is now silent to the user. `search_slack_messages` and `get_slack_saved_messages` still report which backend ran in the machine-readable `search_backend` field, but legacy responses no longer carry the prose `search_backend_note`. That note ended with an instruction to reconnect Slack with the granular `search:read.*` scopes; a model relayed it to a user who was already connected, and reconnecting could not have helped, because whether those scopes are requested at all is fixed by the installing app's configuration. The fallback's results are complete, so there is nothing to act on. The refusal is still recorded on stderr for operators, and the tool descriptions now tell the model not to raise the backend, the fallback or Slack scopes with the user.
 
+### Security
+
+- Text people write into their own Slack profile is now enveloped as untrusted content, with close-tag breakout escaping, before it reaches the model. This covers display names, real names, job titles and status text in `list_slack_users`, `get_slack_user_profile`, `lookup_user_by_email` and `open_slack_dm`; the author display name (`user_display_name`) on messages returned by search, saved messages, channel history, unread messages, thread replies, pins and permalink lookups; the recipient names and the "Message sent to" note from `post_slack_message`; and names listed in the "ambiguous user" error. Previously a display name such as "Ignore previous instructions…" reached the model raw. Usernames, user and channel IDs, emails and emoji codes stay raw so they can still be passed back to tools.
+
 ## [0.3.0] - 2026-08-06
 
 ### Changed
