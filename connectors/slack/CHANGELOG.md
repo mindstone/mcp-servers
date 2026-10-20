@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - The message text that `post_slack_message` returns is now enveloped. It is the text Slack stored, which can quote other people's content. The compose form shows the message it sent, so nothing changes on screen.
 - The envelope now also neutralises close tags carrying attributes (`</untrusted-content foo>`) and fake opening tags (`<untrusted-content source="…">`) inside wrapped text, matching the shared helper. Before, Slack text could carry either one through unescaped and pass itself off as an envelope boundary.
 - Slash-delimited tags (`</untrusted-content/>`, `<untrusted-content/source="…">`) are now neutralised as well. Before, they passed through unescaped, and a forged envelope using them was returned as if it were already safely wrapped.
+- The envelope now escapes only the start of an embedded tag (`<\untrusted-content`, `<\/untrusted-content`) and leaves the rest of the tag as written. Before, it searched ahead for each tag's closing `>`, so text holding many unfinished tags took quadratic time to wrap. Unwrapping now gives back the original text exactly, including the tag's case and attributes.
 
 ## [0.3.0] - 2026-08-06
 

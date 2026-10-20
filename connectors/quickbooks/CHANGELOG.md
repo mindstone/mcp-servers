@@ -14,6 +14,7 @@ are maintained manually as part of the PR review checklist.
 ### Security
 
 - Re-synced the vendored `<untrusted-content>` envelope helper with the template: slash-delimited envelope tags inside wrapped content are now also neutralised, so they can no longer be read as an envelope boundary.
+- The re-synced helper escapes only the start of an embedded envelope tag (`<\untrusted-content`, `<\/untrusted-content`), so wrapping text that holds many unfinished tags no longer takes quadratic time, and unwrapping gives back the original text exactly.
 
 ## [0.4.3] - 2026-10-13
 

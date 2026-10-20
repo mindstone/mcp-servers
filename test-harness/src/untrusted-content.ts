@@ -32,12 +32,16 @@
  * external-text boundary reaches it.
  */
 
-// Whitespace, `/` or `>` after the tag name ends it: `</untrusted-content/>`
-// and `<untrusted-content/source="x">` read as tags too.
-const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content(?:[\s/][^>]*)?>/gi;
-const ESCAPED_UNTRUSTED_CLOSE_TAG = '<\\/untrusted-content>';
-const UNTRUSTED_OPEN_TAG_VARIANT = /<untrusted-content(?:[\s/][^>]*)?>/gi;
-const ESCAPED_UNTRUSTED_OPEN_TAG = '<\\untrusted-content>';
+// Only the `<` + tag-name prefix is matched. Whitespace, `/` or `>` after the
+// name ends it, so `</untrusted-content/>` and `<untrusted-content/source="x">`
+// read as tags too; the rest of the tag is left as text. Matching never scans
+// ahead for a `>`, so it stays linear on hostile input and nothing in the
+// attributes can evade it. Escaping inserts one `\` after the `<`
+// (`<\untrusted-content`, `<\/untrusted-content`); a prefix that already
+// carries backslashes gains one more, so unwrapping restores the text exactly.
+const UNTRUSTED_TAG_PREFIX = /<(\\*)(\/?untrusted-content)(?=[\s/>])/gi;
+const ESCAPED_UNTRUSTED_TAG_PREFIX = /<\\(\\*)(\/?untrusted-content)(?=[\s/>])/gi;
+const RAW_UNTRUSTED_TAG_PREFIX = /<\/?untrusted-content(?=[\s/>])/i;
 const UNTRUSTED_ENVELOPE = /^<untrusted-content source="[^"]*">([\s\S]*)<\/untrusted-content>$/;
 
 function escapeAttr(s: string): string {
@@ -45,24 +49,20 @@ function escapeAttr(s: string): string {
 }
 
 /**
- * Rewrite every `</untrusted-content>` and `<untrusted-content …>` variant
- * (case-insensitive, optional whitespace, `/` or attributes before `>`) inside `s`
- * to a benign textual form, so an attacker who controls the wrapped content
- * can neither terminate the envelope early nor spoof a nested open tag that a
- * downstream parser could re-read as a fresh envelope. An LLM parsing the
- * markup plausibly accepts attribute-bearing close forms such as
- * `</untrusted-content foo>` — the matcher must cover them too.
+ * Neutralise every `</untrusted-content …>` and `<untrusted-content …>` variant
+ * (case-insensitive; whitespace, `/`, attributes or `>` after the name) inside
+ * `s` by escaping its tag-name prefix, so an attacker who controls the wrapped
+ * content can neither terminate the envelope early nor spoof a nested open tag
+ * that a downstream parser could re-read as a fresh envelope. An LLM parsing
+ * the markup plausibly accepts attribute-bearing close forms such as
+ * `</untrusted-content foo>` — escaping the prefix covers them whatever follows.
  */
 function escapeTagSentinels(s: string): string {
-  return s
-    .replace(UNTRUSTED_OPEN_TAG_VARIANT, ESCAPED_UNTRUSTED_OPEN_TAG)
-    .replace(UNTRUSTED_CLOSE_TAG_VARIANT, ESCAPED_UNTRUSTED_CLOSE_TAG);
+  return s.replace(UNTRUSTED_TAG_PREFIX, '<\\$1$2');
 }
 
 function unescapeTagSentinels(s: string): string {
-  return s
-    .replaceAll(ESCAPED_UNTRUSTED_OPEN_TAG, '<untrusted-content>')
-    .replaceAll(ESCAPED_UNTRUSTED_CLOSE_TAG, '</untrusted-content>');
+  return s.replace(ESCAPED_UNTRUSTED_TAG_PREFIX, '<$1$2');
 }
 
 /**
@@ -84,11 +84,7 @@ export function wrapUntrusted(text: string | null | undefined, source: string): 
   const close = '</untrusted-content>';
   if (text.startsWith(open) && text.endsWith(close) && text.length >= open.length + close.length) {
     const inner = text.slice(open.length, text.length - close.length);
-    const hasVariant =
-      UNTRUSTED_CLOSE_TAG_VARIANT.test(inner) || UNTRUSTED_OPEN_TAG_VARIANT.test(inner);
-    UNTRUSTED_CLOSE_TAG_VARIANT.lastIndex = 0; // reset stateful /g regexes
-    UNTRUSTED_OPEN_TAG_VARIANT.lastIndex = 0;
-    if (!hasVariant) {
+    if (!RAW_UNTRUSTED_TAG_PREFIX.test(inner)) {
       return text;
     }
   }
