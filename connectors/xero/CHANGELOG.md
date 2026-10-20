@@ -7,6 +7,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Security
+
+- Re-synced the vendored `<untrusted-content>` envelope helper with the template: slash-delimited envelope tags inside wrapped content are now also neutralised, so they can no longer be read as an envelope boundary.
+
 ## [0.1.1] - 2026-08-09
 
 ### Changed

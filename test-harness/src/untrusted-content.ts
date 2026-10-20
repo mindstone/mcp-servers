@@ -32,9 +32,11 @@
  * external-text boundary reaches it.
  */
 
-const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content(?:\s[^>]*)?>/gi;
+// Whitespace, `/` or `>` after the tag name ends it: `</untrusted-content/>`
+// and `<untrusted-content/source="x">` read as tags too.
+const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content(?:[\s/][^>]*)?>/gi;
 const ESCAPED_UNTRUSTED_CLOSE_TAG = '<\\/untrusted-content>';
-const UNTRUSTED_OPEN_TAG_VARIANT = /<untrusted-content(?:\s[^>]*)?>/gi;
+const UNTRUSTED_OPEN_TAG_VARIANT = /<untrusted-content(?:[\s/][^>]*)?>/gi;
 const ESCAPED_UNTRUSTED_OPEN_TAG = '<\\untrusted-content>';
 const UNTRUSTED_ENVELOPE = /^<untrusted-content source="[^"]*">([\s\S]*)<\/untrusted-content>$/;
 
@@ -44,7 +46,7 @@ function escapeAttr(s: string): string {
 
 /**
  * Rewrite every `</untrusted-content>` and `<untrusted-content …>` variant
- * (case-insensitive, optional whitespace / attributes before `>`) inside `s`
+ * (case-insensitive, optional whitespace, `/` or attributes before `>`) inside `s`
  * to a benign textual form, so an attacker who controls the wrapped content
  * can neither terminate the envelope early nor spoof a nested open tag that a
  * downstream parser could re-read as a fresh envelope. An LLM parsing the
