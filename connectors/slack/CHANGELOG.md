@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- `search_slack_messages` no longer requires `query` when `to_me`, `after` or `before` is given, so asking for "messages to me" or for a date range alone now runs a search instead of being rejected. A call with nothing to search, or a `to_me` search when Slack does not return your identity, now gets a clear error and makes no search call.
+- The thread, search and channel-history tools accept the Slack API argument names models send: `thread_ts` for `get_slack_thread_replies` (`ts` wins when both are given), `max_results` for `search_slack_messages` (`count` wins), `after`/`before` dates for `search_slack_messages` (sent as `after:`/`before:` modifiers), and `oldest`/`latest` for `get_slack_channel_history`.
+
 ### Changed
 
 - The legacy `search.messages` fallback is now silent to the user. `search_slack_messages` and `get_slack_saved_messages` still report which backend ran in the machine-readable `search_backend` field, but legacy responses no longer carry the prose `search_backend_note`. That note ended with an instruction to reconnect Slack with the granular `search:read.*` scopes; a model relayed it to a user who was already connected, and reconnecting could not have helped, because whether those scopes are requested at all is fixed by the installing app's configuration. The fallback's results are complete, so there is nothing to act on. The refusal is still recorded on stderr for operators, and the tool descriptions now tell the model not to raise the backend, the fallback or Slack scopes with the user.

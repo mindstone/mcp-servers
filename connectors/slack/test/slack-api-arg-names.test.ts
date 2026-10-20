@@ -253,4 +253,99 @@ describe('Slack MCP — Slack-API argument names (aliases and time filters)', ()
     expect(query).toContain('after:2026-09-20');
     expect(query).toContain('before:2026-09-27');
   });
+
+  // -------------------------------------------------------------------
+  // search_slack_messages — query optional when to_me / after / before is set
+  // -------------------------------------------------------------------
+
+  it('search: to_me alone searches to:@<you> on Real-Time Search', async () => {
+    const rts = captureParams('assistant.search.context');
+    const result = await client.callTool('search_slack_messages', { to_me: true });
+    const j = result.json as ToolJson;
+    expect(j.ok).toBe(true);
+    expect(rts.seen()?.get('query')).toBe('to:@testuser');
+  });
+
+  it('search: to_me alone searches to:@<you> on the legacy search.messages backend', async () => {
+    refuseRealTimeSearch();
+    const legacy = captureParams('search.messages');
+    const result = await client.callTool('search_slack_messages', { to_me: true });
+    const j = result.json as ToolJson & { search_backend?: string };
+    expect(j.ok).toBe(true);
+    expect(j.search_backend).toBe('search.messages');
+    expect(legacy.seen()?.get('query')).toBe('to:@testuser');
+  });
+
+  it.each([
+    [{ after: '2026-10-01' }, 'after:2026-10-01'],
+    [{ before: '2026-10-15' }, 'before:2026-10-15'],
+    [{ after: '2026-10-01', before: '2026-10-15' }, 'after:2026-10-01 before:2026-10-15'],
+  ])('search: date filters alone (%o) search the modifiers only', async (args, expected) => {
+    const rts = captureParams('assistant.search.context');
+    const result = await client.callTool('search_slack_messages', args);
+    const j = result.json as ToolJson;
+    expect(j.ok).toBe(true);
+    expect(rts.seen()?.get('query')).toBe(expected);
+  });
+
+  it.each([{ query: '' }, { query: '   ' }])(
+    'search: an empty query (%o) with to_me searches to:@<you> only',
+    async (args) => {
+      const rts = captureParams('assistant.search.context');
+      const result = await client.callTool('search_slack_messages', { ...args, to_me: true });
+      const j = result.json as ToolJson;
+      expect(j.ok).toBe(true);
+      expect(rts.seen()?.get('query')).toBe('to:@testuser');
+    },
+  );
+
+  it('search: a query alone is sent unchanged', async () => {
+    const rts = captureParams('assistant.search.context');
+    const result = await client.callTool('search_slack_messages', { query: 'forecast' });
+    expect((result.json as ToolJson).ok).toBe(true);
+    expect(rts.seen()?.get('query')).toBe('forecast');
+  });
+
+  it('search: a query with to_me is prefixed with to:@<you>', async () => {
+    const rts = captureParams('assistant.search.context');
+    const result = await client.callTool('search_slack_messages', {
+      query: 'forecast',
+      to_me: true,
+    });
+    expect((result.json as ToolJson).ok).toBe(true);
+    expect(rts.seen()?.get('query')).toBe('to:@testuser forecast');
+  });
+
+  it.each([{}, { query: '' }, { query: '   ' }, { to_me: false }])(
+    'search: nothing to search (%o) is refused before any Slack search call',
+    async (args) => {
+      const rts = captureParams('assistant.search.context');
+      const legacy = captureParams('search.messages');
+      const result = await client.callTool('search_slack_messages', args);
+      const j = result.json as ToolJson | null;
+      expect(j?.ok).not.toBe(true);
+      expect(j?.error).toMatch(/search term or a filter/i);
+      expect(rts.count()).toBe(0);
+      expect(legacy.count()).toBe(0);
+    },
+  );
+
+  it.each([{ to_me: true }, { to_me: true, after: '2026-10-01' }, { to_me: true, query: 'forecast' }])(
+    'search: to_me (%o) fails clearly when Slack does not return your identity, with no search call',
+    async (args) => {
+      mswServer.use(
+        http.post(`${SLACK_API_BASE}/auth.test`, () =>
+          HttpResponse.json({ ok: true, team: 'Test Workspace', team_id: 'T123' }),
+        ),
+      );
+      const rts = captureParams('assistant.search.context');
+      const legacy = captureParams('search.messages');
+      const result = await client.callTool('search_slack_messages', args);
+      const j = result.json as ToolJson | null;
+      expect(j?.ok).not.toBe(true);
+      expect(j?.error).toMatch(/Slack identity/i);
+      expect(rts.count()).toBe(0);
+      expect(legacy.count()).toBe(0);
+    },
+  );
 });
