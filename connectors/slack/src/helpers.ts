@@ -44,8 +44,8 @@ export function mapSlackFiles(msg: {
 
 /**
  * Envelope source for text a Slack user writes into their own profile
- * (display name, real name, title, status text). Handles, ids, emails and
- * emoji codes stay raw: the model passes them back to tools.
+ * (display name, real name, title, status text, phone). Handles, ids, emails
+ * and emoji codes stay raw: the model passes them back to tools.
  */
 export const SLACK_USER_PROFILE_SOURCE = 'slack:user-profile';
 

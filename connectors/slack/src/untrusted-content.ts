@@ -25,8 +25,10 @@
  *   - file `title` / `name` / `pretty_type` returned by files.info
  *   - bookmark titles and reminder text returned by bookmarks.add /
  *     reminders.add (and their list counterparts)
- *   - user profile text (display name, real name, title, status text) in the
- *     users tools, DM recipient results and message author enrichment
+ *   - user profile text (display name, real name, title, status text, phone)
+ *     in the users tools, DM recipient results and message author enrichment
+ *   - workspace names in list_slack_workspaces
+ *   - the stored message text echoed by post_slack_message
  */
 
 const UNTRUSTED_CLOSE_TAG_VARIANT = /<\/untrusted-content\s*>/gi;

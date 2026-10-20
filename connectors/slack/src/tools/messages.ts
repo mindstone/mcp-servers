@@ -949,7 +949,7 @@ Posted as the user — messages are editable in Slack.`,
         channel: result.channel,
         ts_slack: result.ts,
         ts_iso: result.ts ? slackTsToDatetime(result.ts) : undefined,
-        text: result.message?.text,
+        text: wrapUntrusted(result.message?.text, 'slack:post-message'),
         ...(dmRecipient
           ? {
               recipient: {

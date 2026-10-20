@@ -92,7 +92,17 @@ describe('Slack tool outputs contain envelopes (smoke check on the source)', () 
     const path = await import('node:path');
     const url = await import('node:url');
     const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
-    const TOOLS = ['channels.ts', 'messages.ts', 'threads.ts', 'files.ts', 'pins.ts', 'workspace.ts', 'users.ts'];
+    const TOOLS = [
+      'auth.ts',
+      'channels.ts',
+      'messages.ts',
+      'threads.ts',
+      'files.ts',
+      'pins.ts',
+      'reactions.ts',
+      'workspace.ts',
+      'users.ts',
+    ];
 
     for (const f of TOOLS) {
       const contents = fs.readFileSync(
