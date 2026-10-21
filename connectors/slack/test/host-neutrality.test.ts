@@ -53,7 +53,7 @@ function packageJsonName(): string {
   return pkg.name;
 }
 
-// .html covers the generated compose preview that ships alongside the .ts template.
+// .html covers the generated compose preview, which sits in the public repo next to the .ts template, so it is scanned too.
 function walkSrc(dir: string, files: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);

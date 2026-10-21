@@ -181,6 +181,14 @@ jobs:
               old_version=$(git show "${BASE}:${pkg}" 2>/dev/null | jq -r '.version // ""' 2>/dev/null || echo "")
               package_name=$(jq -r '.name // ""' "${pkg}")
 
+              # Private packages are build-time only and npm refuses to publish
+              # them, so the bump and unpublished-version checks (and their
+              # Release-Gate trailer requirement) do not apply.
+              if [ "$(jq -r '.private // false' "${pkg}")" = "true" ]; then
+                echo "Skipping private package ${name} (${family}); npm never publishes it."
+                continue
+              fi
+
               if [ -z "${old_version}" ]; then
                 echo "Skipping first-add package ${name}@${new_version} (${family}); bootstrap publishes are manual."
                 continue
