@@ -25,6 +25,8 @@ name: Release
 # over with Trusted Publishing (first-adds are exempt from the trailer gate).
 # Version DOWNGRADES (reverts) are skipped with a log line, never published
 # and never failed — reverting a refused bump must not wedge main.
+# Packages with `"private": true` are skipped with a log line and never
+# published (npm refuses to publish them).
 #
 # Source of truth for the design: docs/plans/260525_oss_release_automation.md
 # (in mindstone-rebel-1); release runbook: docs/project/MCP_OSS_RELEASE_AGENT_DRIVEN.md
