@@ -4,6 +4,10 @@ All notable changes to this connector will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- The compose form's wording no longer names a particular host app: the lost-reply notice now starts "No confirmation came back in time…".
+
 ## [0.3.1] - 2026-08-10
 
 ### Changed

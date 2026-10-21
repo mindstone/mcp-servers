@@ -35,22 +35,6 @@ const TARBALL_ALLOWLIST_SUFFIXES = [
   '/scripts/check-no-bridge-strings.sh',
 ];
 
-// File-scoped allowlist for the compose-message iframe. It is GENERATED from
-// the shared compose-app package (scripts/gen-compose-html.mjs) and byte-locked
-// by the drift gate, never hand-authored here. It carries the same host
-// vocabulary the shipped email compose connectors already publish — a
-// "Rebel host renders this iframe" code comment baked into the shared skeleton,
-// plus the intended-recipient notice copy — governed centrally by that shared
-// package. Exempting the generated file as a whole keeps this gate honest for
-// hand-written code (a stray host string anywhere else still fails loudly)
-// while acknowledging content this connector does not own. Matched by path
-// suffix in both the src scan and the packed-tarball scan.
-const GENERATED_TEMPLATE_ALLOWLIST_SUFFIXES = [
-  '/resources/compose-message-template.ts', // src/**/*.ts scan
-  '/dist/resources/compose-message-template.js', // packed tarball
-  '/dist/resources/compose-message-template.d.ts', // packed tarball
-];
-
 // Line-level allowlist: lines matching any of these regexes are exempt
 // from the forbidden-substring scan. Empty by default — the README no
 // longer carries a "Hosts tested" row, and there is no other canonical
@@ -69,11 +53,12 @@ function packageJsonName(): string {
   return pkg.name;
 }
 
-function walkTs(dir: string, files: string[] = []): string[] {
+// .html covers the generated compose preview that ships alongside the .ts template.
+function walkSrc(dir: string, files: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) walkTs(full, files);
-    else if (entry.isFile() && entry.name.endsWith('.ts')) files.push(full);
+    if (entry.isDirectory()) walkSrc(full, files);
+    else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.html'))) files.push(full);
   }
   return files;
 }
@@ -102,12 +87,11 @@ function hasForbiddenSubstring(text: string, pkgName: string): string | null {
   return null;
 }
 
-describe('host-neutrality — src/**/*.ts', () => {
+describe('host-neutrality — src/**/*.{ts,html}', () => {
   it('contains no host-specific vocabulary', () => {
     const pkgName = packageJsonName();
     const violations: { file: string; pattern: string; sample: string }[] = [];
-    for (const file of walkTs(SRC_DIR)) {
-      if (GENERATED_TEMPLATE_ALLOWLIST_SUFFIXES.some((s) => file.endsWith(s))) continue;
+    for (const file of walkSrc(SRC_DIR)) {
       const contents = fs.readFileSync(file, 'utf-8');
       for (const line of contents.split(/\r?\n/)) {
         if (LINE_ALLOWLIST_PATTERNS.some((re) => re.test(line))) continue;
@@ -125,7 +109,7 @@ describe('host-neutrality — src/**/*.ts', () => {
     }
     expect(
       violations,
-      `Forbidden host vocabulary found in src/**/*.ts:\n` +
+      `Forbidden host vocabulary found in src/**/*.{ts,html}:\n` +
         violations.map((v) => `  - ${v.file} [${v.pattern}]: ${v.sample}`).join('\n'),
     ).toEqual([]);
   });
@@ -162,7 +146,6 @@ describe('host-neutrality — packed tarball', () => {
       const violations: { file: string; pattern: string; sample: string }[] = [];
       for (const filePath of fileList) {
         if (TARBALL_ALLOWLIST_SUFFIXES.some((s) => filePath.endsWith(s))) continue;
-        if (GENERATED_TEMPLATE_ALLOWLIST_SUFFIXES.some((s) => filePath.endsWith(s))) continue;
         // Extract the file's contents to stdout — works on macOS bsdtar
         // and gnu tar.
         let contents = '';

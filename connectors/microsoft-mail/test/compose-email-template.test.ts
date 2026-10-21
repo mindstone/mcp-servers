@@ -16,7 +16,7 @@ describe('compose-email template generation parity', () => {
       sendToolName: 'send_email',
       draftToolName: 'create_draft',
       fromMissingHelperText:
-        'Rebel could not confirm the sending account. Cancel and ask Rebel to recreate the draft before sending.',
+        "Couldn't confirm which email account to send from. Cancel, then ask your assistant to recreate this draft.",
       fields: { cc: true, bcc: true },
       deepLink: { kind: 'none' },
     });
@@ -47,8 +47,10 @@ describe('compose-email template contents', () => {
   it('bakes in the Outlook resource URI and send tool', () => {
     expect(COMPOSE_EMAIL_HTML).toContain("var RESOURCE_URI = 'ui://microsoft-mail/compose-email'");
     expect(COMPOSE_EMAIL_HTML).toContain("name: 'send_email'");
+    // The generator splices helper copy as a single-quoted JS string, so the
+    // apostrophe is escaped in the template source.
     expect(COMPOSE_EMAIL_HTML).toContain(
-      'Rebel could not confirm the sending account. Cancel and ask Rebel to recreate the draft before sending.',
+      "Couldn\\'t confirm which email account to send from. Cancel, then ask your assistant to recreate this draft.",
     );
   });
 
