@@ -633,7 +633,7 @@ export const COMPOSE_MESSAGE_HTML = `
         clearError();
         clearSuccess();
         unknownTitle.textContent = 'Not sure if this sent.';
-        unknownText.textContent = "Rebel didn't hear back in time. Check whether it sent before sending again, so it doesn't go out twice.";
+        unknownText.textContent = "No confirmation came back in time. Check whether it sent before sending again, so it doesn't go out twice.";
         unknownBox.classList.remove('hidden');
         postResize();
       }
@@ -819,7 +819,7 @@ export const COMPOSE_MESSAGE_HTML = `
       }
 
       // The Send button is type="button" with an explicit click handler rather
-      // than a form submit button. The Rebel host renders this iframe with a
+      // than a form submit button. The host renders this iframe with a
       // sandbox of "allow-scripts" only — no "allow-forms" — so native form
       // submission is blocked by the browser BEFORE the submit event fires
       // ("Blocked form submission ... the form's frame is sandboxed and the

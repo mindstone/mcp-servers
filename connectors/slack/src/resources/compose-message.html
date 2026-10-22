@@ -633,7 +633,7 @@
         clearError();
         clearSuccess();
         unknownTitle.textContent = 'Not sure if this sent.';
-        unknownText.textContent = "Rebel didn't hear back in time. Check whether it sent before sending again, so it doesn't go out twice.";
+        unknownText.textContent = "No confirmation came back in time. Check whether it sent before sending again, so it doesn't go out twice.";
         unknownBox.classList.remove('hidden');
         postResize();
       }
@@ -700,7 +700,7 @@
         bodyInput.value = String(draft.text || '');
         intendedRecipient = typeof draft.intended_recipient === 'string' ? draft.intended_recipient : '';
         if (intendedRecipient) {
-          recipientNotice.textContent = 'Rebel will send this as a direct message to the person from your request.';
+          recipientNotice.textContent = 'This will be sent as a direct message to the person you asked to contact.';
           recipientNotice.classList.remove('hidden');
         } else {
           recipientNotice.textContent = '';
@@ -830,7 +830,7 @@
       }
 
       // The Send button is type="button" with an explicit click handler rather
-      // than a form submit button. The Rebel host renders this iframe with a
+      // than a form submit button. The host renders this iframe with a
       // sandbox of "allow-scripts" only — no "allow-forms" — so native form
       // submission is blocked by the browser BEFORE the submit event fires
       // ("Blocked form submission ... the form's frame is sandboxed and the
