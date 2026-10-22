@@ -16,6 +16,14 @@ name: Version bump guard
 # on main and turn the merge click into an unreviewed npm publish trigger
 # (and, since the squash commit carries no Release-Gate trailer, a loud
 # publish refusal). Failing the PR early is the kinder failure mode.
+#
+# One exception: a release PR made by the release tooling. It passes only
+# when its branch is in this repo (never a fork), it bumps exactly one
+# package, and the commit that changed that version carries a well-formed
+# Release-Gate trailer — the same attribution and TRAILER_RE as release.yml's
+# detect job. Such a PR must be merged with a merge commit so the stamped
+# release commit reaches main unchanged; a squash or rebase drops or rewrites
+# it, and release.yml then refuses to publish.
 
 on:
   # No `paths:` filter on purpose — same rationale as changelog-check.yml:
@@ -54,8 +62,14 @@ jobs:
       - name: Refuse version bumps to pre-existing packages
         env:
           BASE_SHA: ${{ steps.base.outputs.sha }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+
+          # Keep in step with release.yml's detect job.
+          TRAILER_RE='^Release-Gate: docs-private/reports/security-reviews/([A-Za-z0-9_-][A-Za-z0-9._-]*/)*[A-Za-z0-9_-][A-Za-z0-9._-]*\.md#[a-f0-9]{64}$'
+          BUMPED=()
 
           # Enumerate every package whose package.json changed in this PR.
           mapfile -t CHANGED_PKG < <(
@@ -114,9 +128,34 @@ jobs:
               continue
             fi
 
+            BUMPED+=("${slug}")
+
+            # Attribute the bump to the commit that changed this version to its
+            # final value (newest-first, first-parent comparison), as release.yml does.
+            attributed=""
+            for sha in $(git rev-list "${BASE_SHA}..HEAD" -- "${pkg}"); do
+              commit_version=$(git show "${sha}:${pkg}" 2>/dev/null | jq -r '.version // ""' 2>/dev/null || echo "")
+              parent_version=$(git show "${sha}^:${pkg}" 2>/dev/null | jq -r '.version // ""' 2>/dev/null || echo "")
+              if [ "${commit_version}" = "${new_version}" ] && [ "${commit_version}" != "${parent_version}" ]; then
+                attributed="${sha}"
+                break
+              fi
+            done
+
+            if [ "${HEAD_REPO}" = "${BASE_REPO}" ] && [ -n "${attributed}" ] \
+              && git log -1 --format=%B "${attributed}" | grep -Eq "${TRAILER_RE}"; then
+              echo "  ${slug}: ${old_version} -> ${new_version}, Release-Gate trailer on ${attributed}"
+              continue
+            fi
+
             echo "::error file=${pkg}::Version bump detected for ${slug}: ${old_version} -> ${new_version}"
             FAILED=1
           done
+
+          if [ "${#BUMPED[@]}" -gt 1 ]; then
+            echo "::error::This PR bumps ${#BUMPED[@]} packages (${BUMPED[*]}); a release PR bumps exactly one."
+            FAILED=1
+          fi
 
           if [ "$FAILED" -ne 0 ]; then
             echo ""
@@ -140,4 +179,8 @@ jobs:
           fi
 
           echo ""
-          echo "No version bumps to pre-existing packages. Guard satisfied."
+          if [ "${#BUMPED[@]}" -eq 1 ]; then
+            echo "One stamped release bump (${BUMPED[0]}). Guard satisfied; merge with a merge commit."
+          else
+            echo "No version bumps to pre-existing packages. Guard satisfied."
+          fi
