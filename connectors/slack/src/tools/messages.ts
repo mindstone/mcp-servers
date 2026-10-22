@@ -13,6 +13,7 @@ import {
   resolveChannelId,
   resolveDmRecipient,
   resolveUserIdsToCache,
+  SLACK_USER_PROFILE_SOURCE,
 } from '../helpers.js';
 import { notConnectedJson } from './auth.js';
 import { wrapUntrusted } from '../untrusted-content.js';
@@ -322,9 +323,13 @@ theirs to change. Supports Slack search modifiers:
 - before:YYYY-MM-DD / after:YYYY-MM-DD — Date filters
 - has:link / has:reaction — Content filters
 
-Set to_me=true to prepend "to:@<your_username>" automatically.`,
+Set to_me=true to prepend "to:@<your_username>" automatically. query may be
+left out when to_me, after or before is set.`,
       inputSchema: z.object({
-        query: z.string().min(1).describe('Search query (supports Slack modifiers)'),
+        query: z
+          .string()
+          .optional()
+          .describe('Search query (supports Slack modifiers). May be left out when to_me, after or before is set.'),
         count: z.number().int().min(1).max(100).optional(),
         // Slack-API name models send; count wins when both are given.
         max_results: z.number().int().min(1).max(100).optional().describe('Alias for count.'),
@@ -364,12 +369,28 @@ Set to_me=true to prepend "to:@<your_username>" automatically.`,
         });
       }
 
-      let query = args.query;
-      if (args.after) query = `${query} after:${args.after}`;
-      if (args.before) query = `${query} before:${args.before}`;
+      const parts = [(args.query ?? '').trim()];
+      if (args.after) parts.push(`after:${args.after}`);
+      if (args.before) parts.push(`before:${args.before}`);
       if (args.to_me) {
         const authResult = await userClient.auth.test();
-        if (authResult.user) query = `to:@${authResult.user} ${query}`;
+        // Searching without the to: restriction would answer a different question.
+        if (!authResult.user) {
+          return errorJson({
+            error: 'Could not resolve your Slack identity, so messages to you cannot be searched.',
+            action_required: 'Retry later, or search with from:/in: modifiers instead of to_me.',
+            next_step: 'search_slack_messages',
+          });
+        }
+        parts.unshift(`to:@${authResult.user}`);
+      }
+      const query = parts.filter(Boolean).join(' ');
+      if (!query) {
+        return errorJson({
+          error: 'Nothing to search: give a search term or a filter (to_me, after or before).',
+          action_required: 'Call search_slack_messages again with query, to_me, after or before.',
+          next_step: 'search_slack_messages',
+        });
       }
       const result = await runMessageSearch(userClient, {
         query,
@@ -904,8 +925,8 @@ Posted as the user — messages are editable in Slack.`,
               intended_recipient: intendedRecipient,
               actual_recipient: {
                 user_id: dmRecipient.user_id,
-                real_name: dmRecipient.real_name,
-                display_name: dmRecipient.display_name,
+                real_name: wrapUntrusted(dmRecipient.real_name, SLACK_USER_PROFILE_SOURCE),
+                display_name: wrapUntrusted(dmRecipient.display_name, SLACK_USER_PROFILE_SOURCE),
                 ...(dmRecipient.email ? { email: dmRecipient.email } : {}),
               },
               channel: channelId,
@@ -928,19 +949,19 @@ Posted as the user — messages are editable in Slack.`,
         channel: result.channel,
         ts_slack: result.ts,
         ts_iso: result.ts ? slackTsToDatetime(result.ts) : undefined,
-        text: result.message?.text,
+        text: wrapUntrusted(result.message?.text, 'slack:post-message'),
         ...(dmRecipient
           ? {
               recipient: {
                 user_id: dmRecipient.user_id,
-                real_name: dmRecipient.real_name,
-                display_name: dmRecipient.display_name,
+                real_name: wrapUntrusted(dmRecipient.real_name, SLACK_USER_PROFILE_SOURCE),
+                display_name: wrapUntrusted(dmRecipient.display_name, SLACK_USER_PROFILE_SOURCE),
                 ...(dmRecipient.email ? { email: dmRecipient.email } : {}),
               },
             }
           : {}),
         note: isDmChannel
-          ? `Message sent to ${dmRecipient?.display_name || dmRecipient?.real_name || 'DM recipient'}. Posted as you.`
+          ? `Message sent to ${wrapUntrusted(dmRecipient?.display_name || dmRecipient?.real_name, SLACK_USER_PROFILE_SOURCE) ?? 'DM recipient'}. Posted as you.`
           : 'Posted as you — you can edit this message in Slack.',
       });
     }),

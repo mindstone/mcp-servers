@@ -558,7 +558,7 @@ export const COMPOSE_EMAIL_HTML = `
         } else {
           fromValue.textContent = 'Account not shown';
           fromValue.style.color = 'var(--muted)';
-          fromHelper.textContent = 'Rebel could not confirm the sending account. Cancel and ask Rebel to recreate the draft before sending.';
+          fromHelper.textContent = 'Couldn\\'t confirm which email account to send from. Cancel, then ask your assistant to recreate this draft.';
           fromHelper.classList.remove('hidden');
         }
       }
@@ -727,7 +727,7 @@ export const COMPOSE_EMAIL_HTML = `
         clearError();
         clearSuccess();
         unknownTitle.textContent = 'Not sure if this sent.';
-        unknownText.textContent = "Rebel didn't hear back in time. Check your Sent folder before sending again, so it doesn't go out twice.";
+        unknownText.textContent = "No confirmation came back in time. Check your Sent folder before sending again, so it doesn't go out twice.";
         unknownBox.classList.remove('hidden');
         postResize();
       }
@@ -758,7 +758,7 @@ export const COMPOSE_EMAIL_HTML = `
         clearSuccess();
         unknownTitle.textContent = 'Not sure if the draft was saved.';
         unknownText.textContent =
-          "Rebel didn't hear back in time. Check your Drafts folder before trying again, so you don't create a duplicate.";
+          "No confirmation came back in time. Check your Drafts folder before trying again, so you don't create a duplicate.";
         unknownBox.classList.remove('hidden');
         postResize();
       }
@@ -1013,7 +1013,7 @@ export const COMPOSE_EMAIL_HTML = `
       }
 
       // The Send button is type="button" with an explicit click handler rather
-      // than a form submit button. The Rebel host renders this iframe with a
+      // than a form submit button. The host renders this iframe with a
       // sandbox of "allow-scripts" only — no "allow-forms" — so native form
       // submission is blocked by the browser BEFORE the submit event fires
       // ("Blocked form submission ... the form's frame is sandboxed and the

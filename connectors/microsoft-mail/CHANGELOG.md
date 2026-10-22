@@ -14,6 +14,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   confirmation is terminal (no Reopen) so the form can't silently diverge from
   or duplicate the mailbox draft.
 
+### Changed
+
+- The compose form's wording no longer names a particular host app: the
+  lost-reply notices now start "No confirmation came back in time…" and the
+  unconfirmed-sender notice reads "Couldn't confirm which email account to
+  send from. Cancel, then ask your assistant to recreate this draft."
+
 ## [0.3.0] - 2026-08-06
 
 ### Changed
