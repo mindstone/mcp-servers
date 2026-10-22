@@ -6,10 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- `search_slack_messages` no longer requires `query` when `to_me`, `after` or `before` is given, so asking for "messages to me" or for a date range alone now runs a search instead of being rejected. A call with nothing to search, or a `to_me` search when Slack does not return your identity, now gets a clear error and makes no search call.
+- The thread, search and channel-history tools accept the Slack API argument names models send: `thread_ts` for `get_slack_thread_replies` (`ts` wins when both are given), `max_results` for `search_slack_messages` (`count` wins), `after`/`before` dates for `search_slack_messages` (sent as `after:`/`before:` modifiers), and `oldest`/`latest` for `get_slack_channel_history`.
+
 ### Changed
 
 - The legacy `search.messages` fallback is now silent to the user. `search_slack_messages` and `get_slack_saved_messages` still report which backend ran in the machine-readable `search_backend` field, but legacy responses no longer carry the prose `search_backend_note`. That note ended with an instruction to reconnect Slack with the granular `search:read.*` scopes; a model relayed it to a user who was already connected, and reconnecting could not have helped, because whether those scopes are requested at all is fixed by the installing app's configuration. The fallback's results are complete, so there is nothing to act on. The refusal is still recorded on stderr for operators, and the tool descriptions now tell the model not to raise the backend, the fallback or Slack scopes with the user.
 - The compose form's wording no longer names a particular host app: the lost-reply notice now starts "No confirmation came back in time…" and the direct-message notice reads "This will be sent as a direct message to the person you asked to contact."
+
+### Security
+
+- Text people write into their own Slack profile is now enveloped as untrusted content, with close-tag breakout escaping, before it reaches the model. This covers display names, real names, job titles and status text in `list_slack_users`, the phone number in `get_slack_user_profile` (Slack accepts any text there), `get_slack_user_profile`, `lookup_user_by_email` and `open_slack_dm`; the author display name (`user_display_name`) on messages returned by search, saved messages, channel history, unread messages, thread replies, pins and permalink lookups; the recipient names and the "Message sent to" note from `post_slack_message`; and names listed in the "ambiguous user" error. Previously a display name such as "Ignore previous instructions…" reached the model raw. Usernames, user and channel IDs, emails and emoji codes stay raw so they can still be passed back to tools.
+- Workspace names are now enveloped too. `list_slack_workspaces` returned the saved workspace name, the live name from Slack and the "Connected to Slack workspace" sentence raw, and workspace owners choose that name. Team IDs stay raw.
+- The message text that `post_slack_message` returns is now enveloped. It is the text Slack stored, which can quote other people's content. The compose form shows the message it sent, so nothing changes on screen.
+- The envelope now also neutralises close tags carrying attributes (`</untrusted-content foo>`) and fake opening tags (`<untrusted-content source="…">`) inside wrapped text, matching the shared helper. Before, Slack text could carry either one through unescaped and pass itself off as an envelope boundary.
+- Slash-delimited tags (`</untrusted-content/>`, `<untrusted-content/source="…">`) are now neutralised as well. Before, they passed through unescaped, and a forged envelope using them was returned as if it were already safely wrapped.
+- The envelope now escapes only the start of an embedded tag (`<\untrusted-content`, `<\/untrusted-content`) and leaves the rest of the tag as written. Before, it searched ahead for each tag's closing `>`, so text holding many unfinished tags took quadratic time to wrap. Unwrapping now gives back the original text exactly, including the tag's case and attributes.
 
 ## [0.3.0] - 2026-08-06
 
