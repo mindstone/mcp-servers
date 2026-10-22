@@ -7,6 +7,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- The Gmail compose form and the `compose_workspace_email` tool description no longer name a particular host app: the lost-reply notices now start "No confirmation came back in time…" and the unconfirmed-sender notice reads "Couldn't confirm which email account to send from. Cancel, then ask your assistant to recreate this draft."
+
 ## [0.5.0] - 2026-10-15
 
 ### Changed

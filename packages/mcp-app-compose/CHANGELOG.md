@@ -28,6 +28,11 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   forward it yet. Admin-disabled and security-policy blocks still surface as
   ordinary retryable errors. Templates built without `blockedSendFallback`
   are byte-identical to before.
+- The compose form's built-in wording no longer names a particular host app:
+  the lost-reply notices now start "No confirmation came back in time…", the
+  Slack direct-message notice reads "This will be sent as a direct message to
+  the person you asked to contact.", and a code comment shipped inside the HTML
+  now says "The host renders this iframe".
 
 ## [0.1.0] - 2026-07-06
 
