@@ -45,8 +45,10 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
-          # `pull_request` (not `pull_request_target`): PR head checkout with
-          # no elevated permissions, no secrets exposed.
+          # `pull_request` (not `pull_request_target`): checks out the PR's
+          # synthetic merge with the base, with no elevated permissions and no
+          # secrets exposed. The trailer walk below reaches the PR's own commits
+          # through that merge, as release.yml's does through a real one.
 
       - name: Resolve PR base SHA
         id: base
