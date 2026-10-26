@@ -164,7 +164,7 @@ export function isDriveFileListArgs(args: unknown): args is DriveFileListArgs {
       return (opts.folderId === undefined || typeof opts.folderId === 'string') &&
         (opts.query === undefined || typeof opts.query === 'string') &&
         (opts.pageSize === undefined || typeof opts.pageSize === 'number') &&
-        (opts.orderBy === undefined || (Array.isArray(opts.orderBy) && opts.orderBy.every((o: unknown) => typeof o === 'string'))) &&
+        (opts.orderBy === undefined || typeof opts.orderBy === 'string' || (Array.isArray(opts.orderBy) && opts.orderBy.every((o: unknown) => typeof o === 'string'))) &&
         (opts.fields === undefined || (Array.isArray(opts.fields) && opts.fields.every((f: unknown) => typeof f === 'string'))) &&
         (opts.driveId === undefined || typeof opts.driveId === 'string') &&
         isValidCorpora(opts.corpora);
@@ -604,6 +604,8 @@ interface ReadDocumentArgs {
   documentId: string;
   maxChars?: number;
   returnJson?: boolean;
+  tabId?: string;
+  allTabs?: boolean;
 }
 
 interface CreateDocumentArgs {
@@ -616,12 +618,14 @@ interface AppendDocumentArgs {
   email: string;
   documentId: string;
   text: string;
+  tabId?: string;
 }
 
 interface ReplaceDocumentArgs {
   email: string;
   documentId: string;
   content: string;
+  tabId?: string;
 }
 
 interface FindReplaceArgs {
@@ -630,6 +634,7 @@ interface FindReplaceArgs {
   findText: string;
   replaceText: string;
   matchCase?: boolean;
+  tabId?: string;
 }
 
 interface ExtractIdArgs {
@@ -640,6 +645,7 @@ interface ListTabsArgs {
   email: string;
   documentId: string;
   includeWordCount?: boolean;
+  returnJson?: boolean;
 }
 
 export function isReadDocumentArgs(args: unknown): args is ReadDocumentArgs {
@@ -649,10 +655,14 @@ export function isReadDocumentArgs(args: unknown): args is ReadDocumentArgs {
   const documentId = readAliasedArg<string>(rawParams, 'document_id', 'documentId');
   const maxChars = readAliasedArg<number>(rawParams, 'max_chars', 'maxChars');
   const returnJson = readAliasedArg<boolean>(rawParams, 'return_json', 'returnJson');
+  const tabId = readAliasedArg<string>(rawParams, 'tab_id', 'tabId');
+  const allTabs = readAliasedArg<boolean>(rawParams, 'all_tabs', 'allTabs');
   return (params.email === undefined || typeof params.email === 'string') &&
     typeof documentId === 'string' &&
     (maxChars === undefined || typeof maxChars === 'number') &&
-    (returnJson === undefined || typeof returnJson === 'boolean');
+    (returnJson === undefined || typeof returnJson === 'boolean') &&
+    (tabId === undefined || typeof tabId === 'string') &&
+    (allTabs === undefined || typeof allTabs === 'boolean');
 }
 
 export function assertReadDocumentArgs(args: unknown): asserts args is ReadDocumentArgs {
@@ -679,9 +689,11 @@ export function isAppendDocumentArgs(args: unknown): args is AppendDocumentArgs 
   if (typeof args !== 'object' || args === null) return false;
   const params = args as Partial<AppendDocumentArgs>;
   const documentId = readAliasedArg<string>(args as Record<string, unknown>, 'document_id', 'documentId');
+  const tabId = readAliasedArg<string>(args as Record<string, unknown>, 'tab_id', 'tabId');
   return (params.email === undefined || typeof params.email === 'string') &&
     typeof documentId === 'string' &&
-    typeof params.text === 'string';
+    typeof params.text === 'string' &&
+    (tabId === undefined || typeof tabId === 'string');
 }
 
 export function assertAppendDocumentArgs(args: unknown): asserts args is AppendDocumentArgs {
@@ -694,9 +706,11 @@ export function isReplaceDocumentArgs(args: unknown): args is ReplaceDocumentArg
   if (typeof args !== 'object' || args === null) return false;
   const params = args as Partial<ReplaceDocumentArgs>;
   const documentId = readAliasedArg<string>(args as Record<string, unknown>, 'document_id', 'documentId');
+  const tabId = readAliasedArg<string>(args as Record<string, unknown>, 'tab_id', 'tabId');
   return (params.email === undefined || typeof params.email === 'string') &&
     typeof documentId === 'string' &&
-    typeof params.content === 'string';
+    typeof params.content === 'string' &&
+    (tabId === undefined || typeof tabId === 'string');
 }
 
 export function assertReplaceDocumentArgs(args: unknown): asserts args is ReplaceDocumentArgs {
@@ -713,11 +727,13 @@ export function isFindReplaceArgs(args: unknown): args is FindReplaceArgs {
   const findText = readAliasedArg<string>(rawParams, 'find_text', 'findText');
   const replaceText = readAliasedArg<string>(rawParams, 'replace_text', 'replaceText');
   const matchCase = readAliasedArg<boolean>(rawParams, 'match_case', 'matchCase');
+  const tabId = readAliasedArg<string>(rawParams, 'tab_id', 'tabId');
   return (params.email === undefined || typeof params.email === 'string') &&
     typeof documentId === 'string' &&
     typeof findText === 'string' &&
     typeof replaceText === 'string' &&
-    (matchCase === undefined || typeof matchCase === 'boolean');
+    (matchCase === undefined || typeof matchCase === 'boolean') &&
+    (tabId === undefined || typeof tabId === 'string');
 }
 
 export function assertFindReplaceArgs(args: unknown): asserts args is FindReplaceArgs {
@@ -744,14 +760,176 @@ export function isListTabsArgs(args: unknown): args is ListTabsArgs {
   const rawParams = args as Record<string, unknown>;
   const documentId = readAliasedArg<string>(rawParams, 'document_id', 'documentId');
   const includeWordCount = readAliasedArg<boolean>(rawParams, 'include_word_count', 'includeWordCount');
+  const returnJson = readAliasedArg<boolean>(rawParams, 'return_json', 'returnJson');
   return (params.email === undefined || typeof params.email === 'string') &&
     typeof documentId === 'string' &&
-    (includeWordCount === undefined || typeof includeWordCount === 'boolean');
+    (includeWordCount === undefined || typeof includeWordCount === 'boolean') &&
+    (returnJson === undefined || typeof returnJson === 'boolean');
 }
 
 export function assertListTabsArgs(args: unknown): asserts args is ListTabsArgs {
   if (!isListTabsArgs(args)) {
     throw new Error('Invalid list tabs parameters. Required: email, document_id');
+  }
+}
+
+// Docs Tab Management + Anchored Insert Type Guards
+
+interface AddDocumentTabArgs {
+  email?: string;
+  documentId: string;
+  title: string;
+  parentTabId?: string;
+  position?: number;
+}
+
+interface UpdateDocumentTabArgs {
+  email?: string;
+  documentId: string;
+  tabId: string;
+  title?: string;
+  parentTabId?: string;
+  position?: number;
+}
+
+interface DeleteDocumentTabArgs {
+  email?: string;
+  documentId: string;
+  tabId: string;
+  deleteSubTabs?: boolean;
+}
+
+interface InsertDocumentTextArgs {
+  email?: string;
+  documentId: string;
+  tabId?: string;
+  anchorText: string;
+  position?: string;
+  text: string;
+  matchCase?: boolean;
+  expectEmptyParagraph?: boolean;
+}
+
+function isOptional(value: unknown, type: 'string' | 'number' | 'boolean'): boolean {
+  return value === undefined || typeof value === type;
+}
+
+export function isAddDocumentTabArgs(args: unknown): args is AddDocumentTabArgs {
+  if (typeof args !== 'object' || args === null) return false;
+  const rawParams = args as Record<string, unknown>;
+  const documentId = readAliasedArg<string>(rawParams, 'document_id', 'documentId');
+  const parentTabId = readAliasedArg<string>(rawParams, 'parent_tab_id', 'parentTabId');
+  return isOptional(rawParams.email, 'string') &&
+    typeof documentId === 'string' &&
+    typeof rawParams.title === 'string' &&
+    isOptional(parentTabId, 'string') &&
+    isOptional(rawParams.position, 'number');
+}
+
+export function assertAddDocumentTabArgs(args: unknown): asserts args is AddDocumentTabArgs {
+  if (!isAddDocumentTabArgs(args)) {
+    throw new Error('Invalid add document tab parameters. Required: document_id, title. Optional: parent_tab_id (string), position (number)');
+  }
+}
+
+export function isUpdateDocumentTabArgs(args: unknown): args is UpdateDocumentTabArgs {
+  if (typeof args !== 'object' || args === null) return false;
+  const rawParams = args as Record<string, unknown>;
+  const documentId = readAliasedArg<string>(rawParams, 'document_id', 'documentId');
+  const tabId = readAliasedArg<string>(rawParams, 'tab_id', 'tabId');
+  const parentTabId = readAliasedArg<string>(rawParams, 'parent_tab_id', 'parentTabId');
+  return isOptional(rawParams.email, 'string') &&
+    typeof documentId === 'string' &&
+    typeof tabId === 'string' &&
+    isOptional(rawParams.title, 'string') &&
+    isOptional(parentTabId, 'string') &&
+    isOptional(rawParams.position, 'number');
+}
+
+export function assertUpdateDocumentTabArgs(args: unknown): asserts args is UpdateDocumentTabArgs {
+  if (!isUpdateDocumentTabArgs(args)) {
+    throw new Error('Invalid update document tab parameters. Required: document_id, tab_id. Optional: title (string), parent_tab_id (string), position (number)');
+  }
+}
+
+export function isDeleteDocumentTabArgs(args: unknown): args is DeleteDocumentTabArgs {
+  if (typeof args !== 'object' || args === null) return false;
+  const rawParams = args as Record<string, unknown>;
+  const documentId = readAliasedArg<string>(rawParams, 'document_id', 'documentId');
+  const tabId = readAliasedArg<string>(rawParams, 'tab_id', 'tabId');
+  const deleteSubTabs = readAliasedArg<boolean>(rawParams, 'delete_sub_tabs', 'deleteSubTabs');
+  return isOptional(rawParams.email, 'string') &&
+    typeof documentId === 'string' &&
+    typeof tabId === 'string' &&
+    isOptional(deleteSubTabs, 'boolean');
+}
+
+export function assertDeleteDocumentTabArgs(args: unknown): asserts args is DeleteDocumentTabArgs {
+  if (!isDeleteDocumentTabArgs(args)) {
+    throw new Error('Invalid delete document tab parameters. Required: document_id, tab_id. Optional: delete_sub_tabs (boolean)');
+  }
+}
+
+export function isInsertDocumentTextArgs(args: unknown): args is InsertDocumentTextArgs {
+  if (typeof args !== 'object' || args === null) return false;
+  const rawParams = args as Record<string, unknown>;
+  const documentId = readAliasedArg<string>(rawParams, 'document_id', 'documentId');
+  const tabId = readAliasedArg<string>(rawParams, 'tab_id', 'tabId');
+  const anchorText = readAliasedArg<string>(rawParams, 'anchor_text', 'anchorText');
+  const matchCase = readAliasedArg<boolean>(rawParams, 'match_case', 'matchCase');
+  const expectEmptyParagraph = readAliasedArg<boolean>(rawParams, 'expect_empty_paragraph', 'expectEmptyParagraph');
+  return isOptional(rawParams.email, 'string') &&
+    typeof documentId === 'string' &&
+    isOptional(tabId, 'string') &&
+    typeof anchorText === 'string' &&
+    // Allowed values are checked by the service, which names them in its error.
+    isOptional(rawParams.position, 'string') &&
+    typeof rawParams.text === 'string' &&
+    isOptional(matchCase, 'boolean') &&
+    isOptional(expectEmptyParagraph, 'boolean');
+}
+
+export function assertInsertDocumentTextArgs(args: unknown): asserts args is InsertDocumentTextArgs {
+  if (!isInsertDocumentTextArgs(args)) {
+    throw new Error('Invalid insert document text parameters. Required: document_id, anchor_text, text. Optional: tab_id (string), position ("after" | "before" | "next_paragraph_start"), match_case (boolean), expect_empty_paragraph (boolean)');
+  }
+}
+
+interface CopyDocumentTabArgs {
+  email?: string;
+  documentId: string;
+  sourceTabId: string;
+  targetTabId?: string;
+  overwriteExisting?: boolean;
+  newTabTitle?: string;
+  newTabParentId?: string;
+  newTabPosition?: number;
+}
+
+export function isCopyDocumentTabArgs(args: unknown): args is CopyDocumentTabArgs {
+  if (typeof args !== 'object' || args === null) return false;
+  const rawParams = args as Record<string, unknown>;
+  const documentId = readAliasedArg<string>(rawParams, 'document_id', 'documentId');
+  const sourceTabId = readAliasedArg<string>(rawParams, 'source_tab_id', 'sourceTabId');
+  const targetTabId = readAliasedArg<string>(rawParams, 'target_tab_id', 'targetTabId');
+  const overwriteExisting = readAliasedArg<boolean>(rawParams, 'overwrite_existing', 'overwriteExisting');
+  const newTabTitle = readAliasedArg<string>(rawParams, 'new_tab_title', 'newTabTitle');
+  const newTabParentId = readAliasedArg<string>(rawParams, 'new_tab_parent_id', 'newTabParentId');
+  const newTabPosition = readAliasedArg<number>(rawParams, 'new_tab_position', 'newTabPosition');
+  // Which target arguments may be combined is checked by the service, which explains it.
+  return isOptional(rawParams.email, 'string') &&
+    typeof documentId === 'string' &&
+    typeof sourceTabId === 'string' &&
+    isOptional(targetTabId, 'string') &&
+    isOptional(overwriteExisting, 'boolean') &&
+    isOptional(newTabTitle, 'string') &&
+    isOptional(newTabParentId, 'string') &&
+    isOptional(newTabPosition, 'number');
+}
+
+export function assertCopyDocumentTabArgs(args: unknown): asserts args is CopyDocumentTabArgs {
+  if (!isCopyDocumentTabArgs(args)) {
+    throw new Error('Invalid copy document tab parameters. Required: document_id, source_tab_id, and either target_tab_id (with overwrite_existing: true) or new_tab_title. Optional with new_tab_title: new_tab_parent_id (string), new_tab_position (number)');
   }
 }
 
@@ -1179,6 +1357,104 @@ export function isDeleteSpreadsheetSheetArgs(args: unknown): args is DeleteSprea
 export function assertDeleteSpreadsheetSheetArgs(args: unknown): asserts args is DeleteSpreadsheetSheetArgs {
   if (!isDeleteSpreadsheetSheetArgs(args)) {
     throw new Error('Invalid delete spreadsheet sheet parameters. Required: email, spreadsheet_id, sheet_id');
+  }
+}
+
+interface DuplicateSpreadsheetSheetArgs {
+  email?: string;
+  spreadsheetId: string;
+  sheetId?: number;
+  sheetTitle?: string;
+  title?: string;
+  position?: number;
+}
+
+interface UpdateSpreadsheetSheetArgs {
+  email?: string;
+  spreadsheetId: string;
+  sheetId?: number;
+  sheetTitle?: string;
+  title?: string;
+  position?: number;
+}
+
+interface InsertSpreadsheetDimensionArgs {
+  email?: string;
+  spreadsheetId: string;
+  sheetId?: number;
+  sheetTitle?: string;
+  dimension: 'ROWS' | 'COLUMNS';
+  startIndex: number;
+  count?: number;
+  inheritFrom?: 'before' | 'after';
+}
+
+export function isDuplicateSpreadsheetSheetArgs(args: unknown): args is DuplicateSpreadsheetSheetArgs {
+  if (typeof args !== 'object' || args === null) return false;
+  const rawParams = args as Record<string, unknown>;
+  const spreadsheetId = readAliasedArg<string>(rawParams, 'spreadsheet_id', 'spreadsheetId');
+  const sheetId = readAliasedArg<number>(rawParams, 'sheet_id', 'sheetId');
+  const sheetTitle = readAliasedArg<string>(rawParams, 'sheet_title', 'sheetTitle');
+  return isOptional(rawParams.email, 'string') &&
+    typeof spreadsheetId === 'string' &&
+    isOptional(sheetId, 'number') &&
+    isOptional(sheetTitle, 'string') &&
+    (sheetId !== undefined || sheetTitle !== undefined) &&
+    isOptional(rawParams.title, 'string') &&
+    isOptional(rawParams.new_title, 'string') &&
+    isOptional(rawParams.position, 'number');
+}
+
+export function assertDuplicateSpreadsheetSheetArgs(args: unknown): asserts args is DuplicateSpreadsheetSheetArgs {
+  if (!isDuplicateSpreadsheetSheetArgs(args)) {
+    throw new Error('Invalid duplicate spreadsheet sheet parameters. Required: spreadsheet_id, sheet_id (number) or sheet_title (string). Optional: title (string), position (number)');
+  }
+}
+
+export function isUpdateSpreadsheetSheetArgs(args: unknown): args is UpdateSpreadsheetSheetArgs {
+  if (typeof args !== 'object' || args === null) return false;
+  const rawParams = args as Record<string, unknown>;
+  const spreadsheetId = readAliasedArg<string>(rawParams, 'spreadsheet_id', 'spreadsheetId');
+  const sheetId = readAliasedArg<number>(rawParams, 'sheet_id', 'sheetId');
+  const sheetTitle = readAliasedArg<string>(rawParams, 'sheet_title', 'sheetTitle');
+  return isOptional(rawParams.email, 'string') &&
+    typeof spreadsheetId === 'string' &&
+    isOptional(sheetId, 'number') &&
+    isOptional(sheetTitle, 'string') &&
+    (sheetId !== undefined || sheetTitle !== undefined) &&
+    isOptional(rawParams.title, 'string') &&
+    isOptional(rawParams.new_title, 'string') &&
+    isOptional(rawParams.position, 'number');
+}
+
+export function assertUpdateSpreadsheetSheetArgs(args: unknown): asserts args is UpdateSpreadsheetSheetArgs {
+  if (!isUpdateSpreadsheetSheetArgs(args)) {
+    throw new Error('Invalid update spreadsheet sheet parameters. Required: spreadsheet_id, sheet_id (number) or sheet_title (string). Optional: title (string), position (number)');
+  }
+}
+
+export function isInsertSpreadsheetDimensionArgs(args: unknown): args is InsertSpreadsheetDimensionArgs {
+  if (typeof args !== 'object' || args === null) return false;
+  const rawParams = args as Record<string, unknown>;
+  const spreadsheetId = readAliasedArg<string>(rawParams, 'spreadsheet_id', 'spreadsheetId');
+  const sheetId = readAliasedArg<number>(rawParams, 'sheet_id', 'sheetId');
+  const sheetTitle = readAliasedArg<string>(rawParams, 'sheet_title', 'sheetTitle');
+  const startIndex = readAliasedArg<number>(rawParams, 'start_index', 'startIndex');
+  const inheritFrom = readAliasedArg<string>(rawParams, 'inherit_from', 'inheritFrom');
+  return isOptional(rawParams.email, 'string') &&
+    typeof spreadsheetId === 'string' &&
+    isOptional(sheetId, 'number') &&
+    isOptional(sheetTitle, 'string') &&
+    (sheetId !== undefined || sheetTitle !== undefined) &&
+    (rawParams.dimension === 'ROWS' || rawParams.dimension === 'COLUMNS') &&
+    typeof startIndex === 'number' &&
+    isOptional(rawParams.count, 'number') &&
+    (inheritFrom === undefined || inheritFrom === 'before' || inheritFrom === 'after');
+}
+
+export function assertInsertSpreadsheetDimensionArgs(args: unknown): asserts args is InsertSpreadsheetDimensionArgs {
+  if (!isInsertSpreadsheetDimensionArgs(args)) {
+    throw new Error('Invalid insert dimension parameters. Required: spreadsheet_id, sheet_id (number) or sheet_title (string), dimension ("ROWS" or "COLUMNS"), start_index (number). Optional: count (number), inherit_from ("before" or "after")');
   }
 }
 

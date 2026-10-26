@@ -216,7 +216,7 @@ const SLACK_APPLY_DRAFT_BODY =
   "        bodyInput.value = String(draft.text || '');\n" +
   "        intendedRecipient = typeof draft.intended_recipient === 'string' ? draft.intended_recipient : '';\n" +
   '        if (intendedRecipient) {\n' +
-  "          recipientNotice.textContent = 'Rebel will send this as a direct message to the person from your request.';\n" +
+  "          recipientNotice.textContent = 'This will be sent as a direct message to the person you asked to contact.';\n" +
   "          recipientNotice.classList.remove('hidden');\n" +
   '        } else {\n' +
   "          recipientNotice.textContent = '';\n" +
@@ -301,7 +301,7 @@ function resolveMode(config) {
       sentCollapseDefault: 'Email sent.',
       sentCollapseStamped: 'Email sent · ',
       unknownDetailTextLiteral:
-        '"Rebel didn\'t hear back in time. Check your Sent folder before sending again, so it doesn\'t go out twice."',
+        '"No confirmation came back in time. Check your Sent folder before sending again, so it doesn\'t go out twice."',
       cancelCollapseUnknownText: 'Collapsed. Check your Sent folder if you are not sure.',
     };
   }
@@ -340,7 +340,7 @@ function resolveMode(config) {
     sentCollapseDefault: 'Message sent.',
     sentCollapseStamped: 'Message sent · ',
     unknownDetailTextLiteral:
-      '"Rebel didn\'t hear back in time. Check whether it sent before sending again, so it doesn\'t go out twice."',
+      '"No confirmation came back in time. Check whether it sent before sending again, so it doesn\'t go out twice."',
     cancelCollapseUnknownText: 'Collapsed. Check whether it sent if you are not sure.',
   };
 }
@@ -1114,7 +1114,7 @@ ${hasDraft ? `      // Same lost-reply honesty as a send, lower stakes: a blind 
         clearSuccess();
         unknownTitle.textContent = 'Not sure if the draft was saved.';
         unknownText.textContent =
-          "Rebel didn't hear back in time. Check your Drafts folder before trying again, so you don't create a duplicate.";
+          "No confirmation came back in time. Check your Drafts folder before trying again, so you don't create a duplicate.";
         unknownBox.classList.remove('hidden');
         postResize();
       }
@@ -1438,7 +1438,7 @@ ${blockedSend ? `        // Once the user's own send preference has blocked this
       }
 
       // The Send button is type="button" with an explicit click handler rather
-      // than a form submit button. The Rebel host renders this iframe with a
+      // than a form submit button. The host renders this iframe with a
       // sandbox of "allow-scripts" only — no "allow-forms" — so native form
       // submission is blocked by the browser BEFORE the submit event fires
       // ("Blocked form submission ... the form's frame is sandboxed and the

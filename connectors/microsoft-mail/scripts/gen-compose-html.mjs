@@ -28,7 +28,7 @@ export const OUTLOOK_COMPOSE_APP_CONFIG = Object.freeze({
   // connector's existing create_draft tool instead of sending.
   draftToolName: 'create_draft',
   fromMissingHelperText:
-    'Rebel could not confirm the sending account. Cancel and ask Rebel to recreate the draft before sending.',
+    "Couldn't confirm which email account to send from. Cancel, then ask your assistant to recreate this draft.",
   fields: Object.freeze({ cc: true, bcc: true }),
   deepLink: Object.freeze({ kind: 'none' }),
 });

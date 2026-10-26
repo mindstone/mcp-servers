@@ -1,5 +1,13 @@
 [
   {
+    "tool": "add_workspace_document_tab",
+    "service": "docs",
+    "method": "POST",
+    "path": "https://docs.googleapis.com/v1/documents/{documentId}:batchUpdate",
+    "handlerId": "handleAddDocumentTab",
+    "handlerModule": "src/tools/docs-handlers.ts"
+  },
+  {
     "tool": "add_workspace_spreadsheet_sheet",
     "service": "sheets",
     "method": "POST",
@@ -102,6 +110,14 @@
     "path": "https://www.googleapis.com/drive/v3/files/{fileId}/copy",
     "handlerId": "handleCopyDriveFile",
     "handlerModule": "src/tools/drive-handlers.ts"
+  },
+  {
+    "tool": "copy_workspace_document_tab",
+    "service": "docs",
+    "method": "POST",
+    "path": "https://docs.googleapis.com/v1/documents/{documentId}:batchUpdate",
+    "handlerId": "handleCopyDocumentTab",
+    "handlerModule": "src/tools/docs-handlers.ts"
   },
   {
     "tool": "create_drive_folder",
@@ -232,6 +248,14 @@
     "handlerModule": "src/tools/comments-handlers.ts"
   },
   {
+    "tool": "delete_workspace_document_tab",
+    "service": "docs",
+    "method": "POST",
+    "path": "https://docs.googleapis.com/v1/documents/{documentId}:batchUpdate",
+    "handlerId": "handleDeleteDocumentTab",
+    "handlerModule": "src/tools/docs-handlers.ts"
+  },
+  {
     "tool": "delete_workspace_draft",
     "service": "gmail",
     "method": "DELETE",
@@ -286,6 +310,14 @@
     "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/{messageId}/attachments/{id}",
     "handlerId": "handleDownloadWorkspaceAttachment",
     "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "duplicate_workspace_spreadsheet_sheet",
+    "service": "sheets",
+    "method": "POST",
+    "path": "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}:batchUpdate",
+    "handlerId": "handleDuplicateSheet",
+    "handlerModule": "src/tools/sheets-handlers.ts"
   },
   {
     "tool": "extract_workspace_document_id",
@@ -438,6 +470,22 @@
     "path": "https://slides.googleapis.com/v1/presentations/{presentationId}/pages/{pageObjectId}/thumbnail",
     "handlerId": "handleGetSlideThumbnail",
     "handlerModule": "src/tools/slides-handlers.ts"
+  },
+  {
+    "tool": "insert_workspace_document_text",
+    "service": "docs",
+    "method": "POST",
+    "path": "https://docs.googleapis.com/v1/documents/{documentId}:batchUpdate",
+    "handlerId": "handleInsertDocumentText",
+    "handlerModule": "src/tools/docs-handlers.ts"
+  },
+  {
+    "tool": "insert_workspace_spreadsheet_dimension",
+    "service": "sheets",
+    "method": "POST",
+    "path": "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}:batchUpdate",
+    "handlerId": "handleInsertDimension",
+    "handlerModule": "src/tools/sheets-handlers.ts"
   },
   {
     "tool": "list_chat_messages",
@@ -872,6 +920,14 @@
     "handlerModule": "src/tools/contacts-handlers.ts"
   },
   {
+    "tool": "update_workspace_document_tab",
+    "service": "docs",
+    "method": "POST",
+    "path": "https://docs.googleapis.com/v1/documents/{documentId}:batchUpdate",
+    "handlerId": "handleUpdateDocumentTab",
+    "handlerModule": "src/tools/docs-handlers.ts"
+  },
+  {
     "tool": "update_workspace_draft",
     "service": "gmail",
     "method": "PUT",
@@ -894,6 +950,14 @@
     "path": "https://gmail.googleapis.com/gmail/v1/users/{userId}/settings/filters/{id}",
     "handlerId": "handleUpdateWorkspaceLabelFilter",
     "handlerModule": "src/tools/gmail-handlers.ts"
+  },
+  {
+    "tool": "update_workspace_spreadsheet_sheet",
+    "service": "sheets",
+    "method": "POST",
+    "path": "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheetId}:batchUpdate",
+    "handlerId": "handleUpdateSheet",
+    "handlerModule": "src/tools/sheets-handlers.ts"
   },
   {
     "tool": "update_workspace_spreadsheet_values",

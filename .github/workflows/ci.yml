@@ -19,7 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         connector: [zendesk, fathom, humaans, kling, mixmax, office, openai-image, pandadoc, servicenow, freshdesk, gamma, napkin, elevenlabs, nano-banana, runway, talentlms, workday, quickbooks, email-imap, retell-ai, browser-automation, outreach, salesforce, apple-shortcuts, google-analytics, opus-video-clip]
-        node-version: [20, 22]
+        node-version: [22, 24]
     defaults:
       run:
         working-directory: connectors/${{ matrix.connector }}
@@ -134,7 +134,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Verify STATUS.json against package.json, server.json, src/
         # CONNECTOR is sourced from the matrix (and the matrix is sourced from
         # the discover-connectors slug-validated list); passing it as an env
@@ -209,7 +209,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Prove the gate fails the "fetch + unused helper + raw result" shape
         # Synthetic-fixture regression proof for the F1 false-pass (a vendored
         # untrusted-content helper file must NOT self-satisfy the envelope scan).
@@ -232,7 +232,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Verify external text reaches the untrusted-content envelope (AGENTS.md invariant #6)
         # ATTENTION-FORCING gate, not proof: see scripts/check-untrusted-coverage.mjs
         # header. CONNECTOR is sourced from the slug-validated discover-connectors
@@ -255,7 +255,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Check committed docs/ catalogue matches generator output
         run: node scripts/build-catalogue.mjs --check
 
@@ -271,7 +271,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Check connector READMEs match install-links generator output
         run: node scripts/gen-install-links.mjs --check
 
@@ -287,7 +287,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Prove release-hygiene detections fire on synthetic fixtures
         run: node scripts/check-release-hygiene.mjs --self-test
 
@@ -304,7 +304,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Verify shared-package src bumps and aging [Unreleased] debt
         run: node scripts/check-release-hygiene.mjs
 
@@ -323,7 +323,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
+          node-version: '24'
       - run: npm ci --ignore-scripts
       - name: Type-check the shared compose-app generator
         run: npm run build
@@ -406,7 +406,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
+          node-version: '24'
       # --ignore-scripts is safe: the shared @mindstone/mcp-app-compose builder
       # is a file: devDependency of pure ESM source (no build step), so the
       # drift check can import it straight after install.

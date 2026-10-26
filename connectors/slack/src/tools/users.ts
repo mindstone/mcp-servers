@@ -2,7 +2,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { errorJson, withErrorHandling } from '../utils.js';
 import { getSlackClient, getSlackUserClient } from '../client.js';
-import { resolveUserId } from '../helpers.js';
+import { resolveUserId, SLACK_USER_PROFILE_SOURCE } from '../helpers.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 import { notConnectedJson } from './auth.js';
 
 const RESPONSE_FORMAT_ENUM = z.enum(['concise', 'detailed']).optional();
@@ -71,11 +72,11 @@ matches. For exact email match, prefer lookup_user_by_email.`,
             allMatches.push({
               id: u.id,
               name: u.name,
-              display_name: u.profile?.display_name,
+              display_name: wrapUntrusted(u.profile?.display_name, SLACK_USER_PROFILE_SOURCE),
               ...(isConcise
                 ? {}
                 : {
-                    real_name: u.real_name,
+                    real_name: wrapUntrusted(u.real_name, SLACK_USER_PROFILE_SOURCE),
                     email: u.profile?.email,
                     is_admin: u.is_admin,
                   }),
@@ -102,11 +103,11 @@ matches. For exact email match, prefer lookup_user_by_email.`,
       const users = filteredMembers?.map((u) => ({
         id: u.id,
         name: u.name,
-        display_name: u.profile?.display_name,
+        display_name: wrapUntrusted(u.profile?.display_name, SLACK_USER_PROFILE_SOURCE),
         ...(isConcise
           ? {}
           : {
-              real_name: u.real_name,
+              real_name: wrapUntrusted(u.real_name, SLACK_USER_PROFILE_SOURCE),
               email: u.profile?.email,
               is_admin: u.is_admin,
             }),
@@ -153,15 +154,15 @@ Get user ID from list_slack_users or from a message, or use @username format.`,
         user: {
           id: user?.id,
           name: user?.name,
-          real_name: user?.real_name,
-          display_name: user?.profile?.display_name,
+          real_name: wrapUntrusted(user?.real_name, SLACK_USER_PROFILE_SOURCE),
+          display_name: wrapUntrusted(user?.profile?.display_name, SLACK_USER_PROFILE_SOURCE),
           email: user?.profile?.email,
-          title: user?.profile?.title,
-          phone: user?.profile?.phone,
+          title: wrapUntrusted(user?.profile?.title, SLACK_USER_PROFILE_SOURCE),
+          phone: wrapUntrusted(user?.profile?.phone, SLACK_USER_PROFILE_SOURCE),
           is_admin: user?.is_admin,
           is_owner: user?.is_owner,
           tz: user?.tz,
-          status_text: user?.profile?.status_text,
+          status_text: wrapUntrusted(user?.profile?.status_text, SLACK_USER_PROFILE_SOURCE),
           status_emoji: user?.profile?.status_emoji,
         },
       });
@@ -206,8 +207,8 @@ Requires users:read.email scope (may need admin approval).`,
           user: {
             id: user?.id,
             name: user?.name,
-            real_name: user?.real_name,
-            display_name: user?.profile?.display_name,
+            real_name: wrapUntrusted(user?.real_name, SLACK_USER_PROFILE_SOURCE),
+            display_name: wrapUntrusted(user?.profile?.display_name, SLACK_USER_PROFILE_SOURCE),
             email: user?.profile?.email,
             is_admin: user?.is_admin,
             deleted: user?.deleted,
@@ -322,7 +323,8 @@ WORKFLOW:
         // best-effort
       }
       const alreadyOpen = dmOpenResult.already_open === true;
-      const recipientLabel = dmUserProfile?.display_name || dmUserProfile?.real_name || userId;
+      const recipientName = dmUserProfile?.display_name || dmUserProfile?.real_name;
+      const recipientLabel = recipientName ? wrapUntrusted(recipientName, SLACK_USER_PROFILE_SOURCE) : userId;
       return JSON.stringify({
         ok: true,
         channel: dmOpenResult.channel.id,
@@ -332,8 +334,8 @@ WORKFLOW:
           ? {
               recipient: {
                 user_id: userId,
-                real_name: dmUserProfile.real_name,
-                display_name: dmUserProfile.display_name,
+                real_name: wrapUntrusted(dmUserProfile.real_name, SLACK_USER_PROFILE_SOURCE),
+                display_name: wrapUntrusted(dmUserProfile.display_name, SLACK_USER_PROFILE_SOURCE),
                 ...(dmUserProfile.email ? { email: dmUserProfile.email } : {}),
               },
             }

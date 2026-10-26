@@ -3,6 +3,13 @@ import { z } from 'zod';
 import { authRequiredJson, errorJson, withErrorHandling } from '../utils.js';
 import { getSlackClient, getSlackUserClient, getTokenProvider, getWorkspaces } from '../client.js';
 import { ConnectorError, TOKEN_EXPIRED_REFRESH_DISABLED } from '../types.js';
+import { wrapUntrusted } from '../untrusted-content.js';
+
+/**
+ * Workspace names are chosen by workspace owners, so they are enveloped where
+ * the model reads them (invariant #6). Team ids stay raw.
+ */
+const SLACK_WORKSPACE_NAME_SOURCE = 'slack:workspace-name';
 
 export function registerAuthTools(server: McpServer): void {
   // ---------------------------------------------------------------------
@@ -94,7 +101,10 @@ to start the connection flow. The host will guide the user through OAuth.`,
         try {
           const authResult = await botClient.auth.test();
           tokenValid = authResult.ok === true;
-          teamInfo = { team: authResult.team, user: authResult.user };
+          teamInfo = {
+            team: wrapUntrusted(authResult.team, SLACK_WORKSPACE_NAME_SOURCE),
+            user: authResult.user,
+          };
         } catch {
           tokenValid = false;
         }
@@ -147,12 +157,12 @@ to start the connection flow. The host will guide the user through OAuth.`,
         },
         workspaces: workspaces.map((w) => ({
           teamId: w.teamId,
-          teamName: w.teamName,
+          teamName: wrapUntrusted(w.teamName, SLACK_WORKSPACE_NAME_SOURCE),
           connectedAt: w.authedAt,
         })),
         currentWorkspace: teamInfo,
         message: tokenValid
-          ? `Connected to Slack workspace: ${workspaces[0].teamName}.`
+          ? `Connected to Slack workspace: ${wrapUntrusted(workspaces[0].teamName, SLACK_WORKSPACE_NAME_SOURCE)}.`
           : 'Workspace configured but token may be invalid.',
         ...(tokenValid
           ? {}

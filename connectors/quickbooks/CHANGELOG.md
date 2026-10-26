@@ -11,6 +11,21 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Security
+
+- Re-synced the vendored `<untrusted-content>` envelope helper with the template: slash-delimited envelope tags inside wrapped content are now also neutralised, so they can no longer be read as an envelope boundary.
+- The re-synced helper escapes only the start of an embedded envelope tag (`<\untrusted-content`, `<\/untrusted-content`), so wrapping text that holds many unfinished tags no longer takes quadratic time, and unwrapping gives back the original text exactly.
+
+## [0.4.3] - 2026-10-13
+
+### Changed
+
+- Setup keeps the refresh token its validation grant returned, so a rotated token is no longer thrown away and the next grant no longer fails.
+
+### Fixed
+
+- `configure_quickbooks` now saves and uses the refresh token its validation grant returned. Intuit can rotate the refresh token on any grant, and setup kept the retired one, so the next grant failed and the user had to reconnect. Setup and the runtime token refresh now share one grant function, and a malformed token response is reported as `AUTH_FAILED` instead of being cached. A failed grant now shows only its HTTP status and a standard OAuth error code (never `error_description` or the rest of the body, which can echo credentials), and the host bridge's setup error and warning text is enveloped.
+
 ## [0.4.2] - 2026-08-10
 
 ### Changed

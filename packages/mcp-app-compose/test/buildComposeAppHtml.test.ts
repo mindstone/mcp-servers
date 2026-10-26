@@ -10,7 +10,7 @@ const GMAIL_CONFIG: ComposeAppConfig = {
   resourceUri: 'ui://google-workspace/compose-email',
   sendToolName: 'send_workspace_email',
   fromMissingHelperText:
-    'Rebel could not confirm the sending account. Cancel and ask Rebel to recreate the draft before sending.',
+    "Couldn't confirm which email account to send from. Cancel, then ask your assistant to recreate this draft.",
   fields: { cc: true, bcc: true },
   deepLink: { kind: 'gmail' },
 };
@@ -226,8 +226,49 @@ describe('buildComposeAppHtml — shared invariants (Gmail-shaped config)', () =
     expect(gmailHtml).toContain("var RESOURCE_URI = 'ui://google-workspace/compose-email';");
     expect(gmailHtml).toContain("name: 'send_workspace_email',");
     expect(gmailHtml).toContain(
-      "fromHelper.textContent = 'Rebel could not confirm the sending account. Cancel and ask Rebel to recreate the draft before sending.';",
+      "fromHelper.textContent = 'Couldn\\'t confirm which email account to send from. Cancel, then ask your assistant to recreate this draft.';",
     );
+  });
+});
+
+describe('buildComposeAppHtml — host neutrality', () => {
+  // Every connector consuming this builder is source-available and runs in any
+  // MCP host, so no shipped copy, comment, or markup may name a particular host
+  // app. Covers every mode and the shipped email variants (Gmail with the draft
+  // tool and blocked-send fallback; Outlook with the draft tool, no deep link).
+  const OUTLOOK_CONFIG: ComposeAppConfig = {
+    resourceUri: 'ui://microsoft-mail/compose-email',
+    sendToolName: 'send_email',
+    draftToolName: 'create_draft',
+    fromMissingHelperText: GMAIL_CONFIG.fromMissingHelperText,
+    fields: { cc: true, bcc: true },
+    deepLink: { kind: 'none' },
+  };
+
+  it('names no host app in any mode or email variant', () => {
+    const variants: Array<[string, string]> = [
+      ['gmail', gmailHtml],
+      ['gmail+draft+blocked-send', blockedDraftHtml],
+      ['outlook+draft', buildComposeAppHtml(OUTLOOK_CONFIG)],
+      ['slack', slackHtml],
+      ['teams', teamsHtml],
+    ];
+    for (const [name, html] of variants) {
+      expect(html, name).not.toMatch(/rebel|mindstone|nspr/i);
+    }
+  });
+
+  it('ships the host-neutral lost-reply wording', () => {
+    const emailSend =
+      "No confirmation came back in time. Check your Sent folder before sending again, so it doesn't go out twice.";
+    const chatSend =
+      "No confirmation came back in time. Check whether it sent before sending again, so it doesn't go out twice.";
+    const draftSave =
+      "No confirmation came back in time. Check your Drafts folder before trying again, so you don't create a duplicate.";
+    expect(gmailHtml).toContain(emailSend);
+    expect(draftHtml).toContain(draftSave);
+    expect(slackHtml).toContain(chatSend);
+    expect(teamsHtml).toContain(chatSend);
   });
 });
 
@@ -917,6 +958,9 @@ describe('buildComposeAppHtml — chat mode behaviour (happy-dom)', () => {
       }) as unknown as MessageEvent,
     );
     expect(isHidden(window, 'recipientNotice')).toBe(false);
+    expect(window.document.getElementById('recipientNotice')?.textContent).toBe(
+      'This will be sent as a direct message to the person you asked to contact.',
+    );
     const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
     sendButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
     const toolCall = postedMessages(window).find((msg) => msg.method === 'tools/call');

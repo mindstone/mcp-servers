@@ -1,13 +1,13 @@
 /**
  * QuickBooks credential configuration tool.
  *
- * Validates credentials via token exchange, persists via bridge,
- * and updates runtime credentials.
+ * Validates credentials with the connector's one token grant (auth.ts
+ * requestToken), persists the refresh token that grant left in force via the
+ * bridge, and updates runtime credentials.
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { QuickBooksError, TOKEN_URL, USER_AGENT, REQUEST_TIMEOUT_MS } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import {
@@ -16,8 +16,9 @@ import {
   setRefreshToken,
   setRealmId,
   setEnvironment,
-  clearTokenCache,
   validateEnvironment,
+  requestToken,
+  adoptTokenResponse,
 } from '../auth.js';
 import { bridgeRequest } from '../bridge.js';
 
@@ -66,73 +67,70 @@ COMMON MISTAKES:
         return JSON.stringify({ ok: false, error: 'environment must be "sandbox" or "production".' });
       }
 
-      // Validate credentials by attempting a token refresh
-      const authHeader = 'Basic ' + Buffer.from(`${cid}:${csecret}`).toString('base64');
-      const body = new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: rtoken,
-      });
-
-      let tokenResponse: Response;
-      try {
-        tokenResponse = await fetch(TOKEN_URL, {
-          method: 'POST',
-          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-          headers: {
-            Authorization: authHeader,
-            'Content-Type': 'application/x-www-form-urlencoded',
-            Accept: 'application/json',
-            'User-Agent': USER_AGENT,
-          },
-          body: body.toString(),
-        });
-      } catch (error) {
-        if (error instanceof Error && error.name === 'TimeoutError') {
-          return JSON.stringify({
-            ok: false,
-            error: 'Token exchange request timed out.',
-            resolution: 'Verify your network connectivity.',
-          });
+      // Validate credentials with a grant. Intuit may rotate the refresh token
+      // on it, so from here on the token in force is the one the grant
+      // returned, not the one typed in.
+      const grant = await requestToken({ clientId: cid, clientSecret: csecret, refreshToken: rtoken });
+      if (!grant.ok) {
+        const { failure } = grant;
+        switch (failure.kind) {
+          case 'timeout':
+            return JSON.stringify({
+              ok: false,
+              error: 'Token exchange request timed out.',
+              resolution: 'Verify your network connectivity.',
+            });
+          case 'network':
+            return JSON.stringify({
+              ok: false,
+              error: `Could not reach Intuit OAuth: ${failure.error instanceof Error ? failure.error.message : String(failure.error)}`,
+              resolution: 'Verify your network connectivity.',
+            });
+          case 'http':
+            return JSON.stringify({
+              ok: false,
+              error: `Invalid credentials: ${failure.code ? `${failure.code} (HTTP ${failure.status})` : `HTTP ${failure.status}`}`,
+              resolution: 'Check your Client ID, Client Secret, and Refresh Token. Refresh tokens expire after 100 days of inactivity.',
+            });
+          case 'malformed':
+            return JSON.stringify({
+              ok: false,
+              error: `Intuit OAuth returned a non-JSON or malformed response (HTTP ${failure.status}).`,
+              resolution: 'Try again; if it persists, check the Intuit service status.',
+            });
+          default: {
+            const unreachable: never = failure;
+            throw unreachable;
+          }
         }
-        return JSON.stringify({
-          ok: false,
-          error: `Could not reach Intuit OAuth: ${error instanceof Error ? error.message : String(error)}`,
-          resolution: 'Verify your network connectivity.',
-        });
       }
-
-      if (!tokenResponse.ok) {
-        const errorBody = await tokenResponse.json().catch(() => ({})) as { error_description?: string };
-        // Intuit-controlled text heading to the model — envelope it (AGENTS.md #6).
-        const detail = errorBody?.error_description
-          ? wrapUntrusted(errorBody.error_description, 'quickbooks:oauth-error')
-          : `HTTP ${tokenResponse.status}`;
-        return JSON.stringify({
-          ok: false,
-          error: `Invalid credentials: ${detail}`,
-          resolution: 'Check your Client ID, Client Secret, and Refresh Token. Refresh tokens expire after 100 days of inactivity.',
-        });
-      }
+      const refreshTokenInForce = grant.token.refresh_token ?? rtoken;
 
       // Persist via bridge
       const result = await bridgeRequest('/bundled/quickbooks/configure', {
-        clientId: cid, clientSecret: csecret, refreshToken: rtoken, realmId: rid, environment: env,
+        clientId: cid, clientSecret: csecret, refreshToken: refreshTokenInForce, realmId: rid, environment: env,
       });
 
       if (!result.success) {
-        return JSON.stringify({ ok: false, error: result.error || 'Failed to configure QuickBooks via bridge.' });
+        // Bridge-authored text crosses a process boundary — envelope it
+        // (AGENTS.md #6), as the Workday connector does.
+        return JSON.stringify({
+          ok: false,
+          error: wrapUntrusted(result.error, 'quickbooks-bridge') ?? 'Failed to configure QuickBooks via bridge.',
+        });
       }
 
-      // Update runtime credentials
+      // Update runtime credentials, and keep the grant's access token so the
+      // first tool call does not spend another grant.
       setClientId(cid);
       setClientSecret(csecret);
-      setRefreshToken(rtoken);
+      setRefreshToken(refreshTokenInForce);
       setRealmId(rid);
       setEnvironment(env);
-      clearTokenCache();
+      adoptTokenResponse(grant.token);
 
       const message = result.warning
-        ? `QuickBooks Online configured successfully. Note: ${result.warning}`
+        ? `QuickBooks Online configured successfully. Note: ${wrapUntrusted(result.warning, 'quickbooks-bridge')}`
         : 'QuickBooks Online configured successfully! Try list_quickbooks_invoices or list_quickbooks_customers.';
       return JSON.stringify({ ok: true, message });
     }),

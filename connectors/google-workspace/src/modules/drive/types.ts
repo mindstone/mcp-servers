@@ -25,7 +25,7 @@ export interface FileListOptions {
   query?: string;
   pageSize?: number;
   pageToken?: string;
-  orderBy?: string[];
+  orderBy?: string | string[];
   fields?: string[];
   driveId?: string;
   corpora?: 'user' | 'drive' | 'allDrives';

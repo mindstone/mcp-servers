@@ -91,9 +91,9 @@ function submitAndCaptureTimeout(window: Window): { fireTimeout: () => void; req
   }) as typeof setTimeout;
 
   // Click the Send button — the real user path. The button is type="button"
-  // with a click handler because the Rebel host sandboxes this iframe without
+  // with a click handler because the host sandboxes this iframe without
   // "allow-forms", so native form submission is blocked before the submit event
-  // fires (REBEL send-button silent no-op). Driving the click here keeps the
+  // fires and the send silently no-ops. Driving the click here keeps the
   // test honest against the sandbox the connector actually runs in.
   const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
   sendButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
@@ -200,7 +200,7 @@ describe('compose email iframe template', () => {
 
     const sendButton = composeWindow.document.getElementById('sendButton');
     expect(sendButton).toBeTruthy();
-    // A submit button would trigger native form submission, which the Rebel host
+    // A submit button would trigger native form submission, which the host
     // sandbox ("allow-scripts" only, no "allow-forms") blocks BEFORE the submit
     // event fires — the send then silently no-ops. Must stay a plain button.
     expect((sendButton as unknown as HTMLButtonElement).getAttribute('type')).toBe('button');
@@ -320,7 +320,7 @@ describe('compose email iframe template', () => {
 
     expect(getFromValue(composeWindow)).toBe('Account not shown');
     expect(isHidden(composeWindow, 'fromHelper')).toBe(false);
-    expect(getFromHelper(composeWindow)).toContain('Rebel could not confirm the sending account');
+    expect(getFromHelper(composeWindow)).toContain("Couldn't confirm which email account to send from");
     expectNoConsoleWarnings(composeWindow);
   });
 

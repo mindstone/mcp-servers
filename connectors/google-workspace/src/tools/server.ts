@@ -114,7 +114,12 @@ import {
   handleFindAndReplace,
   handleExtractDocumentId,
   handleListDocumentTabs,
-  handleBatchUpdateDocument
+  handleBatchUpdateDocument,
+  handleAddDocumentTab,
+  handleUpdateDocumentTab,
+  handleDeleteDocumentTab,
+  handleInsertDocumentText,
+  handleCopyDocumentTab
 } from './docs-handlers.js';
 
 // Import comments handlers
@@ -148,6 +153,9 @@ import {
   handleListSheets,
   handleAddSheet,
   handleDeleteSheet,
+  handleDuplicateSheet,
+  handleUpdateSheet,
+  handleInsertDimension,
   handleExtractSpreadsheetId,
   handleBatchGetValues,
   handleBatchUpdateValues,
@@ -245,6 +253,11 @@ import {
   assertExtractIdArgs,
   assertListTabsArgs,
   assertBatchUpdateDocumentArgs,
+  assertAddDocumentTabArgs,
+  assertUpdateDocumentTabArgs,
+  assertDeleteDocumentTabArgs,
+  assertInsertDocumentTextArgs,
+  assertCopyDocumentTabArgs,
   assertReadPresentationArgs,
   assertCreatePresentationArgs,
   assertListSlidesArgs,
@@ -258,6 +271,9 @@ import {
   assertClearSpreadsheetValuesArgs,
   assertListSpreadsheetSheetsArgs,
   assertAddSpreadsheetSheetArgs,
+  assertDuplicateSpreadsheetSheetArgs,
+  assertUpdateSpreadsheetSheetArgs,
+  assertInsertSpreadsheetDimensionArgs,
   assertDeleteSpreadsheetSheetArgs,
   assertExtractSpreadsheetIdArgs,
   assertBatchGetSpreadsheetValuesArgs,
@@ -749,6 +765,26 @@ export class GSuiteServer {
             assertBatchUpdateDocumentArgs(args);
             result = await handleBatchUpdateDocument(args);
             break;
+          case 'add_workspace_document_tab':
+            assertAddDocumentTabArgs(args);
+            result = await handleAddDocumentTab(args);
+            break;
+          case 'update_workspace_document_tab':
+            assertUpdateDocumentTabArgs(args);
+            result = await handleUpdateDocumentTab(args);
+            break;
+          case 'delete_workspace_document_tab':
+            assertDeleteDocumentTabArgs(args);
+            result = await handleDeleteDocumentTab(args);
+            break;
+          case 'insert_workspace_document_text':
+            assertInsertDocumentTextArgs(args);
+            result = await handleInsertDocumentText(args);
+            break;
+          case 'copy_workspace_document_tab':
+            assertCopyDocumentTabArgs(args);
+            result = await handleCopyDocumentTab(args);
+            break;
 
           // Google Slides Operations
           case 'read_workspace_presentation':
@@ -890,6 +926,18 @@ export class GSuiteServer {
           case 'delete_workspace_spreadsheet_sheet':
             assertDeleteSpreadsheetSheetArgs(args);
             result = await handleDeleteSheet(args);
+            break;
+          case 'duplicate_workspace_spreadsheet_sheet':
+            assertDuplicateSpreadsheetSheetArgs(args);
+            result = await handleDuplicateSheet(args);
+            break;
+          case 'update_workspace_spreadsheet_sheet':
+            assertUpdateSpreadsheetSheetArgs(args);
+            result = await handleUpdateSheet(args);
+            break;
+          case 'insert_workspace_spreadsheet_dimension':
+            assertInsertSpreadsheetDimensionArgs(args);
+            result = await handleInsertDimension(args);
             break;
           case 'extract_workspace_spreadsheet_id':
             assertExtractSpreadsheetIdArgs(args);

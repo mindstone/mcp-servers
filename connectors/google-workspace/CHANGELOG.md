@@ -7,6 +7,43 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- The Gmail compose form and the `compose_workspace_email` tool description no longer name a particular host app: the lost-reply notices now start "No confirmation came back in time…" and the unconfirmed-sender notice reads "Couldn't confirm which email account to send from. Cancel, then ask your assistant to recreate this draft."
+
+## [0.5.0] - 2026-10-15
+
+### Changed
+
+- Read, edit, add, reorder, delete and copy Google Docs tabs; duplicate, rename and reorder Sheets tabs and insert rows or columns; list_drive_files accepts a text orderBy.
+
+### Added
+
+- `list_workspace_document_tabs` returns the document's real tab tree: every tab and nested sub-tab with its id, parent, position and sub-tab count (optional word counts, and `return_json` for a flat JSON list). The synthetic `default` tab is no longer listed.
+- `read_workspace_document` accepts `tab_id` (read one tab) or `all_tabs: true` (read every tab under `## Tab:` headings, sharing one `max_chars` budget and listing the tabs that did not fit). On these reads smart chips, people and dates appear as their text, list items start with `• ` and headings with `[H1]`…`[H6]`, `[Title]` or `[Subtitle]` (reads without a tab argument are unchanged).
+- `append_to_workspace_document`, `replace_workspace_document` and `find_and_replace_workspace_document` accept `tab_id` to act on one tab only. `tab_id: "default"` means the first tab.
+- New Docs tab tools: `add_workspace_document_tab` (optionally as a sub-tab, at a position), `update_workspace_document_tab` (rename, reorder or nest under another tab; `position` is the 0-based final position; the Docs API can't move a sub-tab back to the top level) and `delete_workspace_document_tab` (deletes the tab and all its sub-tabs; a tab with sub-tabs is refused unless `delete_sub_tabs: true` is passed). Tab titles are checked for uniqueness before any change. Update and delete refuse the `default` tab id; add accepts `parent_tab_id: "default"` (the first tab).
+- `insert_workspace_document_text` inserts plain text in one tab right after or before a unique anchor text, or at the start of the paragraph that follows it (for example to fill the empty bullet under a heading), with an `expect_empty_paragraph` check (on by default when filling the next paragraph). Line endings are normalised and characters Google Docs can't store are left out before inserting.
+- `copy_workspace_document_tab` copies one tab's content with its formatting (heading and paragraph styles, character styles and links, bullets and numbering, tables, page breaks and smart chips) into a new tab (`new_tab_title`, optionally nested and positioned) or into an existing tab, which is cleared first and needs `overwrite_existing: true`. Every check runs before the first write; a smart chip linking to a file you can't open becomes a titled link, and people and date chips become text; a Google rate limit hit while checking those files stops the copy before anything is written. The result reports what could not be copied (headers and footers, sub-tabs, images and other special elements) and starts with a `Verification:` line comparing text, heading types, paragraph formatting, bullets, list grouping and table shapes with the source; a failed verification is returned as an error result. If the copy stops part-way, the connector tries to delete a new tab again and the result says whether that worked; an existing target may be left cleared or partly written (the document's version history can restore it). If the copy completes but verification finds differences, the tab is kept so it can be checked, and the result is an error listing where it differs.
+- New Sheets tab tools: `duplicate_workspace_spreadsheet_sheet` (copy a tab with its values, formulas and formatting under a new `title`, placed right after the source unless `position` is given) and `update_workspace_spreadsheet_sheet` (rename and/or move a tab; `position` is the 0-based final position, and a call that changes nothing makes no write). Both find the tab by `sheet_id` or by its exact name in `sheet_title`.
+- `insert_workspace_spreadsheet_dimension` inserts 1 to 100 empty rows or columns at a 0-based `start_index` in a sheet (found by `sheet_id` or `sheet_title`), formatted like the row or column before them (or after, with `inherit_from: "after"`). The result names the inserted range in A1 notation; cells after the insert point move down or right.
+
+### Changed
+
+- Reading a document with several tabs without `tab_id` still returns the first tab, and now adds one header line saying how many tabs there are and how to read the others.
+- `find_and_replace_workspace_document` without `tab_id` still replaces in every tab; on a document with several tabs the result now says so.
+- The text results of `read_workspace_spreadsheet`, `read_workspace_spreadsheet_values` and `batch_read_workspace_spreadsheet_values` (including `value_view: "shaped"`) number rows with their sheet row numbers, so a read of `A20:C22` starts at row 20 instead of 1, as anchor reads already did. Values read with `major_dimension: "COLUMNS"` are still numbered from 1.
+
+### Fixed
+
+- `list_drive_files` accepts `options.orderBy` as a string (`"modifiedTime desc"`) as well as an array.
+
+### Security
+
+- Document titles in the results of `append_to_workspace_document`, `replace_workspace_document` and `find_and_replace_workspace_document` are now wrapped as untrusted content.
+- Spreadsheet and sheet titles in the results of `list_workspace_spreadsheet_sheets` and `add_workspace_spreadsheet_sheet` are now wrapped as untrusted content.
+- Google's error text in failed tab changes, anchored inserts and tab copies (Docs) and in failed sheet duplicates, updates and row or column inserts (Sheets) is wrapped as untrusted content. A one-tab JSON read returns the tab's named ranges as a list rather than a map keyed by range name, so range names are wrapped too.
+
 ## [0.4.2] - 2026-09-29
 
 ### Changed

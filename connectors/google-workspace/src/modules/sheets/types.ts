@@ -1,4 +1,5 @@
 import { sheets_v4 } from 'googleapis';
+import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import type { FormulaCellRef, SuspiciousWriteWarning } from './writeGuards.js';
 export type { FormulaCellRef, SuspiciousWriteWarning } from './writeGuards.js';
 
@@ -153,12 +154,94 @@ export interface SheetInfo {
   columnCount?: number;
 }
 
+/**
+ * Input error raised by the sheet-management methods (unknown sheet, position
+ * out of range, …). Service catches rethrow it so the caller sees InvalidParams
+ * instead of a generic API failure.
+ */
+export class SheetsInputError extends McpError {
+  constructor(message: string) {
+    super(ErrorCode.InvalidParams, message);
+    this.name = 'SheetsInputError';
+  }
+}
+
+export interface DuplicateSheetOptions {
+  spreadsheetId: string;
+  /** Exactly one of sheetId / sheetTitle (the sheet to copy). */
+  sheetId?: number;
+  sheetTitle?: string;
+  /** Name for the copy; Google names it "Copy of …" when omitted. */
+  title?: string;
+  /** 0-based position for the copy; defaults to right after the source. */
+  position?: number;
+}
+
+export interface UpdateSheetOptions {
+  spreadsheetId: string;
+  /** Exactly one of sheetId / sheetTitle (the sheet's current title). */
+  sheetId?: number;
+  sheetTitle?: string;
+  title?: string;
+  /** 0-based final position among all sheets. */
+  position?: number;
+}
+
+export type SheetDimension = 'ROWS' | 'COLUMNS';
+
+export interface InsertDimensionOptions {
+  spreadsheetId: string;
+  /** Exactly one of sheetId / sheetTitle. */
+  sheetId?: number;
+  sheetTitle?: string;
+  dimension: SheetDimension;
+  /** 0-based index the first new row/column gets. */
+  startIndex: number;
+  count?: number;
+  /** Copy formatting from the row/column before the insert (default) or after it. */
+  inheritFrom?: 'before' | 'after';
+}
+
+export interface SheetDuplicateResponse {
+  spreadsheetId: string;
+  sourceSheetId: number;
+  sheet: SheetInfo;
+  requestedPosition: number;
+}
+
+export interface SheetUpdateResponse {
+  spreadsheetId: string;
+  sheet: SheetInfo;
+  /** False when the sheet already had that title and position (no write was made). */
+  changed: boolean;
+  requestedPosition: number;
+}
+
+export interface DimensionInsertResponse {
+  spreadsheetId: string;
+  sheet: SheetInfo;
+  dimension: SheetDimension;
+  startIndex: number;
+  count: number;
+  inheritFromBefore: boolean;
+  /** The inserted rows/columns in A1 notation, e.g. `'Q2 Data'!F:F` or `Sheet1!6:7`. */
+  a1Range: string;
+}
+
+export interface SheetTabOperationResult<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
 export interface SpreadsheetResponse {
   title: string;
   spreadsheetId: string;
   spreadsheetUrl: string;
   sheets?: SheetInfo[];
   values?: CellValue[][];
+  /** A1 range `values` came from, used to number rows in text output (not set in JSON results). */
+  valuesRange?: string;
   truncated?: boolean;
   shapedValues?: ShapedReadResponse;
   anchorValues?: AnchorReadResponse;

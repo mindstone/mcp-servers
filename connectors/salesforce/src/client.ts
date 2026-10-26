@@ -91,14 +91,31 @@ export async function getConnection(accountId?: string): Promise<jsforce.Connect
 
   const conn = new jsforce.Connection(connectionConfig);
 
-  conn.on('refresh', async (accessToken: string) => {
+  // With refresh-token rotation on (an org setting), each refresh returns a new
+  // refresh token and retires the old one. jsforce passes the response here
+  // but keeps presenting the old token itself, so take the new one up in the
+  // live connection and in the saved token. `saved` carries each refresh's
+  // result forward; re-saving from the token this connection was built with
+  // would put a retired refresh token back on disk.
+  let saved = tokenData;
+  conn.on('refresh', (accessToken: string, res?: { refresh_token?: unknown }) => {
     console.error(`[Salesforce MCP] Token refreshed for account ${resolvedId}`);
-    const updatedToken: SalesforceTokenData = {
-      ...tokenData,
+    const rotated = typeof res?.refresh_token === 'string' && res.refresh_token ? res.refresh_token : undefined;
+    if (rotated) conn.refreshToken = rotated;
+    saved = {
+      ...saved,
       access_token: accessToken,
+      ...(rotated ? { refresh_token: rotated } : {}),
       expires_at: Date.now() + 2 * 60 * 60 * 1000,
     };
-    saveToken(resolvedId, updatedToken);
+    try {
+      saveToken(resolvedId, saved);
+    } catch {
+      // The new token stays live in this connection; only the copy for the
+      // next process was lost. Bounded message: a filesystem error can quote
+      // the path or content.
+      console.error(`[Salesforce MCP] Failed to save refreshed token for account ${resolvedId}`);
+    }
   });
 
   connections.set(resolvedId, conn);

@@ -8,9 +8,9 @@ Google Workspace MCP server — Gmail, Calendar, Drive, Docs, Sheets, Slides, Co
 
 ## Status
 
-- **Version:** [0.4.2](./CHANGELOG.md) · npm: not yet published
+- **Version:** [0.5.0](./CHANGELOG.md) · npm: not yet published
 - **Auth:** OAuth (host-orchestrated) ([`GOOGLE_CLIENT_SECRET`](./server.json))
-- **Tools:** [116](./src/tools/definitions/) (Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Chat, Meet, Tasks, Forms, Comments, Account)
+- **Tools:** [124](./src/tools/definitions/) (Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Chat, Meet, Tasks, Forms, Comments, Account)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -152,7 +152,7 @@ Until the host has written `${ACCOUNTS_PATH}` and the matching per-account token
 }
 ```
 
-## Tools (116)
+## Tools (124)
 
 The full list lives under [`src/tools/definitions/`](./src/tools/definitions/) and is also surfaced in [`tools-inventory.json`](./tools-inventory.json). Grouped by domain:
 
@@ -161,8 +161,8 @@ The full list lives under [`src/tools/definitions/`](./src/tools/definitions/) a
 | Gmail | 23 | Email search/thread/send/compose, drafts, labels, label filters, attachments, archive/trash/read-state helpers, settings, vacation responder, and send-as aliases/signatures. |
 | Calendar | 9 | Current time, free-slot lookup, calendar/event listing, event creation, updates, responses, and deletion. |
 | Drive | 15 | List/search/upload/download/copy/move/trash/untrash files, folders, permissions, revisions, shared-drive discovery, and activity queries (what changed, when, by whom). |
-| Docs | 8 | Read, create, append, replace, find/replace, tab listing, and batch updates. |
-| Sheets | 14 | Read/write ranges, create spreadsheets, sheet management, batch operations, find/replace, and formatting. |
+| Docs | 13 | Read, create, append, replace, find/replace (whole doc or one tab), insert text at an anchor, tab tree, add/rename/move/delete tabs, copy a tab's content into another tab, and batch updates. Read, append, replace and find/replace can target one tab (`tab_id`); reads can also cover every tab (`all_tabs`). |
+| Sheets | 17 | Read/write ranges, create spreadsheets, sheet management (add, duplicate, rename, reorder, delete), insert rows or columns formatted like their neighbours, batch operations, find/replace, and formatting. |
 | Slides | 7 | Read, create, list/get slides, batch update, thumbnails, and ID extraction. |
 | Labels | 12 | Gmail label CRUD and filter rules. |
 | Contacts | 4 | List, search, create, and update contacts. |
@@ -185,6 +185,44 @@ Known Drive API limitations for shared-drive files (not fixable in this connecto
 
 - Files native to a shared drive have no `owners[]` — ownership belongs to the drive itself. Use `lastModifyingUser` and `createdTime` as proxies when attributing files.
 - The Revisions API does not support shared-drive files, so `list_file_revisions` / `download_file_revision` only work for My Drive files.
+
+### Docs tabs
+
+A Google Doc can hold many tabs, nested up to a few levels deep. Every tab has a tab id such as `t.abc123`; `list_workspace_document_tabs` shows the whole tree with each tab's id, parent and position. A Docs link containing `?tab=t.xxxx` points at one tab, and `t.xxxx` is its tab id.
+
+**Without `tab_id`:**
+
+- `read_workspace_document` returns the first tab and, on a document with several tabs, adds a line saying how many there are. Pass `tab_id` to read one tab, or `all_tabs: true` to read every tab under `## Tab:` headings with one shared `max_chars` budget (tabs that don't fit are listed by id).
+- `append_to_workspace_document`, `replace_workspace_document` and `insert_workspace_document_text` act on the first tab. A tool call never inherits the tab an earlier call used, so pass `tab_id` on every call that should act on another tab.
+- `find_and_replace_workspace_document` replaces in **every** tab. Pass `tab_id` to limit it to one tab (its sub-tabs are separate tabs and are not included).
+
+`tab_id: "default"` means the first top-level tab for reads, edits, the anchored insert, `parent_tab_id` when adding a tab, and the copy source. Tools that delete, rename, move or overwrite a tab need a real tab id and refuse `"default"`.
+
+**Managing tabs:** `add_workspace_document_tab`, `update_workspace_document_tab` (rename, reorder, or nest under another tab; the API can't move a sub-tab back to the top level) and `delete_workspace_document_tab`.
+
+- Tab titles must be unique across the whole document, sub-tabs included; a clash is refused before anything changes.
+- `position` is 0-based among the tab's siblings (0 = first) and means where the tab ends up after the move. The numbers in list outputs start at 1. Results report the position the document actually shows.
+- Deleting a tab deletes all its sub-tabs with it. A tab that has sub-tabs is refused unless `delete_sub_tabs: true` is passed.
+
+**Inserting text at an anchor:** `insert_workspace_document_text` adds plain text to one tab without rewriting it. `anchor_text` must appear exactly once in the tab, inside one paragraph. `position` is `after` (default) or `before` the anchor, or `next_paragraph_start`: the start of the paragraph after the anchor's, which is how to fill an empty bullet under a heading. Anchor on the line directly above that slot; the paragraph there must be empty unless `expect_empty_paragraph: false` is passed. Newlines start new paragraphs that keep the paragraph's heading or bullet formatting; the inserted text itself is plain (no bold or links picked up from its neighbours).
+
+**Copying a tab:** `copy_workspace_document_tab` copies one tab's content into another tab of the same document.
+
+- Copied: text, heading and paragraph styles, character styles and links, bullets and numbering (mapped to Google Docs' preset list styles), tables (cell text, column widths, cell styles), page breaks and smart chips. A smart chip linking to a file you can't open becomes a titled link; people and date chips become their text. The result lists both.
+- Not copied: headers and footers, sub-tabs, images and other special elements (listed under "Not copied"; inline ones also leave a visible `[placeholder]`), and table cell merges (cells are copied unmerged; a table whose merged cells can't be copied is refused before anything is written).
+- Not copied faithfully: links to headings inside the copied tab still point at the original tab's headings, so after a reset they no longer resolve.
+- Which target: to archive or duplicate a tab, use `new_tab_title`. To reset a tab in place from a template tab (keeping its id, position and sub-tabs), use `target_tab_id` with `overwrite_existing: true`, which clears that tab first. Never delete a tab in order to replace it: deleting also deletes its sub-tabs.
+- The result starts with a `Verification:` line comparing text, heading types, paragraph formatting, bullets, list grouping and table shapes with the source. Before deleting or resetting the source, check both that it says `passed` and that the `Not copied` line lists nothing you can't lose: verification can pass while, say, a floating image was left out. A failed verification comes back as an error result.
+- The copy is not atomic. If it stops part-way, the connector tries to delete a new tab again and the result says whether that worked (if not, it names the tab to delete); an existing target may be left cleared or partly written (the document's version history can restore it). If it completes but verification finds differences, the tab is kept so it can be checked, and the result lists the first few places it differs. Long tabs can take 10-60 seconds.
+
+**Example: a weekly archive-and-reset** of a fictional "Acme weekly sync" doc that has a live tab and a Template tab. The business rules (the next meeting date, which lines to keep) are the caller's:
+
+1. `list_workspace_document_tabs` to get the live and Template tab ids, then read the live tab with `tab_id: <live tab id>`. Note the date line and the out-of-office lines to keep **before** anything changes.
+2. `copy_workspace_document_tab` with `source_tab_id: <live tab id>`, `new_tab_title: "2031-10-13"`, `new_tab_parent_id: <live tab id>` and `new_tab_position: 0`, archiving it as its first sub-tab.
+3. Stop unless the result says `Verification: passed` and its `Not copied` line lists nothing the archive can't do without.
+4. `copy_workspace_document_tab` with `source_tab_id: <Template tab id>`, `target_tab_id: <live tab id>` and `overwrite_existing: true`, resetting the live tab in place.
+5. `find_and_replace_workspace_document` the date placeholder **with `tab_id: <live tab id>`** (without it the Template's placeholder changes too), and check the result says `Replaced 1`.
+6. `insert_workspace_document_text` the kept out-of-office lines **with `tab_id: <live tab id>`** (without it the text goes into the first tab, which may be the Template) and `position: "next_paragraph_start"`, anchored on the line directly above the empty bullet.
 
 ### Vacation responder
 
