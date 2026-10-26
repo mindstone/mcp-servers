@@ -34,6 +34,17 @@ function buildEnv(): Record<string, string> {
     env.AGENT_BROWSER_SESSION_NAME = SESSION_NAME;
   }
 
+  // A session name turns on the CLI's periodic autosave (every 30s by
+  // default, agent-browser >= 0.31.2). Each save opens a temporary tab, which
+  // brings a visible browser window in front of the user's other apps.
+  // Save-on-close still persists the session, so periodic saves stay off
+  // unless the host sets an interval. A host value, including an empty
+  // string, passes through untouched; the CLI treats empty or non-numeric
+  // values as its 30s default. The daemon reads this only when it starts.
+  if (env.AGENT_BROWSER_AUTOSAVE_INTERVAL_MS === undefined) {
+    env.AGENT_BROWSER_AUTOSAVE_INTERVAL_MS = '0';
+  }
+
   return env;
 }
 
