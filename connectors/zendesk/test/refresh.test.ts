@@ -37,6 +37,29 @@ function failRenames(code: string): () => void {
   };
 }
 
+/**
+ * Make `writeSync` write at most `maxBytes` per call (0: no progress at all),
+ * as a full or busy disk can, until the returned restore runs.
+ */
+function shortWrites(maxBytes: number): () => void {
+  const original = realFs.writeSync;
+  realFs.writeSync = ((fd: number, buffer: unknown, ...rest: unknown[]) => {
+    if (maxBytes === 0) return 0;
+    if (typeof buffer === 'string') {
+      return original(fd, buffer.slice(0, maxBytes));
+    }
+    const view = buffer as Buffer;
+    const offset = typeof rest[0] === 'number' ? rest[0] : 0;
+    const length = typeof rest[1] === 'number' ? rest[1] : view.length - offset;
+    return original(fd, view, offset, Math.min(length, maxBytes));
+  }) as typeof fs.writeSync;
+  syncBuiltinESMExports();
+  return () => {
+    realFs.writeSync = original;
+    syncBuiltinESMExports();
+  };
+}
+
 interface TokenCall {
   contentType: string | null;
   body: Record<string, unknown> | null;
@@ -258,6 +281,45 @@ describe('OAuth refresh with a public client', () => {
     const leftovers = fs.readdirSync(path.dirname(tokenPath)).filter(f => f.endsWith('.tmp'));
     expect(leftovers).toEqual([]);
     expectNoTokensLogged();
+  });
+
+  it('e2: short writes still leave a complete token file', async () => {
+    writeTokenFile({ scope: 'read write' });
+    useTokenEndpoint(rotated);
+
+    const auth = await import('../src/auth.js');
+    const restore = shortWrites(7);
+    let result: Awaited<ReturnType<typeof auth.refreshToken>>;
+    try {
+      result = await auth.refreshToken(SUB);
+    } finally {
+      restore();
+    }
+    expect(result.ok).toBe(true);
+    const onDisk = readTokenFile();
+    expect(onDisk.access_token).toBe(NEW_ACCESS);
+    expect(onDisk.refresh_token).toBe(NEW_REFRESH);
+    expect(onDisk.scope).toBe('read write');
+  });
+
+  it('e3: a write that makes no progress fails the save and leaves the old file', async () => {
+    writeTokenFile();
+    const before = fs.readFileSync(tokenPath);
+    useTokenEndpoint(rotated);
+
+    const auth = await import('../src/auth.js');
+    const restore = shortWrites(0);
+    let result: Awaited<ReturnType<typeof auth.refreshToken>>;
+    try {
+      result = await auth.refreshToken(SUB);
+    } finally {
+      restore();
+    }
+    expect(result.ok).toBe(true);
+    expect(fs.readFileSync(tokenPath).equals(before)).toBe(true);
+    expect(loggedText()).toContain('Failed to save the renewed token');
+    const leftovers = fs.readdirSync(path.dirname(tokenPath)).filter(f => f.endsWith('.tmp'));
+    expect(leftovers).toEqual([]);
   });
 
   it('f: keeps the old refresh token when the response has none', async () => {

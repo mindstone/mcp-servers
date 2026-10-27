@@ -195,7 +195,14 @@ function writeFileAtomic(target: string, text: string, canReplace?: () => boolea
   let fd: number | undefined;
   try {
     fd = fs.openSync(tmp, 'wx', 0o600);
-    fs.writeSync(fd, text);
+    // writeSync may write fewer bytes than asked (a full or busy disk), so
+    // loop until all of it is written; no progress at all fails the save.
+    const data = Buffer.from(text, 'utf8');
+    for (let offset = 0; offset < data.length;) {
+      const written = fs.writeSync(fd, data, offset, data.length - offset);
+      if (written <= 0) throw Object.assign(new Error('short write'), { code: 'ESHORTWRITE' });
+      offset += written;
+    }
     fs.fsyncSync(fd);
     fs.closeSync(fd);
     fd = undefined;
