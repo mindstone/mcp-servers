@@ -251,7 +251,10 @@ describe('OAuth refresh with a public client', () => {
     expect(onDisk.subdomain).toBe(SUB);
     expect(onDisk.custom_field).toBe('kept');
     expect(onDisk.expires_at as number).toBeGreaterThan(Date.now() + 1_000_000);
-    expect(fs.statSync(tokenPath).mode & 0o777).toBe(0o600);
+    // Windows has no Unix permission bits.
+    if (process.platform !== 'win32') {
+      expect(fs.statSync(tokenPath).mode & 0o777).toBe(0o600);
+    }
     const leftovers = fs.readdirSync(path.dirname(tokenPath)).filter(f => f.endsWith('.tmp'));
     expect(leftovers).toEqual([]);
     expectNoTokensLogged();

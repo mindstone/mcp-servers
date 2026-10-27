@@ -108,11 +108,14 @@ export async function zendeskFetch<T>(
     }
   }
 
+  // Logs carry the method and path only: the host names the tenant, and the
+  // query string can hold search terms such as requester emails.
+  const logTarget = `${method} /api/v2${endpoint.split('?')[0]}`;
   const maxRetries = 2;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const authHeader = getAuthHeader(account);
-    console.error(`[Zendesk API] Calling ${url} with subdomain=${account.subdomain}`);
+    console.error(`[Zendesk API] Calling ${logTarget}`);
 
     const response = await fetch(url, {
       ...fetchOptions,
@@ -150,7 +153,7 @@ export async function zendeskFetch<T>(
         );
       }
 
-      console.error(`[Zendesk API] 401 Unauthorized for ${url}, attempting token refresh`);
+      console.error(`[Zendesk API] 401 Unauthorized for ${logTarget}, attempting token refresh`);
       const result = await refreshToken(account.subdomain);
       if (!result.ok) {
         if (result.reason !== 'transient') account.authIssue = result.reason;

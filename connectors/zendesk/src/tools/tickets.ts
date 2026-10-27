@@ -17,7 +17,7 @@ import {
   wrapCommentBodyFields,
   wrapUntrustedTicketContent,
 } from '../formatters.js';
-import { withErrorHandling, resolveTempOutputPath, createExclusiveFileWriter } from '../utils.js';
+import { withErrorHandling, resolveTempOutputPath, createExclusiveFileWriter, describeErrorForLog } from '../utils.js';
 
 /**
  * Render the cause of an interrupted pagination for a model-visible
@@ -25,11 +25,11 @@ import { withErrorHandling, resolveTempOutputPath, createExclusiveFileWriter } f
  * connector-controlled static text; any other error's `message` can embed
  * vendor/proxy-controlled fragments (and would route around the
  * INTERNAL_ERROR sanitisation in withErrorHandling by riding an `ok: true`
- * response), so it is replaced with static text. The raw error is logged
- * locally for diagnostics.
+ * response), so it is replaced with static text. The log gets the error's
+ * names and codes only.
  */
 function describeInterruptionCause(error: unknown): string {
-  console.error('[Zendesk] Pagination interrupted:', error);
+  console.error(`[Zendesk] Pagination interrupted (${describeErrorForLog(error)})`);
   return error instanceof ZendeskError ? error.message : 'an unexpected internal error';
 }
 

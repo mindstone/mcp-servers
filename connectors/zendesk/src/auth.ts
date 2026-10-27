@@ -12,6 +12,7 @@ import {
   TOKEN_REFRESH_BUFFER_MS,
   REQUEST_TIMEOUT_MS,
   assertValidSubdomain,
+  SUBDOMAIN_RE,
 } from './types.js';
 
 export const CONFIG_PATH = process.env.ZENDESK_CONFIG_PATH || path.join(os.homedir(), '.mcp', 'zendesk');
@@ -130,17 +131,20 @@ export function loadAccounts(): void {
               }
             }
           } catch (tokenError) {
-            // A JSON parse error can quote part of the file, which holds tokens.
+            // A JSON parse error can quote part of the file, which holds
+            // tokens, and other messages name the file, which names the
+            // tenant: log only a fixed reason or the error code.
             const reason = tokenError instanceof SyntaxError
               ? 'the file is not valid JSON'
-              : tokenError instanceof Error ? tokenError.message : 'unknown error';
-            console.error(`[Zendesk] Failed to load token for ${subdomain}: ${reason}`);
+              : SUBDOMAIN_RE.test(subdomain) ? errorName(tokenError) : 'the file name is not a valid subdomain';
+            console.error(`[Zendesk] Failed to load a stored sign-in: ${reason}`);
           }
         }
       }
     }
   } catch (dirError) {
-    console.error('[Zendesk] Failed to read credentials directory:', dirError);
+    // The error's message holds the config path, so log its code only.
+    console.error(`[Zendesk] Failed to read the credentials directory (${errorName(dirError)})`);
   }
 
   for (const account of accountsConfig.accounts) {
@@ -157,7 +161,9 @@ export function loadAccounts(): void {
         });
       }
     } catch (error) {
-      console.error('[Zendesk] Failed to load account:', error);
+      // The error can quote the invalid subdomain, and the row may not be an
+      // object at all: log only the error's code or name.
+      console.error(`[Zendesk] Skipped an account (${errorName(error)})`);
     }
   }
 }
@@ -216,7 +222,7 @@ export function saveToken(subdomain: string, tokenData: TokenData): void {
     }
     writeFileAtomic(tokenFilePath(subdomain), JSON.stringify(tokenData, null, 2));
   } catch (error) {
-    console.error(`[Zendesk] Failed to save token for ${subdomain} (${errorName(error)})`);
+    console.error(`[Zendesk] Failed to save the sign-in for the Zendesk account (${errorName(error)})`);
   }
 }
 
@@ -255,7 +261,7 @@ function replaceTokenFileAtomic(
     });
     return written ? { status: 'written' } : check.blocked ?? { status: 'absent' };
   } catch (error) {
-    console.error(`[Zendesk] Failed to save the renewed token for ${subdomain} (${errorName(error)})`);
+    console.error(`[Zendesk] Failed to save the renewed token for the Zendesk account (${errorName(error)})`);
     return { status: 'failed' };
   }
 }
@@ -313,7 +319,7 @@ async function runRefresh(subdomain: string): Promise<RefreshResult> {
   const fileData = readTokenFile(subdomain);
 
   if (!fileData) {
-    console.error(`[Zendesk] Cannot refresh token for ${subdomain}: no stored sign-in`);
+    console.error('[Zendesk] Cannot refresh the token for the Zendesk account: no stored sign-in');
     return reconnect;
   }
   const onDisk = withUnsavedRenewal(subdomain, fileData);
@@ -330,13 +336,13 @@ async function runRefresh(subdomain: string): Promise<RefreshResult> {
       memory.expiresAt = diskExpiresAt;
       delete memory.authIssue;
     }
-    console.error(`[Zendesk] Using the token renewed elsewhere for ${subdomain}`);
+    console.error('[Zendesk] Using the token renewed elsewhere for the Zendesk account');
     return { ok: true, accessToken: diskAccess, expiresAt: diskExpiresAt };
   }
 
   const refreshTokenToSpend = diskRefresh ?? memory?.refreshToken;
   if (!refreshTokenToSpend) {
-    console.error(`[Zendesk] Cannot refresh token for ${subdomain}: no refresh token available`);
+    console.error('[Zendesk] Cannot refresh the token for the Zendesk account: no refresh token available');
     return reconnect;
   }
   if (deadRefreshTokens.get(subdomain) === refreshTokenToSpend) {
@@ -346,7 +352,7 @@ async function runRefresh(subdomain: string): Promise<RefreshResult> {
   const fileClientId = nonEmptyString(onDisk.client_id);
   const clientId = fileClientId ?? nonEmptyString(process.env.ZENDESK_CLIENT_ID);
   if (!clientId) {
-    console.error(`[Zendesk] Cannot refresh token for ${subdomain}: no OAuth client id in the token file or ZENDESK_CLIENT_ID`);
+    console.error('[Zendesk] Cannot refresh the token for the Zendesk account: no OAuth client id in the token file or ZENDESK_CLIENT_ID');
     return { ok: false, reason: 'no_client_id' };
   }
 
@@ -370,7 +376,7 @@ async function runRefresh(subdomain: string): Promise<RefreshResult> {
       body: JSON.stringify(body),
     });
   } catch (error) {
-    console.error(`[Zendesk] Token refresh for ${subdomain} could not reach Zendesk (${errorName(error)})`);
+    console.error(`[Zendesk] Token refresh for the Zendesk account could not reach Zendesk (${errorName(error)})`);
     return transient;
   }
 
@@ -381,10 +387,10 @@ async function runRefresh(subdomain: string): Promise<RefreshResult> {
     if ((response.status === 400 || response.status === 401) && code && RECONNECT_ERROR_CODES.has(code)) {
       deadRefreshTokens.set(subdomain, refreshTokenToSpend);
       if (memory) memory.authIssue = 'reconnect';
-      console.error(`[Zendesk] Token refresh for ${subdomain} was refused (HTTP ${response.status}${loggableCode(code)}); the account needs to sign in again`);
+      console.error(`[Zendesk] Token refresh for the Zendesk account was refused (HTTP ${response.status}${loggableCode(code)}); the account needs to sign in again`);
       return reconnect;
     }
-    console.error(`[Zendesk] Token refresh failed for ${subdomain} (HTTP ${response.status}${loggableCode(code)})`);
+    console.error(`[Zendesk] Token refresh failed for the Zendesk account (HTTP ${response.status}${loggableCode(code)})`);
     return transient;
   }
 
@@ -394,13 +400,13 @@ async function runRefresh(subdomain: string): Promise<RefreshResult> {
   } catch {
     // The runtime JSON parse error can embed a fragment of the response
     // body; do not let it reach logs.
-    console.error(`[Zendesk] Token refresh for ${subdomain} returned an unparseable response`);
+    console.error('[Zendesk] Token refresh for the Zendesk account returned an unparseable response');
     return transient;
   }
   const tokenResponse = (parsed && typeof parsed === 'object' ? parsed : {}) as Record<string, unknown>;
   const accessToken = nonEmptyString(tokenResponse.access_token);
   if (!accessToken) {
-    console.error(`[Zendesk] Token refresh for ${subdomain} returned no access token`);
+    console.error('[Zendesk] Token refresh for the Zendesk account returned no access token');
     return transient;
   }
 
@@ -422,16 +428,16 @@ async function runRefresh(subdomain: string): Promise<RefreshResult> {
   const current = accounts.get(subdomain);
   if (outcome.status === 'failed') {
     unsavedRenewals.set(subdomain, { diskRefreshToken: fileData.refresh_token, fields: renewed });
-    console.error(`[Zendesk] The renewed token for ${subdomain} works for now, but you may need to reconnect after a restart`);
+    console.error('[Zendesk] The renewed token for the Zendesk account works for now, but you may need to reconnect after a restart');
   } else {
     unsavedRenewals.delete(subdomain);
   }
   if (outcome.status === 'absent') {
-    console.error(`[Zendesk] The sign-in for ${subdomain} was removed during a token refresh; not saving the renewed token`);
+    console.error('[Zendesk] The sign-in for the Zendesk account was removed during a token refresh; not saving the renewed token');
   } else if (outcome.status === 'changed') {
     // A new sign-in (or another writer) replaced the file while this refresh
     // ran. Its tokens are newer than the ones just received: use them.
-    console.error(`[Zendesk] The sign-in for ${subdomain} changed during a token refresh; using the new one`);
+    console.error('[Zendesk] The sign-in for the Zendesk account changed during a token refresh; using the new one');
     const latestAccess = nonEmptyString(outcome.latest?.access_token);
     if (!latestAccess) return reconnect;
     const latestExpiresAt = typeof outcome.latest?.expires_at === 'number' ? outcome.latest.expires_at : NaN;
@@ -452,7 +458,7 @@ async function runRefresh(subdomain: string): Promise<RefreshResult> {
     delete current.authIssue;
   }
 
-  console.error(`[Zendesk] Token refreshed for ${subdomain}${expiresIn !== undefined ? `, expires in ${expiresIn}s` : ''}`);
+  console.error(`[Zendesk] Token refreshed for the Zendesk account${expiresIn !== undefined ? `, expires in ${expiresIn}s` : ''}`);
   return { ok: true, accessToken, expiresAt };
 }
 
@@ -505,7 +511,7 @@ export async function getAccount(subdomain?: string): Promise<ZendeskAccount | u
   if (!account) return undefined;
 
   if (!account.authIssue && tokenNeedsRefresh(account)) {
-    console.error(`[Zendesk] Token for ${account.subdomain} needs refresh (expires at ${formatExpiry(account.expiresAt) ?? 'an unknown time'})`);
+    console.error(`[Zendesk] Token for the Zendesk account needs refresh (expires at ${formatExpiry(account.expiresAt) ?? 'an unknown time'})`);
     // `account` is this call's own object (loadAccounts rebuilds the map), so
     // the result is applied to it directly.
     const result = await refreshToken(account.subdomain);
@@ -532,7 +538,7 @@ export function removeAccount(subdomain: string): void {
   // writeFileSync/unlinkSync, where it would delete another connector's
   // stored credentials outside the Zendesk config root.
   assertValidSubdomain(subdomain);
-  const idx = accountsConfig.accounts.findIndex(a => a.subdomain === subdomain);
+  const idx = accountsConfig.accounts.findIndex(a => a?.subdomain === subdomain);
   if (idx >= 0) {
     accountsConfig.accounts.splice(idx, 1);
   }
@@ -543,7 +549,8 @@ export function removeAccount(subdomain: string): void {
     const accountsPath = path.join(CONFIG_PATH, 'accounts.json');
     fs.writeFileSync(accountsPath, JSON.stringify(accountsConfig, null, 2), { mode: 0o600 });
   } catch (error) {
-    console.error('[Zendesk] Failed to save accounts:', error);
+    // The error's message and path name the config directory.
+    console.error(`[Zendesk] Failed to save accounts (${errorName(error)})`);
   }
   const tokenPath = path.join(CONFIG_PATH, 'credentials', `${subdomain}.token.json`);
   try {
@@ -551,7 +558,7 @@ export function removeAccount(subdomain: string): void {
       fs.unlinkSync(tokenPath);
     }
   } catch (error) {
-    console.error(`[Zendesk] Failed to remove token file for ${subdomain}:`, error);
+    console.error(`[Zendesk] Failed to remove the stored sign-in (${errorName(error)})`);
   }
   accounts.delete(subdomain);
 }
