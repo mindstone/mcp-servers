@@ -297,11 +297,11 @@ describe('compose email iframe template', () => {
         to: ['a@example.com'],
         subject: 'Hello',
         body: 'Body text',
-        email: 'greg@mindstone.com',
+        email: 'jane@example.com',
       },
     });
 
-    expect(getFromValue(composeWindow)).toBe('greg@mindstone.com');
+    expect(getFromValue(composeWindow)).toBe('jane@example.com');
     expect(isHidden(composeWindow, 'fromHelper')).toBe(true);
     expect(getFromHelper(composeWindow)).toBe('');
     expectNoConsoleWarnings(composeWindow);
