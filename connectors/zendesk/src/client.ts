@@ -1,4 +1,5 @@
 import {
+  type AuthIssue,
   type ZendeskAccount,
   type ZendeskFetchOptions,
   type ZendeskComment,
@@ -56,6 +57,30 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
   }
 }
 
+/** The tool error for an OAuth sign-in that can't be used or renewed. */
+export function authIssueError(reason: AuthIssue): ZendeskError {
+  switch (reason) {
+    case 'reconnect':
+      return new ZendeskError(
+        'Your Zendesk connection needs you to sign in again.',
+        'AUTH_FAILED',
+        'Reconnect Zendesk by signing in again from your app\'s connector settings.'
+      );
+    case 'no_client_id':
+      return new ZendeskError(
+        'Your app isn\'t set up to renew this Zendesk sign-in.',
+        'AUTH_FAILED',
+        'Reconnect Zendesk from your app\'s connector settings. If that fails, contact your app\'s support team.'
+      );
+    case 'transient':
+      return new ZendeskError(
+        'Couldn\'t renew your Zendesk sign-in right now.',
+        'AUTH_REFRESH_FAILED',
+        'Try again in a moment.'
+      );
+  }
+}
+
 export async function zendeskFetch<T>(
   account: ZendeskAccount,
   endpoint: string,
@@ -64,6 +89,10 @@ export async function zendeskFetch<T>(
   const { params, ...fetchOptions } = options;
   const method = (options.method ?? 'GET').toUpperCase();
   assertValidSubdomain(account.subdomain);
+
+  if (account.authType === 'oauth' && account.authIssue) {
+    throw authIssueError(account.authIssue);
+  }
 
   let url = `https://${account.subdomain}.zendesk.com/api/v2${endpoint}`;
   if (params) {
@@ -122,60 +151,62 @@ export async function zendeskFetch<T>(
       }
 
       console.error(`[Zendesk API] 401 Unauthorized for ${url}, attempting token refresh`);
-      const refreshed = await refreshToken(account.subdomain);
-      if (refreshed) {
-        const retryResponse = await fetch(url, {
-          ...fetchOptions,
-          signal: fetchOptions.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-          headers: {
-            Authorization: getAuthHeader(account),
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-            ...fetchOptions.headers,
-          },
-        });
+      const result = await refreshToken(account.subdomain);
+      if (!result.ok) {
+        if (result.reason !== 'transient') account.authIssue = result.reason;
+        throw authIssueError(result.reason);
+      }
+      // The caller's object may not be the one in the accounts map
+      // (loadAccounts rebuilds it), so apply the new token here.
+      account.accessToken = result.accessToken;
+      account.expiresAt = result.expiresAt;
+      delete account.authIssue;
 
-        if (retryResponse.ok || retryResponse.status === 204) {
-          if (retryResponse.status === 204) return {} as T;
-          return parseJsonResponse<T>(retryResponse);
-        }
+      const retryResponse = await fetch(url, {
+        ...fetchOptions,
+        signal: fetchOptions.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        headers: {
+          Authorization: getAuthHeader(account),
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...fetchOptions.headers,
+        },
+      });
 
-        if (retryResponse.status === 401) {
-          throw new ZendeskError(
-            'Authentication failed after token refresh',
-            'AUTH_FAILED',
-            'OAuth token is invalid. Please reconnect your Zendesk account in your MCP host app settings.'
-          );
-        }
+      if (retryResponse.ok || retryResponse.status === 204) {
+        if (retryResponse.status === 204) return {} as T;
+        return parseJsonResponse<T>(retryResponse);
+      }
 
-        // Do not read or log the raw vendor error body — it is
-        // attacker/vendor-controlled and may contain echoed request data.
-        console.error(`Zendesk API error after token refresh (HTTP ${retryResponse.status})`);
-
-        if (retryResponse.status === 429) {
-          const waitTime = describeRetryAfter(retryResponse.headers.get('Retry-After'));
-          throw new ZendeskError(
-            `Rate limited. Please wait ${waitTime} before retrying.`,
-            'RATE_LIMITED',
-            `Wait ${waitTime} and try again. Zendesk limits vary by plan (~400 req/min typical).`
-          );
-        }
-
-        const postRefreshStatusMsg = retryResponse.status === 403 ? 'Forbidden - check permissions'
-          : retryResponse.status === 422 ? 'Validation error - check request parameters'
-          : retryResponse.status >= 500 ? 'Zendesk server error - try again later'
-          : 'Request failed';
+      if (retryResponse.status === 401) {
         throw new ZendeskError(
-          `Zendesk API error (${retryResponse.status}): ${postRefreshStatusMsg}`,
-          'API_ERROR',
-          'Check the request parameters and try again.'
+          'Authentication failed after token refresh',
+          'AUTH_FAILED',
+          'OAuth token is invalid. Please reconnect your Zendesk account in your MCP host app settings.'
         );
       }
 
+      // Do not read or log the raw vendor error body — it is
+      // attacker/vendor-controlled and may contain echoed request data.
+      console.error(`Zendesk API error after token refresh (HTTP ${retryResponse.status})`);
+
+      if (retryResponse.status === 429) {
+        const waitTime = describeRetryAfter(retryResponse.headers.get('Retry-After'));
+        throw new ZendeskError(
+          `Rate limited. Please wait ${waitTime} before retrying.`,
+          'RATE_LIMITED',
+          `Wait ${waitTime} and try again. Zendesk limits vary by plan (~400 req/min typical).`
+        );
+      }
+
+      const postRefreshStatusMsg = retryResponse.status === 403 ? 'Forbidden - check permissions'
+        : retryResponse.status === 422 ? 'Validation error - check request parameters'
+        : retryResponse.status >= 500 ? 'Zendesk server error - try again later'
+        : 'Request failed';
       throw new ZendeskError(
-        'Authentication failed',
-        'AUTH_FAILED',
-        'OAuth token is expired or invalid. Please reconnect your Zendesk account in your MCP host app settings.'
+        `Zendesk API error (${retryResponse.status}): ${postRefreshStatusMsg}`,
+        'API_ERROR',
+        'Check the request parameters and try again.'
       );
     }
 
@@ -249,6 +280,6 @@ export function noAccountError(): string {
   return JSON.stringify({
     ok: false,
     error: 'No Zendesk account connected',
-    resolution: 'Use authenticate_zendesk_account or configure credentials via environment variables.',
+    resolution: 'Sign in to Zendesk through your app\'s Zendesk connector settings.',
   });
 }
