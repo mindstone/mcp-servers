@@ -44,9 +44,15 @@ on:
 permissions:
   contents: read
 
+# One release run at a time, and every push keeps its run: without
+# `queue: max`, GitHub keeps only one pending run per group and a newer push
+# replaces it, so a burst of release commits pushed one after another would
+# skip the releases in the replaced runs (each run detects only its own
+# pushed range). `queue: max` holds up to 100 pending runs, in order.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   detect:
