@@ -7,6 +7,9 @@
 //    has since been deliberately rebaselined once (2026-07) to strip internal
 //    ticket references out of the shared builder per the public-repo policy, so
 //    it now pins the intended current output rather than the original bytes.
+//    Rebaselined again (2026-10) to make the shared copy host-neutral; the only
+//    byte delta is the wording of the lost-reply and unconfirmed-sender notices
+//    and of one code comment, none of which names a host app any more.
 // 2. Building with the connector's real config (the same object the generator
 //    script uses) reproduces the committed template. This proves the generator
 //    pipeline is lossless end-to-end, not just that someone committed the

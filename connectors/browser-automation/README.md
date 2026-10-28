@@ -9,7 +9,7 @@ Browser control you can watch: open pages, sign in, click around, fill forms, ta
 
 ## Status
 
-- **Version:** [0.2.2](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-browser-automation)
+- **Version:** [0.2.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-browser-automation)
 - **Auth:** None ([`server.json`](./server.json))
 - **Tools:** [21](./src/tools/) (navigation, observation, interaction, sessions, files)
 - **Surface:** browser-automation
@@ -117,6 +117,7 @@ No API keys or credentials are required. The server communicates with the browse
 |---|---|---|
 | `AGENT_BROWSER_SESSION_NAME` | No | Session name for browser persistence (default: `mcp`) |
 | `AGENT_BROWSER_SHOW_WINDOW` | No | Set to `false` to run without a visible browser window. Default is visible (`true`). |
+| `AGENT_BROWSER_AUTOSAVE_INTERVAL_MS` | No | Periodic session autosave interval in milliseconds (needs `agent-browser` 0.31.2 or later). Default `0` (off), because each periodic save briefly opens a tab that brings a visible browser window in front of other apps. The session is still saved when the browser closes (`browser_close`). Any value you set is passed through as-is; an empty or non-numeric value gets the CLI's 30-second default. The `agent-browser` daemon reads it when it starts, so an already-running daemon keeps its previous setting until it exits (for example after `browser_close`). |
 | `MCP_WORKSPACE_PATH` | No | Workspace directory that `browser_pdf` writes into and `browser_upload` reads from. Defaults to the system temp directory. See [Security notes](#security-notes). |
 
 ### MCP Host Configuration

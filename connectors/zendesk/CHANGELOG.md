@@ -11,6 +11,31 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+
+- OAuth sign-ins refresh as a public (PKCE) client: the refresh uses the token file's `client_id`, else `ZENDESK_CLIENT_ID`, and needs no client secret. Token files may carry optional `client_id` and `scope` fields; the stored scope is kept on refresh.
+- `list_zendesk_accounts` reports `reconnect-required` for a sign-in that can't be renewed.
+
+### Changed
+
+- Token refresh requests are sent as JSON. `ZENDESK_CLIENT_SECRET` is sent only with an env-configured `ZENDESK_CLIENT_ID`, for confidential clients, and both env vars are read when a refresh happens rather than at startup. The hard-coded `read write` scope is no longer sent.
+- A refused refresh token (`invalid_grant`, `invalid_client`, `unauthorized_client`) or a missing client id now returns `AUTH_FAILED` with "Reconnect Zendesk…"; a temporary failure (server error, rate limit, network) returns `AUTH_REFRESH_FAILED` "try again in a moment" once the access token has expired, before any API request.
+- Account guidance in `list_zendesk_accounts` and the no-account error now points to signing in through the host app's Zendesk connector settings instead of the API-token tool.
+
+### Fixed
+
+- Concurrent tool calls share one refresh per subdomain, so a single-use refresh token is no longer spent twice; the token file is re-read first, so a token renewed by another process is used instead of spent again.
+- The retry after an API 401 now uses the refreshed token even when the caller holds an account object loaded earlier.
+- A failed proactive refresh is no longer ignored (which led to a 401 and a second refresh), and a refused refresh token is not sent again in the same process.
+- `list_zendesk_accounts` no longer fails on an OAuth token file with a missing or out-of-range expiry.
+- If a renewed token can't be saved, the connector keeps using it in memory instead of sending the already-spent refresh token again, and `list_zendesk_accounts` shows a `warning` on that account.
+- A refresh that finishes after a new sign-in no longer overwrites it: the file is replaced only if it still holds the refresh token that refresh spent, and otherwise the new sign-in is used.
+
+### Security
+
+- Renewed tokens are written atomically (0600 temp file in the same folder, then rename), and a token file removed during a refresh (a disconnect) is not recreated. No refresh failure deletes or truncates a token file.
+- Refresh failures log only the HTTP status and OAuth error code, never the response body or `error_description`; a corrupt token file's parse error is no longer logged, since it can quote file contents.
+
 ## [0.4.1] - 2026-08-09
 
 ### Changed
