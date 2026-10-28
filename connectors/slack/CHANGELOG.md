@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-28
+
+### Changed
+
+- Search runs with only to_me or a date range; Slack profile text and workspace names reach the model as untrusted content.
+
 ### Fixed
 
 - `search_slack_messages` no longer requires `query` when `to_me`, `after` or `before` is given, so asking for "messages to me" or for a date range alone now runs a search instead of being rejected. A call with nothing to search, or a `to_me` search when Slack does not return your identity, now gets a clear error and makes no search call.
