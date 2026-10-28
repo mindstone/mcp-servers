@@ -7,7 +7,7 @@
  * Sessions persist automatically between invocations.
  *
  * Requirements:
- * - agent-browser CLI binary on PATH, or npx available for fallback
+ * - agent-browser executable on PATH, or the bundled dependency run with this Node
  *
  * Environment variables:
  * - AGENT_BROWSER_SESSION_NAME: Session name for persistence (default: "mcp")

@@ -109,40 +109,77 @@ describe('execAgentBrowser — argument shape', () => {
     expect(capturedArgs).not.toContain('--headless');
   });
 
-  it('npx fallback uses pinned version (not @0.17 or @latest)', async () => {
+  it('uses agent-browser alone when it is on PATH', async () => {
     const childProcess = await import('node:child_process');
     const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
 
-    let firstCmd: string | undefined;
-    let firstArgs: string[] | undefined;
-    let secondCmd: string | undefined;
-    let secondArgs: string[] | undefined;
-    let callCount = 0;
-
-    mockExecFile.mockImplementation((cmd: string, args: string[], _opts: unknown, callback: Function) => {
-      callCount++;
-      if (callCount === 1) {
-        firstCmd = cmd;
-        firstArgs = args;
-        callback(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
-      } else {
-        secondCmd = cmd;
-        secondArgs = args;
-        callback(null, 'ok', '');
-      }
+    const calls: string[] = [];
+    mockExecFile.mockImplementation((cmd: string, _args: string[], _opts: unknown, callback: Function) => {
+      calls.push(cmd);
+      callback(null, 'ok', '');
     });
 
-    const result = await execAgentBrowser(['open', 'https://example.com']);
+    const result = await execAgentBrowser(['snapshot', '-i']);
 
-    expect(firstCmd).toBe('agent-browser');
-    expect(firstArgs).toEqual(['open', 'https://example.com']);
-    expect(secondCmd).toBe('npx');
-    // Pinned version, not 0.17 (older) or `latest` (flaky).
-    expect(secondArgs![0]).toBe('-y');
-    expect(secondArgs![1]).toMatch(/^agent-browser@\d+\.\d+\.\d+$/);
-    expect(secondArgs![1]).not.toBe('agent-browser@0.17');
-    expect(secondArgs!.slice(2)).toEqual(['open', 'https://example.com']);
+    expect(calls).toEqual(['agent-browser']);
     expect(result.stdout).toBe('ok');
+  });
+});
+
+describe('execAgentBrowser — bundled agent-browser when none is on PATH', () => {
+  const originalEnv = process.env.AGENT_BROWSER_SHOW_WINDOW;
+  // Matches either path separator, so the assertion holds on any host OS.
+  const BIN_ENTRY = /[\\/]node_modules[\\/]agent-browser[\\/]bin[\\/]agent-browser\.js$/;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (originalEnv === undefined) delete process.env.AGENT_BROWSER_SHOW_WINDOW;
+    else process.env.AGENT_BROWSER_SHOW_WINDOW = originalEnv;
+  });
+
+  async function runAfterPathMiss(
+    callerArgs: string[],
+    options?: { headed?: boolean },
+  ): Promise<{ calls: Array<{ cmd: string; args: string[]; opts: Record<string, unknown> }>; stdout: string }> {
+    vi.resetModules();
+    const childProcess = await import('node:child_process');
+    const mockExecFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
+
+    const calls: Array<{ cmd: string; args: string[]; opts: Record<string, unknown> }> = [];
+    mockExecFile.mockImplementation(
+      (cmd: string, args: string[], opts: Record<string, unknown>, callback: Function) => {
+        calls.push({ cmd, args, opts });
+        if (calls.length === 1) callback(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+        else callback(null, 'ok', '');
+      },
+    );
+
+    const { execAgentBrowser } = await import('../src/browser-client.js');
+    const result = await execAgentBrowser(callerArgs, options);
+    return { calls, stdout: result.stdout };
+  }
+
+  it('after a PATH miss, runs the bundled bin entry with this Node and no shell', async () => {
+    process.env.AGENT_BROWSER_SHOW_WINDOW = 'false';
+    const { calls, stdout } = await runAfterPathMiss(['fill', '@e3', 'line one\nline two']);
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0].cmd).toBe('agent-browser');
+    expect(calls[1].cmd).toBe(process.execPath);
+    expect(calls[1].args[0]).toMatch(BIN_ENTRY);
+    expect(calls[1].args.slice(1)).toEqual(['fill', '@e3', 'line one\nline two']);
+    expect(calls[1].opts).not.toHaveProperty('shell');
+    expect(calls.map((c) => c.cmd)).not.toContain('npx');
+    expect(calls[1].args).not.toContain('-y');
+    expect(stdout).toBe('ok');
+  });
+
+  it('keeps --headed after the command in the bundled run', async () => {
+    process.env.AGENT_BROWSER_SHOW_WINDOW = 'true';
+    const { calls } = await runAfterPathMiss(['open', 'https://example.com']);
+
+    expect(calls[1].cmd).toBe(process.execPath);
+    expect(calls[1].args.slice(1)).toEqual(['open', '--headed', 'https://example.com']);
   });
 });
 

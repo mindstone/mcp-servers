@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { ConnectorError, DEFAULT_TIMEOUT_MS, SESSION_NAME } from './types.js';
@@ -16,14 +17,22 @@ export interface ExecOptions {
   headed?: boolean;
 }
 
-let resolvedBinary: string | null = null;
+const MAX_BUFFER = 10 * 1024 * 1024; // 10MB for large snapshots
 
-function resolveAgentBrowser(): string {
-  if (resolvedBinary) return resolvedBinary;
-  // Default to the binary name — execFile will search PATH.
-  // If not found (ENOENT), the caller falls back to npx.
-  resolvedBinary = 'agent-browser';
-  return resolvedBinary;
+let bundledEntry: string | null = null;
+
+/**
+ * Path to the JS entry of the agent-browser package this connector depends
+ * on. Run with `process.execPath` rather than through an npm `.cmd` shim or
+ * npx: on Windows, execFile cannot start a shim without a shell, and npx
+ * reaches the CLI through cmd.exe, which cuts arguments at the first newline.
+ * Throws MODULE_NOT_FOUND when the dependency is missing.
+ */
+function resolveBundledEntry(): string {
+  if (!bundledEntry) {
+    bundledEntry = createRequire(import.meta.url).resolve('agent-browser/bin/agent-browser.js');
+  }
+  return bundledEntry;
 }
 
 function buildEnv(): Record<string, string> {
@@ -72,19 +81,6 @@ function resolveHeaded(optionHeaded: boolean | undefined, env: Record<string, st
 }
 
 /**
- * Pinned version of agent-browser used by the npx fallback.
- *
- * Why pinned: keeps fallback behavior reproducible. Bump when verified against
- * a newer release. Do not use `latest` — npx caches by spec, and an unpinned
- * spec produces flaky behavior across machines.
- *
- * 0.33.2 verified 2026-08-05 against the connector's full command surface
- * (open, snapshot -i, screenshot, pdf, get url/title/text, tab, click/fill/
- * type/press/scroll/select/hover, eval, back/forward, wait, close).
- */
-const NPX_FALLBACK_VERSION = '0.33.2';
-
-/**
  * Build the ConnectorError message for a failed CLI invocation.
  *
  * stdout/stderr from the CLI can carry page-derived, attacker-controlled
@@ -122,8 +118,9 @@ function cliFailureMessage(
  * on the CLI — passing one would be a CLI error — so headless is the absence
  * of `--headed`.
  *
- * Falls back to `npx -y agent-browser@<NPX_FALLBACK_VERSION>` if the binary is
- * not on PATH. Uses execFile (no shell) to prevent command injection.
+ * Runs an `agent-browser` executable from PATH when there is one; otherwise
+ * runs the connector's own agent-browser dependency with this Node. Both use
+ * execFile with no shell, so no argument is ever interpreted by a shell.
  */
 export async function execAgentBrowser(
   args: string[],
@@ -139,77 +136,61 @@ export async function execAgentBrowser(
     args = [args[0], '--headed', ...args.slice(1)];
   }
 
-  const binary = resolveAgentBrowser();
-
-  try {
+  const run = async (file: string, fileArgs: string[]): Promise<ExecResult> => {
     // execFile is safe against command injection (no shell interpretation)
-    const result = await execFileAsync(binary, args, {
+    const result = await execFileAsync(file, fileArgs, {
       env,
       timeout: timeoutMs,
-      maxBuffer: 10 * 1024 * 1024, // 10MB for large snapshots
+      maxBuffer: MAX_BUFFER,
     });
     return { stdout: result.stdout, stderr: result.stderr ?? '' };
+  };
+
+  try {
+    return await run('agent-browser', args);
   } catch (error: unknown) {
-    const err = error as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
-
-    // Binary not found on PATH — try npx fallback (pulls a pinned version
-    // from the npm cache / registry).
-    if (err.code === 'ENOENT') {
-      try {
-        const npxResult = await execFileAsync(
-          'npx',
-          ['-y', `agent-browser@${NPX_FALLBACK_VERSION}`, ...args],
-          {
-            env,
-            timeout: timeoutMs + 15_000, // extra time for npx install
-            maxBuffer: 10 * 1024 * 1024,
-          },
-        );
-        return { stdout: npxResult.stdout, stderr: npxResult.stderr ?? '' };
-      } catch (npxError: unknown) {
-        const npxErr = npxError as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
-
-        // Distinguish: npx itself missing (true binary-not-found) vs
-        // agent-browser ran but returned non-zero (CLI error surfaced via npx).
-        if (npxErr.code === 'ENOENT') {
-          throw new ConnectorError(
-            `agent-browser binary not found on PATH and npx is also unavailable: ${npxErr.message ?? String(npxErr)}`,
-            'BINARY_NOT_FOUND',
-            'Install agent-browser: npm install -g agent-browser\n' +
-            'Or ensure npx is available on PATH.',
-          );
-        }
-
-        // npx ran but the underlying CLI exited non-zero — propagate as CLI_ERROR
-        // with the (enveloped) stderr for diagnosis.
-        throw new ConnectorError(
-          cliFailureMessage(args[0], npxErr.stderr, npxErr.stdout),
-          'CLI_ERROR',
-          'The agent-browser CLI command failed (via npx fallback). ' +
-          'Check the error details above. ' +
-          'For best performance, install agent-browser globally: npm install -g agent-browser',
-        );
-      }
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw classifyFailure(error, args[0], timeoutMs);
     }
+  }
 
-    // Timeout — name only the subcommand: the full argument vector may carry
-    // sensitive values (URLs with userinfo, selectors, filenames, typed
-    // values, evaluation scripts) and must not be echoed to the model.
-    if (err.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' || (err as { killed?: boolean }).killed) {
-      throw new ConnectorError(
-        `Command timed out after ${timeoutMs}ms: agent-browser ${args[0]}`,
-        'TIMEOUT',
-        'The browser operation took too long. Try a simpler action or increase the timeout.',
-      );
-    }
+  // Not on PATH: run the bundled copy.
+  try {
+    return await run(process.execPath, [resolveBundledEntry(), ...args]);
+  } catch (error: unknown) {
+    throw classifyFailure(error, args[0], timeoutMs);
+  }
+}
 
-    // Other errors — include the (enveloped) stderr for diagnostics
-    throw new ConnectorError(
-      cliFailureMessage(args[0], err.stderr, err.stdout),
-      'CLI_ERROR',
-      'The agent-browser CLI command failed. Check that agent-browser is installed and the browser session is active.',
+function classifyFailure(error: unknown, command: string, timeoutMs: number): ConnectorError {
+  const err = error as NodeJS.ErrnoException & { stdout?: string; stderr?: string; killed?: boolean };
+
+  // Timeout — name only the subcommand: the full argument vector may carry
+  // sensitive values (URLs with userinfo, selectors, filenames, typed
+  // values, evaluation scripts) and must not be echoed to the model.
+  if (err.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' || err.killed) {
+    return new ConnectorError(
+      `Command timed out after ${timeoutMs}ms: agent-browser ${command}`,
+      'TIMEOUT',
+      'The browser operation took too long. Try a simpler action or increase the timeout.',
     );
   }
+
+  // Neither a PATH executable nor the bundled dependency could be started.
+  if (err.code === 'MODULE_NOT_FOUND' || err.code === 'ENOENT') {
+    return new ConnectorError(
+      'agent-browser is not on PATH and the copy bundled with this connector could not be found',
+      'BINARY_NOT_FOUND',
+      "This connector's installation is incomplete. Reinstall the connector.",
+    );
+  }
+
+  // Other errors — include the (enveloped) stderr for diagnostics
+  return new ConnectorError(
+    cliFailureMessage(command, err.stderr, err.stdout),
+    'CLI_ERROR',
+    'The agent-browser CLI command failed. Check that agent-browser is installed and the browser session is active.',
+  );
 }
 
 /**
@@ -217,5 +198,5 @@ export async function execAgentBrowser(
  * Primarily used for testing to reset state between test runs.
  */
 export function resetBinaryCache(): void {
-  resolvedBinary = null;
+  bundledEntry = null;
 }
