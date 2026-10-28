@@ -168,6 +168,8 @@ describe('execAgentBrowser — bundled agent-browser when none is on PATH', () =
     expect(calls[1].cmd).toBe(process.execPath);
     expect(calls[1].args[0]).toMatch(BIN_ENTRY);
     expect(calls[1].args.slice(1)).toEqual(['fill', '@e3', 'line one\nline two']);
+    expect(calls[1].opts).toEqual(calls[0].opts);
+    expect(calls[1].opts.windowsHide).toBe(true);
     expect(calls[1].opts).not.toHaveProperty('shell');
     expect(calls.map((c) => c.cmd)).not.toContain('npx');
     expect(calls[1].args).not.toContain('-y');

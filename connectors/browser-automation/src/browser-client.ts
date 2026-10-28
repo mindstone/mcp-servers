@@ -1,7 +1,6 @@
 import { execFile } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { promisify } from 'node:util';
-import path from 'node:path';
 import { ConnectorError, DEFAULT_TIMEOUT_MS, SESSION_NAME } from './types.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
@@ -142,6 +141,8 @@ export async function execAgentBrowser(
       env,
       timeout: timeoutMs,
       maxBuffer: MAX_BUFFER,
+      // GUI hosts should not open a console window for each CLI call on Windows.
+      windowsHide: true,
     });
     return { stdout: result.stdout, stderr: result.stderr ?? '' };
   };
@@ -191,12 +192,4 @@ function classifyFailure(error: unknown, command: string, timeoutMs: number): Co
     'CLI_ERROR',
     'The agent-browser CLI command failed. Check that agent-browser is installed and the browser session is active.',
   );
-}
-
-/**
- * Reset the resolved binary cache.
- * Primarily used for testing to reset state between test runs.
- */
-export function resetBinaryCache(): void {
-  bundledEntry = null;
 }
