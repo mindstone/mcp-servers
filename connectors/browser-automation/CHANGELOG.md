@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-10-28
+
+### Changed
+
+- Fix Windows: start the bundled agent-browser CLI with the server's own Node, so tools work on a fresh install and multi-line text arrives whole.
+
 ### Fixed
 
 - On Windows the server could not start its browser CLI, so every tool failed; it now starts, and text with several lines arrives whole.
