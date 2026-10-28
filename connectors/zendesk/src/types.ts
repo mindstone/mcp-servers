@@ -15,7 +15,17 @@ export interface TokenData {
   token_type: string;
   subdomain: string;
   email?: string;
+  /** OAuth client that issued this token; refreshes use it. */
+  client_id?: string;
+  /** Granted scope; refreshes ask for the same scope. */
+  scope?: string;
 }
+
+export type AuthIssue = 'reconnect' | 'no_client_id' | 'transient';
+
+export type RefreshResult =
+  | { ok: true; accessToken: string; expiresAt: number }
+  | { ok: false; reason: AuthIssue };
 
 export interface AccountInfo {
   subdomain: string;
@@ -36,6 +46,8 @@ export interface ZendeskAccount {
   accessToken: string;
   refreshToken?: string;
   expiresAt: number;
+  /** Set when the OAuth token can't be used or renewed; tool calls fail fast with it. */
+  authIssue?: AuthIssue;
 }
 
 export interface BridgeState {

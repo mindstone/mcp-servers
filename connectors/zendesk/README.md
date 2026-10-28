@@ -109,14 +109,47 @@ node dist/index.js
 ### Environment variables
 
 - `ZENDESK_CONFIG_PATH` — path to the config directory that contains `accounts.json` and `credentials/`
-- `ZENDESK_CLIENT_ID` — optional OAuth client ID for legacy token refresh flows
-- `ZENDESK_CLIENT_SECRET` — optional OAuth client secret for legacy token refresh flows
+- `ZENDESK_CLIENT_ID` — OAuth client ID used to renew sign-ins whose token file doesn't carry its own `client_id`; read when a refresh happens
+- `ZENDESK_CLIENT_SECRET` — only for confidential OAuth clients, and only sent together with `ZENDESK_CLIENT_ID`; public (PKCE) clients need none
 - `MCP_HOST_BRIDGE_STATE` — optional path to a host bridge state file used for credential management
 - `MINDSTONE_REBEL_BRIDGE_STATE` — backwards-compatible alias for `MCP_HOST_BRIDGE_STATE`
 
+### Authentication
+
+Each account uses one of two kinds of credential. For a given subdomain, an OAuth sign-in wins over an API token.
+
+**OAuth sign-in (preferred).** The host app runs the Zendesk sign-in (for example, an authorization-code flow with PKCE) and writes the result to `credentials/<subdomain>.token.json` under `ZENDESK_CONFIG_PATH`, owner-only (0600):
+
+```json
+{
+  "access_token": "…",
+  "refresh_token": "…",
+  "expires_in": 1800,
+  "expires_at": 1767225600000,
+  "token_type": "bearer",
+  "subdomain": "acme",
+  "email": "agent@example.com",
+  "client_id": "your-oauth-client-id",
+  "scope": "read write"
+}
+```
+
+`expires_at` is a millisecond timestamp. `client_id` and `scope` are optional; when present, refreshes use that client and ask for the same scope.
+
+The connector renews the access token itself, within five minutes of expiry or after a 401:
+
+- It sends a JSON request to `https://<subdomain>.zendesk.com/oauth/tokens` with the refresh token and the client id (the token file's `client_id`, else `ZENDESK_CLIENT_ID`). No client secret is needed for a public client.
+- Concurrent tool calls share one refresh, and the token file is re-read first, so a token renewed by another process is used rather than spent again.
+- The rotated refresh token is saved by replacing the file atomically, and only if the file still holds the refresh token that was just spent. A token file that was removed while a refresh was running (the account was disconnected) is not recreated, and one replaced by a new sign-in is kept and used instead.
+- If the renewed token can't be saved (a full or read-only disk), the connector keeps using it in memory and doesn't send the spent refresh token again; `list_zendesk_accounts` shows a `warning` on that account until the file changes. After a restart, the account may need to sign in again.
+- If Zendesk refuses the refresh token (`invalid_grant`, `invalid_client`, `unauthorized_client`), or there is no client id, tool calls fail with `AUTH_FAILED` and "Reconnect Zendesk…", and `list_zendesk_accounts` reports `reconnect-required`. The token file is kept; signing in again replaces it.
+- A temporary failure (server error, rate limit, network) returns `AUTH_REFRESH_FAILED` ("try again in a moment") once the access token has expired; the next call tries again.
+
+**API token.** An entry with `subdomain`, `email` and `apiToken` in `accounts.json` (see below), sent as HTTP Basic auth. API tokens don't expire, so they are always `active`.
+
 ### Standalone config directory
 
-Create a config directory and `accounts.json` file:
+To use an API token, create a config directory and `accounts.json` file:
 
 ```bash
 mkdir -p ~/.mcp/zendesk
@@ -231,7 +264,8 @@ EOF
 
 ## Security notes
 
-- Zendesk API-token credentials live in `accounts.json`; OAuth credentials are read from `credentials/*.token.json` under `ZENDESK_CONFIG_PATH`.
+- Zendesk API-token credentials live in `accounts.json`; OAuth credentials are read from `credentials/*.token.json` under `ZENDESK_CONFIG_PATH`. Renewed tokens are written to a 0600 temp file in the same folder and renamed into place; token files are never deleted on a failed refresh.
+- Access tokens, refresh tokens and the token endpoint's error descriptions are never logged; only HTTP status and OAuth error codes are.
 - Host bridge calls, when configured, go to `127.0.0.1` using the token from `MCP_HOST_BRIDGE_STATE`.
 - Ticket subjects, descriptions, comment bodies, user/org/group/macro/view/field text, and other externally authored strings are wrapped in `<untrusted-content source="...">...</untrusted-content>` envelopes with close-tag escaping before model exposure.
 - Ticket exports that write files are constrained to the system temp directory (symlink-safe canonical containment) and are created inside a fresh private per-export directory with owner-only permissions — only the requested file name is honoured, the full path is returned as `file_path`, and pre-existing files are never touched. `export_zendesk_tickets` and `get_zendesk_tickets_by_ids` are annotated as non-read-only because they can write local export files.
@@ -255,6 +289,8 @@ If that fails, confirm that:
 |---------|--------------|-----|
 | Connector fails to start | Not built yet | Run `npm install && npm run build` |
 | Auth error or empty results | Wrong config path or invalid credentials | Check `ZENDESK_CONFIG_PATH` and `accounts.json` |
+| `AUTH_FAILED` with "Reconnect Zendesk" | The OAuth sign-in was revoked, expired from disuse, or has no client id to renew with | Sign in to Zendesk again from the host app |
+| `AUTH_REFRESH_FAILED` | Zendesk couldn't be reached to renew the sign-in | Try again in a moment |
 | MCP host reports protocol issues | Stdout noise in stdio session | Ensure no `console.log` calls (all logging uses `console.error`) |
 
 ## Licence

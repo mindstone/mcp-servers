@@ -132,6 +132,25 @@ export async function createExclusiveFileWriter(requestedPath: string): Promise<
 
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
 
+/**
+ * A log-safe description of an error: its name and code, then its cause's,
+ * e.g. `TypeError <- Error ENOTFOUND`. Messages are left out: a network
+ * failure's cause names the tenant's host, and other messages can quote
+ * vendor response bodies or local paths.
+ */
+export function describeErrorForLog(error: unknown): string {
+  if (!error || typeof error !== 'object') return typeof error;
+  const parts: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current && typeof current === 'object'; depth++) {
+    const { name, code } = current as { name?: unknown; code?: unknown };
+    const label = typeof name === 'string' ? name : 'Error';
+    parts.push(typeof code === 'string' || typeof code === 'number' ? `${label} ${code}` : label);
+    current = (current as { cause?: unknown }).cause;
+  }
+  return parts.join(' <- ');
+}
+
 export function withErrorHandling<T>(
   fn: (args: T, extra: unknown) => Promise<string>
 ): ToolHandler<T> {
@@ -153,10 +172,10 @@ export function withErrorHandling<T>(
           }],
         };
       }
-      // Unexpected errors: log the raw detail locally for diagnostics, but
-      // return a sanitised message — runtime error text can embed fragments
-      // of vendor-controlled response bodies or environment details.
-      console.error('[Zendesk] Unexpected error while handling tool call:', error);
+      // Unexpected errors: log only the error's names and codes, and return a
+      // sanitised message — runtime error text can embed fragments of
+      // vendor-controlled response bodies, the tenant's host or local paths.
+      console.error(`[Zendesk] Unexpected error while handling tool call (${describeErrorForLog(error)})`);
       return {
         content: [{
           type: 'text',
