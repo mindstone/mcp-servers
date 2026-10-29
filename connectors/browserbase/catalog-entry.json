@@ -1,7 +1,7 @@
 {
   "id": "bundled-browserbase",
   "name": "Cloud Browser",
-  "description": "Browsers in the cloud, run by Browserbase, for unattended, scheduled or cloud runs when nobody is at this computer. Billed per session by Browserbase (one-minute minimum). Create sessions, run web agents, keep logins in saved contexts, fetch and search the web. 'Open a browser session and give me the live view link'.",
+  "description": "Browsers in the cloud, run by Browserbase, for web tasks that run while nobody is at this computer, such as scheduled automations. Keeps sign-ins for later tasks, and can also fetch and search the web. Billed per session by Browserbase (one-minute minimum). 'Open a browser session and give me the live view link'.",
   "category": "productivity",
   "icon": "globe",
   "maturity": "beta",
