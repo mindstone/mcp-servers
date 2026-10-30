@@ -86,6 +86,37 @@ export async function resolveAuthedUserId(): Promise<string | undefined> {
 }
 
 /**
+ * Rewrite mentions of the connector's own bot user (`<@BOT>` or
+ * `<@BOT|label>`) as plain `@name` text. Applied to every text sent with the
+ * PERSON's token: a host that listens for the person's messages mentioning
+ * its bot (a search like `<@BOT> from:<@ME>`) would otherwise be retriggered
+ * by its own replies. Bot-token posts need no rewrite, since that search
+ * only matches the person's own messages. Other users' mentions are kept.
+ */
+export function plainTextOwnBotMentions(
+  text: string,
+  botUserId: string | undefined,
+  botName: string | undefined,
+): string {
+  if (!botUserId) return text;
+  const id = botUserId.replace(/[^A-Za-z0-9]/g, '');
+  if (!id) return text;
+  return text.replace(
+    new RegExp(`<@${id}(?:\\|([^>]*))?>`, 'g'),
+    (_match, label: string | undefined) => `@${botName || label || 'app'}`,
+  );
+}
+
+/** {@link plainTextOwnBotMentions} with the bot identity from the workspace record. */
+export async function withOwnBotMentionsAsPlainText(text: string): Promise<string>;
+export async function withOwnBotMentionsAsPlainText(text: string | undefined): Promise<string | undefined>;
+export async function withOwnBotMentionsAsPlainText(text: string | undefined): Promise<string | undefined> {
+  if (!text) return text;
+  const identity = await getTokenProvider()?.getBotIdentity();
+  return plainTextOwnBotMentions(text, identity?.botUserId, identity?.botUsername);
+}
+
+/**
  * Resolve user IDs into the in-memory cache. Uses parallel `users.info`
  * calls (faster than `users.list` on large workspaces). Failures are
  * non-fatal — unresolved users simply don't get enriched.

@@ -212,6 +212,11 @@ export class SlackTokenProvider {
     return tokens?.authedUserId;
   }
 
+  async getBotIdentity(): Promise<{ botUserId?: string; botUsername?: string }> {
+    const tokens = await this.loadTokens();
+    return { botUserId: tokens?.botUserId, botUsername: tokens?.botUsername };
+  }
+
   async getBotToken(): Promise<string> {
     let tokens = this.cachedTokens ?? (await this.loadTokens());
     if (!tokens?.botToken) {

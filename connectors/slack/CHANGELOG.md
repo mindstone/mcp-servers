@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- Text sent as the person (post, thread reply, scheduled message, edit, file-share comment) writes a mention of the connector's own bot user as plain `@name` text, so a host that listens for the person's mentions of its bot is not retriggered by its own replies.
+
 ## [0.3.1] - 2026-10-28
 
 ### Changed

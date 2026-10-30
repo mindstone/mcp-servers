@@ -213,6 +213,8 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 - `delete_slack_message` — Permanently delete a message you posted.
 - `send_myself_a_note` — Send yourself a note that actually notifies you (posts a DM from the bot to the authenticated user). Use this for "jot something down" / reminders instead of a user-token self-DM.
 
+Text sent as you (`post_slack_message`, `reply_to_slack_thread`, `schedule_slack_message`, `update_slack_message`, and the `upload_slack_file` comment) writes a mention of the connector's own bot user as plain `@name` text, so a host that listens for your mentions of its bot is not retriggered by its own replies. Other users' mentions are sent unchanged.
+
 ### Channels
 - `list_slack_channels` — List channels (filterable, paginated).
 - `get_slack_channel_history` — Get recent messages from a channel.
