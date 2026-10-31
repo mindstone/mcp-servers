@@ -165,6 +165,42 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
     return values as CellValue[][] | undefined;
   }
 
+  private limitValues(
+    values: CellValue[][] | undefined,
+    options: Pick<ReadValuesOptions, 'maxRows' | 'maxCols' | 'majorDimension'>,
+  ): { values: CellValue[][] | undefined; truncated: boolean } {
+    if (options.maxRows === undefined && options.maxCols === undefined) return { values, truncated: false };
+    const byColumns = options.majorDimension === 'COLUMNS';
+    const outerLimit = (byColumns ? options.maxCols : options.maxRows) ?? Infinity;
+    const innerLimit = (byColumns ? options.maxRows : options.maxCols) ?? Infinity;
+    let truncated = false;
+    if (values && values.length > outerLimit) {
+      values = values.slice(0, outerLimit);
+      truncated = true;
+    }
+    values = values?.map((row) => {
+      if (row.length > innerLimit) {
+        truncated = true;
+        return row.slice(0, innerLimit);
+      }
+      return row;
+    });
+    return { values, truncated };
+  }
+
+  private buildLimitedShapedRead(
+    range: string,
+    formattedValues: CellValue[][] | undefined,
+    formulaValues: CellValue[][] | undefined,
+    options: ReadValuesOptions,
+  ): ShapedReadResponse {
+    const formatted = this.limitValues(formattedValues, options);
+    const formulas = this.limitValues(formulaValues, options);
+    const shaped = buildShapedReadResponse(range, formatted.values, formulas.values);
+    if (formatted.truncated || formulas.truncated) shaped.truncated = true;
+    return shaped;
+  }
+
   private buildFormulaFallbackWarning(rawError: unknown, tool: string, input: Record<string, unknown>): ShapedWarning {
     return {
       kind: 'mixed_column_types',
@@ -581,12 +617,13 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
         throw formattedResult.reason;
       }
 
-      const shaped = buildShapedReadResponse(
+      const shaped = this.buildLimitedShapedRead(
         formattedResult.value.data.range || continuationRange,
         this.toCellMatrix(formattedResult.value.data.values),
         formulaResult.status === 'fulfilled'
           ? this.toCellMatrix(formulaResult.value.data.values)
           : undefined,
+        options,
       );
 
       if (formulaResult.status === 'rejected') {
@@ -613,10 +650,12 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
       valueRenderOption: this.resolveValueRenderOption(options.valueView),
     });
 
+    const limited = this.limitValues(this.toCellMatrix(response.data.values), options);
+
     if (options.returnJson) {
       return {
         success: true,
-        data: response.data,
+        data: limited.truncated ? { ...response.data, values: limited.values, truncated: true } : response.data,
       };
     }
 
@@ -626,7 +665,8 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
         title: continuationRange,
         spreadsheetId,
         spreadsheetUrl: this.constructSpreadsheetUrl(spreadsheetId),
-        values: this.toCellMatrix(response.data.values),
+        values: limited.values,
+        ...(limited.truncated ? { truncated: true } : {}),
         valuesRange: response.data.range || continuationRange,
       } as SpreadsheetResponse,
     };
@@ -706,23 +746,10 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
               values = this.toCellMatrix(valueRange.values);
               valuesRange = valueRange.range || options.range;
 
-              // Apply truncation if needed
-              const maxRows = options.maxRows ?? DEFAULT_MAX_ROWS;
-              const maxCols = options.maxCols ?? DEFAULT_MAX_COLS;
-
-              if (values && values.length > maxRows) {
-                values = values.slice(0, maxRows);
-                truncated = true;
-              }
-              if (values) {
-                values = values.map(row => {
-                  if (row.length > maxCols) {
-                    truncated = true;
-                    return row.slice(0, maxCols);
-                  }
-                  return row;
-                });
-              }
+              ({ values, truncated } = this.limitValues(values, {
+                maxRows: options.maxRows ?? DEFAULT_MAX_ROWS,
+                maxCols: options.maxCols ?? DEFAULT_MAX_COLS,
+              }));
             }
           }
         }
@@ -804,20 +831,22 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
         valueRenderOption,
       });
 
+      const limited = this.limitValues(this.toCellMatrix(response.data.values), options);
+
       if (options.returnJson) {
         return {
           success: true,
-          data: response.data,
+          data: limited.truncated ? { ...response.data, values: limited.values, truncated: true } : response.data,
         };
       }
 
       // Format as SpreadsheetResponse for human-readable output
-      const values = this.toCellMatrix(response.data.values);
       const result: SpreadsheetResponse = {
         title: options.range,
         spreadsheetId,
         spreadsheetUrl: this.constructSpreadsheetUrl(spreadsheetId),
-        values,
+        values: limited.values,
+        ...(limited.truncated ? { truncated: true } : {}),
         valuesRange: response.data.range || options.range,
       };
 
@@ -905,7 +934,7 @@ export class SheetsService extends BaseGoogleService<sheets_v4.Sheets> {
         );
       }
 
-      const shaped = buildShapedReadResponse(range, formattedValues, formulaValues);
+      const shaped = this.buildLimitedShapedRead(range, formattedValues, formulaValues, options);
       if (fallbackWarnings.length > 0) {
         shaped.warnings = [...(shaped.warnings ?? []), ...fallbackWarnings];
       }

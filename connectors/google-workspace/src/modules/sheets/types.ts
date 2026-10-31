@@ -51,6 +51,7 @@ export interface ShapedReadResponse {
   formulaCellCount: number;
   cells: CellTriad[][];
   warnings?: ShapedWarning[];
+  truncated?: boolean;
 }
 
 export interface ContinuationTokenPayload {
@@ -100,6 +101,8 @@ export interface ReadSpreadsheetOptions {
 
 export interface ReadValuesOptions {
   range: string; // A1 notation, required
+  maxRows?: number;
+  maxCols?: number;
   majorDimension?: 'ROWS' | 'COLUMNS';
   returnJson?: boolean;
   valueView?: ReadValueView;

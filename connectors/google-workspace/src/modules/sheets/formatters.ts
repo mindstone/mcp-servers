@@ -16,6 +16,8 @@ import type {
 import { wrapUntrustedContent } from '../../utils/untrusted-content.js';
 import { firstRowOfA1 } from './a1Utils.js';
 
+export const VALUES_TRUNCATION_NOTICE = 'Data truncated by max_rows/max_cols; re-read an explicit range to retrieve omitted cells.';
+
 /**
  * Construct a Google Sheets URL from spreadsheet ID
  */
@@ -204,6 +206,10 @@ export function formatShapedReadResponse(
     `Rows: ${response.rowCount}, Columns: ${response.columnCount}`,
     `Formula cells: ${response.formulaCellCount}`,
   ];
+
+  if (response.truncated) {
+    lines.push(VALUES_TRUNCATION_NOTICE);
+  }
 
   if (response.inferredHeaders && response.inferredHeaders.length > 0 && response.inferredHeaderConfidence) {
     lines.push(
