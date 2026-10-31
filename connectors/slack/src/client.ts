@@ -13,7 +13,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ConnectorError, MAX_RETRIES, REQUEST_TIMEOUT_MS, type SlackWorkspace } from './types.js';
 import { SlackTokenProvider } from './tokenProvider.js';
-import { sanitizeErrorMessage } from './utils.js';
+import { AUTH_REQUIRED_CODES, isMissingScopeError, isTokenExpiredError, sanitizeErrorMessage, setSlackErrorTokenRole } from './utils.js';
 
 const SLACK_CONFIG_PATH = process.env.SLACK_CONFIG_PATH;
 const SLACK_TEAM_ID = process.env.SLACK_TEAM_ID;
@@ -188,8 +188,8 @@ export async function getSlackClient(): Promise<WebClient | null> {
 }
 
 /**
- * Resolve the user WebClient. Returns null if no user token is configured
- * or if refresh is disabled and the token has expired.
+ * Resolve the user WebClient. Structured token-provider errors propagate;
+ * otherwise an unavailable user token yields null.
  */
 export async function getSlackUserClient(): Promise<WebClient | null> {
   if (tokenProvider) {
@@ -219,6 +219,43 @@ export async function getSlackUserClient(): Promise<WebClient | null> {
  */
 export async function getSlackReaderClient(): Promise<WebClient | null> {
   return (await getSlackUserClient()) ?? (await getSlackClient());
+}
+
+/** People reads may use either identity. Each callback owns its pagination/state. */
+export async function runSlackRead<T>(read: (client: WebClient) => Promise<T>): Promise<T | null> {
+  let userRefusal: unknown;
+  try {
+    const userClient = await getSlackUserClient();
+    if (userClient) return await read(userClient);
+  } catch (error) {
+    setSlackErrorTokenRole(error, 'user');
+    if (!isTokenExpiredError(error) && !isMissingScopeError(error) &&
+        !(error instanceof ConnectorError && AUTH_REQUIRED_CODES.includes(error.code))) {
+      throw error;
+    }
+    userRefusal = error;
+    const code = error instanceof ConnectorError
+      ? error.extra?.slack_error_code ?? error.code
+      : (error as { data: { error: string } }).data.error;
+    console.warn(
+      { token_role: 'user', code: sanitizeErrorMessage(String(code)), fallback_token_role: 'bot' },
+      '[slack-mcp] People read authorization refused; trying bot authorization once.',
+    );
+  }
+
+  let botClient: WebClient | null = null;
+  try {
+    botClient = await getSlackClient();
+    if (botClient) return await read(botClient);
+  } catch (error) {
+    if (!botClient && userRefusal && error instanceof ConnectorError && error.code === 'NO_TOKEN') {
+      throw userRefusal;
+    }
+    setSlackErrorTokenRole(error, 'bot');
+    throw error;
+  }
+  if (userRefusal) throw userRefusal;
+  return null;
 }
 
 /**

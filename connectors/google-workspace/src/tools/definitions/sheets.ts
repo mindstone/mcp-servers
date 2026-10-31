@@ -85,7 +85,7 @@ export const sheetsTools: ToolMetadata[] = [
 
     Use this for focused data extraction. For spreadsheet metadata, use read_workspace_spreadsheet.
     If you intend to write back to this range, call with value_view: 'shaped' first to see formulas — overwriting formulas with computed values is silently destructive.
-    For large or unbounded reads, returns an anchor envelope (first 50 + last 10 rows + summary). Pass anchor_mode: 'never' for legacy first-N truncation. Use continuation_token to page through the middle.
+    For large or unbounded reads, returns an anchor envelope (first 50 + last 10 rows + summary). Pass anchor_mode: 'never' for the full range, or the first max_rows/max_cols if set. Use continuation_token to page through the middle.
     Rows in the text output are numbered with their sheet row numbers. Merged cells show their value only in the first cell of the merge and the other cells read as empty, so when finding a row by its labels, carry a merged label down to the rows below it.
 
     Usage examples:
@@ -126,6 +126,16 @@ export const sheetsTools: ToolMetadata[] = [
           enum: ['ROWS', 'COLUMNS'],
           description: 'How to group values - by ROWS (default) or COLUMNS'
         },
+        max_rows: {
+          type: 'integer',
+          minimum: 1,
+          description: 'Maximum sheet rows to return from ordinary reads and continuation pages (no limit by default). Does not trim anchor envelopes. On an unbounded or 1000+ row text read, pass anchor_mode: \'never\' for the limit to apply. Truncation creates no continuation token; re-read an explicit range to retrieve omitted cells.'
+        },
+        max_cols: {
+          type: 'integer',
+          minimum: 1,
+          description: 'Maximum sheet columns to return from ordinary reads and continuation pages (no limit by default). Does not trim anchor envelopes. On an unbounded or 1000+ row text read, pass anchor_mode: \'never\' for the limit to apply. Truncation creates no continuation token and does not advance an existing token.'
+        },
         return_json: {
           type: 'boolean',
           description: 'Return raw ValueRange JSON instead of formatted text (default: false)'
@@ -138,7 +148,7 @@ export const sheetsTools: ToolMetadata[] = [
         anchor_mode: {
           type: 'string',
           enum: ['auto', 'always', 'never'],
-          description: `How to handle large or unbounded reads. 'auto' (default) returns an anchor envelope (first 50 + last 10 rows + summary + continuation token) when the range is unbounded or >= 1000 rows. 'always' forces the envelope regardless of size. 'never' returns the legacy first-N truncation. Note: JSON callers default to legacy shape; use 'always' to receive the envelope in JSON mode.`
+          description: `How to handle large or unbounded reads. 'auto' (default) returns an anchor envelope (first 50 + last 10 rows + summary + continuation token) when the range is unbounded or >= 1000 rows. 'always' forces the envelope regardless of size. 'never' returns the full range, or the first max_rows/max_cols if set. Note: JSON callers default to legacy shape; use 'always' to receive the envelope in JSON mode.`
         },
         continuation_token: {
           type: 'string',

@@ -8,7 +8,7 @@ Google Workspace MCP server — Gmail, Calendar, Drive, Docs, Sheets, Slides, Co
 
 ## Status
 
-- **Version:** [0.5.0](./CHANGELOG.md) · npm: not yet published
+- **Version:** [0.5.1](./CHANGELOG.md) · npm: not yet published
 - **Auth:** OAuth (host-orchestrated) ([`GOOGLE_CLIENT_SECRET`](./server.json))
 - **Tools:** [124](./src/tools/definitions/) (Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Chat, Meet, Tasks, Forms, Comments, Account)
 - **Surface:** cloud-api
@@ -172,6 +172,12 @@ The full list lives under [`src/tools/definitions/`](./src/tools/definitions/) a
 | Account | 3 | List, authenticate, and remove workspace accounts. |
 | Tasks | 6 | List task lists, and list/create/update/complete/delete tasks. |
 | Forms | 4 | Read-only access to forms and their responses. |
+
+### Sheets read limits
+
+`read_workspace_spreadsheet_values` accepts `max_rows` and `max_cols` to keep the first rows and columns of a values read, including `value_view: "shaped"` and `return_json: true`. They refer to sheet rows and columns even with `major_dimension: "COLUMNS"`. Omitted limits leave that dimension unchanged. A truncated result reports `truncated: true` in JSON or a truncation notice in text.
+
+Anchor envelopes keep their first/last windows, summary and continuation token unchanged. Limits apply when reading a continuation page, but truncation creates no new token and does not advance the original token. To retrieve omitted cells, re-read an explicit range or repeat the token read with larger limits (or without limits).
 
 ### Shared drives
 

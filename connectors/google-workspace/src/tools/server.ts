@@ -867,6 +867,10 @@ export class GSuiteServer {
               spreadsheet_id?: string;
               spreadsheetId?: string;
               range: string;
+              max_rows?: number;
+              maxRows?: number;
+              max_cols?: number;
+              maxCols?: number;
               major_dimension?: 'ROWS' | 'COLUMNS';
               majorDimension?: 'ROWS' | 'COLUMNS';
               return_json?: boolean;
