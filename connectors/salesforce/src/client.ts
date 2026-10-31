@@ -123,6 +123,17 @@ export async function getConnection(accountId?: string): Promise<jsforce.Connect
 }
 
 /**
+ * Recognize jsforce session errors even when the vendor message varies.
+ */
+export function isSessionExpiredError(error: unknown): boolean {
+  return error instanceof Error && (
+    ('errorCode' in error && error.errorCode === 'INVALID_SESSION_ID') ||
+    error.message.includes('INVALID_SESSION_ID') ||
+    error.message.includes('Session expired')
+  );
+}
+
+/**
  * Execute an operation with a jsforce connection, handling session expiry.
  */
 export async function withConnection<T>(
@@ -139,11 +150,7 @@ export async function withConnection<T>(
   try {
     return await operation(conn);
   } catch (error: unknown) {
-    if (
-      error instanceof Error &&
-      (error.message.includes('INVALID_SESSION_ID') ||
-        error.message.includes('Session expired'))
-    ) {
+    if (isSessionExpiredError(error)) {
       // Clear cached connection on session expiry
       connections.delete(resolvedId);
       throw new ConnectorError(

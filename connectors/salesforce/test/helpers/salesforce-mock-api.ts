@@ -64,6 +64,17 @@ export function createSalesforceHandlers() {
       if (authErr) return authErr;
       const url = new URL(request.url);
       const soql = url.searchParams.get('q') || '';
+      if (/IN\s*\(\s*SELECT ContentDocumentId FROM ContentDocumentLink/i.test(soql)) {
+        return HttpResponse.json(
+          [{ message: "Entity 'ContentDocumentLink' is not supported for semi join inner selects", errorCode: 'MALFORMED_QUERY' }],
+          { status: 400 },
+        );
+      }
+      if (soql.includes('FROM ContentDocumentLink')) {
+        return HttpResponse.json({
+          totalSize: 1, done: true, records: [{ ContentDocumentId: '069000000000001' }],
+        });
+      }
       // Return mock data based on FROM clause
       if (soql.includes('FROM Contact')) {
         return HttpResponse.json({

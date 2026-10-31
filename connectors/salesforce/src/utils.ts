@@ -4,6 +4,12 @@ import { wrapUntrusted } from './untrusted-content.js';
 
 type ToolHandler<T> = (args: T, extra: unknown) => Promise<CallToolResult>;
 
+const VENDOR_ERROR_RESOLUTIONS = new Map([
+  ['INVALID_FIELD', "Check the field's API name with salesforce_describe_object; the field may not exist or may be hidden from this user."],
+  ['INVALID_TYPE', "Find the object's API name with salesforce_list_objects (custom_only=false); it may not exist or may be hidden from this user."],
+  ['MALFORMED_QUERY', 'Check the SOQL syntax in the error; dates are written unquoted.'],
+]);
+
 /**
  * Wraps a tool handler with standard error handling.
  */
@@ -49,6 +55,7 @@ export function withErrorHandling<T>(
                 error: wrapUntrusted(error.message, 'salesforce:vendor_errors'),
                 code: 'VENDOR_ERROR',
                 vendor_code: vendorCode,
+                resolution: VENDOR_ERROR_RESOLUTIONS.get(vendorCode),
               }),
             },
           ],
@@ -76,27 +83,16 @@ export function withErrorHandling<T>(
 }
 
 /**
- * Escape a string value for safe use in SOQL queries.
- *
- * Escapes the four characters that SOQL gives special meaning to:
- *   - `\\`  (backslash — the SOQL escape character)
- *   - `'`   (single quote — string delimiter; SOQL doubles the quote)
- *   - `%`   (LIKE wildcard — matches zero-or-more characters)
- *   - `_`   (LIKE wildcard — matches exactly one character)
- *
- * The wildcard characters MUST be escaped at every interpolation site so
- * that user-supplied substrings cannot expand the pattern beyond the
- * literal value the caller intended. For LIKE sites, prefer the
- * dedicated `escapeSOQLLike` helper for an explicit signal of intent.
+ * Escape a SOQL string literal: backslashes first, then apostrophes with a
+ * backslash. LIKE wildcards (%) and (_) remain patterns; use escapeSOQLLike
+ * when interpolating a literal substring into a LIKE pattern.
  */
 export function escapeSOQL(value: string): string {
   if (!value) return '';
   return value
     // Backslash MUST be escaped first to avoid double-escaping.
     .replace(/\\/g, '\\\\')
-    .replace(/'/g, "''")
-    .replace(/%/g, '\\%')
-    .replace(/_/g, '\\_');
+    .replace(/'/g, "\\'");
 }
 
 /**
@@ -109,17 +105,16 @@ export function escapeSOQL(value: string): string {
 export function escapeSOSL(term: string): string {
   if (!term) return '';
   // Backslash MUST be escaped first to avoid double-escaping.
-  return term.replace(/\\/g, '\\\\').replace(/([?&|!{}[\]()^~*:"+-])/g, '\\$1');
+  return term.replace(/\\/g, '\\\\').replace(/([?&|!{}[\]()^~*:"'+-])/g, '\\$1');
 }
 
 /**
  * Escape a user-supplied substring for interpolation inside a SOQL
- * `LIKE '%...%'` clause. Identical to `escapeSOQL` semantically (both
- * escape `\\`, `'`, `%`, `_`) but exists as a separate helper so every
- * `LIKE` site is unambiguously marked as wildcard-aware.
+ * `LIKE '%...%'` clause. Escape SOQL string delimiters and backslashes, then
+ * escape (%) and (_) so caller-supplied wildcards match literally.
  */
 export function escapeSOQLLike(value: string): string {
-  return escapeSOQL(value);
+  return escapeSOQL(value).replace(/%/g, '\\%').replace(/_/g, '\\_');
 }
 
 /**
@@ -172,7 +167,7 @@ export function isValidFieldName(field: string): boolean {
  * Validate query field names (supports dot-notation for relationship fields).
  */
 export function isValidQueryFieldName(field: string): boolean {
-  return /^[a-zA-Z][a-zA-Z0-9_.]*$/.test(field);
+  return /^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)*$/.test(field);
 }
 
 /**
@@ -235,15 +230,14 @@ export function formatSOQLDateTime(value: string, paramName: string): string {
 export function validateFields(
   fields: string[],
   defaultFields: string[],
-  validator: (field: string) => boolean = isValidFieldName,
 ): string[] {
   if (!fields || fields.length === 0) return defaultFields;
-  const invalidFields = fields.filter((f) => !validator(f));
+  const invalidFields = fields.filter((f) => !isValidQueryFieldName(f));
   if (invalidFields.length > 0) {
     throw new ConnectorError(
       `Invalid field names: ${invalidFields.join(', ')}`,
       'INVALID_FIELD_NAMES',
-      'Field names must start with a letter and contain only letters, numbers, and underscores (e.g., Id, Name, Custom_Field__c)',
+      'Use field API names or relationship paths such as Owner.Name; each segment must start with a letter and contain only letters, numbers, and underscores (e.g., Id, Custom_Field__c)',
     );
   }
   return fields;

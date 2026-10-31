@@ -75,6 +75,46 @@ describe('Note tools — Salesforce MCP server', () => {
     expect(record.Content).toBeUndefined();
   });
 
+  it.each([0, 1, 149, 150])('reads links first and signals truncation only at 150 links (%i)', async (linkCount) => {
+    const queries: string[] = [];
+    const noteId = linkCount === 1 ? "069000000000001\\'" : '069000000000001';
+    mswServer.use(
+      http.get('*/services/data/*/query*', ({ request }) => {
+        const query = new URL(request.url).searchParams.get('q') ?? '';
+        queries.push(query);
+        if (query.startsWith('SELECT ContentDocumentId FROM ContentDocumentLink')) {
+          return HttpResponse.json({
+            totalSize: linkCount, done: true,
+            records: Array.from({ length: linkCount }, () => ({ ContentDocumentId: noteId })),
+          });
+        }
+        return HttpResponse.json({ totalSize: 1, done: true, records: [{ Id: '069000000000001', Title: 'Synthetic note' }] });
+      }),
+    );
+    tempConfig = createConfigWithToken();
+    testClient = await createTestClient({ env: createAuthEnv(tempConfig.configPath) });
+
+    const result = await testClient.callTool('salesforce_get_notes', {
+      parent_id: "001000000000001'", include_body: true, limit: 7,
+    });
+    expect(result.json.ok).toBe(true);
+    expect(queries[0]).toBe("SELECT ContentDocumentId FROM ContentDocumentLink WHERE LinkedEntityId = '001000000000001\\'' LIMIT 150");
+    if (linkCount === 0) {
+      expect(queries).toHaveLength(1);
+      expect(result.json).toEqual({ ok: true, records: [], totalSize: 0 });
+    } else {
+      expect(queries).toHaveLength(2);
+      expect(queries[1]).toBe(
+        'SELECT Id, Title, TextPreview, CreatedDate, LastModifiedDate, OwnerId, Content FROM ContentNote WHERE Id IN (' +
+        Array.from({ length: linkCount }, () => linkCount === 1 ? "'069000000000001\\\\\\''" : "'069000000000001'").join(', ') +
+        ') ORDER BY CreatedDate DESC LIMIT 7',
+      );
+      expect(result.json.records[0].Id).toBe('069000000000001');
+      if (linkCount === 150) expect(result.json.truncated).toBe(true);
+      else expect(result.json).not.toHaveProperty('truncated');
+    }
+  });
+
   it('salesforce_create_note creates a ContentNote and links it to the parent', async () => {
     mswServer.use(...createSalesforceHandlers());
     tempConfig = createConfigWithToken();
