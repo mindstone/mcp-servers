@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.mindstone/mcp-server-computers",
   "title": "Computers",
-  "description": "Linux computers with a browser on your own Fly.io, E2B or Google Cloud account: run commands, copy files, use websites",
+  "description": "Linux computers with a browser on your own Fly.io, E2B or Google Cloud account",
   "version": "0.1.0",
   "repository": {
     "url": "https://github.com/mindstone/mcp-servers",
