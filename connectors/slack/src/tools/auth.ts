@@ -1,8 +1,9 @@
+import type { WebClient } from '@slack/web-api';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { authRequiredJson, errorJson, withErrorHandling } from '../utils.js';
+import { AUTH_REQUIRED_CODES, authRequiredJson, errorJson, isMissingScopeError, isTokenExpiredError, sanitizeErrorMessage, withErrorHandling } from '../utils.js';
 import { getSlackClient, getSlackUserClient, getTokenProvider, getWorkspaces } from '../client.js';
-import { ConnectorError, TOKEN_EXPIRED_REFRESH_DISABLED } from '../types.js';
+import { ConnectorError } from '../types.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 
 /**
@@ -52,7 +53,7 @@ completes sign-in:
 Returns:
 - connected: true/false
 - workspaces: array of connected workspaces with team names
-- tokenHealth: bot/user token status (valid|missing|refreshable|expired)
+- tokenHealth: bot/user token status (valid|refused|unavailable|missing|not_configured)
 
 CRITICAL: If response shows connected=false, call authenticate_slack_workspace
 to start the connection flow. The host will guide the user through OAuth.`,
@@ -80,59 +81,50 @@ to start the connection flow. The host will guide the user through OAuth.`,
         });
       }
 
-      let tokenValid = false;
-      let teamInfo: { team?: string; user?: string } | null = null;
-      let botClient = null;
-      try {
-        botClient = await getSlackClient();
-      } catch (err) {
-        // Token expired AND refresh is disabled on this surface — surface
-        // the structured auth_required so the host can dispatch reauth.
-        // Other ConnectorErrors (e.g. NO_TOKEN) report as connected:false
-        // with action_required guidance instead of fail-closing the call.
-        if (err instanceof ConnectorError && err.code === TOKEN_EXPIRED_REFRESH_DISABLED) {
-          return authRequiredJson();
-        }
-        // For all other resolution failures, leave botClient null and
-        // continue — the response will report the workspace as not
-        // connected with recovery guidance.
-      }
-      if (botClient) {
+      async function probe(getClient: () => Promise<WebClient | null>, role: 'bot' | 'user') {
+        const missingStatus = role === 'bot' ? 'missing' : 'not_configured';
         try {
-          const authResult = await botClient.auth.test();
-          tokenValid = authResult.ok === true;
-          teamInfo = {
-            team: wrapUntrusted(authResult.team, SLACK_WORKSPACE_NAME_SOURCE),
-            user: authResult.user,
+          const client = await getClient();
+          if (!client) return { valid: false, status: missingStatus, teamInfo: null };
+          const result = await client.auth.test();
+          return {
+            valid: result.ok === true,
+            status: result.ok === true ? 'valid' : 'unavailable',
+            teamInfo: result.ok === true ? {
+              team: wrapUntrusted(result.team, SLACK_WORKSPACE_NAME_SOURCE),
+              user: result.user,
+            } : null,
           };
-        } catch {
-          tokenValid = false;
+        } catch (error) {
+          const code = error instanceof ConnectorError ? error.code
+            : (error as { data?: { error?: string } })?.data?.error;
+          console.warn(
+            { token_role: role, code: code ? sanitizeErrorMessage(code) : 'unavailable' },
+            '[slack-mcp] Workspace authorization probe failed.',
+          );
+          const refused = isTokenExpiredError(error) || isMissingScopeError(error) ||
+            (error instanceof ConnectorError && AUTH_REQUIRED_CODES.includes(error.code));
+          return {
+            valid: false,
+            status: code === 'NO_TOKEN' ? missingStatus : refused ? 'refused' : 'unavailable',
+            teamInfo: null,
+            refreshDisabled: code === 'TOKEN_EXPIRED_REFRESH_DISABLED',
+          };
         }
       }
-
-      let userClient = null;
-      try {
-        userClient = await getSlackUserClient();
-      } catch {
-        // ignore — user token is non-fatal
-      }
+      const bot = await probe(getSlackClient, 'bot');
+      const user = await probe(getSlackUserClient, 'user');
+      const connected = bot.valid || user.valid;
+      if (!connected && (bot.refreshDisabled || user.refreshDisabled)) return authRequiredJson();
+      const teamInfo = bot.teamInfo ?? user.teamInfo;
 
       const tokenProvider = getTokenProvider();
       const tokenData = tokenProvider ? await tokenProvider.loadTokens() : null;
       const ONE_HOUR_MS = 60 * 60 * 1000;
       const now = Date.now();
 
-      let botTokenStatus: string;
-      if (tokenValid) botTokenStatus = 'valid';
-      else if (!tokenData?.botToken) botTokenStatus = 'missing';
-      else if (tokenData?.botRefreshToken) botTokenStatus = 'refreshable';
-      else botTokenStatus = 'expired';
-
-      let userTokenStatus: string;
-      if (userClient) userTokenStatus = 'valid';
-      else if (!tokenData?.userToken) userTokenStatus = 'not_configured';
-      else if (tokenData?.userRefreshToken) userTokenStatus = 'refreshable';
-      else userTokenStatus = 'expired';
+      const botTokenStatus = bot.status === 'missing' && tokenData?.botToken ? 'unavailable' : bot.status;
+      const userTokenStatus = user.status === 'not_configured' && tokenData?.userToken ? 'unavailable' : user.status;
 
       const refreshEnabled = !!(tokenData?.botRefreshToken || tokenData?.userRefreshToken);
       const botNearExpiry =
@@ -146,8 +138,8 @@ to start the connection flow. The host will guide the user through OAuth.`,
 
       return JSON.stringify({
         ok: true,
-        connected: tokenValid,
-        userTokenEnabled: !!userClient,
+        connected,
+        userTokenEnabled: user.valid,
         tokenHealth: {
           botToken: botTokenStatus,
           userToken: userTokenStatus,
@@ -161,10 +153,10 @@ to start the connection flow. The host will guide the user through OAuth.`,
           connectedAt: w.authedAt,
         })),
         currentWorkspace: teamInfo,
-        message: tokenValid
+        message: connected
           ? `Connected to Slack workspace: ${wrapUntrusted(workspaces[0].teamName, SLACK_WORKSPACE_NAME_SOURCE)}.`
-          : 'Workspace configured but token may be invalid.',
-        ...(tokenValid
+          : 'Workspace configured, but neither authorization passed the Slack connection check.',
+        ...(connected
           ? {}
           : {
               action_required:

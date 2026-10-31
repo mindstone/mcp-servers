@@ -5,9 +5,9 @@
  */
 
 import type { WebClient } from '@slack/web-api';
-import { getSlackClient, getSlackReaderClient, getSlackUserClient, getTokenProvider } from './client.js';
+import { getSlackReaderClient, getSlackUserClient, getTokenProvider, runSlackRead } from './client.js';
 import { ConnectorError, type DmRecipient } from './types.js';
-import { sanitizeErrorMessage } from './utils.js';
+import { AUTH_REQUIRED_CODES, isMissingScopeError, isTokenExpiredError, sanitizeErrorMessage } from './utils.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
 /** Shape of a projected Slack file attachment surfaced in tool responses. */
@@ -128,9 +128,6 @@ export async function withOwnBotMentionsAsPlainText(text: string | undefined): P
  * non-fatal — unresolved users simply don't get enriched.
  */
 export async function resolveUserIdsToCache(userIds: string[]): Promise<void> {
-  const client = (await getSlackClient()) ?? (await getSlackReaderClient());
-  if (!client) return;
-
   const uniqueIds = [...new Set(userIds.map((id) => id.toUpperCase()))];
   const inFlightPromises: Promise<void>[] = [];
   const unknownIds: string[] = [];
@@ -151,24 +148,46 @@ export async function resolveUserIdsToCache(userIds: string[]): Promise<void> {
   }
 
   const lookupPromise = (async () => {
-    const CONCURRENCY = 5;
-    for (let i = 0; i < unknownIds.length; i += CONCURRENCY) {
-      const batch = unknownIds.slice(i, i + CONCURRENCY);
-      await Promise.allSettled(
-        batch.map(async (id) => {
-          try {
-            const result = await client.users.info({ user: id });
+    try {
+      const resolved = await runSlackRead(async (client) => {
+        const users = new Map<string, CachedUser>();
+        const CONCURRENCY = 5;
+        for (let i = 0; i < unknownIds.length; i += CONCURRENCY) {
+          const batch = unknownIds.slice(i, i + CONCURRENCY);
+          const outcomes = await Promise.allSettled(
+            batch.map(id => client.users.info({ user: id })),
+          );
+          for (const [index, outcome] of outcomes.entries()) {
+            const id = batch[index];
+            if (outcome.status === 'rejected') {
+              const error: unknown = outcome.reason;
+              if (isTokenExpiredError(error) || isMissingScopeError(error)) throw error;
+              const message = error instanceof Error ? error.message : String(error);
+              console.warn(
+                { error: sanitizeErrorMessage(message) },
+                '[slack-mcp] User name enrichment unavailable.',
+              );
+              continue;
+            }
+            const result = outcome.value;
             if (result.ok && result.user) {
               const u = result.user;
-              userCache.set(id, {
+              users.set(id, {
                 name: u.name || id,
                 displayName: u.profile?.display_name || u.real_name || u.name || id,
               });
             }
-          } catch {
-            // Best-effort
           }
-        }),
+        }
+        return users;
+      });
+      for (const [id, user] of resolved ?? []) userCache.set(id, user);
+    } catch (error) {
+      if (error instanceof ConnectorError && !AUTH_REQUIRED_CODES.includes(error.code)) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        { error: sanitizeErrorMessage(message) },
+        '[slack-mcp] User name enrichment unavailable.',
       );
     }
   })();
