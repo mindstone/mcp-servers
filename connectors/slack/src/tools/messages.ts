@@ -14,6 +14,7 @@ import {
   resolveDmRecipient,
   resolveUserIdsToCache,
   SLACK_USER_PROFILE_SOURCE,
+  withOwnBotMentionsAsPlainText,
 } from '../helpers.js';
 import { notConnectedJson } from './auth.js';
 import { wrapUntrusted } from '../untrusted-content.js';
@@ -719,6 +720,9 @@ PARAMETER: text. Use text, not message, note, or channel.`,
         });
       }
 
+      // Bot-token post: no own-bot-mention rewrite needed, because a host's
+      // search for the person's mentions of its bot only matches messages
+      // sent as the person (see withOwnBotMentionsAsPlainText).
       const result = await botClient.chat.postMessage({
         channel: authedUserId,
         text: args.text,
@@ -942,7 +946,7 @@ Posted as the user — messages are editable in Slack.`,
 
       const result = await userClient.chat.postMessage({
         channel: channelId,
-        text: args.text,
+        text: await withOwnBotMentionsAsPlainText(args.text),
       });
       return JSON.stringify({
         ok: true,
@@ -1010,7 +1014,7 @@ thread_ts_slack on a message returned by get_slack_channel_history.`,
       const result = await userClient.chat.postMessage({
         channel: channelId,
         thread_ts: args.thread_ts,
-        text: args.text,
+        text: await withOwnBotMentionsAsPlainText(args.text),
       });
       return JSON.stringify({
         ok: true,
@@ -1106,7 +1110,7 @@ channel per 5 minutes. Max 120 days in advance.`,
       }
       const result = await userClient.chat.scheduleMessage({
         channel: channelId,
-        text: args.text,
+        text: await withOwnBotMentionsAsPlainText(args.text),
         post_at: args.post_at,
       });
       const scheduledFor = new Date(args.post_at * 1000).toISOString();
@@ -1288,7 +1292,7 @@ others').`,
       const result = await userClient.chat.update({
         channel: channelId,
         ts: args.ts,
-        text: args.text,
+        text: await withOwnBotMentionsAsPlainText(args.text),
       });
       return JSON.stringify({
         ok: true,
