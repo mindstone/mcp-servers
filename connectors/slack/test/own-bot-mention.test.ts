@@ -133,7 +133,22 @@ describe('plainTextOwnBotMentions', () => {
   });
 
   it('cannot rebuild mention markup from a nested label', () => {
-    expect(plainTextOwnBotMentions(`<@${BOT_ID}|<@${BOT_ID}>>`, BOT_ID, undefined)).toBe('@app>');
+    const out = plainTextOwnBotMentions(`<@${BOT_ID}|<@${BOT_ID}>>`, BOT_ID, undefined);
+    expect(out).toBe('@app|@app>');
+    expect(out).not.toContain(`<@${BOT_ID}`);
+  });
+
+  it('rewrites an unclosed bot mention and keeps the text after it', () => {
+    expect(plainTextOwnBotMentions(`hi <@${BOT_ID}|note`, BOT_ID, undefined)).toBe('hi @app|note');
+  });
+
+  it('stays fast on many unclosed bot mentions', () => {
+    const text = `<@${BOT_ID}|`.repeat(16_000); // about 160k characters, no closing >
+    const started = performance.now();
+    const out = plainTextOwnBotMentions(text, BOT_ID, undefined);
+    const elapsedMs = performance.now() - started;
+    expect(out).not.toContain(`<@${BOT_ID}`);
+    expect(elapsedMs).toBeLessThan(100);
   });
 
   it('strips angle brackets from the stored bot username', () => {
