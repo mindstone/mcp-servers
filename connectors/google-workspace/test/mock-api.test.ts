@@ -2971,3 +2971,126 @@ describe('Sheets read row numbers', () => {
     expect(tableLines(spreadsheet).map((line) => line.split('|')[0])).toEqual(['20', '21', '22']);
   });
 });
+
+describe('Sheets values read limits', () => {
+  const range = 'Summary!A20:C22';
+  const values = [['Label', 'Total', 'Extra'], ['First', '3', 'omit'], ['Last', '7', 'omit']];
+  const unwrap = (result: unknown) => JSON.parse(JSON.stringify(result).replace(/<untrusted-content[^>]*>|<\/untrusted-content>/g, ''));
+
+  it.each(['formatted', 'formula', 'unformatted'] as const)('limits returned %s values by rows and columns independently', async (value_view) => {
+    installTrackerValuesMocks({ [range]: { range, values } });
+    const handlers = await loadHandlers();
+    const args = { spreadsheet_id: TRACKER_ID, range, value_view, return_json: true };
+
+    expect(unwrap(await handlers.handleReadSpreadsheetValues(args)).values).toEqual(values);
+    expect(unwrap(await handlers.handleReadSpreadsheetValues({ ...args, max_rows: 2 })).values).toEqual(values.slice(0, 2));
+    expect(unwrap(await handlers.handleReadSpreadsheetValues({ ...args, max_cols: 1 })).values).toEqual(values.map((row) => row.slice(0, 1)));
+    const limited = unwrap(await handlers.handleReadSpreadsheetValues({ ...args, max_rows: 2, max_cols: 2 }));
+    expect(limited).toMatchObject({ values: [['Label', 'Total'], ['First', '3']], truncated: true });
+    expect(limited.continuationToken).toBeUndefined();
+
+    const text = await handlers.handleReadSpreadsheetValues({ ...args, return_json: false, max_rows: 2, max_cols: 1 });
+    expect(tableLines(text).map((line) => line.split('|')[0])).toEqual(['20', '21']);
+    expect(String(text)).not.toContain('Extra');
+    expect(String(text)).toContain('truncated');
+  });
+
+  it('accepts maxRows/maxCols aliases on the values handler', async () => {
+    installTrackerValuesMocks({ [range]: { range, values } });
+    const handlers = await loadHandlers();
+    const output = unwrap(await handlers.handleReadSpreadsheetValues({
+      spreadsheet_id: TRACKER_ID, range, return_json: true, maxRows: 2, maxCols: 1,
+    }));
+    expect(output).toMatchObject({ values: [['Label'], ['First']], truncated: true });
+  });
+
+  it('limits sheet rows and columns when the API groups values by columns', async () => {
+    installTrackerValuesMocks({ [range]: { range, values } });
+    const handlers = await loadHandlers();
+    const output = unwrap(await handlers.handleReadSpreadsheetValues({
+      spreadsheet_id: TRACKER_ID, range, major_dimension: 'COLUMNS', return_json: true, max_rows: 2, max_cols: 1,
+    }));
+    expect(output.values).toEqual([['Label', 'Total']]);
+    expect(output.majorDimension).toBe('COLUMNS');
+  });
+
+  it('keeps formulas and shaped counts consistent with the retained cells', async () => {
+    mswServer.use(http.get(/https:\/\/sheets\.googleapis\.com\/v4\/spreadsheets\/tracker-sheet\/values\/.+/, ({ request }) => {
+      const formulas = new URL(request.url).searchParams.get('valueRenderOption') === 'FORMULA';
+      return HttpResponse.json({ range, values: formulas ? [['Label', 'Total', 'Extra'], ['First', '=1+2', '=4+5'], ['Last', '=3+4', '=5+6']] : values });
+    }));
+    const handlers = await loadHandlers();
+    const output = unwrap(await handlers.handleReadSpreadsheetValues({
+      spreadsheet_id: TRACKER_ID, range, value_view: 'shaped', return_json: true, max_rows: 2, max_cols: 2,
+    }));
+    expect(output).toMatchObject({ rowCount: 2, columnCount: 2, formulaCellCount: 1, truncated: true });
+    expect(output.cells).toEqual([[{ value: 'Label' }, { value: 'Total' }], [{ value: 'First' }, { value: '3', formula: '=1+2' }]]);
+    expect(output.columnTypes).toHaveLength(2);
+    const text = String(await handlers.handleReadSpreadsheetValues({
+      spreadsheet_id: TRACKER_ID, range, value_view: 'shaped', max_rows: 2, max_cols: 2,
+    }));
+    expect(text).toContain('Data truncated by max_rows/max_cols; re-read an explicit range to retrieve omitted cells.');
+    expect(text).not.toContain('Extra');
+  });
+
+  it('advertises limits and rejects limits of the wrong type', async () => {
+    const { sheetsTools } = await import('../src/tools/definitions/sheets.js');
+    const tool = sheetsTools.find((tool) => tool.name === 'read_workspace_spreadsheet_values');
+    expect(tool?.inputSchema.properties).toMatchObject({ max_rows: { type: 'integer', minimum: 1 }, max_cols: { type: 'integer', minimum: 1 } });
+  });
+
+  it.each(['max_rows', 'max_cols', 'maxRows', 'maxCols'].flatMap((key) =>
+    ['2', 0, -1, 2.5, 0.5, Infinity, NaN].map((value) => [key, value] as const),
+  ))('rejects invalid %s=%s in the runtime guard', async (key, value) => {
+    const { isReadSpreadsheetValuesArgs } = await import('../src/tools/type-guards.js');
+    expect(isReadSpreadsheetValuesArgs({ spreadsheet_id: TRACKER_ID, range, [key]: value })).toBe(false);
+  });
+
+  it.each([
+    ['max_rows', { max_rows: 2.5 }], ['max_cols', { max_cols: 0 }],
+    ['max_rows', { maxRows: -1 }], ['max_cols', { maxCols: '2' }],
+    ['max_rows, max_cols', { max_rows: 0, max_cols: 2.5 }],
+  ])('names invalid limits as positive whole numbers: %s', async (fields, limits) => {
+    const { assertReadSpreadsheetValuesArgs } = await import('../src/tools/type-guards.js');
+    expect(() => assertReadSpreadsheetValuesArgs({ spreadsheet_id: TRACKER_ID, range, ...limits }))
+      .toThrow(`Invalid read spreadsheet values parameters: ${fields} must be positive whole numbers.`);
+  });
+
+  it.each(['formatted', 'shaped'] as const)('preserves %s anchor windows and tokens, then limits the continuation page', async (value_view) => {
+    mswServer.use(
+      http.get(`https://sheets.googleapis.com/v4/spreadsheets/${TRACKER_ID}`, () => HttpResponse.json({
+        spreadsheetId: TRACKER_ID,
+        sheets: [{ properties: { sheetId: 103, title: 'Summary', gridProperties: { rowCount: 100, columnCount: 3 } } }],
+      })),
+      http.get(/https:\/\/sheets\.googleapis\.com\/v4\/spreadsheets\/tracker-sheet\/values\/.+/, ({ request }) => {
+        const requested = decodeURIComponent(new URL(request.url).pathname.split('/values/')[1]);
+        const [, start, end] = /!A(\d+):C(\d+)$/.exec(requested)!;
+        return HttpResponse.json({ range: requested, values: Array.from({ length: Number(end) - Number(start) + 1 }, (_, index) => [Number(start) + index, 'keep', 'extra']) });
+      }),
+    );
+    const handlers = await loadHandlers();
+    const args = { spreadsheet_id: TRACKER_ID, range: 'Summary!A1:C100', value_view, anchor_mode: 'always' as const, return_json: true, max_rows: 2, max_cols: 1 };
+    const anchor = unwrap(await handlers.handleReadSpreadsheetValues(args));
+    expect(anchor.firstRows).toHaveLength(50);
+    expect(anchor.firstRows[0]).toHaveLength(3);
+    expect(anchor.lastRows).toHaveLength(10);
+    expect(anchor.continuationToken).toEqual(expect.any(String));
+
+    const page = unwrap(await handlers.handleReadSpreadsheetValues({ ...args, continuation_token: anchor.continuationToken }));
+    expect(page.truncated).toBe(true);
+    expect(page.continuationToken).toBeUndefined();
+    if (value_view === 'shaped') {
+      expect(page).toMatchObject({ rowCount: 2, columnCount: 1 });
+      expect(page.cells).toEqual([[{ value: 51 }], [{ value: 52 }]]);
+    } else {
+      expect(page.values).toEqual([[51], [52]]);
+    }
+    const text = String(await handlers.handleReadSpreadsheetValues({ ...args, return_json: false, continuation_token: anchor.continuationToken }));
+    expect(text).toContain('Data truncated by max_rows/max_cols; re-read an explicit range to retrieve omitted cells.');
+    expect(tableLines(text).map((line) => line.split('|')[0])).toEqual(['51', '52']);
+    // The original token still addresses the whole middle; truncation does not advance it.
+    const fullPage = unwrap(await handlers.handleReadSpreadsheetValues({ ...args, max_rows: undefined, max_cols: undefined, continuation_token: anchor.continuationToken }));
+    expect(value_view === 'shaped' ? fullPage.cells : fullPage.values).toHaveLength(40);
+    await expect(handlers.handleReadSpreadsheetValues({ ...args, spreadsheet_id: 'other-sheet', continuation_token: anchor.continuationToken })).rejects.toThrow(/does not match the requested spreadsheet/);
+  });
+});

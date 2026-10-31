@@ -1116,6 +1116,8 @@ interface ReadSpreadsheetValuesArgs {
   email: string;
   spreadsheetId: string;
   range: string;
+  maxRows?: number;
+  maxCols?: number;
   majorDimension?: 'ROWS' | 'COLUMNS';
   returnJson?: boolean;
   value_view?: 'formatted' | 'shaped' | 'formula' | 'unformatted';
@@ -1214,6 +1216,8 @@ export function isReadSpreadsheetValuesArgs(args: unknown): args is ReadSpreadsh
   const params = args as Partial<ReadSpreadsheetValuesArgs>;
   const rawParams = args as Record<string, unknown>;
   const spreadsheetId = readAliasedArg<string>(rawParams, 'spreadsheet_id', 'spreadsheetId');
+  const maxRows = readAliasedArg<number>(rawParams, 'max_rows', 'maxRows');
+  const maxCols = readAliasedArg<number>(rawParams, 'max_cols', 'maxCols');
   const majorDimension = readAliasedArg<'ROWS' | 'COLUMNS'>(rawParams, 'major_dimension', 'majorDimension');
   const returnJson = readAliasedArg<boolean>(rawParams, 'return_json', 'returnJson');
   const valueView = readAliasedArg<'formatted' | 'shaped' | 'formula' | 'unformatted'>(rawParams, 'value_view', 'valueView');
@@ -1222,6 +1226,8 @@ export function isReadSpreadsheetValuesArgs(args: unknown): args is ReadSpreadsh
   return (params.email === undefined || typeof params.email === 'string') &&
     typeof spreadsheetId === 'string' &&
     typeof params.range === 'string' &&
+    (maxRows === undefined || (typeof maxRows === 'number' && Number.isInteger(maxRows) && maxRows >= 1)) &&
+    (maxCols === undefined || (typeof maxCols === 'number' && Number.isInteger(maxCols) && maxCols >= 1)) &&
     (majorDimension === undefined || majorDimension === 'ROWS' || majorDimension === 'COLUMNS') &&
     (returnJson === undefined || typeof returnJson === 'boolean') &&
     (valueView === undefined || ['formatted', 'shaped', 'formula', 'unformatted'].includes(valueView)) &&
@@ -1231,7 +1237,15 @@ export function isReadSpreadsheetValuesArgs(args: unknown): args is ReadSpreadsh
 
 export function assertReadSpreadsheetValuesArgs(args: unknown): asserts args is ReadSpreadsheetValuesArgs {
   if (!isReadSpreadsheetValuesArgs(args)) {
-    throw new Error('Invalid read spreadsheet values parameters. Required: email, spreadsheet_id, range');
+    const params = typeof args === 'object' && args !== null ? args as Record<string, unknown> : {};
+    const invalidLimits = ['max_rows', 'max_cols'].filter((key, index) => {
+      const value = readAliasedArg<unknown>(params, key, index === 0 ? 'maxRows' : 'maxCols');
+      return value !== undefined && !(typeof value === 'number' && Number.isInteger(value) && value >= 1);
+    });
+    if (invalidLimits.length) {
+      throw new Error(`Invalid read spreadsheet values parameters: ${invalidLimits.join(', ')} must be positive whole numbers.`);
+    }
+    throw new Error('Invalid read spreadsheet values parameters. Required: spreadsheet_id, range; email is optional.');
   }
 }
 

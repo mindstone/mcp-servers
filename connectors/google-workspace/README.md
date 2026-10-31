@@ -173,6 +173,12 @@ The full list lives under [`src/tools/definitions/`](./src/tools/definitions/) a
 | Tasks | 6 | List task lists, and list/create/update/complete/delete tasks. |
 | Forms | 4 | Read-only access to forms and their responses. |
 
+### Sheets read limits
+
+`read_workspace_spreadsheet_values` accepts `max_rows` and `max_cols` to keep the first rows and columns of a values read, including `value_view: "shaped"` and `return_json: true`. They refer to sheet rows and columns even with `major_dimension: "COLUMNS"`. Omitted limits leave that dimension unchanged. A truncated result reports `truncated: true` in JSON or a truncation notice in text.
+
+Anchor envelopes keep their first/last windows, summary and continuation token unchanged. Limits apply when reading a continuation page, but truncation creates no new token and does not advance the original token. To retrieve omitted cells, re-read an explicit range or repeat the token read with larger limits (or without limits).
+
 ### Shared drives
 
 All Drive file, permission, and comment tools work on shared-drive files (the `files.*` and `permissions.*` calls pass `supportsAllDrives`; the Comments API addresses files by ID and defines no such flag). Listing and search default to the user's own corpus plus files shared with them, so shared-drive content the user has access to but has never opened may not surface by default. To work with shared drives explicitly:

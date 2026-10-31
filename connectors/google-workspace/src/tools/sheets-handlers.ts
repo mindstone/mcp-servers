@@ -4,6 +4,7 @@ import { getSheetsService } from '../modules/sheets/index.js';
 import { ActionableA1Error, normaliseA1Range } from '../modules/sheets/a1Utils.js';
 import { rewriteSheetsApiError } from '../modules/sheets/errorRewriter.js';
 import {
+  VALUES_TRUNCATION_NOTICE,
   extractSpreadsheetIdFromUrl,
   firstSheetRowNumber,
   formatAnchorReadResponse,
@@ -81,6 +82,10 @@ interface ReadValuesArgs {
   spreadsheet_id?: string;
   spreadsheetId?: string;
   range: string;
+  max_rows?: number;
+  maxRows?: number;
+  max_cols?: number;
+  maxCols?: number;
   major_dimension?: 'ROWS' | 'COLUMNS';
   majorDimension?: 'ROWS' | 'COLUMNS';
   return_json?: boolean;
@@ -430,6 +435,8 @@ export async function handleReadSpreadsheetValues(args: ReadValuesArgs): Promise
   const accountManager = getAccountManager();
   const rawArgs = args as unknown as Record<string, unknown>;
   const spreadsheetId = readAliasedString(rawArgs, 'spreadsheet_id', 'spreadsheetId');
+  const maxRows = readAliasedNumber(rawArgs, 'max_rows', 'maxRows');
+  const maxCols = readAliasedNumber(rawArgs, 'max_cols', 'maxCols');
   const majorDimension = readAliasedValue<'ROWS' | 'COLUMNS'>(rawArgs, 'major_dimension', 'majorDimension');
   const returnJson = readAliasedBoolean(rawArgs, 'return_json', 'returnJson');
   const valueView = readAliasedValue<ReadValueView>(rawArgs, 'value_view', 'valueView');
@@ -446,6 +453,8 @@ export async function handleReadSpreadsheetValues(args: ReadValuesArgs): Promise
     
     const options: ReadValuesOptions = {
       range: args.range,
+      maxRows,
+      maxCols,
       majorDimension,
       returnJson,
       valueView,
@@ -482,7 +491,7 @@ export async function handleReadSpreadsheetValues(args: ReadValuesArgs): Promise
     const table = formatValuesAsTable(response.values, {
       firstRowNumber: firstSheetRowNumber(response.valuesRange, majorDimension),
     });
-    return header + table;
+    return header + table + (response.truncated ? `\n${VALUES_TRUNCATION_NOTICE}` : '');
   });
 }
 
