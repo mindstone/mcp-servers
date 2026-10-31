@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-10-31
+
+### Changed
+
+- People lookups now use the person's authorization first, so list_slack_users, get_slack_user_profile and open_slack_dm can return colleagues' email addresses where it has users:read.email.
+
+### Fixed
+
+- Running connectors refuse new Slack calls once the connection's token file is deleted; a call already in progress may finish.
+- People lookups and name enrichment use user authorization first and can recover from eligible authorization refusals with one bot attempt. Pagination and username resolution restart for that attempt.
+- Opening a DM no longer requires bot authorization; only its best-effort profile read can try the other identity. Sending a notified note remains bot-only and explains that other Slack actions may still work when the app's authorization is refused.
+- Workspace connection status now requires a successful Slack authorization check from either token, with independent bot and user health. Errors keep the distinct `invalid_auth`, `token_expired`, `token_revoked` and `account_inactive` codes, and include the token role when known.
+
+## [0.3.2] - 2026-10-31
+
+### Changed
+
+- Posting as the person writes the connector's own bot mention as plain text, so a host listening for the person's mentions of its bot is not retriggered by its own replies.
+
+### Fixed
+
+- Text sent as the person (post, thread reply, scheduled message, edit, file-share comment) writes a mention of the connector's own bot user as plain `@name` text when the workspace record has a bot user ID, so a host that listens for the person's mentions of its bot is not retriggered by its own replies. This applies to every host: a host can no longer invoke its own bot by mentioning it through these tools.
+- The own-bot-mention rewrite runs in linear time: text made of many unclosed `<@BOT|` no longer takes seconds to process, and an unclosed or nested bot mention is also written as plain text.
+
 ## [0.3.1] - 2026-10-28
 
 ### Changed

@@ -212,7 +212,24 @@ export class SlackTokenProvider {
     return tokens?.authedUserId;
   }
 
+  async getBotIdentity(): Promise<{ botUserId?: string; botUsername?: string }> {
+    const tokens = await this.loadTokens();
+    return { botUserId: tokens?.botUserId, botUsername: tokens?.botUsername };
+  }
+
+  private clearCacheIfTokenFileRemoved(): void {
+    if (!this.cachedTokens) return;
+    try {
+      fs.statSync(this.getTokenPath());
+    } catch (err) {
+      // Only confirmed removal retires the cache; failed saves can leave
+      // valid rotated tokens in memory that are newer than the file.
+      if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') this.cachedTokens = null;
+    }
+  }
+
   async getBotToken(): Promise<string> {
+    this.clearCacheIfTokenFileRemoved();
     let tokens = this.cachedTokens ?? (await this.loadTokens());
     if (!tokens?.botToken) {
       throw new ConnectorError(
@@ -333,6 +350,7 @@ export class SlackTokenProvider {
    * that strictly require the user token.
    */
   async getUserToken(): Promise<string | null> {
+    this.clearCacheIfTokenFileRemoved();
     let tokens = this.cachedTokens ?? (await this.loadTokens());
     if (!tokens?.userToken) return null;
 

@@ -9,7 +9,7 @@ Slack workspace MCP server — channels, messages, threads, reactions, users, fi
 
 ## Status
 
-- **Version:** [0.3.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-slack)
+- **Version:** [0.3.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-slack)
 - **Auth:** OAuth (host-orchestrated) ([`SLACK_CLIENT_SECRET`](./server.json))
 - **Tools:** [39](./src/tools/) (messages, channels, threads, users, files, pins)
 - **Surface:** cloud-api
@@ -193,6 +193,16 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 }
 ```
 
+## People reads and authorization
+
+`list_slack_users`, `get_slack_user_profile`, `lookup_user_by_email`, message name enrichment and the profile shown by `open_slack_dm` use user authorization first. If it is absent or refused for authorization, scope or token-type reasons, the read may try bot authorization once. A retry starts the read again, including pagination and username resolution. Neither authorization can supply permissions it was not granted; email lookup still needs `users:read.email`.
+
+Other errors returned to the read runner do not trigger this retry. Writes keep their identity: opening a DM uses user authorization once, and `send_myself_a_note` uses only bot authorization. If Slack refuses the app's authorization, a notified note cannot be sent even while other Slack actions still work. Reconnecting may restore it.
+
+`list_slack_workspaces` tests bot and user authorization independently with `auth.test`. `connected` means at least one passed; `tokenHealth.botToken` and `tokenHealth.userToken` report each result separately (`valid`, `refused`, `unavailable`, or `missing` / `not_configured`). Having a saved token does not establish that Slack accepts it.
+
+`invalid_auth`, `token_expired`, `token_revoked` and `account_inactive` stay unchanged in the result's `code` field, alongside recovery guidance and `next_step`. When these people reads, DM opening or notified-note sending surface a credential refusal, the result also includes a fixed `token_role` (`user` or `bot`) when the attempt is known. Structured errors acquiring credentials keep their existing recovery shape.
+
 ## Tools (39)
 
 ### Authentication
@@ -212,6 +222,8 @@ Until the host has written `${SLACK_CONFIG_PATH}/workspaces/T0123ABCD.json` for 
 - `update_slack_message` — Edit a message you posted.
 - `delete_slack_message` — Permanently delete a message you posted.
 - `send_myself_a_note` — Send yourself a note that actually notifies you (posts a DM from the bot to the authenticated user). Use this for "jot something down" / reminders instead of a user-token self-DM.
+
+Text sent as you (`post_slack_message`, `reply_to_slack_thread`, `schedule_slack_message`, `update_slack_message`, and the `upload_slack_file` comment) writes a mention of the connector's own bot user as plain `@name` text when the workspace record has a bot user ID, so a host that listens for your mentions of its bot is not retriggered by its own replies. Other users' mentions are sent unchanged.
 
 ### Channels
 - `list_slack_channels` — List channels (filterable, paginated).

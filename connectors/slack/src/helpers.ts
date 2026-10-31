@@ -5,9 +5,9 @@
  */
 
 import type { WebClient } from '@slack/web-api';
-import { getSlackClient, getSlackReaderClient, getSlackUserClient, getTokenProvider } from './client.js';
+import { getSlackReaderClient, getSlackUserClient, getTokenProvider, runSlackRead } from './client.js';
 import { ConnectorError, type DmRecipient } from './types.js';
-import { sanitizeErrorMessage } from './utils.js';
+import { AUTH_REQUIRED_CODES, isMissingScopeError, isTokenExpiredError, sanitizeErrorMessage } from './utils.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
 /** Shape of a projected Slack file attachment surfaced in tool responses. */
@@ -86,14 +86,48 @@ export async function resolveAuthedUserId(): Promise<string | undefined> {
 }
 
 /**
+ * Rewrite mentions of the connector's own bot user (`<@BOT>` or
+ * `<@BOT|label>`) as plain `@name` text. Applied to every text sent with the
+ * PERSON's token: a host that listens for the person's messages mentioning
+ * its bot (a search like `<@BOT> from:<@ME>`) would otherwise be retriggered
+ * by its own replies. Bot-token posts need no rewrite, since that search
+ * only matches the person's own messages. Other users' mentions are kept.
+ */
+export function plainTextOwnBotMentions(
+  text: string,
+  botUserId: string | undefined,
+  botName: string | undefined,
+): string {
+  if (!botUserId) return text;
+  const id = botUserId.replace(/[^A-Za-z0-9]/g, '');
+  if (!id) return text;
+  // The label inside the markup is never used: it is caller text and could
+  // carry mention markup of its own. The stored name loses any angle brackets.
+  const name = (botName ?? '').replace(/[<>]/g, '') || 'app';
+  // Every `<@ID` is rewritten, closed or not, so no bot markup can survive
+  // (`<@ID|<@ID>>` included). The label stops at the next `<` or `>`, which
+  // keeps the match linear on long runs of unclosed `<@ID|`.
+  return text.replace(
+    new RegExp(`<@${id}(?![A-Za-z0-9])(?:\\|[^<>]*>|>)?`, 'g'),
+    () => `@${name}`,
+  );
+}
+
+/** {@link plainTextOwnBotMentions} with the bot identity from the workspace record. */
+export async function withOwnBotMentionsAsPlainText(text: string): Promise<string>;
+export async function withOwnBotMentionsAsPlainText(text: string | undefined): Promise<string | undefined>;
+export async function withOwnBotMentionsAsPlainText(text: string | undefined): Promise<string | undefined> {
+  if (!text) return text;
+  const identity = await getTokenProvider()?.getBotIdentity();
+  return plainTextOwnBotMentions(text, identity?.botUserId, identity?.botUsername);
+}
+
+/**
  * Resolve user IDs into the in-memory cache. Uses parallel `users.info`
  * calls (faster than `users.list` on large workspaces). Failures are
  * non-fatal — unresolved users simply don't get enriched.
  */
 export async function resolveUserIdsToCache(userIds: string[]): Promise<void> {
-  const client = (await getSlackClient()) ?? (await getSlackReaderClient());
-  if (!client) return;
-
   const uniqueIds = [...new Set(userIds.map((id) => id.toUpperCase()))];
   const inFlightPromises: Promise<void>[] = [];
   const unknownIds: string[] = [];
@@ -114,24 +148,46 @@ export async function resolveUserIdsToCache(userIds: string[]): Promise<void> {
   }
 
   const lookupPromise = (async () => {
-    const CONCURRENCY = 5;
-    for (let i = 0; i < unknownIds.length; i += CONCURRENCY) {
-      const batch = unknownIds.slice(i, i + CONCURRENCY);
-      await Promise.allSettled(
-        batch.map(async (id) => {
-          try {
-            const result = await client.users.info({ user: id });
+    try {
+      const resolved = await runSlackRead(async (client) => {
+        const users = new Map<string, CachedUser>();
+        const CONCURRENCY = 5;
+        for (let i = 0; i < unknownIds.length; i += CONCURRENCY) {
+          const batch = unknownIds.slice(i, i + CONCURRENCY);
+          const outcomes = await Promise.allSettled(
+            batch.map(id => client.users.info({ user: id })),
+          );
+          for (const [index, outcome] of outcomes.entries()) {
+            const id = batch[index];
+            if (outcome.status === 'rejected') {
+              const error: unknown = outcome.reason;
+              if (isTokenExpiredError(error) || isMissingScopeError(error)) throw error;
+              const message = error instanceof Error ? error.message : String(error);
+              console.warn(
+                { error: sanitizeErrorMessage(message) },
+                '[slack-mcp] User name enrichment unavailable.',
+              );
+              continue;
+            }
+            const result = outcome.value;
             if (result.ok && result.user) {
               const u = result.user;
-              userCache.set(id, {
+              users.set(id, {
                 name: u.name || id,
                 displayName: u.profile?.display_name || u.real_name || u.name || id,
               });
             }
-          } catch {
-            // Best-effort
           }
-        }),
+        }
+        return users;
+      });
+      for (const [id, user] of resolved ?? []) userCache.set(id, user);
+    } catch (error) {
+      if (error instanceof ConnectorError && !AUTH_REQUIRED_CODES.includes(error.code)) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        { error: sanitizeErrorMessage(message) },
+        '[slack-mcp] User name enrichment unavailable.',
       );
     }
   })();
