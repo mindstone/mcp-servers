@@ -104,7 +104,13 @@ export function plainTextOwnBotMentions(
   // The label inside the markup is never used: it is caller text and could
   // carry mention markup of its own. The stored name loses any angle brackets.
   const name = (botName ?? '').replace(/[<>]/g, '') || 'app';
-  return text.replace(new RegExp(`<@${id}(?:\\|[^>]*)?>`, 'g'), () => `@${name}`);
+  // Every `<@ID` is rewritten, closed or not, so no bot markup can survive
+  // (`<@ID|<@ID>>` included). The label stops at the next `<` or `>`, which
+  // keeps the match linear on long runs of unclosed `<@ID|`.
+  return text.replace(
+    new RegExp(`<@${id}(?![A-Za-z0-9])(?:\\|[^<>]*>|>)?`, 'g'),
+    () => `@${name}`,
+  );
 }
 
 /** {@link plainTextOwnBotMentions} with the bot identity from the workspace record. */
