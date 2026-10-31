@@ -9,7 +9,7 @@ import {
   withErrorHandling,
 } from '../utils.js';
 import { getSlackReaderClient, getSlackUserClient, getTokenProvider } from '../client.js';
-import { resolveChannelId } from '../helpers.js';
+import { resolveChannelId, withOwnBotMentionsAsPlainText } from '../helpers.js';
 import { readUploadSourceFile } from '../upload-path-safety.js';
 import { notConnectedJson } from './auth.js';
 import { wrapUntrusted } from '../untrusted-content.js';
@@ -327,6 +327,7 @@ Max file size: 50MB.`,
 
       // Step 3: complete the upload (and optionally share it).
       const channelId = args.channel ? await resolveChannelId(args.channel) : undefined;
+      const initialComment = await withOwnBotMentionsAsPlainText(args.initial_comment);
       const filesPayload = [{ id: fileId, ...(args.title ? { title: args.title } : {}) }] as [
         { id: string; title?: string },
       ];
@@ -335,12 +336,12 @@ Max file size: 50MB.`,
             files: filesPayload,
             channel_id: channelId,
             thread_ts: args.thread_ts,
-            ...(args.initial_comment ? { initial_comment: args.initial_comment } : {}),
+            ...(initialComment ? { initial_comment: initialComment } : {}),
           })
         : await userClient.files.completeUploadExternal({
             files: filesPayload,
             ...(channelId ? { channel_id: channelId } : {}),
-            ...(args.initial_comment ? { initial_comment: args.initial_comment } : {}),
+            ...(initialComment ? { initial_comment: initialComment } : {}),
           });
       const completed = (completeResult.files || []).map((f) => ({
         id: f.id,
