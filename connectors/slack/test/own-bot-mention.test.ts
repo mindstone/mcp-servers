@@ -126,10 +126,19 @@ describe('plainTextOwnBotMentions', () => {
     );
   });
 
-  it('falls back to the label in the markup, then a generic name', () => {
+  it('falls back to a fixed name, never the label in the markup', () => {
     expect(plainTextOwnBotMentions(TEXT, BOT_ID, undefined)).toBe(
-      `Done @app, and @helper too. cc ${OTHER} <@U333X|sam>`,
+      `Done @app, and @app too. cc ${OTHER} <@U333X|sam>`,
     );
+  });
+
+  it('cannot rebuild mention markup from a nested label', () => {
+    expect(plainTextOwnBotMentions(`<@${BOT_ID}|<@${BOT_ID}>>`, BOT_ID, undefined)).toBe('@app>');
+  });
+
+  it('strips angle brackets from the stored bot username', () => {
+    expect(plainTextOwnBotMentions(`<@${BOT_ID}>`, BOT_ID, `<@${BOT_ID}>`)).toBe(`@@${BOT_ID}`);
+    expect(plainTextOwnBotMentions(`<@${BOT_ID}>`, BOT_ID, '<>')).toBe('@app');
   });
 
   it('does not touch an ID that only starts with the bot ID', () => {
@@ -194,6 +203,12 @@ describe('Slack MCP — own bot mention is plain text when posting as the person
         );
         expect(sent[tool], tool).not.toContain(`<@${BOT_ID}`);
       }
+    });
+
+    it('leaves bot mentions unchanged in a bot-token post (send_myself_a_note)', async () => {
+      const seen = captureSentText();
+      await client.callTool('send_myself_a_note', { text: TEXT });
+      expect(seen['chat.postMessage']).toBe(TEXT);
     });
   });
 
