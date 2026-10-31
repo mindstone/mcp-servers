@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-31
+
+### Changed
+
+- Spreadsheet value reads accept max_rows and max_cols limits, so large ranges can be returned in smaller slices.
+
 ### Fixed
 
 - `read_workspace_spreadsheet_values` accepts `max_rows` and `max_cols` and limits the returned cells, including shaped reads and continuation pages. Invalid limits name `max_rows`/`max_cols` and ask for positive whole numbers. Anchor windows and tokens stay unchanged; truncating a page does not create or advance a continuation token.
