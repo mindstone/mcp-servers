@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- Running connectors refuse new Slack calls once the connection's token file is deleted; a call already in progress may finish.
+- People lookups and name enrichment use user authorization first and can recover from eligible authorization refusals with one bot attempt. Pagination and username resolution restart for that attempt.
+- Opening a DM no longer requires bot authorization; only its best-effort profile read can try the other identity. Sending a notified note remains bot-only and explains that other Slack actions may still work when the app's authorization is refused.
+- Workspace connection status now requires a successful Slack authorization check from either token, with independent bot and user health. Errors keep the distinct `invalid_auth`, `token_expired`, `token_revoked` and `account_inactive` codes, and include the token role when known.
+
 ## [0.3.2] - 2026-10-31
 
 ### Changed

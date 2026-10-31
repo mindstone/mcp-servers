@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { errorJson, withErrorHandling } from '../utils.js';
-import { getSlackClient, getSlackUserClient } from '../client.js';
+import { errorJson, sanitizeErrorMessage, withErrorHandling } from '../utils.js';
+import { getSlackUserClient, runSlackRead } from '../client.js';
 import { resolveUserId, SLACK_USER_PROFILE_SOURCE } from '../helpers.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { notConnectedJson } from './auth.js';
@@ -38,89 +38,89 @@ matches. For exact email match, prefer lookup_user_by_email.`,
       },
     },
     withErrorHandling(async (args) => {
-      const client = await getSlackClient();
-      if (!client) return notConnectedJson();
-      const isConcise = args.response_format === 'concise';
-      const nameFilter = args.name?.toLowerCase();
-      const requestedLimit = args.limit || 100;
-      const manualCursor = args.cursor;
+      return await runSlackRead(async (client) => {
+        const isConcise = args.response_format === 'concise';
+        const nameFilter = args.name?.toLowerCase();
+        const requestedLimit = args.limit || 100;
+        const manualCursor = args.cursor;
 
-      if (nameFilter && !manualCursor) {
-        const MAX_PAGES = 5;
-        type UserEntry = {
-          id?: string;
-          name?: string;
-          display_name?: string;
-          real_name?: string;
-          email?: string;
-          is_admin?: boolean;
-        };
-        const allMatches: UserEntry[] = [];
-        let pagesSearched = 0;
-        let usersCursor: string | undefined;
-        do {
-          const page = await client.users.list({ limit: 200, cursor: usersCursor });
-          pagesSearched++;
-          const members = page.members?.filter((u) => !u.is_bot && !u.deleted) || [];
-          const filtered = members.filter(
-            (u) =>
-              u.name?.toLowerCase().includes(nameFilter) ||
-              u.profile?.display_name?.toLowerCase().includes(nameFilter) ||
-              u.real_name?.toLowerCase().includes(nameFilter),
-          );
-          for (const u of filtered) {
-            allMatches.push({
-              id: u.id,
-              name: u.name,
-              display_name: wrapUntrusted(u.profile?.display_name, SLACK_USER_PROFILE_SOURCE),
-              ...(isConcise
-                ? {}
-                : {
-                    real_name: wrapUntrusted(u.real_name, SLACK_USER_PROFILE_SOURCE),
-                    email: u.profile?.email,
-                    is_admin: u.is_admin,
-                  }),
-            });
+        if (nameFilter && !manualCursor) {
+          const MAX_PAGES = 5;
+          type UserEntry = {
+            id?: string;
+            name?: string;
+            display_name?: string;
+            real_name?: string;
+            email?: string;
+            is_admin?: boolean;
+          };
+          const allMatches: UserEntry[] = [];
+          let pagesSearched = 0;
+          let usersCursor: string | undefined;
+          do {
+            const page = await client.users.list({ limit: 200, cursor: usersCursor });
+            pagesSearched++;
+            const members = page.members?.filter((u) => !u.is_bot && !u.deleted) || [];
+            const filtered = members.filter(
+              (u) =>
+                u.name?.toLowerCase().includes(nameFilter) ||
+                u.profile?.display_name?.toLowerCase().includes(nameFilter) ||
+                u.real_name?.toLowerCase().includes(nameFilter),
+            );
+            for (const u of filtered) {
+              allMatches.push({
+                id: u.id,
+                name: u.name,
+                display_name: wrapUntrusted(u.profile?.display_name, SLACK_USER_PROFILE_SOURCE),
+                ...(isConcise
+                  ? {}
+                  : {
+                      real_name: wrapUntrusted(u.real_name, SLACK_USER_PROFILE_SOURCE),
+                      email: u.profile?.email,
+                      is_admin: u.is_admin,
+                    }),
+              });
+              if (allMatches.length >= requestedLimit) break;
+            }
             if (allMatches.length >= requestedLimit) break;
-          }
-          if (allMatches.length >= requestedLimit) break;
-          usersCursor = page.response_metadata?.next_cursor || undefined;
-        } while (usersCursor && pagesSearched < MAX_PAGES);
+            usersCursor = page.response_metadata?.next_cursor || undefined;
+          } while (usersCursor && pagesSearched < MAX_PAGES);
+          return JSON.stringify({
+            ok: true,
+            users: allMatches,
+            pagesSearched,
+            ...(allMatches.length === 0
+              ? {
+                  hint: `No users matching "${args.name}" found after searching ${pagesSearched} pages. Try lookup_user_by_email for exact match.`,
+                }
+              : {}),
+          });
+        }
+
+        const result = await client.users.list({ limit: requestedLimit, cursor: manualCursor });
+        const filteredMembers = result.members?.filter((u) => !u.is_bot && !u.deleted);
+        const users = filteredMembers?.map((u) => ({
+          id: u.id,
+          name: u.name,
+          display_name: wrapUntrusted(u.profile?.display_name, SLACK_USER_PROFILE_SOURCE),
+          ...(isConcise
+            ? {}
+            : {
+                real_name: wrapUntrusted(u.real_name, SLACK_USER_PROFILE_SOURCE),
+                email: u.profile?.email,
+                is_admin: u.is_admin,
+              }),
+        }));
+        const nextCursor = result.response_metadata?.next_cursor || null;
+        const hasMore = !!nextCursor;
         return JSON.stringify({
           ok: true,
-          users: allMatches,
-          pagesSearched,
-          ...(allMatches.length === 0
-            ? {
-                hint: `No users matching "${args.name}" found after searching ${pagesSearched} pages. Try lookup_user_by_email for exact match.`,
-              }
-            : {}),
+          users,
+          nextCursor,
+          hasMore,
+          ...(hasMore ? { hint: 'More results available. Use cursor parameter to fetch next page.' } : {}),
         });
-      }
-
-      const result = await client.users.list({ limit: requestedLimit, cursor: manualCursor });
-      const filteredMembers = result.members?.filter((u) => !u.is_bot && !u.deleted);
-      const users = filteredMembers?.map((u) => ({
-        id: u.id,
-        name: u.name,
-        display_name: wrapUntrusted(u.profile?.display_name, SLACK_USER_PROFILE_SOURCE),
-        ...(isConcise
-          ? {}
-          : {
-              real_name: wrapUntrusted(u.real_name, SLACK_USER_PROFILE_SOURCE),
-              email: u.profile?.email,
-              is_admin: u.is_admin,
-            }),
-      }));
-      const nextCursor = result.response_metadata?.next_cursor || null;
-      const hasMore = !!nextCursor;
-      return JSON.stringify({
-        ok: true,
-        users,
-        nextCursor,
-        hasMore,
-        ...(hasMore ? { hint: 'More results available. Use cursor parameter to fetch next page.' } : {}),
-      });
+      }) ?? notConnectedJson();
     }),
   );
 
@@ -144,28 +144,28 @@ Get user ID from list_slack_users or from a message, or use @username format.`,
       },
     },
     withErrorHandling(async (args) => {
-      const client = await getSlackClient();
-      if (!client) return notConnectedJson();
-      const userId = await resolveUserId(client, args.user);
-      const result = await client.users.info({ user: userId });
-      const user = result.user;
-      return JSON.stringify({
-        ok: true,
-        user: {
-          id: user?.id,
-          name: user?.name,
-          real_name: wrapUntrusted(user?.real_name, SLACK_USER_PROFILE_SOURCE),
-          display_name: wrapUntrusted(user?.profile?.display_name, SLACK_USER_PROFILE_SOURCE),
-          email: user?.profile?.email,
-          title: wrapUntrusted(user?.profile?.title, SLACK_USER_PROFILE_SOURCE),
-          phone: wrapUntrusted(user?.profile?.phone, SLACK_USER_PROFILE_SOURCE),
-          is_admin: user?.is_admin,
-          is_owner: user?.is_owner,
-          tz: user?.tz,
-          status_text: wrapUntrusted(user?.profile?.status_text, SLACK_USER_PROFILE_SOURCE),
-          status_emoji: user?.profile?.status_emoji,
-        },
-      });
+      return await runSlackRead(async (client) => {
+        const userId = await resolveUserId(client, args.user);
+        const result = await client.users.info({ user: userId });
+        const user = result.user;
+        return JSON.stringify({
+          ok: true,
+          user: {
+            id: user?.id,
+            name: user?.name,
+            real_name: wrapUntrusted(user?.real_name, SLACK_USER_PROFILE_SOURCE),
+            display_name: wrapUntrusted(user?.profile?.display_name, SLACK_USER_PROFILE_SOURCE),
+            email: user?.profile?.email,
+            title: wrapUntrusted(user?.profile?.title, SLACK_USER_PROFILE_SOURCE),
+            phone: wrapUntrusted(user?.profile?.phone, SLACK_USER_PROFILE_SOURCE),
+            is_admin: user?.is_admin,
+            is_owner: user?.is_owner,
+            tz: user?.tz,
+            status_text: wrapUntrusted(user?.profile?.status_text, SLACK_USER_PROFILE_SOURCE),
+            status_emoji: user?.profile?.status_emoji,
+          },
+        });
+      }) ?? notConnectedJson();
     }),
   );
 
@@ -197,36 +197,36 @@ Requires users:read.email scope (may need admin approval).`,
       },
     },
     withErrorHandling(async (args) => {
-      const client = (await getSlackUserClient()) ?? (await getSlackClient());
-      if (!client) return notConnectedJson();
-      try {
-        const result = await client.users.lookupByEmail({ email: args.email });
-        const user = result.user;
-        return JSON.stringify({
-          ok: true,
-          user: {
-            id: user?.id,
-            name: user?.name,
-            real_name: wrapUntrusted(user?.real_name, SLACK_USER_PROFILE_SOURCE),
-            display_name: wrapUntrusted(user?.profile?.display_name, SLACK_USER_PROFILE_SOURCE),
-            email: user?.profile?.email,
-            is_admin: user?.is_admin,
-            deleted: user?.deleted,
-          },
-        });
-      } catch (error) {
-        const errCode = (error as { data?: { error?: string } }).data?.error;
-        if (errCode === 'users_not_found') {
-          return errorJson({
-            error: 'User not found for this email',
-            action_required:
-              'The email may not be registered or the user may be deactivated. Try list_slack_users with name filter.',
-            next_step: 'list_slack_users',
-            email: args.email,
+      return await runSlackRead(async (client) => {
+        try {
+          const result = await client.users.lookupByEmail({ email: args.email });
+          const user = result.user;
+          return JSON.stringify({
+            ok: true,
+            user: {
+              id: user?.id,
+              name: user?.name,
+              real_name: wrapUntrusted(user?.real_name, SLACK_USER_PROFILE_SOURCE),
+              display_name: wrapUntrusted(user?.profile?.display_name, SLACK_USER_PROFILE_SOURCE),
+              email: user?.profile?.email,
+              is_admin: user?.is_admin,
+              deleted: user?.deleted,
+            },
           });
+        } catch (error) {
+          const errCode = (error as { data?: { error?: string } }).data?.error;
+          if (errCode === 'users_not_found') {
+            return errorJson({
+              error: 'User not found for this email',
+              action_required:
+                'The email may not be registered or the user may be deactivated. Try list_slack_users with name filter.',
+              next_step: 'list_slack_users',
+              email: args.email,
+            });
+          }
+          throw error;
         }
-        throw error;
-      }
+      }) ?? notConnectedJson();
     }),
   );
 
@@ -268,8 +268,6 @@ WORKFLOW:
       },
     },
     withErrorHandling(async (args) => {
-      const botClient = await getSlackClient();
-      if (!botClient) return notConnectedJson();
       const userClient = await getSlackUserClient();
       if (!userClient) {
         return errorJson({
@@ -311,16 +309,20 @@ WORKFLOW:
       }
       let dmUserProfile: { real_name?: string; display_name?: string; email?: string } | null = null;
       try {
-        const dmUserInfo = await botClient.users.info({ user: userId });
-        if (dmUserInfo.ok && dmUserInfo.user) {
+        const dmUserInfo = await runSlackRead(client => client.users.info({ user: userId }));
+        if (dmUserInfo?.ok && dmUserInfo.user) {
           dmUserProfile = {
             real_name: dmUserInfo.user.real_name,
             display_name: dmUserInfo.user.profile?.display_name,
             email: dmUserInfo.user.profile?.email,
           };
         }
-      } catch {
-        // best-effort
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(
+          { error: sanitizeErrorMessage(message) },
+          '[slack-mcp] DM profile enrichment unavailable.',
+        );
       }
       const alreadyOpen = dmOpenResult.already_open === true;
       const recipientName = dmUserProfile?.display_name || dmUserProfile?.real_name;
@@ -345,6 +347,6 @@ WORKFLOW:
           ? `Existing DM channel with ${recipientLabel}: ${dmOpenResult.channel.id}`
           : `Opened new DM channel with ${recipientLabel}: ${dmOpenResult.channel.id}`,
       });
-    }),
+    }, { tokenRole: 'user' }),
   );
 }

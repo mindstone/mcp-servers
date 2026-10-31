@@ -734,6 +734,9 @@ PARAMETER: text. Use text, not message, note, or channel.`,
         ts_iso: result.ts ? slackTsToDatetime(result.ts) : undefined,
         note: 'Sent to yourself as a notified direct message from the Slack app.',
       });
+    }, {
+      tokenRole: 'bot',
+      authRefusalResolution: "Slack refused the app's authorization for this workspace, so this note could not be sent. Other Slack actions may still work. Reconnecting Slack may restore it.",
     }),
   );
 
