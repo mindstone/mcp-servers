@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, validateObjectName, validateFields, isValidQueryFieldName, escapeSOQL, ALLOWED_FILTER_OPERATORS, validateAndMergeCustomFields, checkSaveResult, formatVendorErrors, sanitizeRecords, requireArg } from '../utils.js';
+import { withErrorHandling, validateObjectName, validateFields, isValidQueryFieldName, escapeSOQL, escapeSOQLLike, ALLOWED_FILTER_OPERATORS, validateAndMergeCustomFields, checkSaveResult, formatVendorErrors, sanitizeRecords, requireArg } from '../utils.js';
 import { withConnection } from '../client.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { ConnectorError, type SaveResult } from '../types.js';
@@ -346,8 +346,8 @@ export function registerQueryTools(server: McpServer): void {
             }
             let formattedValue: string;
             if (typeof filter.value === 'string') {
-              // An explicit LIKE operator accepts a pattern, preserving caller wildcards.
-              formattedValue = `'${escapeSOQL(filter.value)}'`;
+              const escape = filter.operator === 'LIKE' ? escapeSOQLLike : escapeSOQL;
+              formattedValue = `'${escape(filter.value)}'`;
             } else {
               formattedValue = `${filter.value}`;
             }

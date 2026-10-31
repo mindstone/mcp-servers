@@ -83,16 +83,13 @@ export function withErrorHandling<T>(
 }
 
 /**
- * Escape a SOQL string literal: backslashes first, then apostrophes with a
- * backslash. LIKE wildcards (%) and (_) remain patterns; use escapeSOQLLike
+ * Escape a SOQL string literal: backslashes and apostrophes get a backslash,
+ * in one pass so nothing is escaped twice. LIKE wildcards (%) and (_) remain patterns; use escapeSOQLLike
  * when interpolating a literal substring into a LIKE pattern.
  */
 export function escapeSOQL(value: string): string {
   if (!value) return '';
-  return value
-    // Backslash MUST be escaped first to avoid double-escaping.
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "\\'");
+  return value.replace(/[\\']/g, '\\$&');
 }
 
 /**
@@ -114,7 +111,7 @@ export function escapeSOSL(term: string): string {
  * escape (%) and (_) so caller-supplied wildcards match literally.
  */
 export function escapeSOQLLike(value: string): string {
-  return escapeSOQL(value).replace(/%/g, '\\%').replace(/_/g, '\\_');
+  return value.replace(/[\\'%_]/g, '\\$&');
 }
 
 /**

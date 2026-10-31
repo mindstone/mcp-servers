@@ -118,22 +118,13 @@ describe('record query and session regressions', () => {
     expect(queries).toEqual([]);
   });
 
-  it('generic LIKE filters preserve caller wildcards and accept relationship paths', async () => {
+  it('generic LIKE filters match literally and accept relationship paths', async () => {
     captureQueries();
     const result = await (await connect()).callTool('salesforce_get_records', {
       object_name: 'Account', filters: [{ field: 'Owner.Name', operator: 'LIKE', value: '%acme_%' }],
     });
     expect(result.json.ok).toBe(true);
-    expect(queries).toEqual(["SELECT Id FROM Account WHERE Owner.Name LIKE '%acme_%' LIMIT 50"]);
-  });
-
-  it('generic LIKE filters preserve wildcard patterns on simple fields', async () => {
-    captureQueries();
-    const result = await (await connect()).callTool('salesforce_get_records', {
-      object_name: 'Account', filters: [{ field: 'Name', operator: 'LIKE', value: '%acme_%' }],
-    });
-    expect(result.json.ok).toBe(true);
-    expect(queries).toEqual(["SELECT Id FROM Account WHERE Name LIKE '%acme_%' LIMIT 50"]);
+    expect(queries).toEqual(["SELECT Id FROM Account WHERE Owner.Name LIKE '\\%acme\\_\\%' LIMIT 50"]);
   });
 
   it.each(['Owner..Name.', 'COUNT(Id)', 'Owner.Name!'])('generic filters refuse %s', async (field) => {

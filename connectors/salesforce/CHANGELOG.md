@@ -14,10 +14,10 @@ are maintained manually as part of the PR review checklist.
 ### Fixed
 
 - Keep ungrouped aggregate queries valid: omit generated LIMIT clauses, preserve a caller's COUNT() limit, and remove limits Salesforce rejects on other aggregates. Keep FOR VIEW and FOR REFERENCE after LIMIT and OFFSET.
-- Escape SOQL and SOSL apostrophes with backslashes. Literal substring searches still escape wildcards; explicit LIKE filters now preserve caller patterns.
+- Escape SOQL and SOSL apostrophes with backslashes. `%` and `_` are escaped only in LIKE.
 - Accept relationship field paths such as Owner.Name in reads and filters while rejecting malformed paths and dotted write keys.
 - Recognize expired sessions from Salesforce's error code, including while attaching a note, and add recovery hints for invalid fields, invalid objects and malformed queries.
-- Read linked notes with two queries instead of an unsupported ContentDocumentLink semi-join. Skip the second query when no links exist and report truncation when the 500-link lookup cap is reached.
+- Read linked notes with two queries instead of an unsupported ContentDocumentLink semi-join. Skip the second query when no links exist and report truncation when the 150-link lookup cap is reached.
 
 - Keep a rotated refresh token. With refresh-token rotation turned on for the org, each refresh returns a new refresh token and retires the old one; the connector kept presenting and saving the old one, so the next refresh failed and the user had to reconnect. The refresh handler now takes up the new token in the live connection and in the saved token file, and a failed save is logged rather than left as an unhandled rejection.
 
