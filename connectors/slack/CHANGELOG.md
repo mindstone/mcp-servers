@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-10-31
+
+### Changed
+
+- People lookups now use the person's authorization first, so list_slack_users, get_slack_user_profile and open_slack_dm can return colleagues' email addresses where it has users:read.email.
+
 ### Fixed
 
 - Running connectors refuse new Slack calls once the connection's token file is deleted; a call already in progress may finish.
