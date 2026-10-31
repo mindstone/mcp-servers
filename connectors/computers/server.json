@@ -1,0 +1,104 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mindstone/mcp-server-computers",
+  "title": "Computers",
+  "description": "Linux computers with a browser on your own Fly.io, E2B or Google Cloud account: run commands, copy files, use websites",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/mindstone/mcp-servers",
+    "source": "github",
+    "subfolder": "connectors/computers"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@mindstone/mcp-server-computers",
+      "version": "0.1.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "FLY_API_TOKEN",
+          "description": "Fly.io API token (an organization token)",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "FLY_ORG",
+          "description": "Fly.io organization slug (default \"personal\")",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "FLY_APP",
+          "description": "Fly.io app to use instead of creating one (for app-scoped tokens)",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "FLY_REGION",
+          "description": "Fly.io region for new computers (default \"ams\")",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "E2B_API_KEY",
+          "description": "E2B API key",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "GOOGLE_CLOUD_KEY",
+          "description": "Google Cloud service-account JSON key, or an absolute path to it",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "GOOGLE_CLOUD_PROJECT",
+          "description": "Google Cloud project id (default: the key's project)",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "GOOGLE_CLOUD_ZONE",
+          "description": "Google Cloud zone for new computers (default \"europe-west1-b\")",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "GOOGLE_CLOUD_MACHINE_TYPE",
+          "description": "Google Cloud machine type (default \"e2-medium\")",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "COMPUTERS_DEFAULT_PROVIDER",
+          "description": "Which account new computers go to when several are set: fly, e2b or gcp",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "com.mindstone.rebel": {
+        "catalogId": "bundled-computers",
+        "provider": "rebel-oss"
+      }
+    }
+  }
+}
