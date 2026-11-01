@@ -19,6 +19,7 @@ are maintained manually as part of the PR review checklist.
 - Recognize expired sessions from Salesforce's error code, including while attaching a note, and add recovery hints for invalid fields, invalid objects and malformed queries.
 - Read linked notes with two queries instead of an unsupported ContentDocumentLink semi-join. Skip the second query when no links exist and report truncation when the 150-link lookup cap is reached.
 
+- Report a failed save of a renewed sign-in as `TOKEN_SAVE_FAILED` instead of carrying on silently. The request does not run, and a retry works.
 - Keep a rotated refresh token. With refresh-token rotation turned on for the org, each refresh returns a new refresh token and retires the old one; the connector kept presenting and saving the old one, so the next refresh failed and the user had to reconnect. The refresh handler now takes up the new token in the live connection and in the saved token file, and a failed save is logged rather than left as an unhandled rejection.
 
 ## [0.2.3] - 2026-09-29

@@ -15,6 +15,8 @@ import {
   saveAccounts,
 } from './auth.js';
 
+const TOKEN_SAVE_FAILED = 'Failed to save refreshed token';
+
 // Connection cache per account
 const connections = new Map<string, jsforce.Connection>();
 
@@ -111,10 +113,13 @@ export async function getConnection(accountId?: string): Promise<jsforce.Connect
     try {
       saveToken(resolvedId, saved);
     } catch {
-      // The new token stays live in this connection; only the copy for the
-      // next process was lost. Bounded message: a filesystem error can quote
-      // the path or content.
+      // The new token stays live in this connection, but the next process would
+      // start from a retired one, so this must not pass silently. Throwing here
+      // fails the refresh before jsforce replays the request, so a retry can't
+      // repeat a write. Bounded message: a filesystem error can quote the path
+      // or content.
       console.error(`[Salesforce MCP] Failed to save refreshed token for account ${resolvedId}`);
+      throw new Error(TOKEN_SAVE_FAILED);
     }
   });
 
@@ -150,6 +155,13 @@ export async function withConnection<T>(
   try {
     return await operation(conn);
   } catch (error: unknown) {
+    if (error instanceof Error && error.message.includes(TOKEN_SAVE_FAILED)) {
+      throw new ConnectorError(
+        'Could not save the renewed Salesforce sign-in',
+        'TOKEN_SAVE_FAILED',
+        'The request did not run. Try it again. Check that the credentials folder is writable, or Salesforce may need reconnecting after a restart.',
+      );
+    }
     if (isSessionExpiredError(error)) {
       // Clear cached connection on session expiry
       connections.delete(resolvedId);
