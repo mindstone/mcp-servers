@@ -162,7 +162,7 @@ describe('Salesforce keeps a rotated refresh token', () => {
     await vi.waitFor(() => expect(savedRefreshToken()).toBe('refresh-1'));
   });
 
-  it('keeps using the new token when saving it fails', async () => {
+  it('reports a failed save as an error, without running the request, and a retry keeps the new token', async () => {
     const org = rotatingOrg();
     mswServer.use(...org.handlers);
     const client = await startClient();
@@ -171,19 +171,22 @@ describe('Salesforce keeps a rotated refresh token', () => {
     fs.chmodSync(credentialsDir, 0o500);
     let logged: string[] = [];
     try {
-      for (let i = 0; i < 2; i++) {
-        const result = await client.callTool('salesforce_list_objects', {});
-        expect((result.json as Record<string, unknown>).ok).toBe(true);
-        org.revokeAccess();
-      }
+      const failed = await client.callTool('salesforce_list_objects', {});
+      expect(failed.json).toMatchObject({ ok: false, code: 'TOKEN_SAVE_FAILED' });
+      const retried = await client.callTool('salesforce_list_objects', {});
+      expect((retried.json as Record<string, unknown>).ok).toBe(true);
     } finally {
       logged = consoleSpy.mock.calls.map((call) => call.map(String).join(' '));
       fs.chmodSync(credentialsDir, 0o700);
       consoleSpy.mockRestore();
     }
 
+    org.revokeAccess();
+    const later = await client.callTool('salesforce_list_objects', {});
+    expect((later.json as Record<string, unknown>).ok).toBe(true);
     expect(org.grants.map((grant) => grant.presented)).toEqual(['refresh-0', 'refresh-1']);
     expect(org.grants.every((grant) => grant.accepted)).toBe(true);
     expect(logged.some((line) => line.includes('Failed to save refreshed token'))).toBe(true);
+    await vi.waitFor(() => expect(savedRefreshToken()).toBe('refresh-2'));
   });
 });

@@ -209,7 +209,11 @@ Then call `salesforce_connect_account` to start the OAuth flow.
 - The standalone OAuth callback server binds to `127.0.0.1`; it does not honour environment overrides that would expose the callback beyond loopback.
 - OAuth credentials are stored under `SALESFORCE_CONFIG_DIR` (default `~/.mcp/salesforce`) with restrictive directory and file permissions.
 - Write and disconnect tools are marked so capable hosts can ask for confirmation before changing Salesforce data.
-- SOQL helper paths escape string and `LIKE` values, strip comments quote-safely before applying the query limit cap, and enforce a maximum of 200 records for raw SOQL queries.
+- SOQL helper paths escape backslashes and apostrophes. Filters treat `%` and `_` literally, including the `LIKE` operator in `salesforce_get_records`. SOSL searches escape reserved characters, including apostrophes.
+- Raw SOQL queries strip comments without changing string literals and cap row or grouped results at 200. Ungrouped aggregates receive no generated LIMIT: an explicit `COUNT()` limit is preserved to bound the count, while limits on other ungrouped aggregates are removed because Salesforce rejects them. `FOR VIEW` and `FOR REFERENCE` stay after LIMIT and OFFSET.
+- Read fields and generic filter fields accept relationship paths such as `Owner.Name`; write field keys must be single API names.
+- Session expiry is recognized by Salesforce's error code as well as its message. Invalid field, invalid object and malformed query errors include recovery hints; vendor messages remain wrapped as untrusted content.
+- `salesforce_get_notes` reads up to 150 linked documents before fetching the linked notes, returns an empty result when no links exist, and adds `truncated: true` when it reaches 150, because linked files use up that allowance and notes may be missing. The note result limit remains 200 (default 50).
 - Record text returned by read tools is wrapped in `<untrusted-content>` envelopes so Salesforce-authored field values are presented to the model as data, not instructions.
 - `salesforce_convert_lead` reports a conversion as failed when Salesforce rejects it at the record level (e.g. a validation rule), instead of claiming success; the org-authored error detail is enveloped the same way.
 

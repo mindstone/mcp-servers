@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, validateObjectName, validateFields, isValidQueryFieldName, isValidFieldName, escapeSOQL, ALLOWED_FILTER_OPERATORS, validateAndMergeCustomFields, checkSaveResult, formatVendorErrors, sanitizeRecords, requireArg } from '../utils.js';
+import { withErrorHandling, validateObjectName, validateFields, isValidQueryFieldName, escapeSOQL, escapeSOQLLike, ALLOWED_FILTER_OPERATORS, validateAndMergeCustomFields, checkSaveResult, formatVendorErrors, sanitizeRecords, requireArg } from '../utils.js';
 import { withConnection } from '../client.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { ConnectorError, type SaveResult } from '../types.js';
@@ -12,10 +12,11 @@ import { ConnectorError, type SaveResult } from '../types.js';
 // regexes.
 //
 // The walker is QUOTE-AWARE: characters inside a SOQL single-quoted string
-// literal are preserved verbatim. SOQL string literals support two escape
-// forms for an embedded apostrophe: doubled-quote `''` and backslash-quote
-// `\'`. We honour both, plus generic backslash-escapes (`\\`, `\n`, etc.)
-// which simply consume the next character. Without quote-awareness, a
+// literal are preserved verbatim. SOQL escapes an embedded apostrophe as `\'`.
+// The walker also tolerates a doubled `''` in caller-written text, which SOQL
+// itself does not support, so that it never strips inside what the caller
+// meant as a literal. Generic backslash-escapes (`\\`, `\n`, etc.) simply
+// consume the next character. Without quote-awareness, a
 // query like `WHERE Website = 'https://example.com/path'` would be
 // corrupted to `WHERE Website = 'https:` (unterminated literal), since
 // the naive global regex would treat the `//` inside the quoted span as
@@ -33,8 +34,8 @@ function stripSoqlComments(query: string): { text: string; endedInLiteral: boole
     const ch = query[i];
 
     // Inside a single-quoted SOQL string literal: copy verbatim until the
-    // matching close-quote, honouring backslash escapes and the doubled-
-    // apostrophe escape ('').
+    // matching close-quote, honouring backslash escapes and tolerating a
+    // doubled apostrophe ('').
     if (ch === "'") {
       out += ch;
       i++;
@@ -48,7 +49,7 @@ function stripSoqlComments(query: string): { text: string; endedInLiteral: boole
           continue;
         }
         if (c === "'") {
-          // Doubled-apostrophe = literal apostrophe inside the literal.
+          // Tolerated doubled apostrophe: stays inside the literal.
           if (i + 1 < n && query[i + 1] === "'") {
             out += "''";
             i += 2;
@@ -95,6 +96,25 @@ function stripSoqlComments(query: string): { text: string; endedInLiteral: boole
   return { text: out, endedInLiteral };
 }
 
+/** Blank literals and nested subqueries while preserving character positions. */
+function queryKeywordView(query: string): string {
+  const withoutLiterals = query.replace(/'(?:\\[\s\S]|''|[^'\\])*'?/g, (literal) => ' '.repeat(literal.length));
+  const view = withoutLiterals.split('');
+  let subqueryDepth = 0;
+  for (let i = 0; i < view.length; i++) {
+    const ch = withoutLiterals[i];
+    if (subqueryDepth > 0) {
+      if (ch === '(') subqueryDepth++;
+      if (ch === ')') subqueryDepth--;
+      view[i] = ' ';
+    } else if (ch === '(' && /^\s*SELECT\b/i.test(withoutLiterals.slice(i + 1))) {
+      subqueryDepth = 1;
+      view[i] = ' ';
+    }
+  }
+  return view.join('');
+}
+
 /**
  * Enforce a hard cap on the LIMIT clause of a caller-supplied SOQL query.
  *
@@ -104,9 +124,10 @@ function stripSoqlComments(query: string): { text: string; endedInLiteral: boole
  * neutralised. OFFSET clauses are preserved on the output side, and a
  * caller-supplied OFFSET-without-LIMIT triggers an inserted cap.
  *
- * The result is a single, syntactically valid SOQL statement with exactly
- * one `LIMIT <n>` clause where `n <= maxLimit`, and at most one trailing
- * `OFFSET <n>` clause.
+ * Ungrouped aggregates do not get a LIMIT. An explicit COUNT() LIMIT bounds
+ * the count and is preserved; LIMIT is removed for other ungrouped aggregates.
+ * Row and grouped queries are capped at maxLimit. Trailing OFFSET and
+ * FOR VIEW / FOR REFERENCE clauses retain their SOQL order.
  */
 export function applyQueryLimitCap(rawQuery: string, maxLimit: number): string {
   const { text, endedInLiteral } = stripSoqlComments(rawQuery);
@@ -117,6 +138,12 @@ export function applyQueryLimitCap(rawQuery: string, maxLimit: number): string {
   // data, so only strip when the query did not end inside an unterminated one
   // (a closed literal can never be the trailing run the pattern matches).
   let base = endedInLiteral ? cleaned : cleaned.replace(/[;\s]*;[;\s]*$/, '').trimEnd();
+  let forClause = '';
+  const forMatch = base.match(/\s+FOR\s+(VIEW|REFERENCE)\s*$/i);
+  if (forMatch) {
+    forClause = forMatch[0];
+    base = base.slice(0, forMatch.index);
+  }
   let offsetClause = '';
   const offsetMatch = base.match(/^([\s\S]*?)\s+OFFSET\s+(\d+)\s*$/i);
   if (offsetMatch) {
@@ -124,6 +151,14 @@ export function applyQueryLimitCap(rawQuery: string, maxLimit: number): string {
     offsetClause = ` OFFSET ${offsetMatch[2]}`;
   }
   const limitMatch = base.match(/^([\s\S]*?)\s+LIMIT\s+(\d+)\s*$/i);
+  const view = queryKeywordView(base);
+  const selectList = /\bSELECT\b([\s\S]*?)\bFROM\b/i.exec(view)?.[1] ?? '';
+  const isAggregate = /\b(COUNT|COUNT_DISTINCT|SUM|AVG|MIN|MAX)\s*\(/i.test(selectList);
+  if (isAggregate && !/\bGROUP\s+BY\b/i.test(view)) {
+    const isCountAll = /^\s*COUNT\s*\(\s*\)\s*$/i.test(selectList);
+    const aggregateHead = limitMatch && !isCountAll ? limitMatch[1].trimEnd() : base;
+    return `${aggregateHead}${offsetClause}${forClause}`;
+  }
   let head: string;
   let limit: number;
   if (limitMatch) {
@@ -134,7 +169,7 @@ export function applyQueryLimitCap(rawQuery: string, maxLimit: number): string {
     head = base.trimEnd();
     limit = maxLimit;
   }
-  return `${head} LIMIT ${limit}${offsetClause}`;
+  return `${head} LIMIT ${limit}${offsetClause}${forClause}`;
 }
 
 export function registerQueryTools(server: McpServer): void {
@@ -297,21 +332,22 @@ export function registerQueryTools(server: McpServer): void {
         const requestedFields = typeof args.fields === 'string'
           ? args.fields.split(',').map((f) => f.trim()).filter((f) => f.length > 0)
           : args.fields;
-        const fields = validateFields(requestedFields || [], ['Id'], isValidQueryFieldName);
+        const fields = validateFields(requestedFields || [], ['Id']);
         let soql = `SELECT ${fields.join(', ')} FROM ${objectName}`;
         const conditions: string[] = [];
         if (args.record_id) conditions.push(`Id = '${escapeSOQL(args.record_id)}'`);
         if (args.filters && args.filters.length > 0) {
           for (const filter of args.filters) {
-            if (!isValidFieldName(filter.field)) {
-              throw new ConnectorError(`Invalid filter field name: "${filter.field}"`, 'INVALID_FIELD_NAMES', 'Field names must be valid API names');
+            if (!isValidQueryFieldName(filter.field)) {
+              throw new ConnectorError(`Invalid filter field name: "${filter.field}"`, 'INVALID_FIELD_NAMES', 'Use field API names or relationship paths such as Owner.Name; each segment must start with a letter and contain only letters, numbers, and underscores');
             }
             if (!ALLOWED_FILTER_OPERATORS.has(filter.operator)) {
               throw new ConnectorError(`Invalid filter operator: "${filter.operator}"`, 'INVALID_OPERATOR', `Allowed: ${[...ALLOWED_FILTER_OPERATORS].join(', ')}`);
             }
             let formattedValue: string;
             if (typeof filter.value === 'string') {
-              formattedValue = `'${escapeSOQL(filter.value)}'`;
+              const escape = filter.operator === 'LIKE' ? escapeSOQLLike : escapeSOQL;
+              formattedValue = `'${escape(filter.value)}'`;
             } else {
               formattedValue = `${filter.value}`;
             }
