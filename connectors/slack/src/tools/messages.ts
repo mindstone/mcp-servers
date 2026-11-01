@@ -4,7 +4,7 @@ import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import type { WebClient } from '@slack/web-api';
 import { z } from 'zod';
 import { errorJson, parseSlackPermalink, slackTsToDatetime, withErrorHandling } from '../utils.js';
-import { getSlackClient, getSlackReaderClient, getSlackUserClient } from '../client.js';
+import { getSlackClient, getSlackReaderClient, getSlackUserClient, getSlackAppIdentity } from '../client.js';
 import {
   enrichMessageWithUserInfo,
   extractUserIdsFromMessages,
@@ -980,7 +980,7 @@ Posted as the user — messages are editable in Slack.`,
   server.registerTool(
     'reply_to_slack_thread',
     {
-      description: `Reply to an existing message thread in Slack as yourself.
+      description: `Reply to an existing message thread in Slack. A personal app replies as its bot; shared apps reply as you. If a personal app's bot is not in the channel, the reply is posted as you with a hint to invite the app.
 
 PARAMETERS: channel, thread_ts, text. The thread_ts comes from ts_slack /
 thread_ts_slack on a message returned by get_slack_channel_history.`,
@@ -1004,27 +1004,50 @@ thread_ts_slack on a message returned by get_slack_channel_history.`,
       },
     },
     withErrorHandling(async (args) => {
-      const userClient = await getSlackUserClient();
-      if (!userClient) {
+      const app = await getSlackAppIdentity();
+      const ownApp = app.appKind === 'own';
+      const client = ownApp ? await getSlackClient() : await getSlackUserClient();
+      if (!client) {
         return errorJson({
-          error: 'Replying to threads requires user authorization.',
+          error: ownApp ? 'Replying as the app requires bot authorization.' : 'Replying to threads requires user authorization.',
           action_required:
             'Reconnect Slack via authenticate_slack_workspace to grant chat:write.',
           next_step: 'authenticate_slack_workspace',
         });
       }
       const channelId = await resolveChannelId(args.channel);
-      const result = await userClient.chat.postMessage({
+      const post = {
         channel: channelId,
         thread_ts: args.thread_ts,
         text: await withOwnBotMentionsAsPlainText(args.text),
-      });
+      };
+      const appName = app.appName ?? 'your Rebel app';
+      const invitation = app.botUsername ? `invite it with /invite @${app.botUsername}` : 'invite the app to this channel';
+      let note = ownApp
+        ? wrapUntrusted(`Replied as ${appName}.`, 'slack:reply-note')
+        : 'Replied as you — you can edit this message in Slack.';
+      let result;
+      try {
+        result = await client.chat.postMessage(post);
+      } catch (error) {
+        if (!ownApp || (error as { data?: { error?: string } })?.data?.error !== 'not_in_channel') throw error;
+        const userClient = await getSlackUserClient();
+        if (!userClient) {
+          return errorJson({
+            error: 'The app is not in this channel, and posting as you requires user authorization.',
+            action_required: 'Invite the app to this channel, or reconnect Slack to grant chat:write.',
+            next_step: 'authenticate_slack_workspace',
+          });
+        }
+        result = await userClient.chat.postMessage(post);
+        note = wrapUntrusted(`Posted as you because ${appName} isn't in this channel; ${invitation}`, 'slack:reply-note');
+      }
       return JSON.stringify({
         ok: true,
         channel: result.channel,
         ts_slack: result.ts,
         ts_iso: result.ts ? slackTsToDatetime(result.ts) : undefined,
-        note: 'Replied as you — you can edit this message in Slack.',
+        note,
       });
     }),
   );
