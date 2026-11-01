@@ -1021,7 +1021,7 @@ thread_ts_slack on a message returned by get_slack_channel_history.`,
         thread_ts: args.thread_ts,
         text: await withOwnBotMentionsAsPlainText(args.text),
       };
-      const appName = app.appName ?? 'your Rebel app';
+      const appName = app.appName ?? 'your app';
       const invitation = app.botUsername ? `invite it with /invite @${app.botUsername}` : 'invite the app to this channel';
       let note = ownApp
         ? wrapUntrusted(`Replied as ${appName}.`, 'slack:reply-note')
