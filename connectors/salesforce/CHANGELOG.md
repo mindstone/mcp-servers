@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-11-01
+
+### Changed
+
+- Fix raw aggregate queries, apostrophe escaping, get_notes and failed sign-in saves; keep rotated refresh tokens. No live-org QA.
+
 ### Fixed
 
 - Keep ungrouped aggregate queries valid: omit generated LIMIT clauses, preserve a caller's COUNT() limit, and remove limits Salesforce rejects on other aggregates. Keep FOR VIEW and FOR REFERENCE after LIMIT and OFFSET.
