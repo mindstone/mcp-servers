@@ -7,7 +7,7 @@ import { createSlackHandlers, SLACK_API_BASE } from './fixtures/slack-mock-api.j
 import { createSlackConfigDir, createTestClient, type McpTestClient, type SlackTestConfig } from './fixtures/mcp-test-client.js';
 import { SlackTokenProvider } from '../src/tokenProvider.js';
 
-const ownApp = { appKind: 'own', appId: 'A123', clientId: 'own-id', clientSecret: 'fake-own-secret', appName: "Alex's Rebel" };
+const ownApp = { appKind: 'own', appId: 'A123', clientId: 'own-id', clientSecret: 'fake-own-secret', appName: "Alex's Assistant" };
 let cfg: SlackTestConfig;
 let client: McpTestClient | undefined;
 
@@ -95,7 +95,7 @@ describe('thread reply identity', () => {
     const result = await c.callTool('reply_to_slack_thread', args);
     expect(result.json).toMatchObject({ ok: true });
     expect(posts).toEqual(['xoxb-fake-own-bot']);
-    expect((result.json as { note: string }).note).toContain("Alex's Rebel");
+    expect((result.json as { note: string }).note).toContain("Alex's Assistant");
     expect((await c.client.listTools()).tools.find(t => t.name === 'reply_to_slack_thread')?.description).toContain('app');
   });
 
@@ -108,19 +108,19 @@ describe('thread reply identity', () => {
   });
 
   it('falls back only when the bot is not in the channel and explains how to invite it by its handle', async () => {
-    writeTokens({ ...ownApp, botUsername: 'alexs_rebel' });
+    writeTokens({ ...ownApp, botUsername: 'alexs_assistant' });
     const posts = capturePosts('not_in_channel');
     const result = await (await connect()).callTool('reply_to_slack_thread', args);
     expect(posts).toEqual(['xoxb-fake-own-bot', 'xoxp-fake-user']);
     expect(result.json).toMatchObject({ ok: true });
-    expect((result.json as { note: string }).note).toContain("Posted as you because Alex's Rebel isn't in this channel; invite it with /invite @alexs_rebel");
+    expect((result.json as { note: string }).note).toContain("Posted as you because Alex's Assistant isn't in this channel; invite it with /invite @alexs_assistant");
   });
 
   it('asks to invite the app when it has no handle to name', async () => {
     writeTokens(ownApp);
     capturePosts('not_in_channel');
     const result = await (await connect()).callTool('reply_to_slack_thread', args);
-    expect((result.json as { note: string }).note).toContain("Posted as you because Alex's Rebel isn't in this channel; invite the app to this channel");
+    expect((result.json as { note: string }).note).toContain("Posted as you because Alex's Assistant isn't in this channel; invite the app to this channel");
   });
 
   it('surfaces other bot errors without posting as the user', async () => {

@@ -225,6 +225,8 @@ Other errors returned to the read runner do not trigger this retry. Writes keep 
 
 Text sent as you (`post_slack_message`, `reply_to_slack_thread`, `schedule_slack_message`, `update_slack_message`, and the `upload_slack_file` comment) writes a mention of the connector's own bot user as plain `@name` text when the workspace record has a bot user ID, so a host that listens for your mentions of its bot is not retriggered by its own replies. Other users' mentions are sent unchanged.
 
+A workspace record can describe a personal app: `appKind: "own"` with its own `appId`, `clientId`, `clientSecret` and `appName`. Then thread replies post as that app's bot, and token refresh uses the record's `clientId`/`clientSecret` pair instead of `SLACK_CLIENT_ID`/`SLACK_CLIENT_SECRET`. If the bot is not in the channel, the reply is posted as you and the tool result says so, with a hint to invite the app. Records without `appKind` behave as before: replies are sent as you.
+
 ### Channels
 - `list_slack_channels` — List channels (filterable, paginated).
 - `get_slack_channel_history` — Get recent messages from a channel.
