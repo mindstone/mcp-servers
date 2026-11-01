@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Changed
+
+- Refresh with each workspace app’s credentials and reply as personal app bots, with a visible user fallback when the bot is not in the channel.
+
 ## [0.3.3] - 2026-10-31
 
 ### Changed
