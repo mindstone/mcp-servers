@@ -24,6 +24,10 @@ import {
   type UploadResponse,
 } from './types.js';
 import { getApiKey } from './auth.js';
+import { wrapUntrusted } from './untrusted-content.js';
+
+/** Envelope source label for Runway-authored text (error bodies, task failures). */
+export const RUNWAY_API_SOURCE = 'runway-api';
 
 // ============================================================================
 // Local-file sandbox
@@ -375,7 +379,7 @@ export async function runwayFetch<T>(
       detail = ((await response.json()) as { error?: string })?.error || '';
     } catch { /* empty */ }
     throw new RunwayError(
-      `Runway API error (HTTP ${response.status}): ${detail}`,
+      `Runway API error (HTTP ${response.status}): ${detail ? wrapUntrusted(detail, RUNWAY_API_SOURCE) : ''}`,
       `HTTP_${response.status}`,
       'Try again or check https://dev.runwayml.com/',
     );

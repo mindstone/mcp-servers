@@ -15,6 +15,11 @@ are maintained manually as part of the PR review checklist.
 
 - `veo3` is no longer offered on `generate_video_from_image` and `generate_video_from_text`: Runway's API no longer accepts it for generation. Use `veo3.1` or `veo3.1_fast`.
 
+### Security
+
+- Re-synced the vendored `<untrusted-content>` envelope helper with the canonical copy: attribute-bearing closing tags (`</untrusted-content foo="x">`) and spoofed opening tags inside wrapped text are now neutralised. This applies to custom voice names and descriptions.
+- Runway API error text and task failure text (`failure`, `failureCode` on `check_runway_task` and `wait_for_runway_task`) are now wrapped in the envelope before they reach tool output; they were returned raw.
+
 ## [0.4.1] - 2026-08-10
 
 ### Changed

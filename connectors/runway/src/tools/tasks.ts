@@ -1,8 +1,15 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { runwayFetch, runwayRawFetch, validateDownloadUrl, assertDownloadPathInRoot } from '../client.js';
+import {
+  runwayFetch,
+  runwayRawFetch,
+  validateDownloadUrl,
+  assertDownloadPathInRoot,
+  RUNWAY_API_SOURCE,
+} from '../client.js';
 import { RunwayError, type TaskDetail } from '../types.js';
 import { withErrorHandling } from '../utils.js';
+import { wrapUntrusted } from '../untrusted-content.js';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -35,8 +42,9 @@ export function registerTaskTools(server: McpServer): void {
         response.message = 'Generation complete! Output URLs are ready.';
       } else if (result.status === 'FAILED') {
         response.ok = false;
-        response.error = result.failure || 'Generation failed.';
-        response.failure_code = result.failureCode;
+        response.error = result.failure
+          ? wrapUntrusted(result.failure, RUNWAY_API_SOURCE) : 'Generation failed.';
+        response.failure_code = wrapUntrusted(result.failureCode, RUNWAY_API_SOURCE);
       }
       return JSON.stringify(response);
     }),
@@ -88,7 +96,8 @@ export function registerTaskTools(server: McpServer): void {
         if (result.status === 'FAILED') {
           return JSON.stringify({
             ok: false, task_id: result.id, status: 'FAILED',
-            error: result.failure || 'Generation failed.', failure_code: result.failureCode,
+            error: result.failure ? wrapUntrusted(result.failure, RUNWAY_API_SOURCE) : 'Generation failed.',
+            failure_code: wrapUntrusted(result.failureCode, RUNWAY_API_SOURCE),
             elapsed_seconds: Math.round((Date.now() - startTime) / 1000),
           });
         }
