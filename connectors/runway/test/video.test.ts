@@ -1,4 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { mswServer } from './helpers/setup.js';
 import { createRunwayHandlers, createBodyCapturingHandlers } from './helpers/runway-mock-server.js';
 import { createTestClient, type McpTestClient } from './helpers/mcp-test-client.js';
@@ -37,6 +40,32 @@ describe('Video generation tools', () => {
       expect(postBody).toBeDefined();
       expect(postBody.model).toBe('veo3.1');
       expect(postBody.duration).toBe(4);
+    });
+
+    it.each([
+      ['generate_video_from_text', { prompt_text: 'A lighthouse at dusk' }],
+      ['generate_video_from_image', { prompt_image: 'https://example.com/frame.png' }],
+      ['generate_video_from_image', { prompt_image: path.join(os.tmpdir(), 'runway-veo3-frame.png') }],
+    ])('%s refuses veo3, which Runway no longer accepts, before any request (%o)', async (tool, args) => {
+      fs.writeFileSync(path.join(os.tmpdir(), 'runway-veo3-frame.png'), Buffer.alloc(1024, 1));
+      mswServer.use(...createBodyCapturingHandlers(MOCK_API_KEY).handlers);
+      const requests: string[] = [];
+      const onRequest = ({ request }: { request: Request }) => { requests.push(request.url); };
+      mswServer.events.on('request:start', onRequest);
+
+      try {
+        testClient = await createTestClient({
+          env: { RUNWAYML_API_SECRET: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+        });
+
+        const result = await testClient.callTool(tool, { ...args, model: 'veo3' });
+
+        expect(result.isError).toBe(true);
+        expect(requests).toEqual([]);
+      } finally {
+        mswServer.events.removeListener('request:start', onRequest);
+        fs.rmSync(path.join(os.tmpdir(), 'runway-veo3-frame.png'), { force: true });
+      }
     });
 
     it('sends content_moderation when specified', async () => {

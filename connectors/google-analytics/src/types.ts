@@ -6,6 +6,31 @@ import { z } from 'zod';
 
 export const ANALYTICS_SCOPE = 'https://www.googleapis.com/auth/analytics.readonly';
 
+/** Scope required by the Admin API write tools. */
+export const ANALYTICS_EDIT_SCOPE = 'https://www.googleapis.com/auth/analytics.edit';
+
+/** Env var that opts the connector into Admin API writes (invariant #7). */
+export const WRITES_ENV_VAR = 'GA4_ALLOW_WRITES';
+
+/**
+ * Writes are off unless the operator explicitly opts in. Read at call time so
+ * the flag cannot be latched by an earlier import.
+ */
+export function writesEnabled(): boolean {
+  const value = process.env[WRITES_ENV_VAR]?.trim().toLowerCase();
+  return value === 'true' || value === '1';
+}
+
+/** The scope the connector requests: edit only when writes are enabled. */
+export function activeScope(): string {
+  return writesEnabled() ? ANALYTICS_EDIT_SCOPE : ANALYTICS_SCOPE;
+}
+
+/** gcloud command that mints ADC with the scope the connector needs. */
+export function adcLoginCommand(): string {
+  return `gcloud auth application-default login --scopes=${activeScope()} --client-id-file=/path/to/your/oauth-client.json`;
+}
+
 /** Default base URL for the GA Admin API. v1beta is generally available. */
 export const ADMIN_BASE_URL = 'https://analyticsadmin.googleapis.com/v1beta';
 

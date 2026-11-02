@@ -2,14 +2,15 @@
 /**
  * Google Analytics 4 MCP Server
  *
- * Provides Google Analytics 4 reporting, schema discovery, and admin visibility
- * via Model Context Protocol.
+ * Provides Google Analytics 4 reporting, schema discovery, admin visibility, and
+ * (opt-in) admin configuration writes via Model Context Protocol.
  *
  * Authentication: Google Application Default Credentials (ADC)
  *
  * Environment variables:
  * - GOOGLE_APPLICATION_CREDENTIALS: Absolute path to ADC or service account JSON (required)
  * - GA4_PROPERTY_ID: Optional default GA4 property ID; tools fall back to this when property_id is not passed
+ * - GA4_ALLOW_WRITES: Set to true to allow the admin write tools (needs the analytics.edit scope)
  *
  * To mint ADC for a user account, install the gcloud CLI then run:
  *   gcloud auth application-default login \

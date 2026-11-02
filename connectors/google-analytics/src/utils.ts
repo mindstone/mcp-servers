@@ -1,6 +1,6 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z, ZodError } from 'zod';
-import { GoogleAnalyticsError, type DataApiResponse } from './types.js';
+import { adcLoginCommand, GoogleAnalyticsError, type DataApiResponse } from './types.js';
 import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
 
 /** Envelope source labels used across the connector. */
@@ -113,7 +113,7 @@ function mapAuthError(
       error: 'Your Google credentials have expired or been revoked.',
       code: 'CREDENTIALS_EXPIRED',
       resolution:
-        'Re-run `gcloud auth application-default login --scopes=https://www.googleapis.com/auth/analytics.readonly --client-id-file=/path/to/your/oauth-client.json` and reconnect this connector in your MCP host.',
+        `Re-run \`${adcLoginCommand()}\` and reconnect this connector in your MCP host.`,
     };
   }
   if (/ENOENT|no such file/i.test(message)) {
@@ -131,7 +131,7 @@ function mapAuthError(
       error: 'The credential does not have access to this Google Analytics resource.',
       code: 'PERMISSION_DENIED',
       resolution:
-        'Ensure the Google account or service account behind your credentials has access to the GA4 property and that the Google Analytics Admin and Data APIs are enabled in the Google Cloud project attached to the credential.',
+        'Ensure the Google account or service account behind your credentials has access to the GA4 property and that the Google Analytics Admin and Data APIs are enabled in the Google Cloud project attached to the credential. Write tools also need the Editor role on the property and credentials minted with the analytics.edit scope.',
     };
   }
   return null;

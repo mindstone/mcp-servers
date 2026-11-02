@@ -11,13 +11,13 @@ export function registerVideoTools(server: McpServer): void {
     {
       description:
         'Animate a still image into a video. Supports first-frame (and optionally last-frame) keyframe control. ' +
-        'MODELS: gen4.5 (flagship), gen4_turbo (fast/cheap), veo3.1 (best quality + audio), veo3.1_fast, veo3 (deprecated upstream). ' +
+        'MODELS: gen4.5 (flagship), gen4_turbo (fast/cheap), veo3.1 (best quality + audio), veo3.1_fast. ' +
         'WORKFLOW: Returns task_id → poll with check_runway_task or use wait_for_runway_task.',
       inputSchema: z.object({
         prompt_image: z.string().describe('First frame image. HTTPS URL, Runway URI, or local file path.'),
         last_frame_image: z.string().optional().describe('Optional last frame image for transition.'),
         prompt_text: z.string().optional().describe('Describe the desired motion.'),
-        model: z.enum(['gen4.5', 'gen4_turbo', 'veo3.1', 'veo3.1_fast', 'veo3']).optional().describe('Default: gen4_turbo.'),
+        model: z.enum(['gen4.5', 'gen4_turbo', 'veo3.1', 'veo3.1_fast']).optional().describe('Default: gen4_turbo.'),
         ratio: z.enum(['1280:720', '720:1280', '960:960', '1104:832', '832:1104', '1584:672']).optional().describe('Output resolution. Default: 1280:720.'),
         duration: z.number().optional().describe('Seconds. gen4: 2-10 (default 5). veo: 4,6,8 (default 8).'),
         audio: z.boolean().optional().describe('Generate audio (veo models only). Default: true.'),
@@ -71,11 +71,11 @@ export function registerVideoTools(server: McpServer): void {
     {
       description:
         'Create a video entirely from a text description. ' +
-        'MODELS: gen4.5 (flagship), veo3.1 (best + audio), veo3.1_fast, veo3 (deprecated upstream). ' +
+        'MODELS: gen4.5 (flagship), veo3.1 (best + audio), veo3.1_fast. ' +
         'WORKFLOW: Returns task_id → poll or use wait_for_runway_task.',
       inputSchema: z.object({
         prompt_text: z.string().max(1000).describe('Detailed video description. Max 1000 chars.'),
-        model: z.enum(['gen4.5', 'veo3.1', 'veo3.1_fast', 'veo3']).optional().describe('Default: gen4.5.'),
+        model: z.enum(['gen4.5', 'veo3.1', 'veo3.1_fast']).optional().describe('Default: gen4.5.'),
         ratio: z.enum(['1280:720', '720:1280']).optional().describe('Output resolution. Default: 1280:720.'),
         duration: z.number().optional().describe('Seconds. gen4.5: 2-10 (default 5). veo: 4,6,8 (default 8).'),
         audio: z.boolean().optional().describe('Generate audio (veo models only). Default: true.'),
