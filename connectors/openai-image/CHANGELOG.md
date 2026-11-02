@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-02
+
+### Changed
+
+- Default to gpt-image-2.5-sunburst, add gpt-image-2.5-flare, allow transparent backgrounds on 2.5, and refresh speed and cost guidance.
+
 ### Changed
 
 - Default model is now `gpt-image-2.5-sunburst` (OpenAI's most capable image model, same token price as `gpt-image-2`); `gpt-image-2.5-flare` (faster) is added to the known list and `gpt-image-1`, which OpenAI shut down, is removed from it.
