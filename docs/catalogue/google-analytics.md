@@ -5,7 +5,7 @@ title: google-analytics — mcp-servers catalogue
 
 # google-analytics
 
-Google Analytics 4 MCP server for Model Context Protocol hosts. Discover account/property structure, explore the live schema, run reports &#40;with row-volume safety&#41;, create large asynchronous exports, and inspect admin configuration through a standardised MCP interface.
+Google Analytics 4 MCP server for Model Context Protocol hosts. Discover account/property structure, explore the live schema, run reports &#40;with row-volume safety&#41;, create large asynchronous exports, and inspect admin configuration through a standardised MCP interface. With writes explicitly enabled, it can also set up and change property configuration: key events, custom dimensions and metrics, audiences, channel groups, data streams, enhanced measurement, event create rules, Measurement Protocol secrets, product links, and data retention.
 
 
 
@@ -15,7 +15,7 @@ Google Analytics 4 MCP server for Model Context Protocol hosts. Discover account
 |-------|-------|
 | Version | 0.2.1 |
 | Auth | OAuth (—) |
-| Tools | 34 (accounts, schema, reporting, admin) |
+| Tools | 74 (accounts, schema, reporting, admin, admin-writes) |
 | Surface | cloud API |
 
 ## Evidence

@@ -8,12 +8,13 @@
     "envVars": []
   },
   "tools": {
-    "count": 34,
+    "count": 74,
     "domains": [
       "accounts",
       "schema",
       "reporting",
-      "admin"
+      "admin",
+      "admin-writes"
     ]
   },
   "surface": "cloud-api",

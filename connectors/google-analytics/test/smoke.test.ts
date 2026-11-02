@@ -16,7 +16,7 @@ describe('smoke — tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 34 tools with ga_ prefix', async () => {
+  it('registers exactly 74 tools with ga_ prefix', async () => {
     testClient = await createTestClient({
       env: {
         GOOGLE_APPLICATION_CREDENTIALS: FIXTURE_ADC,
@@ -26,7 +26,7 @@ describe('smoke — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((tool) => tool.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(34);
+    expect(toolsResult.tools).toHaveLength(74);
     expect(toolNames).toEqual(
       [
         'ga_batch_run_reports',
@@ -63,20 +63,72 @@ describe('smoke — tool registration', () => {
         'ga_run_report',
         'ga_search_change_history_events',
         'ga_search_schema',
+        'ga_acknowledge_user_data_collection',
+        'ga_archive_audience',
+        'ga_archive_custom_dimension',
+        'ga_archive_custom_metric',
+        'ga_create_audience',
+        'ga_create_bigquery_link',
+        'ga_create_channel_group',
+        'ga_create_custom_dimension',
+        'ga_create_custom_metric',
+        'ga_create_event_create_rule',
+        'ga_create_firebase_link',
+        'ga_create_google_ads_link',
+        'ga_create_key_event',
+        'ga_create_measurement_protocol_secret',
+        'ga_create_property',
+        'ga_create_web_data_stream',
+        'ga_delete_bigquery_link',
+        'ga_delete_channel_group',
+        'ga_delete_data_stream',
+        'ga_delete_event_create_rule',
+        'ga_delete_firebase_link',
+        'ga_delete_google_ads_link',
+        'ga_delete_key_event',
+        'ga_delete_measurement_protocol_secret',
+        'ga_delete_property',
+        'ga_get_enhanced_measurement_settings',
+        'ga_list_event_create_rules',
+        'ga_list_measurement_protocol_secrets',
+        'ga_update_audience',
+        'ga_update_bigquery_link',
+        'ga_update_channel_group',
+        'ga_update_custom_dimension',
+        'ga_update_custom_metric',
+        'ga_update_data_retention_settings',
+        'ga_update_data_stream',
+        'ga_update_enhanced_measurement_settings',
+        'ga_update_event_create_rule',
+        'ga_update_google_ads_link',
+        'ga_update_key_event',
+        'ga_update_property',
       ].sort(),
     );
   });
 
-  it('marks every tool read-only except the server-side materialisation creates', async () => {
+  it('marks every tool read-only except the materialisation creates and the config writes', async () => {
     const toolsResult = await testClient.client.listTools();
-    const creates = new Set(['ga_create_audience_export', 'ga_create_report_task']);
+    const readOnlyAdditions = new Set([
+      'ga_get_enhanced_measurement_settings',
+      'ga_list_event_create_rules',
+      'ga_list_measurement_protocol_secrets',
+    ]);
+    const creates = new Set([
+      'ga_create_audience_export',
+      'ga_create_report_task',
+      ...toolsResult.tools
+        .map((tool) => tool.name)
+        .filter((name) => /^ga_(create|update|delete|archive|acknowledge)_/.test(name))
+        .filter((name) => !readOnlyAdditions.has(name)),
+    ]);
     for (const tool of toolsResult.tools) {
       expect(
         tool.annotations?.readOnlyHint,
         `${tool.name} readOnlyHint`,
       ).toBe(!creates.has(tool.name));
-      // The quota-charging creates are annotated destructive so hosts can gate
-      // them behind explicit user approval (invariant #7).
+      // Quota-charging creates and every config write are annotated
+      // destructive so hosts can gate them behind user approval (invariant #7).
       expect(tool.annotations?.destructiveHint, `${tool.name} destructiveHint`).toBe(
         creates.has(tool.name),
       );

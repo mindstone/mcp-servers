@@ -4,3 +4,5 @@ export { registerReportTools } from './reports.js';
 export { registerAdminTools } from './admin.js';
 export { registerAudienceExportTools } from './audience-exports.js';
 export { registerReportTaskTools } from './report-tasks.js';
+export { registerDefinitionWriteTools } from './definition-writes.js';
+export { registerConfigWriteTools } from './config-writes.js';
