@@ -104,6 +104,31 @@ describe('record query and session regressions', () => {
     }));
   }
 
+  it.each(['Failed to save refreshed token', 'Query contains Failed to save refreshed token'])('keeps a vendor query error containing %s', async (message) => {
+    mswServer.use(http.get('*/services/data/*/query*', () => HttpResponse.json(
+      [{ message, errorCode: 'MALFORMED_QUERY' }], { status: 400 },
+    )));
+    const result = await (await connect()).callTool('salesforce_query', { query: 'SELECT Id FROM Account' });
+    expect(result.json).toMatchObject({ code: 'VENDOR_ERROR', vendor_code: 'MALFORMED_QUERY' });
+    expect(result.json.error).toBe(`<untrusted-content source="salesforce:vendor_errors">${message}</untrusted-content>`);
+  });
+
+  it('keeps date validation errors containing the save-failure phrase', async () => {
+    captureQueries();
+    const result = await (await connect()).callTool('salesforce_get_opportunities', {
+      close_date_from: 'Failed to save refreshed token',
+    });
+    expect(result.json.code).toBe('INVALID_DATE_FORMAT');
+    expect(queries).toEqual([]);
+  });
+
+  it('does not treat a plain error quoting the save-failure marker as a failed save', async () => {
+    await connect();
+    const { withConnection } = await import('../src/client.js');
+    const error = new Error('Input contains Failed to save refreshed token');
+    await expect(withConnection(undefined, async () => { throw error; })).rejects.toBe(error);
+  });
+
   it('get_accounts selects relationship paths', async () => {
     captureQueries();
     const result = await (await connect()).callTool('salesforce_get_accounts', { fields: ['Id', 'Owner.Name'] });
@@ -125,6 +150,45 @@ describe('record query and session regressions', () => {
     });
     expect(result.json.ok).toBe(true);
     expect(queries).toEqual(["SELECT Id FROM Account WHERE Owner.Name LIKE '\\%acme\\_\\%' LIMIT 50"]);
+  });
+
+  it.each([
+    ['CloseDate', '>=', '2026-01-01', '2026-01-01'],
+    ['CreatedDate', '>=', '2026-01-31T09:00:00Z', '2026-01-31T09:00:00Z'],
+    ['CreatedDate', '<', '2026-01-31T09:00:00.123+01:00', '2026-01-31T09:00:00.123+01:00'],
+    ['CreatedDate', '<=', '2026-01-31T09:00:00.1-05:00', '2026-01-31T09:00:00.1-05:00'],
+    ['Description', '=', null, 'null'],
+    ['Description', '!=', null, 'null'],
+    ['Description', '<', null, 'null'],
+    ['Amount', '>', 1000, '1000'],
+    ['IsWon', '=', true, 'true'],
+    ['Name', '=', 'null', "'null'"],
+    ['Name', 'LIKE', '2026-01-01', "'2026-01-01'"],
+    ['Name', '=', '2026-01-01 report', "'2026-01-01 report'"],
+  ])('formats a generic filter %s %s %s', async (field, operator, value, literal) => {
+    captureQueries();
+    const result = await (await connect()).callTool('salesforce_get_records', {
+      object_name: 'Opportunity', filters: [{ field, operator, value }],
+    });
+    expect(result.json.ok).toBe(true);
+    expect(queries).toEqual([`SELECT Id FROM Opportunity WHERE ${field} ${operator} ${literal} LIMIT 50`]);
+  });
+
+  it('surfaces the vendor refusal for date-shaped text on a text field', async () => {
+    mswServer.use(http.get('*/services/data/*/query*', ({ request }) => {
+      queries.push(new URL(request.url).searchParams.get('q') ?? '');
+      return HttpResponse.json([
+        { message: 'Name must be a string in quotes', errorCode: 'MALFORMED_QUERY' },
+      ], { status: 400 });
+    }));
+    const result = await (await connect()).callTool('salesforce_get_records', {
+      object_name: 'Account', filters: [{ field: 'Name', operator: '=', value: '2026-01-01' }],
+    });
+    expect(queries).toEqual(['SELECT Id FROM Account WHERE Name = 2026-01-01 LIMIT 50']);
+    expect(result.json).toMatchObject({
+      code: 'VENDOR_ERROR', vendor_code: 'MALFORMED_QUERY',
+      error: '<untrusted-content source="salesforce:vendor_errors">Name must be a string in quotes</untrusted-content>',
+    });
   });
 
   it.each(['Owner..Name.', 'COUNT(Id)', 'Owner.Name!'])('generic filters refuse %s', async (field) => {

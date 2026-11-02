@@ -1,9 +1,11 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withErrorHandling, validateObjectName, validateFields, isValidQueryFieldName, escapeSOQL, escapeSOQLLike, ALLOWED_FILTER_OPERATORS, validateAndMergeCustomFields, checkSaveResult, formatVendorErrors, sanitizeRecords, requireArg } from '../utils.js';
+import { withErrorHandling, validateObjectName, validateFields, isValidQueryFieldName, escapeSOQL, escapeSOQLLike, SOQL_DATE_LITERAL, ALLOWED_FILTER_OPERATORS, validateAndMergeCustomFields, checkSaveResult, formatVendorErrors, sanitizeRecords, requireArg } from '../utils.js';
 import { withConnection } from '../client.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 import { ConnectorError, type SaveResult } from '../types.js';
+
+const FILTER_VALUE_DESCRIPTION = 'Filter value. A date (2026-01-31) or a datetime with a time zone (2026-01-31T09:00:00Z) is sent unquoted: use a date for date fields and a datetime for datetime fields such as CreatedDate. Use null, not "null", to match an empty field with = or !=. To compare a text field with text that looks like a date, use salesforce_query.';
 
 // Strip SQL-style line ("// ...") and block ("/* ... ") comments from a
 // SOQL query. SOQL itself does not officially support either form, but
@@ -316,8 +318,8 @@ export function registerQueryTools(server: McpServer): void {
         record_id: z.string().min(1).optional().describe('Fetch one record by ID (adds an Id = ... condition)'),
         filters: z.array(z.object({
           field: z.string().describe('Field API name'),
-          operator: z.enum(['=', '!=', '<', '>', '<=', '>=', 'LIKE']).describe('Comparison operator'),
-          value: z.union([z.string(), z.number(), z.boolean()]).describe('Filter value'),
+          operator: z.enum(['=', '!=', '<', '>', '<=', '>=', 'LIKE']).describe('Comparison operator. LIKE matches the value literally, ignoring case: % and _ are not wildcards.'),
+          value: z.union([z.string(), z.number(), z.boolean(), z.null()]).describe(FILTER_VALUE_DESCRIPTION),
         })).optional().describe('WHERE conditions (AND-joined)'),
         limit: z.number().int().min(1).max(200).optional().describe('Max results 1-200 (default: 50)'),
       }),
@@ -345,7 +347,9 @@ export function registerQueryTools(server: McpServer): void {
               throw new ConnectorError(`Invalid filter operator: "${filter.operator}"`, 'INVALID_OPERATOR', `Allowed: ${[...ALLOWED_FILTER_OPERATORS].join(', ')}`);
             }
             let formattedValue: string;
-            if (typeof filter.value === 'string') {
+            if (typeof filter.value === 'string' && filter.operator !== 'LIKE' && SOQL_DATE_LITERAL.test(filter.value)) {
+              formattedValue = filter.value;
+            } else if (typeof filter.value === 'string') {
               const escape = filter.operator === 'LIKE' ? escapeSOQLLike : escapeSOQL;
               formattedValue = `'${escape(filter.value)}'`;
             } else {

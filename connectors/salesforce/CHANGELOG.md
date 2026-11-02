@@ -11,6 +11,15 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+
+- Ask to reconnect when Salesforce refuses an expired or revoked refresh token, and reload the saved sign-in on the next call.
+- Preserve validation and vendor error codes when their messages contain the token-save failure phrase.
+- Retry a failed save of a renewed sign-in before the next request, without blocking the request if saving still fails.
+- Send date, datetime and JSON null filter values unquoted in `salesforce_get_records`.
+- Explain in the tool description that `LIKE` matches literally, ignoring case, and `%` and `_` are not wildcards.
+- Correction to 0.2.4: a failed save of a renewed sign-in is reported as `TOKEN_SAVE_FAILED` and the request does not run; it was not only logged.
+
 ## [0.2.4] - 2026-11-01
 
 ### Changed
