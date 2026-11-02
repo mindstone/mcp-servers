@@ -22,8 +22,15 @@ async function setup() {
   const execFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
   execFile.mockReset();
   const calls: string[][] = [];
+  // Set `hold.next = true` to keep the next `open` running until `hold.release()`.
+  const hold = { next: false, release: () => {} };
   execFile.mockImplementation((_cmd: string, args: string[], _opts: unknown, callback: Function) => {
     calls.push(args);
+    if (hold.next && args[0] === 'open') {
+      hold.next = false;
+      hold.release = () => callback(null, '', '');
+      return;
+    }
     callback(null, '', '');
   });
   const browserClient = await import('../src/browser-client.js');
@@ -36,7 +43,7 @@ async function setup() {
   });
   const exit = vi.fn(() => exited());
   closeBrowserWhenHostStops(stdin, signals, exit);
-  return { browserClient, calls, stdin, signals, exit, exitedPromise };
+  return { browserClient, calls, hold, stdin, signals, exit, exitedPromise };
 }
 
 const closeCalls = (calls: string[][]) => calls.filter((args) => args.includes('close'));
@@ -96,5 +103,32 @@ describe('closing the browser when the host stops the server', () => {
 
     expect(exit).toHaveBeenCalledWith(0);
     expect(consoleError).toHaveBeenCalled();
+  });
+
+  it('refuses new browser commands once stopping', async () => {
+    const { browserClient, stdin, exitedPromise } = await setup();
+    await browserClient.execAgentBrowser(['open', 'https://example.com']);
+
+    stdin.emit('end');
+    await exitedPromise;
+
+    await expect(browserClient.execAgentBrowser(['snapshot'])).rejects.toMatchObject({ code: 'STOPPING' });
+  });
+
+  it('closes again after a command that was still running when the stop began', async () => {
+    const { browserClient, calls, hold, stdin, exitedPromise } = await setup();
+    await browserClient.execAgentBrowser(['open', 'https://example.com']);
+    hold.next = true;
+    const slowOpen = browserClient.execAgentBrowser(['open', 'https://example.org']);
+    await vi.waitFor(() => expect(calls).toHaveLength(2));
+
+    stdin.emit('end');
+    await vi.waitFor(() => expect(closeCalls(calls)).toHaveLength(1));
+    hold.release();
+    await slowOpen;
+    await exitedPromise;
+
+    expect(closeCalls(calls)).toHaveLength(2);
+    expect(calls.at(-1)?.[0]).toBe('close');
   });
 });

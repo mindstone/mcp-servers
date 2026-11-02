@@ -21,6 +21,11 @@ const MAX_BUFFER = 10 * 1024 * 1024; // 10MB for large snapshots
 // Whether this process has run an agent-browser command, so it may have started
 // (or picked up) the background agent-browser daemon. See closeBrowserOnStop.
 let ranBrowserCommand = false;
+// Set once the host is stopping this server: no new browser commands start.
+let stopping = false;
+// Browser commands still running, so a stop can close again after a launch
+// that finishes after the first close.
+const commandsInFlight = new Set<Promise<ExecResult>>();
 
 // A host gives a stopping server only a short grace before killing it;
 // `agent-browser close` normally takes well under a second.
@@ -129,7 +134,25 @@ function cliFailureMessage(
  * runs the connector's own agent-browser dependency with this Node. Both use
  * execFile with no shell, so no argument is ever interpreted by a shell.
  */
-export async function execAgentBrowser(
+export function execAgentBrowser(
+  args: string[],
+  options?: ExecOptions,
+): Promise<ExecResult> {
+  if (stopping) {
+    return Promise.reject(new ConnectorError(
+      'The browser is closing because the app is stopping this connector',
+      'STOPPING',
+      'Try again once the app is running again.',
+    ));
+  }
+  const command = runAgentBrowser(args, options);
+  commandsInFlight.add(command);
+  const forget = () => commandsInFlight.delete(command);
+  command.then(forget, forget);
+  return command;
+}
+
+async function runAgentBrowser(
   args: string[],
   options?: ExecOptions,
 ): Promise<ExecResult> {
@@ -210,9 +233,17 @@ function classifyFailure(error: unknown, command: string, timeoutMs: number): Co
  * stops by itself, so without this it outlives the host and a later run reuses
  * it with stale settings. Closing saves the session, so sign-ins persist. Does
  * nothing if this process never ran a browser command, so a server started only
- * to list its tools never touches a browser it did not use.
+ * to list its tools never touches a browser it did not use. Once called, new
+ * browser commands are refused.
  */
 export async function closeBrowserOnStop(): Promise<void> {
+  stopping = true;
   if (!ranBrowserCommand) return;
-  await execAgentBrowser(['close'], { timeoutMs: STOP_CLOSE_TIMEOUT_MS });
+  const running = [...commandsInFlight];
+  await runAgentBrowser(['close'], { timeoutMs: STOP_CLOSE_TIMEOUT_MS });
+  if (running.length === 0) return;
+  // A command that was still running (say, opening a page) may have started
+  // the browser again after that close: close once more when it has finished.
+  await Promise.allSettled(running);
+  await runAgentBrowser(['close'], { timeoutMs: STOP_CLOSE_TIMEOUT_MS });
 }
