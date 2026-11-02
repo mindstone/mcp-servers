@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-11-02
+
+### Changed
+
+- Ask to reconnect when Salesforce refuses the saved sign-in, retry a failed sign-in save, keep vendor error codes, send date and null filters unquoted. No live-org QA.
+
 ### Fixed
 
 - Ask to reconnect when Salesforce refuses an expired or revoked refresh token, and reload the saved sign-in on the next call.
