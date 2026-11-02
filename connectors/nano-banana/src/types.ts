@@ -1,7 +1,7 @@
 /**
  * Default timeouts (ms) for outbound HTTP requests.
  *
- * Gemini image generation — especially `gemini-3-pro-image-preview` — can
+ * Gemini image generation — especially `gemini-3-pro-image` — can
  * legitimately take 60-120s per request. We default to 180_000 (3 min) so
  * Pro-quality generations don't spuriously abort. Users can override via
  * `NANO_BANANA_GEMINI_TIMEOUT_MS` if their infra needs a tighter bound.
@@ -83,14 +83,41 @@ export class NanoBananaError extends Error {
 // ---------------------------------------------------------------------------
 
 export const SUPPORTED_MODELS = [
-  'gemini-3.1-flash-image-preview',
-  'gemini-3-pro-image-preview',
+  'gemini-3.1-flash-image',
+  'gemini-3-pro-image',
   'gemini-2.5-flash-image',
 ] as const;
 
 export type SupportedModel = (typeof SUPPORTED_MODELS)[number];
 
-export const DEFAULT_MODEL: SupportedModel = 'gemini-3.1-flash-image-preview';
+export const DEFAULT_MODEL: SupportedModel = 'gemini-3.1-flash-image';
+
+/**
+ * Preview ids Google shut down on 2026-06-25 after the same models went GA.
+ * Still accepted from callers (saved prompts, older hosts) and sent as their
+ * GA id, so a request that named one keeps working.
+ */
+export const RETIRED_MODEL_ALIASES = {
+  'gemini-3.1-flash-image-preview': 'gemini-3.1-flash-image',
+  'gemini-3-pro-image-preview': 'gemini-3-pro-image',
+} as const satisfies Record<string, SupportedModel>;
+
+/** Every id the tools accept: the supported ids plus the retired aliases. */
+export const ACCEPTED_MODELS = [
+  ...SUPPORTED_MODELS,
+  'gemini-3.1-flash-image-preview',
+  'gemini-3-pro-image-preview',
+] as const satisfies readonly (SupportedModel | keyof typeof RETIRED_MODEL_ALIASES)[];
+
+export type AcceptedModel = (typeof ACCEPTED_MODELS)[number];
+
+export function resolveModel(requested: AcceptedModel | undefined): SupportedModel {
+  if (requested === undefined) return DEFAULT_MODEL;
+  if (requested in RETIRED_MODEL_ALIASES) {
+    return RETIRED_MODEL_ALIASES[requested as keyof typeof RETIRED_MODEL_ALIASES];
+  }
+  return requested as SupportedModel;
+}
 
 export const SUPPORTED_ASPECT_RATIOS = [
   '1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9',
@@ -121,7 +148,7 @@ export function unsupportedImageSizePayload(model: SupportedModel, imageSize: st
     error: `image_size "${imageSize}" is not supported by ${model} — that model always produces ~1K output.`,
     code: 'UNSUPPORTED_IMAGE_SIZE',
     resolution:
-      'Use "gemini-3.1-flash-image-preview" or "gemini-3-pro-image-preview" for 2K/4K output, or omit image_size.',
+      'Use "gemini-3.1-flash-image" or "gemini-3-pro-image" for 2K/4K output, or omit image_size.',
   };
 }
 

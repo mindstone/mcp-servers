@@ -6,8 +6,8 @@ import { getApiKey, hasApiKey } from '../auth.js';
 import { geminiFetch } from '../client.js';
 import {
   NanoBananaError,
-  SUPPORTED_MODELS,
-  DEFAULT_MODEL,
+  ACCEPTED_MODELS,
+  resolveModel,
   SUPPORTED_ASPECT_RATIOS,
   SUPPORTED_IMAGE_EXTENSIONS,
   SUPPORTED_IMAGE_SIZES,
@@ -22,8 +22,8 @@ import { fetchRemoteImage, isRemoteImageUrl, MAX_REMOTE_IMAGE_BYTES, validateRem
 import { wrapUntrusted } from '../untrusted-content.js';
 
 const MODEL_DESCRIPTION =
-  'Model to use: "gemini-3.1-flash-image-preview" (Nano Banana 2, default — pro-quality at flash speed), ' +
-  '"gemini-3-pro-image-preview" (Nano Banana Pro — highest quality), or ' +
+  'Model to use: "gemini-3.1-flash-image" (Nano Banana 2, default — pro-quality at flash speed), ' +
+  '"gemini-3-pro-image" (Nano Banana Pro — highest quality), or ' +
   '"gemini-2.5-flash-image" (original Nano Banana — fast, legacy; ~1K output only)';
 
 const IMAGE_SIZE_DESCRIPTION =
@@ -173,7 +173,7 @@ export function registerEditTools(server: McpServer): void {
         source_image_path: z.string().min(1).optional().describe('Image to edit: a workspace file path (supports ~ for home directory) or an https:// URL. Single-image shorthand for source_image_paths — provide one or the other (or both).'),
         source_image_paths: z.array(z.string().min(1)).min(1).max(MAX_REFERENCE_IMAGES).optional().describe(`Up to ${MAX_REFERENCE_IMAGES} reference images to edit or combine (multi-image composition/fusion). Each entry follows the same rules as source_image_path.`),
         prompt: z.string().min(1).describe('Instructions for how to edit the image(s)'),
-        model: z.enum(SUPPORTED_MODELS).optional().describe(MODEL_DESCRIPTION),
+        model: z.enum(ACCEPTED_MODELS).optional().describe(MODEL_DESCRIPTION),
         aspect_ratio: z.enum(SUPPORTED_ASPECT_RATIOS).optional().describe('Aspect ratio for the edited image'),
         image_size: z.enum(SUPPORTED_IMAGE_SIZES).optional().describe(IMAGE_SIZE_DESCRIPTION),
         save_path: z.string().optional().describe('Optional file path to save the edited image. IMPORTANT: Must be inside the workspace directory so the image can be displayed inline.'),
@@ -200,7 +200,7 @@ export function registerEditTools(server: McpServer): void {
         };
       }
 
-      const model = input.model ?? DEFAULT_MODEL;
+      const model = resolveModel(input.model);
 
       if (input.image_size && !supportsImageSize(model)) {
         return {

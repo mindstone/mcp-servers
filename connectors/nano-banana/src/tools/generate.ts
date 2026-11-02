@@ -5,8 +5,8 @@ import { getApiKey, hasApiKey } from '../auth.js';
 import { geminiFetch } from '../client.js';
 import {
   NanoBananaError,
-  SUPPORTED_MODELS,
-  DEFAULT_MODEL,
+  ACCEPTED_MODELS,
+  resolveModel,
   SUPPORTED_ASPECT_RATIOS,
   SUPPORTED_IMAGE_SIZES,
   supportsImageSize,
@@ -19,8 +19,8 @@ import { resolveSavePath, writeContainedFileExclusive } from './path-safety.js';
 import { wrapUntrusted } from '../untrusted-content.js';
 
 const MODEL_DESCRIPTION =
-  'Model to use: "gemini-3.1-flash-image-preview" (Nano Banana 2, default — pro-quality at flash speed), ' +
-  '"gemini-3-pro-image-preview" (Nano Banana Pro — highest quality), or ' +
+  'Model to use: "gemini-3.1-flash-image" (Nano Banana 2, default — pro-quality at flash speed), ' +
+  '"gemini-3-pro-image" (Nano Banana Pro — highest quality), or ' +
   '"gemini-2.5-flash-image" (original Nano Banana — fast, legacy; ~1K output only)';
 
 const IMAGE_SIZE_DESCRIPTION =
@@ -42,7 +42,7 @@ export function registerGenerateTools(server: McpServer): void {
         `- Include details about lighting, perspective, and background`,
       inputSchema: z.object({
         prompt: z.string().min(1).describe('Text description of the image to generate'),
-        model: z.enum(SUPPORTED_MODELS).optional().describe(MODEL_DESCRIPTION),
+        model: z.enum(ACCEPTED_MODELS).optional().describe(MODEL_DESCRIPTION),
         aspect_ratio: z.enum(SUPPORTED_ASPECT_RATIOS).optional().describe('Aspect ratio for the generated image (default: 1:1)'),
         image_size: z.enum(SUPPORTED_IMAGE_SIZES).optional().describe(IMAGE_SIZE_DESCRIPTION),
         save_path: z.string().optional().describe('Optional file path to save the image. IMPORTANT: Must be inside the workspace directory so the image can be displayed inline.'),
@@ -69,7 +69,7 @@ export function registerGenerateTools(server: McpServer): void {
         };
       }
 
-      const model = input.model ?? DEFAULT_MODEL;
+      const model = resolveModel(input.model);
 
       if (input.image_size && !supportsImageSize(model)) {
         return {
