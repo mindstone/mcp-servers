@@ -49,6 +49,12 @@ describe('Smoke test — Browser Automation MCP server', () => {
     expect(toolNames).toEqual(EXPECTED_TOOLS);
   });
 
+  it('asks the host to keep it running (super-mcp/keep-alive)', async () => {
+    testClient = await createTestClient();
+
+    expect(testClient.client.getServerCapabilities()?.experimental).toEqual({ 'super-mcp/keep-alive': {} });
+  });
+
   it('should have non-empty descriptions for all tools', async () => {
     testClient = await createTestClient();
 
