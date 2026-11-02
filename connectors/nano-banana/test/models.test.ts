@@ -60,6 +60,7 @@ describe('model selection', () => {
     ['gemini-3.1-flash-image-preview', 'gemini-3.1-flash-image'],
     ['gemini-3-pro-image-preview', 'gemini-3-pro-image'],
     ['gemini-3-pro-image', 'gemini-3-pro-image'],
+    ['gemini-nano-banana-2.1', 'gemini-nano-banana-2.1'],
     ['gemini-2.5-flash-image', 'gemini-2.5-flash-image'],
   ])('sends %s as %s', async (requested, sent) => {
     const { handler, models } = captureModels();
@@ -69,6 +70,26 @@ describe('model selection', () => {
 
     expect(result.isError).toBeFalsy();
     expect(models).toEqual([sent]);
+  });
+
+  it('sends gemini-nano-banana-2.1 on edit with a 4K image size', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const models: string[] = [];
+    mswServer.use(http.post(`${GEMINI_API_BASE}/models/:model\\:generateContent`, async ({ request, params }) => {
+      models.push(String(params.model));
+      bodies.push((await request.json()) as Record<string, unknown>);
+      return HttpResponse.json(createMockGeminiResponse());
+    }));
+    const sourcePath = path.join(workspaceDir, 'in.png');
+    fs.writeFileSync(sourcePath, ONE_PIXEL_PNG);
+
+    const result = await testClient.callTool('nano_banana_edit', {
+      source_image_path: sourcePath, prompt: 'make it pop', model: 'gemini-nano-banana-2.1', image_size: '4K',
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(models).toEqual(['gemini-nano-banana-2.1']);
+    expect((bodies[0].generationConfig as { imageConfig?: unknown }).imageConfig).toEqual({ imageSize: '4K' });
   });
 
   it('still allows 2K/4K on a retired preview id (it resolves to a Gemini 3 model)', async () => {

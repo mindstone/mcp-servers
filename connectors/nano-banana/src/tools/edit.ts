@@ -23,12 +23,13 @@ import { wrapUntrusted } from '../untrusted-content.js';
 
 const MODEL_DESCRIPTION =
   'Model to use: "gemini-3.1-flash-image" (Nano Banana 2, default — pro-quality at flash speed), ' +
-  '"gemini-3-pro-image" (Nano Banana Pro — highest quality), or ' +
+  '"gemini-3-pro-image" (Nano Banana Pro — highest quality), ' +
+  '"gemini-nano-banana-2.1" (Nano Banana 2.1 — newer than the default, always thinks before drawing, so slower and billed for thinking), or ' +
   '"gemini-2.5-flash-image" (original Nano Banana — fast, legacy; ~1K output only)';
 
 const IMAGE_SIZE_DESCRIPTION =
   'Output resolution: "1K" (default, ~1024px), "2K", or "4K". ' +
-  'Only sent to the Gemini 3 image models — gemini-2.5-flash-image always produces ~1K.';
+  'Only sent to the Gemini 3 image models and gemini-nano-banana-2.1 — gemini-2.5-flash-image always produces ~1K.';
 
 /**
  * Detect MIME type from file extension.

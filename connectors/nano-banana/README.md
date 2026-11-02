@@ -134,7 +134,9 @@ Generated and edited output is identified from its bytes before it is returned o
 
 ### Output resolution
 
-Both image tools accept an optional `image_size` parameter (`"1K"`, `"2K"`, or `"4K"`; default `"1K"` ≈ 1024px). Higher resolutions are only honoured by the Gemini 3 image models (`gemini-3.1-flash-image`, the default, and `gemini-3-pro-image`); the legacy `gemini-2.5-flash-image` always produces ~1K output and rejects an explicit `image_size`.
+Both image tools accept an optional `image_size` parameter (`"1K"`, `"2K"`, or `"4K"`; default `"1K"` ≈ 1024px). Higher resolutions are only honoured by the Gemini 3 image models (`gemini-3.1-flash-image`, the default, `gemini-3-pro-image` and `gemini-nano-banana-2.1`); the legacy `gemini-2.5-flash-image` always produces ~1K output and rejects an explicit `image_size`.
+
+`gemini-nano-banana-2.1` (Nano Banana 2.1) can be chosen with `model`; it is not the default. Google enables thinking on it by default (level `medium`, billed), so it is slower than `gemini-3.1-flash-image`. It takes 1K, 2K or 4K.
 
 The `model` parameter also accepts the retired preview ids `gemini-3.1-flash-image-preview` and `gemini-3-pro-image-preview`, which Google shut down on 2026-06-25; a request naming one is sent as its generally available id (`gemini-3.1-flash-image`, `gemini-3-pro-image`).
 

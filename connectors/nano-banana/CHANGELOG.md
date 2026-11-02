@@ -15,6 +15,10 @@ are maintained manually as part of the PR review checklist.
 
 - Default model is now `gemini-3.1-flash-image` and the Pro option `gemini-3-pro-image`: the generally available ids of the same models. Google shut the `-preview` ids down on 2026-06-25, so the previous default could fail. The preview ids are still accepted in `model` and sent as their generally available id.
 
+### Added
+
+- `gemini-nano-banana-2.1` (Nano Banana 2.1) is a selectable `model` on generate and edit, with 1K/2K/4K output. It is not the default: Google runs thinking on it by default, which adds latency and cost.
+
 ### Security
 
 - Re-synced the vendored `<untrusted-content>` envelope helper with the template: slash-delimited envelope tags inside wrapped content are now also neutralised, so they can no longer be read as an envelope boundary.

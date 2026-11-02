@@ -85,6 +85,7 @@ export class NanoBananaError extends Error {
 export const SUPPORTED_MODELS = [
   'gemini-3.1-flash-image',
   'gemini-3-pro-image',
+  'gemini-nano-banana-2.1',
   'gemini-2.5-flash-image',
 ] as const;
 
@@ -148,7 +149,7 @@ export function unsupportedImageSizePayload(model: SupportedModel, imageSize: st
     error: `image_size "${imageSize}" is not supported by ${model} — that model always produces ~1K output.`,
     code: 'UNSUPPORTED_IMAGE_SIZE',
     resolution:
-      'Use "gemini-3.1-flash-image" or "gemini-3-pro-image" for 2K/4K output, or omit image_size.',
+      'Use "gemini-3.1-flash-image", "gemini-3-pro-image" or "gemini-nano-banana-2.1" for 2K/4K output, or omit image_size.',
   };
 }
 
