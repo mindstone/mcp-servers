@@ -240,10 +240,15 @@ export async function closeBrowserOnStop(): Promise<void> {
   stopping = true;
   if (!ranBrowserCommand) return;
   const running = [...commandsInFlight];
-  await runAgentBrowser(['close'], { timeoutMs: STOP_CLOSE_TIMEOUT_MS });
-  if (running.length === 0) return;
-  // A command that was still running (say, opening a page) may have started
-  // the browser again after that close: close once more when it has finished.
-  await Promise.allSettled(running);
-  await runAgentBrowser(['close'], { timeoutMs: STOP_CLOSE_TIMEOUT_MS });
+  try {
+    await runAgentBrowser(['close'], { timeoutMs: STOP_CLOSE_TIMEOUT_MS });
+  } finally {
+    // A command that was still running (say, opening a page) may have started
+    // the browser again after that close, or the close failed while it ran:
+    // close once more when it has finished.
+    if (running.length > 0) {
+      await Promise.allSettled(running);
+      await runAgentBrowser(['close'], { timeoutMs: STOP_CLOSE_TIMEOUT_MS });
+    }
+  }
 }

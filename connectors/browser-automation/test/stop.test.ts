@@ -22,10 +22,16 @@ async function setup() {
   const execFile = childProcess.execFile as unknown as ReturnType<typeof vi.fn>;
   execFile.mockReset();
   const calls: string[][] = [];
-  // Set `hold.next = true` to keep the next `open` running until `hold.release()`.
-  const hold = { next: false, release: () => {} };
+  // Set `hold.next = true` to keep the next `open` running until `hold.release()`;
+  // `hold.failNextClose = true` makes the next `close` fail.
+  const hold = { next: false, failNextClose: false, release: () => {} };
   execFile.mockImplementation((_cmd: string, args: string[], _opts: unknown, callback: Function) => {
     calls.push(args);
+    if (hold.failNextClose && args[0] === 'close') {
+      hold.failNextClose = false;
+      callback(Object.assign(new Error('close failed'), { stderr: 'daemon busy' }), '', 'daemon busy');
+      return;
+    }
     if (hold.next && args[0] === 'open') {
       hold.next = false;
       hold.release = () => callback(null, '', '');
@@ -130,5 +136,23 @@ describe('closing the browser when the host stops the server', () => {
 
     expect(closeCalls(calls)).toHaveLength(2);
     expect(calls.at(-1)?.[0]).toBe('close');
+  });
+
+  it('still closes after an in-flight command when the first close fails', async () => {
+    const { browserClient, calls, hold, stdin, exitedPromise } = await setup();
+    await browserClient.execAgentBrowser(['open', 'https://example.com']);
+    hold.next = true;
+    const slowOpen = browserClient.execAgentBrowser(['open', 'https://example.org']);
+    await vi.waitFor(() => expect(calls).toHaveLength(2));
+    hold.failNextClose = true;
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    stdin.emit('end');
+    await vi.waitFor(() => expect(closeCalls(calls)).toHaveLength(1));
+    hold.release();
+    await slowOpen;
+    await exitedPromise;
+
+    expect(closeCalls(calls)).toHaveLength(2);
   });
 });
