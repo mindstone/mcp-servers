@@ -11,6 +11,14 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Added
+
+- `kling-v3` (Kling 3.0) is a model choice on `generate_kling_video`, `generate_kling_image_to_video` and `generate_kling_image`. Defaults are unchanged (`kling-v2-6` for video, `kling-v2-1` for images): `kling-v3` costs about twice as many units.
+
+### Fixed
+
+- The video tool descriptions no longer say `kling-v2-6` has native audio: the connector does not request sound, so its videos are silent.
+
 ## [0.4.1] - 2026-08-10
 
 ### Changed

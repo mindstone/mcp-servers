@@ -67,6 +67,31 @@ describe('Kling video tools', () => {
       expect(capturedBody!.mode).toBe('pro');
     });
 
+    it.each(['generate_kling_video', 'generate_kling_image_to_video'])(
+      'accepts kling-v3 on %s and keeps kling-v2-6 as the default',
+      async (tool) => {
+        const bodies: Record<string, unknown>[] = [];
+        mswServer.use(
+          http.post(/https:\/\/api-singapore\.klingai\.com\/v1\/videos\/(text2video|image2video)$/, async ({ request }) => {
+            bodies.push((await request.json()) as Record<string, unknown>);
+            return HttpResponse.json({ code: 0, message: 'success', data: { task_id: mockTaskId } });
+          }),
+        );
+
+        testClient = await createTestClient({
+          env: { KLING_ACCESS_KEY: ACCESS_KEY, KLING_SECRET_KEY: SECRET_KEY, MCP_HOST_BRIDGE_STATE: '' },
+        });
+
+        const base = tool === 'generate_kling_video'
+          ? { prompt: 'City skyline timelapse' }
+          : { prompt: 'Slow zoom', image_url: 'https://example.com/photo.jpg' };
+        await testClient.callTool(tool, { ...base, model: 'kling-v3' });
+        await testClient.callTool(tool, base);
+
+        expect(bodies.map((b) => b.model_name)).toEqual(['kling-v3', 'kling-v2-6']);
+      },
+    );
+
     it('sends JWT Bearer token in Authorization header', async () => {
       let capturedAuthHeader: string | null = null;
       mswServer.use(

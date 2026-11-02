@@ -15,6 +15,7 @@ import { unwrapUntrusted, wrapUntrusted } from '../untrusted-content.js';
 const KLING_SOURCE = 'kling-api';
 
 const MODEL_ENUM = [
+  'kling-v3',
   'kling-v2-6',
   'kling-v2-5-turbo',
   'kling-v2-master',
@@ -36,7 +37,8 @@ export function registerVideoTools(server: McpServer): void {
         '3. Repeat step 2 until status is "succeed" (typically 2-5 minutes total)\n' +
         '4. When complete, you\'ll get a video URL (valid for 30 days)\n\n' +
         'MODELS (newest to oldest):\n' +
-        '- kling-v2-6 (default): Latest model with best quality and native audio support\n' +
+        '- kling-v3: Newest (Kling 3.0), highest quality; costs about twice as much per second as kling-v2-6\n' +
+        '- kling-v2-6 (default): High quality at lower cost\n' +
         '- kling-v2-5-turbo: Faster generation, still high quality\n' +
         '- kling-v2-master: High quality model\n' +
         '- kling-v2-1-master: Previous generation master\n' +
