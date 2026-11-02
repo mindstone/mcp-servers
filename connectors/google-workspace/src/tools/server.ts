@@ -1163,19 +1163,19 @@ export class GSuiteServer {
       };
     }
 
+    if (numericStatus === 429 || isGoogleRecoveryExhausted(error)) {
+      return {
+        ok: false,
+        action_required: message,
+        next_step: 'Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.'
+      };
+    }
+
     if (numericStatus === 403) {
       return {
         ok: false,
         action_required: message,
         next_step: 'Google Workspace rejected the request due to insufficient permissions or scopes. Reconnect the account with the required scope or ask the file/calendar owner for access, then retry.'
-      };
-    }
-
-    if (numericStatus === 429) {
-      return {
-        ok: false,
-        action_required: message,
-        next_step: 'Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.'
       };
     }
 

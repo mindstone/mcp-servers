@@ -218,6 +218,73 @@ describe('Google short-window rate-limit recovery', () => {
   });
 
   it.each([
+    ['exhausted retries', undefined, 8],
+    ['declined Retry-After', '120', 1],
+  ] as const)('returns rate-limit guidance for a Sheets quota 403 with %s', async (_reason, retryAfter, expectedRequests) => {
+    const { call } = await load();
+    let requests = 0;
+    mswServer.use(http.get('https://sheets.googleapis.com/v4/spreadsheets/sheet-1', () => {
+      requests++;
+      return HttpResponse.json(QUOTA, {
+        status: 403, headers: retryAfter ? { 'Retry-After': retryAfter } : {},
+      });
+    }));
+    const response = await call('read_workspace_spreadsheet', { spreadsheet_id: 'sheet-1', return_json: true });
+    expect(response.isError).toBe(true);
+    expect(JSON.parse(response.content[0].text)).toMatchObject({
+      ok: false,
+      action_required: QUOTA.error.message,
+      next_step: 'Google Workspace rate limit reached. Back off before retrying, reduce the request size if possible, then try again.',
+      recoveryExhausted: true,
+    });
+    expect(requests).toBe(expectedRequests);
+  });
+
+  it('keeps the Sheets service response for an insufficientPermissions 403', async () => {
+    const { call } = await load();
+    let requests = 0;
+    mswServer.use(http.get('https://sheets.googleapis.com/v4/spreadsheets/sheet-1', () => {
+      requests++;
+      return HttpResponse.json({ error: {
+        code: 403, message: 'Insufficient permissions', errors: [{ reason: 'insufficientPermissions' }],
+      } }, { status: 403 });
+    }));
+    const response = await call('read_workspace_spreadsheet', { spreadsheet_id: 'sheet-1', return_json: true });
+    expect(response.isError).toBe(true);
+    const envelope = JSON.parse(response.content[0].text);
+    expect(envelope).toMatchObject({
+      ok: false,
+      action_required: 'MCP error -32603: Insufficient permissions',
+      next_step: 'Review the error, adjust the request if needed, and retry.',
+    });
+    expect(envelope).not.toHaveProperty('recoveryExhausted');
+    expect(requests).toBe(1);
+  });
+
+  it('keeps permissions guidance when a raw insufficientPermissions 403 reaches the server', async () => {
+    const { call } = await load();
+    const { getSheetsService } = await import('../src/modules/sheets/index.js');
+    const error = Object.assign(new Error('Insufficient permissions'), {
+      response: { status: 403, data: { error: { errors: [{ reason: 'insufficientPermissions' }] } } },
+    });
+    // Ordinary Sheets errors lose their status; inject the raw error at the service boundary.
+    const read = vi.spyOn(getSheetsService(), 'getSpreadsheet').mockRejectedValueOnce(error);
+    try {
+      const response = await call('read_workspace_spreadsheet', { spreadsheet_id: 'sheet-1', return_json: true });
+      expect(response.isError).toBe(true);
+      const envelope = JSON.parse(response.content[0].text);
+      expect(envelope).toMatchObject({
+        ok: false,
+        action_required: 'Insufficient permissions',
+        next_step: 'Google Workspace rejected the request due to insufficient permissions or scopes. Reconnect the account with the required scope or ask the file/calendar owner for access, then retry.',
+      });
+      expect(envelope).not.toHaveProperty('recoveryExhausted');
+    } finally {
+      read.mockRestore();
+    }
+  });
+
+  it.each([
     ['list_workspace_labels', 'https://gmail.googleapis.com/gmail/v1/users/:user/labels', {}],
     ['list_workspace_send_as', `${ROOT.replace('/messages', '')}/settings/sendAs`, {}],
     ['get_workspace_draft', `${ROOT.replace('/messages', '')}/drafts/draft-1`, { draft_id: 'draft-1' }],
