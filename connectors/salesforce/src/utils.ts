@@ -180,6 +180,8 @@ export function validateObjectName(name: string): void {
   }
 }
 
+export const SOQL_DATE_LITERAL = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2}))?$/;
+
 /**
  * Format a date string for SOQL (YYYY-MM-DD format required).
  */

@@ -16,9 +16,11 @@ import {
 } from './auth.js';
 
 const TOKEN_SAVE_FAILED = 'Failed to save refreshed token';
+const REFRESH_TOKEN_EXPIRED = 'expired access/refresh token';
 
 // Connection cache per account
 const connections = new Map<string, jsforce.Connection>();
+const unsavedTokens = new WeakMap<jsforce.Connection, () => void>();
 
 function getLoginUrl(tokenData: SalesforceTokenData): string {
   if (tokenData.login_url) return tokenData.login_url;
@@ -78,14 +80,10 @@ export async function getConnection(accountId?: string): Promise<jsforce.Connect
     version: SALESFORCE_API_VERSION,
   };
 
-  // Only hand jsforce a refresh token when we can also give it a way to USE
-  // that token — i.e. the OAuth2 client info to build a refresh delegate.
-  // jsforce throws synchronously at construction otherwise:
-  // "Refresh token is specified without oauth2 client information or refresh function".
-  // This is the bridge-mode case: the host app owns OAuth and does not pass
-  // SALESFORCE_CLIENT_ID/SECRET into the connector, so we operate on the access
-  // token alone and surface SESSION_EXPIRED (-> reconnect) on expiry rather than
-  // crashing every tool call. (See docs/plans/260612_fix-salesforce-bridge-refresh-token/.)
+  // The host supplies OAuth client credentials in bridge mode too, so jsforce
+  // normally refreshes the sign-in. Without them (manual token mode or a host
+  // that supplies none), use the access token alone and report SESSION_EXPIRED
+  // when it expires. jsforce requires client information with a refresh token.
   if (clientId && clientSecret && tokenData.refresh_token) {
     connectionConfig.oauth2 = { clientId, clientSecret, loginUrl };
     connectionConfig.refreshToken = tokenData.refresh_token;
@@ -112,7 +110,9 @@ export async function getConnection(accountId?: string): Promise<jsforce.Connect
     };
     try {
       saveToken(resolvedId, saved);
+      unsavedTokens.delete(conn);
     } catch {
+      unsavedTokens.set(conn, () => saveToken(resolvedId, saved));
       // The new token stays live in this connection, but the next process would
       // start from a retired one, so this must not pass silently. Throwing here
       // fails the refresh before jsforce replays the request, so a retry can't
@@ -127,6 +127,13 @@ export async function getConnection(accountId?: string): Promise<jsforce.Connect
   return conn;
 }
 
+// The call starting a refresh gets jsforce's error with a prefix before the text;
+// a call waiting on the same refresh gets the original error, unwrapped.
+function isRefreshFailure(error: unknown, text: string): boolean {
+  return error instanceof Error && !(error instanceof ConnectorError) && !('errorCode' in error) &&
+    (error.message === text || error.message.endsWith(`: ${text}`));
+}
+
 /**
  * Recognize jsforce session errors even when the vendor message varies.
  */
@@ -134,7 +141,8 @@ export function isSessionExpiredError(error: unknown): boolean {
   return error instanceof Error && (
     ('errorCode' in error && error.errorCode === 'INVALID_SESSION_ID') ||
     error.message.includes('INVALID_SESSION_ID') ||
-    error.message.includes('Session expired')
+    error.message.includes('Session expired') ||
+    isRefreshFailure(error, REFRESH_TOKEN_EXPIRED)
   );
 }
 
@@ -152,10 +160,19 @@ export async function withConnection<T>(
     : getActiveToken();
 
   const conn = await getConnection(resolvedId);
+  const savePendingToken = unsavedTokens.get(conn);
+  if (savePendingToken) {
+    try {
+      savePendingToken();
+      unsavedTokens.delete(conn);
+    } catch {
+      console.error(`[Salesforce MCP] Still could not save the refreshed token for account ${resolvedId}`);
+    }
+  }
   try {
     return await operation(conn);
   } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes(TOKEN_SAVE_FAILED)) {
+    if (isRefreshFailure(error, TOKEN_SAVE_FAILED)) {
       throw new ConnectorError(
         'Could not save the renewed Salesforce sign-in',
         'TOKEN_SAVE_FAILED',
