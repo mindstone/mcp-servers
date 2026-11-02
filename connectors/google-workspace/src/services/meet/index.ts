@@ -1,3 +1,4 @@
+import { isGoogleRecoveryExhausted } from '../../utils/google-retry.js';
 import { google } from "googleapis";
 import {
   BaseGoogleService,
@@ -47,6 +48,7 @@ export class MeetService extends BaseGoogleService<MeetApiClient> {
    * Maps a thrown error into a MeetError, mirroring the Contacts service.
    */
   private toMeetError(error: unknown, action: string): MeetError {
+    if (isGoogleRecoveryExhausted(error)) throw error;
     if (error instanceof GoogleServiceError) {
       // Assuming GoogleServiceError inherits message and data from McpError
       // Use type assertion as the linter seems unsure

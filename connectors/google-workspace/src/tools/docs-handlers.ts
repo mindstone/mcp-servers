@@ -28,7 +28,8 @@ import {
   readAliasedString,
   readAliasedValue
 } from './arg-aliases.js';
-import { wrapUntrustedContent, wrapUntrustedJsonStrings } from '../utils/untrusted-content.js';
+import { wrapUntrustedContent, wrapUntrustedJsonControls } from '../utils/untrusted-content.js';
+import { preserveGoogleRetryDecision } from '../utils/google-retry.js';
 
 // Handler argument types
 interface ReadDocumentArgs {
@@ -295,7 +296,10 @@ export async function handleReadDocument(args: ReadDocumentArgs): Promise<McpToo
     }
     
     if (returnJson) {
-      return wrapUntrustedJsonStrings(result.data, `google-workspace:docs:document/${documentId}`);
+      return wrapUntrustedJsonControls(result.data, `google-workspace:docs:document/${documentId}`, [
+        'documentId', 'revisionId', 'tabs.*.tabId', 'tabs.*.parentTabId', 'shownTab.tabId', 'requestedTab.tabId',
+        'tab.tabProperties.tabId', 'tab.tabProperties.parentTabId', 'childTabs.*.tabId',
+      ]);
     }
     
     // Format as human-readable text
@@ -491,14 +495,15 @@ export async function handleListDocumentTabs(args: ListTabsArgs): Promise<McpToo
     
     const tabList = result.data as TabListResponse;
     if (returnJson) {
-      return wrapUntrustedJsonStrings(
+      return wrapUntrustedJsonControls(
         {
           documentId: tabList.documentId,
           title: tabList.title,
           tabCount: tabList.tabs.length,
           tabs: tabList.tabs,
         },
-        `google-workspace:docs:tabs/${tabList.documentId}`
+        `google-workspace:docs:tabs/${tabList.documentId}`,
+        ['documentId', 'tabs.*.tabId', 'tabs.*.parentTabId']
       );
     }
     return formatTabsAsText(tabList);
@@ -543,7 +548,7 @@ export async function handleBatchUpdateDocument(args: BatchUpdateDocumentArgs): 
     }
     
     if (returnJson) {
-      return wrapUntrustedJsonStrings(result.data, `google-workspace:docs:batch-update/${documentId}`);
+      return wrapUntrustedJsonControls(result.data, `google-workspace:docs:batch-update/${documentId}`, ['documentId']);
     }
     
     // Format as human-readable text
@@ -920,7 +925,7 @@ export async function handleCopyDocumentTab(args: CopyDocumentTabArgs): Promise<
     );
 
     if (!result.success || !result.data) {
-      throw new McpError(ErrorCode.InternalError, result.error || 'Failed to copy document tab');
+      throw preserveGoogleRetryDecision(new McpError(ErrorCode.InternalError, result.error || 'Failed to copy document tab'), result);
     }
     const data = result.data as TabCopyResponse;
     const text = formatTabCopyAsText(data);

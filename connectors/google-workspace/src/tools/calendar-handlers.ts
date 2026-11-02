@@ -5,7 +5,7 @@ import { toMcpError } from '../utils/apiError.js';
 import { getAccountManager, validateEmail, resolveEmail } from '../modules/accounts/index.js';
 import { EventResponse, CalendarListItem, EventTime } from '../modules/calendar/types.js';
 import { google } from 'googleapis';
-import { wrapUntrustedContent, wrapUntrustedJsonStrings } from '../utils/untrusted-content.js';
+import { wrapUntrustedContent, wrapUntrustedJsonStrings, wrapUntrustedJsonControls } from '../utils/untrusted-content.js';
 
 // Singleton instances
 let driveService: DriveService;
@@ -545,7 +545,7 @@ export async function handleListWorkspaceCalendarEvents(params: any) {
 
       // Return JSON if requested, otherwise format as human-readable text
       if (returnJson) {
-        return wrapUntrustedJsonStrings({
+        return wrapUntrustedJsonControls({
           timezoneInfo: {
             resolved: tzInfo.resolved,
             source: tzInfo.source,
@@ -555,7 +555,7 @@ export async function handleListWorkspaceCalendarEvents(params: any) {
           },
           referenceTimeUTC: new Date().toISOString(),
           events
-        }, 'google-workspace:calendar:events');
+        }, 'google-workspace:calendar:events', ['events.*.attachments.*.fileId']);
       }
 
       return formatEventsAsText(events, tzInfo);
@@ -582,9 +582,10 @@ export async function handleGetWorkspaceCalendarEvent(params: any) {
 
   return accountManager.withTokenRenewal(email, async () => {
     try {
-      return wrapUntrustedJsonStrings(
+      return wrapUntrustedJsonControls(
         await calendarService.getEvent(email, eventId, calendarId),
-        `google-workspace:calendar:event/${eventId}`
+        `google-workspace:calendar:event/${eventId}`,
+        ['attachments.*.fileId']
       );
     } catch (error) {
       throw toMcpError(error, 'Failed to get calendar event');
@@ -733,7 +734,7 @@ export async function handleCreateWorkspaceCalendarEvent(params: any) {
         colorId,
         transparency
       });
-      return wrapUntrustedJsonStrings(createdEvent, 'google-workspace:calendar:event/create');
+      return wrapUntrustedJsonControls(createdEvent, 'google-workspace:calendar:event/create', ['attachments.*.fileId']);
     } catch (error) {
       // CalendarError here is operational (auth/permission/API failure), not caller-arg
       // validation — genuine bad args are rejected by the explicit pre-checks above.
@@ -780,7 +781,7 @@ export async function handleManageWorkspaceCalendarEvent(params: any) {
         newTimes,
         colorId
       });
-      return wrapUntrustedJsonStrings(managedEvent, `google-workspace:calendar:event/${eventId}`);
+      return wrapUntrustedJsonControls(managedEvent, `google-workspace:calendar:event/${eventId}`, ['attachments.*.fileId']);
     } catch (error) {
       throw toMcpError(error, 'Failed to manage calendar event');
     }

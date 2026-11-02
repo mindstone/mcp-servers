@@ -1,3 +1,4 @@
+import { preserveGoogleRetryDecision } from '../../../utils/google-retry.js';
 import { google, gmail_v1 } from 'googleapis';
 import {
   EmailResponse,
@@ -325,11 +326,11 @@ export class EmailService {
         messages
       };
     } catch (error) {
-      throw new GmailError(
+      throw preserveGoogleRetryDecision(new GmailError(
         `Failed to get thread ${threadId}`,
         'THREAD_ERROR',
         `Error: ${describeApiError(error)}`
-      );
+      ), error);
     }
   }
 
@@ -481,11 +482,11 @@ export class EmailService {
       if (error instanceof GmailError) {
         throw error;
       }
-      throw new GmailError(
+      throw preserveGoogleRetryDecision(new GmailError(
         'Failed to get emails',
         'FETCH_ERROR',
         `Error: ${describeApiError(error)}`
-      );
+      ), error);
     }
   }
 
@@ -559,11 +560,11 @@ export class EmailService {
       if (error instanceof GmailError) {
         throw error;
       }
-      throw new GmailError(
+      throw preserveGoogleRetryDecision(new GmailError(
         'Failed to send email',
         'SEND_ERROR',
         `Error: ${describeApiError(error)}`
-      );
+      ), error);
     }
   }
 }

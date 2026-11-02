@@ -20,7 +20,7 @@ import {
   readAliasedString,
   readAliasedValue
 } from './arg-aliases.js';
-import { wrapUntrustedContent, wrapUntrustedJsonStrings } from '../utils/untrusted-content.js';
+import { wrapUntrustedContent, wrapUntrustedJsonControls } from '../utils/untrusted-content.js';
 
 // Handler argument types
 interface ReadPresentationArgs {
@@ -204,7 +204,7 @@ export async function handleReadPresentation(args: ReadPresentationArgs): Promis
     }
     
     if (returnJson) {
-      return wrapUntrustedJsonStrings(result.data, `google-workspace:slides:presentation/${presentationId}`);
+      return wrapUntrustedJsonControls(result.data, `google-workspace:slides:presentation/${presentationId}`, ['presentationId']);
     }
     
     // Format as human-readable text
@@ -297,7 +297,7 @@ export async function handleGetSlide(args: GetSlideArgs): Promise<McpToolRespons
     }
     
     if (returnJson) {
-      return wrapUntrustedJsonStrings(result.data, `google-workspace:slides:slide/${presentationId}`);
+      return wrapUntrustedJsonControls(result.data, `google-workspace:slides:slide/${presentationId}`, ['presentationId']);
     }
     
     // Format as human-readable text
@@ -364,7 +364,7 @@ export async function handleBatchUpdatePresentation(args: BatchUpdatePresentatio
     }
     
     if (returnJson) {
-      return wrapUntrustedJsonStrings(result.data, `google-workspace:slides:batch/${presentationId}`);
+      return wrapUntrustedJsonControls(result.data, `google-workspace:slides:batch/${presentationId}`, ['presentationId']);
     }
     
     // Format as human-readable text

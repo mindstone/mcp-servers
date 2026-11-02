@@ -13,7 +13,7 @@ import {
   readAliasedNumber,
   readAliasedString
 } from './arg-aliases.js';
-import { wrapUntrustedContent, wrapUntrustedJsonStrings } from "../utils/untrusted-content.js";
+import { wrapUntrustedContent, wrapUntrustedJsonControls } from "../utils/untrusted-content.js";
 
 // Singleton instances - Initialize or inject as per project pattern
 let contactsService: ContactsService;
@@ -67,7 +67,7 @@ export async function handleGetContacts(
         pageSize,
         pageToken
       });
-      return wrapUntrustedJsonStrings(result, 'google-workspace:contacts:list');
+      return wrapUntrustedJsonControls(result, 'google-workspace:contacts:list', ['nextPageToken', 'connections.*.resourceName']);
     } catch (error) {
       // toMcpError passes an McpError through, and folds a ContactsError's details into
       // the message (InternalError) so the real cause reaches the user — the host drops
@@ -142,7 +142,7 @@ export async function handleSearchContacts(
       });
       
       if (returnJson) {
-        return wrapUntrustedJsonStrings(result, 'google-workspace:contacts:search');
+        return wrapUntrustedJsonControls(result, 'google-workspace:contacts:search', ['results.*.resourceName']);
       }
       return formatContactsAsText(result.results, result.totalResults);
     } catch (error) {
@@ -218,10 +218,11 @@ function hasAnyWriteField(fields: Omit<CreateContactParams, 'email'>): boolean {
 }
 
 function formatWriteResult(action: string, result: ContactWriteResult): unknown {
-  // Every string field is enveloped, matching the read handlers' whole-result wrapping.
-  return wrapUntrustedJsonStrings(
+  // The provider-generated resource name is reusable; contact text stays enveloped.
+  return wrapUntrustedJsonControls(
     { status: 'success', action, contact: result },
-    'google-workspace:contacts:write'
+    'google-workspace:contacts:write',
+    ['contact.resourceName']
   );
 }
 

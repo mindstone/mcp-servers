@@ -74,6 +74,8 @@ node dist/index.js
 
 ## Configuration
 
+Read and idempotent Google API requests retry short-window rate limits with bounded exponential backoff and respect Retry-After; daily quotas, permission errors, POST and PATCH requests fail without replay. JSON page tokens and provider-generated IDs remain reusable while external text stays enveloped.
+
 This server is designed to run alongside a host application that performs the Google OAuth flow on its own. The host writes credentials to disk; this server reads them.
 
 ### Required environment variables

@@ -71,6 +71,33 @@ export function wrapUntrustedJsonStrings<T>(value: T, source: string): T {
 }
 
 /**
+ * Wrap external text, except provider-generated controls at declared response
+ * paths. A `*` segment matches array items only, never arbitrary object keys.
+ * Callers must not declare author-chosen ids (e.g. Calendar event / Slides
+ * object ids), headers, titles, or metadata as controls.
+ */
+export function wrapUntrustedJsonControls<T>(value: T, source: string, controlPaths: readonly string[]): T {
+  const paths = controlPaths.map(path => path.split('.'));
+  function visit(item: unknown, remaining: string[][]): unknown {
+    if (typeof item === 'string') {
+      return remaining.some(path => path.length === 0) && item.length > 0 && !/[^A-Za-z0-9_+/=.\-]/.test(item)
+        ? item : wrapUntrusted(item, source);
+    }
+    if (Array.isArray(item)) {
+      const children = remaining.filter(path => path[0] === '*').map(path => path.slice(1));
+      return item.map(child => visit(child, children));
+    }
+    if (item && typeof item === 'object') {
+      return Object.fromEntries(Object.entries(item).map(([key, child]) => [key,
+        visit(child, remaining.filter(path => path[0] !== '*' && path[0] === key).map(path => path.slice(1))),
+      ]));
+    }
+    return item;
+  }
+  return visit(value, paths) as T;
+}
+
+/**
  * Connector-local alias for `wrapUntrusted` under the name the existing call
  * sites were written against. `content` is required (never `undefined`), so
  * the result is always a string.

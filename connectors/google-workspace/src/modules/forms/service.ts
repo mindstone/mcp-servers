@@ -1,6 +1,6 @@
 import { google, forms_v1 } from 'googleapis';
 import { BaseGoogleService } from '../../services/base/BaseGoogleService.js';
-import { describeApiError, isAuthHandoffError } from '../../utils/apiError.js';
+import { describeApiError, isPassthroughGoogleError } from '../../utils/apiError.js';
 import { FORMS_SCOPES } from './scopes.js';
 import {
   Form,
@@ -170,7 +170,7 @@ export class FormsService extends BaseGoogleService<forms_v1.Forms> {
     } catch (error) {
       // An expired/revoked grant must keep its reconnect signal — folding it
       // into a plain error string would skip the host's auth_required handoff.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       return {
         success: false,
         error: describeApiError(error)
@@ -252,7 +252,7 @@ export class FormsService extends BaseGoogleService<forms_v1.Forms> {
     } catch (error) {
       // An expired/revoked grant must keep its reconnect signal — folding it
       // into a plain error string would skip the host's auth_required handoff.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       return {
         success: false,
         error: describeApiError(error)
@@ -329,7 +329,7 @@ export class FormsService extends BaseGoogleService<forms_v1.Forms> {
     } catch (error) {
       // An expired/revoked grant must keep its reconnect signal — folding it
       // into a plain error string would skip the host's auth_required handoff.
-      if (isAuthHandoffError(error)) throw error;
+      if (isPassthroughGoogleError(error)) throw error;
       return {
         success: false,
         error: describeApiError(error)

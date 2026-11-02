@@ -7,6 +7,11 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- Retry rejected Google API reads after short-window rate limits without repeating successful requests, and retain terminal retry decisions in tool errors.
+- Keep JSON page tokens and provider-generated identifiers unchanged so they can be reused in subsequent calls; external content remains enveloped.
+
 ## [0.5.1] - 2026-10-31
 
 ### Changed

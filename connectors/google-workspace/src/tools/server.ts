@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import logger from '../utils/logger.js';
+import { isGoogleRecoveryExhausted } from '../utils/google-retry.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -1105,7 +1106,10 @@ export class GSuiteServer {
           _meta: extractResultMeta(result)
         };
       } catch (error) {
-        const response = this.formatErrorResponse(error);
+        const response = {
+          ...this.formatErrorResponse(error),
+          ...(isGoogleRecoveryExhausted(error) ? { recoveryExhausted: true } : {}),
+        };
         return {
           content: [{ type: 'text', text: JSON.stringify(response, null, 2) }],
           isError: true,

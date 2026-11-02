@@ -2,6 +2,7 @@ import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { getAccountManager, resolveEmail } from '../modules/accounts/index.js';
 import { getDriveService, getDriveActivityService } from '../modules/drive/index.js';
 import { normalizeDriveItemName } from '../modules/drive/activity-service.js';
+import { isGoogleRecoveryExhausted } from '../utils/google-retry.js';
 import { toMcpError } from '../utils/apiError.js';
 import { FileListOptions, FileSearchOptions, FileUploadOptions, PermissionOptions } from '../modules/drive/types.js';
 import { McpToolResponse } from './types.js';
@@ -10,7 +11,7 @@ import {
   readAliasedNumber,
   readAliasedString
 } from './arg-aliases.js';
-import { wrapUntrustedContent, wrapUntrustedJsonStrings } from '../utils/untrusted-content.js';
+import { wrapUntrustedContent, wrapUntrustedJsonStrings, wrapUntrustedJsonControls } from '../utils/untrusted-content.js';
 
 const HOST_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -109,6 +110,7 @@ export function formatDriveRecoveryError(operation: string, error: unknown) {
       : 'Unknown error';
   return {
     ok: false,
+    ...(isGoogleRecoveryExhausted(error) ? { recoveryExhausted: true } : {}),
     action_required: `Drive ${operation} failed${statusText}`,
     next_step: `${message}. Check Google Workspace authentication and Drive permissions, then retry.`,
   };
@@ -127,7 +129,9 @@ function formatDriveJsonResult(operation: string, result: { success?: boolean; e
   if (result.success === false) {
     return formatDriveRecoveryError(operation, new Error(result.error || 'Unknown error'));
   }
-  return wrapUntrustedJsonStrings(result, source) as object;
+  return wrapUntrustedJsonControls(result, source, [
+    'data.nextPageToken', 'data.files.*.id', 'data.drives.*.id',
+  ]) as object;
 }
 
 interface DriveFileListArgs {
@@ -367,7 +371,7 @@ export async function handleUploadDriveFile(args: DriveUploadArgs): Promise<McpT
       return {
         content: [{
           type: 'text',
-          text: JSON.stringify(wrapUntrustedJsonStrings(result, 'google-workspace:drive:file-upload'), null, 2)
+          text: JSON.stringify(wrapUntrustedJsonControls(result, 'google-workspace:drive:file-upload', ['data.id', 'data.parents.*']), null, 2)
         }]
       };
     } catch (error) {
@@ -431,7 +435,7 @@ export async function handleCreateDriveFolder(args: DriveFolderArgs): Promise<Mc
       return {
         content: [{
           type: 'text',
-          text: JSON.stringify(wrapUntrustedJsonStrings(result, 'google-workspace:drive:folder/create'), null, 2)
+          text: JSON.stringify(wrapUntrustedJsonControls(result, 'google-workspace:drive:folder/create', ['data.id', 'data.parents.*']), null, 2)
         }]
       };
     } catch (error) {
@@ -553,7 +557,7 @@ export async function handleCopyDriveFile(args: DriveCopyArgs): Promise<McpToolR
       return {
         content: [{
           type: 'text',
-          text: JSON.stringify(wrapUntrustedJsonStrings(result, `google-workspace:drive:file/${fileId}/copy`), null, 2)
+          text: JSON.stringify(wrapUntrustedJsonControls(result, `google-workspace:drive:file/${fileId}/copy`, ['data.id', 'data.parents.*']), null, 2)
         }]
       };
     } catch (error) {
@@ -606,7 +610,7 @@ export async function handleMoveDriveFile(args: DriveMoveArgs): Promise<McpToolR
       return {
         content: [{
           type: 'text',
-          text: JSON.stringify(wrapUntrustedJsonStrings(result, `google-workspace:drive:file/${fileId}/move`), null, 2)
+          text: JSON.stringify(wrapUntrustedJsonControls(result, `google-workspace:drive:file/${fileId}/move`, ['data.id', 'data.parents.*']), null, 2)
         }]
       };
     } catch (error) {
@@ -643,7 +647,7 @@ export async function handleTrashDriveFile(args: DriveTrashArgs): Promise<McpToo
       return {
         content: [{
           type: 'text',
-          text: JSON.stringify(wrapUntrustedJsonStrings(result, `google-workspace:drive:file/${fileId}/trash`), null, 2)
+          text: JSON.stringify(wrapUntrustedJsonControls(result, `google-workspace:drive:file/${fileId}/trash`, ['data.id', 'data.parents.*']), null, 2)
         }]
       };
     } catch (error) {
@@ -674,7 +678,7 @@ export async function handleUntrashDriveFile(args: DriveTrashArgs): Promise<McpT
       return {
         content: [{
           type: 'text',
-          text: JSON.stringify(wrapUntrustedJsonStrings(result, `google-workspace:drive:file/${fileId}/untrash`), null, 2)
+          text: JSON.stringify(wrapUntrustedJsonControls(result, `google-workspace:drive:file/${fileId}/untrash`, ['data.id', 'data.parents.*']), null, 2)
         }]
       };
     } catch (error) {
@@ -711,7 +715,7 @@ export async function handleListFileRevisions(args: DriveRevisionsArgs): Promise
       return {
         content: [{
           type: 'text',
-          text: JSON.stringify(wrapUntrustedJsonStrings(result, `google-workspace:drive:file/${fileId}/revisions`), null, 2)
+          text: JSON.stringify(wrapUntrustedJsonControls(result, `google-workspace:drive:file/${fileId}/revisions`, ['data.nextPageToken', 'data.revisions.*.id']), null, 2)
         }]
       };
     } catch (error) {
