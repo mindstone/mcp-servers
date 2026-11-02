@@ -653,7 +653,6 @@ export function costEstimate(
     gen4_turbo: 5,
     aleph2: 28,
     act_two: 5,
-    veo3: 40,
     'veo3.1': audio === false ? 20 : 40,
     'veo3.1_fast': audio === false ? 10 : 15,
   };

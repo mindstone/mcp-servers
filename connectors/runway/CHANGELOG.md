@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Removed
+
+- `veo3` is no longer offered on `generate_video_from_image` and `generate_video_from_text`: Runway's API no longer accepts it for generation. Use `veo3.1` or `veo3.1_fast`.
+
 ## [0.4.1] - 2026-08-10
 
 ### Changed

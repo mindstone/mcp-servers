@@ -39,6 +39,23 @@ describe('Video generation tools', () => {
       expect(postBody.duration).toBe(4);
     });
 
+    it.each([
+      ['generate_video_from_text', { prompt_text: 'A lighthouse at dusk' }],
+      ['generate_video_from_image', { prompt_image: 'https://example.com/frame.png' }],
+    ])('%s refuses veo3, which Runway no longer accepts, before any request', async (tool, args) => {
+      const { handlers, capturedBodies } = createBodyCapturingHandlers(MOCK_API_KEY);
+      mswServer.use(...handlers);
+
+      testClient = await createTestClient({
+        env: { RUNWAYML_API_SECRET: MOCK_API_KEY, MCP_HOST_BRIDGE_STATE: '' },
+      });
+
+      const result = await testClient.callTool(tool, { ...args, model: 'veo3' });
+
+      expect(result.isError).toBe(true);
+      expect(capturedBodies.filter(c => c.url.includes('_to_video'))).toHaveLength(0);
+    });
+
     it('sends content_moderation when specified', async () => {
       const { handlers, capturedBodies } = createBodyCapturingHandlers(MOCK_API_KEY);
       mswServer.use(...handlers);
