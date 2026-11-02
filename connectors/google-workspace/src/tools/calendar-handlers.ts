@@ -458,7 +458,7 @@ export async function handleListWorkspaceCalendars(params: { email?: string }) {
   return accountManager.withTokenRenewal(email, async () => {
     try {
       const calendars = await calendarService.listCalendars(email);
-      return wrapUntrustedJsonStrings(calendars, 'google-workspace:calendar:list');
+      return wrapUntrustedJsonControls(calendars, 'google-workspace:calendar:list', [], [], ['*.id']);
     } catch (error) {
       throw toMcpError(error, 'Failed to list calendars');
     }

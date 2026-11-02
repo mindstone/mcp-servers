@@ -11,7 +11,7 @@ import {
   readAliasedNumber,
   readAliasedString
 } from './arg-aliases.js';
-import { wrapUntrustedJsonStrings } from "../utils/untrusted-content.js";
+import { wrapUntrustedJsonControls } from "../utils/untrusted-content.js";
 
 // Cap page sizes well below the Chat API maximum (1000) to keep responses manageable
 const MAX_CHAT_PAGE_SIZE = 100;
@@ -79,7 +79,7 @@ export async function handleListChatSpaces(
         pageToken,
         filter
       });
-      return wrapUntrustedJsonStrings(result, 'google-workspace:chat:spaces');
+      return wrapUntrustedJsonControls(result, 'google-workspace:chat:spaces', ['nextPageToken', 'spaces.*.name']);
     } catch (error) {
       // toMcpError passes an McpError (and auth-handoff errors) through unchanged, and folds
       // a ChatError's details into the message so the real cause reaches the user.
@@ -114,7 +114,7 @@ export async function handleListChatMessages(
         filter,
         orderBy
       });
-      return wrapUntrustedJsonStrings(result, 'google-workspace:chat:messages');
+      return wrapUntrustedJsonControls(result, 'google-workspace:chat:messages', ['nextPageToken', 'messages.*.name', 'messages.*.thread.name']);
     } catch (error) {
       throw toMcpError(error, 'Failed to list chat messages');
     }
@@ -155,7 +155,7 @@ export async function handleSendChatMessage(
         parent: space,
         text
       });
-      return wrapUntrustedJsonStrings(result, 'google-workspace:chat:message');
+      return wrapUntrustedJsonControls(result, 'google-workspace:chat:message', ['name', 'thread.name']);
     } catch (error) {
       throw toMcpError(error, 'Failed to send chat message');
     }

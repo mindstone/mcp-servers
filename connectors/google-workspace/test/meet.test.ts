@@ -178,14 +178,11 @@ describe('Meet handlers happy paths', () => {
     const handlers = await loadMeetModules();
 
     const firstPage = await handlers.handleListMeetConferenceRecords({ page_size: 1 });
-    expect(firstPage.conferenceRecords?.[0]?.name).toContain('conferenceRecords/conf-1');
-    expect(firstPage.conferenceRecords?.[0]?.name).toContain(
-      '<untrusted-content source="google-workspace:meet:conference-records">',
-    );
+    expect(firstPage.conferenceRecords?.[0]?.name).toBe('conferenceRecords/conf-1');
     expect(firstPage.conferenceRecords?.[0]?.space).toContain(
       '<untrusted-content source="google-workspace:meet:conference-records">',
     );
-    expect(firstPage.nextPageToken).toContain('conferences-page-2');
+    expect(firstPage.nextPageToken).toBe('conferences-page-2');
 
     const secondPage = await handlers.handleListMeetConferenceRecords({ page_token: 'conferences-page-2' });
     expect(JSON.stringify(secondPage)).toContain('conferenceRecords/conf-2');
@@ -226,10 +223,7 @@ describe('Meet handlers happy paths', () => {
     const handlers = await loadMeetModules();
 
     const result = await handlers.handleListMeetTranscripts({ conference_record: 'conf-1' });
-    expect(result.transcripts?.[0]?.name).toContain('conferenceRecords/conf-1/transcripts/transcript-1');
-    expect(result.transcripts?.[0]?.name).toContain(
-      '<untrusted-content source="google-workspace:meet:transcripts">',
-    );
+    expect(result.transcripts?.[0]?.name).toBe('conferenceRecords/conf-1/transcripts/transcript-1');
     expect(result.transcripts?.[0]?.docsDestination?.exportUri).toContain(
       '<untrusted-content source="google-workspace:meet:transcripts">',
     );
@@ -253,7 +247,7 @@ describe('Meet handlers happy paths', () => {
       '<untrusted-content source="google-workspace:meet:transcript-entries">',
     );
     expect(entry?.participant).toContain('participants/participant-1');
-    expect(firstPage.nextPageToken).toContain('entries-page-2');
+    expect(firstPage.nextPageToken).toBe('entries-page-2');
 
     const secondPage = await handlers.handleGetMeetTranscriptEntries({
       conference_record: 'conferenceRecords/conf-1',

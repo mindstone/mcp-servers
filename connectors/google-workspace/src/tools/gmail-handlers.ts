@@ -661,7 +661,7 @@ export async function handleSearchWorkspaceEmails(params: SearchEmailsParams & R
       if (returnJson) {
         return wrapUntrustedJsonControls(result, 'google-workspace:gmail:search', [
           'nextPageToken', 'emails.*.id', 'emails.*.threadId', 'emails.*.attachments.*.id',
-          'threads.*.threadId', 'threads.*.emails.*.id', 'threads.*.emails.*.threadId',
+          'threads.{}.messages.*',
         ]);
       }
       return formatEmailsAsText(result);

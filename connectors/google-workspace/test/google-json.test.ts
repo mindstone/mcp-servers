@@ -38,4 +38,19 @@ describe('explicit JSON control paths', () => {
   it('the existing wrap-every-string serializer keeps its behavior', () => {
     expect(envelopes.wrapUntrustedJsonStrings({ id: 'msg-1' }, 'test').id).toContain('<untrusted-content');
   });
+
+  it('matches object-map values only at an explicitly declared {} segment', () => {
+    const input = {
+      threads: { 'thread-1': { messages: ['msg-1'], subject: 'External subject', metadata: { id: 'external-id' } } },
+      other: { 'thread-1': { messages: ['msg-2'] } },
+    };
+    const result = envelopes.wrapUntrustedJsonControls(input, 'test', ['threads.{}.messages.*']);
+    expect(Object.keys(result.threads)).toEqual(['thread-1']);
+    expect(result.threads['thread-1'].messages).toEqual(['msg-1']);
+    expect(result.threads['thread-1'].subject).toContain('<untrusted-content');
+    expect(result.threads['thread-1'].metadata.id).toContain('<untrusted-content');
+    expect(result.other['thread-1'].messages[0]).toContain('<untrusted-content');
+    const array = envelopes.wrapUntrustedJsonControls({ threads: [{ messages: ['msg-1'] }] }, 'test', ['threads.{}.messages.*']);
+    expect(array.threads[0].messages[0]).toContain('<untrusted-content');
+  });
 });

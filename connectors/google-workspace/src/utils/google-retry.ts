@@ -4,8 +4,9 @@ import { extractHttpStatus } from './apiError.js';
 
 const TERMINAL_RETRY_DECISION = Symbol.for('google-workspace.terminal-retry-decision');
 const RETRY_METHODS = new Set(['GET', 'HEAD', 'PUT', 'OPTIONS', 'DELETE']);
-// Google's documented exponential backoff caps at 32–64 seconds. Seven retries
-// cover a minute window (caps: 1 + 2 + 4 + 8 + 16 + 32 + 32 seconds).
+// Google's documented exponential backoff caps at 32–64 seconds. Our 32-second
+// caps total 95 seconds over seven retries; jitter in [2/3, 1] guarantees at
+// least 63 1/3 seconds of waiting, so one attempt follows a full minute window.
 const MAX_RATE_LIMIT_RETRIES = 7;
 const MAX_RETRY_AFTER_MS = 64_000;
 const MAX_BACKOFF_MS = 32_000;
@@ -93,7 +94,7 @@ export function createGoogleRetryConfig({
       // gaxios increments currentRetryAttempt BEFORE calling retryBackoff.
       const n = Math.max(0, (error.config.retryConfig?.currentRetryAttempt ?? 1) - 1);
       const cap = Math.min(MAX_BACKOFF_MS, 1000 * 2 ** n);
-      await sleep(Math.max(retryAfterMs(error), cap / 2 + random() * cap / 2));
+      await sleep(Math.max(retryAfterMs(error), cap * (2 + random()) / 3));
     },
   };
 }

@@ -11,7 +11,7 @@ import {
   readAliasedNumber,
   readAliasedString
 } from './arg-aliases.js';
-import { wrapUntrustedJsonStrings } from "../utils/untrusted-content.js";
+import { wrapUntrustedJsonControls } from "../utils/untrusted-content.js";
 
 // Singleton instances - Initialize or inject as per project pattern
 let meetService: MeetService;
@@ -96,7 +96,7 @@ export async function handleListMeetConferenceRecords(
         pageToken,
         filter
       });
-      return wrapUntrustedJsonStrings(result, 'google-workspace:meet:conference-records');
+      return wrapUntrustedJsonControls(result, 'google-workspace:meet:conference-records', ['nextPageToken', 'conferenceRecords.*.name']);
     } catch (error) {
       // toMcpError passes an McpError (and auth-handoff errors) through, and folds a
       // MeetError's details into the message (InternalError) so the real cause reaches
@@ -146,7 +146,7 @@ export async function handleListMeetTranscripts(
         pageSize: pageSize !== undefined ? Math.min(pageSize, MEET_MAX_PAGE_SIZE) : undefined,
         pageToken
       });
-      return wrapUntrustedJsonStrings(result, 'google-workspace:meet:transcripts');
+      return wrapUntrustedJsonControls(result, 'google-workspace:meet:transcripts', ['nextPageToken', 'transcripts.*.name', 'transcripts.*.docsDestination.document']);
     } catch (error) {
       // See handleListMeetConferenceRecords: toMcpError surfaces the real cause.
       throw toMcpError(error, 'Failed to list transcripts');
@@ -201,7 +201,7 @@ export async function handleGetMeetTranscriptEntries(
         pageSize: pageSize !== undefined ? Math.min(pageSize, MEET_MAX_PAGE_SIZE) : undefined,
         pageToken
       });
-      return wrapUntrustedJsonStrings(result, 'google-workspace:meet:transcript-entries');
+      return wrapUntrustedJsonControls(result, 'google-workspace:meet:transcript-entries', ['nextPageToken']);
     } catch (error) {
       // See handleListMeetConferenceRecords: toMcpError surfaces the real cause.
       throw toMcpError(error, 'Failed to get transcript entries');
