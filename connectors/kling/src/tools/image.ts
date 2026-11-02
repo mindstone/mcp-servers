@@ -9,7 +9,7 @@ import { wrapUntrusted } from '../untrusted-content.js';
 /** Envelope source label for vendor-controlled strings in tool output. */
 const KLING_SOURCE = 'kling-api';
 
-const IMAGE_MODEL_ENUM = ['kling-v2-1', 'kling-v2', 'kling-v1-5', 'kling-v1'] as const;
+const IMAGE_MODEL_ENUM = ['kling-v3', 'kling-v2-1', 'kling-v2', 'kling-v1-5', 'kling-v1'] as const;
 
 export function registerImageTools(server: McpServer): void {
   // ─── generate_kling_image ───────────────────────────────────────
@@ -25,7 +25,8 @@ export function registerImageTools(server: McpServer): void {
         'REFERENCE IMAGE (optional): guide the generation with an existing image, EITHER as a public HTTPS URL ' +
         '(image_url) OR a local file (image_path, inside MCP_WORKSPACE_PATH or the system temp directory; ' +
         '.jpg / .jpeg / .png, max 10MB).\n\n' +
-        'MODELS (newest to oldest): kling-v2-1 (default), kling-v2, kling-v1-5, kling-v1.',
+        'MODELS (newest to oldest): kling-v3 (Kling 3.0, highest quality, about twice the cost of kling-v2-1), ' +
+        'kling-v2-1 (default), kling-v2, kling-v1-5, kling-v1.',
       inputSchema: z.object({
         prompt: z
           .string()
