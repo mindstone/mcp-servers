@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-02
+
+### Changed
+
+- Default to the GA gemini-3.1-flash-image and gemini-3-pro-image (preview ids still accepted), add gemini-nano-banana-2.1, and reject unsupported image formats.
+
 ### Changed
 
 - Default model is now `gemini-3.1-flash-image` and the Pro option `gemini-3-pro-image`: the generally available ids of the same models. Google shut the `-preview` ids down on 2026-06-25, so the previous default could fail. The preview ids are still accepted in `model` and sent as their generally available id.
