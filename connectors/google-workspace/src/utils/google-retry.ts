@@ -72,7 +72,7 @@ export function createGoogleRetryConfig({
 } = {}): RetryConfig {
   return {
     shouldRetry(error) {
-      if (error.config.signal?.aborted || error.code === 'AbortError' || error.name === 'AbortError') return false;
+      if ((error.config.signal?.aborted && error.code !== 'TimeoutError') || error.code === 'AbortError') return false;
       if (!RETRY_METHODS.has(error.config.method?.toUpperCase() ?? 'GET')) return false;
       const attempt = error.config.retryConfig?.currentRetryAttempt ?? 0;
       if ((extractHttpStatus(error) === 403 || extractHttpStatus(error) === 429) && LONG_WINDOW_QUOTA.test(errorText(error))) return false;
