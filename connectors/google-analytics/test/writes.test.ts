@@ -382,6 +382,105 @@ const WRITE_CASES: WriteCase[] = [
     path: 'properties/200/dataRetentionSettings',
     updateMask: 'eventDataRetention',
   },
+  // Reporting behaviour
+  {
+    tool: 'ga_create_annotation',
+    args: { property_id: '200', title: 'LinkedIn campaign live', date: '2026-11-02', color: 'BLUE' },
+    method: 'POST',
+    version: 'v1alpha',
+    path: 'properties/200/reportingDataAnnotations',
+    body: { title: 'LinkedIn campaign live', annotationDate: { year: 2026, month: 11, day: 2 }, color: 'BLUE' },
+  },
+  {
+    tool: 'ga_update_annotation',
+    args: { annotation: '21', start_date: '2026-11-02', end_date: '2026-11-30' },
+    method: 'PATCH',
+    version: 'v1alpha',
+    path: 'properties/200/reportingDataAnnotations/21',
+    updateMask: 'annotationDateRange',
+    body: {
+      annotationDateRange: {
+        startDate: { year: 2026, month: 11, day: 2 },
+        endDate: { year: 2026, month: 11, day: 30 },
+      },
+    },
+  },
+  {
+    tool: 'ga_delete_annotation',
+    args: { annotation: '21', ...CONFIRM },
+    method: 'DELETE',
+    version: 'v1alpha',
+    path: 'properties/200/reportingDataAnnotations/21',
+  },
+  {
+    tool: 'ga_update_attribution_settings',
+    args: {
+      property_id: '200',
+      reporting_attribution_model: 'PAID_AND_ORGANIC_CHANNELS_LAST_CLICK',
+      ...CONFIRM,
+    },
+    method: 'PATCH',
+    version: 'v1alpha',
+    path: 'properties/200/attributionSettings',
+    updateMask: 'reportingAttributionModel',
+  },
+  {
+    tool: 'ga_create_calculated_metric',
+    args: {
+      property_id: '200',
+      calculated_metric_id: 'cost_per_signup',
+      display_name: 'Cost per sign-up',
+      formula: '{{advertiserAdCost}} / {{keyEvents:sign_up}}',
+      metric_unit: 'CURRENCY',
+    },
+    method: 'POST',
+    version: 'v1alpha',
+    path: 'properties/200/calculatedMetrics',
+    body: { formula: '{{advertiserAdCost}} / {{keyEvents:sign_up}}', metricUnit: 'CURRENCY' },
+  },
+  {
+    tool: 'ga_update_calculated_metric',
+    args: { calculated_metric: 'cost_per_signup', display_name: 'CPS' },
+    method: 'PATCH',
+    version: 'v1alpha',
+    path: 'properties/200/calculatedMetrics/cost_per_signup',
+    updateMask: 'displayName',
+  },
+  {
+    tool: 'ga_delete_calculated_metric',
+    args: { calculated_metric: 'cost_per_signup', ...CONFIRM },
+    method: 'DELETE',
+    version: 'v1alpha',
+    path: 'properties/200/calculatedMetrics/cost_per_signup',
+  },
+  {
+    tool: 'ga_create_event_edit_rule',
+    args: {
+      data_stream: '300',
+      display_name: 'Normalise sign up',
+      conditions: [{ field: 'eventName', comparisonType: 'EQUALS', value: 'Sign Up' }],
+      parameter_mutations: [{ parameter: 'event_name', parameterValue: 'sign_up' }],
+    },
+    method: 'POST',
+    version: 'v1alpha',
+    path: 'properties/200/dataStreams/300/eventEditRules',
+    body: { displayName: 'Normalise sign up' },
+  },
+  {
+    tool: 'ga_update_event_edit_rule',
+    args: { data_stream: '300', event_edit_rule: '22', display_name: 'Normalise' },
+    method: 'PATCH',
+    version: 'v1alpha',
+    path: 'properties/200/dataStreams/300/eventEditRules/22',
+    updateMask: 'displayName',
+  },
+  {
+    tool: 'ga_delete_event_edit_rule',
+    args: { data_stream: '300', event_edit_rule: '22', ...CONFIRM },
+    method: 'DELETE',
+    version: 'v1alpha',
+    path: 'properties/200/dataStreams/300/eventEditRules/22',
+  },
 ];
 
 describe('write tools — request shape', () => {
@@ -618,5 +717,156 @@ describe('read tools added alongside the writes', () => {
     expect(enveloped(secret.secret, 'displayName')).toBe(
       '<untrusted-content source="ga4-admin">Server</untrusted-content>',
     );
+  });
+});
+
+describe('reporting-behaviour tools', () => {
+  it('ga_create_calculated_metric passes the metric ID as a query parameter', async () => {
+    const calls: Array<{ id: string | null }> = [];
+    mswServer.use(
+      http.post(`${ADMIN_HOST}/v1alpha/properties/200/calculatedMetrics`, ({ request }) => {
+        calls.push({ id: new URL(request.url).searchParams.get('calculatedMetricId') });
+        return HttpResponse.json({ name: 'properties/200/calculatedMetrics/cost_per_signup' });
+      }),
+    );
+    testClient = await createTestClient({
+      env: { GOOGLE_APPLICATION_CREDENTIALS: FIXTURE_ADC, GA4_ALLOW_WRITES: 'true' },
+    });
+    const { parsed } = await call('ga_create_calculated_metric', {
+      property_id: '200',
+      calculated_metric_id: 'cost_per_signup',
+      display_name: 'Cost per sign-up',
+      formula: '{{advertiserAdCost}} / {{sessions}}',
+      metric_unit: 'CURRENCY',
+    });
+    expect(parsed.name).toBe('properties/200/calculatedMetrics/cost_per_signup');
+    expect(calls).toEqual([{ id: 'cost_per_signup' }]);
+  });
+
+  it('annotations need exactly one of date or a full date range', async () => {
+    const calls = await setup();
+    const bad: Array<Record<string, unknown>> = [
+      { property_id: '200', title: 'x' },
+      { property_id: '200', title: 'x', date: '2026-11-02', start_date: '2026-11-01', end_date: '2026-11-03' },
+      { property_id: '200', title: 'x', start_date: '2026-11-01' },
+    ];
+    for (const args of bad) {
+      const { parsed } = await call('ga_create_annotation', args);
+      expect(parsed.code, JSON.stringify(args)).toBe('INVALID_ARGUMENTS');
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it.each([
+    ['ga_list_annotations', {}, 'v1alpha', 'properties/200/reportingDataAnnotations', 'reportingDataAnnotations', 'annotations'],
+    ['ga_list_calculated_metrics', {}, 'v1alpha', 'properties/200/calculatedMetrics', 'calculatedMetrics', 'calculatedMetrics'],
+    ['ga_list_event_edit_rules', { data_stream: '300' }, 'v1alpha', 'properties/200/dataStreams/300/eventEditRules', 'eventEditRules', 'eventEditRules'],
+  ] as const)('%s lists without the write flag and envelopes each item', async (tool, args, version, apiPath, itemKey, outKey) => {
+    mswServer.use(
+      http.get(`${ADMIN_HOST}/${version}/${apiPath}`, () =>
+        HttpResponse.json({ [itemKey]: [{ name: `${apiPath}/1`, displayName: 'Acme' }] }),
+      ),
+    );
+    testClient = await createTestClient({
+      env: { GOOGLE_APPLICATION_CREDENTIALS: FIXTURE_ADC, GA4_PROPERTY_ID: '200', GA4_ALLOW_WRITES: '' },
+    });
+    const { parsed } = await call(tool, args);
+    expect(parsed.ok).toBe(true);
+    const [item] = parsed[outKey] as Array<{ name: string; resource: unknown }>;
+    expect(item.name).toBe(`${apiPath}/1`);
+    expect(enveloped(item.resource, 'displayName')).toBe(
+      '<untrusted-content source="ga4-admin">Acme</untrusted-content>',
+    );
+  });
+
+  it.each([
+    ['ga_get_attribution_settings', { property_id: '200' }, 'v1alpha', 'properties/200/attributionSettings'],
+    ['ga_get_google_signals_settings', { property_id: '200' }, 'v1alpha', 'properties/200/googleSignalsSettings'],
+    ['ga_get_data_sharing_settings', { account_id: 'accounts/100' }, 'v1beta', 'accounts/100/dataSharingSettings'],
+  ] as const)('%s reads without the write flag', async (tool, args, version, apiPath) => {
+    const calls = await setup({ GA4_ALLOW_WRITES: '' });
+    const { parsed } = await call(tool, args);
+    expect(parsed.ok).toBe(true);
+    expect(calls[0]).toMatchObject({ method: 'GET', version, path: apiPath });
+  });
+});
+
+describe('ga_run_funnel_report', () => {
+  const FUNNEL_URL = 'https://analyticsdata.googleapis.com/v1alpha/properties/200:runFunnelReport';
+
+  it('builds the funnel request and formats the funnel table', async () => {
+    const bodies: unknown[] = [];
+    mswServer.use(
+      http.post(FUNNEL_URL, async ({ request }) => {
+        bodies.push(await request.json());
+        return HttpResponse.json({
+          funnelTable: {
+            dimensionHeaders: [{ name: 'funnelStepName' }],
+            metricHeaders: [{ name: 'activeUsers' }, { name: 'funnelStepCompletionRate' }],
+            rows: [
+              { dimensionValues: [{ value: '1. Landing' }], metricValues: [{ value: '1000' }, { value: '0.2' }] },
+              { dimensionValues: [{ value: '2. Signed up' }], metricValues: [{ value: '200' }, { value: '0.5' }] },
+            ],
+          },
+        });
+      }),
+    );
+    testClient = await createTestClient({
+      env: { GOOGLE_APPLICATION_CREDENTIALS: FIXTURE_ADC, GA4_PROPERTY_ID: '200' },
+    });
+    const { parsed } = await call('ga_run_funnel_report', {
+      steps: [
+        { name: 'Landing', event_name: 'session_start' },
+        { name: 'Signed up', event_name: 'sign_up', within_seconds: 3600 },
+      ],
+      breakdown_dimension: 'deviceCategory',
+    });
+    expect(parsed.ok).toBe(true);
+    expect(bodies[0]).toMatchObject({
+      dateRanges: [{ startDate: '28daysAgo', endDate: 'today' }],
+      funnel: {
+        steps: [
+          { name: 'Landing', filterExpression: { funnelEventFilter: { eventName: 'session_start' } } },
+          {
+            name: 'Signed up',
+            withinDurationFromPriorStep: '3600s',
+            filterExpression: { funnelEventFilter: { eventName: 'sign_up' } },
+          },
+        ],
+      },
+      funnelBreakdown: { breakdownDimension: { name: 'deviceCategory' } },
+    });
+    const table = parsed.funnelTable as { rows: Array<Record<string, string>> };
+    expect(table.rows).toHaveLength(2);
+    expect(Object.values(table.rows[1])).toContain('200');
+    expect(parsed.funnelVisualization).toBeNull();
+  });
+
+  it('rejects a step with neither event_name nor filter_expression', async () => {
+    testClient = await createTestClient({
+      env: { GOOGLE_APPLICATION_CREDENTIALS: FIXTURE_ADC, GA4_PROPERTY_ID: '200' },
+    });
+    const { parsed } = await call('ga_run_funnel_report', {
+      steps: [{ name: 'Landing', event_name: 'session_start' }, { name: 'Nothing' }],
+    });
+    expect(parsed.code).toBe('INVALID_ARGUMENTS');
+  });
+
+  it('surfaces Data API errors', async () => {
+    mswServer.use(
+      http.post(FUNNEL_URL, () =>
+        HttpResponse.json({ error: { message: 'Invalid step', status: 'INVALID_ARGUMENT' } }, { status: 400 }),
+      ),
+    );
+    testClient = await createTestClient({
+      env: { GOOGLE_APPLICATION_CREDENTIALS: FIXTURE_ADC, GA4_PROPERTY_ID: '200' },
+    });
+    const { parsed } = await call('ga_run_funnel_report', {
+      steps: [
+        { name: 'A', event_name: 'a' },
+        { name: 'B', event_name: 'b' },
+      ],
+    });
+    expect(parsed.code).toBe('INVALID_ARGUMENT');
   });
 });

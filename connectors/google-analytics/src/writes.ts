@@ -7,7 +7,7 @@
  */
 
 import { z } from 'zod';
-import { assertResourceIdSegment, googleApi, propertyPath, Bases } from './client.js';
+import { assertResourceIdSegment, googleApi, paginate, propertyPath, Bases } from './client.js';
 import { GoogleAnalyticsError, WRITES_ENV_VAR, writesEnabled } from './types.js';
 import { wrapUntrustedJsonStrings } from './untrusted-content.js';
 import { compactObject, parseApiResponse, UNTRUSTED_SOURCES } from './utils.js';
@@ -174,6 +174,27 @@ export async function adminGet(path: string, context: string, alpha = false): Pr
     name: resource.name ?? path,
     resource: wrapUntrustedJsonStrings(resource, UNTRUSTED_SOURCES.admin),
   });
+}
+
+/**
+ * List an Admin API collection in full. Each item keeps its resource name
+ * raw for follow-up calls; the rest is enveloped like `adminGet`.
+ */
+export async function adminList(
+  path: string,
+  itemKey: string,
+  alpha = false,
+): Promise<Array<{ name: string | null; resource: unknown }>> {
+  const items = await paginate(`/${path}`, {
+    itemKey,
+    itemSchema: resourceSchema,
+    query: { pageSize: 200 },
+    baseUrl: alpha ? Bases.adminAlpha : Bases.admin,
+  });
+  return items.map((item) => ({
+    name: item.name ?? null,
+    resource: wrapUntrustedJsonStrings(item, UNTRUSTED_SOURCES.admin),
+  }));
 }
 
 /** Free-form JSON objects for definition blobs (audience filters, grouping rules). */

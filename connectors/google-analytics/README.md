@@ -3,13 +3,13 @@
 [![npm version](https://img.shields.io/npm/v/@mindstone/mcp-server-google-analytics.svg)](https://www.npmjs.com/package/@mindstone/mcp-server-google-analytics)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](./LICENSE)
 
-Google Analytics 4 MCP server for Model Context Protocol hosts. Discover account/property structure, explore the live schema, run reports (with row-volume safety), create large asynchronous exports, and inspect admin configuration through a standardised MCP interface. With writes explicitly enabled, it can also set up and change property configuration: key events, custom dimensions and metrics, audiences, channel groups, data streams, enhanced measurement, event create rules, Measurement Protocol secrets, product links, and data retention.
+Google Analytics 4 MCP server for Model Context Protocol hosts. Discover account/property structure, explore the live schema, run reports (with row-volume safety), create large asynchronous exports, and inspect admin configuration through a standardised MCP interface. With writes explicitly enabled, it can also set up and change property configuration: key events, custom dimensions and metrics, audiences, channel groups, data streams, enhanced measurement, event create and edit rules, calculated metrics, annotations, attribution, Measurement Protocol secrets, product links, and data retention.
 
 ## Status
 
 - **Version:** [0.2.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-google-analytics)
 - **Auth:** OAuth via Google ADC ([`GOOGLE_APPLICATION_CREDENTIALS`](./server.json))
-- **Tools:** [74](./src/tools/) (accounts, schema, reporting, admin, admin writes)
+- **Tools:** [91](./src/tools/) (accounts, schema, reporting, admin, admin writes)
 - **Surface:** cloud-api
 - **Machine-readable:** [`STATUS.json`](./STATUS.json)
 
@@ -144,7 +144,7 @@ The account (or service account) also needs the **Editor** role on the GA4 prope
 }
 ```
 
-## Tools (74)
+## Tools (91)
 
 ### Account & property
 - `ga_list_account_summaries` — discover available accounts and properties
@@ -165,6 +165,7 @@ The account (or service account) also needs the **Editor** role on the GA4 prope
 - `ga_batch_run_reports` — up to 5 reports in one call
 - `ga_run_realtime_report` — last 30 minutes of activity
 - `ga_get_property_quotas_snapshot` — remaining tokens / requests
+- `ga_run_funnel_report` — step-by-step completion and drop-off, with optional breakdown, next action, and trended view (v1alpha)
 
 ### Large exports
 - `ga_create_report_task` — start an asynchronous report task for large exports (no synchronous timeout, no row-volume gate)
@@ -190,6 +191,12 @@ The account (or service account) also needs the **Editor** role on the GA4 prope
 - `ga_get_enhanced_measurement_settings` — automatic events on a web stream
 - `ga_list_event_create_rules` — rules that derive new events on a stream
 - `ga_list_measurement_protocol_secrets` — secret values are returned; treat as sensitive
+- `ga_list_annotations` — chart annotations (v1alpha)
+- `ga_get_attribution_settings` — attribution model and lookback windows (v1alpha)
+- `ga_list_calculated_metrics` — formula metrics (v1alpha)
+- `ga_list_event_edit_rules` — rules that rename or modify events on a stream (v1alpha)
+- `ga_get_google_signals_settings` (v1alpha)
+- `ga_get_data_sharing_settings` — account-level
 
 ### Admin writes (require `GA4_ALLOW_WRITES=true`)
 
@@ -209,13 +216,17 @@ Every write is annotated `readOnlyHint: false`, `destructiveHint: true`. Archive
 - Firebase links: `ga_create_firebase_link`, `ga_delete_firebase_link`
 - BigQuery links (v1alpha): `ga_create_bigquery_link`, `ga_update_bigquery_link`, `ga_delete_bigquery_link`
 - Data retention: `ga_update_data_retention_settings`
+- Annotations (v1alpha): `ga_create_annotation`, `ga_update_annotation`, `ga_delete_annotation`
+- Attribution (v1alpha): `ga_update_attribution_settings`
+- Calculated metrics (v1alpha): `ga_create_calculated_metric`, `ga_update_calculated_metric`, `ga_delete_calculated_metric`
+- Event edit rules (v1alpha): `ga_create_event_edit_rule`, `ga_update_event_edit_rule`, `ga_delete_event_edit_rule`
 
 Explorations, saved reports, and report layouts have no Google API, so they cannot be created or changed by this connector.
 
 ## Notes
 
 - **Read-only by default.** Without `GA4_ALLOW_WRITES=true`, the only tools that create anything are `ga_create_report_task` and `ga_create_audience_export`, which materialise server-side snapshots and charge quota without modifying property configuration. The admin write tools refuse with `WRITES_DISABLED` before any request is sent. All of these are annotated `readOnlyHint: false`, `destructiveHint: true`, so hosts can gate them behind explicit user approval.
-- **Alpha endpoints.** Audiences, channel groups, BigQuery links, enhanced measurement, event create rules, the global site tag, change history (Admin API), and report tasks (Data API) are only exposed on Google's `v1alpha` surfaces today; the corresponding tools note this in their descriptions.
+- **Alpha endpoints.** Audiences, channel groups, BigQuery links, enhanced measurement, event create and edit rules, annotations, attribution, calculated metrics, Google Signals, the global site tag, change history (Admin API), and report tasks and funnel reports (Data API) are only exposed on Google's `v1alpha` surfaces today; the corresponding tools note this in their descriptions.
 - **Untrusted content.** Text authored inside the GA4 property — report dimension values (page titles, campaign names, custom-dimension values), audience/display names, descriptions, definition blobs, data-stream stream-data blobs, the global site tag snippet, custom-metadata expressions, vendor-echoed header/dimension names, and vendor error messages — is returned inside `<untrusted-content source="…">` envelopes so hosts treat it as data, not instructions. Metric values and resource identifiers stay raw so agents can compose follow-up calls. Resource IDs passed to tools are constrained to the ID charset before URL interpolation (`INVALID_RESOURCE_ID` on anything else).
 - **Response validation.** Every Google API response is validated against a Zod schema at the boundary; a shape mismatch fails closed with an `INVALID_API_RESPONSE` error rather than propagating malformed data. Paginated lists follow `nextPageToken` in full and fail with `PAGINATION_LIMIT_EXCEEDED` if the API does not stop paging after a generous safety cap — never a silent truncation.
 

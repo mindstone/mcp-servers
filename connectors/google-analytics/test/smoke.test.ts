@@ -16,7 +16,7 @@ describe('smoke — tool registration', () => {
     if (testClient) await testClient.close();
   });
 
-  it('registers exactly 74 tools with ga_ prefix', async () => {
+  it('registers exactly 91 tools with ga_ prefix', async () => {
     testClient = await createTestClient({
       env: {
         GOOGLE_APPLICATION_CREDENTIALS: FIXTURE_ADC,
@@ -26,7 +26,7 @@ describe('smoke — tool registration', () => {
     const toolsResult = await testClient.client.listTools();
     const toolNames = toolsResult.tools.map((tool) => tool.name).sort();
 
-    expect(toolsResult.tools).toHaveLength(74);
+    expect(toolsResult.tools).toHaveLength(91);
     expect(toolNames).toEqual(
       [
         'ga_batch_run_reports',
@@ -103,6 +103,23 @@ describe('smoke — tool registration', () => {
         'ga_update_google_ads_link',
         'ga_update_key_event',
         'ga_update_property',
+        'ga_list_annotations',
+        'ga_create_annotation',
+        'ga_update_annotation',
+        'ga_delete_annotation',
+        'ga_get_attribution_settings',
+        'ga_update_attribution_settings',
+        'ga_list_calculated_metrics',
+        'ga_create_calculated_metric',
+        'ga_update_calculated_metric',
+        'ga_delete_calculated_metric',
+        'ga_list_event_edit_rules',
+        'ga_create_event_edit_rule',
+        'ga_update_event_edit_rule',
+        'ga_delete_event_edit_rule',
+        'ga_get_google_signals_settings',
+        'ga_get_data_sharing_settings',
+        'ga_run_funnel_report',
       ].sort(),
     );
   });

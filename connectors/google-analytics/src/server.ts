@@ -6,6 +6,8 @@ import {
   registerAudienceExportTools,
   registerConfigWriteTools,
   registerDefinitionWriteTools,
+  registerFunnelTools,
+  registerSettingsTools,
   registerReportTaskTools,
   registerReportTools,
   registerSchemaTools,
@@ -28,6 +30,8 @@ export function createServer(): McpServer {
   registerReportTaskTools(server);
   registerDefinitionWriteTools(server);
   registerConfigWriteTools(server);
+  registerSettingsTools(server);
+  registerFunnelTools(server);
 
   return server;
 }
