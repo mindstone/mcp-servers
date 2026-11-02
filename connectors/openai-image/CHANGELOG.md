@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Default model is now `gpt-image-2.5-sunburst` (OpenAI's most capable image model, same token price as `gpt-image-2`); `gpt-image-2.5-flare` (faster) is added to the known list and `gpt-image-1`, which OpenAI shut down, is removed from it.
+- The known model list and default live in `src/models.ts`, so other tools can read them.
+- The `quality` cost and time guidance is re-measured on `gpt-image-2.5`.
+
+### Fixed
+
+- Transparent backgrounds are no longer refused on `gpt-image-2.5-*`: the gate that refuses them now matches only `gpt-image-2` and its dated snapshots, not every id starting with `gpt-image-2`.
+- The transparency error and tool descriptions no longer point to the retired `gpt-image-1` / `gpt-image-1.5`; they point to the default `gpt-image-2.5` models.
+
 ## [0.3.2] - 2026-08-10
 
 ### Changed
