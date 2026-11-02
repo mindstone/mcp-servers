@@ -37,7 +37,7 @@
           "name": "OPENAI_IMAGE_MODEL",
           "description": "Override the default OpenAI image model identifier",
           "isRequired": false,
-          "default": "gpt-image-2",
+          "default": "gpt-image-2.5-sunburst",
           "format": "string"
         },
         {
