@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-11-01
+
+### Changed
+
+- Personal Slack apps: replies post as your own app, and sign-ins renew with that app's own keys.
+
+### Changed
+
+- Refresh with each workspace app’s credentials and reply as personal app bots, with a visible user fallback when the bot is not in the channel.
+
 ## [0.3.3] - 2026-10-31
 
 ### Changed

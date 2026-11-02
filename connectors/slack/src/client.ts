@@ -213,6 +213,10 @@ export async function getSlackUserClient(): Promise<WebClient | null> {
   return null;
 }
 
+export async function getSlackAppIdentity(): Promise<{ appKind: 'own' | 'shared'; appName?: string; botUsername?: string }> {
+  return tokenProvider ? tokenProvider.getAppIdentity() : { appKind: 'shared' };
+}
+
 /**
  * Reader-preferring client: user token first (broader read access), bot
  * token fallback. Used by list/get tools.

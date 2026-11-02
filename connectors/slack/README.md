@@ -9,7 +9,7 @@ Slack workspace MCP server — channels, messages, threads, reactions, users, fi
 
 ## Status
 
-- **Version:** [0.3.3](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-slack)
+- **Version:** [0.3.4](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-slack)
 - **Auth:** OAuth (host-orchestrated) ([`SLACK_CLIENT_SECRET`](./server.json))
 - **Tools:** [39](./src/tools/) (messages, channels, threads, users, files, pins)
 - **Surface:** cloud-api
@@ -224,6 +224,8 @@ Other errors returned to the read runner do not trigger this retry. Writes keep 
 - `send_myself_a_note` — Send yourself a note that actually notifies you (posts a DM from the bot to the authenticated user). Use this for "jot something down" / reminders instead of a user-token self-DM.
 
 Text sent as you (`post_slack_message`, `reply_to_slack_thread`, `schedule_slack_message`, `update_slack_message`, and the `upload_slack_file` comment) writes a mention of the connector's own bot user as plain `@name` text when the workspace record has a bot user ID, so a host that listens for your mentions of its bot is not retriggered by its own replies. Other users' mentions are sent unchanged.
+
+A workspace record can describe a personal app: `appKind: "own"` with its own `appId`, `clientId`, `clientSecret` and `appName`. Then thread replies post as that app's bot, and token refresh uses the record's `clientId`/`clientSecret` pair instead of `SLACK_CLIENT_ID`/`SLACK_CLIENT_SECRET`. If the bot is not in the channel, the reply is posted as you and the tool result says so, with a hint to invite the app. Records without `appKind` behave as before: replies are sent as you.
 
 ### Channels
 - `list_slack_channels` — List channels (filterable, paginated).
