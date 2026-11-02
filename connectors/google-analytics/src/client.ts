@@ -33,7 +33,7 @@ const apiErrorPayloadSchema = z
   .passthrough();
 
 interface GoogleApiOptions {
-  method?: 'GET' | 'POST';
+  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   query?: Record<string, string | number | boolean | undefined | null>;
   body?: unknown;
   baseUrl?: string;
