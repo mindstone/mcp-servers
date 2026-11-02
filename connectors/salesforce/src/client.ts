@@ -127,6 +127,8 @@ export async function getConnection(accountId?: string): Promise<jsforce.Connect
   return conn;
 }
 
+// The call starting a refresh gets jsforce's error with a prefix before the text;
+// a call waiting on the same refresh gets the original error, unwrapped.
 function isRefreshFailure(error: unknown, text: string): boolean {
   return error instanceof Error && !(error instanceof ConnectorError) && !('errorCode' in error) &&
     (error.message === text || error.message.endsWith(`: ${text}`));
