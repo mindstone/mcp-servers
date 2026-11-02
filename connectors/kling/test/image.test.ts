@@ -66,6 +66,20 @@ describe('generate_kling_image', () => {
     expect(captured.body!.image).toBeUndefined();
   });
 
+  it('accepts kling-v3 and keeps kling-v2-1 as the default', async () => {
+    const { handler, captured } = captureImageGen();
+    mswServer.use(handler);
+    testClient = await createTestClient({
+      env: { KLING_ACCESS_KEY: ACCESS_KEY, KLING_SECRET_KEY: SECRET_KEY, MCP_HOST_BRIDGE_STATE: '' },
+    });
+
+    await testClient.callTool('generate_kling_image', { prompt: 'A ceramic mug', model: 'kling-v3' });
+    expect(captured.body!.model_name).toBe('kling-v3');
+
+    await testClient.callTool('generate_kling_image', { prompt: 'A ceramic mug' });
+    expect(captured.body!.model_name).toBe('kling-v2-1');
+  });
+
   it('sends a workspace-local reference image as base64', async () => {
     const refPath = path.join(workspace, 'ref.png');
     fs.writeFileSync(refPath, PNG_BYTES);
