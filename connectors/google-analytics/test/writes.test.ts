@@ -52,7 +52,7 @@ function enveloped(obj: unknown, key: string): unknown {
  * envelope behaviour is observable. DELETE returns Google's empty body.
  */
 function recordingHandler(calls: RecordedCall[]) {
-  return http.all(new RegExp(`^${ADMIN_HOST.replace(/[.]/g, '\\.')}/.*`), async ({ request }) => {
+  return http.all(`${ADMIN_HOST}/*`, async ({ request }) => {
     const url = new URL(request.url);
     const [, version, ...rest] = url.pathname.split('/');
     const resourcePath = rest.join('/');
