@@ -11,6 +11,12 @@ import { executePowerpointCommand, fail, type CommandResult } from '../officeExe
 
 export type PowerpointCommandHandler = (params: Record<string, unknown>) => Promise<CommandResult>;
 
+function requireShapeFormatting(): void {
+  if (!Office.context.requirements.isSetSupported('PowerPointApi', '1.4')) {
+    fail('UNSUPPORTED_OPERATION', 'Shape formatting requires PowerPointApi 1.4. Update Office before adding a formatted shape.');
+  }
+}
+
 const powerpointCommands: Record<string, PowerpointCommandHandler> = {
   get_slides: getSlides,
   get_slide_content: getSlideContent,
@@ -368,6 +374,7 @@ async function addTextBox(params: Record<string, unknown>): Promise<CommandResul
     }
 
     const slide = getSlideByIndex(slides, slideIndex);
+    if (formatting && Object.keys(formatting).length > 0) requireShapeFormatting();
     const shape = slide.shapes.addTextBox(text as string, {
       left: position.left!,
       top: position.top!,
@@ -521,9 +528,11 @@ async function addShape(params: Record<string, unknown>): Promise<CommandResult>
     lightningBolt: PowerPoint.GeometricShapeType.lightningBolt,
   };
 
-  const geometricType = shapeTypeMap[shapeType as string] ?? PowerPoint.GeometricShapeType.rectangle;
-
   return executePowerpointCommand(async (context) => {
+    if (!Object.prototype.hasOwnProperty.call(shapeTypeMap, shapeType)) {
+      fail('INVALID_ARGUMENT', `Unknown shape type "${shapeType}". Supported types: ${Object.keys(shapeTypeMap).join(', ')}.`);
+    }
+    const geometricType = shapeTypeMap[shapeType]!;
     const slides = context.presentation.slides;
     slides.load('items');
     await context.sync();
@@ -533,6 +542,7 @@ async function addShape(params: Record<string, unknown>): Promise<CommandResult>
     }
 
     const slide = getSlideByIndex(slides, slideIndex);
+    if (['text', 'fillColor', 'lineColor', 'lineWidth'].some((key) => params[key] !== undefined)) requireShapeFormatting();
     const shape = slide.shapes.addGeometricShape(geometricType, {
       left: position.left!,
       top: position.top!,
@@ -674,6 +684,19 @@ async function updateText(params: Record<string, unknown>): Promise<CommandResul
   });
 }
 
+type NotesSlide = { load: (property: string) => void; shapes: PowerPoint.ShapeCollection };
+
+function getNotesSlide(slide: PowerPoint.Slide): NotesSlide {
+  let notesSlide: NotesSlide | undefined;
+  try {
+    notesSlide = (slide as PowerPoint.Slide & { notesSlide?: NotesSlide }).notesSlide;
+  } catch {
+    fail('UNSUPPORTED_OPERATION', 'Speaker notes require a newer version of PowerPoint.');
+  }
+  if (!notesSlide) fail('UNSUPPORTED_OPERATION', 'Speaker notes require a newer version of PowerPoint.');
+  return notesSlide;
+}
+
 /**
  * get_speaker_notes — Read speaker notes for one or all slides.
  *
@@ -700,51 +723,23 @@ async function getSpeakerNotes(params: Record<string, unknown>): Promise<Command
     const startIdx = slideIndex ? slideIndex - 1 : 0;
     const endIdx = slideIndex ? slideIndex : slides.items.length;
 
-    // Detect API availability once by checking the first slide
-    let apiAvailable = true;
-    const firstSlide = slides.items[startIdx];
-    if (firstSlide) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const probe = (firstSlide as any).notesSlide;
-        if (probe === undefined || probe === null) {
-          apiAvailable = false;
-        }
-      } catch {
-        apiAvailable = false;
-      }
-    }
-
-    if (!apiAvailable) fail('UNSUPPORTED_OPERATION', 'Speaker notes require a newer version of PowerPoint.');
-
     for (let i = startIdx; i < endIdx; i++) {
-      const slide = slides.items[i]!;
+      const notesSlide = getNotesSlide(slides.items[i]!);
+      notesSlide.load('shapes');
+      await context.sync();
+      const shapes = notesSlide.shapes;
+      shapes.load(['name', 'type']);
+      await context.sync();
+
       let notesText = '';
-
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const notesSlide = (slide as any).notesSlide;
-        notesSlide.load('shapes');
+      for (const shape of shapes.items) {
+        const textFrame = shape.textFrame;
+        if (!textFrame) continue;
+        textFrame.load('textRange/text');
         await context.sync();
-
-        const shapes = notesSlide.shapes as PowerPoint.ShapeCollection;
-        shapes.load(['name', 'type']);
-        await context.sync();
-
-        for (const shape of shapes.items) {
-          try {
-            const textFrame = shape.textFrame;
-            textFrame.load('textRange/text');
-            await context.sync();
-            if (textFrame.textRange.text.trim().length > 0) {
-              notesText += (notesText ? '\n' : '') + textFrame.textRange.text;
-            }
-          } catch {
-            // Shape may not contain text
-          }
+        if (textFrame.textRange.text.trim().length > 0) {
+          notesText += (notesText ? '\n' : '') + textFrame.textRange.text;
         }
-      } catch {
-        fail('UNSUPPORTED_OPERATION', "This version of PowerPoint can't read speaker notes.");
       }
 
       result.push({ slideNumber: i + 1, notes: notesText });
@@ -786,63 +781,20 @@ async function setSpeakerNotes(params: Record<string, unknown>): Promise<Command
 
     const slide = getSlideByIndex(slides, slideIndex);
 
-    // Check API availability
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const notesSlide = (slide as any).notesSlide;
-    if (notesSlide === undefined || notesSlide === null) {
-      return {
-        success: false,
-        error: 'Setting speaker notes requires PowerPointApi 1.11+. Update Office to the latest version for this feature.',
-        code: 'UNSUPPORTED_OPERATION',
-      };
-    }
+    const notesSlide = getNotesSlide(slide);
+    notesSlide.load('shapes');
+    await context.sync();
+    const shapes = notesSlide.shapes;
+    shapes.load(['name', 'type']);
+    await context.sync();
 
-    try {
-      notesSlide.load('shapes');
-      await context.sync();
-
-      const shapes = notesSlide.shapes as PowerPoint.ShapeCollection;
-      shapes.load(['name', 'type']);
-      await context.sync();
-
-      // Find the notes body placeholder and set its text
-      let notesSet = false;
-      for (const shape of shapes.items) {
-        try {
-          if (shape.name.toLowerCase().includes('notes') || shape.name.toLowerCase().includes('body')) {
-            shape.textFrame.textRange.text = notes as string;
-            notesSet = true;
-            break;
-          }
-        } catch {
-          // Shape may not support text
-        }
-      }
-
-      if (!notesSet && shapes.items.length > 0) {
-        // Fall back to the first text-capable shape
-        try {
-          shapes.items[0]!.textFrame.textRange.text = notes as string;
-          notesSet = true;
-        } catch {
-          // Couldn't set notes
-        }
-      }
-
-      if (!notesSet) {
-        fail('ITEM_NOT_FOUND', 'Could not find a notes placeholder on the slide.');
-      }
-
-      await context.sync();
-      return { success: true, slideNumber: slideIndex };
-    } catch (e) {
-      if (e instanceof Error && e.message.includes('notes placeholder')) {
-        throw e;
-      }
-      fail('UNSUPPORTED_OPERATION',
-        'Speaker notes are not available. Update Office to the latest version for this feature.',
-      );
-    }
+    const shape = shapes.items.find((item) =>
+      item.name.toLowerCase().includes('notes') || item.name.toLowerCase().includes('body'),
+    ) ?? shapes.items.find((item) => item.textFrame);
+    if (!shape?.textFrame) fail('ITEM_NOT_FOUND', 'Could not find a notes placeholder on the slide.');
+    shape.textFrame.textRange.text = notes;
+    await context.sync();
+    return { success: true, slideNumber: slideIndex };
   });
 }
 
@@ -856,26 +808,22 @@ async function getPresentationProperties(_params: Record<string, unknown>): Prom
     slides.load('items');
     await context.sync();
 
-    // Try to load slide masters for layout info
     const layoutNames: string[] = [];
-    try {
-      const slideMasters = presentation.slideMasters;
-      slideMasters.load('items');
+    const slideMasters = presentation.slideMasters;
+    if (!slideMasters) fail('UNSUPPORTED_OPERATION', 'Presentation layouts require a newer version of PowerPoint.');
+    slideMasters.load('items');
+    await context.sync();
+
+    for (const master of slideMasters.items) {
+      const layouts = master.layouts;
+      layouts.load('name');
       await context.sync();
 
-      for (const master of slideMasters.items) {
-        const layouts = master.layouts;
-        layouts.load('name');
-        await context.sync();
-
-        for (const layout of layouts.items) {
-          if (!layoutNames.includes(layout.name)) {
-            layoutNames.push(layout.name);
-          }
+      for (const layout of layouts.items) {
+        if (!layoutNames.includes(layout.name)) {
+          layoutNames.push(layout.name);
         }
       }
-    } catch {
-      // Slide master/layout API may not be available in all versions
     }
 
     return {

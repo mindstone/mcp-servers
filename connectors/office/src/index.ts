@@ -719,7 +719,7 @@ const readTools = {
 };
 const lookFirst = (app) => `Read the current state with ${readTools[app] || readTools.office}, correct the target or arguments, then try again.`;
 const ERROR_CATALOG = {
-  PARTIAL: { retryable: false, fix: 'Inspect the created slide with rebel_office_powerpoint_get_slides and rebel_office_powerpoint_get_slide_content; complete the missing work or delete it with rebel_office_powerpoint_delete_slide before retrying.' },
+  PARTIAL: { retryable: false, fix: 'Inspect the created slide: find its id in rebel_office_powerpoint_get_slides and use its slideNumber as slideIndex for rebel_office_powerpoint_get_slide_content or rebel_office_powerpoint_delete_slide. Complete the missing work or delete the slide before retrying.' },
   INVALID_ARGUMENT: { retryable: false, fix: lookFirst },
   ITEM_NOT_FOUND: { retryable: false, fix: lookFirst },
   NO_SELECTION: { retryable: false, fix: 'Ask the user to select the intended text in Office, or use an explicit target.' },
@@ -860,7 +860,7 @@ const registeredTools = new Map();
 
 const createToolError = (error, name) => {
   const parts = registeredTools.has(name) ? name.slice('rebel_office_'.length).split('_') : ['unknown'];
-  const app = ['word', 'excel', 'powerpoint'].includes(parts[0]) ? parts.shift() : 'office';
+  const app = ['word', 'excel', 'powerpoint'].includes(parts[0]) ? parts.shift() : ['setup', 'status'].includes(parts[0]) ? 'all' : 'office';
   const code = error instanceof McpError && error.code === ErrorCode.InvalidParams ? 'INVALID_ARGUMENT' : 'INTERNAL_ERROR';
   return toMcpResult(stampResultContext({ success: false, code, error: error instanceof Error ? error.message : String(error) }, app, parts.join('_')));
 };
@@ -2996,7 +2996,7 @@ registerTool(TOOL_NAMES.excelSortRange, {
   description:
     'Sort a range or table by one or more columns. Supports ascending/descending order and ' +
     'multi-level sorting. When sorting a table, use column names; when sorting a range, use ' +
-    'column letters or indices.\n\n' +
+    'worksheet column letters (for example, "AA").\n\n' +
     'Related tools: Use `rebel_office_excel_filter_table` to filter without reordering data.',
   inputSchema: {
     "type": "object",
@@ -3020,7 +3020,7 @@ registerTool(TOOL_NAMES.excelSortRange, {
           "properties": {
             "column": {
               "type": "string",
-              "description": "Column letter (e.g., \"B\") or header name for tables."
+              "description": "Worksheet column letter within the range (e.g., \"B\", \"AA\") or header name for tables."
             },
             "ascending": {
               "type": "boolean",
@@ -3077,7 +3077,7 @@ registerTool(TOOL_NAMES.excelFilterTable, {
           "properties": {
             "column": {
               "type": "string",
-              "description": "Column header name or letter."
+              "description": "Column header name."
             },
             "criteria": {
               "type": "object",
@@ -3099,7 +3099,7 @@ registerTool(TOOL_NAMES.excelFilterTable, {
                 },
                 "operator": {
                   "type": "string",
-                  "description": "For condition type: \"greaterThan\", \"lessThan\", \"equals\", etc."
+                  "description": "For condition type: greaterThan, greaterThanOrEqual, lessThan, lessThanOrEqual, equals, notEqual; or >, >=, <, <=, =, <>."
                 },
                 "value": {
                   "anyOf": [
@@ -3955,7 +3955,7 @@ registerTool(TOOL_NAMES.pptAddImage, {
 registerTool(TOOL_NAMES.pptAddShape, {
   title: 'Add shape',
   description:
-    'Add a geometric shape to a slide. Supports rectangles, circles, arrows, stars, callouts, ' +
+    'Add a geometric shape to a slide. Supports rectangles, circles, arrows, stars, ' +
     'and more. Shapes can contain text and have fill colors and line styles.',
   inputSchema: {
     "type": "object",
@@ -3968,7 +3968,7 @@ registerTool(TOOL_NAMES.pptAddShape, {
       "shapeType": {
         "type": "string",
         "minLength": 1,
-        "description": "Shape type (e.g., \"rectangle\", \"ellipse\", \"roundedRectangle\", \"triangle\", \"rightArrow\", \"star5\", \"callout1\")."
+        "description": "Shape type: rectangle, ellipse, roundedRectangle, triangle, rightArrow, star5, diamond, hexagon, pentagon, octagon, heart, cloud, lightningBolt."
       },
       "position": {
         "type": "object",

@@ -771,6 +771,12 @@ async function formatText(params: Record<string, unknown>): Promise<CommandResul
         fail('INVALID_ARGUMENT', `Unsupported target type: "${target.type}".`);
     }
 
+    const alignedParagraphs = typeof formatting['alignment'] === 'string' ? range.paragraphs : undefined;
+    if (alignedParagraphs) {
+      alignedParagraphs.load('items');
+      await context.sync();
+    }
+
     // Apply font formatting
     const font = range.font;
     if (typeof formatting['bold'] === 'boolean') font.bold = formatting['bold'];
@@ -798,9 +804,7 @@ async function formatText(params: Record<string, unknown>): Promise<CommandResul
       };
       const align = alignmentMap[formatting['alignment']];
       if (align !== undefined) {
-        // Alignment applies to the paragraph, not the range font
-        const paragraph = range.paragraphs.getFirst();
-        paragraph.alignment = align;
+        for (const paragraph of alignedParagraphs!.items) paragraph.alignment = align;
       }
     }
 

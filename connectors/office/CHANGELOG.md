@@ -18,12 +18,14 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 
+- Excel condition filters translate named operators and reject unknown ones before writing. Sorting rejects unknown headers and resolves multi-letter columns relative to the range; unsupported shape types fail before creation.
+- Formatted PowerPoint shapes check API support before creation. Speaker-notes and layout failures retain coded errors, Word alignment covers every targeted paragraph, and pairing and partial-slide recovery guidance identify the next step.
+- Setup and status validation failures use the same `app: "all"` value as their other results.
 - Exceptions thrown by tool handlers report `INTERNAL_ERROR` unless they are invalid-argument errors. An installation-disabled Office connection reports non-retryable `CONNECTION_DISABLED` with guidance to contact whoever manages the installation.
 - Excel JSON row keys derived from spreadsheet headers are enclosed in untrusted-content envelopes, with closing tags escaped. Columns named `__proto__` retain their cell values.
 - Office actions report missing targets, empty selections and unsupported requested options as coded failures. PowerPoint text alignment and Excel range filter criteria are applied; unknown filter columns fail before writing.
 - A slide created before a later step fails returns `PARTIAL` with its id and inspect-or-delete recovery. Word edit results describe what changed.
 - Setup and status explain which apps are connected and how to open Rebel; the task pane asks you to open Rebel when waiting for a connection.
-
 - On Windows the add-in now appears in Word, Excel and PowerPoint: it is registered where Office looks for sideloaded add-ins instead of copied into Office's cache folder.
 
 ## [0.3.0] - 2026-08-08

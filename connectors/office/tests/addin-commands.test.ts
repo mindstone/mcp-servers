@@ -28,12 +28,14 @@ function mustGet(handler: Handler | null, action: string): Handler {
 
 /** Install a `{App}.run` global shim that feeds `context` to the callback. */
 function mockOfficeApp(app: 'Word' | 'Excel' | 'PowerPoint', context: unknown): void {
+  g.Office = { context: { requirements: { isSetSupported: vi.fn(() => true) } } };
   g[app] = {
     run: async (fn: (ctx: unknown) => Promise<unknown>) => await fn(context),
   };
 }
 
 afterEach(() => {
+  delete g.Office;
   delete g.Word;
   delete g.Excel;
   delete g.PowerPoint;
@@ -608,7 +610,7 @@ describe('truthful command results', () => {
     Object.assign(g.Excel as object, { FilterOn: { values: 'Values', custom: 'Custom' } });
     expect(await mustGet(getExcelCommandHandler('filter_table'), 'filter_table')({ range: 'A1:B5', filters: [
       { column: 'Name', criteria: { type: 'values', values: ['Acme'] } },
-      { column: 'Count', criteria: { type: 'condition', operator: '>', value: 3 } },
+      { column: 'Count', criteria: { type: 'condition', operator: 'greaterThan', value: 3 } },
     ] })).toMatchObject({ success: true });
     expect(apply).toHaveBeenCalledWith(range, 0, { filterOn: 'Values', values: ['Acme'] });
     expect(apply).toHaveBeenCalledWith(range, 1, { filterOn: 'Custom', criterion1: '>3' });
@@ -665,7 +667,168 @@ it('still applies all requested table filters', async () => {
   Object.assign(g.Excel as object, { FilterOn: { values: 'Values', custom: 'Custom' } });
   expect(await mustGet(getExcelCommandHandler('filter_table'), 'filter_table')({ tableName: 'Data', filters: [
     { column: 'Name', criteria: { type: 'values', values: ['Acme'] } },
-    { column: 'Count', criteria: { type: 'condition', operator: '>', value: 3 } },
+    { column: 'Count', criteria: { type: 'condition', operator: 'greaterThan', value: 3 } },
   ] })).toMatchObject({ success: true });
   expect(apply.mock.calls).toEqual([[0, { filterOn: 'Values', values: ['Acme'] }], [1, { filterOn: 'Custom', criterion1: '>3' }]]);
+});
+
+it('rejects an unknown sort header before applying any sort fields', async () => {
+  const apply = vi.fn();
+  const table = { getHeaderRowRange: () => ({ values: [['Name', 'Count']], load: vi.fn() }), sort: { apply } };
+  mockOfficeApp('Excel', { workbook: { tables: { getItem: () => table } }, sync: vi.fn() });
+  expect(await mustGet(getExcelCommandHandler('sort_range'), 'sort_range')({
+    tableName: 'Data', sortFields: [{ column: 'Name' }, { column: 'Missing' }],
+  })).toMatchObject({ success: false, code: 'ITEM_NOT_FOUND', error: expect.stringContaining('Name, Count') });
+  expect(apply).not.toHaveBeenCalled();
+});
+
+it('sorts AA relative to the start of a range beginning at Z', async () => {
+  const apply = vi.fn();
+  const range = { columnIndex: 25, columnCount: 3, load: vi.fn(), sort: { apply } };
+  mockOfficeApp('Excel', { workbook: { worksheets: { getActiveWorksheet: () => ({ getRange: () => range }) } }, sync: vi.fn() });
+  expect(await mustGet(getExcelCommandHandler('sort_range'), 'sort_range')({
+    range: 'Z2:AB5', sortFields: [{ column: 'AA', ascending: false }],
+  })).toMatchObject({ success: true });
+  expect(apply).toHaveBeenCalledWith([{ key: 1, ascending: false }]);
+});
+
+it('rejects an unknown shape type without creating a rectangle', async () => {
+  const { context, slide, shape } = makePowerPointContext();
+  const addGeometricShape = vi.fn(() => ({ ...shape, load: vi.fn() }));
+  Object.assign(slide.shapes, { addGeometricShape });
+  mockOfficeApp('PowerPoint', context);
+  Object.assign(g.PowerPoint as object, { GeometricShapeType: { rectangle: 'Rectangle' } });
+  expect(await mustGet(getPowerpointCommandHandler('add_shape'), 'add_shape')({
+    slideIndex: 1, shapeType: 'callout1', position: { left: 0, top: 0 },
+  })).toMatchObject({ success: false, code: 'INVALID_ARGUMENT', error: expect.stringContaining('rectangle') });
+  expect(addGeometricShape).not.toHaveBeenCalled();
+});
+
+it.each([
+  ['greaterThan', '>'], ['greaterThanOrEqual', '>='], ['lessThan', '<'],
+  ['lessThanOrEqual', '<='], ['equals', '='], ['notEqual', '<>'],
+  ['>', '>'], ['>=', '>='], ['<', '<'], ['<=', '<='], ['=', '='], ['<>', '<>'],
+])('translates filter operator %s to %s', async (operator, symbol) => {
+  const apply = vi.fn();
+  const table = {
+    getHeaderRowRange: () => ({ values: [['Count']], load: vi.fn() }),
+    columns: { getItemAt: () => ({ filter: { apply } }) },
+  };
+  mockOfficeApp('Excel', { workbook: { tables: { getItem: () => table } }, sync: vi.fn() });
+  Object.assign(g.Excel as object, { FilterOn: { custom: 'Custom' } });
+  expect(await mustGet(getExcelCommandHandler('filter_table'), 'filter_table')({ tableName: 'Data', filters: [
+    { column: 'Count', criteria: { type: 'condition', operator, value: 100 } },
+  ] })).toMatchObject({ success: true });
+  expect(apply).toHaveBeenCalledWith({ filterOn: 'Custom', criterion1: `${symbol}100` });
+});
+
+it.each(['table', 'range'])('rejects an unknown %s filter operator before applying any filters', async (kind) => {
+  const apply = vi.fn();
+  const range = { values: [['Count']], load: vi.fn(), getRow: () => range };
+  const table = { getHeaderRowRange: () => range, columns: { getItemAt: () => ({ filter: { apply } }) } };
+  const sheet = { getRange: () => range, autoFilter: { apply } };
+  mockOfficeApp('Excel', { workbook: { tables: { getItem: () => table }, worksheets: { getActiveWorksheet: () => sheet } }, sync: vi.fn() });
+  Object.assign(g.Excel as object, { FilterOn: { values: 'Values', custom: 'Custom' } });
+  expect(await mustGet(getExcelCommandHandler('filter_table'), 'filter_table')({
+    ...(kind === 'table' ? { tableName: 'Data' } : { range: 'A1:A5' }),
+    filters: [
+      { column: 'Count', criteria: { type: 'values', values: ['3'] } },
+      { column: 'Count', criteria: { type: 'condition', operator: 'approximately', value: 3 } },
+    ],
+  })).toMatchObject({ success: false, code: 'INVALID_ARGUMENT' });
+  expect(apply).not.toHaveBeenCalled();
+});
+
+it.each(['A', 'AC', '1', 'A1'])('rejects invalid or out-of-range sort column %s before sorting', async (column) => {
+  const apply = vi.fn();
+  const range = { columnIndex: 25, columnCount: 3, load: vi.fn(), sort: { apply } };
+  mockOfficeApp('Excel', { workbook: { worksheets: { getActiveWorksheet: () => ({ getRange: () => range }) } }, sync: vi.fn() });
+  expect(await mustGet(getExcelCommandHandler('sort_range'), 'sort_range')({ range: 'Z2:AB5', sortFields: [{ column }] }))
+    .toMatchObject({ success: false, code: 'INVALID_ARGUMENT' });
+  expect(apply).not.toHaveBeenCalled();
+});
+
+it.each(['add_text_box', 'add_shape'])('checks API support before %s creates a formatted shape', async (action) => {
+  const { context, slide } = makePowerPointContext();
+  const add = vi.fn();
+  Object.assign(slide.shapes, { addTextBox: add, addGeometricShape: add });
+  mockOfficeApp('PowerPoint', context);
+  Object.assign(g.PowerPoint as object, { GeometricShapeType: { rectangle: 'Rectangle' } });
+  const isSetSupported = vi.fn(() => false);
+  g.Office = { context: { requirements: { isSetSupported } } };
+  expect(await mustGet(getPowerpointCommandHandler(action), action)({
+    slideIndex: 1, shapeType: 'rectangle', text: 'New', position: { left: 0, top: 0 }, formatting: { alignment: 'center' },
+  })).toMatchObject({ success: false, code: 'UNSUPPORTED_OPERATION' });
+  expect(isSetSupported).toHaveBeenCalledWith('PowerPointApi', '1.4');
+  expect(add).not.toHaveBeenCalled();
+  expect(context.sync).toHaveBeenCalledTimes(1);
+});
+
+function makeNotesContext() {
+  const textRange = { text: 'Existing notes' };
+  const textFrame = { textRange, load: vi.fn() };
+  const shapes = { items: [{ name: 'Notes Body', textFrame }], load: vi.fn() };
+  const slide = { notesSlide: { shapes, load: vi.fn() } };
+  const context = {
+    presentation: { slides: { items: [slide], getItemAt: () => slide, load: vi.fn() } },
+    sync: vi.fn(async () => {}),
+  };
+  return { context, textRange, shapes };
+}
+
+it.each([
+  ['get_speaker_notes', 2, 'AccessDenied', 'READ_ONLY'],
+  ['get_speaker_notes', 4, 'GeneralException', 'GENERAL_EXCEPTION'],
+  ['set_speaker_notes', 2, 'GeneralException', 'GENERAL_EXCEPTION'],
+  ['set_speaker_notes', 4, 'AccessDenied', 'READ_ONLY'],
+  ['set_speaker_notes', 4, 'ApiNotFound', 'UNSUPPORTED_OPERATION'],
+] as const)('preserves %s sync %s error %s as %s', async (action, syncNumber, code, expected) => {
+  const { context } = makeNotesContext();
+  context.sync.mockImplementation(async () => { if (context.sync.mock.calls.length === syncNumber) throw { code, message: 'Office error' }; });
+  mockOfficeApp('PowerPoint', context);
+  expect(await mustGet(getPowerpointCommandHandler(action), action)({ slideIndex: 1, notes: 'New' }))
+    .toMatchObject({ success: false, code: expected });
+});
+
+it('retains the coded missing notes placeholder failure', async () => {
+  const { context, shapes } = makeNotesContext();
+  shapes.items = [];
+  mockOfficeApp('PowerPoint', context);
+  expect(await mustGet(getPowerpointCommandHandler('set_speaker_notes'), 'set_speaker_notes')({ slideIndex: 1, notes: 'New' }))
+    .toMatchObject({ success: false, code: 'ITEM_NOT_FOUND' });
+  expect(context.sync).toHaveBeenCalledTimes(3);
+});
+
+it('reads and writes supported speaker notes', async () => {
+  const { context, textRange } = makeNotesContext();
+  mockOfficeApp('PowerPoint', context);
+  expect(await mustGet(getPowerpointCommandHandler('get_speaker_notes'), 'get_speaker_notes')({ slideIndex: 1 }))
+    .toMatchObject({ success: true, data: { notes: [{ slideNumber: 1, notes: 'Existing notes' }] } });
+  expect(await mustGet(getPowerpointCommandHandler('set_speaker_notes'), 'set_speaker_notes')({ slideIndex: 1, notes: 'New' }))
+    .toMatchObject({ success: true });
+  expect(textRange.text).toBe('New');
+});
+
+it.each(['missing', 'ApiNotFound', 'GeneralException'])('reports layout API failure %s instead of an empty list', async (failure) => {
+  const { context } = makePowerPointContext();
+  if (failure === 'missing') Object.assign(context.presentation, { slideMasters: undefined });
+  else context.sync.mockImplementation(async () => { if (context.sync.mock.calls.length === 2) throw { code: failure, message: 'Layout read failed' }; });
+  mockOfficeApp('PowerPoint', context);
+  expect(await mustGet(getPowerpointCommandHandler('get_presentation_properties'), 'get_presentation_properties')({}))
+    .toMatchObject({ success: false, code: failure === 'GeneralException' ? 'GENERAL_EXCEPTION' : 'UNSUPPORTED_OPERATION' });
+});
+
+it('aligns every paragraph in a Word paragraphRange', async () => {
+  const paragraphs = [{ alignment: 'Left' }, { alignment: 'Left' }];
+  const range = { font: {}, paragraphs: { items: paragraphs, load: vi.fn() } };
+  const startRange = { expandTo: () => range };
+  mockOfficeApp('Word', {
+    document: { body: { paragraphs: { items: [{ getRange: () => startRange }, { getRange: () => ({}) }], load: vi.fn() } } },
+    sync: vi.fn(),
+  });
+  Object.assign(g.Word as object, { Alignment: { left: 'Left', centered: 'Centered', right: 'Right', justified: 'Justified' } });
+  expect(await mustGet(getWordCommandHandler('format_text'), 'format_text')({
+    target: { type: 'paragraphRange', startParagraph: 0, endParagraph: 1 }, formatting: { alignment: 'center' },
+  })).toMatchObject({ success: true });
+  expect(paragraphs.map((paragraph) => paragraph.alignment)).toEqual(['Centered', 'Centered']);
 });

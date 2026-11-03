@@ -702,8 +702,9 @@ async function sortRange(params: Record<string, unknown>): Promise<CommandResult
       const headers = (headerRange.values[0] ?? []) as string[];
       const fields = (sortFields as Array<{ column: string; ascending?: boolean }>).map((sf) => {
         const colIndex = headers.findIndex((h) => h === sf.column);
+        if (colIndex < 0) fail('ITEM_NOT_FOUND', `Column "${sf.column}" not found. Available headers: ${headers.join(', ')}.`);
         return {
-          key: colIndex >= 0 ? colIndex : 0,
+          key: colIndex,
           ascending: sf.ascending !== false,
         } as Excel.SortField;
       });
@@ -712,12 +713,15 @@ async function sortRange(params: Record<string, unknown>): Promise<CommandResult
     } else {
       const sheet = getWorksheet(context, worksheetName);
       const range = sheet.getRange(rangeAddr!);
+      range.load(['columnIndex', 'columnCount']);
+      await context.sync();
       const fields = (sortFields as Array<{ column: string; ascending?: boolean }>).map((sf) => {
-        // Column letter to 0-based index: 'A' → 0, 'B' → 1, etc.
         const colLetter = sf.column.toUpperCase();
-        const colIndex = colLetter.charCodeAt(0) - 65;
+        if (!/^[A-Z]{1,3}$/.test(colLetter)) fail('INVALID_ARGUMENT', `Column "${sf.column}" must be a worksheet column letter.`);
+        const colIndex = [...colLetter].reduce((index, letter) => index * 26 + letter.charCodeAt(0) - 64, 0) - 1 - range.columnIndex;
+        if (colIndex < 0 || colIndex >= range.columnCount) fail('INVALID_ARGUMENT', `Column "${sf.column}" is outside range ${rangeAddr}.`);
         return {
-          key: colIndex >= 0 ? colIndex : 0,
+          key: colIndex,
           ascending: sf.ascending !== false,
         } as Excel.SortField;
       });
@@ -769,7 +773,13 @@ async function filterTable(params: Record<string, unknown>): Promise<CommandResu
       if (f.criteria.type === 'values' && Array.isArray(f.criteria.values)) {
         criteria = { filterOn: Excel.FilterOn.values, values: f.criteria.values };
       } else if (f.criteria.type === 'condition') {
-        criteria = { filterOn: Excel.FilterOn.custom, criterion1: `${f.criteria.operator ?? ''}${f.criteria.value ?? ''}` };
+        const operators: Record<string, string> = {
+          greaterThan: '>', greaterThanOrEqual: '>=', lessThan: '<', lessThanOrEqual: '<=', equals: '=', notEqual: '<>',
+          '>': '>', '>=': '>=', '<': '<', '<=': '<=', '=': '=', '<>': '<>',
+        };
+        const operator = f.criteria.operator ?? '';
+        if (!Object.prototype.hasOwnProperty.call(operators, operator)) fail('INVALID_ARGUMENT', `Unsupported filter operator "${operator}". Use ${Object.keys(operators).join(', ')}.`);
+        criteria = { filterOn: Excel.FilterOn.custom, criterion1: `${operators[operator]}${f.criteria.value ?? ''}` };
       } else {
         fail('INVALID_ARGUMENT', `Unsupported filter criteria for "${f.column}".`);
       }

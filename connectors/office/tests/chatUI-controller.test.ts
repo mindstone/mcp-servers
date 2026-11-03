@@ -853,7 +853,7 @@ describe('office chatUI shared rendering migration (Stage 10)', () => {
       expect(revokedUI.container.textContent).toContain('Waiting for Rebel');
       expect(getConversationBanner(revokedUI.container).dataset.kind).toBe('revoked');
       expect(getConversationBanner(revokedUI.container).textContent).toContain(
-        'Rebel revoked this connection. Open Rebel and re-pair to reconnect.',
+        'Rebel revoked this connection. Open Rebel and reconnect Microsoft Office in Settings.',
       );
     });
 
@@ -887,6 +887,20 @@ describe('office chatUI shared rendering migration (Stage 10)', () => {
       expect(getConversationBanner(errorUI.container).textContent).toContain(
         'That message needs a bit more context.',
       );
+    });
+  });
+
+  it('asks the user to reconnect Office when pairing is rejected', async () => {
+    const harness = createClientHarness();
+    harness.sendMessage.mockRejectedValueOnce(createIntentError('UNAUTHORIZED', 'Pairing rejected', 401));
+    const { container } = mountChatUI({
+      harness,
+      initialSnapshot: { conversationId: 'conv-1', pageTitle: 'Quarterly Plan.docx', pageUrl: 'file:///Quarterly%20Plan.docx' },
+    });
+    await vi.waitFor(() => expect(harness.connectHandlers).toHaveLength(1));
+    sendComposerMessage(container, 'Hello');
+    await vi.waitFor(() => {
+      expect(getConversationBanner(container).textContent).toContain('Open Rebel and reconnect Microsoft Office in Settings.');
     });
   });
 

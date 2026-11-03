@@ -101,7 +101,7 @@ const NOT_READY_COPY =
   'Make sure Rebel is open on this computer; this panel connects by itself as soon as it is.';
 const SETTING_UP_COPY = 'Waiting for Rebel. Make sure Rebel is open on this computer; this panel connects by itself as soon as it is.';
 const REVOKED_COPY =
-  'Rebel revoked this connection. Open Rebel and re-pair to reconnect.';
+  'Rebel revoked this connection. Open Rebel and reconnect Microsoft Office in Settings.';
 const STREAM_DROPPED_COPY =
   "Rebel's streaming connection dropped. Your next message will try to reconnect.";
 const MISSING_CONTEXT_COPY = 'Open a document, then try again.';
@@ -1302,7 +1302,7 @@ function friendlyError(code: string, fallback: string): string {
     case 'PORT_UNREACHABLE':
       return "Rebel isn't reachable right now. Is the desktop app open?";
     case 'UNAUTHORIZED':
-      return NOT_READY_COPY;
+      return 'Open Rebel and reconnect Microsoft Office in Settings.';
     case 'NETWORK_ERROR':
     case 'TIMEOUT':
       return "Rebel isn't responding right now. Try again in a moment.";

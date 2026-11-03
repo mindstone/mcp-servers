@@ -69,6 +69,14 @@ describe('pre-network input validation', () => {
     return { isError: result.isError === true, text };
   };
 
+  it('uses app all on setup validation errors', async () => {
+    const result = await callTool('rebel_office_setup', { action: 'bogus' });
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.text)).toMatchObject({
+      ok: false, app: 'all', action: 'setup', error: { code: 'INVALID_ARGUMENT' },
+    });
+  });
+
   it.each([
     [
       'apply_style: searchText target without searchText',

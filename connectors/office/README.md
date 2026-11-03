@@ -299,11 +299,21 @@ Word formatting, comments and styles need selected text or an explicit target.
 PowerPoint reports `UNSUPPORTED_OPERATION` when it cannot apply requested
 formatting, text, fill or line properties. Text alignment and Excel range filter
 criteria are applied, including checks for unknown filter headers before writing.
+Condition filters accept named operators such as `greaterThan` and Excel symbols
+such as `>`; unknown operators fail before any filter is applied. Sorting rejects
+unknown table headers and resolves worksheet letters such as `AA` within the
+requested range. Unknown shape types fail before creating a shape, and formatted
+shapes require PowerPointApi 1.4 before creation. Word alignment applies to every
+paragraph in the target. Speaker-notes errors report causes such as read-only files;
+unavailable layouts return a coded failure instead of an empty layout list.
 
 If PowerPoint creates a slide but cannot finish moving or filling it, `PARTIAL`
 includes the created slide id in the error message. Inspect that slide, then
 complete the missing work or delete it before retrying to avoid duplicates.
+Find its id in `get_slides` and use the returned `slideNumber` as `slideIndex`
+when reading or deleting it.
 Setup and status cover all three apps; status tells you which apps are connected
 and what to open when none are connected. To connect, click Rebel on the Home tab
 (first use on Windows: Add-ins → Developer Add-ins → Rebel). When the panel says
 “Waiting for Rebel”, open Rebel on the same computer; it connects automatically.
+If the connection is rejected, reconnect Microsoft Office in Rebel's Settings.
