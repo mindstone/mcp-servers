@@ -11,6 +11,11 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Changed
+
+- Every Office tool, including setup, status and validation failures, now returns JSON with `ok`, `app`, `action`, and either `data` or an error with a stable code, message, fix and retry guidance. External text remains inside untrusted-content envelopes.
+- Unsupported results returned inside an Office command now report failure; missing Office APIs advise updating Office. Timeout guidance asks callers to read the current state before repeating an edit.
+
 ### Fixed
 
 - On Windows the add-in now appears in Word, Excel and PowerPoint: it is registered where Office looks for sideloaded add-ins instead of copied into Office's cache folder.

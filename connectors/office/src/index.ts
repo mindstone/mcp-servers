@@ -27,7 +27,7 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
-import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
+import { wrapUntrustedJsonStrings } from './untrusted-content.js';
 import { registerWindowsAddin, unregisterWindowsAddin } from './sidecar/manifest.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -603,7 +603,25 @@ process.on('exit', () => {
 // Sidecar HTTP bridge helper
 // ---------------------------------------------------------------------------
 
-const sidecarRequest = async (app, action, params = {}) => {
+const sidecarRequest = async (app, action, params = {}) =>
+  stampResultContext(await requestSidecar(app, action, params), app, action);
+
+const decodeSidecarResponse = async (response, app) => {
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    return stampUntrustedSource({ success: false, code: 'SIDECAR_ERROR',
+      error: await response.text() || `Office sidecar returned an invalid response (HTTP ${response.status}).` }, app);
+  }
+  return stampUntrustedSource(response.ok ? payload : {
+    success: false,
+    code: payload?.code || 'SIDECAR_ERROR',
+    error: typeof payload?.error === 'string' ? payload.error : `Office sidecar request failed (HTTP ${response.status}).`,
+  }, app);
+};
+
+const requestSidecar = async (app, action, params) => {
   // Lazy-start the sidecar on first use
   try {
     await ensureSidecar();
@@ -655,27 +673,7 @@ const sidecarRequest = async (app, action, params = {}) => {
       response = await makeRequest(state.token);
     }
 
-    if (!response.ok) {
-      // The error body is authored by the sidecar (or an add-in relayed through
-      // it) — external, attacker-influenced text. Stamp it so `toMcpResult`
-      // wraps it in the untrusted-content envelope instead of emitting it
-      // verbatim (AGENTS.md security invariant #6).
-      let detail;
-      try {
-        const payload = await response.json();
-        if (typeof payload?.error === 'string') detail = payload.error;
-      } catch {
-        const body = await response.text();
-        if (body) detail = body;
-      }
-      return stampUntrustedSource({
-        success: false,
-        error: detail || `Office sidecar request failed (HTTP ${response.status}).`,
-        code: 'SIDECAR_ERROR',
-      }, app);
-    }
-
-    return stampUntrustedSource(await response.json(), app);
+    return await decodeSidecarResponse(response, app);
   } catch (err) {
     const msg = err && err.message ? err.message : String(err);
     if (msg.includes('ECONNREFUSED') || msg.includes('fetch failed')) {
@@ -693,56 +691,70 @@ const sidecarRequest = async (app, action, params = {}) => {
   }
 };
 
-/**
- * Wrap a sidecar response into MCP tool result format.
- * Success → text content. Error → text content with isError flag.
- *
- * AGENTS.md security invariant #6: document/spreadsheet/slide content returned
- * by the add-in is authored inside Office files — attacker-influenced whenever
- * the file came from somewhere else. `sidecarRequest` stamps each add-in
- * payload with its source app; here every string in the payload (and any
- * add-in-relayed error message) is wrapped in the canonical
- * `<untrusted-content>` envelope before it reaches the model. Locally
- * generated errors (sidecar unreachable, etc.) carry no stamp and pass
- * through unwrapped.
- */
+// Local metadata cannot be supplied or overwritten by the sidecar payload.
 const UNTRUSTED_SOURCE = Symbol('officeUntrustedSource');
-
-const untrustedSourceForApp = (app) => `microsoft-office-${app}`;
-
-/**
- * Stamp a sidecar JSON payload with its source app. The stamp is a
- * non-enumerable Symbol-keyed property, so it never appears in
- * JSON.stringify output or in `wrapUntrustedJsonStrings`' object walk.
- */
-const stampUntrustedSource = (payload, app) => {
+const RESULT_CONTEXT = Symbol('officeResultContext');
+const stampResultContext = (payload, app, action) => {
   if (payload && typeof payload === 'object') {
-    Object.defineProperty(payload, UNTRUSTED_SOURCE, {
-      value: untrustedSourceForApp(app),
-      enumerable: false,
-      configurable: true,
-    });
+    Object.defineProperty(payload, RESULT_CONTEXT, { value: { app, action }, configurable: true });
   }
   return payload;
 };
+const stampUntrustedSource = (payload, app, action = 'unknown') => {
+  payload = payload && typeof payload === 'object' ? payload : {
+    success: false, code: 'SIDECAR_ERROR',
+    error: typeof payload === 'string' ? payload : 'Invalid Office sidecar response.',
+  };
+  Object.defineProperty(payload, UNTRUSTED_SOURCE, {
+    value: `microsoft-office-${app}`, configurable: true,
+  });
+  return stampResultContext(payload, app, action);
+};
+
+const readTools = {
+  word: 'rebel_office_word_read_document',
+  excel: 'rebel_office_excel_get_worksheets and rebel_office_excel_read_range',
+  powerpoint: 'rebel_office_powerpoint_get_slides and rebel_office_powerpoint_get_slide_content',
+  office: 'rebel_office_status',
+};
+const lookFirst = (app) => `Read the current state with ${readTools[app] || readTools.office}, correct the target or arguments, then try again.`;
+const ERROR_CATALOG = {
+  INVALID_ARGUMENT: { retryable: false, fix: lookFirst },
+  ITEM_NOT_FOUND: { retryable: false, fix: lookFirst },
+  NO_SELECTION: { retryable: false, fix: 'Ask the user to select the intended text in Office, or use an explicit target.' },
+  READ_ONLY: { retryable: false, fix: 'Ask the user to enable editing or save an editable copy before trying again.' },
+  NO_DOCUMENT: { retryable: false, fix: 'Ask the user to open or create the file in the requested Office app.' },
+  UNSUPPORTED_OPERATION: { retryable: false, fix: 'Ask the user to update Office to the latest version, or choose a supported operation.' },
+  INVALID_OPERATION: { retryable: false, fix: lookFirst },
+  GENERAL_EXCEPTION: { retryable: true, fix: lookFirst },
+  APP_NOT_CONNECTED: { retryable: true, fix: 'Ask the user to open the requested Office app and click Rebel until the panel says Connected, then try again.' },
+  ADDIN_DISCONNECTED: { retryable: true, fix: 'Ask the user to reopen the file and the Rebel panel; read the current state before repeating an edit.' },
+  COMMAND_TIMEOUT: { retryable: true, fix: 'Read the current state before repeating an edit; it may already have completed. Then try a smaller range or fewer items.' },
+  SIDECAR_NOT_RUNNING: { retryable: true, fix: 'Enable Microsoft Office in Settings → Connectors, then run rebel_office_setup and try again.' },
+  SIDECAR_ERROR: { retryable: true, fix: 'Restart the Microsoft Office connector in Settings; read the current state before repeating an edit.' },
+  UNAUTHORIZED: { retryable: false, fix: 'Restart the Microsoft Office connector in Settings to restore its connection credentials.' },
+  INVALID_REQUEST: { retryable: false, fix: lookFirst },
+  INTERNAL_ERROR: { retryable: true, fix: 'Restart the Microsoft Office connector in Settings; read the current state before repeating an edit.' },
+  UNKNOWN_ERROR: { retryable: false, fix: "Tell the user what Office said; don't repeat the same call." },
+};
 
 const toMcpResult = (result) => {
-  const source =
-    result && typeof result === 'object' && typeof result[UNTRUSTED_SOURCE] === 'string'
-      ? result[UNTRUSTED_SOURCE]
-      : null;
-  if (result.success === false) {
-    const message = result.error || 'Unknown error';
-    return {
-      content: [{ type: 'text', text: source ? wrapUntrusted(message, source) : message }],
-      isError: true,
-    };
+  const source = result?.[UNTRUSTED_SOURCE];
+  const { app = 'office', action = 'unknown' } = result?.[RESULT_CONTEXT] || {};
+  const wrap = (value) => source ? wrapUntrustedJsonStrings(value, source) : value;
+  let body;
+  const failed = !result || typeof result !== 'object' || result.success === false;
+  if (failed) {
+    const code = typeof result?.code === 'string' && Object.hasOwn(ERROR_CATALOG, result.code) ? result.code : 'UNKNOWN_ERROR';
+    const { retryable, fix } = ERROR_CATALOG[code];
+    body = { ok: false, app, action, error: {
+      code, message: wrap(typeof result?.error === 'string' ? result.error : 'Unknown error'),
+      fix: typeof fix === 'function' ? fix(app) : fix, retryable,
+    } };
+  } else {
+    body = { ok: true, app, action, data: wrap(result.data !== undefined ? result.data : result) };
   }
-  // Return the data payload as formatted JSON text
-  const data = result.data !== undefined ? result.data : result;
-  return {
-    content: [{ type: 'text', text: JSON.stringify(source ? wrapUntrustedJsonStrings(data, source) : data, null, 2) }],
-  };
+  return { content: [{ type: 'text', text: JSON.stringify(body, null, 2) }], ...(failed ? { isError: true } : {}) };
 };
 
 // ---------------------------------------------------------------------------
@@ -837,15 +849,11 @@ const EMPTY_OBJECT_SCHEMA = {
 const jsonSchemaValidator = new AjvJsonSchemaValidator();
 const registeredTools = new Map();
 
-const createToolError = (errorMessage) => ({
-  content: [
-    {
-      type: 'text',
-      text: errorMessage,
-    },
-  ],
-  isError: true,
-});
+const createToolError = (errorMessage, name) => {
+  const parts = registeredTools.has(name) ? name.slice('rebel_office_'.length).split('_') : ['unknown'];
+  const app = ['word', 'excel', 'powerpoint'].includes(parts[0]) ? parts.shift() : 'office';
+  return toMcpResult(stampResultContext({ success: false, code: 'INVALID_ARGUMENT', error: errorMessage }, app, parts.join('_')));
+};
 
 /**
  * Register a tool into the local registry that backs the ListTools/CallTool
@@ -932,7 +940,7 @@ server.server.setRequestHandler(CallToolRequestSchema, async (request, extra) =>
     if (error instanceof McpError && error.code === ErrorCode.UrlElicitationRequired) {
       throw error;
     }
-    return createToolError(error instanceof Error ? error.message : String(error));
+    return createToolError(error instanceof Error ? error.message : String(error), request.params.name);
   }
 });
 
@@ -1047,30 +1055,25 @@ registerTool(TOOL_NAMES.setup, {
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
 }, async (input) => {
+  const respond = (result) => toMcpResult(stampResultContext(result, 'office', 'setup'));
   if (input.action === 'uninstall') {
     const results = await uninstallManifest();
     const summary = results.map(r => `${r.app}: ${r.status}${r.error ? ` (${r.error})` : ''}`).join('\n');
-    return {
-      content: [{ type: 'text', text: `Add-in uninstalled:\n${summary}\n\nRestart any open Office apps to complete removal.` }],
-    };
+    return respond(results.some(r => r.status === 'failed')
+      ? { success: false, code: 'SIDECAR_ERROR', error: summary }
+      : { success: true, data: { results, summary: `Add-in uninstalled:\n${summary}\n\nRestart any open Office apps to complete removal.` } });
   }
 
   // Lazy-start the sidecar so we have a manifest + state file to work with
   try {
     await ensureSidecar();
   } catch (err) {
-    return {
-      content: [{ type: 'text', text: `Failed to start Office sidecar: ${err.message}` }],
-      isError: true,
-    };
+    return respond({ success: false, code: 'SIDECAR_NOT_RUNNING', error: `Failed to start Office sidecar: ${err.message}` });
   }
 
   const state = loadSidecarState();
   if (!state) {
-    return {
-      content: [{ type: 'text', text: "The Office sidecar started but state file not found. Try again." }],
-      isError: true,
-    };
+    return respond({ success: false, code: 'SIDECAR_NOT_RUNNING', error: "The Office sidecar started but state file not found. Try again." });
   }
 
   // Install
@@ -1080,10 +1083,7 @@ registerTool(TOOL_NAMES.setup, {
   // manifestPath points to e.g. .../rebeloffice/manifest.xml — derive the directory
   const manifestDir = state.manifestPath ? path.dirname(state.manifestPath) : null;
   if (!manifestDir || !fs.existsSync(manifestDir)) {
-    return {
-      content: [{ type: 'text', text: 'Manifest directory not found. The sidecar may need to be restarted. Try disabling and re-enabling the Microsoft Office connector in Settings.' }],
-      isError: true,
-    };
+    return respond({ success: false, code: 'SIDECAR_ERROR', error: 'Manifest directory not found. The sidecar may need to be restarted. Try disabling and re-enabling the Microsoft Office connector in Settings.' });
   }
 
   const manifestResults = await installManifest(manifestDir);
@@ -1115,9 +1115,9 @@ registerTool(TOOL_NAMES.setup, {
   lines.push('3. Click it to open the connection panel');
   lines.push('4. Once it shows "Connected", you\'re ready to go!');
 
-  return {
-    content: [{ type: 'text', text: lines.join('\n') }],
-  };
+  return respond(allInstalled
+    ? { success: true, data: { steps, summary: lines.join('\n') } }
+    : { success: false, code: 'SIDECAR_ERROR', error: lines.join('\n') });
 });
 
 // 0b. rebel_office_status — Check connection status
@@ -1134,42 +1134,16 @@ registerTool(TOOL_NAMES.status, {
   },
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 }, async () => {
+  const respond = (result) => toMcpResult(stampResultContext(result, 'office', 'status'));
   const state = loadSidecarState();
   if (!state) {
-    return {
-      content: [{ type: 'text', text: "The Office sidecar isn't running. Enable the Microsoft Office connector in Settings → Connectors, then run rebel_office_setup to install the add-in." }],
-      isError: true,
-    };
+    return respond({ success: false, code: 'SIDECAR_NOT_RUNNING', error: "The Office sidecar isn't running. Enable the Microsoft Office connector in Settings → Connectors, then run rebel_office_setup to install the add-in." });
   }
-
   try {
-    const url = `https://127.0.0.1:${state.port}/health`;
-    // Loopback-scoped helper — see comment above `loopbackHttpsRequest`.
-    const response = await loopbackHttpsRequest(url);
-    const health = await response.json();
-
-    const connected = health.connected || {};
-    const apps = ['word', 'excel', 'powerpoint'];
-    const lines = ['Office connection status:'];
-    for (const app of apps) {
-      const status = connected[app] ? 'Connected' : 'Not connected';
-      lines.push(`  ${app.charAt(0).toUpperCase() + app.slice(1)}: ${status}`);
-    }
-
-    const anyConnected = apps.some(a => connected[a]);
-    if (!anyConnected) {
-      lines.push('\nNo Office apps are connected. Make sure you have:');
-      lines.push('1. Run rebel_office_setup to install the add-in');
-      lines.push('2. Opened Word, Excel, or PowerPoint');
-      lines.push('3. Clicked the "Rebel" button in the Home ribbon (under the "Add ons" menu)');
-    }
-
-    return { content: [{ type: 'text', text: lines.join('\n') }] };
+    const response = await loopbackHttpsRequest(`https://127.0.0.1:${state.port}/health`);
+    return respond(await decodeSidecarResponse(response, 'office'));
   } catch (err) {
-    return {
-      content: [{ type: 'text', text: `Cannot reach Office sidecar: ${err.message}. Try restarting the connector in Settings.` }],
-      isError: true,
-    };
+    return respond({ success: false, code: 'SIDECAR_ERROR', error: `Cannot reach Office sidecar: ${err.message}. Try restarting the connector in Settings.` });
   }
 });
 

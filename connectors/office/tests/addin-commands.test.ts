@@ -12,6 +12,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CommandResult } from '../src/addin/officeExecutor.js';
+import * as executor from '../src/addin/officeExecutor.js';
 import { getWordCommandHandler } from '../src/addin/commands/wordCommands.js';
 import { getExcelCommandHandler } from '../src/addin/commands/excelCommands.js';
 import { getPowerpointCommandHandler } from '../src/addin/commands/powerpointCommands.js';
@@ -471,5 +472,40 @@ describe('powerpoint delete_shape', () => {
 
     expect(result.success).toBe(false);
     if (!result.success) expect(result.error).toContain('not found');
+  });
+});
+
+
+describe('executor result normalization', () => {
+  it.each(['add_image', 'set_speaker_notes'])('promotes %s unsupported failure out of data', async (action) => {
+    const slide = { shapes: {} };
+    mockOfficeApp('PowerPoint', {
+      presentation: { slides: { items: [slide], load: vi.fn(), getItemAt: () => slide } },
+      sync: vi.fn(async () => {}),
+    });
+    const result = await mustGet(getPowerpointCommandHandler(action), action)({
+      slideIndex: 1, source: { type: 'base64', base64: 'aGVsbG8=' },
+      position: { left: 0, top: 0 }, notes: 'Notes',
+    });
+    expect(result).toMatchObject({ success: false, code: 'UNSUPPORTED_OPERATION' });
+    expect(result).not.toHaveProperty('data');
+  });
+
+  it.each(['Word', 'Excel', 'PowerPoint'] as const)('normalizes callback results for %s', async (app) => {
+    mockOfficeApp(app, {});
+    const execute = { Word: executor.executeWordCommand, Excel: executor.executeExcelCommand, PowerPoint: executor.executePowerpointCommand }[app];
+    expect(await execute(async () => ({ success: false, code: 'NO_SELECTION', error: 'Select text' })))
+      .toEqual({ success: false, code: 'NO_SELECTION', error: 'Select text' });
+    expect(await execute(async () => ({ success: true, changed: false })))
+      .toEqual({ success: true, data: { changed: false } });
+    expect(await execute(async () => ({ matches: [] }))).toEqual({ success: true, data: { matches: [] } });
+    expect(await execute(async () => executor.fail('NO_SELECTION', 'Select text')))
+      .toEqual({ success: false, code: 'NO_SELECTION', error: 'Select text' });
+  });
+
+  it.each(['ApiNotFound', 'NotImplemented'])('maps %s to unsupported', async (code) => {
+    mockOfficeApp('Word', {});
+    expect(await executor.executeWordCommand(async () => { throw { code, message: 'Missing API' }; }))
+      .toMatchObject({ success: false, code: 'UNSUPPORTED_OPERATION' });
   });
 });

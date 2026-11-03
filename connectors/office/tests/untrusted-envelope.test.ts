@@ -39,7 +39,7 @@ describe('toMcpResult untrusted-content envelope', () => {
 
     const result = toMcpResult(payload);
     const text = result.content[0]!.text;
-    const parsed = JSON.parse(text) as {
+    const parsed = JSON.parse(text).data as {
       paragraphs: Array<{ text: string; style: string; index: number }>;
       totalParagraphs: number;
       hasMore: boolean;
@@ -62,7 +62,7 @@ describe('toMcpResult untrusted-content envelope', () => {
     const excel = JSON.parse(
       toMcpResult(stampUntrustedSource({ success: true, data: { values: [['A1']] } }, 'excel'))
         .content[0]!.text,
-    ) as { values: string[][] };
+    ).data as { values: string[][] };
     expect(excel.values[0]![0]).toBe(
       '<untrusted-content source="microsoft-office-excel">A1</untrusted-content>',
     );
@@ -70,7 +70,7 @@ describe('toMcpResult untrusted-content envelope', () => {
     const ppt = JSON.parse(
       toMcpResult(stampUntrustedSource({ success: true, data: { title: 'Intro' } }, 'powerpoint'))
         .content[0]!.text,
-    ) as { title: string };
+    ).data as { title: string };
     expect(ppt.title).toBe(
       '<untrusted-content source="microsoft-office-powerpoint">Intro</untrusted-content>',
     );
@@ -85,7 +85,7 @@ describe('toMcpResult untrusted-content envelope', () => {
       'word',
     );
 
-    const parsed = JSON.parse(toMcpResult(payload).content[0]!.text) as { text: string };
+    const parsed = JSON.parse(toMcpResult(payload).content[0]!.text).data as { text: string };
     expect(parsed.text).toContain('<\\/untrusted-content>');
     // The only real close tag is the envelope's own
     expect(parsed.text).not.toContain('</untrusted-content >');
@@ -96,7 +96,7 @@ describe('toMcpResult untrusted-content envelope', () => {
       '<untrusted-content source="microsoft-office-word">Hello</untrusted-content>';
     const payload = stampUntrustedSource({ success: true, data: { text: already } }, 'word');
 
-    const parsed = JSON.parse(toMcpResult(payload).content[0]!.text) as { text: string };
+    const parsed = JSON.parse(toMcpResult(payload).content[0]!.text).data as { text: string };
     expect(parsed.text).toBe(already);
   });
 
@@ -108,7 +108,7 @@ describe('toMcpResult untrusted-content envelope', () => {
 
     const result = toMcpResult(payload);
     expect(result.isError).toBe(true);
-    expect(result.content[0]!.text).toBe(
+    expect(JSON.parse(result.content[0]!.text).error.message).toBe(
       '<untrusted-content source="microsoft-office-word">Word reported an error: boom</untrusted-content>',
     );
   });
@@ -122,7 +122,7 @@ describe('toMcpResult untrusted-content envelope', () => {
 
     const result = toMcpResult(localError);
     expect(result.isError).toBe(true);
-    expect(result.content[0]!.text).toBe(localError.error);
+    expect(JSON.parse(result.content[0]!.text).error.message).toBe(localError.error);
   });
 
   it('the source stamp never leaks into model-visible output', () => {

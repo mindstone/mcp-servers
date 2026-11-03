@@ -24,6 +24,8 @@ export type CommandResult<T = unknown> = CommandSuccess<T> | CommandError;
  * See: https://learn.microsoft.com/en-us/javascript/api/office/officeextension.error
  */
 const OFFICE_ERROR_MAP: Record<string, { message: string; code: string }> = {
+  ApiNotFound: { message: 'This feature is unavailable in this Office version.', code: 'UNSUPPORTED_OPERATION' },
+  NotImplemented: { message: 'This feature is unavailable in this Office version.', code: 'UNSUPPORTED_OPERATION' },
   InvalidArgument: {
     message: 'An invalid argument was provided to the Office API.',
     code: 'INVALID_ARGUMENT',
@@ -46,6 +48,29 @@ const OFFICE_ERROR_MAP: Record<string, { message: string; code: string }> = {
   },
 };
 
+class CommandFailure extends Error {
+  constructor(readonly code: string, message: string) {
+    super(message);
+  }
+}
+
+export function fail(code: string, message: string): never {
+  throw new CommandFailure(code, message);
+}
+
+function commandResult<T>(data: T): CommandResult<T> {
+  if (data && typeof data === 'object' && 'success' in data) {
+    const { success, ...rest } = data;
+    if (success === false) {
+      return { success: false,
+        code: 'code' in rest && typeof rest.code === 'string' ? rest.code : 'UNKNOWN_ERROR',
+        error: 'error' in rest && typeof rest.error === 'string' ? rest.error : 'Unknown error' };
+    }
+    return { success: true, data: rest as T };
+  }
+  return { success: true, data };
+}
+
 /** Map of app name to the "no file open" error message. */
 const NO_FILE_MESSAGES: Record<string, string> = {
   Word: 'No document is open in Word. Open or create a document first.',
@@ -54,6 +79,9 @@ const NO_FILE_MESSAGES: Record<string, string> = {
 };
 
 function normalizeOfficeError(error: unknown, appName = 'Word'): CommandError {
+  if (error instanceof CommandFailure) {
+    return { success: false, error: error.message, code: error.code };
+  }
   // Check for OfficeExtension.Error (has code + message + debugInfo)
   if (
     error !== null &&
@@ -62,7 +90,8 @@ function normalizeOfficeError(error: unknown, appName = 'Word'): CommandError {
     typeof (error as { code: unknown }).code === 'string'
   ) {
     const officeError = error as { code: string; message: string; debugInfo?: unknown };
-    const mapped = OFFICE_ERROR_MAP[officeError.code];
+    const mapped = Object.prototype.hasOwnProperty.call(OFFICE_ERROR_MAP, officeError.code)
+      ? OFFICE_ERROR_MAP[officeError.code] : undefined;
 
     if (mapped) {
       return { success: false, error: mapped.message, code: mapped.code };
@@ -71,7 +100,7 @@ function normalizeOfficeError(error: unknown, appName = 'Word'): CommandError {
     return {
       success: false,
       error: `${appName} reported an error: ${officeError.message}`,
-      code: officeError.code,
+      code: 'UNKNOWN_ERROR',
     };
   }
 
@@ -122,7 +151,7 @@ export async function executeWordCommand<T>(
       return await fn(context);
     });
 
-    return { success: true, data };
+    return commandResult(data);
   } catch (error) {
     return normalizeOfficeError(error, 'Word');
   }
@@ -139,7 +168,7 @@ export async function executeExcelCommand<T>(
       return await fn(context);
     });
 
-    return { success: true, data };
+    return commandResult(data);
   } catch (error) {
     return normalizeOfficeError(error, 'Excel');
   }
@@ -156,7 +185,7 @@ export async function executePowerpointCommand<T>(
       return await fn(context);
     });
 
-    return { success: true, data };
+    return commandResult(data);
   } catch (error) {
     return normalizeOfficeError(error, 'PowerPoint');
   }

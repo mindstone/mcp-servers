@@ -56,7 +56,10 @@ async function connectSetup(statePath: string | undefined = stateFile) {
 
 async function setup(action: 'install' | 'uninstall') {
   const result = await client!.callTool({ name: 'rebel_office_setup', arguments: { action } });
-  return (result.content as Array<{ type: string; text: string }>)[0]!.text;
+  const parsed = JSON.parse((result.content as Array<{ type: string; text: string }>)[0]!.text);
+  expect(parsed).toMatchObject({ app: 'office', action: 'setup' });
+  expect(result.isError === true).toBe(!parsed.ok);
+  return parsed;
 }
 
 describe('Windows setup tool', () => {
@@ -68,7 +71,7 @@ describe('Windows setup tool', () => {
       app: 'all', path: manifestPath, status: 'removed',
     }));
 
-    expect(await setup('uninstall')).toContain('all: removed');
+    expect(await setup('uninstall')).toMatchObject({ ok: true, data: { summary: expect.stringContaining('all: removed') } });
     expect(unregisterWindowsAddin).toHaveBeenCalledExactlyOnceWith(manifestPath);
     expect(registerWindowsAddin).not.toHaveBeenCalled();
   });
@@ -76,7 +79,7 @@ describe('Windows setup tool', () => {
   it('reports a missing state directory configuration without calling the registry', async () => {
     // Empty configuration is also treated as absent by the server.
     await connectSetup('');
-    expect(await setup('uninstall')).toContain("all: failed (The Office sidecar state directory isn't configured.)");
+    expect(await setup('uninstall')).toMatchObject({ ok: false, error: { code: 'SIDECAR_ERROR', message: expect.stringContaining("all: failed (The Office sidecar state directory isn't configured.)") } });
     expect(unregisterWindowsAddin).not.toHaveBeenCalled();
   });
 
@@ -92,9 +95,21 @@ describe('Windows setup tool', () => {
       app: 'all', path: manifestPath, status,
     }));
 
-    const text = await setup('install');
+    const result = await setup('install');
+    expect(result.ok).toBe(true);
+    const text = result.data.summary;
     expect(text).toContain('Install manifest: done');
     expect(text).toContain(`all: ${status}`);
     expect(registerWindowsAddin).toHaveBeenCalledExactlyOnceWith(manifestPath);
   });
+});
+
+
+it('does not report setup success when registration fails', async () => {
+  const api = await connectSetup();
+  api.setSpawnSidecarAndWaitForTests(async () => {
+    await fs.writeFile(stateFile, JSON.stringify({ port: 52100, token: 'test-token', manifestPath: path.join(stateDir, 'manifest.xml') }));
+  });
+  vi.mocked(registerWindowsAddin).mockResolvedValue({ app: 'all', path: stateDir, status: 'failed', error: 'Registration denied' });
+  expect(await setup('install')).toMatchObject({ ok: false, error: { code: 'SIDECAR_ERROR', message: expect.stringContaining('Registration denied') } });
 });

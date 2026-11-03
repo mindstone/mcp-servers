@@ -101,6 +101,10 @@ describe('pre-network input validation', () => {
     const result = await callTool(name as string, args as Record<string, unknown>);
     expect(result.isError).toBe(true);
     expect(result.text).toContain('Input validation error');
+    const parsed = JSON.parse(result.text);
+    expect(parsed).toMatchObject({ ok: false, app: (name as string).split('_')[2],
+      action: (name as string).split('_').slice(3).join('_'),
+      error: { code: 'INVALID_ARGUMENT', retryable: false, fix: expect.any(String) } });
   });
 
   it.each([
@@ -141,3 +145,15 @@ describe('pre-network input validation', () => {
     expect(result.text).not.toContain('Input validation error');
   });
 });
+
+
+it.each(['rebel_office_setup', 'rebel_office_status', 'unknown_tool'])(
+  '%s returns the result shape on failure', async (name) => {
+    const response = await client.callTool({ name, arguments: {} });
+    expect(response.isError).toBe(true);
+    expect(JSON.parse((response.content as Array<{ text: string }>)[0]!.text)).toMatchObject({
+      ok: false, app: 'office', action: name === 'unknown_tool' ? 'unknown' : name.slice('rebel_office_'.length),
+      error: { code: name === 'unknown_tool' ? 'INVALID_ARGUMENT' : 'SIDECAR_NOT_RUNNING' },
+    });
+  },
+);

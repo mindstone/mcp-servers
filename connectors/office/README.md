@@ -27,23 +27,33 @@ Tools the host calls:
 1. `rebel_office_excel_set_formula` — writes `=B<row>*C<row>` into each cell in column D.
 2. `rebel_office_excel_format_range` — applies bold to the totals row range.
 
-Response (trimmed):
+## What the AI gets back
+
+Every tool, including setup, status and input-validation failures, returns JSON
+in `content[0].text`. `ok: true` means the requested operation completed,
+including setting a value that already had that value. Successful results carry
+`data`; failures carry `error` and set MCP's `isError: true`.
 
 ```json
-{
-  "set_formula": {
-    "worksheet": "Sheet1",
-    "range": "D2:D24",
-    "formula": "=B2*C2",
-    "filled_rows": 23
-  },
-  "format_range": {
-    "worksheet": "Sheet1",
-    "range": "A25:D25",
-    "bold": true
-  }
-}
+{"ok":true,"app":"word","action":"read_document","data":{"paragraphs":[]}}
 ```
+
+```json
+{"ok":false,"app":"excel","action":"write_range","error":{"code":"READ_ONLY","message":"<untrusted-content source=\"microsoft-office-excel\">The file is read-only.</untrusted-content>","fix":"Ask the user to enable editing or save an editable copy before trying again.","retryable":false}}
+```
+
+`app` is `word`, `excel`, `powerpoint`, or `office` for setup and status;
+`action` names the tool's operation (`setup` or `status` for those tools).
+Unknown or disabled tools and invalid inputs use `INVALID_ARGUMENT`; an unknown
+tool has `app: "office"` and `action: "unknown"`.
+
+Error codes, fixes and retry guidance come from a local catalog. Unknown Office
+codes become `UNKNOWN_ERROR`. `retryable` means recovery may permit another
+attempt; after a timeout, read the current state before repeating an edit,
+because the edit may already have completed. Messages and all strings in data
+received from Office or the sidecar stay inside `<untrusted-content>` envelopes,
+with embedded closing tags escaped. App, action, codes and fixes stay outside
+those envelopes.
 
 ## Requirements
 
