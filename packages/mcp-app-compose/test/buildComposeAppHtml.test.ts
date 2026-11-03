@@ -397,7 +397,28 @@ describe('buildComposeAppHtml — blocked-send detector and Gmail URL (happy-dom
     expect(isHidden(window, 'errorBox')).toBe(true);
     const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
     expect(sendButton.disabled).toBe(true);
-    expect(sendButton.title).toContain('turned off in your settings');
+    expect(sendButton.title).toContain('blocked sending this email');
+  });
+
+  it.each([
+    { label: 'structured user-disabled reason', message: 'Tool call failed', data: { reason: 'user-disabled' } },
+    { label: 'legacy user-disabled message', message: USER_DISABLED_ERROR, data: undefined },
+  ])('uses truthful blocked-send copy for $label', ({ message, data }) => {
+    const window = sendThenReplyError(blockedHtml, message, undefined, data);
+
+    expect(isHidden(window, 'blockedBox')).toBe(false);
+    const blockedText = window.document.getElementById('blockedText') as unknown as HTMLElement;
+    const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
+    for (const copy of [blockedText.textContent, sendButton.title]) {
+      expect(copy).toContain('blocked sending this email');
+      expect(copy).not.toMatch(/settings/i);
+    }
+
+    setFieldValue(window, 'subjectInput', 'x'.repeat(9000));
+    const openComposeButton = window.document.getElementById('openComposeButton') as unknown as HTMLButtonElement;
+    openComposeButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    expect(blockedText.textContent).toContain('too large to open in Gmail');
+    expect(blockedText.textContent).not.toMatch(/settings/i);
   });
 
   it('treats admin-disabled, generic-security, and transport failures as ordinary errors', () => {
@@ -513,6 +534,7 @@ describe('buildComposeAppHtml — blocked-send detector and Gmail URL (happy-dom
     const blockedText = window.document.getElementById('blockedText');
     // Copy is cause-agnostic (recipients OR an oversized subject can overflow).
     expect((blockedText as unknown as HTMLElement).textContent).toContain('too large to open in Gmail');
+    expect((blockedText as unknown as HTMLElement).textContent).not.toMatch(/settings/i);
   });
 
   it('degrades to recipients + subject only (no body) when the compose URL would be too long', () => {
