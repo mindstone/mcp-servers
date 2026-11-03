@@ -13,6 +13,9 @@ export const SNAPSHOT_TIMEOUT_MS = 15_000;
 export const SCREENSHOT_TIMEOUT_MS = 15_000;
 export const SESSION_NAME = 'mcp';
 
+/** Experimental capability asking the host to keep this server running until the host stops. */
+export const KEEP_ALIVE_CAPABILITY = 'super-mcp/keep-alive';
+
 export class ConnectorError extends Error {
   constructor(
     message: string,

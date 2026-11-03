@@ -4,7 +4,8 @@
  *
  * Provides headless browser automation via the agent-browser CLI.
  * Uses accessibility snapshots (@ref pointers) instead of fragile CSS selectors.
- * Sessions persist automatically between invocations.
+ * Sessions persist automatically between invocations. When the host stops this
+ * server, it closes the browser (see src/stop.ts).
  *
  * Requirements:
  * - agent-browser executable on PATH, or the bundled dependency run with this Node
@@ -21,11 +22,13 @@
 import './installGracefulFs.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createServer } from './server.js';
+import { closeBrowserWhenHostStops } from './stop.js';
 
 async function main() {
   const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  closeBrowserWhenHostStops();
   console.error('Browser Automation MCP server running on stdio');
 }
 
