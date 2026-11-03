@@ -132,7 +132,7 @@ describe.each([
     }));
   }
 
-  function deliver(window: Window, outcome = sentOutcome, source: Window['parent'] | null = window.eval('window.parent')): void {
+  function deliver(window: Window, outcome: typeof sentOutcome | null = sentOutcome, source: Window['parent'] | null = window.eval('window.parent')): void {
     window.dispatchEvent(new window.MessageEvent('message', {
       data: { method: 'mcp-app:card-outcome', params: outcome }, source,
     }));
@@ -300,6 +300,75 @@ describe.each([
 
   it('restores an uncertain send beside Retry on cold mount', () => {
     const window = loadWindow(html, maybeOutcome);
+    expectUncertainty(window);
+  });
+
+  it.each(['live', 'cold', 'collapsed'])('clears only received uncertainty from a %s copy when the outcome is removed', (state) => {
+    const window = mount(state === 'cold' ? maybeOutcome : undefined);
+    if (state !== 'cold') deliver(window, maybeOutcome);
+    if (state === 'collapsed') click(window, 'cancelButton');
+    deliver(window, null);
+    expect(isHidden(window, 'unknownBox')).toBe(true);
+    expect(isHidden(window, 'errorBox')).toBe(true);
+    expect(isHidden(window, 'composeForm')).toBe(false);
+    expect(isHidden(window, 'collapsedState')).toBe(true);
+    expect(window.document.getElementById('sendButton')!.hasAttribute('disabled')).toBe(false);
+    expect((window.document.getElementById('bodyInput') as unknown as HTMLTextAreaElement).value).toBe('Ready to send.');
+    click(window, 'cancelButton');
+    expect(window.document.getElementById('collapsedMessage')!.textContent).toBe('Draft collapsed. Nothing sent.');
+    click(window, 'reopenButton');
+    click(window, 'sendButton');
+    expect(calls(window)).toHaveLength(1);
+  });
+
+  it.each(['error', 'timeout'])('keeps its own %s uncertainty when the outcome is removed', (failure) => {
+    const window = mount(maybeOutcome);
+    const timeout = vi.spyOn(window, 'setTimeout');
+    click(window, 'retryButton');
+    if (failure === 'error') {
+      reply(window, { message: 'Connection lost.' });
+    } else {
+      const callback = timeout.mock.calls.find((call) => call[1] === 75000)?.[0];
+      expect(typeof callback).toBe('function');
+      (callback as () => void)();
+    }
+    deliver(window, maybeOutcome);
+    deliver(window, null);
+    expectUncertainty(window);
+    click(window, 'cancelButton');
+    expect(window.document.getElementById('collapsedMessage')!.textContent).toContain('Check');
+  });
+
+  it('ignores a removed outcome while its own Send is pending', () => {
+    const window = mount(maybeOutcome);
+    click(window, 'retryButton');
+    const before = window.document.body.innerHTML;
+    deliver(window, null);
+    expect(window.document.body.innerHTML).toBe(before);
+    reply(window, { message: 'Server is stopped.', data: { reason: 'not-dispatched' } });
+    expectUncertainty(window);
+    deliver(window, null);
+    expect(isHidden(window, 'unknownBox')).toBe(true);
+  });
+
+  it('keeps its own sent view when the outcome is removed', () => {
+    const window = mount();
+    click(window, 'sendButton');
+    reply(window);
+    click(window, 'reopenButton');
+    const before = window.document.body.innerHTML;
+    deliver(window, null);
+    expect(window.document.body.innerHTML).toBe(before);
+    click(window, 'sendButton');
+    expect(calls(window)).toHaveLength(1);
+  });
+
+  it('ignores removed outcomes from an unrelated frame or without a source', () => {
+    const window = mount(maybeOutcome);
+    const unrelated = mount();
+    deliver(window, null, unrelated.eval('window'));
+    expectUncertainty(window);
+    deliver(window, null, null);
     expectUncertainty(window);
   });
 

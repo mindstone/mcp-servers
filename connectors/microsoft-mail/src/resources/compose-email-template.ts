@@ -477,6 +477,7 @@ export const COMPOSE_EMAIL_HTML = `
       var collapsed = false;
       var outcomeUnknown = false;
       var sendMayHaveGone = false;
+      var ownSendMayHaveGone = false;
       var sent = false;
       // Which action the in-flight request belongs to ('send' | 'draft').
       // Captured before clearing on reply/timeout so the response handler can
@@ -754,6 +755,7 @@ export const COMPOSE_EMAIL_HTML = `
         }
         pendingAction = null;
         setSending(false);
+        ownSendMayHaveGone = true;
         showSendUnknown();
       }
 
@@ -997,7 +999,16 @@ export const COMPOSE_EMAIL_HTML = `
       }
 
       function applyCardOutcome(o) {
-        if (!o || typeof o !== 'object' || sent) return;
+        if (sent) return;
+        if (o === null) {
+          if (!sendMayHaveGone || ownSendMayHaveGone) return;
+          if (pendingRequestId && pendingRequestId === pendingSendRequestId) return;
+          sendMayHaveGone = false;
+          clearUnknown();
+          setCollapsed(false);
+          return;
+        }
+        if (!o || typeof o !== 'object') return;
         if (o.outcome === 'maybe-sent') {
           if (pendingRequestId && pendingRequestId === pendingSendRequestId) return;
           showSendUnknown();
@@ -1007,6 +1018,7 @@ export const COMPOSE_EMAIL_HTML = `
         if (o.outcome !== 'sent' && o.outcome !== 'submitted') return;
         sent = true;
         sendMayHaveGone = false;
+        ownSendMayHaveGone = false;
         clearSendTimeout();
         clearError();
         clearSuccess();
@@ -1217,6 +1229,7 @@ export const COMPOSE_EMAIL_HTML = `
             sendButton.disabled = true;
           }
           if (completedAction !== 'draft' && (!blockedBeforeSend || sendMayHaveGone)) {
+            if (!blockedBeforeSend) ownSendMayHaveGone = true;
             showSendUnknown();
           }
           showError(errorMessage);
@@ -1243,6 +1256,7 @@ export const COMPOSE_EMAIL_HTML = `
         renderSentView(sentPayload, getSendMetaFromResult(data.result), stamp);
         sent = true;
         sendMayHaveGone = false;
+        ownSendMayHaveGone = false;
         reopenButton.classList.remove('hidden');
         setCollapsed(true, stamp ? 'Email sent · ' + stamp : 'Email sent.');
       });

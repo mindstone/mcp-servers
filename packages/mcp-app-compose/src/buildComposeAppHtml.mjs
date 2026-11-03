@@ -831,6 +831,7 @@ ${gmail ? `        <button id="openGmailButton" type="button" class="button butt
       var collapsed = false;
       var outcomeUnknown = false;
       var sendMayHaveGone = false;
+      var ownSendMayHaveGone = false;
       var sent = false;
 ${m.extraStateVars}${hasDraft ? `      // Which action the in-flight request belongs to ('send' | 'draft').
       // Captured before clearing on reply/timeout so the response handler can
@@ -1109,6 +1110,7 @@ ${hasDraft ? `        if (pendingAction === 'draft') {
         }
         pendingAction = null;
 ` : ''}        setSending(false);
+        ownSendMayHaveGone = true;
         showSendUnknown();
       }
 
@@ -1418,7 +1420,16 @@ ${f.cc ? `        var cc = normalizeAddressList(payload.cc).join(',');
       }
 
       function applyCardOutcome(o) {
-        if (!o || typeof o !== 'object' || sent) return;
+        if (sent) return;
+        if (o === null) {
+          if (!sendMayHaveGone || ownSendMayHaveGone) return;
+          if (pendingRequestId && pendingRequestId === pendingSendRequestId) return;
+          sendMayHaveGone = false;
+          clearUnknown();
+          setCollapsed(false);
+          return;
+        }
+        if (!o || typeof o !== 'object') return;
         if (o.outcome === 'maybe-sent') {
           if (pendingRequestId && pendingRequestId === pendingSendRequestId) return;
           showSendUnknown();
@@ -1428,6 +1439,7 @@ ${f.cc ? `        var cc = normalizeAddressList(payload.cc).join(',');
         if (o.outcome !== 'sent' && o.outcome !== 'submitted') return;
         sent = true;
         sendMayHaveGone = false;
+        ownSendMayHaveGone = false;
         clearSendTimeout();
         clearError();
         clearSuccess();
@@ -1640,6 +1652,7 @@ ${hasDraft ? `          if (completedAction === 'draft') {
             sendButton.disabled = true;
           }
           if (${hasDraft ? "completedAction !== 'draft' && " : ''}(!blockedBeforeSend || sendMayHaveGone)) {
+            if (!blockedBeforeSend) ownSendMayHaveGone = true;
             showSendUnknown();
           }
 ${blockedSend ? `          // Only the host's closed user-disabled reason permits the Gmail
@@ -1677,6 +1690,7 @@ ${hasDraft ? `        if (completedAction === 'draft') {
         renderSentView(sentPayload, getSendMetaFromResult(data.result), stamp);
         sent = true;
         sendMayHaveGone = false;
+        ownSendMayHaveGone = false;
         reopenButton.classList.remove('hidden');
         setCollapsed(true, stamp ? ${quoteJsString(m.sentCollapseStamped)} + stamp : ${quoteJsString(m.sentCollapseDefault)});
       });
