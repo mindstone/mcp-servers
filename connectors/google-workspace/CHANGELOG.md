@@ -16,6 +16,16 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Compose cards keep their sent status across copies and reloads in supporting hosts. Reloaded cards show the send time without the sent contents. The sender keeps its posted contents even if confirmation arrives after a lost reply; malformed host timestamps omit the date.
 - After an unconfirmed send, the check-before-resending notice stays visible while editing and returns on Reopen. Cancel keeps the same reminder. Calls blocked before sending, including `not-dispatched` failures, still say "Nothing sent" unless an earlier attempt may have gone through.
 
+## [0.5.2] - 2026-11-03
+
+### Changed
+
+- The Gmail draft card's blocked-send note now says the person blocked sending and offers Gmail, instead of pointing to a Settings switch that may not exist.
+
+### Fixed
+
+- The blocked-send note on the Gmail draft card now says the person blocked sending and offers Gmail, instead of pointing to a Settings switch that may not exist.
+
 ## [0.5.1] - 2026-10-31
 
 ### Changed

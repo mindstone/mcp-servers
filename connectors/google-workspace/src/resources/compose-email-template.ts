@@ -999,8 +999,8 @@ export const COMPOSE_EMAIL_HTML = `
       }
 
       // ---- Blocked-send Gmail escape hatch ----
-      // Shown ONLY when the user's own send preference blocks the tool
-      // (the host's closed 'user-disabled' reason). We
+      // Shown ONLY when the user's own choice blocks sending (the host's
+      // closed 'user-disabled' reason). We
       // never call the disabled tool; instead we open a prefilled Gmail compose
       // window so the user finishes the send in Gmail (no copy-paste). This is
       // deliberately narrow: admin-disabled ("disabled by your organization…")
@@ -1013,7 +1013,7 @@ export const COMPOSE_EMAIL_HTML = `
       // rather than truncating without telling the user.
       var GMAIL_COMPOSE_MAX_URL = 8000;
       var BLOCKED_SEND_MESSAGE =
-        'Sending from here is turned off in your settings. You can finish and send this email in Gmail, or turn sending back on in Settings.';
+        "You've blocked sending this email, so this card can't send it. You can finish and send it in Gmail instead.";
 
       // Base URL + path are constant (code-reviewed here, never config-provided);
       // only the field VALUES vary and go through URLSearchParams, so query
@@ -1048,7 +1048,7 @@ export const COMPOSE_EMAIL_HTML = `
         if (sendMayHaveGone) showSendUnknown();
         sendButton.disabled = true;
         sendButton.title =
-          'Sending from here is turned off in your settings. Turn it back on in Settings, or open this draft in Gmail to send.';
+          "You've blocked sending this email. Open it in Gmail to send it there.";
         blockedText.textContent = BLOCKED_SEND_MESSAGE;
         blockedBox.classList.remove('hidden');
         postResize();
@@ -1067,7 +1067,7 @@ export const COMPOSE_EMAIL_HTML = `
             // very long subject). Gmail would silently refuse to open it, so
             // don't pretend — tell the user and post nothing.
             blockedText.textContent =
-              'This draft is too large to open in Gmail. Shorten the recipients or subject, or turn sending back on in Settings.';
+              'This draft is too large to open in Gmail. Use fewer recipients or a shorter subject, then click Open in Gmail.';
             postResize();
             return;
           }
