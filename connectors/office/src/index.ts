@@ -785,6 +785,17 @@ const toMcpResult = (result) => {
   const source = result?.[UNTRUSTED_SOURCE];
   const { app = 'office', action = 'unknown' } = result?.[RESULT_CONTEXT] || {};
   const wrap = (value) => source ? wrapUntrustedJsonStrings(value, source) : value;
+  // Non-identifier keys can contain document-authored instructions, just like string values.
+  const guardDataKeys = (value) => {
+    if (!source) return value;
+    if (Array.isArray(value)) return value.map(guardDataKeys);
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+        /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ? key : wrap(key), guardDataKeys(item),
+      ]));
+    }
+    return value;
+  };
   let body;
   const failed = !result || typeof result !== 'object' || result.success === false;
   if (failed) {
@@ -804,7 +815,7 @@ const toMcpResult = (result) => {
     }
     const name = `rebel_office_${app}_${action}`;
     const undo = undoForTool(name, registeredTools.get(name)?.annotations);
-    body = { ok: true, app, action, data: wrap(data), ...(undo ? { undo } : {}) };
+    body = { ok: true, app, action, data: wrap(guardDataKeys(data)), ...(undo ? { undo } : {}) };
   }
   return { content: [{ type: 'text', text: JSON.stringify(body, null, 2) }], ...(failed ? { isError: true } : {}) };
 };
@@ -1149,9 +1160,6 @@ registerTool(TOOL_NAMES.setup, {
   const lines = ['Office add-in installation:'];
   for (const step of steps) {
     lines.push(`\n${step.step}: ${step.status}`);
-    if (step.status === 'manual_needed' && step.details.manual) {
-      lines.push(`  → ${step.details.manual}`);
-    }
     if (Array.isArray(step.details)) {
       for (const d of step.details) {
         lines.push(`  ${d.app}: ${d.status}${d.error ? ` — ${d.error}` : ''}`);

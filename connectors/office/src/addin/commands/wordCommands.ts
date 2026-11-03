@@ -135,7 +135,6 @@ async function getSelection(_params: Record<string, unknown>): Promise<CommandRe
 // ---------------------------------------------------------------------------
 
 interface MarkdownLine {
-  text: string;
   headingLevel: number;
   segments: Array<{ text: string; bold: boolean; italic: boolean }>;
 }
@@ -191,8 +190,7 @@ function parseMarkdownLine(line: string): MarkdownLine {
     remaining = nextStar === -1 ? '' : remaining.slice(chunk.length);
   }
 
-  const plainText = segments.map((s) => s.text).join('');
-  return { text: plainText, headingLevel, segments };
+  return { headingLevel, segments };
 }
 
 const HEADING_STYLES: Record<number, string> = {
@@ -204,28 +202,30 @@ const HEADING_STYLES: Record<number, string> = {
   6: 'Heading 6',
 };
 
-/** Queue styled runs directly, so repeated words do not share formatting or undo steps. */
+/** Insert all text before marking runs, so later parts cannot inherit inline formatting. */
 function insertMarkdownParagraph(
   parsed: MarkdownLine,
   target: Word.Paragraph | Word.Range,
   explicitStyle?: string,
+  replaceSelection = false,
 ): Word.Range | Word.Paragraph {
   const style = explicitStyle ?? (parsed.headingLevel > 0 ? HEADING_STYLES[parsed.headingLevel] : undefined);
   let cursor = target;
-  let previous: MarkdownLine['segments'][number] | undefined;
+  const runs: Array<{ range: Word.Range; segment: MarkdownLine['segments'][number] }> = [];
   for (const segment of parsed.segments) {
     const range = cursor.insertText(segment.text, Word.InsertLocation.end);
+    runs.push({ range, segment });
+    cursor = range;
+  }
+  for (const { range, segment } of runs) {
     if (segment.bold) range.font.bold = true;
     if (segment.italic) range.font.italic = true;
-    if (!segment.bold && !segment.italic) {
-      if (previous?.bold) range.font.bold = false;
-      if (previous?.italic) range.font.italic = false;
-    }
-    cursor = range;
-    previous = segment;
   }
-  // A range containing a paragraph break styles the preceding paragraph.
-  if (style) cursor.style = style;
+  if (style) {
+    // A break range belongs to the preceding paragraph; use the last inserted text's paragraph.
+    if (replaceSelection) (cursor as Word.Range).paragraphs.getLast().style = style;
+    else target.style = style;
+  }
   return cursor;
 }
 
@@ -316,7 +316,7 @@ async function insertText(params: Record<string, unknown>): Promise<CommandResul
         let cursor: Word.Range | Word.Paragraph = selection.insertText('', Word.InsertLocation.replace);
         for (const [index, parsed] of parsedLines.entries()) {
           if (index > 0) cursor = cursor.insertText('\n', Word.InsertLocation.end);
-          cursor = insertMarkdownParagraph(parsed, cursor, style);
+          cursor = insertMarkdownParagraph(parsed, cursor, style, true);
         }
         break;
       }
@@ -465,10 +465,9 @@ async function getProperties(_params: Record<string, unknown>): Promise<CommandR
     customProperties.load(['key', 'value', 'type']);
     await context.sync();
 
-    const customProps: Record<string, unknown> = {};
-    for (const prop of customProperties.items) {
-      customProps[prop.key] = prop.value;
-    }
+    const customProps: Record<string, unknown> = Object.fromEntries(
+      customProperties.items.map((prop) => [prop.key, prop.value]),
+    );
 
     return {
       title: properties.title,
@@ -714,7 +713,10 @@ async function formatText(params: Record<string, unknown>): Promise<CommandResul
         break;
 
       case 'paragraphRange': {
-        const startIdx = typeof target.startParagraph === 'number' ? target.startParagraph : 0;
+        const startIdx = target.startParagraph;
+        if (typeof startIdx !== 'number') {
+          fail('INVALID_ARGUMENT', 'The "startParagraph" field is required for target type "paragraphRange".');
+        }
         const endIdx = typeof target.endParagraph === 'number' ? target.endParagraph : startIdx;
         const paragraphs = context.document.body.paragraphs;
         paragraphs.load('items');
@@ -838,7 +840,10 @@ async function insertTable(params: Record<string, unknown>): Promise<CommandResu
 
     let table: Word.Table;
 
-    if (location === 'afterParagraph' && typeof params['paragraphIndex'] === 'number') {
+    if (location === 'afterParagraph') {
+      if (typeof params['paragraphIndex'] !== 'number') {
+        fail('INVALID_ARGUMENT', 'The "paragraphIndex" parameter is required for location "afterParagraph".');
+      }
       const paragraphs = context.document.body.paragraphs;
       paragraphs.load('items');
       await context.sync();
@@ -931,10 +936,10 @@ async function insertImage(params: Record<string, unknown>): Promise<CommandResu
     if (location === 'replaceSelection') {
       const selection = context.document.getSelection();
       image = selection.insertInlinePictureFromBase64(base64Data, Word.InsertLocation.replace);
-    } else if (
-      location === 'afterParagraph' &&
-      typeof params['paragraphIndex'] === 'number'
-    ) {
+    } else if (location === 'afterParagraph') {
+      if (typeof params['paragraphIndex'] !== 'number') {
+        fail('INVALID_ARGUMENT', 'The "paragraphIndex" parameter is required for location "afterParagraph".');
+      }
       const paragraphs = context.document.body.paragraphs;
       paragraphs.load('items');
       await context.sync();
@@ -1296,7 +1301,10 @@ async function acceptRejectChanges(params: Record<string, unknown>): Promise<Com
         break;
 
       case 'specific': {
-        const ids = new Set(target.changeIds ?? []);
+        if (!Array.isArray(target.changeIds) || target.changeIds.length === 0) {
+          fail('INVALID_ARGUMENT', 'The "changeIds" field is required for target type "specific".');
+        }
+        const ids = new Set(target.changeIds);
         changesToProcess = trackedChanges.items.filter((change, index) =>
           ids.has(getTrackedChangeIdentifier(change, index)),
         );
@@ -1509,7 +1517,10 @@ async function applyStyle(params: Record<string, unknown>): Promise<CommandResul
       }
 
       case 'paragraphRange': {
-        const startIdx = typeof target.startParagraph === 'number' ? target.startParagraph : 0;
+        const startIdx = target.startParagraph;
+        if (typeof startIdx !== 'number') {
+          fail('INVALID_ARGUMENT', 'The "startParagraph" field is required for target type "paragraphRange".');
+        }
         const endIdx = typeof target.endParagraph === 'number' ? target.endParagraph : startIdx;
         const paragraphs = context.document.body.paragraphs;
         paragraphs.load('items');

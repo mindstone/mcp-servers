@@ -79,6 +79,16 @@ the user first. No undo history is stored by the connector.
 
 For Excel `read_range` and `read_table` JSON rows, header-derived object keys
 are enveloped just like `headers`, including a column named `__proto__`.
+Other result keys that are not plain identifiers are also enveloped, including
+document property names containing spaces, punctuation or closing tags.
+
+Word text inserts give heading and named styles to the whole paragraph and add
+only the requested inline bold or italic, preserving the style's formatting.
+
+Relative placements require their target: `afterParagraph` needs
+`paragraphIndex`, and `afterSheet` needs `afterSheet`. A paragraph range needs
+`startParagraph`, and a specific tracked-change target needs `changeIds`.
+
 If the Office connection is turned off for the Rebel installation, tools that
 start it return `CONNECTION_DISABLED` with `retryable: false`. Ask whoever manages
 the installation to re-enable it; Settings cannot override that decision.

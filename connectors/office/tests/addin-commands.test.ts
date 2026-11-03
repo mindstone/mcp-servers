@@ -875,13 +875,100 @@ it('aligns every paragraph in a Word paragraphRange', async () => {
 });
 
 // Record which syncs actually commit writes, rather than counting read syncs as undo steps.
+function makeWorksheetInsertContext() {
+  let pending: string[] = [];
+  const batches: string[][] = [];
+  const reference = { position: 2, load: vi.fn() };
+  let position = 3;
+  const sheet = {
+    name: 'New sheet', load: vi.fn(),
+    get position() { return position; },
+    set position(value: number) { pending.push(`position=${value}`); position = value; },
+  };
+  const worksheets = {
+    getItem: vi.fn(() => reference),
+    add: vi.fn(() => { pending.push('add'); return sheet; }),
+  };
+  const context = {
+    workbook: { worksheets },
+    sync: vi.fn(async () => { batches.push(pending); pending = []; }),
+  };
+  return { context, worksheets, batches };
+}
+
+it('reads the reference position before adding and positioning a worksheet in one write', async () => {
+  const { context, worksheets, batches } = makeWorksheetInsertContext();
+  mockOfficeApp('Excel', context);
+  expect(await mustGet(getExcelCommandHandler('add_worksheet'), 'add_worksheet')({ position: 'afterSheet', afterSheet: 'Reference' }))
+    .toMatchObject({ success: true, data: { name: 'New sheet', position: 3 } });
+  expect(worksheets.getItem).toHaveBeenCalledWith('Reference');
+  expect(batches).toEqual([[], ['add', 'position=3']]);
+});
+
+it('rejects afterSheet without a reference before adding a worksheet', async () => {
+  const { context, worksheets, batches } = makeWorksheetInsertContext();
+  mockOfficeApp('Excel', context);
+  expect(await mustGet(getExcelCommandHandler('add_worksheet'), 'add_worksheet')({ position: 'afterSheet' }))
+    .toMatchObject({ success: false, code: 'INVALID_ARGUMENT' });
+  expect(worksheets.add).not.toHaveBeenCalled();
+  expect(batches.flat()).toEqual([]);
+});
+
+it.each(['insert_text', 'insert_table', 'insert_image'])(
+  'rejects afterParagraph without paragraphIndex before writing in %s', async (action) => {
+    const insert = vi.fn(() => ({}));
+    const context = {
+      document: { body: {
+        insertParagraph: insert, insertTable: insert,
+        paragraphs: { load: vi.fn(), items: [{ getRange: () => ({ insertInlinePictureFromBase64: insert }) }] },
+      } },
+      sync: vi.fn(),
+    };
+    mockOfficeApp('Word', context);
+    Object.assign(g.Word as object, { InsertLocation: { end: 'End', after: 'After' } });
+    expect(await mustGet(getWordCommandHandler(action), action)({
+      text: 'Text', headers: ['Header'], rows: [], source: { type: 'base64', base64: 'aGVsbG8=' }, location: 'afterParagraph',
+    })).toMatchObject({ success: false, code: 'INVALID_ARGUMENT' });
+    expect(insert).not.toHaveBeenCalled();
+  },
+);
+
+it.each(['format_text', 'apply_style'])(
+  'rejects paragraphRange without startParagraph before writing in %s', async (action) => {
+    const { context, paragraphs } = makeWordParagraphsContext(['Text']);
+    const range = { font: {} };
+    Object.assign(paragraphs[0]!, { getRange: () => ({ expandTo: () => range }) });
+    mockOfficeApp('Word', context);
+    expect(await mustGet(getWordCommandHandler(action), action)({
+      style: 'Quote', formatting: { bold: true }, target: { type: 'paragraphRange' },
+    })).toMatchObject({ success: false, code: 'INVALID_ARGUMENT' });
+    expect(paragraphs[0]!.style).toBe('');
+    expect(range.font).toEqual({});
+    expect(context.sync).not.toHaveBeenCalled();
+  },
+);
+
+it('rejects a specific tracked-change target without changeIds before writing', async () => {
+  const accept = vi.fn();
+  const context = {
+    document: { body: { getTrackedChanges: () => ({ load: vi.fn(), items: [{ accept }] }) } },
+    sync: vi.fn(),
+  };
+  mockOfficeApp('Word', context);
+  expect(await mustGet(getWordCommandHandler('accept_reject_changes'), 'accept_reject_changes')({
+    action: 'accept', target: { type: 'specific' },
+  })).toMatchObject({ success: false, code: 'INVALID_ARGUMENT' });
+  expect(accept).not.toHaveBeenCalled();
+});
+
 function makeWordInsertContext() {
   const batches: string[][] = [];
   let pending: string[] = [];
   interface InsertRange {
     text: string;
     font: { bold?: boolean; italic?: boolean };
-    style: string;
+    style?: string;
+    paragraphs: { getLast(): { style: string } };
     insertText(value: string): InsertRange;
   }
   const paragraphs: Array<{ style: string; runs: InsertRange[] }> = [];
@@ -896,18 +983,30 @@ function makeWordInsertContext() {
         if (value === '\n') {
           const next = insertParagraph('', 'After');
           next.style = paragraph.style;
+          let runStyle: string | undefined;
           // The break belongs to this paragraph; insertion at its end reaches the next.
           return {
-            text: value, font: {},
-            get style() { return paragraph.style; },
-            set style(value: string) { paragraph.style = value; },
+            text: value, font: {}, paragraphs: { getLast: () => paragraph },
+            get style() { return runStyle; },
+            set style(value) { write(`run-style:${value}`); runStyle = value; },
             insertText: next.insertText,
           };
         }
+        const previous = runs.at(-1);
+        // New text inherits direct formatting already applied at the insertion point.
+        const font = { ...previous?.font };
+        let runStyle: string | undefined;
         const run: InsertRange = {
-          text: value, font: {}, insertText: paragraph.insertText,
-          get style() { return paragraph.style; },
-          set style(value: string) { paragraph.style = value; },
+          text: value, font: new Proxy(font, {
+            set(target, key, value: boolean) {
+              write(`font:${String(key)}=${value}`);
+              Reflect.set(target, key, value);
+              return true;
+            },
+          }),
+          paragraphs: { getLast: () => paragraph }, insertText: paragraph.insertText,
+          get style() { return runStyle; },
+          set style(value) { write(`run-style:${value}`); runStyle = value; },
         };
         runs.push(run);
         return run;
@@ -921,7 +1020,10 @@ function makeWordInsertContext() {
     return paragraph;
   };
   const selectionRange = {
-    insertText: () => insertParagraph('', 'Replace'),
+    insertText: () => {
+      const paragraph = insertParagraph('', 'Replace');
+      return { text: '', font: {}, paragraphs: { getLast: () => paragraph }, insertText: paragraph.insertText };
+    },
   };
   const context = {
     document: {
@@ -950,8 +1052,9 @@ describe('one Word insert undo step', () => {
       expect(first).toBeDefined();
       expect(first!.style).toBe('Heading 1');
       expect(first!.runs.map(r => [r.text, r.font.bold, r.font.italic])).toEqual([
-        ['same ', undefined, undefined], ['same', true, undefined], [' ', false, undefined], ['slant', undefined, true],
+        ['same ', undefined, undefined], ['same', true, undefined], [' ', undefined, undefined], ['slant', undefined, true],
       ]);
+      expect(paragraphs.flatMap(p => p.runs).every(run => run.style === undefined)).toBe(true);
       expect(paragraphs.map(p => p.runs.map(r => r.text).join(''))).toEqual(['same same slant', 'Second bold']);
     },
   );
@@ -967,16 +1070,56 @@ describe('one Word insert undo step', () => {
     expect(batches.filter(batch => batch.length)).toHaveLength(1);
   });
 
-  it('resets only the preceding marked properties on a following plain run', async () => {
-    const { context, paragraphs } = makeWordInsertContext();
+  it('inserts every part before applying direct formatting, without assigning false', async () => {
+    const { context, paragraphs, batches } = makeWordInsertContext();
     mockOfficeApp('Word', context);
     Object.assign(g.Word as object, { InsertLocation: { end: 'End' } });
     expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({ text: '**Bold** plain *italic* plain ***both*** plain' }))
       .toMatchObject({ success: true });
     expect(paragraphs[0]!.runs.map(run => run.font)).toEqual([
-      { bold: true }, { bold: false }, { italic: true }, { italic: false },
-      { bold: true, italic: true }, { bold: false, italic: false },
+      { bold: true }, {}, { italic: true }, {},
+      { bold: true, italic: true }, {},
     ]);
+    expect(batches.flat().some(event => event.endsWith('=false'))).toBe(false);
+    const writes = batches.flat();
+    expect(writes.findIndex(event => event.startsWith('font:')))
+      .toBeGreaterThan(writes.findLastIndex(event => event.startsWith('text:')));
+  });
+
+  it.each(['end', 'start', 'afterParagraph', 'beforeParagraph', 'replaceSelection'])(
+    'puts the heading style on the paragraph and no run at %s', async (location) => {
+      const { context, paragraphs, batches } = makeWordInsertContext();
+      mockOfficeApp('Word', context);
+      Object.assign(g.Word as object, { InsertLocation: { start: 'Start', end: 'End', after: 'After', before: 'Before', replace: 'Replace' } });
+      expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({ text: '# Plan for **Q3**', location, paragraphIndex: 0 }))
+        .toMatchObject({ success: true });
+      expect(paragraphs[0]!.style).toBe('Heading 1');
+      expect(paragraphs[0]!.runs.map(run => [run.text, run.style, run.font]))
+        .toEqual([['Plan for ', undefined, {}], ['Q3', undefined, { bold: true }]]);
+      expect(batches.filter(batch => batch.length)).toHaveLength(1);
+    },
+  );
+
+  it('keeps the Quote baseline after inline emphasis', async () => {
+    const { context, paragraphs, batches } = makeWordInsertContext();
+    mockOfficeApp('Word', context);
+    Object.assign(g.Word as object, { InsertLocation: { end: 'End' } });
+    expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({ text: '*Emphasis* remainder', style: 'Quote' }))
+      .toMatchObject({ success: true });
+    expect(paragraphs[0]!.style).toBe('Quote');
+    expect(paragraphs[0]!.runs.map(run => [run.style, run.font]))
+      .toEqual([[undefined, { italic: true }], [undefined, {}]]);
+    expect(batches.flat().some(event => event.endsWith('=false'))).toBe(false);
+  });
+
+  it('keeps adjacent bold and italic parts independent', async () => {
+    const { context, paragraphs } = makeWordInsertContext();
+    mockOfficeApp('Word', context);
+    Object.assign(g.Word as object, { InsertLocation: { end: 'End' } });
+    expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({ text: '**a***b*' }))
+      .toMatchObject({ success: true });
+    expect(paragraphs[0]!.runs.map(run => [run.text, run.font]))
+      .toEqual([['a', { bold: true }], ['b', { italic: true }]]);
   });
 
   it('applies a replacement heading to the text after the paragraph break', async () => {

@@ -204,17 +204,21 @@ async function addWorksheet(params: Record<string, unknown>): Promise<CommandRes
   const afterSheet = typeof params['afterSheet'] === 'string' ? params['afterSheet'] : undefined;
 
   return executeExcelCommand(async (context) => {
-    const newSheet = context.workbook.worksheets.add(name);
-    newSheet.load(['name', 'position']);
-
+    let targetPosition: number | undefined;
     if (position === 'start') {
-      newSheet.position = 0;
-    } else if (position === 'afterSheet' && afterSheet) {
+      targetPosition = 0;
+    } else if (position === 'afterSheet') {
+      if (!afterSheet) {
+        fail('INVALID_ARGUMENT', 'The "afterSheet" parameter is required for position "afterSheet".');
+      }
       const refSheet = context.workbook.worksheets.getItem(afterSheet);
       refSheet.load('position');
       await context.sync();
-      newSheet.position = refSheet.position + 1;
+      targetPosition = refSheet.position + 1;
     }
+    const newSheet = context.workbook.worksheets.add(name);
+    newSheet.load(['name', 'position']);
+    if (targetPosition !== undefined) newSheet.position = targetPosition;
     // 'end' is the default behavior
 
     await context.sync();
