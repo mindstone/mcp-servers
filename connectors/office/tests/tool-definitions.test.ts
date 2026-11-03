@@ -222,3 +222,19 @@ describe('handler failures', () => {
     },
   );
 });
+
+it('derives all 60 app identities from their actual sidecar action', async () => {
+  const tools = [...hooks.registeredTools].filter(([name]) => /^rebel_office_(word|excel|powerpoint)_/.test(name));
+  expect(tools).toHaveLength(60);
+  for (const [name, tool] of tools) {
+    const dispatch = tool.handler.toString().match(/sidecarRequest\(['"](word|excel|powerpoint)['"],\s*['"]([^'"]+)['"]/);
+    expect(dispatch, name).not.toBeNull();
+    expect(name).toBe(`rebel_office_${dispatch![1]}_${dispatch![2]}`);
+  }
+});
+
+it('keeps the public tool names and input schemas unchanged', async () => {
+  const { createHash } = await import('node:crypto');
+  const surface = [...hooks.registeredTools].map(([name, tool]) => ({ name, inputSchema: tool.inputSchema }));
+  expect(createHash('sha256').update(JSON.stringify(surface)).digest('hex')).toMatchInlineSnapshot(`"7e1b1008aa7f7ce03adbbcd53ccc6289ef9684887f7db4d1005224b7ac0044bc"`);
+});

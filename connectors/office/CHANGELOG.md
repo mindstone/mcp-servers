@@ -13,11 +13,13 @@ are maintained manually as part of the PR review checklist.
 
 ### Changed
 
+- Successful edits and their tool descriptions share undo guidance for the local Office app and platform, including native undo exceptions and PowerPoint for Mac reversal limits. PowerPoint text, notes and shape-format edits return the previous values.
 - Every Office tool, including setup, status and validation failures, now returns JSON with `ok`, `app`, `action`, and either `data` or an error with a stable code, message, fix and retry guidance. External text remains inside untrusted-content envelopes.
 - Unsupported results returned inside an Office command now report failure; missing Office APIs advise updating Office. Timeout guidance asks callers to read the current state before repeating an edit.
 
 ### Fixed
 
+- Word markdown inserts preserve bold, italic and styles at every insertion location in one writing batch. PowerPoint adds and moves a slide in one batch, with a second batch only for placeholder text; unavailable slide movement fails before creation.
 - Excel condition filters translate named operators and reject unknown ones before writing. Sorting rejects unknown headers and resolves multi-letter columns relative to the range; unsupported shape types fail before creation.
 - Formatted PowerPoint shapes check API support before creation. Speaker-notes and layout failures retain coded errors, Word alignment covers every targeted paragraph, and pairing and partial-slide recovery guidance identify the next step.
 - Setup and status validation failures use the same `app: "all"` value as their other results.

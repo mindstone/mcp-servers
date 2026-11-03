@@ -327,7 +327,8 @@ function makePowerPointContext() {
   const shape = {
     id: 'shape-42',
     name: 'Title 1',
-    fill: { setSolidColor: vi.fn() },
+    load: vi.fn(),
+    fill: { type: 'Solid', foregroundColor: '#112233', load: vi.fn(), setSolidColor: vi.fn() },
     lineFormat: { color: '', weight: 0 },
     left: 0,
     top: 0,
@@ -568,7 +569,7 @@ describe('truthful command results', () => {
   it.each(['add_text_box', 'update_text'])('applies advertised alignment for %s', async (action) => {
     const { context, slide, shape } = makePowerPointContext();
     const paragraphFormat = { horizontalAlignment: 'Left' };
-    Object.assign(shape, { textFrame: { textRange: { text: '', font: {}, paragraphFormat } }, load: vi.fn() });
+    Object.assign(shape, { textFrame: { load: vi.fn(), textRange: { text: '', font: {}, paragraphFormat } }, load: vi.fn() });
     Object.assign(slide.shapes, { addTextBox: () => shape });
     mockOfficeApp('PowerPoint', context);
     expect(await mustGet(getPowerpointCommandHandler(action), action)({
@@ -579,13 +580,13 @@ describe('truthful command results', () => {
 
   it.each(['add_text_box', 'update_text'])('rejects unavailable formatting for %s before writing', async (action) => {
     const { context, slide, shape } = makePowerPointContext();
-    Object.assign(shape, { textFrame: { textRange: { text: '' } }, load: vi.fn() });
+    Object.assign(shape, { textFrame: { load: vi.fn(), textRange: { text: '' } }, load: vi.fn() });
     Object.assign(slide.shapes, { addTextBox: () => shape });
     mockOfficeApp('PowerPoint', context);
     expect(await mustGet(getPowerpointCommandHandler(action), action)({
       slideIndex: 1, text: 'New', position: { left: 0, top: 0 }, target: { type: 'shapeId', shapeId: shape.id }, formatting: { bold: true },
     })).toMatchObject({ success: false, code: 'UNSUPPORTED_OPERATION' });
-    expect(context.sync).toHaveBeenCalledTimes(action === 'update_text' ? 2 : 1);
+    expect(context.sync).toHaveBeenCalledTimes(action === 'update_text' ? 3 : 1);
   });
 
   it.each(['table', 'range'])('rejects unknown %s filter columns without applying earlier filters', async (kind) => {
@@ -616,18 +617,19 @@ describe('truthful command results', () => {
     expect(apply).toHaveBeenCalledWith(range, 1, { filterOn: 'Custom', criterion1: '>3' });
   });
 
-  it.each(['move', 'placeholder', 'sync', 'missing placeholder'])('reports a created slide when its later %s fails', async (failure) => {
-    const slide = { id: 'created-slide', moveTo: vi.fn(), shapes: { items: [{ name: 'Title' }], load: vi.fn() } };
-    if (failure === 'move') slide.moveTo.mockImplementation(() => { throw new Error('No move API'); });
+  it.each(['placeholder', 'sync', 'missing placeholder'])('reports a created slide when its later %s fails', async (failure) => {
+    const slide = { id: 'created-slide', load: vi.fn(), moveTo: vi.fn(), shapes: { items: [{ name: 'Title', textFrame: { textRange: { text: '' } } }], load: vi.fn() } };
+    if (failure === 'placeholder') Object.defineProperty(slide.shapes.items[0]!, 'textFrame', { get: () => { throw new Error('No text API'); } });
     if (failure === 'missing placeholder') slide.shapes.items = [];
-    const slides = { items: [] as typeof slide[], load: vi.fn(), add: () => { slides.items.push(slide); } };
+    const slides = { items: [] as typeof slide[], getItemAt: () => slide, load: vi.fn(), add: () => { slides.items.push(slide); } };
     const sync = vi.fn(async () => {});
-    if (failure === 'sync') sync.mockImplementation(async () => { if (sync.mock.calls.length === 4) throw new Error('Write failed'); });
+    if (failure === 'sync') sync.mockImplementation(async () => { if (sync.mock.calls.length === 3) throw new Error('Write failed'); });
     mockOfficeApp('PowerPoint', { presentation: { slides }, sync });
     expect(await mustGet(getPowerpointCommandHandler('add_slide'), 'add_slide')({
-      ...(failure === 'move' || failure === 'sync' ? { position: 1 } : { title: 'New title' }),
+      title: 'New title', ...(failure === 'sync' ? { position: 1 } : {}),
     })).toMatchObject({ success: false, code: 'PARTIAL', error: expect.stringContaining('created-slide') });
     expect(slides.items).toHaveLength(1);
+    if (failure === 'sync') expect(sync).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -831,4 +833,190 @@ it('aligns every paragraph in a Word paragraphRange', async () => {
     target: { type: 'paragraphRange', startParagraph: 0, endParagraph: 1 }, formatting: { alignment: 'center' },
   })).toMatchObject({ success: true });
   expect(paragraphs.map((paragraph) => paragraph.alignment)).toEqual(['Centered', 'Centered']);
+});
+
+// Record which syncs actually commit writes, rather than counting read syncs as undo steps.
+function makeWordInsertContext() {
+  const batches: string[][] = [];
+  let pending: string[] = [];
+  const paragraphs: Array<{ style: string; runs: Array<{ text: string; font: { bold: boolean; italic: boolean } }> }> = [];
+  const write = (value: string) => { pending.push(value); };
+  const insertParagraph = (text: string, location: string) => {
+    write(`paragraph:${location}`);
+    const runs: Array<{ text: string; font: { bold: boolean; italic: boolean } }> = [];
+    const paragraph = {
+      style: '', runs,
+      insertText: (value: string) => {
+        write(`text:${value}`);
+        if (value === '\n') return insertParagraph('', 'After');
+        const run = { text: value, font: { bold: false, italic: false }, insertText: paragraph.insertText };
+        runs.push(run);
+        return run;
+      },
+      search: () => ({ items: [{ font: {} }], load: vi.fn() }),
+      getRange: () => ({ insertParagraph }),
+      insertParagraph,
+    };
+    if (text) paragraph.insertText(text);
+    if (location === 'Start') paragraphs.unshift(paragraph); else paragraphs.push(paragraph);
+    return paragraph;
+  };
+  const selectionRange = {
+    insertText: () => insertParagraph('', 'Replace'),
+  };
+  const context = {
+    document: {
+      body: { insertParagraph, paragraphs: { items: [{ insertParagraph, getRange: () => ({ insertParagraph }) }], load: vi.fn() } },
+      getSelection: () => selectionRange,
+    },
+    sync: vi.fn(async () => { batches.push(pending); pending = []; }),
+  };
+  return { context, batches, paragraphs, selectionRange };
+}
+
+describe('one Word insert undo step', () => {
+  it.each(['end', 'start', 'afterParagraph', 'beforeParagraph', 'replaceSelection'])(
+    'queues bold and italic runs before one writing sync at %s', async (location) => {
+      const { context, batches, paragraphs } = makeWordInsertContext();
+      mockOfficeApp('Word', context);
+      Object.assign(g.Word as object, { InsertLocation: { start: 'Start', end: 'End', after: 'After', before: 'Before', replace: 'Replace' } });
+      const result = await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({
+        text: '# same **same** *slant*\nSecond **bold**', location, paragraphIndex: 0,
+      });
+      expect(result.success).toBe(true);
+      expect(batches.filter(batch => batch.length > 0)).toHaveLength(1);
+      expect(batches.slice(0, -1).every(batch => batch.length === 0)).toBe(true);
+      expect(context.sync).toHaveBeenCalledTimes(['afterParagraph', 'beforeParagraph'].includes(location) ? 2 : 1);
+      const first = paragraphs.find(p => p.runs.map(r => r.text).join('') === 'same same slant');
+      expect(first).toBeDefined();
+      expect(first!.style).toBe('Heading 1');
+      expect(first!.runs.map(r => [r.text, r.font.bold, r.font.italic])).toEqual([
+        ['same ', false, false], ['same', true, false], [' ', false, false], ['slant', false, true],
+      ]);
+      expect(paragraphs.map(p => p.runs.map(r => r.text).join(''))).toEqual(['same same slant', 'Second bold']);
+    },
+  );
+});
+
+function makeAddSlideContext() {
+  let pending: string[] = [];
+  const batches: string[][] = [];
+  const events: string[] = [];
+  const textRange = { set text(value: string) { pending.push(`text:${value}`); } };
+  const slide = {
+    id: 'new-slide',
+    moveTo: vi.fn(() => { events.push('move'); pending.push('move'); }),
+    load: vi.fn(),
+    shapes: { items: ['Title', 'Subtitle', 'Content'].map(name => ({ name, textFrame: { textRange } })), load: vi.fn(() => { events.push('shapes.load'); }) },
+  };
+  const slides = {
+    items: [] as typeof slide[], load: vi.fn(),
+    add: vi.fn(() => { events.push('add'); pending.push('add'); slides.items.push(slide); }),
+    getItemAt: vi.fn((index: number) => { events.push(`get:${index}`); return slide; }),
+  };
+  const sync = vi.fn(async () => { events.push('sync'); batches.push(pending); pending = []; });
+  return { context: { presentation: { slides }, sync }, slides, slide, batches, events };
+}
+
+describe('PowerPoint undo values and batching', () => {
+  it.each([undefined, 'New title'])('adds and moves in one write, with a second only for text %s', async (title) => {
+    const { context, batches, events } = makeAddSlideContext();
+    mockOfficeApp('PowerPoint', context);
+    expect(await mustGet(getPowerpointCommandHandler('add_slide'), 'add_slide')({ position: 1, title }))
+      .toMatchObject({ success: true, data: { slideId: 'new-slide', slideNumber: 1 } });
+    expect(batches.filter(batch => batch.length)).toEqual(title === undefined ? [['add', 'move']] : [['add', 'move'], ['text:New title']]);
+    expect(events.slice(events.indexOf('add'), events.indexOf('add') + 4)).toEqual(['add', 'get:0', 'move', ...(title === undefined ? ['sync'] : ['shapes.load'])]);
+  });
+
+  it('rejects an unavailable move API before adding anything', async () => {
+    const { context, slide, slides } = makeAddSlideContext();
+    Object.assign(slide, { moveTo: undefined });
+    // An existing slide proxy exposes the same API as the prospective new slide.
+    slides.items.push(slide);
+    mockOfficeApp('PowerPoint', context);
+    expect(await mustGet(getPowerpointCommandHandler('add_slide'), 'add_slide')({ position: 1 }))
+      .toMatchObject({ success: false, code: 'UNSUPPORTED_OPERATION' });
+    expect(slides.add).not.toHaveBeenCalled();
+  });
+
+  it('returns previous text before replacing a shape', async () => {
+    const { context, shape } = makePowerPointContext();
+    Object.assign(shape, { textFrame: { load: vi.fn(), textRange: { text: 'Previous text' } } });
+    mockOfficeApp('PowerPoint', context);
+    expect(await mustGet(getPowerpointCommandHandler('update_text'), 'update_text')({ slideIndex: 1, target: { type: 'shapeId', shapeId: shape.id }, text: 'New' }))
+      .toMatchObject({ success: true, data: { shapeId: shape.id, previousText: 'Previous text' } });
+  });
+
+  it('returns previous notes, including blank notes', async () => {
+    const { context, textRange } = makeNotesContext();
+    textRange.text = '';
+    mockOfficeApp('PowerPoint', context);
+    expect(await mustGet(getPowerpointCommandHandler('set_speaker_notes'), 'set_speaker_notes')({ slideIndex: 1, notes: 'New' }))
+      .toMatchObject({ success: true, data: { previousNotes: '' } });
+  });
+
+  it('returns only the previous formatting properties that it changed', async () => {
+    const { context, shape } = makePowerPointContext();
+    Object.assign(shape, { load: vi.fn() });
+    Object.assign(shape.fill, { type: 'Solid', foregroundColor: '#112233', load: vi.fn() });
+    mockOfficeApp('PowerPoint', context);
+    expect(await mustGet(getPowerpointCommandHandler('format_shape'), 'format_shape')({ slideIndex: 1, target: { type: 'shapeId', shapeId: shape.id }, formatting: { fillColor: '#ffffff', name: 'New name', left: 20 } }))
+      .toMatchObject({ success: true, data: { previous: { fillColor: '#112233', name: 'Title 1', left: 0 } } });
+  });
+});
+
+it('rejects unsupported slide movement requirements before creation', async () => {
+  const { context, slides } = makeAddSlideContext();
+  mockOfficeApp('PowerPoint', context);
+  g.Office = { context: { requirements: { isSetSupported: vi.fn(() => false) } } };
+  expect(await mustGet(getPowerpointCommandHandler('add_slide'), 'add_slide')({ position: 1 }))
+    .toMatchObject({ success: false, code: 'UNSUPPORTED_OPERATION' });
+  expect(slides.add).not.toHaveBeenCalled();
+});
+
+it('reports a previous non-solid fill without promising a solid-color inverse', async () => {
+  const { context, shape } = makePowerPointContext();
+  shape.fill.type = 'Gradient';
+  mockOfficeApp('PowerPoint', context);
+  expect(await mustGet(getPowerpointCommandHandler('format_shape'), 'format_shape')({
+    slideIndex: 1, target: { type: 'shapeId', shapeId: shape.id }, formatting: { fillColor: '#ffffff' },
+  })).toMatchObject({ success: true, data: { previousFillType: 'Gradient', previous: { fillColor: '#112233' } } });
+});
+
+it.each(['end', 'start', 'afterParagraph', 'beforeParagraph', 'replaceSelection'])(
+  'preserves an explicit style over markdown headings at %s without an extra write', async (location) => {
+    const { context, batches, paragraphs } = makeWordInsertContext();
+    mockOfficeApp('Word', context);
+    Object.assign(g.Word as object, { InsertLocation: { start: 'Start', end: 'End', after: 'After', before: 'Before', replace: 'Replace' } });
+    expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({ text: '# **Bold**\n*Italic*', style: 'Quote', location, paragraphIndex: 0 }))
+      .toMatchObject({ success: true });
+    expect(batches.filter(batch => batch.length > 0)).toHaveLength(1);
+    expect(paragraphs.map(p => p.style)).toEqual(['Quote', 'Quote']);
+  },
+);
+
+it.each(['title', 'subtitle', 'body'])('adds slide %s in a second writing sync', async (placeholder) => {
+  const { context, batches } = makeAddSlideContext();
+  mockOfficeApp('PowerPoint', context);
+  expect(await mustGet(getPowerpointCommandHandler('add_slide'), 'add_slide')({ [placeholder]: 'New text' }))
+    .toMatchObject({ success: true });
+  expect(batches.filter(batch => batch.length)).toEqual([['add'], ['text:New text']]);
+});
+
+it('adds an empty slide at the end with one writing sync', async () => {
+  const { context, batches } = makeAddSlideContext();
+  mockOfficeApp('PowerPoint', context);
+  expect(await mustGet(getPowerpointCommandHandler('add_slide'), 'add_slide')({}))
+    .toMatchObject({ success: true, data: { slideNumber: 1 } });
+  expect(batches.filter(batch => batch.length)).toEqual([['add']]);
+});
+
+it('returns no untouched properties in previous shape formatting', async () => {
+  const { context, shape } = makePowerPointContext();
+  mockOfficeApp('PowerPoint', context);
+  const result = await mustGet(getPowerpointCommandHandler('format_shape'), 'format_shape')({
+    slideIndex: 1, target: { type: 'shapeId', shapeId: shape.id }, formatting: { name: 'New' },
+  });
+  expect(result.success).toBe(true);
+  if (result.success) expect((result.data as { previous: unknown }).previous).toEqual({ name: 'Title 1' });
 });

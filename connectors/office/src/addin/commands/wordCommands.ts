@@ -200,43 +200,22 @@ const HEADING_STYLES: Record<number, string> = {
   6: 'Heading 6',
 };
 
-/**
- * Insert a paragraph with markdown formatting.
- * Inserts text, applies heading style, then applies bold/italic to segments.
- */
-async function insertMarkdownParagraph(
-  context: Word.RequestContext,
+/** Queue styled runs directly, so repeated words do not share formatting or undo steps. */
+function insertMarkdownParagraph(
   parsed: MarkdownLine,
-  target: Word.Body,
-  insertLocation: Word.InsertLocation.start | Word.InsertLocation.end,
+  target: Word.Paragraph | Word.Range,
   explicitStyle?: string,
-): Promise<void> {
-  const paragraph = target.insertParagraph(parsed.text, insertLocation);
-
-  // Apply heading or explicit style
+): Word.Range | Word.Paragraph {
   const style = explicitStyle ?? (parsed.headingLevel > 0 ? HEADING_STYLES[parsed.headingLevel] : undefined);
-  if (style) {
-    paragraph.style = style;
+  if (style) target.style = style;
+  let cursor = target;
+  for (const segment of parsed.segments) {
+    const range = cursor.insertText(segment.text, Word.InsertLocation.end);
+    range.font.bold = segment.bold;
+    range.font.italic = segment.italic;
+    cursor = range;
   }
-
-  // Apply inline bold/italic formatting via search within the paragraph range
-  const hasFormatting = parsed.segments.some((s) => s.bold || s.italic);
-  if (hasFormatting) {
-    await context.sync();
-
-    for (const segment of parsed.segments) {
-      if (!segment.bold && !segment.italic) continue;
-
-      const results = paragraph.search(segment.text, { matchCase: true });
-      results.load('items');
-      await context.sync();
-
-      for (const range of results.items) {
-        if (segment.bold) range.font.bold = true;
-        if (segment.italic) range.font.italic = true;
-      }
-    }
-  }
+  return cursor;
 }
 
 /**
@@ -267,14 +246,14 @@ async function insertText(params: Record<string, unknown>): Promise<CommandResul
     switch (location) {
       case 'end':
         for (const parsed of parsedLines) {
-          await insertMarkdownParagraph(context, parsed, context.document.body, Word.InsertLocation.end, style);
+          insertMarkdownParagraph(parsed, context.document.body.insertParagraph('', Word.InsertLocation.end), style);
         }
         break;
 
       case 'start':
         // Insert in reverse order at start to maintain original order
         for (let i = parsedLines.length - 1; i >= 0; i--) {
-          await insertMarkdownParagraph(context, parsedLines[i]!, context.document.body, Word.InsertLocation.start, style);
+          insertMarkdownParagraph(parsedLines[i]!, context.document.body.insertParagraph('', Word.InsertLocation.start), style);
         }
         break;
 
@@ -293,10 +272,8 @@ async function insertText(params: Record<string, unknown>): Promise<CommandResul
 
         let insertAfter = paragraphs.items[idx]!.getRange('After');
         for (const parsed of parsedLines) {
-          const newParagraph = insertAfter.insertParagraph(parsed.text, Word.InsertLocation.after);
-          if (style ?? (parsed.headingLevel > 0 ? HEADING_STYLES[parsed.headingLevel] : undefined)) {
-            newParagraph.style = style ?? HEADING_STYLES[parsed.headingLevel]!;
-          }
+          const newParagraph = insertAfter.insertParagraph('', Word.InsertLocation.after);
+          insertMarkdownParagraph(parsed, newParagraph, style);
           insertAfter = newParagraph.getRange('After');
         }
         break;
@@ -317,26 +294,18 @@ async function insertText(params: Record<string, unknown>): Promise<CommandResul
 
         const insertBefore = paragraphs.items[idx]!;
         for (const parsed of parsedLines) {
-          const newParagraph = insertBefore.insertParagraph(parsed.text, Word.InsertLocation.before);
-          if (style ?? (parsed.headingLevel > 0 ? HEADING_STYLES[parsed.headingLevel] : undefined)) {
-            newParagraph.style = style ?? HEADING_STYLES[parsed.headingLevel]!;
-          }
+          const newParagraph = insertBefore.insertParagraph('', Word.InsertLocation.before);
+          insertMarkdownParagraph(parsed, newParagraph, style);
         }
         break;
       }
 
       case 'replaceSelection': {
         const selection = context.document.getSelection();
-        // For replace, join all lines and insert as single text block
-        const fullText = parsedLines.map((p) => p.text).join('\n');
-        selection.insertText(fullText, Word.InsertLocation.replace);
-        if (style) {
-          const selParagraphs = selection.paragraphs;
-          selParagraphs.load('items');
-          await context.sync();
-          for (const p of selParagraphs.items) {
-            p.style = style;
-          }
+        let cursor: Word.Range | Word.Paragraph = selection.insertText('', Word.InsertLocation.replace);
+        for (const [index, parsed] of parsedLines.entries()) {
+          if (index > 0) cursor = cursor.insertText('\n', Word.InsertLocation.end);
+          cursor = insertMarkdownParagraph(parsed, cursor, style);
         }
         break;
       }

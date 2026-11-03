@@ -740,6 +740,47 @@ const ERROR_CATALOG = {
   UNKNOWN_ERROR: { retryable: false, fix: "Tell the user what Office said; don't repeat the same call." },
 };
 
+const nativeUndo = 'The user can undo this with Ctrl+Z (Cmd+Z on Mac).';
+const macPowerpointUndo = "PowerPoint for Mac can't undo add-in edits with Cmd+Z. ";
+const readBeforeReversing = ' Read the current slide or shape with rebel_office_powerpoint_get_slides and rebel_office_powerpoint_get_slide_content (or rebel_office_powerpoint_get_speaker_notes for notes) first; ask the user before reversing if it has changed since the edit.';
+const deleteAddedShape = 'To reverse this, use rebel_office_powerpoint_delete_shape with target.type="shapeId", target.shapeId=data.shapeId and the original slideIndex.';
+const UNDO_WORDING = {
+  word: { default: nativeUndo },
+  excel: {
+    default: nativeUndo,
+    delete_worksheet: "Excel can't undo this, and it clears Excel's undo history. Confirm with the user first.",
+  },
+  powerpoint: {
+    default: nativeUndo,
+    add_slide: 'Without title, subtitle or body, the user can undo this with Ctrl+Z. With title, subtitle or body, use Ctrl+Z twice (text, then slide), or rebel_office_powerpoint_delete_slide: find data.slideId in rebel_office_powerpoint_get_slides and use its slideNumber as slideIndex.',
+    darwin: {
+      default: 'This cannot be undone exactly with these tools; confirm with the user first.',
+      add_text_box: deleteAddedShape,
+      add_shape: deleteAddedShape,
+      add_image: deleteAddedShape,
+      add_slide: 'To reverse this, use rebel_office_powerpoint_delete_slide: find data.slideId in rebel_office_powerpoint_get_slides and use its slideNumber as slideIndex.',
+      update_text: 'To restore plain text, use rebel_office_powerpoint_update_text with the original slideIndex, target.type="shapeId", target.shapeId=data.shapeId and text=data.previousText, if non-empty. Blank previous text or formatting changed by update_text cannot be undone exactly with these tools; confirm with the user first.',
+      set_speaker_notes: 'To reverse this, use rebel_office_powerpoint_set_speaker_notes with slideIndex=data.slideNumber and notes=data.previousNotes, if non-empty. Previously blank notes cannot be undone exactly with these tools; confirm with the user first.',
+      format_shape: 'To reverse representable values, use rebel_office_powerpoint_format_shape with slideIndex=data.slideIndex, target.type="shapeId", target.shapeId=data.shapeId and formatting=data.previous. A non-solid previous fill (data.previousFillType), or previous lineWidth, width or height of zero, cannot be undone exactly with these tools; confirm with the user first.',
+      reorder_slides: 'To reverse this, use rebel_office_powerpoint_reorder_slides with data.from and data.to swapped: fromIndex=data.to, toIndex=data.from.',
+      delete_shape: 'This cannot be undone exactly with these tools; confirm with the user first.',
+      delete_slide: 'This cannot be undone exactly with these tools; confirm with the user first.',
+      apply_layout: 'This cannot be undone exactly with these tools; confirm with the user first.',
+    },
+  },
+};
+const undoForTool = (name, annotations) => {
+  if (annotations?.readOnlyHint !== false) return undefined;
+  const match = name.match(/^rebel_office_(word|excel|powerpoint)_(.+)$/);
+  if (!match) return undefined;
+  const [, app, action] = match;
+  const wording = UNDO_WORDING[app];
+  if (app === 'powerpoint' && process.platform === 'darwin') {
+    return macPowerpointUndo + (Object.hasOwn(wording.darwin, action) ? wording.darwin[action] : wording.darwin.default) + readBeforeReversing;
+  }
+  return Object.hasOwn(wording, action) ? wording[action] : wording.default;
+};
+
 const toMcpResult = (result) => {
   const source = result?.[UNTRUSTED_SOURCE];
   const { app = 'office', action = 'unknown' } = result?.[RESULT_CONTEXT] || {};
@@ -761,7 +802,9 @@ const toMcpResult = (result) => {
         ? Object.fromEntries(Object.entries(row).map(([key, value]) => [wrap(key), value]))
         : row) };
     }
-    body = { ok: true, app, action, data: wrap(data) };
+    const name = `rebel_office_${app}_${action}`;
+    const undo = undoForTool(name, registeredTools.get(name)?.annotations);
+    body = { ok: true, app, action, data: wrap(data), ...(undo ? { undo } : {}) };
   }
   return { content: [{ type: 'text', text: JSON.stringify(body, null, 2) }], ...(failed ? { isError: true } : {}) };
 };
@@ -876,9 +919,10 @@ const registerTool = (name, config, handler) => {
     throw new Error(`Tool ${name} is already registered`);
   }
 
+  const undo = undoForTool(name, config.annotations);
   const tool = {
     title: config.title,
-    description: config.description,
+    description: config.description + (undo ? '\n\n' + undo : ''),
     inputSchema: config.inputSchema || EMPTY_OBJECT_SCHEMA,
     outputSchema: config.outputSchema,
     annotations: config.annotations,
@@ -3205,8 +3249,7 @@ registerTool(TOOL_NAMES.excelInsertRowsColumns, {
 registerTool(TOOL_NAMES.excelDeleteRowsColumns, {
   title: 'Delete rows or columns',
   description:
-    'Delete rows or columns from a worksheet. **This permanently removes the data in those ' +
-    'rows/columns — cannot be undone.** Remaining data shifts to fill the gap.',
+    'Delete rows or columns from a worksheet. Remaining data shifts to fill the gap.',
   inputSchema: {
     "type": "object",
     "properties": {
@@ -3710,8 +3753,7 @@ registerTool(TOOL_NAMES.pptAddSlide, {
 registerTool(TOOL_NAMES.pptDeleteSlide, {
   title: 'Delete slide',
   description:
-    'Delete a slide from the presentation by index. **This permanently removes the slide and all ' +
-    'its content — cannot be undone.** Returns confirmation.',
+    'Delete a slide and its content from the presentation by index. Returns confirmation.',
   inputSchema: {
     "type": "object",
     "properties": {
@@ -4248,7 +4290,7 @@ registerTool(TOOL_NAMES.pptDeleteShape, {
   description:
     'Delete a shape from a slide, identified by shape ID or by placeholder/name match.\n\n' +
     'Use `rebel_office_powerpoint_get_slide_content` to list a slide\'s shapes and their IDs first. ' +
-    'This cannot be undone from the API — delete with care.',
+    'Returns confirmation of deletion.',
   inputSchema: {
     "type": "object",
     "properties": {

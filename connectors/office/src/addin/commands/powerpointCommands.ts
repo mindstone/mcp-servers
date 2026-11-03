@@ -228,25 +228,24 @@ async function addSlide(params: Record<string, unknown>): Promise<CommandResult>
       addOptions = { layoutId: layout.id };
     }
 
-    // Add a new slide (Office.js adds to the end by default)
+    const previousCount = slides.items.length;
+    if (position !== undefined && (!Office.context.requirements.isSetSupported('PowerPointApi', '1.8') || typeof slides.getItemAt(0).moveTo !== 'function')) {
+      fail('UNSUPPORTED_OPERATION', 'Moving slides requires a newer version of PowerPoint.');
+    }
+
     slides.add(addOptions);
+    const newSlide = slides.getItemAt(previousCount);
+    if (position !== undefined) newSlide.moveTo(position - 1);
+    newSlide.load('id');
+    const hasText = title !== undefined || subtitle !== undefined || body !== undefined;
+    if (hasText) newSlide.shapes.load(['id', 'name', 'type']);
     await context.sync();
 
-    // Reload to get the new slide
-    slides.load('items');
-    await context.sync();
-
-    const newSlide = slides.items[slides.items.length - 1]!;
-
-    try {
-      if (position !== undefined) newSlide.moveTo(position - 1);
-      if (title !== undefined || subtitle !== undefined || body !== undefined) {
-        const shapes = newSlide.shapes;
-        shapes.load(['id', 'name', 'type']);
-        await context.sync();
+    if (hasText) {
+      try {
         for (const [placeholder, text] of [['subtitle', subtitle], ['title', title], ['body', body]] as const) {
           if (text === undefined) continue;
-          const shape = shapes.items.find((s) => {
+          const shape = newSlide.shapes.items.find((s) => {
             const name = s.name.toLowerCase();
             return placeholder === 'body' ? /content|body|text/.test(name)
               : name.includes(placeholder) && (placeholder !== 'title' || !name.includes('subtitle'));
@@ -254,15 +253,15 @@ async function addSlide(params: Record<string, unknown>): Promise<CommandResult>
           if (!shape) fail('ITEM_NOT_FOUND', `Placeholder "${placeholder}" not found.`);
           shape.textFrame.textRange.text = text;
         }
+        await context.sync();
+      } catch (error) {
+        fail('PARTIAL', `Created slide id: ${newSlide.id}, but could not finish the request: ${error instanceof Error ? error.message : String(error)}`);
       }
-      await context.sync();
-    } catch (error) {
-      fail('PARTIAL', `Created slide id: ${newSlide.id}, but could not finish the request: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     return {
       success: true,
-      slideNumber: position ?? slides.items.length,
+      slideNumber: position ?? previousCount + 1,
       slideId: newSlide.id,
     };
   });
@@ -659,6 +658,9 @@ async function updateText(params: Record<string, unknown>): Promise<CommandResul
       fail('INVALID_ARGUMENT', `Unsupported target type: "${target.type}".`);
     }
 
+    targetShape.textFrame.load('textRange/text');
+    await context.sync();
+    const previousText = targetShape.textFrame.textRange.text;
     targetShape.textFrame.textRange.text = text as string;
 
     // Apply formatting if specified
@@ -680,7 +682,7 @@ async function updateText(params: Record<string, unknown>): Promise<CommandResul
     }
 
     await context.sync();
-    return { success: true, shapeId: targetShape.id };
+    return { success: true, shapeId: targetShape.id, previousText };
   });
 }
 
@@ -792,9 +794,12 @@ async function setSpeakerNotes(params: Record<string, unknown>): Promise<Command
       item.name.toLowerCase().includes('notes') || item.name.toLowerCase().includes('body'),
     ) ?? shapes.items.find((item) => item.textFrame);
     if (!shape?.textFrame) fail('ITEM_NOT_FOUND', 'Could not find a notes placeholder on the slide.');
+    shape.textFrame.load('textRange/text');
+    await context.sync();
+    const previousNotes = shape.textFrame.textRange.text;
     shape.textFrame.textRange.text = notes;
     await context.sync();
-    return { success: true, slideNumber: slideIndex };
+    return { success: true, slideNumber: slideIndex, previousNotes };
   });
 }
 
@@ -1054,6 +1059,24 @@ async function formatShape(params: Record<string, unknown>): Promise<CommandResu
     const slide = getSlideByIndex(slides, slideIndex);
     const shape = await findShape(context, slide, target);
 
+    const properties = {
+      fillColor: 'fill/foregroundColor', lineColor: 'lineFormat/color', lineWidth: 'lineFormat/weight',
+      left: 'left', top: 'top', width: 'width', height: 'height', name: 'name',
+    };
+    const changed = Object.keys(properties).filter(key => Object.prototype.hasOwnProperty.call(formatting, key));
+    shape.load(changed.map(key => properties[key as keyof typeof properties]));
+    if (changed.includes('fillColor')) shape.fill.load('type');
+    await context.sync();
+    const previous: Record<string, unknown> = {};
+    for (const key of changed) {
+      previous[key] = key === 'fillColor' ? shape.fill.foregroundColor
+        : key === 'lineColor' ? shape.lineFormat.color
+        : key === 'lineWidth' ? shape.lineFormat.weight
+        : shape[key as 'left' | 'top' | 'width' | 'height' | 'name'];
+    }
+    // A color alone cannot represent gradients, picture fills, or no fill.
+    const previousFillType = changed.includes('fillColor') ? String(shape.fill.type) : undefined;
+
     if (typeof formatting['fillColor'] === 'string') {
       shape.fill.setSolidColor(formatting['fillColor']);
     }
@@ -1070,6 +1093,6 @@ async function formatShape(params: Record<string, unknown>): Promise<CommandResu
     if (typeof formatting['name'] === 'string') shape.name = formatting['name'];
 
     await context.sync();
-    return { success: true, slideIndex, shapeId: shape.id };
+    return { success: true, slideIndex, shapeId: shape.id, previous, ...(previousFillType === undefined ? {} : { previousFillType }) };
   });
 }

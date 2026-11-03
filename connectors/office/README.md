@@ -56,6 +56,26 @@ received from Office or the sidecar stay inside `<untrusted-content>` envelopes,
 with embedded closing tags escaped. App, action, codes and fixes stay outside
 those envelopes.
 
+### Undoing edits
+
+Every successful edit includes an `undo` sentence, also shown at the end of its
+tool description. This guidance comes from the connector; previous text and
+formatting values stay in the enveloped `data` fields.
+
+On current desktop Word and Excel, and PowerPoint on Windows, each edit uses one
+writing batch, so the user can undo it with Ctrl+Z (Cmd+Z on Mac). A PowerPoint
+slide with title, subtitle or body takes two: text, then slide. Deleting an Excel
+worksheet cannot be undone and clears Excel's undo history.
+
+PowerPoint for Mac cannot reliably undo add-in edits with Cmd+Z. Its `undo`
+guidance names the existing tools and returned values to reverse an edit. Read
+the current state first and ask the user if it has changed since the edit.
+Deleting shapes or slides and applying layouts cannot be reversed exactly with
+these tools. Neither can restoring empty text or notes, a non-solid fill,
+previous dimensions or line width of zero, or text formatting changed by
+`update_text`. Those limitations are stated in the tool's guidance; confirm with
+the user first. No undo history is stored by the connector.
+
 For Excel `read_range` and `read_table` JSON rows, header-derived object keys
 are enveloped just like `headers`, including a column named `__proto__`.
 If the Office connection is turned off for the Rebel installation, tools that
@@ -307,7 +327,7 @@ shapes require PowerPointApi 1.4 before creation. Word alignment applies to ever
 paragraph in the target. Speaker-notes errors report causes such as read-only files;
 unavailable layouts return a coded failure instead of an empty layout list.
 
-If PowerPoint creates a slide but cannot finish moving or filling it, `PARTIAL`
+If PowerPoint creates a slide but cannot finish filling it, `PARTIAL`
 includes the created slide id in the error message. Inspect that slide, then
 complete the missing work or delete it before retrying to avoid duplicates.
 Find its id in `get_slides` and use the returned `slideNumber` as `slideIndex`
