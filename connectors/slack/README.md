@@ -227,6 +227,10 @@ Text sent as you (`post_slack_message`, `reply_to_slack_thread`, `schedule_slack
 
 A workspace record can describe a personal app: `appKind: "own"` with its own `appId`, `clientId`, `clientSecret` and `appName`. Then thread replies post as that app's bot, and token refresh uses the record's `clientId`/`clientSecret` pair instead of `SLACK_CLIENT_ID`/`SLACK_CLIENT_SECRET`. If the bot is not in the channel, the reply is posted as you and the tool result says so, with a hint to invite the app. Records without `appKind` behave as before: replies are sent as you.
 
+### Compose send status
+
+In hosts that remember send status, sending a message closes its other compose copies. Reloaded cards show "Message sent" with the send time and hide Reopen because they do not have the sent contents. The copy used to send keeps its read-only sent view. After an error or missing confirmation, check whether the message was sent before using Retry; editing or collapsing the card does not resolve that uncertainty. Cancel says "Nothing sent" only when no send may have gone through.
+
 ### Channels
 - `list_slack_channels` — List channels (filterable, paginated).
 - `get_slack_channel_history` — Get recent messages from a channel.

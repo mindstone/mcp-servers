@@ -77,15 +77,18 @@ const slackHtml = buildComposeAppHtml(SLACK_CONFIG);
 const teamsHtml = buildComposeAppHtml(TEAMS_CONFIG);
 
 let composeWindow: Window | undefined;
+const outcomeWindows: Window[] = [];
 
 afterEach(() => {
   composeWindow?.close();
   composeWindow = undefined;
+  outcomeWindows.splice(0).forEach((window) => window.close());
 });
 
-function loadWindow(html: string): Window {
+function loadWindow(html: string, cardOutcome?: { outcome: string; at: number }): Window {
   const window = new Window({ url: 'https://example.com/compose-email.html' });
   composeWindow = window;
+  Object.assign(window, { __MCP_HOST_CONTEXT__: { cardOutcome } });
   window.document.write(html);
   window.parent.postMessage = vi.fn();
   const script = window.document.querySelector('script');
@@ -93,6 +96,193 @@ function loadWindow(html: string): Window {
   window.eval(script?.textContent ?? '');
   return window;
 }
+
+describe.each([
+  ['email', blockedDraftHtml, 'Email sent · '],
+  ['slack', slackHtml, 'Message sent · '],
+  ['teams', teamsHtml, 'Message sent · '],
+])('compose send outcomes (%s)', (mode, html, sentPrefix) => {
+  const at = Date.UTC(2026, 0, 2, 15, 4);
+  const sentOutcome = { outcome: 'sent', at };
+  const maybeOutcome = { outcome: 'maybe-sent', at };
+
+  function mount(outcome?: { outcome: string; at: number }): Window {
+    const window = loadWindow(html, outcome);
+    outcomeWindows.push(window);
+    setFieldValue(window, 'toInput', mode === 'email' ? 'jane@example.com' : 'channel-123');
+    if (mode === 'email') setFieldValue(window, 'subjectInput', 'Update');
+    setFieldValue(window, 'bodyInput', 'Ready to send.');
+    return window;
+  }
+
+  function click(window: Window, id: string): void {
+    window.document.getElementById(id)!.dispatchEvent(new window.Event('click'));
+  }
+
+  function calls(window: Window) {
+    return postedMessages(window).filter((message) => message.method === 'tools/call');
+  }
+
+  function reply(window: Window, error?: { message: string; data?: { reason: string } }): void {
+    const request = calls(window).at(-1);
+    expect(request).toBeTruthy();
+    window.dispatchEvent(new window.MessageEvent('message', {
+      data: { jsonrpc: '2.0', id: request?.id, ...(error ? { error } : { result: {} }) },
+      source: window.eval('window.parent'),
+    }));
+  }
+
+  function deliver(window: Window, outcome = sentOutcome, source: Window['parent'] | null = window.eval('window.parent')): void {
+    window.dispatchEvent(new window.MessageEvent('message', {
+      data: { method: 'mcp-app:card-outcome', params: outcome }, source,
+    }));
+  }
+
+  function expectUncertainty(window: Window): void {
+    expect(isHidden(window, 'composeForm')).toBe(false);
+    expect(isHidden(window, 'unknownBox')).toBe(false);
+    expect(window.document.getElementById('unknownText')!.textContent).toMatch(/Check (your Sent folder|whether it sent)/);
+    const retry = window.document.getElementById('retryButton')!;
+    expect(retry.closest('.hidden')).toBeNull();
+    expect(retry.parentElement).toBe(window.document.getElementById('unknownBox'));
+  }
+
+  it('declares the Send outcome in request metadata', () => {
+    const window = mount();
+    click(window, 'sendButton');
+    expect(calls(window)[0]?.params._meta).toEqual({ 'rebel/cardOutcome': 'sent' });
+  });
+
+  it.each(['sent', 'submitted'])('restores a cold %s outcome with its time and retires Send and Retry', (outcome) => {
+    const window = mount({ outcome, at });
+    const stamp = new Date(at).toLocaleString(undefined, {
+      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+    });
+    expect(isHidden(window, 'composeForm')).toBe(true);
+    expect(isHidden(window, 'collapsedState')).toBe(false);
+    expect(window.document.getElementById('collapsedMessage')!.textContent).toBe(sentPrefix + stamp);
+    expect(isHidden(window, 'reopenButton')).toBe(true);
+    click(window, 'sendButton');
+    click(window, 'retryButton');
+    expect(calls(window)).toHaveLength(0);
+  });
+
+  it('collapses the other window after a successful send and prevents another send', () => {
+    const first = mount();
+    const second = mount();
+    click(first, 'sendButton');
+    reply(first);
+    deliver(second);
+    expect(isHidden(second, 'composeForm')).toBe(true);
+    expect(isHidden(second, 'collapsedState')).toBe(false);
+    expect(isHidden(second, 'reopenButton')).toBe(true);
+    click(second, 'sendButton');
+    click(second, 'retryButton');
+    expect(calls(first)).toHaveLength(1);
+    expect(calls(second)).toHaveLength(0);
+  });
+
+  it('keeps its own read-only sent contents when the host outcome arrives', () => {
+    const window = mount();
+    click(window, 'sendButton');
+    reply(window);
+    click(window, 'reopenButton');
+    deliver(window);
+    expect(isHidden(window, 'sentView')).toBe(false);
+    expect(window.document.getElementById('sentBody')!.textContent).toBe('Ready to send.');
+    expect(isHidden(window, 'reopenButton')).toBe(false);
+    click(window, 'sendButton');
+    click(window, 'retryButton');
+    expect(calls(window)).toHaveLength(1);
+  });
+
+  it('restores an uncertain send beside Retry on cold mount', () => {
+    const window = loadWindow(html, maybeOutcome);
+    expectUncertainty(window);
+  });
+
+  it('applies a live uncertain send and clears it after a successful send', () => {
+    const window = mount();
+    deliver(window, maybeOutcome);
+    expectUncertainty(window);
+    click(window, 'retryButton');
+    reply(window);
+    expect(isHidden(window, 'unknownBox')).toBe(true);
+    expect(isHidden(window, 'collapsedState')).toBe(false);
+    expect(window.document.getElementById('collapsedMessage')!.textContent).toContain(sentPrefix);
+    deliver(window, maybeOutcome);
+    expect(isHidden(window, 'composeForm')).toBe(true);
+  });
+
+  it('keeps uncertainty through edit then Cancel', () => {
+    const window = mount();
+    click(window, 'sendButton');
+    reply(window, { message: 'Connection lost.' });
+    expectUncertainty(window);
+    setFieldValue(window, 'bodyInput', 'Edited after the error.');
+    click(window, 'cancelButton');
+    expect(window.document.getElementById('collapsedMessage')!.textContent).not.toContain('Nothing sent');
+    expect(window.document.getElementById('collapsedMessage')!.textContent).toContain('Check');
+  });
+
+  it('keeps uncertainty through Cancel, Reopen, then Cancel', () => {
+    const window = mount();
+    click(window, 'sendButton');
+    reply(window, { message: 'Connection lost.' });
+    click(window, 'cancelButton');
+    click(window, 'reopenButton');
+    expectUncertainty(window);
+    click(window, 'cancelButton');
+    expect(window.document.getElementById('collapsedMessage')!.textContent).not.toContain('Nothing sent');
+  });
+
+  it.each(['user-disabled', 'admin-disabled', 'security-policy'])('keeps Nothing sent for a pre-execution %s block', (reason) => {
+    const window = mount();
+    click(window, 'sendButton');
+    reply(window, { message: 'Tool call blocked.', data: { reason } });
+    expect(isHidden(window, 'unknownBox')).toBe(true);
+    click(window, 'cancelButton');
+    expect(window.document.getElementById('collapsedMessage')!.textContent).toBe('Draft collapsed. Nothing sent.');
+  });
+
+  it('does not erase earlier uncertainty after a pre-execution block', () => {
+    const window = mount(maybeOutcome);
+    click(window, 'sendButton');
+    reply(window, { message: 'Tool call blocked.', data: { reason: 'admin-disabled' } });
+    click(window, 'cancelButton');
+    expect(window.document.getElementById('collapsedMessage')!.textContent).not.toContain('Nothing sent');
+  });
+
+  it('treats an unknown block reason as uncertain', () => {
+    const window = mount();
+    click(window, 'sendButton');
+    reply(window, { message: 'Tool call failed.', data: { reason: 'unknown' } });
+    expectUncertainty(window);
+  });
+
+  it('keeps the no-reply uncertainty after editing and collapsing', () => {
+    const window = mount();
+    const timeout = vi.spyOn(window, 'setTimeout');
+    click(window, 'sendButton');
+    const callback = timeout.mock.calls.find((call) => call[1] === 75000)?.[0];
+    expect(typeof callback).toBe('function');
+    (callback as () => void)();
+    expectUncertainty(window);
+    setFieldValue(window, 'bodyInput', 'Edited after timeout.');
+    click(window, 'cancelButton');
+    expect(window.document.getElementById('collapsedMessage')!.textContent).not.toContain('Nothing sent');
+  });
+
+  it('accepts outcome messages only from the parent', () => {
+    const window = mount();
+    deliver(window, sentOutcome, null);
+    const foreign = mount();
+    deliver(window, sentOutcome, foreign);
+    expect(isHidden(window, 'composeForm')).toBe(false);
+    click(window, 'sendButton');
+    expect(calls(window)).toHaveLength(1);
+  });
+});
 
 function setFieldValue(window: Window, id: string, value: string): void {
   const element = window.document.getElementById(id) as unknown as HTMLInputElement | HTMLTextAreaElement;
@@ -254,7 +444,7 @@ describe('buildComposeAppHtml — host neutrality', () => {
       ['teams', teamsHtml],
     ];
     for (const [name, html] of variants) {
-      expect(html, name).not.toMatch(/rebel|mindstone|nspr/i);
+      expect(html.replaceAll("'rebel/cardOutcome'", "'cardOutcome'"), name).not.toMatch(/rebel|mindstone|nspr/i);
     }
   });
 
@@ -365,7 +555,6 @@ describe('buildComposeAppHtml — blocked-send Gmail escape hatch (gating)', () 
       'function buildGmailComposeUrl',
       'function showBlockedSend',
       'var GMAIL_COMPOSE_MAX_URL = 8000;',
-      'var blockedReason = data.error.data && data.error.data.reason;',
     ]) {
       expect(blockedHtml).toContain(marker);
       // Absent from the historical output (byte-parity for connectors that omit it).
@@ -613,6 +802,7 @@ describe('buildComposeAppHtml — save-draft lifecycle (happy-dom)', () => {
     });
     expect(toolCall.id).toMatch(/^draft-/);
     expect(toolCall.params?.name).toBe('create_workspace_draft');
+    expect(toolCall.params?._meta).toBeUndefined();
     expect(toolCall.params?.arguments?.to).toEqual(['jane@example.com', 'ben@example.com']);
     expect(toolCall.params?.arguments?.cc).toEqual(['boss@example.com']);
     expect(toolCall.params?.arguments?.bcc).toEqual(['archive@example.com']);

@@ -4,6 +4,11 @@ All notable changes to this connector will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Compose cards keep their sent status across copies and reloads in supporting hosts. Reloaded cards show the send time without the sent contents.
+- After an unconfirmed send, Cancel keeps the reminder to check whether it was sent, even after editing or reopening the draft. Calls blocked before sending still say "Nothing sent."
+
 ### Changed
 
 - The compose form's wording no longer names a particular host app: the lost-reply notice now starts "No confirmation came back in time…".

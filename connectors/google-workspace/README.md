@@ -173,6 +173,10 @@ The full list lives under [`src/tools/definitions/`](./src/tools/definitions/) a
 | Tasks | 6 | List task lists, and list/create/update/complete/delete tasks. |
 | Forms | 4 | Read-only access to forms and their responses. |
 
+### Compose send status
+
+In hosts that remember send status, sending an email closes its other compose copies. Reloaded cards show "Email sent" with the send time and hide Reopen because they do not have the sent contents. The copy used to send keeps its read-only sent view. After an error or missing confirmation, check whether the email was sent before using Retry; editing or collapsing the card does not resolve that uncertainty. Cancel says "Nothing sent" only when no send may have gone through.
+
 ### Sheets read limits
 
 `read_workspace_spreadsheet_values` accepts `max_rows` and `max_cols` to keep the first rows and columns of a values read, including `value_view: "shaped"` and `return_json: true`. They refer to sheet rows and columns even with `major_dimension: "COLUMNS"`. Omitted limits leave that dimension unchanged. A truncated result reports `truncated: true` in JSON or a truncation notice in text.

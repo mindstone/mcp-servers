@@ -188,6 +188,10 @@ Sign in via [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/)'s `auth
 
 Some Teams Graph APIs may require tenant admin approval. Tools marked with a required permission check the connected account's token up front and return actionable reconnect guidance when the permission is missing (under Microsoft's managed consent policy, `ChannelMessage.Read.All` is admin-consent-gated in most tenants).
 
+### Compose send status
+
+In hosts that remember send status, sending a message closes its other compose copies. Reloaded cards show "Message sent" with the send time and hide Reopen because they do not have the sent contents. The copy used to send keeps its read-only sent view. After an error or missing confirmation, check whether the message was sent before using Retry; editing or collapsing the card does not resolve that uncertainty. Cancel says "Nothing sent" only when no send may have gone through.
+
 ## Security notes
 
 - No authentication tool of its own; sign-in is delegated to [`@mindstone/mcp-server-microsoft-mail`](../microsoft-mail/) so the cohort has a single OAuth surface.

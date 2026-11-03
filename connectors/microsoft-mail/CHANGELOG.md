@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- Compose cards keep their sent status across copies and reloads in supporting hosts. Reloaded cards show the send time without the sent contents.
+- After an unconfirmed send, Cancel keeps the reminder to check whether it was sent, even after editing or reopening the draft. Calls blocked before sending still say "Nothing sent."
+
 ### Added
 
 - The inline compose form (`compose_email`) gains a "Save draft" button

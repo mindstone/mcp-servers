@@ -7,6 +7,11 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- Compose cards keep their sent status across copies and reloads in supporting hosts. Reloaded cards show the send time without the sent contents.
+- After an unconfirmed send, Cancel keeps the reminder to check whether it was sent, even after editing or reopening the draft. Calls blocked before sending still say "Nothing sent."
+
 ## [0.5.1] - 2026-10-31
 
 ### Changed

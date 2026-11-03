@@ -828,6 +828,7 @@ ${gmail ? `        <button id="openGmailButton" type="button" class="button butt
       var sending = false;
       var collapsed = false;
       var outcomeUnknown = false;
+      var sendMayHaveGone = false;
       var sent = false;
 ${m.extraStateVars}${hasDraft ? `      // Which action the in-flight request belongs to ('send' | 'draft').
       // Captured before clearing on reply/timeout so the response handler can
@@ -1043,6 +1044,7 @@ ${f.cc ? `        ccInput.disabled = nextSaving;\n` : ''}${f.bcc ? `        bccI
       }
 
       function showError(message) {
+        errorBox.appendChild(retryButton);
         errorText.textContent = message || ${quoteJsString(m.sendFailedText)};
         errorBox.classList.remove('hidden');
         postResize();
@@ -1071,6 +1073,7 @@ ${f.cc ? `        ccInput.disabled = nextSaving;\n` : ''}${f.bcc ? `        bccI
         unknownTitle.textContent = '';
         unknownText.textContent = '';
         unknownBox.classList.add('hidden');
+        errorBox.appendChild(retryButton);
       }
 
       // No reply ever came back for the send (e.g. the host's response was lost
@@ -1079,18 +1082,20 @@ ${f.cc ? `        ccInput.disabled = nextSaving;\n` : ''}${f.bcc ? `        bccI
       // tell the user to verify before resending (the send is not idempotent, so
       // a blind retry could send a duplicate).
       function showSendUnknown() {
+        sendMayHaveGone = true;
         outcomeUnknown = true;
         clearError();
         clearSuccess();
         unknownTitle.textContent = 'Not sure if this sent.';
         unknownText.textContent = ${m.unknownDetailTextLiteral};
         unknownBox.classList.remove('hidden');
+        unknownBox.appendChild(retryButton);
         postResize();
       }
 
       function handleSendTimeout() {
         sendTimeoutId = null;
-        if (!pendingRequestId) {
+        if (!pendingRequestId || sent) {
           return;
         }
         pendingRequestId = null;
@@ -1171,6 +1176,7 @@ ${hasDraft ? `        pendingAction = 'send';
             method: 'tools/call',
             params: {
               name: ${quoteJsString(config.sendToolName)},
+              _meta: { 'rebel/cardOutcome': 'sent' },
               arguments: payload
             },
             id: pendingRequestId
@@ -1404,14 +1410,33 @@ ${f.cc ? `        var cc = normalizeAddressList(payload.cc).join(',');
         return 'https://mail.google.com/mail/u/' + userPart + '/#all/' + encodeURIComponent(id);
       }
 
-` : ''}      function formatSentTime() {
+` : ''}      function formatSentTime(at) {
         try {
-          return new Date().toLocaleString(undefined, {
+          return new Date(at === undefined ? Date.now() : at).toLocaleString(undefined, {
             month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
           });
         } catch (_) {
           return '';
         }
+      }
+
+      function applyCardOutcome(o) {
+        if (!o || typeof o !== 'object' || sent) return;
+        if (o.outcome === 'maybe-sent') {
+          showSendUnknown();
+          setCollapsed(false);
+          return;
+        }
+        if (o.outcome !== 'sent' && o.outcome !== 'submitted') return;
+        sent = true;
+        sendMayHaveGone = false;
+        clearSendTimeout();
+        clearError();
+        clearSuccess();
+        clearUnknown();
+        var stamp = formatSentTime(o.at);
+        setCollapsed(true, stamp ? ${quoteJsString(m.sentCollapseStamped)} + stamp : ${quoteJsString(m.sentCollapseDefault)});
+        reopenButton.classList.add('hidden');
       }
 
       function renderSentView(payload, meta, stamp) {
@@ -1420,6 +1445,7 @@ ${f.cc ? `        var cc = normalizeAddressList(payload.cc).join(',');
 ${m.renderSentViewBody}      }
 
       function handleSendRequest() {
+        if (sent) return;
         if (sending) return;
 ${blockedSend ? `        // Once the user's own send preference has blocked this tool, never
         // re-invoke it — the escape hatch is the only path out. The Send button
@@ -1470,6 +1496,7 @@ ${hasDraft ? `      draftButton.addEventListener('click', function () {
       });
 
       retryButton.addEventListener('click', function () {
+        if (sent) return;
         if (sending) return;
         var payload = readFormPayload();
 ${hasDraft ? `        if (retryAction === 'draft') {
@@ -1492,9 +1519,8 @@ ${hasDraft ? `        if (retryAction === 'draft') {
 
       cancelButton.addEventListener('click', function () {
         if (sending) return;
-        // After a lost-reply timeout we don't know if the email sent, so don't
-        // claim "Nothing sent." on collapse — point the user to verify instead.
-        var collapseMessage = outcomeUnknown
+        // Hiding the notice does not resolve whether an earlier send went out.
+        var collapseMessage = sendMayHaveGone
           ? ${quoteJsString(m.cancelCollapseUnknownText)}
           : 'Draft collapsed. Nothing sent.';
         clearError();
@@ -1505,6 +1531,7 @@ ${hasDraft ? `        if (retryAction === 'draft') {
 
       reopenButton.addEventListener('click', function () {
         setCollapsed(false);
+        if (!sent && sendMayHaveGone) showSendUnknown();
       });
 
       sentCollapseButton.addEventListener('click', function () {
@@ -1561,6 +1588,11 @@ ${gmail ? `      // The iframe sandbox is "allow-scripts" only (no allow-popups 
           return;
         }
 
+        if (data.method === 'mcp-app:card-outcome') {
+          if (event.source === window.parent) applyCardOutcome(data.params);
+          return;
+        }
+
         if (data.method === 'ui/notifications/tool-result') {
           // Always parse (so the migration-shim's malformed-envelope warning
           // still fires), but apply only the first successful prefill: a stray
@@ -1598,7 +1630,12 @@ ${hasDraft ? `          if (completedAction === 'draft') {
             // is already cleared, so this is what the Retry handler routes on.
             retryAction = 'draft';
           }
-` : ''}${blockedSend ? `          // Prefer the host-vetted structured reason (a closed enum the host
+` : ''}          var blockedReason = data.error.data && data.error.data.reason;
+          var blockedBeforeSend = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy';
+          if (${hasDraft ? "completedAction !== 'draft' && " : ''}!blockedBeforeSend) {
+            showSendUnknown();
+          }
+${blockedSend ? `          // Prefer the host-vetted structured reason (a closed enum the host
           // derives from the tool-block error data) and fall back to
           // text-matching the flattened message for hosts that don't forward it
           // yet. Only 'user-disabled' opens the Gmail escape hatch —
@@ -1606,12 +1643,12 @@ ${hasDraft ? `          if (completedAction === 'draft') {
           // the detector comment above for why).
 ${hasDraft ? `          // Send-failure only: a blocked DRAFT tool must never surface the
           // "sending is turned off" copy or the Open-in-Gmail bypass.
-          ` : ''}var blockedReason = data.error.data && data.error.data.reason;
-          if (${hasDraft ? 'completedAction !== \'draft\' && ' : ''}(blockedReason === 'user-disabled' || isUserDisabledSendError(errorMessage))) {
+` : ''}          if (${hasDraft ? 'completedAction !== \'draft\' && ' : ''}(blockedReason === 'user-disabled' || isUserDisabledSendError(errorMessage))) {
             showBlockedSend();
             return;
           }
 ` : ''}          showError(errorMessage);
+          if (outcomeUnknown) unknownBox.appendChild(retryButton);
           return;
         }
 
@@ -1638,6 +1675,8 @@ ${hasDraft ? `        if (completedAction === 'draft') {
         var stamp = formatSentTime();
         renderSentView(sentPayload, getSendMetaFromResult(data.result), stamp);
         sent = true;
+        sendMayHaveGone = false;
+        reopenButton.classList.remove('hidden');
         setCollapsed(true, stamp ? ${quoteJsString(m.sentCollapseStamped)} + stamp : ${quoteJsString(m.sentCollapseDefault)});
       });
 
@@ -1649,7 +1688,9 @@ ${hasDraft ? `        if (completedAction === 'draft') {
       applyThemeFromHostContext();
 ${f.cc ? `      setCcVisible(false);
 ` : ''}${f.bcc ? `      setBccVisible(false);
-` : ''}      setCollapsed(false);
+` : ''}      var hostOutcome = (window.__MCP_HOST_CONTEXT__ || {}).cardOutcome;
+      if (hostOutcome) applyCardOutcome(hostOutcome);
+      else setCollapsed(false);
       postResize();
       postReady();
 

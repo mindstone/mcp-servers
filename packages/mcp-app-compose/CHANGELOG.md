@@ -7,6 +7,11 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- Compose cards keep the send time across copies and reloads in supporting hosts. Reloaded sent cards hide Reopen because they do not have the sent contents.
+- Unconfirmed sends retain the reminder to check whether the message was sent through edits, Cancel and Reopen. Calls blocked before sending still say "Nothing sent."
+
 ### Added
 
 - Optional `draftToolName` config knob (email mode only): when set, the compose

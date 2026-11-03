@@ -196,6 +196,10 @@ Until the host has written `${MS_CONFIG_DIR}/credentials/<account>.token.json` a
 | `get_automatic_replies` | Read the out-of-office configuration (requires `MailboxSettings.Read`). |
 | `set_automatic_replies` | Turn out-of-office replies on/off or schedule them (requires `MailboxSettings.ReadWrite`). |
 
+### Compose send status
+
+In hosts that remember send status, sending an email closes its other compose copies. Reloaded cards show "Email sent" with the send time and hide Reopen because they do not have the sent contents. The copy used to send keeps its read-only sent view. After an error or missing confirmation, check whether the email was sent before using Retry; editing or collapsing the card does not resolve that uncertainty. Cancel says "Nothing sent" only when no send may have gone through.
+
 ### Graph permissions
 
 Mail tools run on the `Mail.ReadWrite` + `Mail.Send` delegated grants. The automatic-replies tools additionally need `MailboxSettings.Read` / `MailboxSettings.ReadWrite`; in many organizations an administrator must approve that permission, and the tools return a guidance envelope (rather than a raw Graph 403) when the connected account lacks it.

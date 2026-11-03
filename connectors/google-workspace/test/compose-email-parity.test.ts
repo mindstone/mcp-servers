@@ -10,6 +10,8 @@
 //    Rebaselined again (2026-10) to make the shared copy host-neutral; the only
 //    byte delta is the wording of the lost-reply and unconfirmed-sender notices
 //    and of one code comment, none of which names a host app any more.
+//    Rebaselined again (2026-11) for shared send-status restoration, the Send
+//    outcome declaration and uncertainty that survives editing and collapse.
 // 2. Building with the connector's real config (the same object the generator
 //    script uses) reproduces the committed template. This proves the generator
 //    pipeline is lossless end-to-end, not just that someone committed the

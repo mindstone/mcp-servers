@@ -474,6 +474,7 @@ export const COMPOSE_EMAIL_HTML = `
       var sending = false;
       var collapsed = false;
       var outcomeUnknown = false;
+      var sendMayHaveGone = false;
       var sent = false;
       // Which action the in-flight request belongs to ('send' | 'draft').
       // Captured before clearing on reply/timeout so the response handler can
@@ -687,6 +688,7 @@ export const COMPOSE_EMAIL_HTML = `
       }
 
       function showError(message) {
+        errorBox.appendChild(retryButton);
         errorText.textContent = message || 'Failed to send email.';
         errorBox.classList.remove('hidden');
         postResize();
@@ -715,6 +717,7 @@ export const COMPOSE_EMAIL_HTML = `
         unknownTitle.textContent = '';
         unknownText.textContent = '';
         unknownBox.classList.add('hidden');
+        errorBox.appendChild(retryButton);
       }
 
       // No reply ever came back for the send (e.g. the host's response was lost
@@ -723,18 +726,20 @@ export const COMPOSE_EMAIL_HTML = `
       // tell the user to verify before resending (the send is not idempotent, so
       // a blind retry could send a duplicate).
       function showSendUnknown() {
+        sendMayHaveGone = true;
         outcomeUnknown = true;
         clearError();
         clearSuccess();
         unknownTitle.textContent = 'Not sure if this sent.';
         unknownText.textContent = "No confirmation came back in time. Check your Sent folder before sending again, so it doesn't go out twice.";
         unknownBox.classList.remove('hidden');
+        unknownBox.appendChild(retryButton);
         postResize();
       }
 
       function handleSendTimeout() {
         sendTimeoutId = null;
-        if (!pendingRequestId) {
+        if (!pendingRequestId || sent) {
           return;
         }
         pendingRequestId = null;
@@ -836,6 +841,7 @@ export const COMPOSE_EMAIL_HTML = `
             method: 'tools/call',
             params: {
               name: 'send_email',
+              _meta: { 'rebel/cardOutcome': 'sent' },
               arguments: payload
             },
             id: pendingRequestId
@@ -974,14 +980,33 @@ export const COMPOSE_EMAIL_HTML = `
         }
       }
 
-      function formatSentTime() {
+      function formatSentTime(at) {
         try {
-          return new Date().toLocaleString(undefined, {
+          return new Date(at === undefined ? Date.now() : at).toLocaleString(undefined, {
             month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
           });
         } catch (_) {
           return '';
         }
+      }
+
+      function applyCardOutcome(o) {
+        if (!o || typeof o !== 'object' || sent) return;
+        if (o.outcome === 'maybe-sent') {
+          showSendUnknown();
+          setCollapsed(false);
+          return;
+        }
+        if (o.outcome !== 'sent' && o.outcome !== 'submitted') return;
+        sent = true;
+        sendMayHaveGone = false;
+        clearSendTimeout();
+        clearError();
+        clearSuccess();
+        clearUnknown();
+        var stamp = formatSentTime(o.at);
+        setCollapsed(true, stamp ? 'Email sent · ' + stamp : 'Email sent.');
+        reopenButton.classList.add('hidden');
       }
 
       function renderSentView(payload, meta, stamp) {
@@ -1000,6 +1025,7 @@ export const COMPOSE_EMAIL_HTML = `
       }
 
       function handleSendRequest() {
+        if (sent) return;
         if (sending) return;
 
         var payload = readFormPayload();
@@ -1045,6 +1071,7 @@ export const COMPOSE_EMAIL_HTML = `
       });
 
       retryButton.addEventListener('click', function () {
+        if (sent) return;
         if (sending) return;
         var payload = readFormPayload();
         if (retryAction === 'draft') {
@@ -1067,9 +1094,8 @@ export const COMPOSE_EMAIL_HTML = `
 
       cancelButton.addEventListener('click', function () {
         if (sending) return;
-        // After a lost-reply timeout we don't know if the email sent, so don't
-        // claim "Nothing sent." on collapse — point the user to verify instead.
-        var collapseMessage = outcomeUnknown
+        // Hiding the notice does not resolve whether an earlier send went out.
+        var collapseMessage = sendMayHaveGone
           ? 'Collapsed. Check your Sent folder if you are not sure.'
           : 'Draft collapsed. Nothing sent.';
         clearError();
@@ -1080,6 +1106,7 @@ export const COMPOSE_EMAIL_HTML = `
 
       reopenButton.addEventListener('click', function () {
         setCollapsed(false);
+        if (!sent && sendMayHaveGone) showSendUnknown();
       });
 
       sentCollapseButton.addEventListener('click', function () {
@@ -1124,6 +1151,11 @@ export const COMPOSE_EMAIL_HTML = `
           return;
         }
 
+        if (data.method === 'mcp-app:card-outcome') {
+          if (event.source === window.parent) applyCardOutcome(data.params);
+          return;
+        }
+
         if (data.method === 'ui/notifications/tool-result') {
           // Always parse (so the migration-shim's malformed-envelope warning
           // still fires), but apply only the first successful prefill: a stray
@@ -1161,7 +1193,13 @@ export const COMPOSE_EMAIL_HTML = `
             // is already cleared, so this is what the Retry handler routes on.
             retryAction = 'draft';
           }
+          var blockedReason = data.error.data && data.error.data.reason;
+          var blockedBeforeSend = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy';
+          if (completedAction !== 'draft' && !blockedBeforeSend) {
+            showSendUnknown();
+          }
           showError(errorMessage);
+          if (outcomeUnknown) unknownBox.appendChild(retryButton);
           return;
         }
 
@@ -1184,6 +1222,8 @@ export const COMPOSE_EMAIL_HTML = `
         var stamp = formatSentTime();
         renderSentView(sentPayload, getSendMetaFromResult(data.result), stamp);
         sent = true;
+        sendMayHaveGone = false;
+        reopenButton.classList.remove('hidden');
         setCollapsed(true, stamp ? 'Email sent · ' + stamp : 'Email sent.');
       });
 
@@ -1195,7 +1235,9 @@ export const COMPOSE_EMAIL_HTML = `
       applyThemeFromHostContext();
       setCcVisible(false);
       setBccVisible(false);
-      setCollapsed(false);
+      var hostOutcome = (window.__MCP_HOST_CONTEXT__ || {}).cardOutcome;
+      if (hostOutcome) applyCardOutcome(hostOutcome);
+      else setCollapsed(false);
       postResize();
       postReady();
 
