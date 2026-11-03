@@ -1007,7 +1007,7 @@ export const COMPOSE_EMAIL_HTML = `
       // rather than truncating without telling the user.
       var GMAIL_COMPOSE_MAX_URL = 8000;
       var BLOCKED_SEND_MESSAGE =
-        "Not sent. You've blocked sending this email, so this card can't send it. You can finish and send it in Gmail instead.";
+        "You've blocked sending this email, so this card can't send it. You can finish and send it in Gmail instead.";
 
       function isUserDisabledSendError(message) {
         var m = String(message || '').toLowerCase();

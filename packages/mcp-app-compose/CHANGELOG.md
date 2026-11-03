@@ -7,10 +7,6 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-### Fixed
-
-- The blocked-send note on the Gmail draft card now says the email was not sent because the person blocked it and offers Gmail, instead of pointing to a Settings switch that may not exist.
-
 ### Added
 
 - Optional `draftToolName` config knob (email mode only): when set, the compose
@@ -37,6 +33,10 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   Slack direct-message notice reads "This will be sent as a direct message to
   the person you asked to contact.", and a code comment shipped inside the HTML
   now says "The host renders this iframe".
+
+### Fixed
+
+- The blocked-send note on the Gmail draft card now says the person blocked sending and offers Gmail, instead of pointing to a Settings switch that may not exist.
 
 ## [0.1.0] - 2026-07-06
 
