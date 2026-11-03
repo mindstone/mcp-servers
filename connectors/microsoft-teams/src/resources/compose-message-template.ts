@@ -423,11 +423,15 @@ export const COMPOSE_MESSAGE_HTML = `
       // already reviewed before clicking Send.
       var draftApplied = false;
       var pendingRequestId = null;
-      var pendingPayload = null;
+      var pendingSendPayload = null;
+      // Retain across the local timeout so even a late reply clears its payload.
+      var pendingSendRequestId = null;
       var sending = false;
+      var hostSending = false;
       var collapsed = false;
-      var outcomeUnknown = false;
+      var sendMayHaveGone = false;
       var sent = false;
+      var sendBlocked = false;
       var sendTimeoutId = null;
       // Just beyond the host-side tool-call timeout (60s) so a legitimately slow
       // send resolves to its real result first; this only fires when the reply
@@ -576,8 +580,11 @@ export const COMPOSE_MESSAGE_HTML = `
       }
 
       function setSending(nextSending) {
+        // Only a host outcome can release another copy's in-flight send.
+        nextSending = nextSending || hostSending;
         sending = nextSending;
-        sendButton.disabled = nextSending;
+        sendButton.disabled = nextSending || sendBlocked;
+        retryButton.disabled = nextSending;
         cancelButton.disabled = nextSending;
         toInput.disabled = nextSending;
         bodyInput.disabled = nextSending;
@@ -593,6 +600,7 @@ export const COMPOSE_MESSAGE_HTML = `
       }
 
       function showError(message) {
+        retryButton.classList.toggle('hidden', sendBlocked);
         errorText.textContent = message || 'Failed to send message.';
         errorBox.classList.remove('hidden');
         postResize();
@@ -617,10 +625,10 @@ export const COMPOSE_MESSAGE_HTML = `
       }
 
       function clearUnknown() {
-        outcomeUnknown = false;
         unknownTitle.textContent = '';
         unknownText.textContent = '';
         unknownBox.classList.add('hidden');
+        errorBox.appendChild(retryButton);
       }
 
       // No reply ever came back for the send (e.g. the host's response was lost
@@ -629,18 +637,19 @@ export const COMPOSE_MESSAGE_HTML = `
       // tell the user to verify before resending (the send is not idempotent, so
       // a blind retry could send a duplicate).
       function showSendUnknown() {
-        outcomeUnknown = true;
+        sendMayHaveGone = true;
         clearError();
         clearSuccess();
         unknownTitle.textContent = 'Not sure if this sent.';
         unknownText.textContent = "No confirmation came back in time. Check whether it sent before sending again, so it doesn't go out twice.";
         unknownBox.classList.remove('hidden');
+        if (!sendBlocked) unknownBox.appendChild(retryButton);
         postResize();
       }
 
       function handleSendTimeout() {
         sendTimeoutId = null;
-        if (!pendingRequestId) {
+        if (!pendingRequestId || sent) {
           return;
         }
         pendingRequestId = null;
@@ -668,8 +677,9 @@ export const COMPOSE_MESSAGE_HTML = `
       }
 
       function sendPayload(payload) {
-        pendingPayload = payload;
+        pendingSendPayload = payload;
         pendingRequestId = 'send-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+        pendingSendRequestId = pendingRequestId;
         setSending(true);
         clearError();
         clearSuccess();
@@ -683,6 +693,7 @@ export const COMPOSE_MESSAGE_HTML = `
             method: 'tools/call',
             params: {
               name: 'send_chat_message',
+              _meta: { 'mcp-app/cardOutcome': 'sent' },
               arguments: payload
             },
             id: pendingRequestId
@@ -788,14 +799,52 @@ export const COMPOSE_MESSAGE_HTML = `
         }
       }
 
-      function formatSentTime() {
+      function formatSentTime(at) {
+        if (typeof at !== 'number' || !Number.isFinite(at)) return '';
+        var date = new Date(at);
+        if (!Number.isFinite(date.getTime())) return '';
         try {
-          return new Date().toLocaleString(undefined, {
+          return date.toLocaleString(undefined, {
             month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
           });
         } catch (_) {
           return '';
         }
+      }
+
+      function applyCardOutcome(o) {
+        if (sent) return;
+        if (pendingRequestId && pendingRequestId === pendingSendRequestId &&
+            (!o || o.outcome === 'sending' || o.outcome === 'maybe-sent')) return;
+        if (hostSending) {
+          hostSending = false;
+          setSending(false);
+          if (sendMayHaveGone) showSendUnknown();
+        }
+        if (!o || typeof o !== 'object') return;
+        if (o.outcome === 'sending') {
+          hostSending = true;
+          setCollapsed(false);
+          setSending(true);
+          clearUnknown();
+          return;
+        }
+        if (o.outcome === 'maybe-sent') {
+          showSendUnknown();
+          setCollapsed(false);
+          return;
+        }
+        if (o.outcome !== 'sent' && o.outcome !== 'submitted') return;
+        sent = true;
+        sendMayHaveGone = false;
+        clearSendTimeout();
+        clearError();
+        clearSuccess();
+        clearUnknown();
+        var stamp = formatSentTime(o.at);
+        setCollapsed(true, stamp ? 'Message sent · ' + stamp : 'Message sent.');
+        if (pendingSendPayload) renderSentView(pendingSendPayload, null, stamp);
+        reopenButton.classList.toggle('hidden', !pendingSendPayload);
       }
 
       function renderSentView(payload, meta, stamp) {
@@ -806,8 +855,9 @@ export const COMPOSE_MESSAGE_HTML = `
       }
 
       function handleSendRequest() {
+        if (sent) return;
         if (sending) return;
-
+        if (sendBlocked) return;
         var payload = readFormPayload();
         var validationError = validatePayload(payload);
         if (validationError) {
@@ -840,7 +890,9 @@ export const COMPOSE_MESSAGE_HTML = `
       });
 
       retryButton.addEventListener('click', function () {
+        if (sent) return;
         if (sending) return;
+        if (sendBlocked) return;
         var payload = readFormPayload();
         var validationError = validatePayload(payload);
         if (validationError) {
@@ -852,9 +904,8 @@ export const COMPOSE_MESSAGE_HTML = `
 
       cancelButton.addEventListener('click', function () {
         if (sending) return;
-        // After a lost-reply timeout we don't know if the email sent, so don't
-        // claim "Nothing sent." on collapse — point the user to verify instead.
-        var collapseMessage = outcomeUnknown
+        // Hiding the notice does not resolve whether an earlier send went out.
+        var collapseMessage = sendMayHaveGone
           ? 'Collapsed. Check whether it sent if you are not sure.'
           : 'Draft collapsed. Nothing sent.';
         clearError();
@@ -865,6 +916,7 @@ export const COMPOSE_MESSAGE_HTML = `
 
       reopenButton.addEventListener('click', function () {
         setCollapsed(false);
+        if (!sent && sendMayHaveGone) showSendUnknown();
       });
 
       sentCollapseButton.addEventListener('click', function () {
@@ -873,9 +925,9 @@ export const COMPOSE_MESSAGE_HTML = `
 
       [toInput, bodyInput].forEach(function (element) {
         element.addEventListener('input', function () {
-          clearError();
+          if (!sendBlocked) clearError();
           clearSuccess();
-          clearUnknown();
+          if (!sendMayHaveGone) clearUnknown();
           postResize();
         });
       });
@@ -899,6 +951,11 @@ export const COMPOSE_MESSAGE_HTML = `
           return;
         }
 
+        if (data.method === 'mcp-app:card-outcome') {
+          if (event.source === window.parent) applyCardOutcome(data.params);
+          return;
+        }
+
         if (data.method === 'ui/notifications/tool-result') {
           // Always parse (so the migration-shim's malformed-envelope warning
           // still fires), but apply only the first successful prefill: a stray
@@ -912,7 +969,14 @@ export const COMPOSE_MESSAGE_HTML = `
           return;
         }
 
-        if (data.jsonrpc !== '2.0' || !pendingRequestId || data.id !== pendingRequestId) {
+        if (data.jsonrpc !== '2.0') return;
+        var completedSendPayload = null;
+        if (pendingSendRequestId && data.id === pendingSendRequestId) {
+          completedSendPayload = pendingSendPayload;
+          pendingSendPayload = null;
+          pendingSendRequestId = null;
+        }
+        if (!pendingRequestId || data.id !== pendingRequestId) {
           return;
         }
 
@@ -925,19 +989,31 @@ export const COMPOSE_MESSAGE_HTML = `
           var errorMessage = data.error && typeof data.error.message === 'string'
             ? data.error.message
             : 'Failed to send message.';
+          var blockedReason = data.error.data && data.error.data.reason;
+          var retryCannotChangeBlock = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy';
+          var blockedBeforeSend = retryCannotChangeBlock || blockedReason === 'not-dispatched';
+          if (retryCannotChangeBlock) {
+            sendBlocked = true;
+            sendButton.disabled = true;
+          }
+          if ((!blockedBeforeSend || sendMayHaveGone)) {
+            showSendUnknown();
+          }
           showError(errorMessage);
           return;
         }
 
         clearError();
         clearSuccess();
-        // Preserve what was sent instead of discarding the draft. pendingPayload
+        // Preserve what was sent instead of discarding the draft. completedSendPayload
         // is the exact payload we posted. We default to the collapsed summary, but
         // Reopen now restores a read-only view of the sent message.
-        var sentPayload = pendingPayload || readFormPayload();
-        var stamp = formatSentTime();
+        var sentPayload = completedSendPayload || readFormPayload();
+        var stamp = formatSentTime(Date.now());
         renderSentView(sentPayload, getSendMetaFromResult(data.result), stamp);
         sent = true;
+        sendMayHaveGone = false;
+        reopenButton.classList.remove('hidden');
         setCollapsed(true, stamp ? 'Message sent · ' + stamp : 'Message sent.');
       });
 
@@ -947,7 +1023,9 @@ export const COMPOSE_MESSAGE_HTML = `
       }
 
       applyThemeFromHostContext();
-      setCollapsed(false);
+      var hostOutcome = (window.__MCP_HOST_CONTEXT__ || {}).cardOutcome;
+      if (hostOutcome) applyCardOutcome(hostOutcome);
+      else setCollapsed(false);
       postResize();
       postReady();
 

@@ -28,8 +28,9 @@ export interface ComposeFieldSpec {
 export type ComposeDeepLink = { kind: 'gmail' } | { kind: 'none' };
 
 /**
- * Escape hatch shown when the send tool is blocked (super-mcp TOOL_BLOCKED /
- * -33008 — user-disabled, admin-disabled, or security-policy). A closed
+ * Escape hatch shown only when the host's closed `error.data.reason` is
+ * `user-disabled`. Other pre-execution reasons (`admin-disabled`,
+ * `security-policy`, `not-dispatched`) never open the escape hatch. A closed
  * discriminator, not a config URL template: like {@link ComposeDeepLink}, the
  * target and URL construction stay code-reviewed in this package.
  * `'gmail-compose'` offers an "Open in Gmail" button that opens a prefilled

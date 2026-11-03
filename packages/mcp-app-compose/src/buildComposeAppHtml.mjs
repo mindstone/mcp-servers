@@ -824,10 +824,13 @@ ${gmail ? `        <button id="openGmailButton" type="button" class="button butt
       // already reviewed before clicking Send.
       var draftApplied = false;
       var pendingRequestId = null;
-      var pendingPayload = null;
+      var pendingSendPayload = null;
+      // Retain across the local timeout so even a late reply clears its payload.
+      var pendingSendRequestId = null;
       var sending = false;
+      var hostSending = false;
       var collapsed = false;
-      var outcomeUnknown = false;
+      var sendMayHaveGone = false;
       var sent = false;
 ${m.extraStateVars}${hasDraft ? `      // Which action the in-flight request belongs to ('send' | 'draft').
       // Captured before clearing on reply/timeout so the response handler can
@@ -835,8 +838,8 @@ ${m.extraStateVars}${hasDraft ? `      // Which action the in-flight request bel
       // later Retry click still knows which tool to re-invoke.
       var pendingAction = null;
       var retryAction = null;
-` : ''}${blockedSend ? `      var sendBlocked = false;
-` : ''}${gmail ? `      var gmailUrl = null;
+` : ''}      var sendBlocked = false;
+${gmail ? `      var gmailUrl = null;
 ` : ''}      var sendTimeoutId = null;
       // Just beyond the host-side tool-call timeout (60s) so a legitimately slow
       // send resolves to its real result first; this only fires when the reply
@@ -1002,8 +1005,11 @@ ${blockedSend ? `      var blockedBox = document.getElementById('blockedBox');
       }
 
       function setSending(nextSending) {
+        // Only a host outcome can release another copy's in-flight send.
+        nextSending = nextSending || hostSending;
         sending = nextSending;
-        sendButton.disabled = nextSending${blockedSend ? ' || sendBlocked' : ''};
+        sendButton.disabled = nextSending || sendBlocked;
+        retryButton.disabled = nextSending;
 ${hasDraft ? '        draftButton.disabled = nextSending;\n' : ''}        cancelButton.disabled = nextSending;
         toInput.disabled = nextSending;
 ${f.cc ? `        ccInput.disabled = nextSending;
@@ -1015,14 +1021,11 @@ ${f.cc ? `        ccInput.disabled = nextSending;
         postResize();
       }
 
-${hasDraft ? `      // Mirror of setSending for the Save-draft action. One request is in
-      // flight at a time (both paths share pendingRequestId and set the same
-      // \`sending\` flag), so the two busy states can never overlap; every
-      // control locks either way and only the active button shows a spinner
-      // and aria-busy.
+${hasDraft ? `      // One local request is in flight at a time, but a send in another
+      // copy can overlap this draft save and must keep the controls locked.
       function setSavingDraft(nextSaving) {
         sending = nextSaving;
-        sendButton.disabled = nextSaving${blockedSend ? ' || sendBlocked' : ''};
+        sendButton.disabled = nextSaving || sendBlocked;
         draftButton.disabled = nextSaving;
         cancelButton.disabled = nextSaving;
         toInput.disabled = nextSaving;
@@ -1034,6 +1037,7 @@ ${f.cc ? `        ccInput.disabled = nextSaving;\n` : ''}${f.bcc ? `        bccI
         draftSpinner.classList.toggle('hidden', !nextSaving);
         draftLabel.textContent = nextSaving ? 'Saving…' : 'Save draft';
         draftButton.setAttribute('aria-busy', nextSaving ? 'true' : 'false');
+        if (hostSending) setSending(true);
         postResize();
       }
 
@@ -1043,6 +1047,7 @@ ${f.cc ? `        ccInput.disabled = nextSaving;\n` : ''}${f.bcc ? `        bccI
       }
 
       function showError(message) {
+        retryButton.classList.toggle('hidden', sendBlocked${hasDraft ? " && retryAction !== 'draft'" : ''});
         errorText.textContent = message || ${quoteJsString(m.sendFailedText)};
         errorBox.classList.remove('hidden');
         postResize();
@@ -1067,10 +1072,10 @@ ${f.cc ? `        ccInput.disabled = nextSaving;\n` : ''}${f.bcc ? `        bccI
       }
 
       function clearUnknown() {
-        outcomeUnknown = false;
         unknownTitle.textContent = '';
         unknownText.textContent = '';
         unknownBox.classList.add('hidden');
+        errorBox.appendChild(retryButton);
       }
 
       // No reply ever came back for the send (e.g. the host's response was lost
@@ -1079,18 +1084,19 @@ ${f.cc ? `        ccInput.disabled = nextSaving;\n` : ''}${f.bcc ? `        bccI
       // tell the user to verify before resending (the send is not idempotent, so
       // a blind retry could send a duplicate).
       function showSendUnknown() {
-        outcomeUnknown = true;
+        sendMayHaveGone = true;
         clearError();
         clearSuccess();
         unknownTitle.textContent = 'Not sure if this sent.';
         unknownText.textContent = ${m.unknownDetailTextLiteral};
         unknownBox.classList.remove('hidden');
+        if (!sendBlocked) unknownBox.appendChild(retryButton);
         postResize();
       }
 
       function handleSendTimeout() {
         sendTimeoutId = null;
-        if (!pendingRequestId) {
+        if (!pendingRequestId || sent) {
           return;
         }
         pendingRequestId = null;
@@ -1109,7 +1115,6 @@ ${hasDraft ? `      // Same lost-reply honesty as a send, lower stakes: a blind 
       // could create a duplicate draft, so we say we're not sure and point at
       // the Drafts folder instead of offering Retry.
       function showDraftSaveUnknown() {
-        outcomeUnknown = true;
         clearError();
         clearSuccess();
         unknownTitle.textContent = 'Not sure if the draft was saved.';
@@ -1154,8 +1159,9 @@ ${hasDraft ? `      // Same provider-compatible minimum as sending (the draft to
       }
 
 ` : ''}      function sendPayload(payload) {
-        pendingPayload = payload;
+        pendingSendPayload = payload;
         pendingRequestId = 'send-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+        pendingSendRequestId = pendingRequestId;
 ${hasDraft ? `        pendingAction = 'send';
         retryAction = null;
 ` : ''}        setSending(true);
@@ -1171,6 +1177,7 @@ ${hasDraft ? `        pendingAction = 'send';
             method: 'tools/call',
             params: {
               name: ${quoteJsString(config.sendToolName)},
+              _meta: { 'mcp-app/cardOutcome': 'sent' },
               arguments: payload
             },
             id: pendingRequestId
@@ -1180,7 +1187,6 @@ ${hasDraft ? `        pendingAction = 'send';
       }
 
 ${hasDraft ? `      function saveDraftPayload(payload) {
-        pendingPayload = payload;
         pendingRequestId = 'draft-' + Date.now() + '-' + Math.random().toString(16).slice(2);
         pendingAction = 'draft';
         retryAction = null;
@@ -1297,13 +1303,13 @@ ${m.applyDraftDataBody}      }
       }
 
 ${blockedSend ? `      // ---- Blocked-send Gmail escape hatch ----
-      // Shown ONLY when the user's own choice blocks sending (structured
-      // user-disabled reason, or legacy -33008 + "disabled by user preference"). We
+      // Shown ONLY when the user's own choice blocks sending (the host's
+      // closed 'user-disabled' reason). We
       // never call the disabled tool; instead we open a prefilled Gmail compose
       // window so the user finishes the send in Gmail (no copy-paste). This is
       // deliberately narrow: admin-disabled ("disabled by your organization…")
-      // and generic security-policy blocks fall through to the normal retryable
-      // error, because offering a Gmail bypass there would route around a control
+      // and generic security-policy blocks show the reason without Retry,
+      // because offering a Gmail bypass there would route around a control
       // the user did not set.
       //
       // Gmail compose URLs that get too long can silently fail to open, so we cap
@@ -1312,14 +1318,6 @@ ${blockedSend ? `      // ---- Blocked-send Gmail escape hatch ----
       var GMAIL_COMPOSE_MAX_URL = 8000;
       var BLOCKED_SEND_MESSAGE =
         "You've blocked sending this email, so this card can't send it. You can finish and send it in Gmail instead.";
-
-      function isUserDisabledSendError(message) {
-        var m = String(message || '').toLowerCase();
-        // Anchor the code so it can't match inside a longer number (-330080),
-        // and require the user-preference phrase so admin-disabled / generic
-        // security blocks fall through to the ordinary retryable error.
-        return /-33008\\b/.test(m) && m.indexOf('disabled by user preference') !== -1;
-      }
 
       // Base URL + path are constant (code-reviewed here, never config-provided);
       // only the field VALUES vary and go through URLSearchParams, so query
@@ -1348,10 +1346,10 @@ ${f.cc ? `        var cc = normalizeAddressList(payload.cc).join(',');
       }
 
       function showBlockedSend() {
-        sendBlocked = true;
         clearError();
         clearSuccess();
         clearUnknown();
+        if (sendMayHaveGone) showSendUnknown();
         sendButton.disabled = true;
         sendButton.title =
           "You've blocked sending this email. Open it in Gmail to send it there.";
@@ -1404,14 +1402,52 @@ ${f.cc ? `        var cc = normalizeAddressList(payload.cc).join(',');
         return 'https://mail.google.com/mail/u/' + userPart + '/#all/' + encodeURIComponent(id);
       }
 
-` : ''}      function formatSentTime() {
+` : ''}      function formatSentTime(at) {
+        if (typeof at !== 'number' || !Number.isFinite(at)) return '';
+        var date = new Date(at);
+        if (!Number.isFinite(date.getTime())) return '';
         try {
-          return new Date().toLocaleString(undefined, {
+          return date.toLocaleString(undefined, {
             month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
           });
         } catch (_) {
           return '';
         }
+      }
+
+      function applyCardOutcome(o) {
+        if (sent) return;
+        if (pendingRequestId && pendingRequestId === pendingSendRequestId &&
+            (!o || o.outcome === 'sending' || o.outcome === 'maybe-sent')) return;
+        if (hostSending) {
+          hostSending = false;
+          setSending(false);
+          if (sendMayHaveGone) showSendUnknown();
+        }
+        if (!o || typeof o !== 'object') return;
+        if (o.outcome === 'sending') {
+          hostSending = true;
+          setCollapsed(false);
+          setSending(true);
+          clearUnknown();
+          return;
+        }
+        if (o.outcome === 'maybe-sent') {
+          showSendUnknown();
+          setCollapsed(false);
+          return;
+        }
+        if (o.outcome !== 'sent' && o.outcome !== 'submitted') return;
+        sent = true;
+        sendMayHaveGone = false;
+        clearSendTimeout();
+        clearError();
+        clearSuccess();
+        clearUnknown();
+        var stamp = formatSentTime(o.at);
+        setCollapsed(true, stamp ? ${quoteJsString(m.sentCollapseStamped)} + stamp : ${quoteJsString(m.sentCollapseDefault)});
+        if (pendingSendPayload) renderSentView(pendingSendPayload, null, stamp);
+        reopenButton.classList.toggle('hidden', !pendingSendPayload);
       }
 
       function renderSentView(payload, meta, stamp) {
@@ -1420,13 +1456,9 @@ ${f.cc ? `        var cc = normalizeAddressList(payload.cc).join(',');
 ${m.renderSentViewBody}      }
 
       function handleSendRequest() {
+        if (sent) return;
         if (sending) return;
-${blockedSend ? `        // Once the user's own send preference has blocked this tool, never
-        // re-invoke it — the escape hatch is the only path out. The Send button
-        // is already disabled, but this also fends off a future host that grants
-        // allow-forms (a submit could otherwise re-fire the disabled tool).
         if (sendBlocked) return;
-` : ''}
         var payload = readFormPayload();
         var validationError = validatePayload(payload);
         if (validationError) {
@@ -1470,7 +1502,9 @@ ${hasDraft ? `      draftButton.addEventListener('click', function () {
       });
 
       retryButton.addEventListener('click', function () {
+        if (sent) return;
         if (sending) return;
+        if (sendBlocked${hasDraft ? " && retryAction !== 'draft'" : ''}) return;
         var payload = readFormPayload();
 ${hasDraft ? `        if (retryAction === 'draft') {
           var draftValidationError = validateDraftPayload(payload);
@@ -1492,9 +1526,8 @@ ${hasDraft ? `        if (retryAction === 'draft') {
 
       cancelButton.addEventListener('click', function () {
         if (sending) return;
-        // After a lost-reply timeout we don't know if the email sent, so don't
-        // claim "Nothing sent." on collapse — point the user to verify instead.
-        var collapseMessage = outcomeUnknown
+        // Hiding the notice does not resolve whether an earlier send went out.
+        var collapseMessage = sendMayHaveGone
           ? ${quoteJsString(m.cancelCollapseUnknownText)}
           : 'Draft collapsed. Nothing sent.';
         clearError();
@@ -1505,6 +1538,7 @@ ${hasDraft ? `        if (retryAction === 'draft') {
 
       reopenButton.addEventListener('click', function () {
         setCollapsed(false);
+        if (!sent && sendMayHaveGone) showSendUnknown();
       });
 
       sentCollapseButton.addEventListener('click', function () {
@@ -1535,9 +1569,9 @@ ${gmail ? `      // The iframe sandbox is "allow-scripts" only (no allow-popups 
 
 ` : ''}      ${m.inputListenerElements}.forEach(function (element) {
         element.addEventListener('input', function () {
-          clearError();
+          if (!sendBlocked) clearError();
           clearSuccess();
-          clearUnknown();
+          if (!sendMayHaveGone) clearUnknown();
           postResize();
         });
       });
@@ -1561,6 +1595,11 @@ ${gmail ? `      // The iframe sandbox is "allow-scripts" only (no allow-popups 
           return;
         }
 
+        if (data.method === 'mcp-app:card-outcome') {
+          if (event.source === window.parent) applyCardOutcome(data.params);
+          return;
+        }
+
         if (data.method === 'ui/notifications/tool-result') {
           // Always parse (so the migration-shim's malformed-envelope warning
           // still fires), but apply only the first successful prefill: a stray
@@ -1574,7 +1613,14 @@ ${gmail ? `      // The iframe sandbox is "allow-scripts" only (no allow-popups 
           return;
         }
 
-        if (data.jsonrpc !== '2.0' || !pendingRequestId || data.id !== pendingRequestId) {
+        if (data.jsonrpc !== '2.0') return;
+        var completedSendPayload = null;
+        if (pendingSendRequestId && data.id === pendingSendRequestId) {
+          completedSendPayload = pendingSendPayload;
+          pendingSendPayload = null;
+          pendingSendRequestId = null;
+        }
+        if (!pendingRequestId || data.id !== pendingRequestId) {
           return;
         }
 
@@ -1598,16 +1644,20 @@ ${hasDraft ? `          if (completedAction === 'draft') {
             // is already cleared, so this is what the Retry handler routes on.
             retryAction = 'draft';
           }
-` : ''}${blockedSend ? `          // Prefer the host-vetted structured reason (a closed enum the host
-          // derives from the tool-block error data) and fall back to
-          // text-matching the flattened message for hosts that don't forward it
-          // yet. Only 'user-disabled' opens the Gmail escape hatch —
-          // admin-disabled and security-policy blocks stay ordinary errors (see
-          // the detector comment above for why).
-${hasDraft ? `          // Send-failure only: a blocked DRAFT tool must never surface the
-          // "sending is turned off" copy or the Open-in-Gmail bypass.
-          ` : ''}var blockedReason = data.error.data && data.error.data.reason;
-          if (${hasDraft ? 'completedAction !== \'draft\' && ' : ''}(blockedReason === 'user-disabled' || isUserDisabledSendError(errorMessage))) {
+` : ''}          var blockedReason = data.error.data && data.error.data.reason;
+          var retryCannotChangeBlock = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy';
+          var blockedBeforeSend = retryCannotChangeBlock || blockedReason === 'not-dispatched';
+          if (${hasDraft ? "completedAction !== 'draft' && " : ''}retryCannotChangeBlock) {
+            sendBlocked = true;
+            sendButton.disabled = true;
+          }
+          if (${hasDraft ? "completedAction !== 'draft' && " : ''}(!blockedBeforeSend || sendMayHaveGone)) {
+            showSendUnknown();
+          }
+${blockedSend ? `          // Only the host's closed user-disabled reason permits the Gmail
+          // escape hatch; message text cannot establish why a call failed.
+${hasDraft ? `          // Draft failures must never open the send-only escape hatch.
+` : ''}          if (${hasDraft ? 'completedAction !== \'draft\' && ' : ''}blockedReason === 'user-disabled') {
             showBlockedSend();
             return;
           }
@@ -1622,22 +1672,24 @@ ${hasDraft ? `        if (completedAction === 'draft') {
           // Collapse to a stamped confirmation and retire the form — Reopen
           // would resurrect an editable copy whose next Save/Send silently
           // diverges from (or duplicates) the saved draft.
-          var draftStamp = formatSentTime();
+          var draftStamp = formatSentTime(Date.now());
           setCollapsed(true, draftStamp ? 'Draft saved · ' + draftStamp : 'Draft saved.');
           reopenButton.classList.add('hidden');
           return;
         }
 ` : ''}${gmail ? `        // Preserve what was sent (and how to reach it) instead of discarding the
-        // draft. pendingPayload is the exact payload we posted; the reply carries
+        // draft. completedSendPayload is the exact payload we posted; the reply carries
         // the Gmail message/thread ids. We default to the collapsed summary, but
         // Reopen now restores a read-only view of the sent message.
-` : `        // Preserve what was sent instead of discarding the draft. pendingPayload
+` : `        // Preserve what was sent instead of discarding the draft. completedSendPayload
         // is the exact payload we posted. We default to the collapsed summary, but
         // Reopen now restores a read-only view of the sent message.
-`}        var sentPayload = pendingPayload || readFormPayload();
-        var stamp = formatSentTime();
+`}        var sentPayload = completedSendPayload || readFormPayload();
+        var stamp = formatSentTime(Date.now());
         renderSentView(sentPayload, getSendMetaFromResult(data.result), stamp);
         sent = true;
+        sendMayHaveGone = false;
+        reopenButton.classList.remove('hidden');
         setCollapsed(true, stamp ? ${quoteJsString(m.sentCollapseStamped)} + stamp : ${quoteJsString(m.sentCollapseDefault)});
       });
 
@@ -1649,7 +1701,9 @@ ${hasDraft ? `        if (completedAction === 'draft') {
       applyThemeFromHostContext();
 ${f.cc ? `      setCcVisible(false);
 ` : ''}${f.bcc ? `      setBccVisible(false);
-` : ''}      setCollapsed(false);
+` : ''}      var hostOutcome = (window.__MCP_HOST_CONTEXT__ || {}).cardOutcome;
+      if (hostOutcome) applyCardOutcome(hostOutcome);
+      else setCollapsed(false);
       postResize();
       postReady();
 
