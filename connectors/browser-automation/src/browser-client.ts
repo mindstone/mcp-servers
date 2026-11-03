@@ -18,6 +18,19 @@ export interface ExecOptions {
 
 const MAX_BUFFER = 10 * 1024 * 1024; // 10MB for large snapshots
 
+// Whether this process has run an agent-browser command, so it may have started
+// (or picked up) the background agent-browser daemon. See closeBrowserOnStop.
+let ranBrowserCommand = false;
+// Set once the host is stopping this server: no new browser commands start.
+let stopping = false;
+// Browser commands still running, so a stop can close again after a launch
+// that finishes after the first close.
+const commandsInFlight = new Set<Promise<ExecResult>>();
+
+// A host gives a stopping server only a short grace before killing it;
+// `agent-browser close` normally takes well under a second.
+const STOP_CLOSE_TIMEOUT_MS = 5_000;
+
 let bundledEntry: string | null = null;
 
 /**
@@ -121,12 +134,31 @@ function cliFailureMessage(
  * runs the connector's own agent-browser dependency with this Node. Both use
  * execFile with no shell, so no argument is ever interpreted by a shell.
  */
-export async function execAgentBrowser(
+export function execAgentBrowser(
+  args: string[],
+  options?: ExecOptions,
+): Promise<ExecResult> {
+  if (stopping) {
+    return Promise.reject(new ConnectorError(
+      'The browser is closing because the app is stopping this connector',
+      'STOPPING',
+      'Try again once the app is running again.',
+    ));
+  }
+  const command = runAgentBrowser(args, options);
+  commandsInFlight.add(command);
+  const forget = () => commandsInFlight.delete(command);
+  command.then(forget, forget);
+  return command;
+}
+
+async function runAgentBrowser(
   args: string[],
   options?: ExecOptions,
 ): Promise<ExecResult> {
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const env = buildEnv();
+  ranBrowserCommand = true;
 
   // Inject --headed AFTER the command (positional index 1). The CLI parses
   // the first positional as the command name, so flags must follow it.
@@ -192,4 +224,31 @@ function classifyFailure(error: unknown, command: string, timeoutMs: number): Co
     'CLI_ERROR',
     'The agent-browser CLI command failed. Check that agent-browser is installed and the browser session is active.',
   );
+}
+
+/**
+ * Close the browser and its agent-browser daemon when this server stops.
+ *
+ * The daemon detaches from this process and, for a visible browser, never
+ * stops by itself, so without this it outlives the host and a later run reuses
+ * it with stale settings. Closing saves the session, so sign-ins persist. Does
+ * nothing if this process never ran a browser command, so a server started only
+ * to list its tools never touches a browser it did not use. Once called, new
+ * browser commands are refused.
+ */
+export async function closeBrowserOnStop(): Promise<void> {
+  stopping = true;
+  if (!ranBrowserCommand) return;
+  const running = [...commandsInFlight];
+  try {
+    await runAgentBrowser(['close'], { timeoutMs: STOP_CLOSE_TIMEOUT_MS });
+  } finally {
+    // A command that was still running (say, opening a page) may have started
+    // the browser again after that close, or the close failed while it ran:
+    // close once more when it has finished.
+    if (running.length > 0) {
+      await Promise.allSettled(running);
+      await runAgentBrowser(['close'], { timeoutMs: STOP_CLOSE_TIMEOUT_MS });
+    }
+  }
 }

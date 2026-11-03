@@ -11,6 +11,14 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+
+- The browser and its `agent-browser` background process no longer keep running after the host app quits. A later run no longer picks up that old browser with stale settings, which could keep bringing the window in front of other apps. The server now closes the browser when the host stops it, saving the session first.
+
+### Added
+
+- The server declares the experimental capability `super-mcp/keep-alive`, so a host that stops idle servers keeps it (and its open browser) running until the host itself stops.
+
 ## [0.2.4] - 2026-10-28
 
 ### Changed
