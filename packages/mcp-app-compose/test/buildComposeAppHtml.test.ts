@@ -999,6 +999,7 @@ describe('buildComposeAppHtml — blocked-send detector and Gmail URL (happy-dom
     expect(sendButton.disabled).toBe(true);
     const blockedText = window.document.getElementById('blockedText') as unknown as HTMLElement;
     expect(blockedText.textContent).not.toMatch(/not sent/i);
+    expect(isHidden(window, 'unknownBox')).toBe(false);
   });
 
   it('shows the escape hatch (not a retryable error) when the user disabled the send tool', () => {
@@ -1046,8 +1047,7 @@ describe('buildComposeAppHtml — blocked-send detector and Gmail URL (happy-dom
   });
 
   it("shows the escape hatch on structured reason 'user-disabled' even when the message would not text-match", () => {
-    // A newer host forwards the closed discriminator but flattens the message
-    // to something the legacy detector cannot recognise.
+    // Message text plays no part in classification; only the structured reason counts.
     const window = sendThenReplyError(blockedHtml, 'Tool call failed', undefined, {
       reason: 'user-disabled',
     });

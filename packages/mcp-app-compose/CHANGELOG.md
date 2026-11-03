@@ -15,6 +15,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Unconfirmed sends retain the reminder to check whether the message was sent through edits, Cancel and Reopen. Calls blocked before sending, including `not-dispatched` failures, still say "Nothing sent." A later block does not erase an earlier uncertain send.
 - Retry stays unavailable after your own setting blocks sending. Block classification uses only the host's closed `error.data.reason`, never message text.
 - After a draft-save timeout, Cancel says "Nothing sent" because saving a draft does not send it; an earlier uncertain send still keeps its check-before-resending wording.
+- The blocked-send note on the Gmail draft card now says the person blocked sending and offers Gmail, instead of pointing to a Settings switch that may not exist.
 
 ### Added
 
@@ -37,10 +38,6 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   Slack direct-message notice reads "This will be sent as a direct message to
   the person you asked to contact.", and a code comment shipped inside the HTML
   now says "The host renders this iframe".
-
-### Fixed
-
-- The blocked-send note on the Gmail draft card now says the person blocked sending and offers Gmail, instead of pointing to a Settings switch that may not exist.
 
 ## [0.1.0] - 2026-07-06
 
