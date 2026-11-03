@@ -1,19 +1,20 @@
 /**
- * Tests for manifest generation + auto-install into Office WEF folders.
+ * Tests for manifest generation + macOS WEF install / Windows registration.
  *
  * These tests use the `overrides` parameter on `installManifestsToWefFolders`
- * to redirect the target paths to temp directories, so they never touch real
- * Office wef folders on the developer's machine.
+ * to redirect macOS paths to temp directories and stub Windows registry commands,
+ * so they never touch real Office installations.
  */
 
 import * as fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_SIDECAR_PORT,
   installManifestsToWefFolders,
   SIDECAR_PORT_FALLBACKS,
+  unregisterWindowsAddin,
   writeManifest,
 } from '../src/sidecar/manifest.js';
 
@@ -26,6 +27,7 @@ async function makeTempDir(prefix: string): Promise<string> {
 }
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   while (cleanupDirs.length > 0) {
     const dir = cleanupDirs.pop();
     if (dir) {
@@ -122,41 +124,138 @@ describe('installManifestsToWefFolders (macOS)', () => {
   });
 });
 
-describe('installManifestsToWefFolders (Windows)', () => {
-  it('installs the combined multi-host manifest into the shared wef folder', async () => {
-    const stateDir = await makeTempDir('office-manifest-state-');
-    const wefDir = await makeTempDir('office-manifest-wef-win-');
+const registryKey = String.raw`HKCU\Software\Microsoft\Office\16.0\WEF\Developer`;
+const registryCommand = expect.stringMatching(/reg\.exe$/);
+const queryError = () => Object.assign(
+  new Error('reg failed'),
+  { code: 1, stderr: 'Registry query failed.' },
+);
 
-    await writeManifest(52100, stateDir);
+describe('installManifestsToWefFolders (Windows)', () => {
+  it('registers the combined manifest, passing a path with spaces as one argument, without copying to Wef', async () => {
+    const stateDir = await makeTempDir('office manifest state ');
+    const localAppData = await makeTempDir('office-localappdata-');
+    vi.stubEnv('LOCALAPPDATA', localAppData);
+    const manifestPath = await writeManifest(52100, stateDir);
+    const registryRunner = vi.fn()
+      .mockRejectedValueOnce(queryError())
+      .mockResolvedValueOnce({ stdout: '' });
 
     const results = await installManifestsToWefFolders(stateDir, {
-      platform: 'win32',
-      winPath: wefDir,
+      platform: 'win32', registryRunner,
     });
 
-    expect(results).toHaveLength(1);
-    expect(results[0]?.status).toBe('installed');
-    expect(results[0]?.app).toBe('all');
-
-    const content = await fs.readFile(path.join(wefDir, 'manifest.xml'), 'utf8');
-    expect(content).toContain('https://localhost:52100');
-    // Combined manifest has all three hosts listed.
-    expect(content).toContain('Name="Document"');
-    expect(content).toContain('Name="Workbook"');
-    expect(content).toContain('Name="Presentation"');
+    expect(registryRunner.mock.calls).toEqual([
+      [registryCommand, ['query', registryKey, '/v', manifestPath]],
+      [registryCommand, ['add', registryKey, '/v', manifestPath, '/t', 'REG_SZ', '/d', manifestPath, '/f']],
+    ]);
+    expect(results).toEqual([{ app: 'all', path: manifestPath, status: 'installed' }]);
+    expect(await fs.readdir(localAppData)).toEqual([]);
   });
 
-  it('reports "skipped" when LOCALAPPDATA is unavailable on Windows', async () => {
+  it('reports unchanged for an identical REG_SZ value without writing again', async () => {
     const stateDir = await makeTempDir('office-manifest-state-');
-    await writeManifest(52100, stateDir);
-
-    const results = await installManifestsToWefFolders(stateDir, {
-      platform: 'win32',
-      winPath: null,
+    const manifestPath = await writeManifest(52100, stateDir);
+    const registryRunner = vi.fn().mockResolvedValue({
+      stdout: `\r\n${registryKey}\r\n    ${manifestPath}    REG_SZ    ${manifestPath}\r\n`,
     });
+    const results = await installManifestsToWefFolders(stateDir, { platform: 'win32', registryRunner });
+    expect(results).toEqual([{ app: 'all', path: manifestPath, status: 'unchanged' }]);
+    expect(registryRunner).toHaveBeenCalledExactlyOnceWith(registryCommand, ['query', registryKey, '/v', manifestPath]);
+  });
 
-    expect(results).toHaveLength(1);
-    expect(results[0]?.status).toBe('skipped');
+  it('repairs a value whose data differs', async () => {
+    const stateDir = await makeTempDir('office-manifest-state-');
+    const manifestPath = await writeManifest(52100, stateDir);
+    const registryRunner = vi.fn()
+      .mockResolvedValueOnce({ stdout: `    ${manifestPath}    REG_SZ    C:\\old\\manifest.xml` })
+      .mockResolvedValueOnce({ stdout: '' });
+    const results = await installManifestsToWefFolders(stateDir, { platform: 'win32', registryRunner });
+    expect(results).toEqual([{ app: 'all', path: manifestPath, status: 'installed' }]);
+    expect(registryRunner).toHaveBeenLastCalledWith(registryCommand, [
+      'add', registryKey, '/v', manifestPath, '/t', 'REG_SZ', '/d', manifestPath, '/f',
+    ]);
+  });
+
+  it('registers the manifest after a localised query failure', async () => {
+    const stateDir = await makeTempDir('office-manifest-state-');
+    const manifestPath = await writeManifest(52100, stateDir);
+    const registryRunner = vi.fn()
+      .mockRejectedValueOnce(Object.assign(new Error('reg failed'), {
+        code: 1, stderr: 'FEHLER: Der angegebene Registrierungsschlüssel wurde nicht gefunden.',
+      }))
+      .mockResolvedValueOnce({ stdout: '' });
+
+    const results = await installManifestsToWefFolders(stateDir, { platform: 'win32', registryRunner });
+    expect(results).toEqual([{ app: 'all', path: manifestPath, status: 'installed' }]);
+    expect(registryRunner).toHaveBeenCalledTimes(2);
+    expect(registryRunner).toHaveBeenLastCalledWith(registryCommand, [
+      'add', registryKey, '/v', manifestPath, '/t', 'REG_SZ', '/d', manifestPath, '/f',
+    ]);
+  });
+
+  it('reports failed when both query and add reject', async () => {
+    const stateDir = await makeTempDir('office-manifest-state-');
+    const manifestPath = await writeManifest(52100, stateDir);
+    const registryRunner = vi.fn().mockRejectedValue(Object.assign(new Error('spawn reg ENOENT'), { code: 'ENOENT' }));
+    const results = await installManifestsToWefFolders(stateDir, { platform: 'win32', registryRunner });
+    expect(results).toEqual([{ app: 'all', path: manifestPath, status: 'failed', error: 'spawn reg ENOENT' }]);
+    expect(registryRunner).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports failed when adding the registry value is denied', async () => {
+    const stateDir = await makeTempDir('office-manifest-state-');
+    const manifestPath = await writeManifest(52100, stateDir);
+    const registryRunner = vi.fn()
+      .mockRejectedValueOnce(queryError())
+      .mockRejectedValueOnce(new Error('Access is denied.'));
+    const results = await installManifestsToWefFolders(stateDir, { platform: 'win32', registryRunner });
+    expect(results).toEqual([{ app: 'all', path: manifestPath, status: 'failed', error: 'Access is denied.' }]);
+    expect(registryRunner).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('unregisterWindowsAddin', () => {
+  const manifestPath = String.raw`C:\Users\Test User\Rebel 日本語\manifest.xml`;
+
+  it('deletes only the value named by the full manifest path', async () => {
+    const runner = vi.fn().mockResolvedValue({ stdout: '' });
+    expect(await unregisterWindowsAddin(manifestPath, runner)).toEqual({
+      app: 'all', path: manifestPath, status: 'removed',
+    });
+    expect(runner.mock.calls).toEqual([
+      [registryCommand, ['query', registryKey, '/v', manifestPath]],
+      [registryCommand, ['delete', registryKey, '/v', manifestPath, '/f']],
+    ]);
+  });
+
+  it('reports not_installed when the registry value is missing', async () => {
+    const runner = vi.fn().mockRejectedValue(queryError());
+    expect(await unregisterWindowsAddin(manifestPath, runner)).toEqual({
+      app: 'all', path: manifestPath, status: 'not_installed',
+    });
+    expect(runner).toHaveBeenCalledExactlyOnceWith(registryCommand, ['query', registryKey, '/v', manifestPath]);
+  });
+
+  it('reports failed when reg.exe cannot be spawned', async () => {
+    const runner = vi.fn().mockRejectedValue(Object.assign(new Error('spawn reg ENOENT'), { code: 'ENOENT' }));
+    expect(await unregisterWindowsAddin(manifestPath, runner)).toEqual({
+      app: 'all', path: manifestPath, status: 'failed', error: 'spawn reg ENOENT',
+    });
+    expect(runner).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports failed when the query succeeds but deletion is denied', async () => {
+    const runner = vi.fn()
+      .mockResolvedValueOnce({ stdout: '' })
+      .mockRejectedValueOnce(Object.assign(new Error('Access is denied.'), { code: 1 }));
+    expect(await unregisterWindowsAddin(manifestPath, runner)).toEqual({
+      app: 'all', path: manifestPath, status: 'failed', error: 'Access is denied.',
+    });
+    expect(runner.mock.calls).toEqual([
+      [registryCommand, ['query', registryKey, '/v', manifestPath]],
+      [registryCommand, ['delete', registryKey, '/v', manifestPath, '/f']],
+    ]);
   });
 });
 
