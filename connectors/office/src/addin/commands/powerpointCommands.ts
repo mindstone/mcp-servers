@@ -716,9 +716,10 @@ async function getSpeakerNotes(params: Record<string, unknown>): Promise<Command
         try {
           textFrame.load('textRange/text');
           await context.sync();
-        } catch {
-          // Notes pages also contain shapes without text, such as the slide image.
-          continue;
+        } catch (error) {
+          // Loading text on a notes-page shape without a text frame raises InvalidArgument.
+          if (error !== null && typeof error === 'object' && 'code' in error && error.code === 'InvalidArgument') continue;
+          throw error;
         }
         if (textFrame.textRange.text.trim().length > 0) {
           notesText += (notesText ? '\n' : '') + textFrame.textRange.text;

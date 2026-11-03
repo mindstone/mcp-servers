@@ -207,13 +207,15 @@ function insertMarkdownParagraph(
   parsed: MarkdownLine,
   target: Word.Paragraph | Word.Range,
   explicitStyle?: string,
-  replaceSelection = false,
-): Word.Range | Word.Paragraph {
+  deferredStyles?: Array<{ range: Word.Range; style: string }>,
+): Word.Range {
   const style = explicitStyle ?? (parsed.headingLevel > 0 ? HEADING_STYLES[parsed.headingLevel] : undefined);
-  let cursor = target;
+  let cursor: Word.Range | undefined;
   const runs: Array<{ range: Word.Range; segment: MarkdownLine['segments'][number] }> = [];
   for (const segment of parsed.segments) {
-    const range = cursor.insertText(segment.text, Word.InsertLocation.end);
+    const range: Word.Range = cursor
+      ? cursor.insertText(segment.text, Word.InsertLocation.after)
+      : target.insertText(segment.text, Word.InsertLocation.end);
     runs.push({ range, segment });
     cursor = range;
   }
@@ -222,11 +224,11 @@ function insertMarkdownParagraph(
     if (segment.italic) range.font.italic = true;
   }
   if (style) {
-    // A break range belongs to the preceding paragraph; use the last inserted text's paragraph.
-    if (replaceSelection) (cursor as Word.Range).paragraphs.getLast().style = style;
+    // Delay replacement styles so later paragraph breaks inherit the original style.
+    if (deferredStyles) deferredStyles.push({ range: runs[0]?.range ?? target.getRange(), style });
     else target.style = style;
   }
-  return cursor;
+  return cursor ?? target.getRange();
 }
 
 /**
@@ -313,11 +315,13 @@ async function insertText(params: Record<string, unknown>): Promise<CommandResul
 
       case 'replaceSelection': {
         const selection = context.document.getSelection();
-        let cursor: Word.Range | Word.Paragraph = selection.insertText('', Word.InsertLocation.replace);
+        let cursor = selection.insertText('', Word.InsertLocation.replace);
+        const deferredStyles: Array<{ range: Word.Range; style: string }> = [];
         for (const [index, parsed] of parsedLines.entries()) {
-          if (index > 0) cursor = cursor.insertText('\n', Word.InsertLocation.end);
-          cursor = insertMarkdownParagraph(parsed, cursor, style, true);
+          if (index > 0) cursor = cursor.insertText('\n', Word.InsertLocation.after);
+          cursor = insertMarkdownParagraph(parsed, cursor, style, deferredStyles);
         }
+        for (const { range, style: paragraphStyle } of deferredStyles) range.paragraphs.getFirst().style = paragraphStyle;
         break;
       }
 
@@ -465,9 +469,7 @@ async function getProperties(_params: Record<string, unknown>): Promise<CommandR
     customProperties.load(['key', 'value', 'type']);
     await context.sync();
 
-    const customProps: Record<string, unknown> = Object.fromEntries(
-      customProperties.items.map((prop) => [prop.key, prop.value]),
-    );
+    const customProps = customProperties.items.map((prop) => ({ name: prop.key, value: prop.value }));
 
     return {
       title: properties.title,
@@ -1308,6 +1310,9 @@ async function acceptRejectChanges(params: Record<string, unknown>): Promise<Com
         changesToProcess = trackedChanges.items.filter((change, index) =>
           ids.has(getTrackedChangeIdentifier(change, index)),
         );
+        const availableIds = new Set(trackedChanges.items.map(getTrackedChangeIdentifier));
+        const unmatchedIds = [...ids].filter(id => !availableIds.has(id));
+        if (unmatchedIds.length > 0) fail('ITEM_NOT_FOUND', `Tracked change IDs not found: ${unmatchedIds.join(', ')}.`);
         break;
       }
 

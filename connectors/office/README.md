@@ -80,7 +80,9 @@ the user first. No undo history is stored by the connector.
 For Excel `read_range` and `read_table` JSON rows, header-derived object keys
 are enveloped just like `headers`, including a column named `__proto__`.
 Other result keys that are not plain identifiers are also enveloped, including
-document property names containing spaces, punctuation or closing tags.
+keys containing spaces, punctuation or closing tags. Word `get_properties`
+returns `customProperties` as an array of `{ name, value }` entries; every name
+is enveloped, including names that look like identifiers and `__proto__`.
 
 Word text inserts give heading and named styles to the whole paragraph and add
 only the requested inline bold or italic, preserving the style's formatting.
@@ -88,6 +90,8 @@ only the requested inline bold or italic, preserving the style's formatting.
 Relative placements require their target: `afterParagraph` needs
 `paragraphIndex`, and `afterSheet` needs `afterSheet`. A paragraph range needs
 `startParagraph`, and a specific tracked-change target needs `changeIds`.
+If any requested tracked-change IDs are missing, `ITEM_NOT_FOUND` lists them
+before any changes are accepted or rejected.
 
 If the Office connection is turned off for the Rebel installation, tools that
 start it return `CONNECTION_DISABLED` with `retryable: false`. Ask whoever manages
@@ -336,7 +340,9 @@ unknown table headers and resolves worksheet letters such as `AA` within the
 requested range; exclude the header row when passing a range to sort. Unknown shape
 types fail before creating a shape, and formatted shapes require PowerPointApi 1.4
 before creation. Word alignment applies to every
-paragraph in the target. Reading speaker notes skips notes-page shapes without text.
+paragraph in the target. Reading speaker notes skips the `InvalidArgument`
+text-load error for notes-page shapes without text; other read failures return
+coded errors.
 Setting notes returns `ITEM_NOT_FOUND` when no shape name contains "notes" or "body".
 Speaker-notes errors report causes such as read-only files;
 unavailable layouts return a coded failure instead of an empty layout list.
