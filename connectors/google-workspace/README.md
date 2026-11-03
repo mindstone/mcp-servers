@@ -8,7 +8,7 @@ Google Workspace MCP server — Gmail, Calendar, Drive, Docs, Sheets, Slides, Co
 
 ## Status
 
-- **Version:** [0.5.1](./CHANGELOG.md) · npm: not yet published
+- **Version:** [0.5.2](./CHANGELOG.md) · npm: not yet published
 - **Auth:** OAuth (host-orchestrated) ([`GOOGLE_CLIENT_SECRET`](./server.json))
 - **Tools:** [124](./src/tools/definitions/) (Gmail, Calendar, Drive, Docs, Sheets, Slides, Contacts, Chat, Meet, Tasks, Forms, Comments, Account)
 - **Surface:** cloud-api
@@ -172,6 +172,14 @@ The full list lives under [`src/tools/definitions/`](./src/tools/definitions/) a
 | Account | 3 | List, authenticate, and remove workspace accounts. |
 | Tasks | 6 | List task lists, and list/create/update/complete/delete tasks. |
 | Forms | 4 | Read-only access to forms and their responses. |
+
+### Compose send status
+
+In hosts that remember send status, sending an email closes its other compose copies. Reloaded cards show "Email sent" with the send time and hide Reopen because they do not have the sent contents. The copy used to send keeps its posted contents in a read-only sent view, including when confirmation follows a lost reply. After an error or block reply, a later sent status from another copy shows only the sent bar, without this copy's contents. While a send is in progress, other copies show “Sending…” with Send, Retry, Cancel and Save draft (where available) disabled. Replies to this copy’s own requests keep those controls locked until the other send ends. If the send ends without a confirmed outcome, those copies return to editing and keep any earlier uncertainty. A copy waiting for its own Send reply keeps its sending view. Sent views stay read-only, and uncertainty remains until a send is confirmed. After an error or missing confirmation, check whether the email was sent before using Retry; the notice stays visible while editing and returns on Reopen. Collapsing the card does not resolve that uncertainty. Policy-block explanations stay visible while editing with Send disabled. Cancel says "Nothing sent" only when no send may have gone through, including a `not-dispatched` failure before the request left the device.
+
+When sending is blocked by your settings, your organization or security policy, the card hides Retry and keeps Cancel. If the server is stopped, Retry remains available.
+
+Send requests declare `_meta: { 'mcp-app/cardOutcome': 'sent' }` to supporting hosts. When your own setting blocks sending, Retry stays unavailable; the Gmail fallback depends on the structured `user-disabled` reason. Draft saves do not declare a send outcome; Cancel after a draft-save timeout says "Nothing sent" unless an earlier send remains uncertain.
 
 ### Sheets read limits
 

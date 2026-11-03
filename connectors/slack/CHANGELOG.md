@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- Compose cards hide Retry when sending is blocked by your settings, your organization or security policy. Cancel stays available; a stopped server still offers Retry.
+- Send requests declare the host-neutral `_meta: { 'mcp-app/cardOutcome': 'sent' }` outcome.
+- Compose cards keep their sent status across copies and reloads in supporting hosts. Reloaded cards show the send time without the sent contents. The sender keeps its posted contents even if confirmation arrives after a lost reply; malformed host timestamps omit the date.
+- After an unconfirmed send, the check-before-resending notice stays visible while editing and returns on Reopen. Cancel keeps the same reminder. Calls blocked before sending, including `not-dispatched` failures, still say "Nothing sent" unless an earlier attempt may have gone through.
+
 ## [0.3.4] - 2026-11-01
 
 ### Changed

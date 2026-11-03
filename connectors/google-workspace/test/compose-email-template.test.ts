@@ -626,7 +626,7 @@ describe('compose email iframe template', () => {
     expectNoConsoleWarnings(composeWindow);
   });
 
-  it('clears the unknown-outcome state when the user edits a field to resend', () => {
+  it('keeps the unknown-outcome notice when the user edits a field to resend', () => {
     composeWindow = loadComposeEmailWindow();
     const { fireTimeout } = submitAndCaptureTimeout(composeWindow);
     fireTimeout();
@@ -634,7 +634,10 @@ describe('compose email iframe template', () => {
 
     setFieldValue(composeWindow, 'bodyInput', 'Hello there, edited');
 
-    expect(isHidden(composeWindow, 'unknownBox')).toBe(true);
+    expect(isHidden(composeWindow, 'unknownBox')).toBe(false);
+    expect(composeWindow.document.getElementById('retryButton')!.parentElement).toBe(
+      composeWindow.document.getElementById('unknownBox'),
+    );
     expectNoConsoleWarnings(composeWindow);
   });
 

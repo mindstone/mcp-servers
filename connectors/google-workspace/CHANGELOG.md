@@ -7,6 +7,25 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- Compose cards hide Retry when sending is blocked by your settings, your organization or security policy. Cancel stays available; a stopped server still offers Retry.
+- Send requests declare the host-neutral `_meta: { 'mcp-app/cardOutcome': 'sent' }` outcome.
+- After your own setting blocks sending, Retry stays unavailable. Blocks are classified only by the host's closed reason, never the error wording.
+- Cancel after a draft-save timeout says "Nothing sent" unless an earlier send remains uncertain.
+- Compose cards keep their sent status across copies and reloads in supporting hosts. Reloaded cards show the send time without the sent contents. The sender keeps its posted contents even if confirmation arrives after a lost reply; malformed host timestamps omit the date.
+- After an unconfirmed send, the check-before-resending notice stays visible while editing and returns on Reopen. Cancel keeps the same reminder. Calls blocked before sending, including `not-dispatched` failures, still say "Nothing sent" unless an earlier attempt may have gone through.
+
+## [0.5.2] - 2026-11-03
+
+### Changed
+
+- The Gmail draft card's blocked-send note now says the person blocked sending and offers Gmail, instead of pointing to a Settings switch that may not exist.
+
+### Fixed
+
+- The blocked-send note on the Gmail draft card now says the person blocked sending and offers Gmail, instead of pointing to a Settings switch that may not exist.
+
 ## [0.5.1] - 2026-10-31
 
 ### Changed

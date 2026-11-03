@@ -7,6 +7,16 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- Draft-save replies and timeouts keep Send, Retry, Cancel and Save draft locked while another copy is sending, until the host delivers the end of that send.
+- Compose cards hide Retry when sending is blocked by your settings, your organization or security policy. Cancel stays available; a stopped server still offers Retry.
+- Compose cards keep the send time across copies and reloads in supporting hosts. Reloaded sent cards hide Reopen because they do not have the sent contents. The copy that sent retains its posted contents even when its reply was lost before host confirmation. Malformed host timestamps use an undated sent bar.
+- Unconfirmed sends retain the reminder to check whether the message was sent through edits, Cancel and Reopen. Calls blocked before sending, including `not-dispatched` failures, still say "Nothing sent." A later block does not erase an earlier uncertain send.
+- Retry stays unavailable after your own setting blocks sending. Block classification uses only the host's closed `error.data.reason`, never message text.
+- After a draft-save timeout, Cancel says "Nothing sent" because saving a draft does not send it; an earlier uncertain send still keeps its check-before-resending wording.
+- The blocked-send note on the Gmail draft card now says the person blocked sending and offers Gmail, instead of pointing to a Settings switch that may not exist.
+
 ### Added
 
 - Optional `draftToolName` config knob (email mode only): when set, the compose
@@ -21,13 +31,8 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Changed
 
-- The blocked-send Gmail escape hatch now prefers the structured block reason
-  newer hosts forward on the JSON-RPC error (`error.data.reason ===
-  'user-disabled'`, a closed enum the host derives from the tool-block error)
-  and falls back to text-matching the flattened message for hosts that don't
-  forward it yet. Admin-disabled and security-policy blocks still surface as
-  ordinary retryable errors. Templates built without `blockedSendFallback`
-  are byte-identical to before.
+- Send requests declare `_meta: { 'mcp-app/cardOutcome': 'sent' }` for supporting hosts; draft-save requests do not declare a send outcome.
+- The blocked-send Gmail escape hatch uses only `error.data.reason === 'user-disabled'`. Admin-disabled, security-policy and not-dispatched failures do not open the escape hatch.
 - The compose form's built-in wording no longer names a particular host app:
   the lost-reply notices now start "No confirmation came back in time…", the
   Slack direct-message notice reads "This will be sent as a direct message to

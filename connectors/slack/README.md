@@ -227,6 +227,14 @@ Text sent as you (`post_slack_message`, `reply_to_slack_thread`, `schedule_slack
 
 A workspace record can describe a personal app: `appKind: "own"` with its own `appId`, `clientId`, `clientSecret` and `appName`. Then thread replies post as that app's bot, and token refresh uses the record's `clientId`/`clientSecret` pair instead of `SLACK_CLIENT_ID`/`SLACK_CLIENT_SECRET`. If the bot is not in the channel, the reply is posted as you and the tool result says so, with a hint to invite the app. Records without `appKind` behave as before: replies are sent as you.
 
+### Compose send status
+
+In hosts that remember send status, sending a message closes its other compose copies. Reloaded cards show "Message sent" with the send time and hide Reopen because they do not have the sent contents. The copy used to send keeps its posted contents in a read-only sent view, including when confirmation follows a lost reply. After an error or block reply, a later sent status from another copy shows only the sent bar, without this copy's contents. While a send is in progress, other copies show “Sending…” with Send, Retry, Cancel and Save draft (where available) disabled. Replies to this copy’s own requests keep those controls locked until the other send ends. If the send ends without a confirmed outcome, those copies return to editing and keep any earlier uncertainty. A copy waiting for its own Send reply keeps its sending view. Sent views stay read-only, and uncertainty remains until a send is confirmed. After an error or missing confirmation, check whether the message was sent before using Retry; the notice stays visible while editing and returns on Reopen. Collapsing the card does not resolve that uncertainty. Policy-block explanations stay visible while editing with Send disabled. Cancel says "Nothing sent" only when no send may have gone through, including a `not-dispatched` failure before the request left the device.
+
+When sending is blocked by your settings, your organization or security policy, the card hides Retry and keeps Cancel. If the server is stopped, Retry remains available.
+
+Send requests declare `_meta: { 'mcp-app/cardOutcome': 'sent' }` to supporting hosts.
+
 ### Channels
 - `list_slack_channels` — List channels (filterable, paginated).
 - `get_slack_channel_history` — Get recent messages from a channel.
