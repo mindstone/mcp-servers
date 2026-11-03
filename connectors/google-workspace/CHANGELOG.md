@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-03
+
+### Changed
+
+- The Gmail draft card's blocked-send note now says the person blocked sending and offers Gmail, instead of pointing to a Settings switch that may not exist.
+
 ### Fixed
 
 - The blocked-send note on the Gmail draft card now says the person blocked sending and offers Gmail, instead of pointing to a Settings switch that may not exist.
