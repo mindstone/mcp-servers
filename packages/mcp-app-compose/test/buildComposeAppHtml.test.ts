@@ -390,6 +390,45 @@ describe('buildComposeAppHtml — blocked-send Gmail escape hatch (gating)', () 
 });
 
 describe('buildComposeAppHtml — blocked-send detector and Gmail URL (happy-dom)', () => {
+  it('does not claim an earlier unconfirmed email was not sent when a retry is blocked', () => {
+    const window = loadWindow(blockedHtml);
+    setFieldValue(window, 'toInput', 'jane@example.com');
+    setFieldValue(window, 'subjectInput', 'Quarterly update');
+    setFieldValue(window, 'bodyInput', 'Numbers attached.');
+
+    let fireTimeout: (() => void) | undefined;
+    vi.spyOn(window, 'setTimeout').mockImplementation((callback, delay) => {
+      if (delay === 75000) fireTimeout = callback;
+      return 1;
+    });
+    const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
+    sendButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    expect(postedMessages(window).filter((msg) => msg.method === 'tools/call')).toHaveLength(1);
+    expect(fireTimeout).toBeTypeOf('function');
+    fireTimeout?.();
+    expect(isHidden(window, 'unknownBox')).toBe(false);
+    expect(sendButton.disabled).toBe(false);
+
+    sendButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    const calls = postedMessages(window).filter((msg) => msg.method === 'tools/call');
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.id).not.toBe(calls[0]?.id);
+    window.dispatchEvent(
+      new window.MessageEvent('message', {
+        data: {
+          jsonrpc: '2.0',
+          id: calls[1]?.id,
+          error: { code: -32000, message: 'Tool call failed', data: { reason: 'user-disabled' } },
+        },
+      }),
+    );
+
+    expect(isHidden(window, 'blockedBox')).toBe(false);
+    expect(sendButton.disabled).toBe(true);
+    const blockedText = window.document.getElementById('blockedText') as unknown as HTMLElement;
+    expect(blockedText.textContent).not.toMatch(/not sent/i);
+  });
+
   it('shows the escape hatch (not a retryable error) when the user disabled the send tool', () => {
     const window = sendThenReplyError(blockedHtml, USER_DISABLED_ERROR);
 
@@ -397,7 +436,33 @@ describe('buildComposeAppHtml — blocked-send detector and Gmail URL (happy-dom
     expect(isHidden(window, 'errorBox')).toBe(true);
     const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
     expect(sendButton.disabled).toBe(true);
-    expect(sendButton.title).toContain('turned off in your settings');
+    expect(sendButton.title).toContain('blocked sending this email');
+  });
+
+  it.each([
+    { label: 'structured user-disabled reason', message: 'Tool call failed', data: { reason: 'user-disabled' } },
+    { label: 'legacy user-disabled message', message: USER_DISABLED_ERROR, data: undefined },
+  ])('uses truthful blocked-send copy for $label', ({ message, data }) => {
+    const window = sendThenReplyError(blockedHtml, message, undefined, data);
+
+    expect(isHidden(window, 'blockedBox')).toBe(false);
+    const blockedText = window.document.getElementById('blockedText') as unknown as HTMLElement;
+    const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
+    expect(blockedText.textContent).toBe(
+      "You've blocked sending this email, so this card can't send it. You can finish and send it in Gmail instead.",
+    );
+    expect(sendButton.title).toBe("You've blocked sending this email. Open it in Gmail to send it there.");
+    for (const copy of [blockedText.textContent, sendButton.title]) {
+      expect(copy).not.toMatch(/settings/i);
+    }
+
+    setFieldValue(window, 'subjectInput', 'x'.repeat(9000));
+    const openComposeButton = window.document.getElementById('openComposeButton') as unknown as HTMLButtonElement;
+    openComposeButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
+    expect(blockedText.textContent).toBe(
+      'This draft is too large to open in Gmail. Use fewer recipients or a shorter subject, then click Open in Gmail.',
+    );
+    expect(blockedText.textContent).not.toMatch(/settings/i);
   });
 
   it('treats admin-disabled, generic-security, and transport failures as ordinary errors', () => {
@@ -513,6 +578,7 @@ describe('buildComposeAppHtml — blocked-send detector and Gmail URL (happy-dom
     const blockedText = window.document.getElementById('blockedText');
     // Copy is cause-agnostic (recipients OR an oversized subject can overflow).
     expect((blockedText as unknown as HTMLElement).textContent).toContain('too large to open in Gmail');
+    expect((blockedText as unknown as HTMLElement).textContent).not.toMatch(/settings/i);
   });
 
   it('degrades to recipients + subject only (no body) when the compose URL would be too long', () => {
