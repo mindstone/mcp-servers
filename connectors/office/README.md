@@ -42,10 +42,11 @@ including setting a value that already had that value. Successful results carry
 {"ok":false,"app":"excel","action":"write_range","error":{"code":"READ_ONLY","message":"<untrusted-content source=\"microsoft-office-excel\">The file is read-only.</untrusted-content>","fix":"Ask the user to enable editing or save an editable copy before trying again.","retryable":false}}
 ```
 
-`app` is `word`, `excel`, `powerpoint`, or `office` for setup and status;
+`app` is `word`, `excel`, `powerpoint`, or `all` for setup and status;
 `action` names the tool's operation (`setup` or `status` for those tools).
-Unknown or disabled tools and invalid inputs use `INVALID_ARGUMENT`; an unknown
-tool has `app: "office"` and `action: "unknown"`.
+Unknown or disabled tools and invalid inputs use `INVALID_ARGUMENT`
+(`McpError(InvalidParams)`); other exceptions thrown by handlers use
+`INTERNAL_ERROR`. An unknown tool has `app: "office"` and `action: "unknown"`.
 
 Error codes, fixes and retry guidance come from a local catalog. Unknown Office
 codes become `UNKNOWN_ERROR`. `retryable` means recovery may permit another
@@ -54,6 +55,12 @@ because the edit may already have completed. Messages and all strings in data
 received from Office or the sidecar stay inside `<untrusted-content>` envelopes,
 with embedded closing tags escaped. App, action, codes and fixes stay outside
 those envelopes.
+
+For Excel `read_range` and `read_table` JSON rows, header-derived object keys
+are enveloped just like `headers`, including a column named `__proto__`.
+If the Office connection is turned off for the Rebel installation, tools that
+start it return `CONNECTION_DISABLED` with `retryable: false`. Ask whoever manages
+the installation to re-enable it; Settings cannot override that decision.
 
 ## Requirements
 

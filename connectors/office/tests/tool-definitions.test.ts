@@ -11,7 +11,10 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+const { __test: hooks } = await import('../src/index.js');
 
 const serverModule = (await import('../src/index.js')) as unknown as {
   __test: {
@@ -158,3 +161,56 @@ it.each(['rebel_office_setup', 'rebel_office_status', 'unknown_tool'])(
     });
   },
 );
+
+describe('handler failures', () => {
+  it.each([
+    [new TypeError('Unexpected handler bug'), 'INTERNAL_ERROR'],
+    ['Unexpected thrown string', 'INTERNAL_ERROR'],
+    [new McpError(ErrorCode.InternalError, 'Internal handler error'), 'INTERNAL_ERROR'],
+    [new McpError(ErrorCode.InvalidParams, 'Invalid handler argument'), 'INVALID_ARGUMENT'],
+  ])('classifies %s as %s', async (error, code) => {
+    const tool = hooks.registeredTools.get('rebel_office_word_read_document');
+    const original = tool.handler;
+    tool.handler = () => { throw error; };
+    try {
+      const response = await client.callTool({ name: 'rebel_office_word_read_document', arguments: {} });
+      expect(response.isError).toBe(true);
+      expect(JSON.parse((response.content as Array<{ text: string }>)[0]!.text)).toMatchObject({
+        ok: false, app: 'word', action: 'read_document', error: { code },
+      });
+    } finally {
+      tool.handler = original;
+    }
+  });
+
+  it('classifies a disabled tool as INVALID_ARGUMENT', async () => {
+    const tool = hooks.registeredTools.get('rebel_office_word_read_document');
+    tool.disable();
+    try {
+      const response = await client.callTool({ name: 'rebel_office_word_read_document', arguments: {} });
+      expect(JSON.parse((response.content as Array<{ text: string }>)[0]!.text).error.code).toBe('INVALID_ARGUMENT');
+    } finally {
+      tool.enable();
+    }
+  });
+
+  it.each(['MCP_OFFICE_SIDECAR_DISABLE', 'REBEL_DISABLE_OFFICE_SIDECAR'])(
+    'reports setup disabled by %s without suggesting Settings', async (envName) => {
+      vi.stubEnv(envName, '1');
+      try {
+        const response = await client.callTool({ name: 'rebel_office_setup', arguments: {} });
+        const result = JSON.parse((response.content as Array<{ text: string }>)[0]!.text);
+        expect(response.isError).toBe(true);
+        expect(result).toMatchObject({ ok: false, app: 'all', action: 'setup', error: {
+          code: 'CONNECTION_DISABLED', retryable: false,
+          message: expect.stringContaining('turned off for this Rebel installation'),
+          fix: expect.stringContaining('manages this Rebel installation'),
+        } });
+        expect(result.error.fix).not.toContain('Settings');
+        expect(JSON.stringify(result)).not.toContain(envName);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+});

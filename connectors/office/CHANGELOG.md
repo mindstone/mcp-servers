@@ -18,6 +18,8 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 
+- Exceptions thrown by tool handlers report `INTERNAL_ERROR` unless they are invalid-argument errors. An installation-disabled Office connection reports non-retryable `CONNECTION_DISABLED` with guidance to contact whoever manages the installation.
+- Excel JSON row keys derived from spreadsheet headers are enclosed in untrusted-content envelopes, with closing tags escaped. Columns named `__proto__` retain their cell values.
 - Office actions report missing targets, empty selections and unsupported requested options as coded failures. PowerPoint text alignment and Excel range filter criteria are applied; unknown filter columns fail before writing.
 - A slide created before a later step fails returns `PARTIAL` with its id and inspect-or-delete recovery. Word edit results describe what changed.
 - Setup and status explain which apps are connected and how to open Rebel; the task pane asks you to open Rebel when waiting for a connection.

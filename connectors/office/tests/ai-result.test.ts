@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 const { __test: { toMcpResult, stampUntrustedSource, sidecarRequest } } = await import('../src/index.js');
 
@@ -6,7 +6,7 @@ const codes = [
   'INVALID_ARGUMENT', 'ITEM_NOT_FOUND', 'NO_SELECTION', 'READ_ONLY', 'NO_DOCUMENT',
   'UNSUPPORTED_OPERATION', 'INVALID_OPERATION', 'GENERAL_EXCEPTION', 'APP_NOT_CONNECTED',
   'ADDIN_DISCONNECTED', 'COMMAND_TIMEOUT', 'SIDECAR_NOT_RUNNING', 'SIDECAR_ERROR',
-  'UNAUTHORIZED', 'INVALID_REQUEST', 'INTERNAL_ERROR', 'UNKNOWN_ERROR',
+  'UNAUTHORIZED', 'INVALID_REQUEST', 'INTERNAL_ERROR', 'UNKNOWN_ERROR', 'CONNECTION_DISABLED',
 ];
 const retryable = new Set([
   'GENERAL_EXCEPTION', 'APP_NOT_CONNECTED', 'ADDIN_DISCONNECTED', 'COMMAND_TIMEOUT',
@@ -68,4 +68,21 @@ describe('one Office result shape', () => {
     expect(result).toMatchObject({ ok: false, app: 'excel', action: 'write_range', error: { code: 'SIDECAR_NOT_RUNNING' } });
     expect(result.error.message).not.toContain('<untrusted-content');
   });
+
+  it.each(['MCP_OFFICE_SIDECAR_DISABLE', 'REBEL_DISABLE_OFFICE_SIDECAR'])(
+    'reports %s as a non-retryable installation decision', async (envName) => {
+      vi.stubEnv(envName, '1');
+      try {
+        const { mcp, result } = format(await sidecarRequest('excel', 'write_range'));
+        expect(mcp.isError).toBe(true);
+        expect(result).toMatchObject({ ok: false, app: 'excel', action: 'write_range', error: {
+          code: 'CONNECTION_DISABLED', retryable: false,
+          fix: expect.stringContaining('manages this Rebel installation'),
+        } });
+        expect(result.error.fix).not.toContain('Settings');
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
 });

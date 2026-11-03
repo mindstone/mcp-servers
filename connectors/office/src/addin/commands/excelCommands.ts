@@ -94,13 +94,9 @@ async function readRange(params: Record<string, unknown>): Promise<CommandResult
     if (hasHeaders && returnJson && totalRows > 0) {
       const headers = allValues[0] as string[];
       const dataRows = allValues.slice(1, 1 + limit);
-      const jsonRows = dataRows.map((row) => {
-        const obj: Record<string, unknown> = {};
-        for (let c = 0; c < headers.length; c++) {
-          obj[headers[c] ?? `Column${c + 1}`] = row[c];
-        }
-        return obj;
-      });
+      const jsonRows = dataRows.map((row) => Object.fromEntries(
+        headers.map((header, c) => [header ?? `Column${c + 1}`, row[c]]),
+      ));
       return { headers, rows: jsonRows, totalRows: totalRows - 1, returnedRows: jsonRows.length };
     }
 
@@ -277,13 +273,9 @@ async function readTable(params: Record<string, unknown>): Promise<CommandResult
     const slicedRows = allRows.slice(offset, offset + limit);
 
     if (returnJson) {
-      const jsonRows = slicedRows.map((row) => {
-        const obj: Record<string, unknown> = {};
-        for (let c = 0; c < headers.length; c++) {
-          obj[headers[c] ?? `Column${c + 1}`] = row[c];
-        }
-        return obj;
-      });
+      const jsonRows = slicedRows.map((row) => Object.fromEntries(
+        headers.map((header, c) => [header ?? `Column${c + 1}`, row[c]]),
+      ));
       return { headers, rows: jsonRows, totalRows, returnedRows: jsonRows.length, offset };
     }
 

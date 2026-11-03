@@ -629,7 +629,7 @@ const requestSidecar = async (app, action, params) => {
     return {
       success: false,
       error: `Failed to start Office sidecar: ${err.message}`,
-      code: 'SIDECAR_NOT_RUNNING',
+      code: err.code === 'kill-switch' ? 'CONNECTION_DISABLED' : 'SIDECAR_NOT_RUNNING',
     };
   }
 
@@ -731,6 +731,7 @@ const ERROR_CATALOG = {
   APP_NOT_CONNECTED: { retryable: true, fix: 'Ask the user to open the requested Office app and click Rebel until the panel says Connected, then try again.' },
   ADDIN_DISCONNECTED: { retryable: true, fix: 'Ask the user to reopen the file and the Rebel panel; read the current state before repeating an edit.' },
   COMMAND_TIMEOUT: { retryable: true, fix: 'Read the current state before repeating an edit; it may already have completed. Then try a smaller range or fewer items.' },
+  CONNECTION_DISABLED: { retryable: false, fix: 'Ask whoever manages this Rebel installation to re-enable the Office connection before trying again.' },
   SIDECAR_NOT_RUNNING: { retryable: true, fix: 'Enable Microsoft Office in Settings → Connectors, then run rebel_office_setup and try again.' },
   SIDECAR_ERROR: { retryable: true, fix: 'Restart the Microsoft Office connector in Settings; read the current state before repeating an edit.' },
   UNAUTHORIZED: { retryable: false, fix: 'Restart the Microsoft Office connector in Settings to restore its connection credentials.' },
@@ -753,7 +754,14 @@ const toMcpResult = (result) => {
       fix: typeof fix === 'function' ? fix(app) : fix, retryable,
     } };
   } else {
-    body = { ok: true, app, action, data: wrap(result.data !== undefined ? result.data : result) };
+    let data = result.data !== undefined ? result.data : result;
+    // Excel JSON rows use spreadsheet-authored headers as keys; structural keys stay local.
+    if (source && app === 'excel' && ['read_range', 'read_table'].includes(action) && Array.isArray(data?.rows)) {
+      data = { ...data, rows: data.rows.map(row => row && typeof row === 'object' && !Array.isArray(row)
+        ? Object.fromEntries(Object.entries(row).map(([key, value]) => [wrap(key), value]))
+        : row) };
+    }
+    body = { ok: true, app, action, data: wrap(data) };
   }
   return { content: [{ type: 'text', text: JSON.stringify(body, null, 2) }], ...(failed ? { isError: true } : {}) };
 };
@@ -850,10 +858,11 @@ const EMPTY_OBJECT_SCHEMA = {
 const jsonSchemaValidator = new AjvJsonSchemaValidator();
 const registeredTools = new Map();
 
-const createToolError = (errorMessage, name) => {
+const createToolError = (error, name) => {
   const parts = registeredTools.has(name) ? name.slice('rebel_office_'.length).split('_') : ['unknown'];
   const app = ['word', 'excel', 'powerpoint'].includes(parts[0]) ? parts.shift() : 'office';
-  return toMcpResult(stampResultContext({ success: false, code: 'INVALID_ARGUMENT', error: errorMessage }, app, parts.join('_')));
+  const code = error instanceof McpError && error.code === ErrorCode.InvalidParams ? 'INVALID_ARGUMENT' : 'INTERNAL_ERROR';
+  return toMcpResult(stampResultContext({ success: false, code, error: error instanceof Error ? error.message : String(error) }, app, parts.join('_')));
 };
 
 /**
@@ -938,10 +947,7 @@ server.server.setRequestHandler(CallToolRequestSchema, async (request, extra) =>
 
     return await Promise.resolve(tool.handler(validation.data, extra));
   } catch (error) {
-    if (error instanceof McpError && error.code === ErrorCode.UrlElicitationRequired) {
-      throw error;
-    }
-    return createToolError(error instanceof Error ? error.message : String(error), request.params.name);
+    return createToolError(error, request.params.name);
   }
 });
 
@@ -1069,7 +1075,7 @@ registerTool(TOOL_NAMES.setup, {
   try {
     await ensureSidecar();
   } catch (err) {
-    return respond({ success: false, code: 'SIDECAR_NOT_RUNNING', error: `Failed to start Office sidecar: ${err.message}` });
+    return respond({ success: false, code: err.code === 'kill-switch' ? 'CONNECTION_DISABLED' : 'SIDECAR_NOT_RUNNING', error: `Failed to start Office sidecar: ${err.message}` });
   }
 
   const state = loadSidecarState();
@@ -4470,6 +4476,7 @@ export const __test = {
   stampUntrustedSource,
   sidecarRequest,
   server,
+  registeredTools,
   packageVersion: PACKAGE_VERSION,
   setSpawnSidecarAndWaitForTests(fn: typeof defaultSpawnSidecarAndWait) {
     spawnSidecarAndWait = fn;
