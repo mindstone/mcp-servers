@@ -836,8 +836,8 @@ ${m.extraStateVars}${hasDraft ? `      // Which action the in-flight request bel
       // later Retry click still knows which tool to re-invoke.
       var pendingAction = null;
       var retryAction = null;
-` : ''}${blockedSend ? `      var sendBlocked = false;
-` : ''}${gmail ? `      var gmailUrl = null;
+` : ''}      var sendBlocked = false;
+${gmail ? `      var gmailUrl = null;
 ` : ''}      var sendTimeoutId = null;
       // Just beyond the host-side tool-call timeout (60s) so a legitimately slow
       // send resolves to its real result first; this only fires when the reply
@@ -1004,7 +1004,7 @@ ${blockedSend ? `      var blockedBox = document.getElementById('blockedBox');
 
       function setSending(nextSending) {
         sending = nextSending;
-        sendButton.disabled = nextSending${blockedSend ? ' || sendBlocked' : ''};
+        sendButton.disabled = nextSending || sendBlocked;
 ${hasDraft ? '        draftButton.disabled = nextSending;\n' : ''}        cancelButton.disabled = nextSending;
         toInput.disabled = nextSending;
 ${f.cc ? `        ccInput.disabled = nextSending;
@@ -1023,7 +1023,7 @@ ${hasDraft ? `      // Mirror of setSending for the Save-draft action. One reque
       // and aria-busy.
       function setSavingDraft(nextSaving) {
         sending = nextSaving;
-        sendButton.disabled = nextSaving${blockedSend ? ' || sendBlocked' : ''};
+        sendButton.disabled = nextSaving || sendBlocked;
         draftButton.disabled = nextSaving;
         cancelButton.disabled = nextSaving;
         toInput.disabled = nextSaving;
@@ -1044,8 +1044,8 @@ ${f.cc ? `        ccInput.disabled = nextSaving;\n` : ''}${f.bcc ? `        bccI
       }
 
       function showError(message) {
-${blockedSend ? `        retryButton.classList.toggle('hidden', sendBlocked${hasDraft ? " && retryAction !== 'draft'" : ''});
-` : ''}        errorText.textContent = message || ${quoteJsString(m.sendFailedText)};
+        retryButton.classList.toggle('hidden', sendBlocked${hasDraft ? " && retryAction !== 'draft'" : ''});
+        errorText.textContent = message || ${quoteJsString(m.sendFailedText)};
         errorBox.classList.remove('hidden');
         postResize();
       }
@@ -1089,7 +1089,7 @@ ${blockedSend ? `        retryButton.classList.toggle('hidden', sendBlocked${has
         unknownTitle.textContent = 'Not sure if this sent.';
         unknownText.textContent = ${m.unknownDetailTextLiteral};
         unknownBox.classList.remove('hidden');
-${blockedSend ? '        if (!sendBlocked) ' : '        '}unknownBox.appendChild(retryButton);
+        if (!sendBlocked) unknownBox.appendChild(retryButton);
         postResize();
       }
 
@@ -1307,8 +1307,8 @@ ${blockedSend ? `      // ---- Blocked-send Gmail escape hatch ----
       // never call the disabled tool; instead we open a prefilled Gmail compose
       // window so the user finishes the send in Gmail (no copy-paste). This is
       // deliberately narrow: admin-disabled ("disabled by your organization…")
-      // and generic security-policy blocks fall through to the normal retryable
-      // error, because offering a Gmail bypass there would route around a control
+      // and generic security-policy blocks show the reason without Retry,
+      // because offering a Gmail bypass there would route around a control
       // the user did not set.
       //
       // Gmail compose URLs that get too long can silently fail to open, so we cap
@@ -1345,7 +1345,6 @@ ${f.cc ? `        var cc = normalizeAddressList(payload.cc).join(',');
       }
 
       function showBlockedSend() {
-        sendBlocked = true;
         clearError();
         clearSuccess();
         clearUnknown();
@@ -1443,12 +1442,7 @@ ${m.renderSentViewBody}      }
       function handleSendRequest() {
         if (sent) return;
         if (sending) return;
-${blockedSend ? `        // Once the user's own send preference has blocked this tool, never
-        // re-invoke it — the escape hatch is the only path out. The Send button
-        // is already disabled, but this also fends off a future host that grants
-        // allow-forms (a submit could otherwise re-fire the disabled tool).
         if (sendBlocked) return;
-` : ''}
         var payload = readFormPayload();
         var validationError = validatePayload(payload);
         if (validationError) {
@@ -1494,8 +1488,8 @@ ${hasDraft ? `      draftButton.addEventListener('click', function () {
       retryButton.addEventListener('click', function () {
         if (sent) return;
         if (sending) return;
-${blockedSend ? `        if (sendBlocked${hasDraft ? " && retryAction !== 'draft'" : ''}) return;
-` : ''}        var payload = readFormPayload();
+        if (sendBlocked${hasDraft ? " && retryAction !== 'draft'" : ''}) return;
+        var payload = readFormPayload();
 ${hasDraft ? `        if (retryAction === 'draft') {
           var draftValidationError = validateDraftPayload(payload);
           if (draftValidationError) {
@@ -1628,7 +1622,12 @@ ${hasDraft ? `          if (completedAction === 'draft') {
             retryAction = 'draft';
           }
 ` : ''}          var blockedReason = data.error.data && data.error.data.reason;
-          var blockedBeforeSend = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy' || blockedReason === 'not-dispatched';
+          var retryCannotChangeBlock = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy';
+          var blockedBeforeSend = retryCannotChangeBlock || blockedReason === 'not-dispatched';
+          if (${hasDraft ? "completedAction !== 'draft' && " : ''}retryCannotChangeBlock) {
+            sendBlocked = true;
+            sendButton.disabled = true;
+          }
           if (${hasDraft ? "completedAction !== 'draft' && " : ''}(!blockedBeforeSend || sendMayHaveGone)) {
             showSendUnknown();
           }

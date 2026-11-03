@@ -200,6 +200,8 @@ Until the host has written `${MS_CONFIG_DIR}/credentials/<account>.token.json` a
 
 In hosts that remember send status, sending an email closes its other compose copies. Reloaded cards show "Email sent" with the send time and hide Reopen because they do not have the sent contents. The copy used to send keeps its posted contents in a read-only sent view, including when host confirmation follows a lost reply. After an error or missing confirmation, check whether the email was sent before using Retry; the notice stays visible while editing and returns on Reopen. Collapsing the card does not resolve that uncertainty. Cancel says "Nothing sent" only when no send may have gone through, including a `not-dispatched` failure before the request left the device.
 
+When sending is blocked by your settings, your organization or security policy, the card hides Retry and keeps Cancel. If the server is stopped, Retry remains available.
+
 Send requests declare `_meta: { 'mcp-app/cardOutcome': 'sent' }` to supporting hosts. Draft saves do not declare a send outcome; Cancel after a draft-save timeout says "Nothing sent" unless an earlier send remains uncertain.
 
 ### Graph permissions

@@ -429,6 +429,7 @@ export const COMPOSE_MESSAGE_HTML = `
       var outcomeUnknown = false;
       var sendMayHaveGone = false;
       var sent = false;
+      var sendBlocked = false;
       var sendTimeoutId = null;
       // Just beyond the host-side tool-call timeout (60s) so a legitimately slow
       // send resolves to its real result first; this only fires when the reply
@@ -578,7 +579,7 @@ export const COMPOSE_MESSAGE_HTML = `
 
       function setSending(nextSending) {
         sending = nextSending;
-        sendButton.disabled = nextSending;
+        sendButton.disabled = nextSending || sendBlocked;
         cancelButton.disabled = nextSending;
         toInput.disabled = nextSending;
         bodyInput.disabled = nextSending;
@@ -594,6 +595,7 @@ export const COMPOSE_MESSAGE_HTML = `
       }
 
       function showError(message) {
+        retryButton.classList.toggle('hidden', sendBlocked);
         errorText.textContent = message || 'Failed to send message.';
         errorBox.classList.remove('hidden');
         postResize();
@@ -638,7 +640,7 @@ export const COMPOSE_MESSAGE_HTML = `
         unknownTitle.textContent = 'Not sure if this sent.';
         unknownText.textContent = "No confirmation came back in time. Check whether it sent before sending again, so it doesn't go out twice.";
         unknownBox.classList.remove('hidden');
-        unknownBox.appendChild(retryButton);
+        if (!sendBlocked) unknownBox.appendChild(retryButton);
         postResize();
       }
 
@@ -836,7 +838,7 @@ export const COMPOSE_MESSAGE_HTML = `
       function handleSendRequest() {
         if (sent) return;
         if (sending) return;
-
+        if (sendBlocked) return;
         var payload = readFormPayload();
         var validationError = validatePayload(payload);
         if (validationError) {
@@ -871,6 +873,7 @@ export const COMPOSE_MESSAGE_HTML = `
       retryButton.addEventListener('click', function () {
         if (sent) return;
         if (sending) return;
+        if (sendBlocked) return;
         var payload = readFormPayload();
         var validationError = validatePayload(payload);
         if (validationError) {
@@ -961,7 +964,12 @@ export const COMPOSE_MESSAGE_HTML = `
             ? data.error.message
             : 'Failed to send message.';
           var blockedReason = data.error.data && data.error.data.reason;
-          var blockedBeforeSend = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy' || blockedReason === 'not-dispatched';
+          var retryCannotChangeBlock = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy';
+          var blockedBeforeSend = retryCannotChangeBlock || blockedReason === 'not-dispatched';
+          if (retryCannotChangeBlock) {
+            sendBlocked = true;
+            sendButton.disabled = true;
+          }
           if ((!blockedBeforeSend || sendMayHaveGone)) {
             showSendUnknown();
           }

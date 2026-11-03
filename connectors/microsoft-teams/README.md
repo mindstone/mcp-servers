@@ -192,6 +192,8 @@ Some Teams Graph APIs may require tenant admin approval. Tools marked with a req
 
 In hosts that remember send status, sending a message closes its other compose copies. Reloaded cards show "Message sent" with the send time and hide Reopen because they do not have the sent contents. The copy used to send keeps its posted contents in a read-only sent view, including when host confirmation follows a lost reply. After an error or missing confirmation, check whether the message was sent before using Retry; the notice stays visible while editing and returns on Reopen. Collapsing the card does not resolve that uncertainty. Cancel says "Nothing sent" only when no send may have gone through, including a `not-dispatched` failure before the request left the device.
 
+When sending is blocked by your settings, your organization or security policy, the card hides Retry and keeps Cancel. If the server is stopped, Retry remains available.
+
 Send requests declare `_meta: { 'mcp-app/cardOutcome': 'sent' }` to supporting hosts.
 
 ## Security notes

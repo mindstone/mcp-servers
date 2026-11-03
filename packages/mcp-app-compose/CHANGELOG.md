@@ -9,6 +9,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 
+- Compose cards hide Retry when sending is blocked by your settings, your organization or security policy. Cancel stays available; a stopped server still offers Retry.
 - Compose cards keep the send time across copies and reloads in supporting hosts. Reloaded sent cards hide Reopen because they do not have the sent contents. The copy that sent retains its posted contents even when its reply was lost before host confirmation. Malformed host timestamps use an undated sent bar.
 - Unconfirmed sends retain the reminder to check whether the message was sent through edits, Cancel and Reopen. Calls blocked before sending, including `not-dispatched` failures, still say "Nothing sent." A later block does not erase an earlier uncertain send.
 - Retry stays unavailable after your own setting blocks sending. Block classification uses only the host's closed `error.data.reason`, never message text.

@@ -1003,8 +1003,8 @@ export const COMPOSE_EMAIL_HTML = `
       // never call the disabled tool; instead we open a prefilled Gmail compose
       // window so the user finishes the send in Gmail (no copy-paste). This is
       // deliberately narrow: admin-disabled ("disabled by your organization…")
-      // and generic security-policy blocks fall through to the normal retryable
-      // error, because offering a Gmail bypass there would route around a control
+      // and generic security-policy blocks show the reason without Retry,
+      // because offering a Gmail bypass there would route around a control
       // the user did not set.
       //
       // Gmail compose URLs that get too long can silently fail to open, so we cap
@@ -1041,7 +1041,6 @@ export const COMPOSE_EMAIL_HTML = `
       }
 
       function showBlockedSend() {
-        sendBlocked = true;
         clearError();
         clearSuccess();
         clearUnknown();
@@ -1151,12 +1150,7 @@ export const COMPOSE_EMAIL_HTML = `
       function handleSendRequest() {
         if (sent) return;
         if (sending) return;
-        // Once the user's own send preference has blocked this tool, never
-        // re-invoke it — the escape hatch is the only path out. The Send button
-        // is already disabled, but this also fends off a future host that grants
-        // allow-forms (a submit could otherwise re-fire the disabled tool).
         if (sendBlocked) return;
-
         var payload = readFormPayload();
         var validationError = validatePayload(payload);
         if (validationError) {
@@ -1336,7 +1330,12 @@ export const COMPOSE_EMAIL_HTML = `
             retryAction = 'draft';
           }
           var blockedReason = data.error.data && data.error.data.reason;
-          var blockedBeforeSend = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy' || blockedReason === 'not-dispatched';
+          var retryCannotChangeBlock = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy';
+          var blockedBeforeSend = retryCannotChangeBlock || blockedReason === 'not-dispatched';
+          if (completedAction !== 'draft' && retryCannotChangeBlock) {
+            sendBlocked = true;
+            sendButton.disabled = true;
+          }
           if (completedAction !== 'draft' && (!blockedBeforeSend || sendMayHaveGone)) {
             showSendUnknown();
           }

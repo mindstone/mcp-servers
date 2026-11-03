@@ -482,6 +482,7 @@ export const COMPOSE_EMAIL_HTML = `
       // later Retry click still knows which tool to re-invoke.
       var pendingAction = null;
       var retryAction = null;
+      var sendBlocked = false;
       var sendTimeoutId = null;
       // Just beyond the host-side tool-call timeout (60s) so a legitimately slow
       // send resolves to its real result first; this only fires when the reply
@@ -644,7 +645,7 @@ export const COMPOSE_EMAIL_HTML = `
 
       function setSending(nextSending) {
         sending = nextSending;
-        sendButton.disabled = nextSending;
+        sendButton.disabled = nextSending || sendBlocked;
         draftButton.disabled = nextSending;
         cancelButton.disabled = nextSending;
         toInput.disabled = nextSending;
@@ -665,7 +666,7 @@ export const COMPOSE_EMAIL_HTML = `
       // and aria-busy.
       function setSavingDraft(nextSaving) {
         sending = nextSaving;
-        sendButton.disabled = nextSaving;
+        sendButton.disabled = nextSaving || sendBlocked;
         draftButton.disabled = nextSaving;
         cancelButton.disabled = nextSaving;
         toInput.disabled = nextSaving;
@@ -688,6 +689,7 @@ export const COMPOSE_EMAIL_HTML = `
       }
 
       function showError(message) {
+        retryButton.classList.toggle('hidden', sendBlocked && retryAction !== 'draft');
         errorText.textContent = message || 'Failed to send email.';
         errorBox.classList.remove('hidden');
         postResize();
@@ -732,7 +734,7 @@ export const COMPOSE_EMAIL_HTML = `
         unknownTitle.textContent = 'Not sure if this sent.';
         unknownText.textContent = "No confirmation came back in time. Check your Sent folder before sending again, so it doesn't go out twice.";
         unknownBox.classList.remove('hidden');
-        unknownBox.appendChild(retryButton);
+        if (!sendBlocked) unknownBox.appendChild(retryButton);
         postResize();
       }
 
@@ -1029,7 +1031,7 @@ export const COMPOSE_EMAIL_HTML = `
       function handleSendRequest() {
         if (sent) return;
         if (sending) return;
-
+        if (sendBlocked) return;
         var payload = readFormPayload();
         var validationError = validatePayload(payload);
         if (validationError) {
@@ -1075,6 +1077,7 @@ export const COMPOSE_EMAIL_HTML = `
       retryButton.addEventListener('click', function () {
         if (sent) return;
         if (sending) return;
+        if (sendBlocked && retryAction !== 'draft') return;
         var payload = readFormPayload();
         if (retryAction === 'draft') {
           var draftValidationError = validateDraftPayload(payload);
@@ -1196,7 +1199,12 @@ export const COMPOSE_EMAIL_HTML = `
             retryAction = 'draft';
           }
           var blockedReason = data.error.data && data.error.data.reason;
-          var blockedBeforeSend = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy' || blockedReason === 'not-dispatched';
+          var retryCannotChangeBlock = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy';
+          var blockedBeforeSend = retryCannotChangeBlock || blockedReason === 'not-dispatched';
+          if (completedAction !== 'draft' && retryCannotChangeBlock) {
+            sendBlocked = true;
+            sendButton.disabled = true;
+          }
           if (completedAction !== 'draft' && (!blockedBeforeSend || sendMayHaveGone)) {
             showSendUnknown();
           }

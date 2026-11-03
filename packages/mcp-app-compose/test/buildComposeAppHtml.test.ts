@@ -284,14 +284,50 @@ describe.each([
     expect(window.document.getElementById('collapsedMessage')!.textContent).toBe('Draft collapsed. Nothing sent.');
   });
 
+  it.each(['admin-disabled', 'security-policy'])('shows the %s reason without Retry and keeps Cancel', (reason) => {
+    const window = mount();
+    const message = reason === 'admin-disabled' ? 'Sending is disabled by your organization.' : 'Sending is blocked by security policy.';
+    click(window, 'sendButton');
+    reply(window, { message, data: { reason } });
+    expect(isHidden(window, 'errorBox')).toBe(false);
+    expect(window.document.getElementById('errorText')!.textContent).toBe(message);
+    expect(window.document.getElementById('retryButton')!.closest('.hidden')).not.toBeNull();
+    expect(isHidden(window, 'unknownBox')).toBe(true);
+    expect(isHidden(window, 'cancelButton')).toBe(false);
+    expect(window.document.getElementById('cancelButton')!.hasAttribute('disabled')).toBe(false);
+    click(window, 'retryButton');
+    expect(calls(window)).toHaveLength(1);
+    click(window, 'cancelButton');
+    expect(window.document.getElementById('collapsedMessage')!.textContent).toBe('Draft collapsed. Nothing sent.');
+  });
+
+  it('keeps Retry for a not-dispatched send so a recovered server can send it', () => {
+    const window = mount();
+    click(window, 'sendButton');
+    reply(window, { message: 'Server is stopped.', data: { reason: 'not-dispatched' } });
+    expect(isHidden(window, 'errorBox')).toBe(false);
+    expect(window.document.getElementById('errorText')!.textContent).toBe('Server is stopped.');
+    expect(window.document.getElementById('retryButton')!.closest('.hidden')).toBeNull();
+    expect(isHidden(window, 'unknownBox')).toBe(true);
+    click(window, 'retryButton');
+    expect(calls(window)).toHaveLength(2);
+    reply(window);
+    expect(window.document.getElementById('collapsedMessage')!.textContent).toContain(sentPrefix);
+  });
+
   it.each(['user-disabled', 'admin-disabled', 'security-policy', 'not-dispatched'])('keeps earlier uncertainty visible alongside a %s block', (reason) => {
     const window = mount(maybeOutcome);
     click(window, 'retryButton');
     reply(window, { message: 'Tool call blocked.', data: { reason } });
     expect(isHidden(window, 'unknownBox')).toBe(false);
     expect(window.document.getElementById('unknownTitle')!.textContent).toBe('Not sure if this sent.');
-    if (mode === 'email' && reason === 'user-disabled') {
-      expect(isHidden(window, 'blockedBox')).toBe(false);
+    if (reason !== 'not-dispatched') {
+      if (mode === 'email' && reason === 'user-disabled') {
+        expect(isHidden(window, 'blockedBox')).toBe(false);
+      } else {
+        expect(isHidden(window, 'errorBox')).toBe(false);
+        expect(window.document.getElementById('errorText')!.textContent).toBe('Tool call blocked.');
+      }
       expect(window.document.getElementById('retryButton')!.closest('.hidden')).not.toBeNull();
       click(window, 'retryButton');
       expect(calls(window)).toHaveLength(1);
@@ -327,10 +363,10 @@ describe.each([
     expect(window.document.getElementById('collapsedMessage')!.textContent).not.toContain('Nothing sent');
   });
 
-  it.skipIf(mode !== 'email')('does not offer or invoke Retry after the user setting blocks sending', () => {
+  it.each(['user-disabled', 'admin-disabled', 'security-policy'])('does not restore Retry after a %s block on Reopen or a repeated uncertain outcome', (reason) => {
     const window = mount(maybeOutcome);
     click(window, 'retryButton');
-    reply(window, { message: 'Tool call blocked.', data: { reason: 'user-disabled' } });
+    reply(window, { message: 'Tool call blocked.', data: { reason } });
     click(window, 'cancelButton');
     click(window, 'reopenButton');
     deliver(window, maybeOutcome);
@@ -680,13 +716,14 @@ describe('buildComposeAppHtml — blocked-send detector and Gmail URL (happy-dom
     expect(sendButton.disabled).toBe(true);
   });
 
-  it('keeps admin-disabled and security-policy structured reasons as ordinary errors', () => {
+  it('shows admin-disabled and security-policy reasons without Retry or the Gmail fallback', () => {
     for (const reason of ['admin-disabled', 'security-policy']) {
       const window = sendThenReplyError(blockedHtml, 'Tool call failed', undefined, { reason });
       expect(isHidden(window, 'blockedBox')).toBe(true);
       expect(isHidden(window, 'errorBox')).toBe(false);
       const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
-      expect(sendButton.disabled).toBe(false);
+      expect(sendButton.disabled).toBe(true);
+      expect(window.document.getElementById('retryButton')!.closest('.hidden')).not.toBeNull();
     }
   });
 

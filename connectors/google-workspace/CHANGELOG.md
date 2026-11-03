@@ -9,6 +9,7 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 
+- Compose cards hide Retry when sending is blocked by your settings, your organization or security policy. Cancel stays available; a stopped server still offers Retry.
 - Send requests declare the host-neutral `_meta: { 'mcp-app/cardOutcome': 'sent' }` outcome.
 - After your own setting blocks sending, Retry stays unavailable. Blocks are classified only by the host's closed reason, never the error wording.
 - Cancel after a draft-save timeout says "Nothing sent" unless an earlier send remains uncertain.
