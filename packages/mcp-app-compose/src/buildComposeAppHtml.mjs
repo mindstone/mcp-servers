@@ -828,10 +828,9 @@ ${gmail ? `        <button id="openGmailButton" type="button" class="button butt
       // Retain across the local timeout so even a late reply clears its payload.
       var pendingSendRequestId = null;
       var sending = false;
+      var hostSending = false;
       var collapsed = false;
-      var outcomeUnknown = false;
       var sendMayHaveGone = false;
-      var ownSendMayHaveGone = false;
       var sent = false;
 ${m.extraStateVars}${hasDraft ? `      // Which action the in-flight request belongs to ('send' | 'draft').
       // Captured before clearing on reply/timeout so the response handler can
@@ -1008,6 +1007,7 @@ ${blockedSend ? `      var blockedBox = document.getElementById('blockedBox');
       function setSending(nextSending) {
         sending = nextSending;
         sendButton.disabled = nextSending || sendBlocked;
+        retryButton.disabled = nextSending;
 ${hasDraft ? '        draftButton.disabled = nextSending;\n' : ''}        cancelButton.disabled = nextSending;
         toInput.disabled = nextSending;
 ${f.cc ? `        ccInput.disabled = nextSending;
@@ -1072,7 +1072,6 @@ ${f.cc ? `        ccInput.disabled = nextSaving;\n` : ''}${f.bcc ? `        bccI
       }
 
       function clearUnknown() {
-        outcomeUnknown = false;
         unknownTitle.textContent = '';
         unknownText.textContent = '';
         unknownBox.classList.add('hidden');
@@ -1086,7 +1085,6 @@ ${f.cc ? `        ccInput.disabled = nextSaving;\n` : ''}${f.bcc ? `        bccI
       // a blind retry could send a duplicate).
       function showSendUnknown() {
         sendMayHaveGone = true;
-        outcomeUnknown = true;
         clearError();
         clearSuccess();
         unknownTitle.textContent = 'Not sure if this sent.';
@@ -1110,7 +1108,6 @@ ${hasDraft ? `        if (pendingAction === 'draft') {
         }
         pendingAction = null;
 ` : ''}        setSending(false);
-        ownSendMayHaveGone = true;
         showSendUnknown();
       }
 
@@ -1118,7 +1115,6 @@ ${hasDraft ? `      // Same lost-reply honesty as a send, lower stakes: a blind 
       // could create a duplicate draft, so we say we're not sure and point at
       // the Drafts folder instead of offering Retry.
       function showDraftSaveUnknown() {
-        outcomeUnknown = true;
         clearError();
         clearSuccess();
         unknownTitle.textContent = 'Not sure if the draft was saved.';
@@ -1421,17 +1417,22 @@ ${f.cc ? `        var cc = normalizeAddressList(payload.cc).join(',');
 
       function applyCardOutcome(o) {
         if (sent) return;
-        if (o === null) {
-          if (!sendMayHaveGone || ownSendMayHaveGone) return;
-          if (pendingRequestId && pendingRequestId === pendingSendRequestId) return;
-          sendMayHaveGone = false;
-          clearUnknown();
-          setCollapsed(false);
-          return;
+        if (pendingRequestId && pendingRequestId === pendingSendRequestId &&
+            (!o || o.outcome === 'sending' || o.outcome === 'maybe-sent')) return;
+        if (hostSending) {
+          setSending(false);
+          hostSending = false;
+          if (sendMayHaveGone) showSendUnknown();
         }
         if (!o || typeof o !== 'object') return;
+        if (o.outcome === 'sending') {
+          hostSending = true;
+          setCollapsed(false);
+          setSending(true);
+          clearUnknown();
+          return;
+        }
         if (o.outcome === 'maybe-sent') {
-          if (pendingRequestId && pendingRequestId === pendingSendRequestId) return;
           showSendUnknown();
           setCollapsed(false);
           return;
@@ -1439,7 +1440,6 @@ ${f.cc ? `        var cc = normalizeAddressList(payload.cc).join(',');
         if (o.outcome !== 'sent' && o.outcome !== 'submitted') return;
         sent = true;
         sendMayHaveGone = false;
-        ownSendMayHaveGone = false;
         clearSendTimeout();
         clearError();
         clearSuccess();
@@ -1569,7 +1569,7 @@ ${gmail ? `      // The iframe sandbox is "allow-scripts" only (no allow-popups 
 
 ` : ''}      ${m.inputListenerElements}.forEach(function (element) {
         element.addEventListener('input', function () {
-          clearError();
+          if (!sendBlocked) clearError();
           clearSuccess();
           if (!sendMayHaveGone) clearUnknown();
           postResize();
@@ -1652,7 +1652,6 @@ ${hasDraft ? `          if (completedAction === 'draft') {
             sendButton.disabled = true;
           }
           if (${hasDraft ? "completedAction !== 'draft' && " : ''}(!blockedBeforeSend || sendMayHaveGone)) {
-            if (!blockedBeforeSend) ownSendMayHaveGone = true;
             showSendUnknown();
           }
 ${blockedSend ? `          // Only the host's closed user-disabled reason permits the Gmail
@@ -1690,7 +1689,6 @@ ${hasDraft ? `        if (completedAction === 'draft') {
         renderSentView(sentPayload, getSendMetaFromResult(data.result), stamp);
         sent = true;
         sendMayHaveGone = false;
-        ownSendMayHaveGone = false;
         reopenButton.classList.remove('hidden');
         setCollapsed(true, stamp ? ${quoteJsString(m.sentCollapseStamped)} + stamp : ${quoteJsString(m.sentCollapseDefault)});
       });

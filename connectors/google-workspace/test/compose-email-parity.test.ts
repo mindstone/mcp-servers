@@ -15,6 +15,8 @@
 //    Refined for the host-neutral outcome key, closed block reasons, persistent
 //    edit notice, blocked Retry, lost-reply sent contents and timestamp validation.
 //    Refined to keep earlier send uncertainty visible beside a later send block.
+//    Rebaselined for transient sending status, settled uncertainty, persistent
+//    policy explanations and the pending-reply payload cleanup refinements.
 // 2. Building with the connector's real config (the same object the generator
 //    script uses) reproduces the committed template. This proves the generator
 //    pipeline is lossless end-to-end, not just that someone committed the

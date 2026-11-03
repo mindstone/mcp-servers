@@ -429,10 +429,9 @@ export const COMPOSE_MESSAGE_HTML = `
       // Retain across the local timeout so even a late reply clears its payload.
       var pendingSendRequestId = null;
       var sending = false;
+      var hostSending = false;
       var collapsed = false;
-      var outcomeUnknown = false;
       var sendMayHaveGone = false;
-      var ownSendMayHaveGone = false;
       var sent = false;
       var intendedRecipient = '';
       var sendBlocked = false;
@@ -587,6 +586,7 @@ export const COMPOSE_MESSAGE_HTML = `
       function setSending(nextSending) {
         sending = nextSending;
         sendButton.disabled = nextSending || sendBlocked;
+        retryButton.disabled = nextSending;
         cancelButton.disabled = nextSending;
         toInput.disabled = nextSending;
         bodyInput.disabled = nextSending;
@@ -627,7 +627,6 @@ export const COMPOSE_MESSAGE_HTML = `
       }
 
       function clearUnknown() {
-        outcomeUnknown = false;
         unknownTitle.textContent = '';
         unknownText.textContent = '';
         unknownBox.classList.add('hidden');
@@ -641,7 +640,6 @@ export const COMPOSE_MESSAGE_HTML = `
       // a blind retry could send a duplicate).
       function showSendUnknown() {
         sendMayHaveGone = true;
-        outcomeUnknown = true;
         clearError();
         clearSuccess();
         unknownTitle.textContent = 'Not sure if this sent.';
@@ -658,7 +656,6 @@ export const COMPOSE_MESSAGE_HTML = `
         }
         pendingRequestId = null;
         setSending(false);
-        ownSendMayHaveGone = true;
         showSendUnknown();
       }
 
@@ -830,17 +827,22 @@ export const COMPOSE_MESSAGE_HTML = `
 
       function applyCardOutcome(o) {
         if (sent) return;
-        if (o === null) {
-          if (!sendMayHaveGone || ownSendMayHaveGone) return;
-          if (pendingRequestId && pendingRequestId === pendingSendRequestId) return;
-          sendMayHaveGone = false;
-          clearUnknown();
-          setCollapsed(false);
-          return;
+        if (pendingRequestId && pendingRequestId === pendingSendRequestId &&
+            (!o || o.outcome === 'sending' || o.outcome === 'maybe-sent')) return;
+        if (hostSending) {
+          setSending(false);
+          hostSending = false;
+          if (sendMayHaveGone) showSendUnknown();
         }
         if (!o || typeof o !== 'object') return;
+        if (o.outcome === 'sending') {
+          hostSending = true;
+          setCollapsed(false);
+          setSending(true);
+          clearUnknown();
+          return;
+        }
         if (o.outcome === 'maybe-sent') {
-          if (pendingRequestId && pendingRequestId === pendingSendRequestId) return;
           showSendUnknown();
           setCollapsed(false);
           return;
@@ -848,7 +850,6 @@ export const COMPOSE_MESSAGE_HTML = `
         if (o.outcome !== 'sent' && o.outcome !== 'submitted') return;
         sent = true;
         sendMayHaveGone = false;
-        ownSendMayHaveGone = false;
         clearSendTimeout();
         clearError();
         clearSuccess();
@@ -937,7 +938,7 @@ export const COMPOSE_MESSAGE_HTML = `
 
       [toInput, bodyInput].forEach(function (element) {
         element.addEventListener('input', function () {
-          clearError();
+          if (!sendBlocked) clearError();
           clearSuccess();
           if (!sendMayHaveGone) clearUnknown();
           postResize();
@@ -1009,7 +1010,6 @@ export const COMPOSE_MESSAGE_HTML = `
             sendButton.disabled = true;
           }
           if ((!blockedBeforeSend || sendMayHaveGone)) {
-            if (!blockedBeforeSend) ownSendMayHaveGone = true;
             showSendUnknown();
           }
           showError(errorMessage);
@@ -1026,7 +1026,6 @@ export const COMPOSE_MESSAGE_HTML = `
         renderSentView(sentPayload, getSendMetaFromResult(data.result), stamp);
         sent = true;
         sendMayHaveGone = false;
-        ownSendMayHaveGone = false;
         reopenButton.classList.remove('hidden');
         setCollapsed(true, stamp ? 'Message sent · ' + stamp : 'Message sent.');
       });
