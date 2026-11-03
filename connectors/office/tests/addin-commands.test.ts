@@ -878,17 +878,37 @@ it('aligns every paragraph in a Word paragraphRange', async () => {
 function makeWordInsertContext() {
   const batches: string[][] = [];
   let pending: string[] = [];
-  const paragraphs: Array<{ style: string; runs: Array<{ text: string; font: { bold: boolean; italic: boolean } }> }> = [];
+  interface InsertRange {
+    text: string;
+    font: { bold?: boolean; italic?: boolean };
+    style: string;
+    insertText(value: string): InsertRange;
+  }
+  const paragraphs: Array<{ style: string; runs: InsertRange[] }> = [];
   const write = (value: string) => { pending.push(value); };
   const insertParagraph = (text: string, location: string) => {
     write(`paragraph:${location}`);
-    const runs: Array<{ text: string; font: { bold: boolean; italic: boolean } }> = [];
+    const runs: InsertRange[] = [];
     const paragraph = {
-      style: '', runs,
-      insertText: (value: string) => {
+      style: 'Normal', runs,
+      insertText: (value: string): InsertRange => {
         write(`text:${value}`);
-        if (value === '\n') return insertParagraph('', 'After');
-        const run = { text: value, font: { bold: false, italic: false }, insertText: paragraph.insertText };
+        if (value === '\n') {
+          const next = insertParagraph('', 'After');
+          next.style = paragraph.style;
+          // The break belongs to this paragraph; insertion at its end reaches the next.
+          return {
+            text: value, font: {},
+            get style() { return paragraph.style; },
+            set style(value: string) { paragraph.style = value; },
+            insertText: next.insertText,
+          };
+        }
+        const run: InsertRange = {
+          text: value, font: {}, insertText: paragraph.insertText,
+          get style() { return paragraph.style; },
+          set style(value: string) { paragraph.style = value; },
+        };
         runs.push(run);
         return run;
       },
@@ -930,11 +950,58 @@ describe('one Word insert undo step', () => {
       expect(first).toBeDefined();
       expect(first!.style).toBe('Heading 1');
       expect(first!.runs.map(r => [r.text, r.font.bold, r.font.italic])).toEqual([
-        ['same ', false, false], ['same', true, false], [' ', false, false], ['slant', false, true],
+        ['same ', undefined, undefined], ['same', true, undefined], [' ', false, undefined], ['slant', undefined, true],
       ]);
       expect(paragraphs.map(p => p.runs.map(r => r.text).join(''))).toEqual(['same same slant', 'Second bold']);
     },
   );
+
+  it.each(['Quote', 'Heading 4'])('leaves plain runs free of direct bold and italic with style %s', async (style) => {
+    const { context, paragraphs, batches } = makeWordInsertContext();
+    mockOfficeApp('Word', context);
+    Object.assign(g.Word as object, { InsertLocation: { end: 'End' } });
+    expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({ text: 'Plain text', style }))
+      .toMatchObject({ success: true });
+    expect(paragraphs[0]!.style).toBe(style);
+    expect(paragraphs[0]!.runs[0]!.font).toEqual({});
+    expect(batches.filter(batch => batch.length)).toHaveLength(1);
+  });
+
+  it('resets only the preceding marked properties on a following plain run', async () => {
+    const { context, paragraphs } = makeWordInsertContext();
+    mockOfficeApp('Word', context);
+    Object.assign(g.Word as object, { InsertLocation: { end: 'End' } });
+    expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({ text: '**Bold** plain *italic* plain ***both*** plain' }))
+      .toMatchObject({ success: true });
+    expect(paragraphs[0]!.runs.map(run => run.font)).toEqual([
+      { bold: true }, { bold: false }, { italic: true }, { italic: false },
+      { bold: true, italic: true }, { bold: false, italic: false },
+    ]);
+  });
+
+  it('applies a replacement heading to the text after the paragraph break', async () => {
+    const { context, paragraphs, batches } = makeWordInsertContext();
+    mockOfficeApp('Word', context);
+    Object.assign(g.Word as object, { InsertLocation: { end: 'End', replace: 'Replace' } });
+    expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({ text: 'Intro\n# Heading', location: 'replaceSelection' }))
+      .toMatchObject({ success: true });
+    expect(paragraphs.map(p => ({ text: p.runs.map(r => r.text).join(''), style: p.style })))
+      .toEqual([{ text: 'Intro', style: 'Normal' }, { text: 'Heading', style: 'Heading 1' }]);
+    expect(batches.filter(batch => batch.length)).toHaveLength(1);
+  });
+
+  it.each([
+    ['5 * 3', '5 * 3'],
+    ['a * b ** c', 'a  b * c'],
+  ])('finishes inserting text containing an unmatched asterisk: %s', async (text, expected) => {
+    const { context, paragraphs, batches } = makeWordInsertContext();
+    mockOfficeApp('Word', context);
+    Object.assign(g.Word as object, { InsertLocation: { end: 'End' } });
+    expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({ text }))
+      .toMatchObject({ success: true });
+    expect(paragraphs[0]!.runs.map(run => run.text).join('')).toBe(expected);
+    expect(batches.filter(batch => batch.length)).toHaveLength(1);
+  });
 });
 
 function makeAddSlideContext() {
@@ -1001,6 +1068,19 @@ describe('PowerPoint undo values and batching', () => {
     mockOfficeApp('PowerPoint', context);
     expect(await mustGet(getPowerpointCommandHandler('format_shape'), 'format_shape')({ slideIndex: 1, target: { type: 'shapeId', shapeId: shape.id }, formatting: { fillColor: '#ffffff', name: 'New name', left: 20 } }))
       .toMatchObject({ success: true, data: { previous: { fillColor: '#112233', name: 'Title 1', left: 0 } } });
+  });
+
+  it.each([null, ''])('omits absent previous fill and line colors (%s)', async (color) => {
+    const { context, shape } = makePowerPointContext();
+    Object.assign(shape.fill, { type: 'NoFill', foregroundColor: color });
+    Object.assign(shape.lineFormat, { color });
+    mockOfficeApp('PowerPoint', context);
+    const result = await mustGet(getPowerpointCommandHandler('format_shape'), 'format_shape')({
+      slideIndex: 1, target: { type: 'shapeId', shapeId: shape.id },
+      formatting: { fillColor: '#ffffff', lineColor: '#ffffff', name: 'New' },
+    });
+    expect(result).toMatchObject({ success: true, data: { previousFillType: 'NoFill' } });
+    if (result.success) expect((result.data as { previous: unknown }).previous).toEqual({ name: 'Title 1' });
   });
 });
 

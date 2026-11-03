@@ -19,7 +19,7 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 
-- Word markdown inserts preserve bold, italic and styles at every insertion location in one writing batch. PowerPoint adds and moves a slide in one batch, with a second batch only for placeholder text; unavailable slide movement fails before creation.
+- Word markdown inserts retain paragraph-style formatting, apply inline bold and italic, and style each line at every insertion location in one writing batch. Stray asterisks no longer stall insertion. PowerPoint adds and moves a slide in one batch, with a second batch only for placeholder text; unavailable slide movement fails before creation.
 - Excel condition filters translate named operators and reject unknown ones before writing. Sorting rejects unknown headers and resolves multi-letter columns relative to the range; unsupported shape types fail before creation.
 - Formatted PowerPoint shapes check API support before creation. Speaker-notes and layout failures retain coded errors, Word alignment covers every targeted paragraph, and pairing and partial-slide recovery guidance identify the next step.
 - Setup and status validation failures use the same `app: "all"` value as their other results.

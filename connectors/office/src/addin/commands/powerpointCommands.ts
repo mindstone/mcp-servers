@@ -1050,10 +1050,12 @@ async function formatShape(params: Record<string, unknown>): Promise<CommandResu
     await context.sync();
     const previous: Record<string, unknown> = {};
     for (const key of changed) {
-      previous[key] = key === 'fillColor' ? shape.fill.foregroundColor
+      const value = key === 'fillColor' ? shape.fill.foregroundColor
         : key === 'lineColor' ? shape.lineFormat.color
         : key === 'lineWidth' ? shape.lineFormat.weight
         : shape[key as 'left' | 'top' | 'width' | 'height' | 'name'];
+      if ((key === 'fillColor' || key === 'lineColor') && (value == null || value === '')) continue;
+      previous[key] = value;
     }
     // A color alone cannot represent gradients, picture fills, or no fill.
     const previousFillType = changed.includes('fillColor') ? String(shape.fill.type) : undefined;

@@ -71,9 +71,10 @@ PowerPoint for Mac cannot reliably undo add-in edits with Cmd+Z. Its `undo`
 guidance names the existing tools and returned values to reverse an edit. Read
 the current state first and ask the user if it has changed since the edit.
 Deleting shapes or slides and applying layouts cannot be reversed exactly with
-these tools. Neither can restoring empty text or notes, a non-solid fill,
+these tools. Neither can restoring empty text or notes, a non-solid fill, no line,
 previous dimensions or line width of zero, or text formatting changed by
-`update_text`. Those limitations are stated in the tool's guidance; confirm with
+`update_text`. Restoring previous text does not restore its original mixed
+formatting. Those limitations are stated in the tool's guidance; confirm with
 the user first. No undo history is stored by the connector.
 
 For Excel `read_range` and `read_table` JSON rows, header-derived object keys

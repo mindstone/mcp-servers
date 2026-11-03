@@ -741,7 +741,7 @@ const ERROR_CATALOG = {
 };
 
 const nativeUndo = 'The user can undo this with Ctrl+Z (Cmd+Z on Mac).';
-const macPowerpointUndo = "PowerPoint for Mac can't undo add-in edits with Cmd+Z. ";
+const macPowerpointUndo = "PowerPoint for Mac can't reliably undo add-in edits with Cmd+Z. ";
 const readBeforeReversing = ' Read the current slide or shape with rebel_office_powerpoint_get_slides and rebel_office_powerpoint_get_slide_content (or rebel_office_powerpoint_get_speaker_notes for notes) first; ask the user before reversing if it has changed since the edit.';
 const deleteAddedShape = 'To reverse this, use rebel_office_powerpoint_delete_shape with target.type="shapeId", target.shapeId=data.shapeId and the original slideIndex.';
 const UNDO_WORDING = {
@@ -759,9 +759,9 @@ const UNDO_WORDING = {
       add_shape: deleteAddedShape,
       add_image: deleteAddedShape,
       add_slide: 'To reverse this, use rebel_office_powerpoint_delete_slide: find data.slideId in rebel_office_powerpoint_get_slides and use its slideNumber as slideIndex.',
-      update_text: 'To restore plain text, use rebel_office_powerpoint_update_text with the original slideIndex, target.type="shapeId", target.shapeId=data.shapeId and text=data.previousText, if non-empty. Blank previous text or formatting changed by update_text cannot be undone exactly with these tools; confirm with the user first.',
+      update_text: 'To restore plain text, use rebel_office_powerpoint_update_text with the original slideIndex, target.type="shapeId", target.shapeId=data.shapeId and text=data.previousText, if non-empty; the original text\'s mixed formatting is not restored. Blank previous text or formatting changed by update_text cannot be undone exactly with these tools; confirm with the user first.',
       set_speaker_notes: 'To reverse this, use rebel_office_powerpoint_set_speaker_notes with slideIndex=data.slideNumber and notes=data.previousNotes, if non-empty. Previously blank notes cannot be undone exactly with these tools; confirm with the user first.',
-      format_shape: 'To reverse representable values, use rebel_office_powerpoint_format_shape with slideIndex=data.slideIndex, target.type="shapeId", target.shapeId=data.shapeId and formatting=data.previous. A non-solid previous fill (data.previousFillType), or previous lineWidth, width or height of zero, cannot be undone exactly with these tools; confirm with the user first.',
+      format_shape: 'To reverse representable values, use rebel_office_powerpoint_format_shape with slideIndex=data.slideIndex, target.type="shapeId", target.shapeId=data.shapeId and formatting=data.previous. A non-solid previous fill (data.previousFillType), no line, or previous lineWidth, width or height of zero cannot be undone exactly with these tools; confirm with the user first.',
       reorder_slides: 'To reverse this, use rebel_office_powerpoint_reorder_slides with data.from and data.to swapped: fromIndex=data.to, toIndex=data.from.',
       delete_shape: 'This cannot be undone exactly with these tools; confirm with the user first.',
       delete_slide: 'This cannot be undone exactly with these tools; confirm with the user first.',

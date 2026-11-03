@@ -183,6 +183,10 @@ function parseMarkdownLine(line: string): MarkdownLine {
     const chunk = nextStar === -1 ? remaining : remaining.slice(0, nextStar);
     if (chunk.length > 0) {
       segments.push({ text: chunk, bold: false, italic: false });
+    } else {
+      segments.push({ text: '*', bold: false, italic: false });
+      remaining = remaining.slice(1);
+      continue;
     }
     remaining = nextStar === -1 ? '' : remaining.slice(chunk.length);
   }
@@ -207,14 +211,21 @@ function insertMarkdownParagraph(
   explicitStyle?: string,
 ): Word.Range | Word.Paragraph {
   const style = explicitStyle ?? (parsed.headingLevel > 0 ? HEADING_STYLES[parsed.headingLevel] : undefined);
-  if (style) target.style = style;
   let cursor = target;
+  let previous: MarkdownLine['segments'][number] | undefined;
   for (const segment of parsed.segments) {
     const range = cursor.insertText(segment.text, Word.InsertLocation.end);
-    range.font.bold = segment.bold;
-    range.font.italic = segment.italic;
+    if (segment.bold) range.font.bold = true;
+    if (segment.italic) range.font.italic = true;
+    if (!segment.bold && !segment.italic) {
+      if (previous?.bold) range.font.bold = false;
+      if (previous?.italic) range.font.italic = false;
+    }
     cursor = range;
+    previous = segment;
   }
+  // A range containing a paragraph break styles the preceding paragraph.
+  if (style) cursor.style = style;
   return cursor;
 }
 

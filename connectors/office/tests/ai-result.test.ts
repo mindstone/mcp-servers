@@ -112,8 +112,10 @@ describe('undo instructions from the edit registry', () => {
       expect(undo('add_slide')).toMatch(/delete_slide.*data.slideId/);
       expect(undo('update_text')).toMatch(/cannot be undone exactly/i);
       expect(undo('update_text')).toContain('previousText');
+      expect(undo('update_text')).toContain("the original text's mixed formatting is not restored");
       expect(undo('set_speaker_notes')).toMatch(/blank.*cannot be undone exactly/i);
       expect(undo('format_shape')).toMatch(/non-solid.*cannot be undone exactly/i);
+      expect(undo('format_shape')).toMatch(/no line.*cannot be undone exactly/i);
       for (const action of ['delete_shape', 'delete_slide', 'apply_layout']) expect(undo(action)).toMatch(/confirm with the user first/i);
       expect(undo('reorder_slides')).toMatch(/from.*to.*swapped/i);
       expect(undo('update_text')).not.toContain('hostile');
@@ -134,7 +136,7 @@ it.each(['win32', 'darwin'] as const)('advertises and returns the same undo inst
       if (tool.annotations.readOnlyHint === false) {
         expect(result.undo, name).toEqual(expect.any(String));
         expect(tool.description.endsWith(result.undo), name).toBe(true);
-        if (app === 'powerpoint' && platform === 'darwin') expect(result.undo).toContain("can't undo add-in edits with Cmd+Z");
+        if (app === 'powerpoint' && platform === 'darwin') expect(result.undo).toContain("can't reliably undo add-in edits with Cmd+Z");
       } else expect(tool.description).not.toMatch(/Ctrl\+Z|Cmd\+Z|cannot be undone/);
     }
     const undo = (app: string, action: string) => JSON.parse(current.toMcpResult(current.stampUntrustedSource({ success: true, data: {} }, app, action)).content[0].text).undo;
