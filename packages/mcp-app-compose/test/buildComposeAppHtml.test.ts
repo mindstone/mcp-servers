@@ -284,10 +284,24 @@ describe.each([
     expect(window.document.getElementById('collapsedMessage')!.textContent).toBe('Draft collapsed. Nothing sent.');
   });
 
-  it.each(['user-disabled', 'admin-disabled', 'security-policy', 'not-dispatched'])('does not erase earlier uncertainty after a %s block', (reason) => {
+  it.each(['user-disabled', 'admin-disabled', 'security-policy', 'not-dispatched'])('keeps earlier uncertainty visible alongside a %s block', (reason) => {
     const window = mount(maybeOutcome);
-    click(window, 'sendButton');
+    click(window, 'retryButton');
     reply(window, { message: 'Tool call blocked.', data: { reason } });
+    expect(isHidden(window, 'unknownBox')).toBe(false);
+    expect(window.document.getElementById('unknownTitle')!.textContent).toBe('Not sure if this sent.');
+    if (mode === 'email' && reason === 'user-disabled') {
+      expect(isHidden(window, 'blockedBox')).toBe(false);
+      expect(window.document.getElementById('retryButton')!.closest('.hidden')).not.toBeNull();
+      click(window, 'retryButton');
+      expect(calls(window)).toHaveLength(1);
+    } else {
+      expectUncertainty(window);
+      expect(isHidden(window, 'errorBox')).toBe(false);
+      expect(window.document.getElementById('errorText')!.textContent).toBe('Tool call blocked.');
+    }
+    setFieldValue(window, 'bodyInput', 'Edited after the block.');
+    expect(isHidden(window, 'unknownBox')).toBe(false);
     click(window, 'cancelButton');
     expect(window.document.getElementById('collapsedMessage')!.textContent).not.toContain('Nothing sent');
   });

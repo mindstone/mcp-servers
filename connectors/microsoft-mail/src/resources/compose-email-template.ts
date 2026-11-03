@@ -1197,7 +1197,7 @@ export const COMPOSE_EMAIL_HTML = `
           }
           var blockedReason = data.error.data && data.error.data.reason;
           var blockedBeforeSend = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy' || blockedReason === 'not-dispatched';
-          if (completedAction !== 'draft' && !blockedBeforeSend) {
+          if (completedAction !== 'draft' && (!blockedBeforeSend || sendMayHaveGone)) {
             showSendUnknown();
           }
           showError(errorMessage);

@@ -962,7 +962,7 @@ export const COMPOSE_MESSAGE_HTML = `
             : 'Failed to send message.';
           var blockedReason = data.error.data && data.error.data.reason;
           var blockedBeforeSend = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy' || blockedReason === 'not-dispatched';
-          if (!blockedBeforeSend) {
+          if ((!blockedBeforeSend || sendMayHaveGone)) {
             showSendUnknown();
           }
           showError(errorMessage);

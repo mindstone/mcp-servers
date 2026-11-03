@@ -1045,6 +1045,7 @@ export const COMPOSE_EMAIL_HTML = `
         clearError();
         clearSuccess();
         clearUnknown();
+        if (sendMayHaveGone) showSendUnknown();
         sendButton.disabled = true;
         sendButton.title =
           'Sending from here is turned off in your settings. Turn it back on in Settings, or open this draft in Gmail to send.';
@@ -1336,7 +1337,7 @@ export const COMPOSE_EMAIL_HTML = `
           }
           var blockedReason = data.error.data && data.error.data.reason;
           var blockedBeforeSend = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy' || blockedReason === 'not-dispatched';
-          if (completedAction !== 'draft' && !blockedBeforeSend) {
+          if (completedAction !== 'draft' && (!blockedBeforeSend || sendMayHaveGone)) {
             showSendUnknown();
           }
           // Only the host's closed user-disabled reason permits the Gmail

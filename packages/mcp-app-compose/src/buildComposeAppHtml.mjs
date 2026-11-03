@@ -1349,6 +1349,7 @@ ${f.cc ? `        var cc = normalizeAddressList(payload.cc).join(',');
         clearError();
         clearSuccess();
         clearUnknown();
+        if (sendMayHaveGone) showSendUnknown();
         sendButton.disabled = true;
         sendButton.title =
           'Sending from here is turned off in your settings. Turn it back on in Settings, or open this draft in Gmail to send.';
@@ -1628,7 +1629,7 @@ ${hasDraft ? `          if (completedAction === 'draft') {
           }
 ` : ''}          var blockedReason = data.error.data && data.error.data.reason;
           var blockedBeforeSend = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy' || blockedReason === 'not-dispatched';
-          if (${hasDraft ? "completedAction !== 'draft' && " : ''}!blockedBeforeSend) {
+          if (${hasDraft ? "completedAction !== 'draft' && " : ''}(!blockedBeforeSend || sendMayHaveGone)) {
             showSendUnknown();
           }
 ${blockedSend ? `          // Only the host's closed user-disabled reason permits the Gmail
