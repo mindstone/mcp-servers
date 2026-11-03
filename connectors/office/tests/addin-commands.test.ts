@@ -1017,16 +1017,18 @@ function makeWordInsertContext(originalStyle = 'Normal') {
   }
   const paragraphs: Array<{ style: string; runs: InsertRange[] }> = [];
   const write = (value: string) => { pending.push(value); };
-  const insertParagraph = (text: string, location: string) => {
+  const insertParagraph = (text: string, location: string, inheritedStyle = originalStyle) => {
     write(`paragraph:${location}`);
     const runs: InsertRange[] = [];
+    let paragraphStyle = inheritedStyle;
     const paragraph = {
-      style: originalStyle, runs,
+      get style() { return paragraphStyle; },
+      set style(value: string) { write(`style:${value}`); paragraphStyle = value; },
+      runs,
       insertText: (value: string, _location: string): InsertRange => {
         write(`text:${value}`);
         if (value === '\n') {
-          const next = insertParagraph('', 'After');
-          next.style = paragraph.style;
+          const next = insertParagraph('', 'After', paragraph.style);
           let runStyle: string | undefined;
           // The break belongs to this paragraph; insertion at its end reaches the next.
           return {
@@ -1085,6 +1087,42 @@ function makeWordInsertContext(originalStyle = 'Normal') {
 }
 
 describe('one Word insert undo step', () => {
+  it.each(['end', 'start', 'afterParagraph', 'beforeParagraph', 'replaceSelection'])(
+    'inserts all lines before styles and marks at %s', async (location) => {
+      const { context, batches } = makeWordInsertContext();
+      mockOfficeApp('Word', context);
+      Object.assign(g.Word as object, { InsertLocation: { start: 'Start', end: 'End', after: 'After', before: 'Before', replace: 'Replace' } });
+      expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({
+        text: '# Intro **bold**\n## Second *italic*', location, paragraphIndex: 0,
+      })).toMatchObject({ success: true });
+      expect(batches.filter(batch => batch.length)).toHaveLength(1);
+      expect(batches.slice(0, -1).every(batch => batch.length === 0)).toBe(true);
+      const writes = batches.flat();
+      const lastInsert = writes.findLastIndex(event => event.startsWith('text:') || event.startsWith('paragraph:'));
+      const firstStyle = writes.findIndex(event => event.startsWith('style:'));
+      const lastStyle = writes.findLastIndex(event => event.startsWith('style:'));
+      const firstMark = writes.findIndex(event => event.startsWith('font:'));
+      expect(firstStyle).toBeGreaterThan(lastInsert);
+      expect(firstMark).toBeGreaterThan(lastStyle);
+      expect(writes.filter(event => event.startsWith('font:')).sort()).toEqual(['font:bold=true', 'font:italic=true']);
+      if (location === 'replaceSelection') expect(writes).toContain('text:\n');
+    },
+  );
+
+  it.each(['end', 'start', 'afterParagraph', 'beforeParagraph', 'replaceSelection'])(
+    'styles a single paragraph before applying whole-line marks at %s', async (location) => {
+      const { context, batches } = makeWordInsertContext();
+      mockOfficeApp('Word', context);
+      Object.assign(g.Word as object, { InsertLocation: { start: 'Start', end: 'End', after: 'After', before: 'Before', replace: 'Replace' } });
+      expect(await mustGet(getWordCommandHandler('insert_text'), 'insert_text')({
+        text: '***Whole line***', style: 'Quote', location, paragraphIndex: 0,
+      })).toMatchObject({ success: true });
+      expect(batches.filter(batch => batch.length)).toHaveLength(1);
+      expect(batches.flat().filter(event => !event.startsWith('paragraph:')))
+        .toEqual(['text:Whole line', 'style:Quote', 'font:bold=true', 'font:italic=true']);
+    },
+  );
+
   it.each(['end', 'start', 'afterParagraph', 'beforeParagraph', 'replaceSelection'])(
     'queues bold and italic runs before one writing sync at %s', async (location) => {
       const { context, batches, paragraphs } = makeWordInsertContext();

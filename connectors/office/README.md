@@ -84,8 +84,9 @@ keys containing spaces, punctuation or closing tags. Word `get_properties`
 returns `customProperties` as an array of `{ name, value }` entries; every name
 is enveloped, including names that look like identifiers and `__proto__`.
 
-Word text inserts give heading and named styles to the whole paragraph and add
-only the requested inline bold or italic, preserving the style's formatting.
+Word text inserts add all text and paragraph breaks first, then give heading and
+named styles to the whole paragraph, then add only the requested inline bold or
+italic, preserving the style's formatting.
 
 Relative placements require their target: `afterParagraph` needs
 `paragraphIndex`, and `afterSheet` needs `afterSheet`. A paragraph range needs
