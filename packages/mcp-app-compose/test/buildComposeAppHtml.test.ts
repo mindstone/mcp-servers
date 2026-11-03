@@ -85,7 +85,7 @@ afterEach(() => {
   outcomeWindows.splice(0).forEach((window) => window.close());
 });
 
-function loadWindow(html: string, cardOutcome?: { outcome: string; at: number }): Window {
+function loadWindow(html: string, cardOutcome?: { outcome: string; at?: unknown }): Window {
   const window = new Window({ url: 'https://example.com/compose-email.html' });
   composeWindow = window;
   Object.assign(window, { __MCP_HOST_CONTEXT__: { cardOutcome } });
@@ -106,7 +106,7 @@ describe.each([
   const sentOutcome = { outcome: 'sent', at };
   const maybeOutcome = { outcome: 'maybe-sent', at };
 
-  function mount(outcome?: { outcome: string; at: number }): Window {
+  function mount(outcome?: { outcome: string; at?: unknown }): Window {
     const window = loadWindow(html, outcome);
     outcomeWindows.push(window);
     setFieldValue(window, 'toInput', mode === 'email' ? 'jane@example.com' : 'channel-123');
@@ -150,7 +150,7 @@ describe.each([
   it('declares the Send outcome in request metadata', () => {
     const window = mount();
     click(window, 'sendButton');
-    expect(calls(window)[0]?.params._meta).toEqual({ 'rebel/cardOutcome': 'sent' });
+    expect(calls(window)[0]?.params._meta).toEqual({ 'mcp-app/cardOutcome': 'sent' });
   });
 
   it.each(['sent', 'submitted'])('restores a cold %s outcome with its time and retires Send and Retry', (outcome) => {
@@ -196,6 +196,44 @@ describe.each([
     expect(calls(window)).toHaveLength(1);
   });
 
+  it('retains the posted contents when a lost reply is followed by host confirmation', () => {
+    const window = mount();
+    const timeout = vi.spyOn(window, 'setTimeout');
+    click(window, 'sendButton');
+    const callback = timeout.mock.calls.find((call) => call[1] === 75000)?.[0];
+    expect(typeof callback).toBe('function');
+    (callback as () => void)();
+    setFieldValue(window, 'bodyInput', 'Unsent edits after timeout.');
+    deliver(window);
+    expect(isHidden(window, 'reopenButton')).toBe(false);
+    click(window, 'reopenButton');
+    expect(isHidden(window, 'sentView')).toBe(false);
+    expect(window.document.getElementById('sentBody')!.textContent).toBe('Ready to send.');
+    click(window, 'retryButton');
+    expect(calls(window)).toHaveLength(1);
+  });
+
+  it.each([
+    { label: 'null', at: null }, { label: 'missing', at: undefined },
+    { label: 'text', at: 'invalid' }, { label: 'ISO string', at: '2026-01-02T15:04:00Z' },
+    { label: 'NaN', at: NaN }, { label: 'infinity', at: Infinity },
+    { label: 'out of range', at: 9e99 }, { label: 'object', at: {} }, { label: 'array', at: [] },
+  ])(
+    'uses an undated sent bar for malformed host time $label', ({ at }) => {
+      const window = mount({ outcome: 'sent', at });
+      expect(window.document.getElementById('collapsedMessage')!.textContent).toBe(sentPrefix.split(' · ')[0] + '.');
+    },
+  );
+
+  it('keeps Retry beside the warning when the uncertain send fails validation', () => {
+    const window = mount(maybeOutcome);
+    setFieldValue(window, 'bodyInput', '');
+    click(window, 'retryButton');
+    expectUncertainty(window);
+    expect(calls(window)).toHaveLength(0);
+    expect(isHidden(window, 'errorBox')).toBe(false);
+  });
+
   it('restores an uncertain send beside Retry on cold mount', () => {
     const window = loadWindow(html, maybeOutcome);
     expectUncertainty(window);
@@ -220,6 +258,7 @@ describe.each([
     reply(window, { message: 'Connection lost.' });
     expectUncertainty(window);
     setFieldValue(window, 'bodyInput', 'Edited after the error.');
+    expectUncertainty(window);
     click(window, 'cancelButton');
     expect(window.document.getElementById('collapsedMessage')!.textContent).not.toContain('Nothing sent');
     expect(window.document.getElementById('collapsedMessage')!.textContent).toContain('Check');
@@ -236,7 +275,7 @@ describe.each([
     expect(window.document.getElementById('collapsedMessage')!.textContent).not.toContain('Nothing sent');
   });
 
-  it.each(['user-disabled', 'admin-disabled', 'security-policy'])('keeps Nothing sent for a pre-execution %s block', (reason) => {
+  it.each(['user-disabled', 'admin-disabled', 'security-policy', 'not-dispatched'])('keeps Nothing sent for a pre-execution %s block', (reason) => {
     const window = mount();
     click(window, 'sendButton');
     reply(window, { message: 'Tool call blocked.', data: { reason } });
@@ -245,10 +284,10 @@ describe.each([
     expect(window.document.getElementById('collapsedMessage')!.textContent).toBe('Draft collapsed. Nothing sent.');
   });
 
-  it('does not erase earlier uncertainty after a pre-execution block', () => {
+  it.each(['user-disabled', 'admin-disabled', 'security-policy', 'not-dispatched'])('does not erase earlier uncertainty after a %s block', (reason) => {
     const window = mount(maybeOutcome);
     click(window, 'sendButton');
-    reply(window, { message: 'Tool call blocked.', data: { reason: 'admin-disabled' } });
+    reply(window, { message: 'Tool call blocked.', data: { reason } });
     click(window, 'cancelButton');
     expect(window.document.getElementById('collapsedMessage')!.textContent).not.toContain('Nothing sent');
   });
@@ -269,8 +308,23 @@ describe.each([
     (callback as () => void)();
     expectUncertainty(window);
     setFieldValue(window, 'bodyInput', 'Edited after timeout.');
+    expectUncertainty(window);
     click(window, 'cancelButton');
     expect(window.document.getElementById('collapsedMessage')!.textContent).not.toContain('Nothing sent');
+  });
+
+  it.skipIf(mode !== 'email')('does not offer or invoke Retry after the user setting blocks sending', () => {
+    const window = mount(maybeOutcome);
+    click(window, 'retryButton');
+    reply(window, { message: 'Tool call blocked.', data: { reason: 'user-disabled' } });
+    click(window, 'cancelButton');
+    click(window, 'reopenButton');
+    deliver(window, maybeOutcome);
+    expect(isHidden(window, 'unknownBox')).toBe(false);
+    const retry = window.document.getElementById('retryButton')!;
+    click(window, 'retryButton');
+    expect(calls(window)).toHaveLength(1);
+    expect(retry.closest('.hidden')).not.toBeNull();
   });
 
   it('accepts outcome messages only from the parent', () => {
@@ -444,7 +498,7 @@ describe('buildComposeAppHtml — host neutrality', () => {
       ['teams', teamsHtml],
     ];
     for (const [name, html] of variants) {
-      expect(html.replaceAll("'rebel/cardOutcome'", "'cardOutcome'"), name).not.toMatch(/rebel|mindstone|nspr/i);
+      expect(html, name).not.toMatch(/rebel|mindstone|nspr/i);
     }
   });
 
@@ -551,7 +605,6 @@ describe('buildComposeAppHtml — blocked-send Gmail escape hatch (gating)', () 
     for (const marker of [
       'id="blockedBox"',
       'id="openComposeButton"',
-      'function isUserDisabledSendError',
       'function buildGmailComposeUrl',
       'function showBlockedSend',
       'var GMAIL_COMPOSE_MAX_URL = 8000;',
@@ -580,7 +633,7 @@ describe('buildComposeAppHtml — blocked-send Gmail escape hatch (gating)', () 
 
 describe('buildComposeAppHtml — blocked-send detector and Gmail URL (happy-dom)', () => {
   it('shows the escape hatch (not a retryable error) when the user disabled the send tool', () => {
-    const window = sendThenReplyError(blockedHtml, USER_DISABLED_ERROR);
+    const window = sendThenReplyError(blockedHtml, USER_DISABLED_ERROR, undefined, { reason: 'user-disabled' });
 
     expect(isHidden(window, 'blockedBox')).toBe(false);
     expect(isHidden(window, 'errorBox')).toBe(true);
@@ -623,7 +676,7 @@ describe('buildComposeAppHtml — blocked-send detector and Gmail URL (happy-dom
     }
   });
 
-  it('ignores unrecognised or malformed error.data shapes and falls back to text-matching', () => {
+  it('classifies blocks only by the structured reason, regardless of message text', () => {
     // Unknown reason with a non-matching message → ordinary error.
     const unknownReason = sendThenReplyError(blockedHtml, 'Tool call failed', undefined, {
       reason: 'totally-new-kind',
@@ -631,13 +684,19 @@ describe('buildComposeAppHtml — blocked-send detector and Gmail URL (happy-dom
     expect(isHidden(unknownReason, 'blockedBox')).toBe(true);
     expect(isHidden(unknownReason, 'errorBox')).toBe(false);
 
-    // Malformed data alongside a legacy user-disabled message → the text
-    // fallback still opens the escape hatch.
+    // Message text cannot establish that a call was blocked before dispatch.
     const malformedData = sendThenReplyError(blockedHtml, USER_DISABLED_ERROR, undefined, {
       unrelated: true,
     });
-    expect(isHidden(malformedData, 'blockedBox')).toBe(false);
-    expect(isHidden(malformedData, 'errorBox')).toBe(true);
+    expect(isHidden(malformedData, 'blockedBox')).toBe(true);
+    expect(isHidden(malformedData, 'errorBox')).toBe(false);
+    expect(isHidden(malformedData, 'unknownBox')).toBe(false);
+    const adminBlock = sendThenReplyError(blockedHtml, USER_DISABLED_ERROR, undefined, { reason: 'admin-disabled' });
+    expect(isHidden(adminBlock, 'blockedBox')).toBe(true);
+    expect(isHidden(adminBlock, 'unknownBox')).toBe(true);
+    const noReason = sendThenReplyError(blockedHtml, USER_DISABLED_ERROR);
+    expect(isHidden(noReason, 'blockedBox')).toBe(true);
+    expect(isHidden(noReason, 'unknownBox')).toBe(false);
   });
 
   it('opens a prefilled mail.google.com compose window via the host bridge', () => {
@@ -645,7 +704,7 @@ describe('buildComposeAppHtml — blocked-send detector and Gmail URL (happy-dom
       to: 'jane@example.com',
       subject: 'Q3 numbers',
       body: 'Attached.',
-    });
+    }, { reason: 'user-disabled' });
     const openComposeButton = window.document.getElementById('openComposeButton') as unknown as HTMLButtonElement;
     openComposeButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
 
@@ -660,7 +719,7 @@ describe('buildComposeAppHtml — blocked-send detector and Gmail URL (happy-dom
   });
 
   it('carries edits made after the block into the Gmail compose URL', () => {
-    const window = sendThenReplyError(blockedHtml, USER_DISABLED_ERROR);
+    const window = sendThenReplyError(blockedHtml, USER_DISABLED_ERROR, undefined, { reason: 'user-disabled' });
     // User edits the draft after seeing the escape hatch.
     setFieldValue(window, 'toInput', 'edited@example.com');
     setFieldValue(window, 'bodyInput', 'Rewritten body.');
@@ -678,7 +737,7 @@ describe('buildComposeAppHtml — blocked-send detector and Gmail URL (happy-dom
   it('round-trips multiple comma-separated recipients through the URL', () => {
     const window = sendThenReplyError(blockedHtml, USER_DISABLED_ERROR, {
       to: 'ann@example.com, ben@example.com',
-    });
+    }, { reason: 'user-disabled' });
     const openComposeButton = window.document.getElementById('openComposeButton') as unknown as HTMLButtonElement;
     openComposeButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
 
@@ -693,7 +752,7 @@ describe('buildComposeAppHtml — blocked-send detector and Gmail URL (happy-dom
     // Far more recipients than a Gmail compose URL can carry, so dropping the
     // body still leaves it over the cap.
     const manyRecipients = Array.from({ length: 300 }, (_, i) => `recipient.number.${i}@example.com`).join(', ');
-    const window = sendThenReplyError(blockedHtml, USER_DISABLED_ERROR, { to: manyRecipients });
+    const window = sendThenReplyError(blockedHtml, USER_DISABLED_ERROR, { to: manyRecipients }, { reason: 'user-disabled' });
     const openComposeButton = window.document.getElementById('openComposeButton') as unknown as HTMLButtonElement;
     openComposeButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
 
@@ -707,7 +766,7 @@ describe('buildComposeAppHtml — blocked-send detector and Gmail URL (happy-dom
   it('degrades to recipients + subject only (no body) when the compose URL would be too long', () => {
     const window = sendThenReplyError(blockedHtml, USER_DISABLED_ERROR, {
       body: 'x'.repeat(9000),
-    });
+    }, { reason: 'user-disabled' });
     const openComposeButton = window.document.getElementById('openComposeButton') as unknown as HTMLButtonElement;
     openComposeButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }) as unknown as Event);
 
@@ -899,6 +958,48 @@ describe('buildComposeAppHtml — save-draft lifecycle (happy-dom)', () => {
     // off would be nonsense for a draft save.
     const sendButton = window.document.getElementById('sendButton') as unknown as HTMLButtonElement;
     expect(sendButton.disabled).toBe(false);
+  });
+
+  it('says Nothing sent after a draft-save timeout and Cancel', () => {
+    const fresh = loadWindow(draftHtml);
+    setFieldValue(fresh, 'toInput', 'jane@example.com');
+    setFieldValue(fresh, 'subjectInput', 'Update');
+    setFieldValue(fresh, 'bodyInput', 'Draft only.');
+    const timeout = vi.spyOn(fresh, 'setTimeout');
+    fresh.document.getElementById('draftButton')!.dispatchEvent(new fresh.Event('click'));
+    const callback = timeout.mock.calls.find((call) => call[1] === 75000)?.[0];
+    expect(typeof callback).toBe('function');
+    (callback as () => void)();
+    expect(fresh.document.getElementById('unknownTitle')!.textContent).toBe('Not sure if the draft was saved.');
+    fresh.document.getElementById('cancelButton')!.dispatchEvent(new fresh.Event('click'));
+    expect(fresh.document.getElementById('collapsedMessage')!.textContent).toBe('Draft collapsed. Nothing sent.');
+  });
+
+  it('keeps an earlier send uncertainty and posted contents through a draft-save timeout', () => {
+    const window = loadWindow(draftHtml);
+    setFieldValue(window, 'toInput', 'jane@example.com');
+    setFieldValue(window, 'subjectInput', 'Update');
+    setFieldValue(window, 'bodyInput', 'Posted send contents.');
+    window.document.getElementById('sendButton')!.dispatchEvent(new window.Event('click'));
+    const sendCall = postedMessages(window).find((message) => message.method === 'tools/call');
+    window.dispatchEvent(new window.MessageEvent('message', {
+      data: { jsonrpc: '2.0', id: sendCall?.id, error: { message: 'Connection lost.' } },
+    }));
+    setFieldValue(window, 'bodyInput', 'Later draft contents.');
+    const timeout = vi.spyOn(window, 'setTimeout');
+    window.document.getElementById('draftButton')!.dispatchEvent(new window.Event('click'));
+    const callback = timeout.mock.calls.find((call) => call[1] === 75000)?.[0];
+    expect(typeof callback).toBe('function');
+    (callback as () => void)();
+    window.document.getElementById('cancelButton')!.dispatchEvent(new window.Event('click'));
+    expect(window.document.getElementById('collapsedMessage')!.textContent).not.toContain('Nothing sent');
+    window.dispatchEvent(new window.MessageEvent('message', {
+      data: { method: 'mcp-app:card-outcome', params: { outcome: 'sent', at: Date.UTC(2026, 0, 2) } },
+      source: window.eval('window.parent'),
+    }));
+    window.document.getElementById('reopenButton')!.dispatchEvent(new window.Event('click'));
+    expect(isHidden(window, 'sentView')).toBe(false);
+    expect(window.document.getElementById('sentBody')!.textContent).toBe('Posted send contents.');
   });
 
   it('keeps the send path intact alongside the draft action', () => {

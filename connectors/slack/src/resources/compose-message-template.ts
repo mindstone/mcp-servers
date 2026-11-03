@@ -425,7 +425,7 @@ export const COMPOSE_MESSAGE_HTML = `
       // already reviewed before clicking Send.
       var draftApplied = false;
       var pendingRequestId = null;
-      var pendingPayload = null;
+      var pendingSendPayload = null;
       var sending = false;
       var collapsed = false;
       var outcomeUnknown = false;
@@ -598,7 +598,6 @@ export const COMPOSE_MESSAGE_HTML = `
       }
 
       function showError(message) {
-        errorBox.appendChild(retryButton);
         errorText.textContent = message || 'Failed to send message.';
         errorBox.classList.remove('hidden');
         postResize();
@@ -680,7 +679,7 @@ export const COMPOSE_MESSAGE_HTML = `
       }
 
       function sendPayload(payload) {
-        pendingPayload = payload;
+        pendingSendPayload = payload;
         pendingRequestId = 'send-' + Date.now() + '-' + Math.random().toString(16).slice(2);
         setSending(true);
         clearError();
@@ -695,7 +694,7 @@ export const COMPOSE_MESSAGE_HTML = `
             method: 'tools/call',
             params: {
               name: 'post_slack_message',
-              _meta: { 'rebel/cardOutcome': 'sent' },
+              _meta: { 'mcp-app/cardOutcome': 'sent' },
               arguments: payload
             },
             id: pendingRequestId
@@ -810,8 +809,11 @@ export const COMPOSE_MESSAGE_HTML = `
       }
 
       function formatSentTime(at) {
+        if (typeof at !== 'number' || !Number.isFinite(at)) return '';
+        var date = new Date(at);
+        if (!Number.isFinite(date.getTime())) return '';
         try {
-          return new Date(at === undefined ? Date.now() : at).toLocaleString(undefined, {
+          return date.toLocaleString(undefined, {
             month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
           });
         } catch (_) {
@@ -835,7 +837,8 @@ export const COMPOSE_MESSAGE_HTML = `
         clearUnknown();
         var stamp = formatSentTime(o.at);
         setCollapsed(true, stamp ? 'Message sent · ' + stamp : 'Message sent.');
-        reopenButton.classList.add('hidden');
+        if (pendingSendPayload) renderSentView(pendingSendPayload, null, stamp);
+        reopenButton.classList.toggle('hidden', !pendingSendPayload);
       }
 
       function renderSentView(payload, meta, stamp) {
@@ -917,7 +920,7 @@ export const COMPOSE_MESSAGE_HTML = `
         element.addEventListener('input', function () {
           clearError();
           clearSuccess();
-          clearUnknown();
+          if (!sendMayHaveGone) clearUnknown();
           postResize();
         });
       });
@@ -973,22 +976,21 @@ export const COMPOSE_MESSAGE_HTML = `
             ? data.error.message
             : 'Failed to send message.';
           var blockedReason = data.error.data && data.error.data.reason;
-          var blockedBeforeSend = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy';
+          var blockedBeforeSend = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy' || blockedReason === 'not-dispatched';
           if (!blockedBeforeSend) {
             showSendUnknown();
           }
           showError(errorMessage);
-          if (outcomeUnknown) unknownBox.appendChild(retryButton);
           return;
         }
 
         clearError();
         clearSuccess();
-        // Preserve what was sent instead of discarding the draft. pendingPayload
+        // Preserve what was sent instead of discarding the draft. pendingSendPayload
         // is the exact payload we posted. We default to the collapsed summary, but
         // Reopen now restores a read-only view of the sent message.
-        var sentPayload = pendingPayload || readFormPayload();
-        var stamp = formatSentTime();
+        var sentPayload = pendingSendPayload || readFormPayload();
+        var stamp = formatSentTime(Date.now());
         renderSentView(sentPayload, getSendMetaFromResult(data.result), stamp);
         sent = true;
         sendMayHaveGone = false;

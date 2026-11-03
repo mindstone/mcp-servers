@@ -6,8 +6,9 @@ All notable changes to this connector will be documented in this file.
 
 ### Fixed
 
-- Compose cards keep their sent status across copies and reloads in supporting hosts. Reloaded cards show the send time without the sent contents.
-- After an unconfirmed send, Cancel keeps the reminder to check whether it was sent, even after editing or reopening the draft. Calls blocked before sending still say "Nothing sent."
+- Send requests declare the host-neutral `_meta: { 'mcp-app/cardOutcome': 'sent' }` outcome.
+- Compose cards keep their sent status across copies and reloads in supporting hosts. Reloaded cards show the send time without the sent contents. The sender keeps its posted contents even if confirmation arrives after a lost reply; malformed host timestamps omit the date.
+- After an unconfirmed send, the check-before-resending notice stays visible while editing and returns on Reopen. Cancel keeps the same reminder. Calls blocked before sending, including `not-dispatched` failures, still say "Nothing sent" unless an earlier attempt may have gone through.
 
 ### Changed
 

@@ -12,6 +12,8 @@
 //    and of one code comment, none of which names a host app any more.
 //    Rebaselined again (2026-11) for shared send-status restoration, the Send
 //    outcome declaration and uncertainty that survives editing and collapse.
+//    Refined for the host-neutral outcome key, closed block reasons, persistent
+//    edit notice, blocked Retry, lost-reply sent contents and timestamp validation.
 // 2. Building with the connector's real config (the same object the generator
 //    script uses) reproduces the committed template. This proves the generator
 //    pipeline is lossless end-to-end, not just that someone committed the

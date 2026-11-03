@@ -482,7 +482,7 @@ export const COMPOSE_EMAIL_HTML = `
       // already reviewed before clicking Send.
       var draftApplied = false;
       var pendingRequestId = null;
-      var pendingPayload = null;
+      var pendingSendPayload = null;
       var sending = false;
       var collapsed = false;
       var outcomeUnknown = false;
@@ -706,7 +706,7 @@ export const COMPOSE_EMAIL_HTML = `
       }
 
       function showError(message) {
-        errorBox.appendChild(retryButton);
+        retryButton.classList.toggle('hidden', sendBlocked && retryAction !== 'draft');
         errorText.textContent = message || 'Failed to send email.';
         errorBox.classList.remove('hidden');
         postResize();
@@ -751,7 +751,7 @@ export const COMPOSE_EMAIL_HTML = `
         unknownTitle.textContent = 'Not sure if this sent.';
         unknownText.textContent = "No confirmation came back in time. Check your Sent folder before sending again, so it doesn't go out twice.";
         unknownBox.classList.remove('hidden');
-        unknownBox.appendChild(retryButton);
+        if (!sendBlocked) unknownBox.appendChild(retryButton);
         postResize();
       }
 
@@ -842,7 +842,7 @@ export const COMPOSE_EMAIL_HTML = `
       }
 
       function sendPayload(payload) {
-        pendingPayload = payload;
+        pendingSendPayload = payload;
         pendingRequestId = 'send-' + Date.now() + '-' + Math.random().toString(16).slice(2);
         pendingAction = 'send';
         retryAction = null;
@@ -859,7 +859,7 @@ export const COMPOSE_EMAIL_HTML = `
             method: 'tools/call',
             params: {
               name: 'send_workspace_email',
-              _meta: { 'rebel/cardOutcome': 'sent' },
+              _meta: { 'mcp-app/cardOutcome': 'sent' },
               arguments: payload
             },
             id: pendingRequestId
@@ -869,7 +869,6 @@ export const COMPOSE_EMAIL_HTML = `
       }
 
       function saveDraftPayload(payload) {
-        pendingPayload = payload;
         pendingRequestId = 'draft-' + Date.now() + '-' + Math.random().toString(16).slice(2);
         pendingAction = 'draft';
         retryAction = null;
@@ -1000,7 +999,7 @@ export const COMPOSE_EMAIL_HTML = `
 
       // ---- Blocked-send Gmail escape hatch ----
       // Shown ONLY when the user's own send preference blocks the tool
-      // (super-mcp TOOL_BLOCKED / -33008 + "disabled by user preference"). We
+      // (the host's closed 'user-disabled' reason). We
       // never call the disabled tool; instead we open a prefilled Gmail compose
       // window so the user finishes the send in Gmail (no copy-paste). This is
       // deliberately narrow: admin-disabled ("disabled by your organization…")
@@ -1014,14 +1013,6 @@ export const COMPOSE_EMAIL_HTML = `
       var GMAIL_COMPOSE_MAX_URL = 8000;
       var BLOCKED_SEND_MESSAGE =
         'Sending from here is turned off in your settings. You can finish and send this email in Gmail, or turn sending back on in Settings.';
-
-      function isUserDisabledSendError(message) {
-        var m = String(message || '').toLowerCase();
-        // Anchor the code so it can't match inside a longer number (-330080),
-        // and require the user-preference phrase so admin-disabled / generic
-        // security blocks fall through to the ordinary retryable error.
-        return /-33008\\b/.test(m) && m.indexOf('disabled by user preference') !== -1;
-      }
 
       // Base URL + path are constant (code-reviewed here, never config-provided);
       // only the field VALUES vary and go through URLSearchParams, so query
@@ -1107,8 +1098,11 @@ export const COMPOSE_EMAIL_HTML = `
       }
 
       function formatSentTime(at) {
+        if (typeof at !== 'number' || !Number.isFinite(at)) return '';
+        var date = new Date(at);
+        if (!Number.isFinite(date.getTime())) return '';
         try {
-          return new Date(at === undefined ? Date.now() : at).toLocaleString(undefined, {
+          return date.toLocaleString(undefined, {
             month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
           });
         } catch (_) {
@@ -1132,7 +1126,8 @@ export const COMPOSE_EMAIL_HTML = `
         clearUnknown();
         var stamp = formatSentTime(o.at);
         setCollapsed(true, stamp ? 'Email sent · ' + stamp : 'Email sent.');
-        reopenButton.classList.add('hidden');
+        if (pendingSendPayload) renderSentView(pendingSendPayload, null, stamp);
+        reopenButton.classList.toggle('hidden', !pendingSendPayload);
       }
 
       function renderSentView(payload, meta, stamp) {
@@ -1206,6 +1201,7 @@ export const COMPOSE_EMAIL_HTML = `
       retryButton.addEventListener('click', function () {
         if (sent) return;
         if (sending) return;
+        if (sendBlocked && retryAction !== 'draft') return;
         var payload = readFormPayload();
         if (retryAction === 'draft') {
           var draftValidationError = validateDraftPayload(payload);
@@ -1272,7 +1268,7 @@ export const COMPOSE_EMAIL_HTML = `
         element.addEventListener('input', function () {
           clearError();
           clearSuccess();
-          clearUnknown();
+          if (!sendMayHaveGone) clearUnknown();
           postResize();
         });
       });
@@ -1339,24 +1335,18 @@ export const COMPOSE_EMAIL_HTML = `
             retryAction = 'draft';
           }
           var blockedReason = data.error.data && data.error.data.reason;
-          var blockedBeforeSend = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy';
+          var blockedBeforeSend = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy' || blockedReason === 'not-dispatched';
           if (completedAction !== 'draft' && !blockedBeforeSend) {
             showSendUnknown();
           }
-          // Prefer the host-vetted structured reason (a closed enum the host
-          // derives from the tool-block error data) and fall back to
-          // text-matching the flattened message for hosts that don't forward it
-          // yet. Only 'user-disabled' opens the Gmail escape hatch —
-          // admin-disabled and security-policy blocks stay ordinary errors (see
-          // the detector comment above for why).
-          // Send-failure only: a blocked DRAFT tool must never surface the
-          // "sending is turned off" copy or the Open-in-Gmail bypass.
-          if (completedAction !== 'draft' && (blockedReason === 'user-disabled' || isUserDisabledSendError(errorMessage))) {
+          // Only the host's closed user-disabled reason permits the Gmail
+          // escape hatch; message text cannot establish why a call failed.
+          // Draft failures must never open the send-only escape hatch.
+          if (completedAction !== 'draft' && blockedReason === 'user-disabled') {
             showBlockedSend();
             return;
           }
           showError(errorMessage);
-          if (outcomeUnknown) unknownBox.appendChild(retryButton);
           return;
         }
 
@@ -1367,17 +1357,17 @@ export const COMPOSE_EMAIL_HTML = `
           // Collapse to a stamped confirmation and retire the form — Reopen
           // would resurrect an editable copy whose next Save/Send silently
           // diverges from (or duplicates) the saved draft.
-          var draftStamp = formatSentTime();
+          var draftStamp = formatSentTime(Date.now());
           setCollapsed(true, draftStamp ? 'Draft saved · ' + draftStamp : 'Draft saved.');
           reopenButton.classList.add('hidden');
           return;
         }
         // Preserve what was sent (and how to reach it) instead of discarding the
-        // draft. pendingPayload is the exact payload we posted; the reply carries
+        // draft. pendingSendPayload is the exact payload we posted; the reply carries
         // the Gmail message/thread ids. We default to the collapsed summary, but
         // Reopen now restores a read-only view of the sent message.
-        var sentPayload = pendingPayload || readFormPayload();
-        var stamp = formatSentTime();
+        var sentPayload = pendingSendPayload || readFormPayload();
+        var stamp = formatSentTime(Date.now());
         renderSentView(sentPayload, getSendMetaFromResult(data.result), stamp);
         sent = true;
         sendMayHaveGone = false;

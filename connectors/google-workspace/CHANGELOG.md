@@ -9,8 +9,11 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 
-- Compose cards keep their sent status across copies and reloads in supporting hosts. Reloaded cards show the send time without the sent contents.
-- After an unconfirmed send, Cancel keeps the reminder to check whether it was sent, even after editing or reopening the draft. Calls blocked before sending still say "Nothing sent."
+- Send requests declare the host-neutral `_meta: { 'mcp-app/cardOutcome': 'sent' }` outcome.
+- After your own setting blocks sending, Retry stays unavailable. Blocks are classified only by the host's closed reason, never the error wording.
+- Cancel after a draft-save timeout says "Nothing sent" unless an earlier send remains uncertain.
+- Compose cards keep their sent status across copies and reloads in supporting hosts. Reloaded cards show the send time without the sent contents. The sender keeps its posted contents even if confirmation arrives after a lost reply; malformed host timestamps omit the date.
+- After an unconfirmed send, the check-before-resending notice stays visible while editing and returns on Reopen. Cancel keeps the same reminder. Calls blocked before sending, including `not-dispatched` failures, still say "Nothing sent" unless an earlier attempt may have gone through.
 
 ## [0.5.1] - 2026-10-31
 

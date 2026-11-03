@@ -470,7 +470,7 @@ export const COMPOSE_EMAIL_HTML = `
       // already reviewed before clicking Send.
       var draftApplied = false;
       var pendingRequestId = null;
-      var pendingPayload = null;
+      var pendingSendPayload = null;
       var sending = false;
       var collapsed = false;
       var outcomeUnknown = false;
@@ -688,7 +688,6 @@ export const COMPOSE_EMAIL_HTML = `
       }
 
       function showError(message) {
-        errorBox.appendChild(retryButton);
         errorText.textContent = message || 'Failed to send email.';
         errorBox.classList.remove('hidden');
         postResize();
@@ -824,7 +823,7 @@ export const COMPOSE_EMAIL_HTML = `
       }
 
       function sendPayload(payload) {
-        pendingPayload = payload;
+        pendingSendPayload = payload;
         pendingRequestId = 'send-' + Date.now() + '-' + Math.random().toString(16).slice(2);
         pendingAction = 'send';
         retryAction = null;
@@ -841,7 +840,7 @@ export const COMPOSE_EMAIL_HTML = `
             method: 'tools/call',
             params: {
               name: 'send_email',
-              _meta: { 'rebel/cardOutcome': 'sent' },
+              _meta: { 'mcp-app/cardOutcome': 'sent' },
               arguments: payload
             },
             id: pendingRequestId
@@ -851,7 +850,6 @@ export const COMPOSE_EMAIL_HTML = `
       }
 
       function saveDraftPayload(payload) {
-        pendingPayload = payload;
         pendingRequestId = 'draft-' + Date.now() + '-' + Math.random().toString(16).slice(2);
         pendingAction = 'draft';
         retryAction = null;
@@ -981,8 +979,11 @@ export const COMPOSE_EMAIL_HTML = `
       }
 
       function formatSentTime(at) {
+        if (typeof at !== 'number' || !Number.isFinite(at)) return '';
+        var date = new Date(at);
+        if (!Number.isFinite(date.getTime())) return '';
         try {
-          return new Date(at === undefined ? Date.now() : at).toLocaleString(undefined, {
+          return date.toLocaleString(undefined, {
             month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
           });
         } catch (_) {
@@ -1006,7 +1007,8 @@ export const COMPOSE_EMAIL_HTML = `
         clearUnknown();
         var stamp = formatSentTime(o.at);
         setCollapsed(true, stamp ? 'Email sent · ' + stamp : 'Email sent.');
-        reopenButton.classList.add('hidden');
+        if (pendingSendPayload) renderSentView(pendingSendPayload, null, stamp);
+        reopenButton.classList.toggle('hidden', !pendingSendPayload);
       }
 
       function renderSentView(payload, meta, stamp) {
@@ -1127,7 +1129,7 @@ export const COMPOSE_EMAIL_HTML = `
         element.addEventListener('input', function () {
           clearError();
           clearSuccess();
-          clearUnknown();
+          if (!sendMayHaveGone) clearUnknown();
           postResize();
         });
       });
@@ -1194,12 +1196,11 @@ export const COMPOSE_EMAIL_HTML = `
             retryAction = 'draft';
           }
           var blockedReason = data.error.data && data.error.data.reason;
-          var blockedBeforeSend = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy';
+          var blockedBeforeSend = blockedReason === 'user-disabled' || blockedReason === 'admin-disabled' || blockedReason === 'security-policy' || blockedReason === 'not-dispatched';
           if (completedAction !== 'draft' && !blockedBeforeSend) {
             showSendUnknown();
           }
           showError(errorMessage);
-          if (outcomeUnknown) unknownBox.appendChild(retryButton);
           return;
         }
 
@@ -1210,16 +1211,16 @@ export const COMPOSE_EMAIL_HTML = `
           // Collapse to a stamped confirmation and retire the form — Reopen
           // would resurrect an editable copy whose next Save/Send silently
           // diverges from (or duplicates) the saved draft.
-          var draftStamp = formatSentTime();
+          var draftStamp = formatSentTime(Date.now());
           setCollapsed(true, draftStamp ? 'Draft saved · ' + draftStamp : 'Draft saved.');
           reopenButton.classList.add('hidden');
           return;
         }
-        // Preserve what was sent instead of discarding the draft. pendingPayload
+        // Preserve what was sent instead of discarding the draft. pendingSendPayload
         // is the exact payload we posted. We default to the collapsed summary, but
         // Reopen now restores a read-only view of the sent message.
-        var sentPayload = pendingPayload || readFormPayload();
-        var stamp = formatSentTime();
+        var sentPayload = pendingSendPayload || readFormPayload();
+        var stamp = formatSentTime(Date.now());
         renderSentView(sentPayload, getSendMetaFromResult(data.result), stamp);
         sent = true;
         sendMayHaveGone = false;
