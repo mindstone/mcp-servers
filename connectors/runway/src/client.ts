@@ -24,6 +24,10 @@ import {
   type UploadResponse,
 } from './types.js';
 import { getApiKey } from './auth.js';
+import { wrapUntrusted } from './untrusted-content.js';
+
+/** Envelope source label for Runway-authored text (error bodies, task failures). */
+export const RUNWAY_API_SOURCE = 'runway-api';
 
 // ============================================================================
 // Local-file sandbox
@@ -375,7 +379,7 @@ export async function runwayFetch<T>(
       detail = ((await response.json()) as { error?: string })?.error || '';
     } catch { /* empty */ }
     throw new RunwayError(
-      `Runway API error (HTTP ${response.status}): ${detail}`,
+      `Runway API error (HTTP ${response.status}): ${detail ? wrapUntrusted(detail, RUNWAY_API_SOURCE) : ''}`,
       `HTTP_${response.status}`,
       'Try again or check https://dev.runwayml.com/',
     );
@@ -653,7 +657,6 @@ export function costEstimate(
     gen4_turbo: 5,
     aleph2: 28,
     act_two: 5,
-    veo3: 40,
     'veo3.1': audio === false ? 20 : 40,
     'veo3.1_fast': audio === false ? 10 : 15,
   };

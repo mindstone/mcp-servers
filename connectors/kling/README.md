@@ -7,7 +7,7 @@ Kling AI video and image generation MCP server for Model Context Protocol hosts.
 
 ## Status
 
-- **Version:** [0.4.1](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-kling)
+- **Version:** [0.5.0](./CHANGELOG.md) · [npm](https://www.npmjs.com/package/@mindstone/mcp-server-kling)
 - **Auth:** API key ([`KLING_ACCESS_KEY`](./server.json))
 - **Tools:** [10](./src/tools/) (video-generation, image-generation, tasks, account, downloads)
 - **Surface:** cloud-api
@@ -135,6 +135,8 @@ node dist/index.js
 
 ### Image generation
 - `generate_kling_image` — Create an AI-generated image from a text description, with optional reference image
+
+Models: the video tools default to `kling-v2-6` and the image tool to `kling-v2-1`. `kling-v3` (Kling 3.0) is available on all three generation tools through the `model` parameter; it costs about twice as many Kling units per second of video and per image, so it is not the default.
 
 ### Task management
 - `check_kling_task` — Check if a generation task is complete (task types: `text2video`, `image2video`, `video-extend`, `lip-sync`, `image`)

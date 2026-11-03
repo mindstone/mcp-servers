@@ -11,6 +11,13 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { logger, redactSensitiveInLogs } from './logger.js';
+import {
+  DEFAULT_MODEL,
+  SUPPORTED_MODELS,
+  isSupportedModel,
+  modelKnownToRejectTransparency,
+  modelSupportsModeration,
+} from './models.js';
 import { wrapUntrusted } from './untrusted-content.js';
 
 const require = createRequire(import.meta.url);
@@ -33,12 +40,6 @@ const MODERN_FALLBACK_DIR_NAME = 'MCP-Generated-Images';
 export const LEGACY_FALLBACK_FOLDER_NAME = LEGACY_FALLBACK_DIR_NAME;
 export const MODERN_FALLBACK_FOLDER_NAME = MODERN_FALLBACK_DIR_NAME;
 const OPENAI_API_BASE_URL = 'https://api.openai.com';
-const KNOWN_MODELS = new Set([
-  'gpt-image-2',
-  'gpt-image-1.5',
-  'gpt-image-1',
-  'gpt-image-1-mini',
-]);
 
 const SIZE_MAP: Record<string, string> = {
   square: '1024x1024',
@@ -126,9 +127,6 @@ class WorkspaceFenceToolError extends OpenAIImageToolError {
   }
 }
 
-const modelSupportsModeration = (model: string): boolean =>
-  model.startsWith('gpt-image-2');
-
 // `moderation` is a plain tool input like any other: both 'auto' (the
 // default) and 'low' are forwarded upstream when the model supports it.
 // Invocation gating is the host's tool-approval layer's job, not this
@@ -137,14 +135,8 @@ const resolveModeration = (
   requested: 'auto' | 'low' | undefined,
 ): 'auto' | 'low' => requested ?? 'auto';
 
-// gpt-image-2 rejects background: 'transparent' upstream (OpenAI Images API,
-// verified 2026-08). Unknown models (OPENAI_IMAGE_MODEL overrides) pass
-// through to upstream validation, matching the configuredModel() philosophy.
-const modelKnownToRejectTransparency = (model: string): boolean =>
-  model.startsWith('gpt-image-2');
-
 export const configuredModel = (): string =>
-  process.env.OPENAI_IMAGE_MODEL?.trim() || 'gpt-image-2';
+  process.env.OPENAI_IMAGE_MODEL?.trim() || DEFAULT_MODEL;
 
 export const configuredWorkspacePath = (): string | undefined =>
   process.env.MCP_WORKSPACE_PATH?.trim() || undefined;
@@ -246,10 +238,10 @@ export const resolveRequestTimeoutMs = (): number => {
 
 export const OPENAI_IMAGE_REQUEST_TIMEOUT_MS = resolveRequestTimeoutMs();
 
-if (!KNOWN_MODELS.has(configuredModel())) {
+if (!isSupportedModel(configuredModel())) {
   logger.warn(
     '[openai-image] Unknown OPENAI_IMAGE_MODEL value. Continuing with upstream validation.',
-    { model: configuredModel(), knownModels: [...KNOWN_MODELS] },
+    { model: configuredModel(), knownModels: [...SUPPORTED_MODELS] },
   );
 }
 
@@ -1516,7 +1508,7 @@ const ensureTransparentBackgroundSupported = (
     throw new OpenAIImageToolError(
       'INVALID_INPUT',
       `Model ${envelopeConfiguredModel(model)} does not support transparent backgrounds.`,
-      'Set OPENAI_IMAGE_MODEL to gpt-image-1.5 (or gpt-image-1), or omit the background option.',
+      `Set OPENAI_IMAGE_MODEL to ${DEFAULT_MODEL} (the default) or gpt-image-2.5-flare, or omit the background option.`,
     );
   }
 };
@@ -1536,7 +1528,7 @@ const generateImageSchema = z.object({
     .enum(['low', 'medium', 'high', 'auto'])
     .optional()
     .describe(
-      'Image quality (defaults to high). Medium is usually about 50 seconds and $0.04; high can take up to 3 minutes and cost about $0.21.',
+      'Image quality (defaults to high). Medium is usually about 10-20 seconds and $0.01-0.02; high usually takes 20-60 seconds and costs about $0.05-0.08.',
     ),
   count: z
     .number()
@@ -1570,7 +1562,7 @@ const generateImageSchema = z.object({
     .enum(['transparent', 'opaque', 'auto'])
     .optional()
     .describe(
-      "Background style. 'transparent' produces a cutout with an alpha channel; it requires png or webp output and a transparency-capable model (gpt-image-1.x — gpt-image-2 rejects it).",
+      "Background style. 'transparent' produces a cutout with an alpha channel; it requires png or webp output. The default model supports it; gpt-image-2 does not.",
     ),
 });
 
@@ -1602,7 +1594,7 @@ const editImageSchema = z.object({
     .enum(['low', 'medium', 'high', 'auto'])
     .optional()
     .describe(
-      'Output quality (defaults to high). Medium is usually about 50 seconds and $0.04; high can take up to 3 minutes and cost about $0.21.',
+      'Output quality (defaults to high). Medium is usually about 10-20 seconds and $0.01-0.02; high usually takes 20-60 seconds and costs about $0.05-0.08.',
     ),
   count: z
     .number()
@@ -1634,7 +1626,7 @@ const editImageSchema = z.object({
     .enum(['transparent', 'opaque', 'auto'])
     .optional()
     .describe(
-      "Background style. 'transparent' produces a cutout with an alpha channel; it requires png or webp output and a transparency-capable model (gpt-image-1.x — gpt-image-2 rejects it).",
+      "Background style. 'transparent' produces a cutout with an alpha channel; it requires png or webp output. The default model supports it; gpt-image-2 does not.",
     ),
 });
 
@@ -1720,7 +1712,7 @@ const registerTools = (targetServer: McpServer): void => {
     {
       title: 'Generate Image',
       description:
-        "Generate one or more images using OpenAI's gpt-image-2 family and save outputs to your workspace.",
+        "Generate one or more images using OpenAI's GPT Image models and save outputs to your workspace.",
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,

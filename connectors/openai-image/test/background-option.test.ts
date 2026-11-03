@@ -98,11 +98,46 @@ describe('background option with transparency model gate', () => {
     }
   });
 
-  it('rejects background transparent on gpt-image-2 before any API call', async () => {
+  it('sends background transparent on the default model (gpt-image-2.5)', async () => {
+    const workspace = await makeTempDir('bg-default');
+    const connector = await importConnectorModule({
+      MCP_WORKSPACE_PATH: workspace,
+      OPENAI_API_KEY: 'sk-test-Acme-bg-default',
+    });
+    const captured: CapturedRequest[] = [];
+    mockOpenAIImageResponses(captured);
+    const pair = await createInMemoryClientPair(connector.createServer());
+
+    try {
+      const result = (await pair.client.callTool({
+        name: 'generate_image',
+        arguments: {
+          prompt: 'Acme logo cutout',
+          background: 'transparent',
+        },
+      })) as CallToolResult;
+
+      expect(result.isError).not.toBe(true);
+      const body = JSON.parse(captured[0]?.body as string) as Record<
+        string,
+        unknown
+      >;
+      expect(body.model).toBe('gpt-image-2.5-sunburst');
+      expect(body.background).toBe('transparent');
+      expect(body.moderation).toBe('auto');
+    } finally {
+      await pair.close();
+    }
+  });
+
+  it.each(['gpt-image-2', 'gpt-image-2-2026-04-21'])(
+    'rejects background transparent on %s before any API call',
+    async (model) => {
     const workspace = await makeTempDir('bg-gated');
     const connector = await importConnectorModule({
       MCP_WORKSPACE_PATH: workspace,
       OPENAI_API_KEY: 'sk-test-Acme-bg-gated',
+      OPENAI_IMAGE_MODEL: model,
     });
     const captured: CapturedRequest[] = [];
     mockOpenAIImageResponses(captured);
@@ -120,13 +155,15 @@ describe('background option with transparency model gate', () => {
       const payload = extractErrorPayload(result);
       expect(payload.ok).toBe(false);
       expect(payload.code).toBe('INVALID_INPUT');
-      expect(payload.error).toContain('gpt-image-2');
-      expect(payload.resolution).toContain('gpt-image-1.5');
+      expect(payload.error).toContain(model);
+      expect(payload.resolution).toContain('gpt-image-2.5-sunburst');
+      expect(payload.resolution).not.toContain('gpt-image-1');
       expect(captured).toHaveLength(0);
     } finally {
       await pair.close();
     }
-  });
+  },
+  );
 
   it('rejects background transparent with jpeg output before any API call', async () => {
     const workspace = await makeTempDir('bg-jpeg');

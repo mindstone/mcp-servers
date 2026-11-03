@@ -10,7 +10,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { GoogleAuth } from 'google-auth-library';
-import { ANALYTICS_SCOPE, GoogleAnalyticsError } from './types.js';
+import { activeScope, adcLoginCommand, GoogleAnalyticsError } from './types.js';
 
 let authInstance: GoogleAuth | null = null;
 
@@ -32,7 +32,7 @@ export function getAuth(): GoogleAuth {
     throw new GoogleAnalyticsError(
       'GOOGLE_APPLICATION_CREDENTIALS is not set.',
       'CREDENTIALS_NOT_CONFIGURED',
-      'Set GOOGLE_APPLICATION_CREDENTIALS to the absolute path of your ADC or service-account JSON. To mint ADC, install the Google Cloud CLI then run: gcloud auth application-default login --scopes=https://www.googleapis.com/auth/analytics.readonly --client-id-file=/path/to/oauth-client.json',
+      `Set GOOGLE_APPLICATION_CREDENTIALS to the absolute path of your ADC or service-account JSON. To mint ADC, install the Google Cloud CLI then run: ${adcLoginCommand()}`,
     );
   }
 
@@ -56,7 +56,10 @@ export function getAuth(): GoogleAuth {
 
   authInstance = new GoogleAuth({
     keyFilename: credentialsPath,
-    scopes: [ANALYTICS_SCOPE],
+    // Service-account credentials honour this scope. Authorized-user ADC
+    // carries the scopes it was minted with, which is why the setup docs
+    // mint it with analytics.edit when writes are enabled.
+    scopes: [activeScope()],
   });
   return authInstance;
 }
@@ -72,7 +75,7 @@ export async function getAccessToken(): Promise<string> {
     throw new GoogleAnalyticsError(
       'Failed to obtain Google access token.',
       'TOKEN_FETCH_FAILED',
-      'Re-run `gcloud auth application-default login --scopes=https://www.googleapis.com/auth/analytics.readonly` to refresh credentials, then reconnect this connector in your MCP host.',
+      `Re-run \`${adcLoginCommand()}\` to refresh credentials, then reconnect this connector in your MCP host.`,
     );
   }
   return token;
