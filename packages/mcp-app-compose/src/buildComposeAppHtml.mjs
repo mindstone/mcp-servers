@@ -825,6 +825,8 @@ ${gmail ? `        <button id="openGmailButton" type="button" class="button butt
       var draftApplied = false;
       var pendingRequestId = null;
       var pendingSendPayload = null;
+      // Retain across the local timeout so even a late reply clears its payload.
+      var pendingSendRequestId = null;
       var sending = false;
       var collapsed = false;
       var outcomeUnknown = false;
@@ -1161,6 +1163,7 @@ ${hasDraft ? `      // Same provider-compatible minimum as sending (the draft to
 ` : ''}      function sendPayload(payload) {
         pendingSendPayload = payload;
         pendingRequestId = 'send-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+        pendingSendRequestId = pendingRequestId;
 ${hasDraft ? `        pendingAction = 'send';
         retryAction = null;
 ` : ''}        setSending(true);
@@ -1417,6 +1420,7 @@ ${f.cc ? `        var cc = normalizeAddressList(payload.cc).join(',');
       function applyCardOutcome(o) {
         if (!o || typeof o !== 'object' || sent) return;
         if (o.outcome === 'maybe-sent') {
+          if (pendingRequestId && pendingRequestId === pendingSendRequestId) return;
           showSendUnknown();
           setCollapsed(false);
           return;
@@ -1597,7 +1601,14 @@ ${gmail ? `      // The iframe sandbox is "allow-scripts" only (no allow-popups 
           return;
         }
 
-        if (data.jsonrpc !== '2.0' || !pendingRequestId || data.id !== pendingRequestId) {
+        if (data.jsonrpc !== '2.0') return;
+        var completedSendPayload = null;
+        if (pendingSendRequestId && data.id === pendingSendRequestId) {
+          completedSendPayload = pendingSendPayload;
+          pendingSendPayload = null;
+          pendingSendRequestId = null;
+        }
+        if (!pendingRequestId || data.id !== pendingRequestId) {
           return;
         }
 
@@ -1655,13 +1666,13 @@ ${hasDraft ? `        if (completedAction === 'draft') {
           return;
         }
 ` : ''}${gmail ? `        // Preserve what was sent (and how to reach it) instead of discarding the
-        // draft. pendingSendPayload is the exact payload we posted; the reply carries
+        // draft. completedSendPayload is the exact payload we posted; the reply carries
         // the Gmail message/thread ids. We default to the collapsed summary, but
         // Reopen now restores a read-only view of the sent message.
-` : `        // Preserve what was sent instead of discarding the draft. pendingSendPayload
+` : `        // Preserve what was sent instead of discarding the draft. completedSendPayload
         // is the exact payload we posted. We default to the collapsed summary, but
         // Reopen now restores a read-only view of the sent message.
-`}        var sentPayload = pendingSendPayload || readFormPayload();
+`}        var sentPayload = completedSendPayload || readFormPayload();
         var stamp = formatSentTime(Date.now());
         renderSentView(sentPayload, getSendMetaFromResult(data.result), stamp);
         sent = true;

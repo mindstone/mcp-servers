@@ -471,6 +471,8 @@ export const COMPOSE_EMAIL_HTML = `
       var draftApplied = false;
       var pendingRequestId = null;
       var pendingSendPayload = null;
+      // Retain across the local timeout so even a late reply clears its payload.
+      var pendingSendRequestId = null;
       var sending = false;
       var collapsed = false;
       var outcomeUnknown = false;
@@ -827,6 +829,7 @@ export const COMPOSE_EMAIL_HTML = `
       function sendPayload(payload) {
         pendingSendPayload = payload;
         pendingRequestId = 'send-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+        pendingSendRequestId = pendingRequestId;
         pendingAction = 'send';
         retryAction = null;
         setSending(true);
@@ -996,6 +999,7 @@ export const COMPOSE_EMAIL_HTML = `
       function applyCardOutcome(o) {
         if (!o || typeof o !== 'object' || sent) return;
         if (o.outcome === 'maybe-sent') {
+          if (pendingRequestId && pendingRequestId === pendingSendRequestId) return;
           showSendUnknown();
           setCollapsed(false);
           return;
@@ -1174,7 +1178,14 @@ export const COMPOSE_EMAIL_HTML = `
           return;
         }
 
-        if (data.jsonrpc !== '2.0' || !pendingRequestId || data.id !== pendingRequestId) {
+        if (data.jsonrpc !== '2.0') return;
+        var completedSendPayload = null;
+        if (pendingSendRequestId && data.id === pendingSendRequestId) {
+          completedSendPayload = pendingSendPayload;
+          pendingSendPayload = null;
+          pendingSendRequestId = null;
+        }
+        if (!pendingRequestId || data.id !== pendingRequestId) {
           return;
         }
 
@@ -1224,10 +1235,10 @@ export const COMPOSE_EMAIL_HTML = `
           reopenButton.classList.add('hidden');
           return;
         }
-        // Preserve what was sent instead of discarding the draft. pendingSendPayload
+        // Preserve what was sent instead of discarding the draft. completedSendPayload
         // is the exact payload we posted. We default to the collapsed summary, but
         // Reopen now restores a read-only view of the sent message.
-        var sentPayload = pendingSendPayload || readFormPayload();
+        var sentPayload = completedSendPayload || readFormPayload();
         var stamp = formatSentTime(Date.now());
         renderSentView(sentPayload, getSendMetaFromResult(data.result), stamp);
         sent = true;

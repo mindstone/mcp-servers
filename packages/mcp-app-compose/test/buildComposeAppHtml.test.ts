@@ -196,6 +196,70 @@ describe.each([
     expect(calls(window)).toHaveLength(1);
   });
 
+  it.each(['not-dispatched', 'user-disabled', 'admin-disabled', 'security-policy', 'unknown'])(
+    'does not attribute its %s contents to a send from another copy', (reason) => {
+      const first = mount();
+      const second = mount();
+      setFieldValue(first, 'bodyInput', 'Old');
+      click(first, 'sendButton');
+      reply(first, { message: 'Send failed.', data: { reason } });
+      setFieldValue(second, 'bodyInput', 'New');
+      click(second, 'sendButton');
+      reply(second);
+      deliver(first);
+      expect(isHidden(first, 'composeForm')).toBe(true);
+      expect(first.document.getElementById('collapsedMessage')!.textContent).toContain(sentPrefix);
+      expect(isHidden(first, 'reopenButton')).toBe(true);
+      expect(first.document.getElementById('sentBody')!.textContent).toBe('');
+    },
+  );
+
+  it('ignores maybe-sent without changing the pending Send view or state', () => {
+    const window = mount();
+    click(window, 'sendButton');
+    const before = window.document.body.innerHTML;
+    const messages = postedMessages(window).length;
+    deliver(window, maybeOutcome);
+    expect(window.document.body.innerHTML).toBe(before);
+    expect(postedMessages(window)).toHaveLength(messages);
+    click(window, 'retryButton');
+    expect(calls(window)).toHaveLength(1);
+    reply(window, { message: 'Server is stopped.', data: { reason: 'not-dispatched' } });
+    expect(isHidden(window, 'unknownBox')).toBe(true);
+    click(window, 'cancelButton');
+    expect(window.document.getElementById('collapsedMessage')!.textContent).toBe('Draft collapsed. Nothing sent.');
+    deliver(window, maybeOutcome);
+    expectUncertainty(window);
+  });
+
+  it('keeps its posted contents when sent arrives during its own pending Send', () => {
+    const window = mount();
+    click(window, 'sendButton');
+    setFieldValue(window, 'bodyInput', 'Unsent edits.');
+    deliver(window);
+    expect(isHidden(window, 'composeForm')).toBe(true);
+    expect(isHidden(window, 'collapsedState')).toBe(false);
+    expect(isHidden(window, 'reopenButton')).toBe(false);
+    click(window, 'reopenButton');
+    expect(window.document.getElementById('sentBody')!.textContent).toBe('Ready to send.');
+    reply(window);
+    click(window, 'reopenButton');
+    expect(window.document.getElementById('sentBody')!.textContent).toBe('Ready to send.');
+  });
+
+  it('clears retained contents when an error reply arrives after the local timeout', () => {
+    const window = mount();
+    const timeout = vi.spyOn(window, 'setTimeout');
+    click(window, 'sendButton');
+    const callback = timeout.mock.calls.find((call) => call[1] === 75000)?.[0];
+    expect(typeof callback).toBe('function');
+    (callback as () => void)();
+    reply(window, { message: 'Connection lost.' });
+    deliver(window);
+    expect(isHidden(window, 'reopenButton')).toBe(true);
+    expect(window.document.getElementById('sentBody')!.textContent).toBe('');
+  });
+
   it('retains the posted contents when a lost reply is followed by host confirmation', () => {
     const window = mount();
     const timeout = vi.spyOn(window, 'setTimeout');
@@ -1026,7 +1090,7 @@ describe('buildComposeAppHtml — save-draft lifecycle (happy-dom)', () => {
     expect(fresh.document.getElementById('collapsedMessage')!.textContent).toBe('Draft collapsed. Nothing sent.');
   });
 
-  it('keeps an earlier send uncertainty and posted contents through a draft-save timeout', () => {
+  it('keeps earlier send uncertainty but discards answered send contents through a draft-save timeout', () => {
     const window = loadWindow(draftHtml);
     setFieldValue(window, 'toInput', 'jane@example.com');
     setFieldValue(window, 'subjectInput', 'Update');
@@ -1048,9 +1112,9 @@ describe('buildComposeAppHtml — save-draft lifecycle (happy-dom)', () => {
       data: { method: 'mcp-app:card-outcome', params: { outcome: 'sent', at: Date.UTC(2026, 0, 2) } },
       source: window.eval('window.parent'),
     }));
-    window.document.getElementById('reopenButton')!.dispatchEvent(new window.Event('click'));
-    expect(isHidden(window, 'sentView')).toBe(false);
-    expect(window.document.getElementById('sentBody')!.textContent).toBe('Posted send contents.');
+    expect(isHidden(window, 'collapsedState')).toBe(false);
+    expect(isHidden(window, 'reopenButton')).toBe(true);
+    expect(window.document.getElementById('sentBody')!.textContent).toBe('');
   });
 
   it('keeps the send path intact alongside the draft action', () => {
