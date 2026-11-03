@@ -18,6 +18,10 @@ are maintained manually as part of the PR review checklist.
 
 ### Fixed
 
+- Office actions report missing targets, empty selections and unsupported requested options as coded failures. PowerPoint text alignment and Excel range filter criteria are applied; unknown filter columns fail before writing.
+- A slide created before a later step fails returns `PARTIAL` with its id and inspect-or-delete recovery. Word edit results describe what changed.
+- Setup and status explain which apps are connected and how to open Rebel; the task pane asks you to open Rebel when waiting for a connection.
+
 - On Windows the add-in now appears in Word, Excel and PowerPoint: it is registered where Office looks for sideloaded add-ins instead of copied into Office's cache folder.
 
 ## [0.3.0] - 2026-08-08

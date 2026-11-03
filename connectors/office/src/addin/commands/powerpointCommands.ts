@@ -7,7 +7,7 @@
  * Some features (speaker notes, advanced shape manipulation) require newer API sets.
  */
 
-import { executePowerpointCommand, type CommandResult } from '../officeExecutor.js';
+import { executePowerpointCommand, fail, type CommandResult } from '../officeExecutor.js';
 
 export type PowerpointCommandHandler = (params: Record<string, unknown>) => Promise<CommandResult>;
 
@@ -132,7 +132,7 @@ async function getSlideContent(params: Record<string, unknown>): Promise<Command
     await context.sync();
 
     if (slideIndex > slides.items.length) {
-      throw new Error(
+      fail('INVALID_ARGUMENT',
         `Slide index ${slideIndex} out of range. Presentation has ${slides.items.length} slides.`,
       );
     }
@@ -206,13 +206,17 @@ async function addSlide(params: Record<string, unknown>): Promise<CommandResult>
     slides.load('items');
     await context.sync();
 
+    if (position !== undefined && (!Number.isInteger(position) || position < 1 || position > slides.items.length + 1)) {
+      fail('INVALID_ARGUMENT', `Slide position ${position} out of range. Presentation has ${slides.items.length} slides.`);
+    }
+
     // Resolve the requested layout against the slide masters (if given)
     let addOptions: PowerPoint.AddSlideOptions | undefined;
     if (layoutName) {
       const { layout, available } = await findLayoutByName(context, layoutName);
       if (!layout) {
-        throw new Error(
-          `Layout "${layoutName}" not found. Available layouts: ${available.join(', ') || '(none found)'}.`,
+        fail('ITEM_NOT_FOUND',
+        `Layout "${layoutName}" not found. Available layouts: ${available.join(', ') || '(none found)'}.`,
         );
       }
       addOptions = { layoutId: layout.id };
@@ -228,40 +232,26 @@ async function addSlide(params: Record<string, unknown>): Promise<CommandResult>
 
     const newSlide = slides.items[slides.items.length - 1]!;
 
-    // Move to desired position if specified
-    if (position !== undefined && position <= slides.items.length) {
-      // moveTo is not available in all API versions; use try/catch
-      try {
-        newSlide.moveTo(position - 1); // 0-based target index
+    try {
+      if (position !== undefined) newSlide.moveTo(position - 1);
+      if (title !== undefined || subtitle !== undefined || body !== undefined) {
+        const shapes = newSlide.shapes;
+        shapes.load(['id', 'name', 'type']);
         await context.sync();
-      } catch {
-        // moveTo not supported in this API version; slide stays at end
-      }
-    }
-
-    // Populate placeholders (title, subtitle, body)
-    if (title || subtitle || body) {
-      const shapes = newSlide.shapes;
-      shapes.load(['id', 'name', 'type']);
-      await context.sync();
-
-      for (const shape of shapes.items) {
-        const nameLower = shape.name.toLowerCase();
-
-        try {
-          if (title && nameLower.includes('title')) {
-            shape.textFrame.textRange.text = title;
-          } else if (subtitle && nameLower.includes('subtitle')) {
-            shape.textFrame.textRange.text = subtitle;
-          } else if (body && (nameLower.includes('content') || nameLower.includes('body') || nameLower.includes('text'))) {
-            shape.textFrame.textRange.text = body;
-          }
-        } catch {
-          // Shape may not support text; skip
+        for (const [placeholder, text] of [['subtitle', subtitle], ['title', title], ['body', body]] as const) {
+          if (text === undefined) continue;
+          const shape = shapes.items.find((s) => {
+            const name = s.name.toLowerCase();
+            return placeholder === 'body' ? /content|body|text/.test(name)
+              : name.includes(placeholder) && (placeholder !== 'title' || !name.includes('subtitle'));
+          });
+          if (!shape) fail('ITEM_NOT_FOUND', `Placeholder "${placeholder}" not found.`);
+          shape.textFrame.textRange.text = text;
         }
       }
-
       await context.sync();
+    } catch (error) {
+      fail('PARTIAL', `Created slide id: ${newSlide.id}, but could not finish the request: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     return {
@@ -293,7 +283,7 @@ async function deleteSlide(params: Record<string, unknown>): Promise<CommandResu
     await context.sync();
 
     if (slideIndex > slides.items.length) {
-      throw new Error(
+      fail('INVALID_ARGUMENT',
         `Slide index ${slideIndex} out of range. Presentation has ${slides.items.length} slides.`,
       );
     }
@@ -329,7 +319,7 @@ async function reorderSlides(params: Record<string, unknown>): Promise<CommandRe
     await context.sync();
 
     if (fromIndex > slides.items.length || toIndex > slides.items.length) {
-      throw new Error(
+      fail('INVALID_ARGUMENT',
         `Slide index out of range. Presentation has ${slides.items.length} slides.`,
       );
     }
@@ -374,7 +364,7 @@ async function addTextBox(params: Record<string, unknown>): Promise<CommandResul
     await context.sync();
 
     if (slideIndex > slides.items.length) {
-      throw new Error(`Slide index ${slideIndex} out of range.`);
+      fail('INVALID_ARGUMENT', `Slide index ${slideIndex} out of range.`);
     }
 
     const slide = getSlideByIndex(slides, slideIndex);
@@ -395,8 +385,12 @@ async function addTextBox(params: Record<string, unknown>): Promise<CommandResul
         if (typeof formatting['fontColor'] === 'string') font.color = formatting['fontColor'];
         if (typeof formatting['bold'] === 'boolean') font.bold = formatting['bold'];
         if (typeof formatting['italic'] === 'boolean') font.italic = formatting['italic'];
+        if (typeof formatting['alignment'] === 'string') {
+          const alignments = { left: 'Left', center: 'Center', right: 'Right', justified: 'Justify' } as const;
+          textRange.paragraphFormat.horizontalAlignment = alignments[formatting['alignment'] as keyof typeof alignments];
+        }
       } catch {
-        // Font formatting may not be fully supported in all API versions
+        fail('UNSUPPORTED_OPERATION', "This version of PowerPoint can't apply the requested text formatting.");
       }
     }
 
@@ -452,7 +446,7 @@ async function addImage(params: Record<string, unknown>): Promise<CommandResult>
     await context.sync();
 
     if (slideIndex > slides.items.length) {
-      throw new Error(`Slide index ${slideIndex} out of range.`);
+      fail('INVALID_ARGUMENT', `Slide index ${slideIndex} out of range.`);
     }
 
     const slide = getSlideByIndex(slides, slideIndex);
@@ -535,7 +529,7 @@ async function addShape(params: Record<string, unknown>): Promise<CommandResult>
     await context.sync();
 
     if (slideIndex > slides.items.length) {
-      throw new Error(`Slide index ${slideIndex} out of range.`);
+      fail('INVALID_ARGUMENT', `Slide index ${slideIndex} out of range.`);
     }
 
     const slide = getSlideByIndex(slides, slideIndex);
@@ -552,7 +546,7 @@ async function addShape(params: Record<string, unknown>): Promise<CommandResult>
       try {
         shape.textFrame.textRange.text = text;
       } catch {
-        // Some shapes may not support text
+        fail('UNSUPPORTED_OPERATION', "This version of PowerPoint can't set text on this shape.");
       }
     }
 
@@ -562,7 +556,7 @@ async function addShape(params: Record<string, unknown>): Promise<CommandResult>
       try {
         shape.fill.setSolidColor(fillColor);
       } catch {
-        // Fill may not be settable on all shape types
+        fail('UNSUPPORTED_OPERATION', "This version of PowerPoint can't set this shape fill.");
       }
     }
 
@@ -572,7 +566,7 @@ async function addShape(params: Record<string, unknown>): Promise<CommandResult>
       try {
         shape.lineFormat.color = lineColor;
       } catch {
-        // Line format may not be available
+        fail('UNSUPPORTED_OPERATION', "This version of PowerPoint can't set this shape line formatting.");
       }
     }
 
@@ -581,7 +575,7 @@ async function addShape(params: Record<string, unknown>): Promise<CommandResult>
       try {
         shape.lineFormat.weight = lineWidth;
       } catch {
-        // Line format may not be available
+        fail('UNSUPPORTED_OPERATION', "This version of PowerPoint can't set this shape line formatting.");
       }
     }
 
@@ -624,7 +618,7 @@ async function updateText(params: Record<string, unknown>): Promise<CommandResul
     await context.sync();
 
     if (slideIndex > slides.items.length) {
-      throw new Error(`Slide index ${slideIndex} out of range.`);
+      fail('INVALID_ARGUMENT', `Slide index ${slideIndex} out of range.`);
     }
 
     const slide = getSlideByIndex(slides, slideIndex);
@@ -636,23 +630,23 @@ async function updateText(params: Record<string, unknown>): Promise<CommandResul
 
     if (target.type === 'shapeId') {
       if (typeof target.shapeId !== 'string') {
-        throw new Error('The "shapeId" field is required for target type "shapeId".');
+        fail('INVALID_ARGUMENT', 'The "shapeId" field is required for target type "shapeId".');
       }
       targetShape = shapes.items.find((s) => s.id === target.shapeId) ?? null;
       if (!targetShape) {
-        throw new Error(`Shape with ID "${target.shapeId}" not found on slide ${slideIndex}.`);
+        fail('ITEM_NOT_FOUND', `Shape with ID "${target.shapeId}" not found on slide ${slideIndex}.`);
       }
     } else if (target.type === 'placeholder') {
       if (typeof target.placeholder !== 'string') {
-        throw new Error('The "placeholder" field is required for target type "placeholder".');
+        fail('INVALID_ARGUMENT', 'The "placeholder" field is required for target type "placeholder".');
       }
       const placeholderLower = target.placeholder.toLowerCase();
       targetShape = shapes.items.find((s) => s.name.toLowerCase().includes(placeholderLower)) ?? null;
       if (!targetShape) {
-        throw new Error(`Placeholder "${target.placeholder}" not found on slide ${slideIndex}.`);
+        fail('ITEM_NOT_FOUND', `Placeholder "${target.placeholder}" not found on slide ${slideIndex}.`);
       }
     } else {
-      throw new Error(`Unsupported target type: "${target.type}".`);
+      fail('INVALID_ARGUMENT', `Unsupported target type: "${target.type}".`);
     }
 
     targetShape.textFrame.textRange.text = text as string;
@@ -666,8 +660,12 @@ async function updateText(params: Record<string, unknown>): Promise<CommandResul
         if (typeof formatting['fontColor'] === 'string') font.color = formatting['fontColor'];
         if (typeof formatting['bold'] === 'boolean') font.bold = formatting['bold'];
         if (typeof formatting['italic'] === 'boolean') font.italic = formatting['italic'];
+        if (typeof formatting['alignment'] === 'string') {
+          const alignments = { left: 'Left', center: 'Center', right: 'Right', justified: 'Justify' } as const;
+          targetShape.textFrame.textRange.paragraphFormat.horizontalAlignment = alignments[formatting['alignment'] as keyof typeof alignments];
+        }
       } catch {
-        // Font formatting may not be fully supported
+        fail('UNSUPPORTED_OPERATION', "This version of PowerPoint can't apply the requested text formatting.");
       }
     }
 
@@ -680,8 +678,7 @@ async function updateText(params: Record<string, unknown>): Promise<CommandResul
  * get_speaker_notes — Read speaker notes for one or all slides.
  *
  * Uses the Office.js `Slide.notesSlide` API which requires PowerPointApi 1.11+.
- * When unavailable, falls back to the Common API `getSelectedDataAsync`
- * for the selected slide, or returns an informative message.
+ * When unavailable, returns a coded unsupported-operation failure.
  *
  * Params:
  *   slideIndex (number, optional) — 1-based; omit for all slides
@@ -693,6 +690,10 @@ async function getSpeakerNotes(params: Record<string, unknown>): Promise<Command
     const slides = context.presentation.slides;
     slides.load('items');
     await context.sync();
+
+    if (slideIndex !== undefined && (!Number.isInteger(slideIndex) || slideIndex < 1 || slideIndex > slides.items.length)) {
+      fail('INVALID_ARGUMENT', `Slide index ${slideIndex} out of range. Presentation has ${slides.items.length} slides.`);
+    }
 
     const result: Array<{ slideNumber: number; notes: string }> = [];
 
@@ -714,16 +715,7 @@ async function getSpeakerNotes(params: Record<string, unknown>): Promise<Command
       }
     }
 
-    if (!apiAvailable) {
-      // Return a clear message indicating the limitation
-      for (let i = startIdx; i < endIdx; i++) {
-        result.push({
-          slideNumber: i + 1,
-          notes: '(Speaker notes require PowerPointApi 1.11+. Upgrade Office or use the desktop app for this feature.)',
-        });
-      }
-      return { notes: result, apiSupported: false };
-    }
+    if (!apiAvailable) fail('UNSUPPORTED_OPERATION', 'Speaker notes require a newer version of PowerPoint.');
 
     for (let i = startIdx; i < endIdx; i++) {
       const slide = slides.items[i]!;
@@ -752,7 +744,7 @@ async function getSpeakerNotes(params: Record<string, unknown>): Promise<Command
           }
         }
       } catch {
-        // Notes slide may not exist for this slide
+        fail('UNSUPPORTED_OPERATION', "This version of PowerPoint can't read speaker notes.");
       }
 
       result.push({ slideNumber: i + 1, notes: notesText });
@@ -789,7 +781,7 @@ async function setSpeakerNotes(params: Record<string, unknown>): Promise<Command
     await context.sync();
 
     if (slideIndex > slides.items.length) {
-      throw new Error(`Slide index ${slideIndex} out of range.`);
+      fail('INVALID_ARGUMENT', `Slide index ${slideIndex} out of range.`);
     }
 
     const slide = getSlideByIndex(slides, slideIndex);
@@ -837,18 +829,17 @@ async function setSpeakerNotes(params: Record<string, unknown>): Promise<Command
         }
       }
 
-      await context.sync();
-
       if (!notesSet) {
-        throw new Error('Could not find a notes placeholder on the slide.');
+        fail('ITEM_NOT_FOUND', 'Could not find a notes placeholder on the slide.');
       }
 
+      await context.sync();
       return { success: true, slideNumber: slideIndex };
     } catch (e) {
       if (e instanceof Error && e.message.includes('notes placeholder')) {
         throw e;
       }
-      throw new Error(
+      fail('UNSUPPORTED_OPERATION',
         'Speaker notes are not available. Update Office to the latest version for this feature.',
       );
     }
@@ -927,7 +918,7 @@ async function findLayoutByName(
       }
     }
   } catch (error) {
-    throw new Error(
+    fail('UNSUPPORTED_OPERATION',
       `Slide layouts are not supported by this version of PowerPoint (${error instanceof Error ? error.message : String(error)}).`,
     );
   }
@@ -951,28 +942,28 @@ async function findShape(
 
   if (target.type === 'shapeId') {
     if (typeof target.shapeId !== 'string') {
-      throw new Error('The "shapeId" field is required for target type "shapeId".');
+      fail('INVALID_ARGUMENT', 'The "shapeId" field is required for target type "shapeId".');
     }
     const shape = shapes.items.find((s) => s.id === target.shapeId);
     if (!shape) {
-      throw new Error(`Shape with ID "${target.shapeId}" not found on this slide.`);
+      fail('ITEM_NOT_FOUND', `Shape with ID "${target.shapeId}" not found on this slide.`);
     }
     return shape;
   }
 
   if (target.type === 'placeholder') {
     if (typeof target.placeholder !== 'string') {
-      throw new Error('The "placeholder" field is required for target type "placeholder".');
+      fail('INVALID_ARGUMENT', 'The "placeholder" field is required for target type "placeholder".');
     }
     const placeholderLower = target.placeholder.toLowerCase();
     const shape = shapes.items.find((s) => s.name.toLowerCase().includes(placeholderLower));
     if (!shape) {
-      throw new Error(`Placeholder "${target.placeholder}" not found on this slide.`);
+      fail('ITEM_NOT_FOUND', `Placeholder "${target.placeholder}" not found on this slide.`);
     }
     return shape;
   }
 
-  throw new Error(`Unsupported target type: "${target.type}". Use "shapeId" or "placeholder".`);
+  fail('INVALID_ARGUMENT', `Unsupported target type: "${target.type}". Use "shapeId" or "placeholder".`);
 }
 
 /**
@@ -1002,14 +993,14 @@ async function applyLayout(params: Record<string, unknown>): Promise<CommandResu
     await context.sync();
 
     if (slideIndex > slides.items.length) {
-      throw new Error(
+      fail('INVALID_ARGUMENT',
         `Slide index ${slideIndex} out of range. Presentation has ${slides.items.length} slides.`,
       );
     }
 
     const { layout, available } = await findLayoutByName(context, layoutName as string);
     if (!layout) {
-      throw new Error(
+      fail('ITEM_NOT_FOUND',
         `Layout "${layoutName}" not found. Available layouts: ${available.join(', ') || '(none found)'}.`,
       );
     }
@@ -1050,7 +1041,7 @@ async function deleteShape(params: Record<string, unknown>): Promise<CommandResu
     await context.sync();
 
     if (slideIndex > slides.items.length) {
-      throw new Error(
+      fail('INVALID_ARGUMENT',
         `Slide index ${slideIndex} out of range. Presentation has ${slides.items.length} slides.`,
       );
     }
@@ -1107,7 +1098,7 @@ async function formatShape(params: Record<string, unknown>): Promise<CommandResu
     await context.sync();
 
     if (slideIndex > slides.items.length) {
-      throw new Error(
+      fail('INVALID_ARGUMENT',
         `Slide index ${slideIndex} out of range. Presentation has ${slides.items.length} slides.`,
       );
     }

@@ -283,3 +283,20 @@ repository-level [SECURITY.md](../../SECURITY.md) for vulnerability reporting.
 ## Architecture and drift-risk notes
 
 Sidecar lifecycle, port allocation, manifest sideloading, and the byte-compatible code vendored from the Mindstone Rebel monorepo are documented in [`docs/connectors/office-architecture.md`](../../docs/connectors/office-architecture.md). That file is the canonical reference if you are debugging the sidecar handshake or planning a release that touches the vendored sidecar/appBridge or chat code.
+
+### Action results and recovery
+
+An action succeeds only when the requested work completes. Missing targets and
+search matches return `ITEM_NOT_FOUND`; invalid indexes return `INVALID_ARGUMENT`.
+Word formatting, comments and styles need selected text or an explicit target.
+PowerPoint reports `UNSUPPORTED_OPERATION` when it cannot apply requested
+formatting, text, fill or line properties. Text alignment and Excel range filter
+criteria are applied, including checks for unknown filter headers before writing.
+
+If PowerPoint creates a slide but cannot finish moving or filling it, `PARTIAL`
+includes the created slide id in the error message. Inspect that slide, then
+complete the missing work or delete it before retrying to avoid duplicates.
+Setup and status cover all three apps; status tells you which apps are connected
+and what to open when none are connected. To connect, click Rebel on the Home tab
+(first use on Windows: Add-ins → Developer Add-ins → Rebel). When the panel says
+“Waiting for Rebel”, open Rebel on the same computer; it connects automatically.

@@ -57,7 +57,7 @@ async function connectSetup(statePath: string | undefined = stateFile) {
 async function setup(action: 'install' | 'uninstall') {
   const result = await client!.callTool({ name: 'rebel_office_setup', arguments: { action } });
   const parsed = JSON.parse((result.content as Array<{ type: string; text: string }>)[0]!.text);
-  expect(parsed).toMatchObject({ app: 'office', action: 'setup' });
+  expect(parsed).toMatchObject({ app: 'all', action: 'setup' });
   expect(result.isError === true).toBe(!parsed.ok);
   return parsed;
 }
@@ -99,6 +99,8 @@ describe('Windows setup tool', () => {
     expect(result.ok).toBe(true);
     const text = result.data.summary;
     expect(text).toContain('Install manifest: done');
+    expect(text).toContain('Home tab');
+    expect(text).toContain('Developer Add-ins');
     expect(text).toContain(`all: ${status}`);
     expect(registerWindowsAddin).toHaveBeenCalledExactlyOnceWith(manifestPath);
   });
@@ -112,4 +114,10 @@ it('does not report setup success when registration fails', async () => {
   });
   vi.mocked(registerWindowsAddin).mockResolvedValue({ app: 'all', path: stateDir, status: 'failed', error: 'Registration denied' });
   expect(await setup('install')).toMatchObject({ ok: false, error: { code: 'SIDECAR_ERROR', message: expect.stringContaining('Registration denied') } });
+});
+
+it('reports a failed registry delete on uninstall', async () => {
+  await connectSetup();
+  vi.mocked(unregisterWindowsAddin).mockResolvedValue({ app: 'all', path: stateDir, status: 'failed', error: 'Delete denied' });
+  expect(await setup('uninstall')).toMatchObject({ ok: false, error: { code: 'SIDECAR_ERROR', message: expect.stringContaining('Delete denied') } });
 });

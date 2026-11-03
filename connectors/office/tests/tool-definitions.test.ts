@@ -151,9 +151,10 @@ it.each(['rebel_office_setup', 'rebel_office_status', 'unknown_tool'])(
   '%s returns the result shape on failure', async (name) => {
     const response = await client.callTool({ name, arguments: {} });
     expect(response.isError).toBe(true);
+    if (name === 'rebel_office_status') expect((response.content as Array<{ text: string }>)[0]!.text).not.toContain('rebel_office_setup');
     expect(JSON.parse((response.content as Array<{ text: string }>)[0]!.text)).toMatchObject({
-      ok: false, app: 'office', action: name === 'unknown_tool' ? 'unknown' : name.slice('rebel_office_'.length),
-      error: { code: name === 'unknown_tool' ? 'INVALID_ARGUMENT' : 'SIDECAR_NOT_RUNNING' },
+      ok: false, app: name === 'unknown_tool' ? 'office' : 'all', action: name === 'unknown_tool' ? 'unknown' : name.slice('rebel_office_'.length),
+      error: { code: name === 'unknown_tool' ? 'INVALID_ARGUMENT' : name === 'rebel_office_status' ? 'SIDECAR_ERROR' : 'SIDECAR_NOT_RUNNING' },
     });
   },
 );

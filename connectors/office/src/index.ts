@@ -719,6 +719,7 @@ const readTools = {
 };
 const lookFirst = (app) => `Read the current state with ${readTools[app] || readTools.office}, correct the target or arguments, then try again.`;
 const ERROR_CATALOG = {
+  PARTIAL: { retryable: false, fix: 'Inspect the created slide with rebel_office_powerpoint_get_slides and rebel_office_powerpoint_get_slide_content; complete the missing work or delete it with rebel_office_powerpoint_delete_slide before retrying.' },
   INVALID_ARGUMENT: { retryable: false, fix: lookFirst },
   ITEM_NOT_FOUND: { retryable: false, fix: lookFirst },
   NO_SELECTION: { retryable: false, fix: 'Ask the user to select the intended text in Office, or use an explicit target.' },
@@ -1038,7 +1039,7 @@ registerTool(TOOL_NAMES.setup, {
     '  • Force a re-install after deleting manifests manually\n' +
     '  • Uninstall the add-in (action="uninstall")\n\n' +
     'After install, open (or restart) Word, Excel, or PowerPoint. The Rebel button will appear ' +
-    'in the Home ribbon, under the "Add ons" menu; click it to open the panel and see "Connected".',
+    'on the Home tab; on first use in Windows, choose Add-ins → Developer Add-ins → Rebel. Click Rebel to open the panel and see "Connected".',
   inputSchema: {
     "type": "object",
     "properties": {
@@ -1055,7 +1056,7 @@ registerTool(TOOL_NAMES.setup, {
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
 }, async (input) => {
-  const respond = (result) => toMcpResult(stampResultContext(result, 'office', 'setup'));
+  const respond = (result) => toMcpResult(stampResultContext(result, 'all', 'setup'));
   if (input.action === 'uninstall') {
     const results = await uninstallManifest();
     const summary = results.map(r => `${r.app}: ${r.status}${r.error ? ` (${r.error})` : ''}`).join('\n');
@@ -1111,7 +1112,7 @@ registerTool(TOOL_NAMES.setup, {
   lines.push('\nNext steps:');
   lines.push('1. Open (or restart) the Microsoft 365 desktop app for Word, Excel, or PowerPoint');
   lines.push('   (the web/browser versions of Office are not supported)');
-  lines.push('2. Find the "Rebel" button in the Home ribbon, under the "Add ons" menu');
+  lines.push('2. Click Rebel on the Home tab (first use on Windows: Add-ins → Developer Add-ins → Rebel)');
   lines.push('3. Click it to open the connection panel');
   lines.push('4. Once it shows "Connected", you\'re ready to go!');
 
@@ -1134,14 +1135,21 @@ registerTool(TOOL_NAMES.status, {
   },
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 }, async () => {
-  const respond = (result) => toMcpResult(stampResultContext(result, 'office', 'status'));
+  const respond = (result) => toMcpResult(stampResultContext(result, 'all', 'status'));
   const state = loadSidecarState();
   if (!state) {
-    return respond({ success: false, code: 'SIDECAR_NOT_RUNNING', error: "The Office sidecar isn't running. Enable the Microsoft Office connector in Settings → Connectors, then run rebel_office_setup to install the add-in." });
+    return respond({ success: false, code: 'SIDECAR_ERROR', error: "The Office sidecar isn't running. Enable the Microsoft Office connector in Settings → Connectors; the add-in installs automatically." });
   }
   try {
     const response = await loopbackHttpsRequest(`https://127.0.0.1:${state.port}/health`);
-    return respond(await decodeSidecarResponse(response, 'office'));
+    const health = await decodeSidecarResponse(response, 'office');
+    if (health.success === false) return respond(health);
+    const apps = Object.fromEntries(['word', 'excel', 'powerpoint'].map(app => [app, health.connected?.[app] === true ? 'connected' : 'not_connected']));
+    return respond({ success: true, data: { sidecar: 'running', apps,
+      ...(Object.values(apps).every(status => status === 'not_connected') ? {
+        fix: 'Open Word, Excel or PowerPoint and click Rebel on the Home tab (first use on Windows: Add-ins → Developer Add-ins → Rebel).',
+      } : {}),
+    } });
   } catch (err) {
     return respond({ success: false, code: 'SIDECAR_ERROR', error: `Cannot reach Office sidecar: ${err.message}. Try restarting the connector in Settings.` });
   }

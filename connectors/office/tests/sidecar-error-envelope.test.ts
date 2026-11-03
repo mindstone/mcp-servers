@@ -119,7 +119,7 @@ it('returns structured health data and keeps sidecar text enveloped', async () =
   const response = await client.callTool({ name: 'rebel_office_status', arguments: {} });
   expect(response.isError).toBeUndefined();
   expect(JSON.parse((response.content as Array<{ text: string }>)[0]!.text)).toMatchObject({
-    ok: true, app: 'office', action: 'status', data: { connected: { word: true } },
+    ok: true, app: 'all', action: 'status', data: { sidecar: 'running', apps: { word: 'connected' } },
   });
 });
 
@@ -130,4 +130,22 @@ it('envelopes malformed health response text', async () => {
   const result = JSON.parse((response.content as Array<{ text: string }>)[0]!.text);
   expect(result.error.message).toContain('<untrusted-content source="microsoft-office-office">');
   expect(result.error.message).not.toContain(ATTACKER_CLOSE_TAG);
+});
+
+it('returns actionable structured status when no apps are connected', async () => {
+  healthBody = JSON.stringify({ status: 'ok', connected: { word: false, excel: false, powerpoint: false } });
+  const response = await client.callTool({ name: 'rebel_office_status', arguments: {} });
+  const result = JSON.parse((response.content as Array<{ text: string }>)[0]!.text);
+  expect(result).toMatchObject({ ok: true, app: 'all', action: 'status', data: {
+    sidecar: 'running', apps: { word: 'not_connected', excel: 'not_connected', powerpoint: 'not_connected' },
+    fix: expect.stringContaining('Home tab'),
+  } });
+  expect(result.data.fix).not.toContain('rebel_office_setup');
+});
+
+it('gives a partial slide creation a specific inspect-or-delete recovery', () => {
+  const response = toMcpResult({ success: false, code: 'PARTIAL', error: 'Created slide id: created-slide' });
+  expect(JSON.parse(response.content[0]!.text)).toMatchObject({ ok: false, error: {
+    code: 'PARTIAL', retryable: false, fix: expect.stringMatching(/inspect.*delete/i),
+  } });
 });

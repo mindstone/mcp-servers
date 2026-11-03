@@ -7,7 +7,7 @@
  * ExcelApi 1.8+ (data validation), ExcelApi 1.10+ (comments).
  */
 
-import { executeExcelCommand, type CommandResult } from '../officeExecutor.js';
+import { executeExcelCommand, fail, type CommandResult } from '../officeExecutor.js';
 
 export type ExcelCommandHandler = (params: Record<string, unknown>) => Promise<CommandResult>;
 
@@ -670,7 +670,7 @@ async function addConditionalFormatting(params: Record<string, unknown>): Promis
       }
 
       default:
-        throw new Error(`Unsupported conditional formatting type: "${rule['type'] as string}".`);
+        fail('INVALID_ARGUMENT', `Unsupported conditional formatting type: "${rule['type'] as string}".`);
     }
 
     await context.sync();
@@ -757,51 +757,36 @@ async function filterTable(params: Record<string, unknown>): Promise<CommandResu
   }
 
   return executeExcelCommand(async (context) => {
-    if (tableName) {
-      const table = context.workbook.tables.getItem(tableName);
-
-      if (!filters) {
-        // Clear all filters
-        table.clearFilters();
-        await context.sync();
-        return { success: true, action: 'cleared' };
-      }
-
-      const headerRange = table.getHeaderRowRange();
-      headerRange.load('values');
+    const table = tableName ? context.workbook.tables.getItem(tableName) : undefined;
+    const sheet = table ? undefined : getWorksheet(context, worksheetName);
+    const range = table ? table.getHeaderRowRange() : sheet!.getRange(rangeAddr!);
+    if (!filters) {
+      if (table) table.clearFilters();
+      else sheet!.autoFilter.clearCriteria();
       await context.sync();
-
-      const headers = (headerRange.values[0] ?? []) as string[];
-
-      for (const f of filters as Array<{ column: string; criteria: { type: string; values?: string[]; operator?: string; value?: unknown } }>) {
-        const colIndex = headers.findIndex((h) => h === f.column);
-        if (colIndex < 0) continue;
-
-        const column = table.columns.getItemAt(colIndex);
-        if (f.criteria.type === 'values' && Array.isArray(f.criteria.values)) {
-          column.filter.applyValuesFilter(f.criteria.values);
-        } else if (f.criteria.type === 'condition') {
-          const dynamicCriteria: Excel.FilterCriteria = {
-            filterOn: Excel.FilterOn.custom,
-            criterion1: `${f.criteria.operator ?? ''}${f.criteria.value ?? ''}`,
-          };
-          column.filter.applyCustomFilter(dynamicCriteria.criterion1!);
-        }
-      }
-    } else {
-      const sheet = getWorksheet(context, worksheetName);
-      const range = sheet.getRange(rangeAddr!);
-
-      if (!filters) {
-        sheet.autoFilter.clearCriteria();
-        await context.sync();
-        return { success: true, action: 'cleared' };
-      }
-
-      // Apply auto-filter on the range
-      sheet.autoFilter.apply(range);
+      return { success: true, action: 'cleared' };
     }
-
+    const headerRange = table ? range : range.getRow(0);
+    headerRange.load('values');
+    await context.sync();
+    const headers = (headerRange.values[0] ?? []).map(String);
+    const resolved = (filters as Array<{ column: string; criteria: { type: string; values?: string[]; operator?: string; value?: unknown } }>).map((f) => {
+      const index = headers.indexOf(f.column);
+      if (index < 0) fail('ITEM_NOT_FOUND', `Column "${f.column}" not found. Available headers: ${headers.join(', ')}.`);
+      let criteria: Excel.FilterCriteria;
+      if (f.criteria.type === 'values' && Array.isArray(f.criteria.values)) {
+        criteria = { filterOn: Excel.FilterOn.values, values: f.criteria.values };
+      } else if (f.criteria.type === 'condition') {
+        criteria = { filterOn: Excel.FilterOn.custom, criterion1: `${f.criteria.operator ?? ''}${f.criteria.value ?? ''}` };
+      } else {
+        fail('INVALID_ARGUMENT', `Unsupported filter criteria for "${f.column}".`);
+      }
+      return { index, criteria };
+    });
+    for (const { index, criteria } of resolved) {
+      if (table) table.columns.getItemAt(index).filter.apply(criteria);
+      else sheet!.autoFilter.apply(range, index, criteria);
+    }
     await context.sync();
     return { success: true, action: 'applied' };
   });
@@ -1087,7 +1072,7 @@ async function addDataValidation(params: Record<string, unknown>): Promise<Comma
       }
 
       default:
-        throw new Error(`Unsupported validation type: "${rule['type'] as string}".`);
+        fail('INVALID_ARGUMENT', `Unsupported validation type: "${rule['type'] as string}".`);
     }
 
     if (showErrorAlert || errorMessage) {

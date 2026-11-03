@@ -237,7 +237,8 @@ describe('office chatUI shared rendering migration (Stage 10)', () => {
     );
 
     expect(getHeader(container).dataset.status).toBe('not-ready');
-    expect(container.textContent).toContain('Rebel is setting up');
+    expect(container.textContent).toContain('Waiting for Rebel');
+    expect(container.textContent).toContain('Make sure Rebel is open on this computer; this panel connects by itself as soon as it is.');
     expect(getTextarea(container).disabled).toBe(true);
     expect(getSendButton(container).disabled).toBe(true);
     expect(createIntentClient).not.toHaveBeenCalled();
@@ -849,7 +850,7 @@ describe('office chatUI shared rendering migration (Stage 10)', () => {
 
     await vi.waitFor(() => {
       expect(getHeader(revokedUI.container).dataset.status).toBe('not-ready');
-      expect(revokedUI.container.textContent).toContain('Rebel is setting up');
+      expect(revokedUI.container.textContent).toContain('Waiting for Rebel');
       expect(getConversationBanner(revokedUI.container).dataset.kind).toBe('revoked');
       expect(getConversationBanner(revokedUI.container).textContent).toContain(
         'Rebel revoked this connection. Open Rebel and re-pair to reconnect.',
