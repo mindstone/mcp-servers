@@ -557,12 +557,15 @@ describe('truthful command results', () => {
 
   it.each(['text', 'fillColor', 'lineColor', 'lineWidth'])('rejects unsupported shape %s before a writing sync', async (option) => {
     const { context, slide } = makePowerPointContext();
-    Object.assign(slide.shapes, { addGeometricShape: () => ({ load: vi.fn() }) });
+    const add = vi.fn();
+    Object.assign(slide.shapes, { addGeometricShape: add });
     mockOfficeApp('PowerPoint', context);
     Object.assign(g.PowerPoint as object, { GeometricShapeType: { rectangle: 'Rectangle' } });
+    g.Office = { context: { requirements: { isSetSupported: vi.fn(() => false) } } };
     expect(await mustGet(getPowerpointCommandHandler('add_shape'), 'add_shape')({
       slideIndex: 1, shapeType: 'rectangle', position: { left: 0, top: 0 }, [option]: option === 'lineWidth' ? 2 : 'value',
     })).toMatchObject({ success: false, code: 'UNSUPPORTED_OPERATION' });
+    expect(add).not.toHaveBeenCalled();
     expect(context.sync).toHaveBeenCalledTimes(1); // slides read only
   });
 
@@ -578,15 +581,19 @@ describe('truthful command results', () => {
     expect(paragraphFormat.horizontalAlignment).toBe('Center');
   });
 
-  it.each(['add_text_box', 'update_text'])('rejects unavailable formatting for %s before writing', async (action) => {
+  it.each(['add_text_box', 'update_text'])('preserves unavailable formatting errors at the %s sync', async (action) => {
     const { context, slide, shape } = makePowerPointContext();
-    Object.assign(shape, { textFrame: { load: vi.fn(), textRange: { text: '' } }, load: vi.fn() });
+    Object.assign(shape, { textFrame: { load: vi.fn(), textRange: { text: '', font: {} } }, load: vi.fn() });
     Object.assign(slide.shapes, { addTextBox: () => shape });
+    const syncNumber = action === 'update_text' ? 4 : 2;
+    context.sync.mockImplementation(async () => {
+      if (context.sync.mock.calls.length === syncNumber) throw { code: 'ApiNotFound', message: 'Formatting unavailable' };
+    });
     mockOfficeApp('PowerPoint', context);
     expect(await mustGet(getPowerpointCommandHandler(action), action)({
       slideIndex: 1, text: 'New', position: { left: 0, top: 0 }, target: { type: 'shapeId', shapeId: shape.id }, formatting: { bold: true },
     })).toMatchObject({ success: false, code: 'UNSUPPORTED_OPERATION' });
-    expect(context.sync).toHaveBeenCalledTimes(action === 'update_text' ? 3 : 1);
+    expect(context.sync).toHaveBeenCalledTimes(syncNumber);
   });
 
   it.each(['table', 'range'])('rejects unknown %s filter columns without applying earlier filters', async (kind) => {
@@ -780,7 +787,7 @@ function makeNotesContext() {
 
 it.each([
   ['get_speaker_notes', 2, 'AccessDenied', 'READ_ONLY'],
-  ['get_speaker_notes', 4, 'GeneralException', 'GENERAL_EXCEPTION'],
+  ['get_speaker_notes', 3, 'GeneralException', 'GENERAL_EXCEPTION'],
   ['set_speaker_notes', 2, 'GeneralException', 'GENERAL_EXCEPTION'],
   ['set_speaker_notes', 4, 'AccessDenied', 'READ_ONLY'],
   ['set_speaker_notes', 4, 'ApiNotFound', 'UNSUPPORTED_OPERATION'],
@@ -799,6 +806,38 @@ it('retains the coded missing notes placeholder failure', async () => {
   expect(await mustGet(getPowerpointCommandHandler('set_speaker_notes'), 'set_speaker_notes')({ slideIndex: 1, notes: 'New' }))
     .toMatchObject({ success: false, code: 'ITEM_NOT_FOUND' });
   expect(context.sync).toHaveBeenCalledTimes(3);
+});
+
+it('does not write to an unrelated notes-page shape with a textFrame proxy', async () => {
+  const { context, shapes, textRange } = makeNotesContext();
+  shapes.items[0]!.name = 'Slide Image';
+  mockOfficeApp('PowerPoint', context);
+  expect(await mustGet(getPowerpointCommandHandler('set_speaker_notes'), 'set_speaker_notes')({ slideIndex: 1, notes: 'New' }))
+    .toMatchObject({ success: false, code: 'ITEM_NOT_FOUND' });
+  expect(textRange.text).toBe('Existing notes');
+  expect(context.sync).toHaveBeenCalledTimes(3);
+});
+
+it('skips a second notes-page shape whose text sync throws InvalidArgument', async () => {
+  const { context, shapes } = makeNotesContext();
+  const imageTextFrame = { textRange: { text: '' }, load: vi.fn() };
+  shapes.items.push({ name: 'Slide Image', textFrame: imageTextFrame });
+  context.sync.mockImplementation(async () => {
+    if (context.sync.mock.calls.length === 5) throw { code: 'InvalidArgument', message: 'Shape has no text frame' };
+  });
+  mockOfficeApp('PowerPoint', context);
+  const result = await mustGet(getPowerpointCommandHandler('get_speaker_notes'), 'get_speaker_notes')({ slideIndex: 1 });
+  expect(result)
+    .toMatchObject({ success: true, data: { apiSupported: true, notes: [{ slideNumber: 1, notes: 'Existing notes' }] } });
+  expect(imageTextFrame.load).toHaveBeenCalledWith('textRange/text');
+  expect(context.sync).toHaveBeenCalledTimes(5);
+  const { __test: { toMcpResult, stampUntrustedSource } } = await import('../src/index.js');
+  const response = toMcpResult(stampUntrustedSource(result, 'powerpoint', 'get_speaker_notes'));
+  expect(response.isError).toBeUndefined();
+  expect(JSON.parse(response.content[0]!.text)).toMatchObject({
+    ok: true, app: 'powerpoint', action: 'get_speaker_notes',
+    data: { notes: [{ slideNumber: 1, notes: '<untrusted-content source="microsoft-office-powerpoint">Existing notes</untrusted-content>' }] },
+  });
 });
 
 it('reads and writes supported speaker notes', async () => {

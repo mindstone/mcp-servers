@@ -383,20 +383,16 @@ async function addTextBox(params: Record<string, unknown>): Promise<CommandResul
 
     // Apply formatting if specified
     if (formatting) {
-      try {
-        const textRange = shape.textFrame.textRange;
-        const font = textRange.font;
-        if (typeof formatting['fontFamily'] === 'string') font.name = formatting['fontFamily'];
-        if (typeof formatting['fontSize'] === 'number') font.size = formatting['fontSize'];
-        if (typeof formatting['fontColor'] === 'string') font.color = formatting['fontColor'];
-        if (typeof formatting['bold'] === 'boolean') font.bold = formatting['bold'];
-        if (typeof formatting['italic'] === 'boolean') font.italic = formatting['italic'];
-        if (typeof formatting['alignment'] === 'string') {
-          const alignments = { left: 'Left', center: 'Center', right: 'Right', justified: 'Justify' } as const;
-          textRange.paragraphFormat.horizontalAlignment = alignments[formatting['alignment'] as keyof typeof alignments];
-        }
-      } catch {
-        fail('UNSUPPORTED_OPERATION', "This version of PowerPoint can't apply the requested text formatting.");
+      const textRange = shape.textFrame.textRange;
+      const font = textRange.font;
+      if (typeof formatting['fontFamily'] === 'string') font.name = formatting['fontFamily'];
+      if (typeof formatting['fontSize'] === 'number') font.size = formatting['fontSize'];
+      if (typeof formatting['fontColor'] === 'string') font.color = formatting['fontColor'];
+      if (typeof formatting['bold'] === 'boolean') font.bold = formatting['bold'];
+      if (typeof formatting['italic'] === 'boolean') font.italic = formatting['italic'];
+      if (typeof formatting['alignment'] === 'string') {
+        const alignments = { left: 'Left', center: 'Center', right: 'Right', justified: 'Justify' } as const;
+        textRange.paragraphFormat.horizontalAlignment = alignments[formatting['alignment'] as keyof typeof alignments];
       }
     }
 
@@ -552,40 +548,24 @@ async function addShape(params: Record<string, unknown>): Promise<CommandResult>
     // Set text if provided
     const text = params['text'];
     if (typeof text === 'string' && text.length > 0) {
-      try {
-        shape.textFrame.textRange.text = text;
-      } catch {
-        fail('UNSUPPORTED_OPERATION', "This version of PowerPoint can't set text on this shape.");
-      }
+      shape.textFrame.textRange.text = text;
     }
 
     // Set fill color
     const fillColor = params['fillColor'];
     if (typeof fillColor === 'string') {
-      try {
-        shape.fill.setSolidColor(fillColor);
-      } catch {
-        fail('UNSUPPORTED_OPERATION', "This version of PowerPoint can't set this shape fill.");
-      }
+      shape.fill.setSolidColor(fillColor);
     }
 
     // Set line properties
     const lineColor = params['lineColor'];
     if (typeof lineColor === 'string') {
-      try {
-        shape.lineFormat.color = lineColor;
-      } catch {
-        fail('UNSUPPORTED_OPERATION', "This version of PowerPoint can't set this shape line formatting.");
-      }
+      shape.lineFormat.color = lineColor;
     }
 
     const lineWidth = params['lineWidth'];
     if (typeof lineWidth === 'number') {
-      try {
-        shape.lineFormat.weight = lineWidth;
-      } catch {
-        fail('UNSUPPORTED_OPERATION', "This version of PowerPoint can't set this shape line formatting.");
-      }
+      shape.lineFormat.weight = lineWidth;
     }
 
     shape.load('id');
@@ -665,19 +645,15 @@ async function updateText(params: Record<string, unknown>): Promise<CommandResul
 
     // Apply formatting if specified
     if (formatting) {
-      try {
-        const font = targetShape.textFrame.textRange.font;
-        if (typeof formatting['fontFamily'] === 'string') font.name = formatting['fontFamily'];
-        if (typeof formatting['fontSize'] === 'number') font.size = formatting['fontSize'];
-        if (typeof formatting['fontColor'] === 'string') font.color = formatting['fontColor'];
-        if (typeof formatting['bold'] === 'boolean') font.bold = formatting['bold'];
-        if (typeof formatting['italic'] === 'boolean') font.italic = formatting['italic'];
-        if (typeof formatting['alignment'] === 'string') {
-          const alignments = { left: 'Left', center: 'Center', right: 'Right', justified: 'Justify' } as const;
-          targetShape.textFrame.textRange.paragraphFormat.horizontalAlignment = alignments[formatting['alignment'] as keyof typeof alignments];
-        }
-      } catch {
-        fail('UNSUPPORTED_OPERATION', "This version of PowerPoint can't apply the requested text formatting.");
+      const font = targetShape.textFrame.textRange.font;
+      if (typeof formatting['fontFamily'] === 'string') font.name = formatting['fontFamily'];
+      if (typeof formatting['fontSize'] === 'number') font.size = formatting['fontSize'];
+      if (typeof formatting['fontColor'] === 'string') font.color = formatting['fontColor'];
+      if (typeof formatting['bold'] === 'boolean') font.bold = formatting['bold'];
+      if (typeof formatting['italic'] === 'boolean') font.italic = formatting['italic'];
+      if (typeof formatting['alignment'] === 'string') {
+        const alignments = { left: 'Left', center: 'Center', right: 'Right', justified: 'Justify' } as const;
+        targetShape.textFrame.textRange.paragraphFormat.horizontalAlignment = alignments[formatting['alignment'] as keyof typeof alignments];
       }
     }
 
@@ -737,8 +713,13 @@ async function getSpeakerNotes(params: Record<string, unknown>): Promise<Command
       for (const shape of shapes.items) {
         const textFrame = shape.textFrame;
         if (!textFrame) continue;
-        textFrame.load('textRange/text');
-        await context.sync();
+        try {
+          textFrame.load('textRange/text');
+          await context.sync();
+        } catch {
+          // Notes pages also contain shapes without text, such as the slide image.
+          continue;
+        }
         if (textFrame.textRange.text.trim().length > 0) {
           notesText += (notesText ? '\n' : '') + textFrame.textRange.text;
         }
@@ -792,8 +773,8 @@ async function setSpeakerNotes(params: Record<string, unknown>): Promise<Command
 
     const shape = shapes.items.find((item) =>
       item.name.toLowerCase().includes('notes') || item.name.toLowerCase().includes('body'),
-    ) ?? shapes.items.find((item) => item.textFrame);
-    if (!shape?.textFrame) fail('ITEM_NOT_FOUND', 'Could not find a notes placeholder on the slide.');
+    );
+    if (!shape) fail('ITEM_NOT_FOUND', 'Could not find a notes placeholder on the slide.');
     shape.textFrame.load('textRange/text');
     await context.sync();
     const previousNotes = shape.textFrame.textRange.text;

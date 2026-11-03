@@ -322,9 +322,12 @@ criteria are applied, including checks for unknown filter headers before writing
 Condition filters accept named operators such as `greaterThan` and Excel symbols
 such as `>`; unknown operators fail before any filter is applied. Sorting rejects
 unknown table headers and resolves worksheet letters such as `AA` within the
-requested range. Unknown shape types fail before creating a shape, and formatted
-shapes require PowerPointApi 1.4 before creation. Word alignment applies to every
-paragraph in the target. Speaker-notes errors report causes such as read-only files;
+requested range; exclude the header row when passing a range to sort. Unknown shape
+types fail before creating a shape, and formatted shapes require PowerPointApi 1.4
+before creation. Word alignment applies to every
+paragraph in the target. Reading speaker notes skips notes-page shapes without text.
+Setting notes returns `ITEM_NOT_FOUND` when no shape name contains "notes" or "body".
+Speaker-notes errors report causes such as read-only files;
 unavailable layouts return a coded failure instead of an empty layout list.
 
 If PowerPoint creates a slide but cannot finish filling it, `PARTIAL`

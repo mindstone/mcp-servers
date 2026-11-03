@@ -3040,7 +3040,7 @@ registerTool(TOOL_NAMES.excelSortRange, {
   description:
     'Sort a range or table by one or more columns. Supports ascending/descending order and ' +
     'multi-level sorting. When sorting a table, use column names; when sorting a range, use ' +
-    'worksheet column letters (for example, "AA").\n\n' +
+    'worksheet column letters (for example, "AA") and exclude the header row from the range.\n\n' +
     'Related tools: Use `rebel_office_excel_filter_table` to filter without reordering data.',
   inputSchema: {
     "type": "object",
