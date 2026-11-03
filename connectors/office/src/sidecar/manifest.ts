@@ -3,13 +3,15 @@
  * Generates a manifest XML with the correct sidecar HTTPS port.
  *
  * The sidecar binds to `DEFAULT_SIDECAR_PORT` (52100) with a small fallback window.
- * Manifests are written into the state directory AND auto-installed into Office's
- * WEF folders, where Office reads them at launch time.
+ * Manifests are written into the state directory, then installed into macOS WEF
+ * folders or registered under the Windows per-user WEF Developer registry key.
  */
 
+import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { promisify } from 'node:util';
 
 const MANIFEST_FILE = 'manifest.xml';
 
@@ -43,15 +45,6 @@ const MAC_WEF_PATHS: Record<OfficeHost, string> = {
   excel: path.join(os.homedir(), 'Library/Containers/com.microsoft.Excel/Data/Documents/wef'),
   powerpoint: path.join(os.homedir(), 'Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef'),
 };
-
-/**
- * Windows shared WEF folder (per-user, no admin needed).
- * Windows uses one folder for all Office apps — a combined multi-host manifest serves them all.
- */
-function winWefPath(): string | null {
-  const localAppData = process.env['LOCALAPPDATA'];
-  return localAppData ? path.join(localAppData, 'Microsoft', 'Office', '16.0', 'Wef') : null;
-}
 
 /**
  * Generate the Office Add-in manifest XML with the actual sidecar port.
@@ -171,7 +164,7 @@ export function generateManifest(port: number, host: OfficeHost = 'word'): strin
 
 /**
  * Generate a combined manifest with all three Office hosts.
- * Used on Windows where a single shared WEF folder serves all apps.
+ * Registered once on Windows for all three Office apps.
  */
 export function generateCombinedManifest(port: number): string {
   const baseUrl = `https://localhost:${port}`;
@@ -293,7 +286,7 @@ ${hostBlocks.join('\n\n')}
  *
  * Writes:
  *   - manifest.word.xml, manifest.excel.xml, manifest.powerpoint.xml — single-host (macOS wef folders)
- *   - manifest.xml — combined multi-host manifest (Windows shared wef folder)
+ *   - manifest.xml — combined multi-host manifest (registered on Windows)
  */
 export async function writeManifest(port: number, stateDir: string): Promise<string> {
   await fs.mkdir(stateDir, { recursive: true });
@@ -305,7 +298,7 @@ export async function writeManifest(port: number, stateDir: string): Promise<str
     await fs.writeFile(path.join(stateDir, `manifest.${host}.xml`), content, { encoding: 'utf8' });
   }
 
-  // Write combined multi-host manifest for Windows (single shared wef folder)
+  // Write combined multi-host manifest for Windows registration
   const manifestPath = path.join(stateDir, MANIFEST_FILE);
   await fs.writeFile(manifestPath, generateCombinedManifest(port), { encoding: 'utf8' });
 
@@ -319,6 +312,57 @@ export interface WefInstallResult {
   path: string;
   status: WefInstallStatus;
   error?: string;
+}
+
+const WINDOWS_ADDIN_KEY = String.raw`HKCU\Software\Microsoft\Office\16.0\WEF\Developer`;
+const WINDOWS_REGISTRY_COMMAND = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'reg.exe');
+const execRegistry = promisify(execFile);
+
+export type WindowsRegistryRunner = (command: string, args: string[]) => Promise<{ stdout: string }>;
+
+const runRegistry: WindowsRegistryRunner = (command, args) => execRegistry(command, args, { windowsHide: true });
+
+/** Register the combined manifest for all Windows Office apps. Result path is the manifest path. */
+export async function registerWindowsAddin(
+  manifestPath: string,
+  runner: WindowsRegistryRunner = runRegistry,
+): Promise<WefInstallResult> {
+  try {
+    try {
+      const { stdout } = await runner(WINDOWS_REGISTRY_COMMAND, ['query', WINDOWS_ADDIN_KEY, '/v', manifestPath]);
+      const identical = stdout.split(/\r?\n/).some((line) => {
+        const value = line.trim().match(/^(.+?)\s+REG_SZ\s+(.*)$/);
+        return value?.[1] === manifestPath && value[2] === manifestPath;
+      });
+      if (identical) return { app: 'all', path: manifestPath, status: 'unchanged' };
+    } catch {
+      // Query errors are localised; let the idempotent add determine whether registration succeeds.
+    }
+
+    await runner(WINDOWS_REGISTRY_COMMAND, ['add', WINDOWS_ADDIN_KEY, '/v', manifestPath, '/t', 'REG_SZ', '/d', manifestPath, '/f']);
+    return { app: 'all', path: manifestPath, status: 'installed' };
+  } catch (err) {
+    return { app: 'all', path: manifestPath, status: 'failed', error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** Remove only this manifest's Windows registration. Result path is the manifest path. */
+export async function unregisterWindowsAddin(
+  manifestPath: string,
+  runner: WindowsRegistryRunner = runRegistry,
+): Promise<{ app: 'all'; path: string; status: 'removed' | 'not_installed' | 'failed'; error?: string }> {
+  try {
+    try {
+      await runner(WINDOWS_REGISTRY_COMMAND, ['query', WINDOWS_ADDIN_KEY, '/v', manifestPath]);
+    } catch (err) {
+      if (err !== null && typeof err === 'object' && 'code' in err && err.code === 'ENOENT') throw err;
+      return { app: 'all', path: manifestPath, status: 'not_installed' };
+    }
+    await runner(WINDOWS_REGISTRY_COMMAND, ['delete', WINDOWS_ADDIN_KEY, '/v', manifestPath, '/f']);
+    return { app: 'all', path: manifestPath, status: 'removed' };
+  } catch (err) {
+    return { app: 'all', path: manifestPath, status: 'failed', error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 /**
@@ -341,19 +385,19 @@ export interface WefInstallOverrides {
   platform?: NodeJS.Platform;
   /** Override individual macOS wef folder paths. Primarily for tests. */
   macPaths?: Partial<Record<OfficeHost, string>>;
-  /** Override the Windows wef folder path (or pass null to simulate missing LOCALAPPDATA). */
-  winPath?: string | null;
+  /** Override Windows registry commands. Primarily for tests. */
+  registryRunner?: WindowsRegistryRunner;
 }
 
 /**
- * Install the generated manifests into Office's WEF folders (where Office reads sideloaded manifests).
+ * Install the generated manifests where Office looks for sideloaded add-ins.
  * Idempotent: only writes if the target is missing or differs. Safe to call on every sidecar startup.
  *
  * macOS: per-app wef folders, one single-host manifest per app.
- * Windows: one shared wef folder, the combined multi-host manifest.
+ * Windows: per-user WEF Developer registry value pointing at the combined multi-host manifest.
  *
  * @param stateDir - directory where the generated manifests were written (by `writeManifest()`)
- * @param overrides - test-only hooks to redirect platform/paths
+ * @param overrides - test-only hooks to redirect platform/paths and registry commands
  */
 export async function installManifestsToWefFolders(
   stateDir: string,
@@ -395,43 +439,7 @@ export async function installManifestsToWefFolders(
   }
 
   if (platform === 'win32') {
-    const wefDir = overrides.winPath !== undefined ? overrides.winPath : winWefPath();
-    if (!wefDir) {
-      results.push({
-        app: 'all',
-        path: '(unknown)',
-        status: 'skipped',
-        error: 'LOCALAPPDATA environment variable not set',
-      });
-      return results;
-    }
-
-    const source = path.join(stateDir, MANIFEST_FILE);
-    const target = path.join(wefDir, MANIFEST_FILE);
-
-    try {
-      const [newContent, existingContent] = await Promise.all([
-        fs.readFile(source, 'utf8'),
-        readFileOrNull(target),
-      ]);
-
-      if (existingContent === newContent) {
-        results.push({ app: 'all', path: wefDir, status: 'unchanged' });
-        return results;
-      }
-
-      await fs.mkdir(wefDir, { recursive: true });
-      await fs.writeFile(target, newContent, { encoding: 'utf8' });
-      results.push({ app: 'all', path: wefDir, status: 'installed' });
-    } catch (err) {
-      results.push({
-        app: 'all',
-        path: wefDir,
-        status: 'failed',
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-    return results;
+    return [await registerWindowsAddin(path.join(stateDir, MANIFEST_FILE), overrides.registryRunner)];
   }
 
   results.push({
