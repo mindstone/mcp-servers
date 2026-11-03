@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-02
+
+### Changed
+
+- Stop offering veo3, which Runway no longer accepts (veo3.1 and veo3.1_fast remain), and envelope Runway error and task-failure text with the canonical helper.
+
 ### Removed
 
 - `veo3` is no longer offered on `generate_video_from_image` and `generate_video_from_text`: Runway's API no longer accepts it for generation. Use `veo3.1` or `veo3.1_fast`.
