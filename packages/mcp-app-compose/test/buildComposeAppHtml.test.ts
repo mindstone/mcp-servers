@@ -180,6 +180,73 @@ describe.each([
     expect(calls(window)).toHaveLength(1);
   });
 
+  if (mode === 'email') {
+    it.each(['success', 'error', 'timeout'])('keeps the host sending lock after its own draft %s until a host outcome arrives', (completion) => {
+      const window = mount();
+      const timeout = vi.spyOn(window, 'setTimeout');
+      click(window, 'draftButton');
+      expect(calls(window)).toHaveLength(1);
+      deliver(window, sendingOutcome);
+      if (completion === 'timeout') {
+        const callback = timeout.mock.calls.find((call) => call[1] === 75000)?.[0];
+        expect(typeof callback).toBe('function');
+        (callback as () => void)();
+      } else {
+        reply(window, completion === 'error' ? { message: 'Draft save failed.' } : undefined);
+      }
+
+      const controls = ['sendButton', 'retryButton', 'cancelButton', 'draftButton', 'toInput', 'subjectInput', 'ccInput', 'bccInput', 'bodyInput'];
+      for (const id of controls) {
+        expect(window.document.getElementById(id)!.hasAttribute('disabled'), id).toBe(true);
+      }
+      expect(window.document.getElementById('sendLabel')!.textContent).toBe('Sending…');
+      const before = window.document.body.innerHTML;
+      for (const id of ['sendButton', 'retryButton', 'cancelButton', 'draftButton']) click(window, id);
+      expect(calls(window)).toHaveLength(1);
+      expect(window.document.body.innerHTML).toBe(before);
+
+      deliver(window, sendingOutcome);
+      for (const id of controls) {
+        expect(window.document.getElementById(id)!.hasAttribute('disabled'), id).toBe(true);
+      }
+      deliver(window, null);
+      for (const id of controls) {
+        expect(window.document.getElementById(id)!.hasAttribute('disabled'), id).toBe(false);
+      }
+      if (completion === 'error') {
+        click(window, 'retryButton');
+        expect(calls(window)).toHaveLength(2);
+        expect(calls(window)[1]?.params.name).toBe('create_workspace_draft');
+      }
+    });
+  }
+
+  it.each(['success', 'error'])('keeps the host sending lock after its own timed-out Send gets a late %s reply', (completion) => {
+    const window = mount();
+    const timeout = vi.spyOn(window, 'setTimeout');
+    click(window, 'sendButton');
+    const callback = timeout.mock.calls.find((call) => call[1] === 75000)?.[0];
+    expect(typeof callback).toBe('function');
+    (callback as () => void)();
+    deliver(window, sendingOutcome);
+    reply(window, completion === 'error' ? { message: 'Connection lost.' } : undefined);
+    const controls = ['sendButton', 'retryButton', 'cancelButton', ...(mode === 'email' ? ['draftButton'] : [])];
+    for (const id of controls) {
+      expect(window.document.getElementById(id)!.hasAttribute('disabled'), id).toBe(true);
+      click(window, id);
+    }
+    expect(calls(window)).toHaveLength(1);
+    expect(isHidden(window, 'composeForm')).toBe(false);
+    deliver(window, maybeOutcome);
+    for (const id of controls) {
+      expect(window.document.getElementById(id)!.hasAttribute('disabled'), id).toBe(false);
+    }
+    expectUncertainty(window);
+    click(window, 'retryButton');
+    expect(calls(window)).toHaveLength(2);
+    expect(calls(window)[1]?.params._meta).toEqual({ 'mcp-app/cardOutcome': 'sent' });
+  });
+
   it.each(['received', 'error', 'timeout'])('restores earlier %s uncertainty after another copy stops sending', (source) => {
     const window = mount(source === 'received' ? maybeOutcome : undefined);
     if (source !== 'received') {

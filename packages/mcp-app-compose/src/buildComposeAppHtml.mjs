@@ -1005,6 +1005,8 @@ ${blockedSend ? `      var blockedBox = document.getElementById('blockedBox');
       }
 
       function setSending(nextSending) {
+        // Only a host outcome can release another copy's in-flight send.
+        nextSending = nextSending || hostSending;
         sending = nextSending;
         sendButton.disabled = nextSending || sendBlocked;
         retryButton.disabled = nextSending;
@@ -1019,11 +1021,8 @@ ${f.cc ? `        ccInput.disabled = nextSending;
         postResize();
       }
 
-${hasDraft ? `      // Mirror of setSending for the Save-draft action. One request is in
-      // flight at a time (both paths share pendingRequestId and set the same
-      // \`sending\` flag), so the two busy states can never overlap; every
-      // control locks either way and only the active button shows a spinner
-      // and aria-busy.
+${hasDraft ? `      // One local request is in flight at a time, but a send in another
+      // copy can overlap this draft save and must keep the controls locked.
       function setSavingDraft(nextSaving) {
         sending = nextSaving;
         sendButton.disabled = nextSaving || sendBlocked;
@@ -1038,6 +1037,7 @@ ${f.cc ? `        ccInput.disabled = nextSaving;\n` : ''}${f.bcc ? `        bccI
         draftSpinner.classList.toggle('hidden', !nextSaving);
         draftLabel.textContent = nextSaving ? 'Saving…' : 'Save draft';
         draftButton.setAttribute('aria-busy', nextSaving ? 'true' : 'false');
+        if (hostSending) setSending(true);
         postResize();
       }
 
@@ -1420,8 +1420,8 @@ ${f.cc ? `        var cc = normalizeAddressList(payload.cc).join(',');
         if (pendingRequestId && pendingRequestId === pendingSendRequestId &&
             (!o || o.outcome === 'sending' || o.outcome === 'maybe-sent')) return;
         if (hostSending) {
-          setSending(false);
           hostSending = false;
+          setSending(false);
           if (sendMayHaveGone) showSendUnknown();
         }
         if (!o || typeof o !== 'object') return;

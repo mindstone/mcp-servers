@@ -663,6 +663,8 @@ export const COMPOSE_EMAIL_HTML = `
       }
 
       function setSending(nextSending) {
+        // Only a host outcome can release another copy's in-flight send.
+        nextSending = nextSending || hostSending;
         sending = nextSending;
         sendButton.disabled = nextSending || sendBlocked;
         retryButton.disabled = nextSending;
@@ -679,11 +681,8 @@ export const COMPOSE_EMAIL_HTML = `
         postResize();
       }
 
-      // Mirror of setSending for the Save-draft action. One request is in
-      // flight at a time (both paths share pendingRequestId and set the same
-      // \`sending\` flag), so the two busy states can never overlap; every
-      // control locks either way and only the active button shows a spinner
-      // and aria-busy.
+      // One local request is in flight at a time, but a send in another
+      // copy can overlap this draft save and must keep the controls locked.
       function setSavingDraft(nextSaving) {
         sending = nextSaving;
         sendButton.disabled = nextSaving || sendBlocked;
@@ -700,6 +699,7 @@ export const COMPOSE_EMAIL_HTML = `
         draftSpinner.classList.toggle('hidden', !nextSaving);
         draftLabel.textContent = nextSaving ? 'Saving…' : 'Save draft';
         draftButton.setAttribute('aria-busy', nextSaving ? 'true' : 'false');
+        if (hostSending) setSending(true);
         postResize();
       }
 
@@ -1116,8 +1116,8 @@ export const COMPOSE_EMAIL_HTML = `
         if (pendingRequestId && pendingRequestId === pendingSendRequestId &&
             (!o || o.outcome === 'sending' || o.outcome === 'maybe-sent')) return;
         if (hostSending) {
-          setSending(false);
           hostSending = false;
+          setSending(false);
           if (sendMayHaveGone) showSendUnknown();
         }
         if (!o || typeof o !== 'object') return;

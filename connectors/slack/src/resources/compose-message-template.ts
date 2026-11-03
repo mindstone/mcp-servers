@@ -584,6 +584,8 @@ export const COMPOSE_MESSAGE_HTML = `
       }
 
       function setSending(nextSending) {
+        // Only a host outcome can release another copy's in-flight send.
+        nextSending = nextSending || hostSending;
         sending = nextSending;
         sendButton.disabled = nextSending || sendBlocked;
         retryButton.disabled = nextSending;
@@ -830,8 +832,8 @@ export const COMPOSE_MESSAGE_HTML = `
         if (pendingRequestId && pendingRequestId === pendingSendRequestId &&
             (!o || o.outcome === 'sending' || o.outcome === 'maybe-sent')) return;
         if (hostSending) {
-          setSending(false);
           hostSending = false;
+          setSending(false);
           if (sendMayHaveGone) showSendUnknown();
         }
         if (!o || typeof o !== 'object') return;
