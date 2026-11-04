@@ -28,6 +28,10 @@ are maintained manually as part of the PR review checklist.
 - Excel JSON row keys derived from spreadsheet headers and non-identifier keys anywhere in Office result data are enclosed in untrusted-content envelopes, with closing tags escaped. Columns and Word custom properties named `__proto__` retain their values.
 - Office actions report missing targets, empty selections and unsupported requested options as coded failures. Relative insertions, paragraph ranges and specific tracked-change targets reject missing target fields before writing. Specific tracked-change targets also list unmatched IDs as `ITEM_NOT_FOUND` before accepting or rejecting anything. PowerPoint text alignment and Excel range filter criteria are applied; unknown filter columns fail before writing.
 - A slide created before a later step fails returns `PARTIAL` with its id and inspect-or-delete recovery. Word edit results describe what changed.
+
+### Security
+
+- `ws` now requires 8.22.0 or later (a memory-exhaustion fix in the WebSocket parser the sidecar uses) and `@modelcontextprotocol/sdk` 1.32.2 or later; locked transitive dependencies are updated to releases with security fixes.
 - Setup and status explain which apps are connected and how to open Rebel; the task pane asks you to open Rebel when waiting for a connection.
 - On Windows the add-in now appears in Word, Excel and PowerPoint: it is registered where Office looks for sideloaded add-ins instead of copied into Office's cache folder.
 
