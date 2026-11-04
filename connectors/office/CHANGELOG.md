@@ -32,6 +32,7 @@ are maintained manually as part of the PR review checklist.
 ### Security
 
 - `ws` now requires 8.22.0 or later (a memory-exhaustion fix in the WebSocket parser the sidecar uses) and `@modelcontextprotocol/sdk` 1.32.2 or later; locked transitive dependencies are updated to releases with security fixes.
+- `office-addin-dev-certs` moves to 3.0.1, which no longer bundles Application Insights and its Azure and OpenTelemetry dependencies; the certificate location, names and the API the sidecar uses are unchanged.
 - Setup and status explain which apps are connected and how to open Rebel; the task pane asks you to open Rebel when waiting for a connection.
 - On Windows the add-in now appears in Word, Excel and PowerPoint: it is registered where Office looks for sideloaded add-ins instead of copied into Office's cache folder.
 
