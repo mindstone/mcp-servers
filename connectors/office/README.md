@@ -27,23 +27,76 @@ Tools the host calls:
 1. `rebel_office_excel_set_formula` — writes `=B<row>*C<row>` into each cell in column D.
 2. `rebel_office_excel_format_range` — applies bold to the totals row range.
 
-Response (trimmed):
+## What the AI gets back
+
+Every tool, including setup, status and input-validation failures, returns JSON
+in `content[0].text`. `ok: true` means the requested operation completed,
+including setting a value that already had that value. Successful results carry
+`data`; failures carry `error` and set MCP's `isError: true`.
 
 ```json
-{
-  "set_formula": {
-    "worksheet": "Sheet1",
-    "range": "D2:D24",
-    "formula": "=B2*C2",
-    "filled_rows": 23
-  },
-  "format_range": {
-    "worksheet": "Sheet1",
-    "range": "A25:D25",
-    "bold": true
-  }
-}
+{"ok":true,"app":"word","action":"read_document","data":{"paragraphs":[]}}
 ```
+
+```json
+{"ok":false,"app":"excel","action":"write_range","error":{"code":"READ_ONLY","message":"<untrusted-content source=\"microsoft-office-excel\">The file is read-only.</untrusted-content>","fix":"Ask the user to enable editing or save an editable copy before trying again.","retryable":false}}
+```
+
+`app` is `word`, `excel`, `powerpoint`, or `all` for setup and status;
+`action` names the tool's operation (`setup` or `status` for those tools).
+Unknown or disabled tools and invalid inputs use `INVALID_ARGUMENT`
+(`McpError(InvalidParams)`); other exceptions thrown by handlers use
+`INTERNAL_ERROR`. An unknown tool has `app: "office"` and `action: "unknown"`.
+
+Error codes, fixes and retry guidance come from a local catalog. Unknown Office
+codes become `UNKNOWN_ERROR`. `retryable` means recovery may permit another
+attempt; after a timeout, read the current state before repeating an edit,
+because the edit may already have completed. Messages and all strings in data
+received from Office or the sidecar stay inside `<untrusted-content>` envelopes,
+with embedded closing tags escaped. App, action, codes and fixes stay outside
+those envelopes.
+
+### Undoing edits
+
+Every successful edit includes an `undo` sentence, also shown at the end of its
+tool description. This guidance comes from the connector; previous text and
+formatting values stay in the enveloped `data` fields.
+
+On current desktop Word and Excel, and PowerPoint on Windows, each edit uses one
+writing batch, so the user can undo it with Ctrl+Z (Cmd+Z on Mac). A PowerPoint
+slide with title, subtitle or body takes two: text, then slide. Deleting an Excel
+worksheet cannot be undone and clears Excel's undo history.
+
+PowerPoint for Mac cannot reliably undo add-in edits with Cmd+Z. Its `undo`
+guidance names the existing tools and returned values to reverse an edit. Read
+the current state first and ask the user if it has changed since the edit.
+Deleting shapes or slides and applying layouts cannot be reversed exactly with
+these tools. Neither can restoring empty text or notes, a non-solid fill, no line,
+previous dimensions or line width of zero, or text formatting changed by
+`update_text`. Restoring previous text does not restore its original mixed
+formatting. Those limitations are stated in the tool's guidance; confirm with
+the user first. No undo history is stored by the connector.
+
+For Excel `read_range` and `read_table` JSON rows, header-derived object keys
+are enveloped just like `headers`, including a column named `__proto__`.
+Other result keys that are not plain identifiers are also enveloped, including
+keys containing spaces, punctuation or closing tags. Word `get_properties`
+returns `customProperties` as an array of `{ name, value }` entries; every name
+is enveloped, including names that look like identifiers and `__proto__`.
+
+Word text inserts add all text and paragraph breaks first, then give heading and
+named styles to the whole paragraph, then add only the requested inline bold or
+italic, preserving the style's formatting.
+
+Relative placements require their target: `afterParagraph` needs
+`paragraphIndex`, and `afterSheet` needs `afterSheet`. A paragraph range needs
+`startParagraph`, and a specific tracked-change target needs `changeIds`.
+If any requested tracked-change IDs are missing, `ITEM_NOT_FOUND` lists them
+before any changes are accepted or rejected.
+
+If the Office connection is turned off for the Rebel installation, tools that
+start it return `CONNECTION_DISABLED` with `retryable: false`. Ask whoever manages
+the installation to re-enable it; Settings cannot override that decision.
 
 ## Requirements
 
@@ -57,6 +110,8 @@ On Windows, the helper registers the generated manifest under the current user's
 in Word, Excel and PowerPoint. This registration needs no administrator access.
 Run `rebel_office_setup` with `action="uninstall"` to remove the registration, then
 restart any open Office apps.
+On Windows, the add-in stays removed only while the Office connection is turned
+off in Rebel, because the connector registers it again whenever it starts.
 
 <!-- BEGIN INSTALL_LINKS: do not edit by hand; regenerated by scripts/gen-install-links.mjs -->
 ## One-click install
@@ -273,3 +328,35 @@ repository-level [SECURITY.md](../../SECURITY.md) for vulnerability reporting.
 ## Architecture and drift-risk notes
 
 Sidecar lifecycle, port allocation, manifest sideloading, and the byte-compatible code vendored from the Mindstone Rebel monorepo are documented in [`docs/connectors/office-architecture.md`](../../docs/connectors/office-architecture.md). That file is the canonical reference if you are debugging the sidecar handshake or planning a release that touches the vendored sidecar/appBridge or chat code.
+
+### Action results and recovery
+
+An action succeeds only when the requested work completes. Missing targets and
+search matches return `ITEM_NOT_FOUND`; invalid indexes return `INVALID_ARGUMENT`.
+Word formatting, comments and styles need selected text or an explicit target.
+PowerPoint reports `UNSUPPORTED_OPERATION` when it cannot apply requested
+formatting, text, fill or line properties. Text alignment and Excel range filter
+criteria are applied, including checks for unknown filter headers before writing.
+Condition filters accept named operators such as `greaterThan` and Excel symbols
+such as `>`; unknown operators fail before any filter is applied. Sorting rejects
+unknown table headers and resolves worksheet letters such as `AA` within the
+requested range; exclude the header row when passing a range to sort. Unknown shape
+types fail before creating a shape, and formatted shapes require PowerPointApi 1.4
+before creation. Word alignment applies to every
+paragraph in the target. Reading speaker notes skips the `InvalidArgument`
+text-load error for notes-page shapes without text; other read failures return
+coded errors.
+Setting notes returns `ITEM_NOT_FOUND` when no shape name contains "notes" or "body".
+Speaker-notes errors report causes such as read-only files;
+unavailable layouts return a coded failure instead of an empty layout list.
+
+If PowerPoint creates a slide but cannot finish filling it, `PARTIAL`
+includes the created slide id in the error message. Inspect that slide, then
+complete the missing work or delete it before retrying to avoid duplicates.
+Find its id in `get_slides` and use the returned `slideNumber` as `slideIndex`
+when reading or deleting it.
+Setup and status cover all three apps; status tells you which apps are connected
+and what to open when none are connected. To connect, click Rebel on the Home tab
+(first use on Windows: Add-ins → Developer Add-ins → Rebel). When the panel says
+“Waiting for Rebel”, open Rebel on the same computer; it connects automatically.
+If the connection is rejected, reconnect Microsoft Office in Rebel's Settings.
