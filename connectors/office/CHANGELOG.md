@@ -11,6 +11,10 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+### Fixed
+
+- On Windows the add-in now appears in Word, Excel and PowerPoint: it is registered where Office looks for sideloaded add-ins instead of copied into Office's cache folder.
+
 ## [0.3.0] - 2026-08-08
 
 ### Changed

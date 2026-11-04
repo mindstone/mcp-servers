@@ -28,6 +28,7 @@ import {
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 import { wrapUntrusted, wrapUntrustedJsonStrings } from './untrusted-content.js';
+import { registerWindowsAddin, unregisterWindowsAddin } from './sidecar/manifest.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -936,7 +937,7 @@ server.server.setRequestHandler(CallToolRequestSchema, async (request, extra) =>
 });
 
 // ---------------------------------------------------------------------------
-// Setup helpers — sideload manifest into Office wef folders
+// Setup helpers — install or remove the Office add-in
 // ---------------------------------------------------------------------------
 
 /**
@@ -950,19 +951,11 @@ const MAC_WEF_PATHS = {
 };
 
 /**
- * Windows shared folder path for sideloaded manifests.
- * This is the per-user WEF folder (no admin needed).
- */
-const WIN_WEF_PATH = process.env.LOCALAPPDATA
-  ? path.join(process.env.LOCALAPPDATA, 'Microsoft', 'Office', '16.0', 'Wef')
-  : null;
-
-/**
- * Copy the manifest to all Office wef folders for the current platform.
- * Creates the wef directories if they don't exist.
+ * Copy the manifests into macOS wef folders or register the Windows manifest.
+ * Creates the macOS wef directories if they don't exist.
  * Returns an array of {app, path, status} results.
  */
-const installManifest = (manifestDir) => {
+const installManifest = async (manifestDir) => {
   const results = [];
 
   if (process.platform === 'darwin') {
@@ -980,16 +973,8 @@ const installManifest = (manifestDir) => {
         results.push({ app, path: wefDir, status: 'failed', error: err.message });
       }
     }
-  } else if (process.platform === 'win32' && WIN_WEF_PATH) {
-    // Windows uses a single shared WEF folder — copy the default manifest
-    const source = path.join(manifestDir, 'manifest.xml');
-    try {
-      fs.mkdirSync(WIN_WEF_PATH, { recursive: true });
-      fs.copyFileSync(source, path.join(WIN_WEF_PATH, 'manifest.xml'));
-      results.push({ app: 'all', path: WIN_WEF_PATH, status: 'installed' });
-    } catch (err) {
-      results.push({ app: 'all', path: WIN_WEF_PATH, status: 'failed', error: err.message });
-    }
+  } else if (process.platform === 'win32') {
+    results.push(await registerWindowsAddin(path.join(manifestDir, 'manifest.xml')));
   } else {
     results.push({ app: 'all', path: 'unknown', status: 'skipped', error: `Unsupported platform: ${process.platform}` });
   }
@@ -1000,9 +985,9 @@ const installManifest = (manifestDir) => {
 // No certificate trust needed — sidecar uses plain HTTP on localhost.
 
 /**
- * Remove the manifest from all Office wef folders (uninstall).
+ * Remove the macOS manifests or the Windows registry value (uninstall).
  */
-const uninstallManifest = () => {
+const uninstallManifest = async () => {
   const results = [];
   const manifestName = 'manifest.xml';
 
@@ -1020,17 +1005,11 @@ const uninstallManifest = () => {
         results.push({ app, status: 'failed', error: err.message });
       }
     }
-  } else if (process.platform === 'win32' && WIN_WEF_PATH) {
-    const target = path.join(WIN_WEF_PATH, manifestName);
-    try {
-      if (fs.existsSync(target)) {
-        fs.unlinkSync(target);
-        results.push({ app: 'all', status: 'removed' });
-      } else {
-        results.push({ app: 'all', status: 'not_installed' });
-      }
-    } catch (err) {
-      results.push({ app: 'all', status: 'failed', error: err.message });
+  } else if (process.platform === 'win32') {
+    if (!stateDir) {
+      results.push({ app: 'all', status: 'failed', error: "The Office sidecar state directory isn't configured." });
+    } else {
+      results.push(await unregisterWindowsAddin(path.join(stateDir, manifestName)));
     }
   }
 
@@ -1069,7 +1048,7 @@ registerTool(TOOL_NAMES.setup, {
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
 }, async (input) => {
   if (input.action === 'uninstall') {
-    const results = uninstallManifest();
+    const results = await uninstallManifest();
     const summary = results.map(r => `${r.app}: ${r.status}${r.error ? ` (${r.error})` : ''}`).join('\n');
     return {
       content: [{ type: 'text', text: `Add-in uninstalled:\n${summary}\n\nRestart any open Office apps to complete removal.` }],
@@ -1097,7 +1076,7 @@ registerTool(TOOL_NAMES.setup, {
   // Install
   const steps = [];
 
-  // Step 1: Install manifest to wef folders
+  // Step 1: Install the Office add-in manifest
   // manifestPath points to e.g. .../rebeloffice/manifest.xml — derive the directory
   const manifestDir = state.manifestPath ? path.dirname(state.manifestPath) : null;
   if (!manifestDir || !fs.existsSync(manifestDir)) {
@@ -1107,8 +1086,8 @@ registerTool(TOOL_NAMES.setup, {
     };
   }
 
-  const manifestResults = installManifest(manifestDir);
-  const allInstalled = manifestResults.every(r => r.status === 'installed');
+  const manifestResults = await installManifest(manifestDir);
+  const allInstalled = manifestResults.every(r => r.status === 'installed' || r.status === 'unchanged');
   steps.push({
     step: 'Install manifest',
     status: allInstalled ? 'done' : 'partial',
