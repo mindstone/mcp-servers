@@ -7,6 +7,12 @@ format and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-11-03
+
+### Changed
+
+- Cards keep their send state in every copy and after a restart; a blocked send says why without a Retry that can't work.
+
 ### Fixed
 
 - Compose cards hide Retry when sending is blocked by your settings, your organization or security policy. Cancel stays available; a stopped server still offers Retry.
