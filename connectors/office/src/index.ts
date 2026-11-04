@@ -743,7 +743,8 @@ const ERROR_CATALOG = {
 const nativeUndo = 'The user can undo this with Ctrl+Z (Cmd+Z on Mac).';
 const macPowerpointUndo = "PowerPoint for Mac can't reliably undo add-in edits with Cmd+Z. ";
 const readBeforeReversing = ' Read the current slide or shape with rebel_office_powerpoint_get_slides and rebel_office_powerpoint_get_slide_content (or rebel_office_powerpoint_get_speaker_notes for notes) first; ask the user before reversing if it has changed since the edit.';
-const deleteAddedShape = 'To reverse this, use rebel_office_powerpoint_delete_shape with target.type="shapeId", target.shapeId=data.shapeId and the original slideIndex.';
+const reuseReturnedText = ' When reusing returned text (including names and formatting values), use the text inside the untrusted-content envelope, not the envelope markup.';
+const deleteAddedShape = 'To reverse this, use rebel_office_powerpoint_delete_shape with target.type="shapeId", target.shapeId=data.shapeId and the original slideIndex.' + reuseReturnedText;
 const UNDO_WORDING = {
   word: { default: nativeUndo },
   excel: {
@@ -752,17 +753,17 @@ const UNDO_WORDING = {
   },
   powerpoint: {
     default: nativeUndo,
-    add_slide: 'Without title, subtitle or body, the user can undo this with Ctrl+Z. With title, subtitle or body, use Ctrl+Z twice (text, then slide), or rebel_office_powerpoint_delete_slide: find data.slideId in rebel_office_powerpoint_get_slides and use its slideNumber as slideIndex.',
+    add_slide: 'Without title, subtitle or body, the user can undo this with Ctrl+Z. With title, subtitle or body, use Ctrl+Z twice (text, then slide), or rebel_office_powerpoint_delete_slide: find data.slideId in rebel_office_powerpoint_get_slides and use its slideNumber as slideIndex.' + reuseReturnedText,
     darwin: {
       default: 'This cannot be undone exactly with these tools; confirm with the user first.',
       add_text_box: deleteAddedShape,
       add_shape: deleteAddedShape,
       add_image: deleteAddedShape,
-      add_slide: 'To reverse this, use rebel_office_powerpoint_delete_slide: find data.slideId in rebel_office_powerpoint_get_slides and use its slideNumber as slideIndex.',
-      update_text: 'To restore plain text, use rebel_office_powerpoint_update_text with the original slideIndex, target.type="shapeId", target.shapeId=data.shapeId and text=data.previousText, if non-empty; the original text\'s mixed formatting is not restored. Blank previous text or formatting changed by update_text cannot be undone exactly with these tools; confirm with the user first.',
-      set_speaker_notes: 'To reverse this, use rebel_office_powerpoint_set_speaker_notes with slideIndex=data.slideNumber and notes=data.previousNotes, if non-empty. Previously blank notes cannot be undone exactly with these tools; confirm with the user first.',
-      format_shape: 'To reverse representable values, use rebel_office_powerpoint_format_shape with slideIndex=data.slideIndex, target.type="shapeId", target.shapeId=data.shapeId and formatting=data.previous. A non-solid previous fill (data.previousFillType), no line, or previous lineWidth, width or height of zero cannot be undone exactly with these tools; confirm with the user first.',
-      reorder_slides: 'To reverse this, use rebel_office_powerpoint_reorder_slides with data.from and data.to swapped: fromIndex=data.to, toIndex=data.from.',
+      add_slide: 'To reverse this, use rebel_office_powerpoint_delete_slide: find data.slideId in rebel_office_powerpoint_get_slides and use its slideNumber as slideIndex.' + reuseReturnedText,
+      update_text: 'To restore plain text, use rebel_office_powerpoint_update_text with the original slideIndex, target.type="shapeId", target.shapeId=data.shapeId and text=data.previousText, if non-empty; the original text\'s mixed formatting is not restored. Blank previous text or formatting changed by update_text cannot be undone exactly with these tools; confirm with the user first.' + reuseReturnedText,
+      set_speaker_notes: 'To reverse this, use rebel_office_powerpoint_set_speaker_notes with slideIndex=data.slideNumber and notes=data.previousNotes, if non-empty. Previously blank notes cannot be undone exactly with these tools; confirm with the user first.' + reuseReturnedText,
+      format_shape: 'To reverse representable values, use rebel_office_powerpoint_format_shape with slideIndex=data.slideIndex, target.type="shapeId", target.shapeId=data.shapeId and formatting=data.previous. A non-solid previous fill (data.previousFillType), no line, or previous lineWidth, width or height of zero cannot be undone exactly with these tools; confirm with the user first.' + reuseReturnedText,
+      reorder_slides: 'To reverse this, use rebel_office_powerpoint_reorder_slides with data.from and data.to swapped: fromIndex=data.to, toIndex=data.from.' + reuseReturnedText,
       delete_shape: 'This cannot be undone exactly with these tools; confirm with the user first.',
       delete_slide: 'This cannot be undone exactly with these tools; confirm with the user first.',
       apply_layout: 'This cannot be undone exactly with these tools; confirm with the user first.',
@@ -1090,6 +1091,8 @@ const uninstallManifest = async () => {
 // Tool definitions
 // ---------------------------------------------------------------------------
 
+const windowsUninstallGuidance = 'On Windows, the add-in stays removed only while the Office connection is turned off in Rebel, because the connector registers it again whenever it starts.';
+
 // 0a. rebel_office_setup — (Re-)install or uninstall the Office add-in
 registerTool(TOOL_NAMES.setup, {
   title: 'Install or repair Office add-in',
@@ -1099,6 +1102,7 @@ registerTool(TOOL_NAMES.setup, {
     'the sidecar, which installs the add-in manifest automatically. Use this tool only to:\n' +
     '  • Force a re-install after deleting manifests manually\n' +
     '  • Uninstall the add-in (action="uninstall")\n\n' +
+    windowsUninstallGuidance + '\n\n' +
     'After install, open (or restart) Word, Excel, or PowerPoint. The Rebel button will appear ' +
     'on the Home tab; on first use in Windows, choose Add-ins → Developer Add-ins → Rebel. Click Rebel to open the panel and see "Connected".',
   inputSchema: {
@@ -1123,7 +1127,7 @@ registerTool(TOOL_NAMES.setup, {
     const summary = results.map(r => `${r.app}: ${r.status}${r.error ? ` (${r.error})` : ''}`).join('\n');
     return respond(results.some(r => r.status === 'failed')
       ? { success: false, code: 'SIDECAR_ERROR', error: summary }
-      : { success: true, data: { results, summary: `Add-in uninstalled:\n${summary}\n\nRestart any open Office apps to complete removal.` } });
+      : { success: true, data: { results, summary: `Add-in uninstalled:\n${summary}\n\nRestart any open Office apps to complete removal.${process.platform === 'win32' ? ` ${windowsUninstallGuidance}` : ''}` } });
   }
 
   // Lazy-start the sidecar so we have a manifest + state file to work with

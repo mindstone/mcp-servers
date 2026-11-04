@@ -71,7 +71,9 @@ describe('Windows setup tool', () => {
       app: 'all', path: manifestPath, status: 'removed',
     }));
 
-    expect(await setup('uninstall')).toMatchObject({ ok: true, data: { summary: expect.stringContaining('all: removed') } });
+    const result = await setup('uninstall');
+    expect(result).toMatchObject({ ok: true, data: { summary: expect.stringContaining('all: removed') } });
+    expect(result.data.summary).toContain('On Windows, the add-in stays removed only while the Office connection is turned off in Rebel, because the connector registers it again whenever it starts.');
     expect(unregisterWindowsAddin).toHaveBeenCalledExactlyOnceWith(manifestPath);
     expect(registerWindowsAddin).not.toHaveBeenCalled();
   });

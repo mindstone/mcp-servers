@@ -119,6 +119,9 @@ describe('undo instructions from the edit registry', () => {
       for (const action of ['delete_shape', 'delete_slide', 'apply_layout']) expect(undo(action)).toMatch(/confirm with the user first/i);
       expect(undo('reorder_slides')).toMatch(/from.*to.*swapped/i);
       expect(undo('update_text')).not.toContain('hostile');
+      for (const action of ['add_text_box', 'add_shape', 'add_image', 'add_slide', 'update_text', 'set_speaker_notes', 'format_shape', 'reorder_slides']) {
+        expect(undo(action), action).toContain('use the text inside the untrusted-content envelope, not the envelope markup');
+      }
     } finally { vi.restoreAllMocks(); }
   });
 });
