@@ -11,6 +11,12 @@ are maintained manually as part of the PR review checklist.
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-11-03
+
+### Changed
+
+- Close the browser when the host stops the server, and describe the connector by what it does for people.
+
 ### Fixed
 
 - The browser and its `agent-browser` background process no longer keep running after the host app quits. A later run no longer picks up that old browser with stale settings, which could keep bringing the window in front of other apps. The server now closes the browser when the host stops it, saving the session first.
