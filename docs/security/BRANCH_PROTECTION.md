@@ -1,31 +1,32 @@
 # Branch & Tag Protection — chosen posture
 
-**Status:** Documents the *chosen, actual* posture (updated 2026-06-11). Earlier revisions of this file described a much stricter aspirational posture (PR-required, enforce-admins, signed commits, push restrictions) that was never applied and had drifted badly from reality in both directions — stricter than reality on branch protection, behind reality on CI publishing existing at all. This revision documents what is deliberately configured and why, so settings drift stays visible and honest.
+**Status:** Documents the *chosen, actual* posture (updated 2026-11-04). Earlier revisions of this file described a much stricter aspirational posture (PR-required, enforce-admins, signed commits, push restrictions) that was never applied and had drifted badly from reality in both directions — stricter than reality on branch protection, behind reality on CI publishing existing at all. This revision documents what is deliberately configured and why, so settings drift stays visible and honest.
 **Audience:** Repo administrators on `mindstone/mcp-servers`.
 
 These settings live in GitHub UI / API, not in repo files. When you change a setting, change this document in the same sitting.
 
 ## 0. The posture in one paragraph
 
-`main` accepts **direct pushes from maintainers and the release tooling** — this is deliberate (decision 2026-06-09, reaffirmed 2026-06-11: the team is small and the release flow is script-driven from the Rebel repo). PRs are gated by **required status checks** (the version-bump guard workflow is live, live-tested, and registered as a required check as of 2026-06-11 — a PR can never become a publish trigger). Publishes are gated **by construction, not by humans**: `release.yml` refuses any version bump whose release commit lacks a `Release-Gate` trailer, the `npm-publish` environment has **no required reviewers by design** under the AI-only release policy, and every publish posts a Slack alert. The full gate chain is in [`docs/PUBLISH_APPROVAL_PROCESS.md`](../PUBLISH_APPROVAL_PROCESS.md).
+`main` takes changes **only by pull request, for everyone, admins included**, and no human approval is needed: review happens while the code is written. Greg, 2026-11-04: "A Okay, let's do the PRs plus a required secret scan." This replaces the direct-push model of June. PRs are gated by **required status checks**, including a secret scan and the version-bump guard (a PR can never become a publish trigger). Publishes are gated **by construction, not by humans**: `release.yml` refuses any version bump whose release commit lacks a `Release-Gate` trailer, the `npm-publish` environment has **no required reviewers by design** under the AI-only release policy, and every publish posts a Slack alert. The full gate chain is in [`docs/PUBLISH_APPROVAL_PROCESS.md`](../PUBLISH_APPROVAL_PROCESS.md).
 
-## 1. Branch protection — `main` (classic rule)
+## 1. Branch protection — `main` (ruleset)
 
-Configured under `Settings → Branches` (classic branch protection; ruleset migration deferred, see §6).
+Configured under `Settings → Rules → Rulesets`, in the ruleset `main: pull requests and secret scan`. There is no classic branch protection rule: a deploy key cannot bypass one, and the export below needs that.
 
 | Setting | Chosen value | Rationale |
 |---|---|---|
-| Require a pull request before merging | **Off** | Direct push by maintainers + release tooling is the working model. PRs remain the preferred path for non-trivial and external changes, but are not forced. |
-| Required approving reviews | **None enforced** | Two-maintainer team; review happens via the AI-only review chain (cross-family adversarial review on releases; CHIEF_ENGINEER-style review on Rebel-side work), not via GitHub review clicks. |
-| Require status checks to pass | **On** — currently registered: `build-and-test`, `validate` (server.json check), `connector version bumps require a CHANGELOG entry` (changelog-check), the STATUS/catalogue drift checks, `connector version bumps land only via release tooling` (the version-bump guard; live-tested — it blocked verification PR #90), and `server.json registry validation` (registry round-trip; given a distinct check-run name 2026-06-11 to disambiguate from CI's `validate` job). Both registered as required 2026-06-11. | Blocks PR merges on CI fail. A PR merge is mechanically blocked by the version-bump guard and the registry validation. (Defense in depth: even if a bump somehow merged, `release.yml`'s trailer gate refuses to publish it.) |
+| Require a pull request before merging | **On** | Greg's decision, 2026-11-04. |
+| Required approving reviews | **0** | Review happens while the code is written, through the AI review chain (cross-family adversarial review on releases; CHIEF_ENGINEER-style review on Rebel-side work), not through GitHub review clicks. |
+| Allowed merge methods | **Merge, squash, rebase** | `mcp:release` and the fleet's merge both use merge commits. |
+| Require status checks to pass | **On**, from GitHub Actions only: `secret-scan`, `Catalogue is up to date`, `One-click install blocks match server.json`, `Discover connectors for status-check`, `server.json registry validation`, `package version bumps require a CHANGELOG entry`, `package version bumps land only via release tooling` | Blocks a merge on a failed check. All six older checks passed on 25 of 25 recently merged PRs, releases included, before they became binding for admins. |
 | Require branches to be up to date before merging | **On** (strict checks) | Closes the merge-train substitution gap; re-runs the drift checks against current `main` before merge. |
-| Include administrators (enforce_admins) | **Off** | Consequence of the direct-push model. Admin pushes bypass the PR checks; the publish path is protected separately by the trailer gate, which direct pushes cannot bypass. |
-| Restrict who can push | **Not set** (org membership is the effective restriction) | Acceptable at current team size; revisit at OSS-launch review. |
+| Bypass list | **Empty** until the export is armed (§6) | A bypass for the admin role would let every session on an admin account push straight past the rule. |
+| Require linear history | **Off. Do not add it back.** | With no bypass it would refuse every merge commit. The old classic rule only appeared to work because admins bypassed it. |
 | Allow force pushes | **Off** | Mandatory. |
 | Allow deletions | **Off** | Mandatory. |
 | Require signed commits | **Off — DEFERRED hardening** | Would add an out-of-band-credential property on top of the trailer gate (a compromised GitHub session could not forge a publishable release commit). Deferred for key-management overhead at current team size. **Re-open signals:** external-contributor volume growth, any credential-compromise scare, OSS-launch readiness review. |
 
-What this posture accepts, honestly: a maintainer (or anyone compromising a maintainer account) can push code to `main` without review, and the required checks run *after* the push (detection, not prevention). What it does **not** accept: that push becoming an npm publish — a version bump without a valid `Release-Gate` trailer fails `release.yml` loudly and publishes nothing, and a bump inside a PR fails the version-bump guard before merge.
+What this posture accepts, honestly: a pull request can edit the workflow of a check it must pass, because `pull_request` runs the pull request's copy, and anyone with write access can merge their own pull request once it is green. The checks catch accidents, not someone determined; the publish path stays protected separately by the trailer gate.
 
 ## 2. Tag protection — `*-v*`
 
@@ -54,16 +55,13 @@ The `npm-publish` environment **exists** and is required by `release.yml`'s `pub
 ## 5. Verification (post-config)
 
 ```bash
-# Required status checks on main include the two PR gates
-gh api repos/mindstone/mcp-servers/branches/main/protection \
-  --jq '.required_status_checks.contexts'
-# expect: includes build-and-test, validate, the changelog check, and the
-# STATUS/catalogue drift checks + version-bump guard + server.json registry validation.
-# registration (see §1) — once added, expect it here too
+# The rules that apply to main, by type: expect pull_request and
+# required_status_checks, with deletion and non_fast_forward
+gh api repos/mindstone/mcp-servers/rules/branches/main --jq '.[].type'
 
-# PRs are NOT required (chosen posture) — direct push is allowed
-gh api repos/mindstone/mcp-servers/branches/main/protection \
-  --jq '.required_pull_request_reviews // "none (by design)"'
+# The required checks: expect secret-scan and the six in §1
+gh api repos/mindstone/mcp-servers/rules/branches/main \
+  --jq '.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context'
 
 # npm-publish environment exists with no required reviewers (by design)
 gh api repos/mindstone/mcp-servers/environments/npm-publish \
@@ -83,6 +81,21 @@ gh secret list --repo mindstone/mcp-servers \
 git log --grep='^Release-Gate: ' --oneline -5
 ```
 
-## 6. Ruleset migration — DEFERRED
+## 6. Emergencies, and the export's key
 
-The OpenSSF Scorecard `Branch-Protection` check reports `-1` because the default `GITHUB_TOKEN` cannot read **classic** branch protection; migrating the `main` rule to a repository ruleset (Settings → Rules → Rulesets) would fix the score with no behavior change. Deferred as a pure score fix. **Re-open signals:** OSS-launch readiness review, or the next time branch protection is edited anyway and the marginal cost is ~zero. When migrating, translate §1 above 1:1 to ruleset toggles and only delete the classic rule after `gh api repos/mindstone/mcp-servers/rules/branches/main` confirms the ruleset is active.
+**In an emergency**, a repository admin turns the ruleset off, does what is needed, and turns it straight back on. Find the ruleset's id with `gh api repos/mindstone/mcp-servers/rulesets`, then:
+
+```bash
+gh api -X PUT repos/mindstone/mcp-servers/rulesets/<id> -f enforcement=disabled
+gh api -X PUT repos/mindstone/mcp-servers/rulesets/<id> -f enforcement=active
+```
+
+Say so where the team will see it: while it is off, nothing on this page holds, for anyone.
+
+**The export's deploy key** pushes to `main` directly once the folder export from Rebel is armed, and its rollback moves `main` back with a force push. Add it when the key exists, not before, by adding this entry to the ruleset's bypass list (Settings → Rules → Rulesets, or `gh api -X PUT` with the full list):
+
+```json
+{ "actor_type": "DeployKey", "bypass_mode": "always" }
+```
+
+That entry covers every deploy key on this repository, so the export's must be the only one with write access. The ruleset targets `main` only, so `main-lkg` stays updatable. See `docs/project/OSS_FOLDER_EXPORT.md` in the Rebel repository.
