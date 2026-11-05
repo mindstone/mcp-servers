@@ -1,5 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { ConnectorError } from '../types.js';
 import { errorJson, sanitizeErrorMessage, withErrorHandling } from '../utils.js';
 import { getSlackUserClient, runSlackRead } from '../client.js';
 import { resolveUserId, SLACK_USER_PROFILE_SOURCE } from '../helpers.js';
@@ -270,12 +271,11 @@ WORKFLOW:
     withErrorHandling(async (args) => {
       const userClient = await getSlackUserClient();
       if (!userClient) {
-        return errorJson({
-          error: 'Opening DMs requires user authorization.',
-          action_required:
-            'Reconnect Slack via authenticate_slack_workspace to grant im:write.',
-          next_step: 'authenticate_slack_workspace',
-        });
+        throw new ConnectorError(
+          'Opening DMs requires user authorization.',
+          'NO_TOKEN',
+          'Reconnect Slack via authenticate_slack_workspace to grant im:write.',
+        );
       }
       const userInput = args.user;
       let userId: string;

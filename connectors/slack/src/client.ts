@@ -228,11 +228,21 @@ export async function getSlackReaderClient(): Promise<WebClient | null> {
 /** People reads may use either identity. Each callback owns its pagination/state. */
 export async function runSlackRead<T>(read: (client: WebClient) => Promise<T>): Promise<T | null> {
   let userRefusal: unknown;
+  let userClient: WebClient | null = null;
+  let recoveringPersistence = false;
   try {
-    const userClient = await getSlackUserClient();
+    try {
+      userClient = await getSlackUserClient();
+    } catch (error) {
+      if (!(error instanceof ConnectorError && error.code === 'TOKEN_PERSIST_FAILED')) throw error;
+      recoveringPersistence = true;
+      userClient = await getSlackUserClient();
+      if (!userClient) throw new ConnectorError('No Slack user token found after persistence retry.', 'NO_TOKEN', 'Reconnect Slack via authenticate_slack_workspace.');
+    }
     if (userClient) return await read(userClient);
   } catch (error) {
     setSlackErrorTokenRole(error, 'user');
+    if (recoveringPersistence && !userClient) throw error;
     if (!isTokenExpiredError(error) && !isMissingScopeError(error) &&
         !(error instanceof ConnectorError && AUTH_REQUIRED_CODES.includes(error.code))) {
       throw error;
